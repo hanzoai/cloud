@@ -121,6 +121,44 @@ type WritebackHook func(ctx context.Context, conn Connection, payload []byte) er
 // Provider is one connectable third-party. Everything provider-specific is a
 // field here so the handlers stay provider-blind. The func fields read ENV at
 // call time (not at init), so an operator can inject creds without a rebuild.
+// Kind is HOW a connector is connected, and it is the one thing that genuinely
+// differs between the two halves of this catalog.
+//
+// An OAuth connector sends the browser to the provider and gets a code back. A
+// CREDENTIAL connector cannot: WhatsApp Cloud API hands you a permanent token
+// and a phone-number id in a dashboard, a Twilio-style SMS account has an
+// account SID and an auth token, and SMTP is a host, a user and a password.
+// There is no consent screen and no redirect to come back from.
+//
+// Making those pretend to be OAuth would mean a connect that returns an
+// authorizeUrl pointing at a page we invented, and a callback route nothing
+// calls. So they are a second KIND over the SAME plane: same catalog, same org
+// gate, same KMS custody, same disconnect. Only `connect` differs — one answers
+// with a URL to visit, the other accepts the fields and verifies them.
+type Kind string
+
+const (
+	// KindOAuth: connect returns {authorizeUrl}; the provider calls back.
+	KindOAuth Kind = "oauth"
+	// KindCredential: connect ACCEPTS the fields, verifies them against the
+	// provider, and seals them. There is no callback.
+	KindCredential Kind = "credential"
+)
+
+// Field is one input a credential connector asks for. It is published in the
+// provider view so a UI can render the form from the catalog rather than
+// hard-coding a shape per provider — the same reason the OAuth half publishes
+// its scopes.
+type Field struct {
+	Name  string `json:"name"`  // the key in the connect body, and the KMS secret name when Secret
+	Label string `json:"label"` // what the form shows
+	// Secret decides custody: true is sealed into KMS and never read back;
+	// false is non-secret configuration (a phone-number id, an SMTP host) and
+	// lives in the connection row where the UI can show it.
+	Secret   bool `json:"secret"`
+	Required bool `json:"required"`
+}
+
 type Provider struct {
 	ID           string   // stable slug, the :provider path segment ("slack","github")
 	Name         string   // display name
@@ -143,6 +181,17 @@ type Provider struct {
 	// Revoke best-effort invalidates a token at the provider on disconnect. nil
 	// when the provider has no revoke endpoint.
 	Revoke func(ctx context.Context, creds OAuthConfig, token string) error
+
+	// Kind decides which connect path this provider takes. The zero value is
+	// KindOAuth, so every existing declaration keeps its meaning.
+	Kind Kind
+	// Fields are what a KindCredential provider asks for. Empty for OAuth.
+	Fields []Field
+	// Verify checks pasted credentials against the provider and names the
+	// account. A credential connector MUST have one: accepting a token without
+	// ever calling the provider would report a connection that has never worked
+	// and fail later, somewhere else, on somebody's first real send.
+	Verify func(ctx context.Context, values map[string]string) (*ExchangeResult, error)
 
 	// #51 seams — declared, nil today, not wired to a route (see SyncHook/WritebackHook).
 	Sync      SyncHook
@@ -191,6 +240,16 @@ type providerView struct {
 	Available   bool            `json:"available"` // creds configured
 	Connected   bool            `json:"connected"` // this org has a connection
 	Connection  *connectionView `json:"connection,omitempty"`
+
+	// Kind tells a client WHICH connect it is about to do: "oauth" answers with
+	// an authorizeUrl to navigate to, "credential" wants the fields below in the
+	// POST body. Published rather than inferred, so a UI never has to keep its
+	// own list of which providers are which.
+	Kind Kind `json:"kind"`
+	// Fields is the form a credential connector needs, empty for OAuth. A UI
+	// renders it from here for the same reason the OAuth half publishes scopes:
+	// the catalog is the one place that knows.
+	Fields []Field `json:"fields,omitempty"`
 }
 
 type connectionView struct {
@@ -233,6 +292,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// dispatcher actually serves — otherwise its OAuth callback would 404 silently
 	// and the connect flow would dead-end. One route, one truth.
 	for id, p := range providers {
+		// A CREDENTIAL connector has no callback — the caller POSTs its fields
+		// and there is nothing to come back from — so it declares no
+		// RedirectPath and this assertion does not apply to it. Requiring one
+		// would force a provider to name a route that is never called.
+		if p.Kind == KindCredential {
+			if p.Verify == nil {
+				_ = store.Close()
+				return fmt.Errorf("connectors.Mount: credential provider %q declares no Verify", id)
+			}
+			continue
+		}
 		if want := callbackPath(id); p.RedirectPath != want {
 			_ = store.Close()
 			return fmt.Errorf("connectors.Mount: provider %q RedirectPath %q must equal %q", id, p.RedirectPath, want)
@@ -373,6 +443,14 @@ func (s *svc) connect(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
 	}
 
+	// A CREDENTIAL connector has no consent screen to send anyone to: the caller
+	// POSTs the fields and this verifies and seals them in the same request. It
+	// answers {connected:true} rather than {authorizeUrl}, so the two kinds are
+	// told apart by what comes back and never by guessing.
+	if p.Kind == KindCredential {
+		return s.connectCredential(c, org, p)
+	}
+
 	// Opportunistic GC of expired nonces (best-effort; never fails the request).
 	if _, err := s.store.GCNonces(c.Context(), staleNonceCutoff()); err != nil {
 		s.log.Warn("nonce gc", "err", err)
@@ -394,6 +472,56 @@ func (s *svc) connect(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "authorize: %v", err)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"authorizeUrl": authorizeURL})
+}
+
+// connectCredential accepts pasted credentials, VERIFIES them against the
+// provider, and seals them — all inside the one org-authed request.
+//
+// It verifies before it stores, and that is the whole design. A connector that
+// accepted a token without ever calling the provider would report an account
+// connected that has never worked, and the failure would surface later,
+// somewhere else, on somebody's first real send — with nothing pointing back at
+// the moment the wrong token was pasted.
+//
+// The values are read from the body and NEVER logged. A secret field goes
+// straight to the KMS seal; a non-secret one (a phone-number id, an SMTP host)
+// lands in the connection row where a UI can show it back.
+func (s *svc) connectCredential(c *zip.Ctx, org string, p *Provider) error {
+	if p.Verify == nil {
+		return zip.Errorf(http.StatusInternalServerError, "%s declares no verifier", p.ID)
+	}
+
+	var body map[string]string
+	if err := c.Bind(&body); err != nil {
+		return zip.ErrBadRequest("body must be a JSON object of field values")
+	}
+
+	values := make(map[string]string, len(p.Fields))
+	for _, f := range p.Fields {
+		v := strings.TrimSpace(body[f.Name])
+		if v == "" && f.Required {
+			return zip.ErrBadRequest(f.Name + " is required")
+		}
+		// The same bound the OAuth code carries, for the same reason: a field is
+		// caller-supplied and a megabyte of it has no legitimate meaning.
+		if len(v) > maxCodeLen {
+			return zip.ErrBadRequest(f.Name + " is too long")
+		}
+		values[f.Name] = v
+	}
+
+	res, err := p.Verify(c.Context(), values)
+	if err != nil || res == nil {
+		// The provider's own words are not reflected back: they are outside our
+		// control and would be a channel for whatever it feels like saying. The
+		// log keeps the detail for whoever has to fix it.
+		s.log.Warn("credential verify failed", "provider", p.ID, "org", org, "err", err)
+		return zip.Errorf(http.StatusBadGateway, "%s refused these credentials", p.ID)
+	}
+	if reason := s.land(c.Context(), org, p, res); reason != "" {
+		return zip.Errorf(http.StatusInternalServerError, "%s", reason)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"connected": true, "account": res.AccountLabel})
 }
 
 // callback is the PUBLIC, state-authed OAuth return. It ALWAYS 302s the user back
@@ -447,6 +575,27 @@ func (s *svc) callback(c *zip.Ctx) error {
 	// reflected in the redirect. Strips control chars (kills log-line/separator
 	// injection via e.g. a crafted Slack workspace name) and bounds length. Secret
 	// token VALUES are never passed through here; they go straight to the KMS seal.
+	if reason := s.land(c.Context(), payload.Org, p, res); reason != "" {
+		return s.failRedirect(c, p.ID, reason)
+	}
+	return s.successRedirect(c, p.ID, res.AccountLabel)
+}
+
+// land is what "connected" MEANS, for both kinds: sanitize what the provider
+// said, seal the secrets, then write the row. It returns "" on success or a
+// short reason — a string rather than an error because its two callers report
+// failure differently (a redirect for OAuth, a status for credentials) and
+// neither wants the other's shape.
+//
+// Extracted rather than copied when the credential kind arrived: this is the
+// ordering that keeps custody honest, and a second copy of it is a second place
+// for that ordering to be got wrong.
+func (s *svc) land(ctx context.Context, org string, p *Provider, res *ExchangeResult) string {
+	// Harden the provider-supplied NON-secret metadata at the framework ingest
+	// boundary — ONE place, every provider — before it is logged, stored, or
+	// reflected in the redirect. Strips control chars (kills log-line/separator
+	// injection via e.g. a crafted Slack workspace name) and bounds length. Secret
+	// token VALUES are never passed through here; they go straight to the KMS seal.
 	res.ExternalID = sanitizeMeta(res.ExternalID)
 	res.AccountLabel = sanitizeMeta(res.AccountLabel)
 	res.BotUserID = sanitizeMeta(res.BotUserID)
@@ -455,25 +604,25 @@ func (s *svc) callback(c *zip.Ctx) error {
 	// connection row, so a KMS failure leaves NO half-connected state advertising a
 	// token that was never stored.
 	for name, value := range res.Tokens {
-		if err := s.kmsPut(payload.Org, p.ID, name, []byte(value)); err != nil {
-			s.log.Warn("kms seal failed", "provider", p.ID, "org", payload.Org, "secret", name, "err", err)
-			return s.failRedirect(c, p.ID, "secret custody failed")
+		if err := s.kmsPut(org, p.ID, name, []byte(value)); err != nil {
+			s.log.Warn("kms seal failed", "provider", p.ID, "org", org, "secret", name, "err", err)
+			return "secret custody failed"
 		}
 	}
 	conn := Connection{
-		Org:          payload.Org,
+		Org:          org,
 		Provider:     p.ID,
 		ExternalID:   res.ExternalID,
 		AccountLabel: res.AccountLabel,
 		BotUserID:    res.BotUserID,
 		Scopes:       res.Scopes,
 	}
-	if err := s.store.Upsert(c.Context(), conn); err != nil {
-		s.log.Warn("connection upsert failed", "provider", p.ID, "org", payload.Org, "err", err)
-		return s.failRedirect(c, p.ID, "persist failed")
+	if err := s.store.Upsert(ctx, conn); err != nil {
+		s.log.Warn("connection upsert failed", "provider", p.ID, "org", org, "err", err)
+		return "persist failed"
 	}
-	s.log.Info("integration connected", "provider", p.ID, "org", payload.Org, "account", res.AccountLabel, "externalId", res.ExternalID)
-	return s.successRedirect(c, p.ID, res.AccountLabel)
+	s.log.Info("connector connected", "provider", p.ID, "org", org, "account", res.AccountLabel, "externalId", res.ExternalID)
+	return ""
 }
 
 // disconnect revokes (best-effort) and forgets an org's connection: it deletes
@@ -525,9 +674,15 @@ func (s *svc) disconnect(c *zip.Ctx) error {
 // providerView renders a provider's card for an org, folding in the org's live
 // connection status.
 func (s *svc) providerView(ctx context.Context, org string, p *Provider) (providerView, error) {
+	kind := p.Kind
+	if kind == "" {
+		kind = KindOAuth // the zero value, stated rather than left blank on the wire
+	}
 	v := providerView{
 		ID: p.ID, Name: p.Name, Description: p.Description, Category: p.Category,
 		Available: p.Configured(),
+		Kind:      kind,
+		Fields:    p.Fields,
 	}
 	conn, found, err := s.store.Get(ctx, org, p.ID)
 	if err != nil {
