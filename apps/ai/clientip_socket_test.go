@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/ai/address"
 	"github.com/hanzoai/cloud/clientip"
 	"github.com/zap-proto/zip"
 )
@@ -73,7 +74,7 @@ func TestTheCallersAddressCrossesTheProcessBoundary(t *testing.T) {
 	var hostStamped string
 	host.Use(zip.H(clientip.StampClientIP))
 	host.Use(zip.H(func(c *zip.Ctx) error {
-		hostStamped = string(c.Fiber().Request().Header.Peek(clientip.ClientIPHeader))
+		hostStamped = string(c.Fiber().Request().Header.Peek(address.Header))
 		return c.Continue()
 	}))
 	host.Use(remote)
