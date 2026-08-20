@@ -26,7 +26,11 @@ API="${REVIEW_API:-https://api.hanzo.ai}"
 # data-shared, and this reviewer is handed the diff of a private repository.
 MODEL="${REVIEW_MODEL:-fireworks/gpt-oss-120b}"
 
-KEY="${REVIEW_API_KEY:-}"
+# An IAM access token, minted for this run by whoever invokes the reviewer.
+# There is no API key here and there is not meant to be one: IAM issues tokens,
+# the gateway accepts them, and a bearer that outlives the run is a bearer that
+# has to be rotated in a second place and is therefore forgotten there.
+TOKEN="${REVIEW_TOKEN:-}"
 # A diff no one can read is not a diff anyone reviewed. Bounded, and the bound
 # REFUSES rather than truncating: a silent cut is how the hostile hunk is the
 # one that fell off the end.
@@ -34,7 +38,7 @@ MAXBYTES="${REVIEW_MAX_BYTES:-400000}"
 
 die() { echo "::error::review: $*" >&2; exit 1; }
 
-[ -n "$KEY" ] || die "no REVIEW_API_KEY — the reviewer cannot run, so the change cannot pass"
+[ -n "$TOKEN" ] || die "no REVIEW_TOKEN — the reviewer has no identity, so the change cannot pass"
 
 # `req` and `resp` are created further down, so the trap defaults them: under
 # `set -u` a trap that expands an unset name fails, and a failing trap replaces
@@ -143,7 +147,7 @@ json.dump({"model": model, "max_tokens": 1500, "temperature": 0,
 PY
 
 code=$(curl -sS -m 180 -o "$resp" -w '%{http_code}' "$API/v1/chat/completions" \
-  -H "Authorization: Bearer $KEY" -H 'content-type: application/json' --data-binary @"$req" || echo 000)
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @"$req" || echo 000)
 [ "$code" = "200" ] || die "reviewer answered $code — cannot judge this change, so it does not pass ($(head -c 200 "$resp"))"
 
 python3 - "$resp" "$selfmod" <<'PY'
