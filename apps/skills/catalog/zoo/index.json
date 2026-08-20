@@ -5,7 +5,7 @@
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 537,
+  "skill_count": 542,
   "skills": [
     {
       "description": "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents..",
@@ -280,6 +280,14 @@
       "version": "8.0.0"
     },
     {
+      "description": "Read allowance allowance: Answers what the CALLER has left of their plan's free-call allowance this period, and the instant the count starts again..",
+      "name": "allowance_allowance",
+      "path": "allowance_allowance/SKILL.md",
+      "service": "allowance",
+      "sha256": "0f98772c681c832c9685fa5e55fdad4b482b05279203e171e0c3b43f2c5ca469",
+      "version": "8.0.0"
+    },
+    {
       "description": "Read analytics event js: The Zoo event tag — the one-line install for a surface with no bundler.",
       "name": "analytics_event-js",
       "path": "analytics_event-js/SKILL.md",
@@ -464,11 +472,27 @@
       "version": "8.0.0"
     },
     {
+      "description": "Read benchmark claims: Lists the effective published claims: what the leaderboard will use for each (benchmark, model) after the seed, the import and any stored correction are layered..",
+      "name": "benchmark_claims",
+      "path": "benchmark_claims/SKILL.md",
+      "service": "benchmark",
+      "sha256": "c2ca18122308a5e50356f623a9d3ea3ba620670d1b5c5805fcd1d47dc391c4a1",
+      "version": "8.0.0"
+    },
+    {
       "description": "Read benchmark compare: Is the ONLY valid arm-vs-arm test: it pairs the two models on the items BOTH completed, and answers rescue and damage counts with an exact-McNemar p..",
       "name": "benchmark_compare",
       "path": "benchmark_compare/SKILL.md",
       "service": "benchmark",
       "sha256": "dc1110ff16e40130d8b86cd26a43b07c6c44cad63044ac07b62d9faad5bb3575",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read benchmark history: Returns each model's measured score per run over time, oldest first, with the change between runs..",
+      "name": "benchmark_history",
+      "path": "benchmark_history/SKILL.md",
+      "service": "benchmark",
+      "sha256": "935ccb23823feab601dad8688da117cf391da6ea8e7ca16f6a0809ca6f39128e",
       "version": "8.0.0"
     },
     {
@@ -512,11 +536,11 @@
       "version": "8.0.0"
     },
     {
-      "description": "Read billing credit balance: What is left of your credit, as one number.",
+      "description": "Read billing credit balance: What is left of your credit, as one number, What is left of your credit, grouped by where it came from.",
       "name": "billing_credit-balance",
       "path": "billing_credit-balance/SKILL.md",
       "service": "billing",
-      "sha256": "5ffa35315c3de8a17a62304fca4e7f68b3333469790b19033520a87b3df9e435",
+      "sha256": "1716ca9cc2fb0333074a9cab46f897f617129e15f89ba68715aa5024b7b3c1b7",
       "version": "8.0.0"
     },
     {
@@ -1104,11 +1128,11 @@
       "version": "8.0.0"
     },
     {
-      "description": "Read compliance audit: AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane — the SOC 2 posture surface (privileged actions: who started/decided what, when)..",
+      "description": "Read compliance audit: AuditRead is the compliance read of the SHARED tamper-evident audit plane — the SOC 2 posture surface (privileged actions: who started/decided what, when)..",
       "name": "compliance_audit",
       "path": "compliance_audit/SKILL.md",
       "service": "compliance",
-      "sha256": "99130124f9dff93810efd5d37631c29440641779ef56b068375a57bc9f14d126",
+      "sha256": "f7cbb594c91d97375c71d078b0980e42cdf9e605d8fdefc7c33c78318c0a7793",
       "version": "8.0.0"
     },
     {
@@ -1485,6 +1509,14 @@
       "path": "download_download/SKILL.md",
       "service": "download",
       "sha256": "060ee2f7419fb00f9ac6c527639e493c23775f9d20cf09537501ef565ba217a7",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read edge edge: health reports whether a publish reaches readers, rather than whether it was accepted..",
+      "name": "edge_edge",
+      "path": "edge_edge/SKILL.md",
+      "service": "edge",
+      "sha256": "f835ac8aa536f449d366986c523a6d285e1f7c5555260fed294eba3bb696c648",
       "version": "8.0.0"
     },
     {
@@ -1968,14 +2000,6 @@
       "version": "8.0.0"
     },
     {
-      "description": "Read generate-text-to-speech-audio-stream generate text to speech audio stream: Convert text to speech with streaming.",
-      "name": "generate-text-to-speech-audio-stream_generate-text-to-speech-audio-stream",
-      "path": "generate-text-to-speech-audio-stream_generate-text-to-speech-audio-stream/SKILL.md",
-      "service": "generate-text-to-speech-audio-stream",
-      "sha256": "90b4f8fa9647d60981f3f26e1586b831b74084b0ee27f44f64583543ae6766b3",
-      "version": "8.0.0"
-    },
-    {
       "description": "Read git blob: View a file in a repository, View a file in a repository.",
       "name": "git_blob",
       "path": "git_blob/SKILL.md",
@@ -2184,11 +2208,11 @@
       "version": "8.0.0"
     },
     {
-      "description": "Read iam organizations: Returns the organizations you can see, newest first., Returns one organization: its display, its defaults and the sign-in rules everyone in it inherits..",
+      "description": "Read iam organizations: Returns the organizations you can see, newest first., Returns one organization: its display, its defaults and the sign-in rules everyone in it inherits., Returns the organizations you can act in, the ones you belong to first and the rest after, newest firs",
       "name": "iam_organizations",
       "path": "iam_organizations/SKILL.md",
       "service": "iam",
-      "sha256": "514b2294b8e60659dbb8bf85394e81d6197dbe8ca492a32415175aef19a73c22",
+      "sha256": "f5f07b4a8ab8ff8edccfefb802e15f98372f689953819d9a115ed2fcede11ef2",
       "version": "8.0.0"
     },
     {
@@ -2357,6 +2381,14 @@
       "path": "integrations_github/SKILL.md",
       "service": "integrations",
       "sha256": "187ba321e8c0c9871d279c789e2935e7afa769ab13cc1d712045579d733b3b11",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read integrations gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
+      "name": "integrations_gitlab",
+      "path": "integrations_gitlab/SKILL.md",
+      "service": "integrations",
+      "sha256": "d590e80d88726e281417a991e981274d6be66c0e0cb58beb56f5c027cfcbe1d7",
       "version": "8.0.0"
     },
     {
@@ -2949,6 +2981,14 @@
       "path": "openapi_openapi-json/SKILL.md",
       "service": "openapi",
       "sha256": "efd517f5e72d32ee404e3ce55d59e35a228335a3b5e2053d65d0ac596a38b660",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read openapi well known: The API description, at the conventional address.",
+      "name": "openapi_well-known",
+      "path": "openapi_well-known/SKILL.md",
+      "service": "openapi",
+      "sha256": "2cfe005857db76fffb60f66c05b9ed0cd732a6356ac6fee7cc070ea2605cc684",
       "version": "8.0.0"
     },
     {
@@ -3664,59 +3704,59 @@
       "version": "8.0.0"
     },
     {
-      "description": "Read sentinel events: Returns one captured error event of a project, by its id..",
-      "name": "sentinel_events",
-      "path": "sentinel_events/SKILL.md",
-      "service": "sentinel",
-      "sha256": "09d19674f541fc54f730212d5334a31edd941d8a30dc4896c9ccce0def8c1d6e",
+      "description": "Read sentry events: Returns one captured error event of a project, by its id..",
+      "name": "sentry_events",
+      "path": "sentry_events/SKILL.md",
+      "service": "sentry",
+      "sha256": "baa86e6365415e0a297b532112c5890b8cd3b1c3b60a4d7420ce80c073e7c13b",
       "version": "8.0.0"
     },
     {
-      "description": "Read sentinel issues: Lists the caller's org's grouped error issues, optionally narrowed to one project and one time window, and filtered by status, level, environment, service, a free-text query and a sort., Returns one grouped issue of the caller's org with its latest occurrenc",
-      "name": "sentinel_issues",
-      "path": "sentinel_issues/SKILL.md",
-      "service": "sentinel",
-      "sha256": "b2ee0a383a4eb88a9ca192e68ca016468a281377913ad4fda0c36d77db9df1b7",
+      "description": "Read sentry issues: Lists the caller's org's grouped error issues, optionally narrowed to one project and one time window, and filtered by status, level, environment, service, a free-text query and a sort., Returns one grouped issue of the caller's org with its latest occurrence ",
+      "name": "sentry_issues",
+      "path": "sentry_issues/SKILL.md",
+      "service": "sentry",
+      "sha256": "51e06be3d9ac80b90eb6986e52e4e1e7d87fd6bef2077454bc515373033487b4",
       "version": "8.0.0"
     },
     {
-      "description": "Read sentinel logs: Lists a project's captured error events, newest first, optionally narrowed to those whose message or exception text contains a search string..",
-      "name": "sentinel_logs",
-      "path": "sentinel_logs/SKILL.md",
-      "service": "sentinel",
-      "sha256": "38e4c289d521284259a2a2686d8b786a0387ad6ac92400b73633ad6bc3e5f1c9",
+      "description": "Read sentry logs: Lists a project's captured error events, newest first, optionally narrowed to those whose message or exception text contains a search string..",
+      "name": "sentry_logs",
+      "path": "sentry_logs/SKILL.md",
+      "service": "sentry",
+      "sha256": "ce3d5a6c0dacfaec41dee5dda5e14c14edf9f2816c5a912a4d47130b8ae7c8e4",
       "version": "8.0.0"
     },
     {
-      "description": "Read sentinel projects: Lists the caller's org's Sentry projects, each with its freshly-derived DSN., Returns one Sentry project of the caller's org, DSN included..",
-      "name": "sentinel_projects",
-      "path": "sentinel_projects/SKILL.md",
-      "service": "sentinel",
-      "sha256": "0bfcd18f91b14ef60a2e8acdd0f72348c404d252a550a1f777a91571d60a36ec",
+      "description": "Read sentry projects: Lists the caller's org's Sentry projects, each with its freshly-derived DSN., Returns one Sentry project of the caller's org, DSN included..",
+      "name": "sentry_projects",
+      "path": "sentry_projects/SKILL.md",
+      "service": "sentry",
+      "sha256": "d37230a14fb6011acc2cd3a97260fc100019d8728e265f2c94f7accaeb47ee7c",
       "version": "8.0.0"
     },
     {
-      "description": "Read sentinel sentinel: Read the caller org's errors on the Sentry surface.",
-      "name": "sentinel_sentinel",
-      "path": "sentinel_sentinel/SKILL.md",
-      "service": "sentinel",
-      "sha256": "f2689d02dae86b2b45018de281a98cefa67dcbbf4dde6e24df8f707e85a3551f",
+      "description": "Read sentry sentry: Read the caller org's errors on the Sentry surface.",
+      "name": "sentry_sentry",
+      "path": "sentry_sentry/SKILL.md",
+      "service": "sentry",
+      "sha256": "925d14b11248859abad6604104b2e5edbd6ede2670e1ba6b2bf77d605db12f07",
       "version": "8.0.0"
     },
     {
-      "description": "Read sentinel stats: Returns a project's event-rate timeseries: one bucket per interval over the requested period, counting the events in it..",
-      "name": "sentinel_stats",
-      "path": "sentinel_stats/SKILL.md",
-      "service": "sentinel",
-      "sha256": "b71736f9a61f862c0b1b2b03348313dbfba975b3604cbfbc7d572effa2175dc0",
+      "description": "Read sentry stats: Returns a project's event-rate timeseries: one bucket per interval over the requested period, counting the events in it..",
+      "name": "sentry_stats",
+      "path": "sentry_stats/SKILL.md",
+      "service": "sentry",
+      "sha256": "808935352aacce22d2e508f89071c1896f8f635e4e64a27232e797a4a52fef34",
       "version": "8.0.0"
     },
     {
-      "description": "Read sentinel traces: Lists the traces a project's captured errors reference, each with how many errors landed on it, when they started and stopped, and the latest message seen — the entry point for \"which requests are failing\"., Returns one trace's captured errors for a project ",
-      "name": "sentinel_traces",
-      "path": "sentinel_traces/SKILL.md",
-      "service": "sentinel",
-      "sha256": "e5c57d9331c737ee272c09cfa54f76c7afb670c521b411fba71992080c20e0fd",
+      "description": "Read sentry traces: Lists the traces a project's captured errors reference, each with how many errors landed on it, when they started and stopped, and the latest message seen — the entry point for \"which requests are failing\"., Returns one trace's captured errors for a project — ",
+      "name": "sentry_traces",
+      "path": "sentry_traces/SKILL.md",
+      "service": "sentry",
+      "sha256": "b27683d09ecd053973d5b47be7180b9db7d71291c81a4754b0c5fd16bf27f161",
       "version": "8.0.0"
     },
     {
