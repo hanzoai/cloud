@@ -64,7 +64,7 @@ jobs:
       GOPRIVATE: github.com/hanzoai/*
       GOWORK: off
       # A STABLE cache home, at the path the gate uses. setup-go's cache writes to
-      # the Actions cache backend, which this forge does not provide; naming the
+      # the Actions cache backend, which Hanzo Git does not provide; naming the
       # two caches at a fixed path makes them persist on the runner's filesystem
       # instead, and sharing the gate's path is what makes this six minutes rather
       # than fifty. Go locks both, so concurrent jobs sharing them is safe.
@@ -87,7 +87,7 @@ jobs:
         with:
           go-version-file: go.mod
           # OFF, and said rather than defaulted: setup-go's cache writes to the
-          # Actions cache backend, which this forge does not serve. The caches
+          # Actions cache backend, which Hanzo Git does not serve. The caches
           # that make this six minutes are the fixed paths in `env:` above, which
           # live on the runner's own filesystem and outlast the job.
           cache: false
@@ -102,7 +102,7 @@ jobs:
           GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # RUNNER_TEMP is unset on this forge. Unguarded, "$RUNNER_TEMP/x" is
+          # RUNNER_TEMP is unset on Hanzo Git. Unguarded, "$RUNNER_TEMP/x" is
           # "/x" and the step dies before printing anything.
           TMP="${RUNNER_TEMP:-/tmp}"
           CFG="$TMP/gitconfig-private"
@@ -118,17 +118,17 @@ jobs:
           { echo "GIT_CONFIG_GLOBAL=$CFG"; echo "GIT_CONFIG_NOSYSTEM=1"; } >> "$GITHUB_ENV"
           export GIT_CONFIG_GLOBAL="$CFG" GIT_CONFIG_NOSYSTEM=1
 
-          # THE FORGE FIRST, as cicd.yml does. It mirrors the same objects, so the
-          # fetched zip hashes to the h1: line already in go.sum and a forge
+          # GIT.HANZO.AI FIRST, as cicd.yml does. It mirrors the same objects, so the
+          # fetched zip hashes to the h1: line already in go.sum and Hanzo Git
           # serving different bytes fails the build rather than shipping them.
           # It is also the substitution that survives a GitHub ACL drift, which
           # has blocked releases here before. GH_PAT stays the fallback for a
-          # module the forge has not mirrored.
+          # module Hanzo Git has not mirrored.
           if [ -n "${GIT_TOKEN:-}" ]; then
             git config --global \
               url."https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
           fi
-          [ -n "${GH_PAT:-}" ] || { echo "::warning::GH_PAT is not set — a private module the forge has not mirrored, and that is not already in the cache, cannot be fetched"; exit 0; }
+          [ -n "${GH_PAT:-}" ] || { echo "::warning::GH_PAT is not set — a private module Hanzo Git has not mirrored, and that is not already in the cache, cannot be fetched"; exit 0; }
           git config --global \
             url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
 
