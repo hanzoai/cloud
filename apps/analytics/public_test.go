@@ -584,12 +584,22 @@ func TestAuthenticated_OptOutNotHonoredForPrincipal(t *testing.T) {
 	}
 }
 
-// ── the fan-out seam refuses the public tenant ──────────────────────────────
+// ── the fan-out seam delivers to the org that owns the write ────────────────
 
-// TestFanOut_PublicTenantNeverReachesDestinations: destinations receive the RAW
-// pre-scrub event and forward it to an org's connected ad platforms, so an unattested
-// event must never reach one.
-func TestFanOut_PublicTenantNeverReachesDestinations(t *testing.T) {
+// TestFanOut_ProjectedWriteReachesItsOwnOrg: a write that landed fans out to the org
+// that owns it, which is the seam an org's connected ad platforms hang off.
+//
+// It asked something else once — that the reserved `$public` tenant never reached a
+// destination, because destinations take the RAW pre-scrub event. That tenant is
+// retired: the door attributes a site's events to the key its project minted or
+// refuses them (688ac687a), so there is no unattested org left to keep out and the
+// property is held by construction rather than by a check here.
+//
+// What replaced it fanned out the SAME org twice and never emptied the recorder
+// between, so the second assertion counted the first delivery too and raced between
+// one and two — green alone, red under a full-package run, which is the shape that
+// turns a gate red for reasons no diff explains. One org, one delivery, once.
+func TestFanOut_ProjectedWriteReachesItsOwnOrg(t *testing.T) {
 	// fanOut dispatches on a goroutine, so the recorder is shared across goroutines and
 	// must be guarded — the sink WRITES from the dispatch goroutine while the assertions
 	// below READ from the test goroutine. Without this the test is itself a data race
@@ -609,20 +619,16 @@ func TestFanOut_PublicTenantNeverReachesDestinations(t *testing.T) {
 	t.Cleanup(remove)
 
 	fanOut("acme", []CaptureEvent{{Type: "pageview", Event: "$pageview"}})
-	// Give a real fan-out time to land.
-	time.Sleep(50 * time.Millisecond)
-	if got := seen(); len(got) != 1 || got[0] != "acme" {
-		t.Fatalf("a projected write must fan out to its own org, got %v", got)
-	}
 
-	// A real org still fans out — the guard is scoped to the sentinel, not a regression.
-	fanOut("acme", []CaptureEvent{{Type: "pageview", Event: "$pageview"}})
+	// WAITED FOR, never slept past: the dispatch is a goroutine, so a fixed sleep
+	// either wastes the time or is too short on a loaded machine. Poll until the
+	// delivery lands, then assert the WHOLE recorder — one org, exactly once.
 	deadline := time.Now().Add(2 * time.Second)
 	for len(seen()) == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if got := seen(); len(got) != 1 || got[0] != "acme" {
-		t.Fatalf("a real org must still fan out, got %v", got)
+		t.Fatalf("a projected write must fan out to its own org exactly once, got %v", got)
 	}
 }
 
