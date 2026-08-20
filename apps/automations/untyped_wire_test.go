@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Three /v1/automations routes are deliberately NOT typed ops, and routes() names the
+// Three /v1/auto routes are deliberately NOT typed ops, and routes() names the
 // wire fact behind each one. Prose is not a gate: a later reader can retype any of
 // them, watch the suite stay green, and ship a silent wire change — each one breaks
 // on inputs no existing test sends.
@@ -72,7 +72,7 @@ import (
 // pins that, so this retype goes red where the REST pins cannot see it.
 
 // TestResumeAcceptsAnyJSONValue pins the resume payload on POST
-// /v1/automations/runs/{id}/resume: it is an ARBITRARY JSON value — a number, a
+// /v1/auto/runs/{id}/resume: it is an ARBITRARY JSON value — a number, a
 // string, an array, a bool, null or an object — handed verbatim to the waitpoint as
 // its output. A struct In accepts only an object (and null), so `42`, `"hi"`, `[1,2]`
 // and `true` would all become 400s.
@@ -99,7 +99,7 @@ func TestResumeAcceptsAnyJSONValue(t *testing.T) {
 	}
 
 	// An object body is the shape a typed In could describe — it is the CONTROL.
-	control := reqRaw(t, app, "/v1/automations/runs/run_arb/resume", "acme", `{"a":1}`)
+	control := reqRaw(t, app, "/v1/auto/runs/run_arb/resume", "acme", `{"a":1}`)
 	if control.Code == http.StatusBadRequest {
 		t.Fatalf("object resume payload must not 400, got %d: %s", control.Code, control.Body)
 	}
@@ -110,13 +110,13 @@ func TestResumeAcceptsAnyJSONValue(t *testing.T) {
 	if control.Code == http.StatusNotFound {
 		t.Fatalf("the seeded run must be FOUND — the path param has to reach the handler, got 404: %s", control.Body)
 	}
-	if unknown := reqRaw(t, app, "/v1/automations/runs/run_absent/resume", "acme", `{"a":1}`); unknown.Code != http.StatusNotFound {
+	if unknown := reqRaw(t, app, "/v1/auto/runs/run_absent/resume", "acme", `{"a":1}`); unknown.Code != http.StatusNotFound {
 		t.Fatalf("an unknown run id must answer 404, got %d: %s", unknown.Code, unknown.Body)
 	}
 
 	// Every one of these is a legal resume payload today and a 400 under a struct In.
 	for _, raw := range []string{`42`, `"hi"`, `[1,2]`, `true`, `null`} {
-		got := reqRaw(t, app, "/v1/automations/runs/run_arb/resume", "acme", raw)
+		got := reqRaw(t, app, "/v1/auto/runs/run_arb/resume", "acme", raw)
 		if got.Code == http.StatusBadRequest {
 			t.Fatalf("resume payload %s must be accepted verbatim, got 400: %s", raw, got.Body)
 		}
@@ -128,7 +128,7 @@ func TestResumeAcceptsAnyJSONValue(t *testing.T) {
 }
 
 // TestInboundHookAcceptsPayloadKeysCollidingWithPathParams pins the decisive fact
-// about POST /v1/automations/hooks/{source}/{event}: the body is an OPEN-KEYED event
+// about POST /v1/auto/hooks/{source}/{event}: the body is an OPEN-KEYED event
 // payload threaded to flows as {{trigger.*}}, so a producer may legitimately send a
 // key named "source" or "event" holding any JSON type.
 //
@@ -168,7 +168,7 @@ func TestInboundHookAcceptsPayloadKeysCollidingWithPathParams(t *testing.T) {
 		`{"msg":"c","event":[1,2]}`,
 		`{"msg":"d","source":null,"event":99}`,
 	} {
-		got := reqRaw(t, app, "/v1/automations/hooks/github/push", "acme", raw)
+		got := reqRaw(t, app, "/v1/auto/hooks/github/push", "acme", raw)
 		if got.Code != http.StatusOK {
 			t.Fatalf("event payload %s is legal today and must answer 200, got %d: %s", raw, got.Code, got.Body)
 		}
@@ -205,7 +205,7 @@ func TestInboundHookAcceptsPayloadKeysCollidingWithPathParams(t *testing.T) {
 }
 
 // TestOperationsAnswersTwoBodyShapes pins the reason POST
-// /v1/automations/flows/{id}/operations cannot be a typed op: it answers TWO
+// /v1/auto/flows/{id}/operations cannot be a typed op: it answers TWO
 // different bodies on one route and one status. CHANGE_STATUS is flow-scoped and
 // answers the FLOW; every other operation edits the step tree and answers the
 // VERSION. A typed op declares ONE Out, so typing this route would have to change
@@ -217,7 +217,7 @@ func TestInboundHookAcceptsPayloadKeysCollidingWithPathParams(t *testing.T) {
 func TestOperationsAnswersTwoBodyShapes(t *testing.T) {
 	app := newApp(t)
 
-	create := req(t, app, http.MethodPost, "/v1/automations/flows", "acme", map[string]any{
+	create := req(t, app, http.MethodPost, "/v1/auto/flows", "acme", map[string]any{
 		"displayName": "Two Shapes",
 		"trigger": map[string]any{
 			"name": "trigger", "type": TriggerTypePiece, "displayName": "Start",
@@ -229,7 +229,7 @@ func TestOperationsAnswersTwoBodyShapes(t *testing.T) {
 	if err := json.Unmarshal(create.Body, &pf); err != nil {
 		t.Fatalf("create flow: %v (%s)", err, create.Body)
 	}
-	path := "/v1/automations/flows/" + pf.ID + "/operations"
+	path := "/v1/auto/flows/" + pf.ID + "/operations"
 
 	// CHANGE_STATUS answers the FLOW: projectId is a Flow field, and no FlowVersion
 	// carries it.
@@ -280,7 +280,7 @@ func TestOperationsAnswersTwoBodyShapes(t *testing.T) {
 //
 // It has two halves, and the first is what makes the second real:
 //
-//   - the CHANNEL, on an op that is typed today (GET /v1/automations/runs/:id): a
+//   - the CHANNEL, on an op that is typed today (GET /v1/auto/runs/:id): a
 //     tools/call carrying the run id in its arguments must return that run, and the
 //     same call without it must not. If zip ever stopped binding an op's address from
 //     the arguments object, this half goes red for all fourteen ops at once.
@@ -300,7 +300,7 @@ func TestOpsAddressThroughArgumentsAlone(t *testing.T) {
 		t.Fatalf("seed run: %v", err)
 	}
 
-	text, isErr := toolsCall(t, app, "acme", "get_automations_runs_by_id", `{"id":"run_mcp"}`)
+	text, isErr := toolsCall(t, app, "acme", "get_auto_runs_by_id", `{"id":"run_mcp"}`)
 	if isErr {
 		t.Fatalf("a typed op must be addressable by its arguments alone: %s", text)
 	}
@@ -308,7 +308,7 @@ func TestOpsAddressThroughArgumentsAlone(t *testing.T) {
 		t.Fatalf("tools/call must answer the run its arguments named, got %s", text)
 	}
 	// Without the address the SAME tool cannot find it — so "found" below discriminates.
-	if _, isErr := toolsCall(t, app, "acme", "get_automations_runs_by_id", `{}`); !isErr {
+	if _, isErr := toolsCall(t, app, "acme", "get_auto_runs_by_id", `{}`); !isErr {
 		t.Fatal("a tools/call with no id must not resolve a run — the discriminator is dead")
 	}
 

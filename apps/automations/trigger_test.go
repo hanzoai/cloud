@@ -157,8 +157,8 @@ func TestInboundHookContentHashDedupe(t *testing.T) {
 	seedWebhookFlow(t, mounted.State.store, "acme", "github", "push")
 
 	body := map[string]any{"msg": "same"}
-	r1 := req(t, app, http.MethodPost, "/v1/automations/hooks/github/push", "acme", body)
-	r2 := req(t, app, http.MethodPost, "/v1/automations/hooks/github/push", "acme", body)
+	r1 := req(t, app, http.MethodPost, "/v1/auto/hooks/github/push", "acme", body)
+	r2 := req(t, app, http.MethodPost, "/v1/auto/hooks/github/push", "acme", body)
 	if r1.Code != http.StatusOK || r2.Code != http.StatusOK {
 		t.Fatalf("hook codes want 200/200, got %d/%d", r1.Code, r2.Code)
 	}
@@ -356,10 +356,10 @@ func TestInboundHookOrgGatedAndDispatches(t *testing.T) {
 	seedWebhookFlow(t, mounted.State.store, "acme", "github", "push")
 	captureStarter(t)
 
-	if got := req(t, app, http.MethodPost, "/v1/automations/hooks/github/push", "", map[string]any{"msg": "x"}); got.Code != http.StatusForbidden {
+	if got := req(t, app, http.MethodPost, "/v1/auto/hooks/github/push", "", map[string]any{"msg": "x"}); got.Code != http.StatusForbidden {
 		t.Fatalf("anonymous hook want 403, got %d", got.Code)
 	}
-	got := req(t, app, http.MethodPost, "/v1/automations/hooks/github/push", "acme", map[string]any{"msg": "hi"})
+	got := req(t, app, http.MethodPost, "/v1/auto/hooks/github/push", "acme", map[string]any{"msg": "hi"})
 	if got.Code != http.StatusOK {
 		t.Fatalf("authenticated hook want 200, got %d: %s", got.Code, got.Body)
 	}
@@ -388,7 +388,7 @@ func TestEnableDisableMaintainsWebhookSubscription(t *testing.T) {
 			},
 		},
 	}
-	res := req(t, app, http.MethodPost, "/v1/automations/flows", "acme", create)
+	res := req(t, app, http.MethodPost, "/v1/auto/flows", "acme", create)
 	if res.Code != http.StatusCreated {
 		t.Fatalf("create flow want 201, got %d: %s", res.Code, res.Body)
 	}
@@ -405,7 +405,7 @@ func TestEnableDisableMaintainsWebhookSubscription(t *testing.T) {
 		t.Fatalf("disabled flow is already subscribed: %d", len(subs))
 	}
 	// Enable → subscribes; delivery fires.
-	if r := req(t, app, http.MethodPost, "/v1/automations/flows/"+created.ID+"/enable", "acme", nil); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodPost, "/v1/auto/flows/"+created.ID+"/enable", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("enable want 200, got %d: %s", r.Code, r.Body)
 	}
 	if subs, _ := st.MatchTriggers(context.Background(), "acme", "github", "push"); len(subs) != 1 {
@@ -415,7 +415,7 @@ func TestEnableDisableMaintainsWebhookSubscription(t *testing.T) {
 		t.Fatalf("enabled delivery want 1, got %d (err=%v)", n, err)
 	}
 	// Disable → unsubscribes; delivery is a no-op.
-	if r := req(t, app, http.MethodPost, "/v1/automations/flows/"+created.ID+"/disable", "acme", nil); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodPost, "/v1/auto/flows/"+created.ID+"/disable", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("disable want 200, got %d: %s", r.Code, r.Body)
 	}
 	if subs, _ := st.MatchTriggers(context.Background(), "acme", "github", "push"); len(subs) != 0 {

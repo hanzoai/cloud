@@ -9,20 +9,20 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/automations/flows/:id", zip.Doc{
+	zip.Describe("DELETE /v1/auto/flows/:id", zip.Doc{
 		Description: "Deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found.",
 		Fields: map[string]string{
 			"flowRef.id": "ID is the flow to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
-	zip.Describe("GET /v1/automations/connectors", zip.Doc{
+	zip.Describe("GET /v1/auto/connectors", zip.Doc{
 		Description: "Connectors returns the connector catalogue. Each entry is an external service a\nflow step can invoke, carrying its auth descriptor and the input properties of its\nactions and triggers. The catalogue is the same for every tenant, so the gate is a\nvalidated principal rather than a per-org view.",
 		Fields: map[string]string{
 			"PropSpec.type": "string|number|boolean|object|array",
 		},
 	})
-	zip.Describe("GET /v1/automations/flows", zip.Doc{
+	zip.Describe("GET /v1/auto/flows", zip.Doc{
 		Description: "Returns the caller org's automations, most-recently-updated first. The\noptional `limit` query bounds the page.",
 		Fields: map[string]string{
 			"Flow.projectId":  "projectId == org (server-derived)",
@@ -30,7 +30,7 @@ func init() {
 			"listQuery.limit": "Limit bounds the page (default 200, maximum 1000).",
 		},
 	})
-	zip.Describe("GET /v1/automations/flows/:id", zip.Doc{
+	zip.Describe("GET /v1/auto/flows/:id", zip.Doc{
 		Description: "Returns one automation and its latest version. That is the flow record\nplus the step tree the builder edits; a flow of another org answers not-found.",
 		Fields: map[string]string{
 			"FlowAction.type":                  "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
@@ -48,7 +48,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
-	zip.Describe("GET /v1/automations/flows/:id/versions", zip.Doc{
+	zip.Describe("GET /v1/auto/flows/:id/versions", zip.Doc{
 		Description: "Returns one flow's versions, newest first. The optional `limit`\nquery bounds the page.",
 		Fields: map[string]string{
 			"FlowAction.type":    "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
@@ -59,13 +59,13 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
-	zip.Describe("GET /v1/automations/pieces", zip.Doc{
+	zip.Describe("GET /v1/auto/pieces", zip.Doc{
 		Description: "Pieces is the retired-name alias of the connector catalogue. It serves exactly\nwhat GET /v1/automations/connectors serves, under the name this surface used\nbefore \"piece\" (the ActivePieces term) became \"connector\", and stays valid for\nclients pinned to the old path. Prefer /connectors.",
 		Fields: map[string]string{
 			"PropSpec.type": "string|number|boolean|object|array",
 		},
 	})
-	zip.Describe("GET /v1/automations/runs", zip.Doc{
+	zip.Describe("GET /v1/auto/runs", zip.Doc{
 		Description: "Returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page.",
 		Fields: map[string]string{
 			"runPage.data":    "Data is the page of runs, newest first.",
@@ -73,14 +73,14 @@ func init() {
 			"runQuery.limit":  "Limit bounds the page (default 200, maximum 1000).",
 		},
 	})
-	zip.Describe("GET /v1/automations/runs/:id", zip.Doc{
+	zip.Describe("GET /v1/auto/runs/:id", zip.Doc{
 		Description: "Returns one run. A run that has not reached a terminal status is refreshed\nfrom the durable engine first — scoped to the org's own namespace — so the caller\nsees live progress rather than the last status that happened to be persisted.",
 		Fields: map[string]string{
 			"runRef.id": "ID is the run to read, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"run_1"}`),
 	})
-	zip.Describe("PATCH /v1/automations/flows/:id", zip.Doc{
+	zip.Describe("PATCH /v1/auto/flows/:id", zip.Doc{
 		Description: "Updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow.",
 		Fields: map[string]string{
 			"Flow.projectId":                 "projectId == org (server-derived)",
@@ -92,7 +92,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"flow_1","folderId":"ops"}`),
 	})
-	zip.Describe("POST /v1/automations/flows", zip.Doc{
+	zip.Describe("POST /v1/auto/flows", zip.Doc{
 		Description: "Creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/automations/flows/{id}/enable does that.",
 		Fields: map[string]string{
 			"FlowAction.type":                  "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
@@ -113,7 +113,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"displayName":"Nightly Sync","trigger":{"name":"trigger","type":"PIECE_TRIGGER","displayName":"Start","strategy":"MANUAL","settings":{"pieceName":"core","triggerName":"manual"}}}`),
 	})
-	zip.Describe("POST /v1/automations/flows/:id/disable", zip.Doc{
+	zip.Describe("POST /v1/auto/flows/:id/disable", zip.Doc{
 		Description: "Disarms a flow's trigger and marks it DISABLED. Its schedule and its\nevent subscriptions are dropped, so a disabled flow is never a live target; runs\nalready in flight are unaffected, and it can still be started on demand.",
 		Fields: map[string]string{
 			"Flow.projectId": "projectId == org (server-derived)",
@@ -121,7 +121,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
-	zip.Describe("POST /v1/automations/flows/:id/enable", zip.Doc{
+	zip.Describe("POST /v1/auto/flows/:id/enable", zip.Doc{
 		Description: "Arms a flow's trigger and marks it ENABLED. A POLLING trigger gets a\ncron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the\nrouting index, so an inbound event starts it; a MANUAL trigger arms nothing and\nstill runs on demand.",
 		Fields: map[string]string{
 			"Flow.projectId": "projectId == org (server-derived)",
@@ -129,17 +129,17 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
-	zip.Describe("POST /v1/automations/flows/:id/operations", zip.Doc{
+	zip.Describe("POST /v1/auto/flows/:id/operations", zip.Doc{
 		Description: "Applies a FlowOperation. CHANGE_STATUS is flow-scoped (routes to\nenable/disable); every other op mutates the flow's latest version's step tree.\n\nUNTYPED, and the reason is the two returns below: CHANGE_STATUS answers with the\nFLOW and every other operation with the VERSION it edited — two response bodies on\none route. A typed op declares ONE Out, so typing this would have to change the\nbody one of the two branches sends, and the wire is not the migration's to move.\n\nIts In is not the problem — {id, type, request} is a closed shape — and neither is a\nUNION Out, which fails for a stated reason: Flow's externalId, folderId and\npublishedVersionId carry no omitempty and so are emitted unconditionally today, and\nthe omitempty a union needs to keep the version branch clean would delete them from\nthe flow branch. Nor is `Out any` a conversion. It would compile and preserve the\nbytes, and it publishes `{\"type\":\"object\"}` — an SDK method returning an untyped\nblob and an MCP tool whose result says nothing, which is what the untyped route\nalready offers. A typed op exists for the schema; declaring one with no schema\nspends the route's one chance to be described and buys nothing.\n\nIt converts when zip can declare a response per outcome (the multi-SHAPE sibling of\nthe multi-status gap the conditional-status class waits on); until then the builder's\nedit door stays a route and nothing else — no MCP tool, no CLI command, no SDK method.",
 	})
-	zip.Describe("POST /v1/automations/flows/:id/run", zip.Doc{
+	zip.Describe("POST /v1/auto/flows/:id/run", zip.Doc{
 		Description: "Starts one durable run of a flow now. It runs the flow's published\nversion if one is pinned, else its latest, and answers the run record it created.\nThe run is bounded by the org's per-minute run-start budget and its in-flight\nconcurrency ceiling; over either, or with the engine not ready, no run is started\nand no run id is burned.",
 		Fields: map[string]string{
 			"flowRef.id": "ID is the flow to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
-	zip.Describe("POST /v1/automations/flows/:id/versions", zip.Doc{
+	zip.Describe("POST /v1/auto/flows/:id/versions", zip.Doc{
 		Description: "Adds a new DRAFT version to a flow. The version is created invalid\nunless it carries a trigger, and it does not become the running version until it\nis published (PATCH the flow's publishedVersionId) or becomes the latest.",
 		Fields: map[string]string{
 			"FlowAction.type":             "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
@@ -150,10 +150,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"flow_1","displayName":"v2"}`),
 	})
-	zip.Describe("POST /v1/automations/hooks/:source/:event", zip.Doc{
+	zip.Describe("POST /v1/auto/hooks/:source/:event", zip.Doc{
 		Description: "Is the authenticated inbound event sink:\nPOST /v1/automations/hooks/:source/:event. The org is the VALIDATED principal (never\nthe body); the path names the (source,event) trigger key; the JSON body is the event\npayload threaded to matching flows as {{trigger.*}}. An optional X-Idempotency-Key\nmakes a re-delivery a no-op. Returns how many flows the event matched+started.\n\nUNTYPED, and the DECISIVE reason is that the body is an OPEN-KEYED payload while the\naddress (source,event) is in the URL. An In can serve one of those, never both, and\neach choice breaks the wire differently:\n\n  - A STRUCT In binds :source and :event — zip matches a path param to the field\n    whose json tag, else field name, equals it — so it must own fields named source\n    and event. A producer may legitimately send an event key called \"source\" or\n    \"event\" holding any JSON type, and zip decodes the body into the In BEFORE the\n    handler runs, so {\"source\": 42} becomes `invalid body:` 400 where today it is\n    accepted and delivered. Worse is the case that does NOT error: a payload key the\n    struct has no field for is not a failure, it is DISCARDED. {\"msg\":\"hello\"} still\n    answers 200 with the same matched count, and the flow receives {{trigger.msg}}\n    EMPTY. Nothing 400s and nothing logs — every webhook keeps \"working\" while every\n    payload arrives blank.\n  - A NON-STRUCT In (map[string]any) takes the open body — and bindURL walks a struct\n    only, so :source and :event never arrive. The event matches no subscription and\n    answers matched:0.\n\nBoth retypes were run: each leaves the pre-existing suite green except for the\nassertions in untyped_wire_test.go written for exactly this, which is why that test\npins DELIVERY (the payload the flow receives, and the match count) and not just the\nstatus code.\n\nThe rest of the contract is raw-byte-shaped but NOT independently blocking, and the\ndistinction matters because the recoverable half is the tempting one: with no\nX-Idempotency-Key the dedupe key is a CONTENT HASH OF THE RAW RECEIVED BYTES (a\nre-encoded decoded value gives different bytes, so a hammer of identical POSTs would\nstop collapsing to one run), two request HEADERS carry the remainder\n(X-Idempotency-Key and X-Causation-Depth, which stops an in-platform trigger cycle\namplifying), and the size bound is measured on the raw bytes before any parse — yet\nall four ARE reachable from a typed op via cloud.Request(ctx), so none of them is\nthe reason. Same family as the raw-byte-signed provider webhooks in\napps/integrations.\n\nThe struct-with-a-swallowing-UnmarshalJSON retype fails here for the same reason it\nfails at resumeRun above: it holds the REST wire and gives up the MCP tool and the\nZAP call, because those carry the arguments object as the WHOLE input and (source,\nevent) live only in the URL. See TestOpsAddressThroughArgumentsAlone.",
 	})
-	zip.Describe("POST /v1/automations/runs/:id/resume", zip.Doc{
+	zip.Describe("POST /v1/auto/runs/:id/resume", zip.Doc{
 		Description: "Delivers a waitpoint's output into a paused run, resuming it.\n\nUNTYPED, because the body and the address pull the In in opposite directions and it\ncan only answer to one of them.\n\nThe payload is an ARBITRARY JSON value — an object, an array, a string, a number,\nnull — handed verbatim to the waitpoint. zip's invoke unmarshals into the In BEFORE\nthe handler runs, so a struct In turns every non-object payload into a 400. The\nobvious repair is a non-struct In (`any` accepts all six shapes), and it trades the\n400 for something quieter: bindURL walks a STRUCT only, so an `any` In never\nreceives :id, GetRun is asked for the empty id, and EVERY resume answers 404 — with\nno 400 anywhere to show for it. That is why TestResumeAcceptsAnyJSONValue pins the\naddressing (a seeded run and an unknown one must answer differently) and not only\nthe acceptance: acceptance alone is green through that retype, verified.\n\nThe size bound is measured on the RAW received bytes before any parse, which is the\nonly place it can be measured — a decoded value has no byte count of its own. That\none IS reachable from a typed op via cloud.Request(ctx), so it is not the blocker.\n\nOne retype looks like it beats both and does not: a STRUCT In holding an id field\nplus an UnmarshalJSON that swallows the whole body. Nothing can fail it, and bindURL\nstill binds :id, so the REST wire is preserved exactly — measured. What it gives up\nis everything typing was for. A tools/call and a ZAP by-name call carry every\nargument in ONE JSON object and bind no path from it, so an In that discards its own\nkeys never receives the address: the tool answers \"run not found\" for a run that\nexists, while the published schema advertises a body of {\"id\": string} this route has\nnever accepted. TestOpsAddressThroughArgumentsAlone is the pin; the four REST pins\nstay green through it, which is why that fifth one exists.",
 	})
 }

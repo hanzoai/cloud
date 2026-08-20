@@ -408,11 +408,10 @@ var Apps = []App{
 	{Name: "admission", Prefixes: []string{"/v1/flags/waitlist"}},
 	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},
 	{Name: "tel", Prefixes: []string{"/v1/tel"}},
-	{Name: "automations", Prefixes: []string{"/v1/automations"}},
+	{Name: "automations", Prefixes: []string{"/v1/auto"}},
 	{Name: "flow", Prefixes: []string{"/v1/flow"}},
 	{Name: "engine", Prefixes: []string{"/v1/engine"}},
 	{Name: "registry", Prefixes: []string{"/v1/registry"}},
-	{Name: "auto", Prefixes: []string{"/v1/auto"}},
 	// The tool plane also serves the CALLER's own tools — its connectors, skills,
 	// agents, and the external MCP servers it enabled — which are rows and could
 	// never have been in a build-time catalogue. It used to be the fleet's single

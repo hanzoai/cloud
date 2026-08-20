@@ -568,111 +568,61 @@
   }
  ],
  "authz": [],
- "auto": [
-  {
-   "id": "delete_auto_flows_by_flow",
-   "doc": "Deletes one of the caller's flows. A foreign id answers 404 and\ndeletes nothing."
-  },
-  {
-   "id": "get_auto_flows",
-   "doc": "Flows lists the caller's flows, newest first. The list is scoped by the\nproduct to the caller's org — it can only ever hold the caller's own flows."
-  },
-  {
-   "id": "get_auto_flows_by_flow",
-   "doc": "Flow reads one of the caller's flows — the full record, graph included. A\nflow outside the caller's org answers 404, indistinguishable from one that\ndoes not exist."
-  },
-  {
-   "id": "get_auto_pieces",
-   "doc": "Pieces lists the product's built-in piece catalog: the trigger and action\ntypes a flow's nodes can use (webhook, schedule, http, set, branch), each\nwith its input descriptors. The catalog is compiled into the product —\nadding a piece is a product release, not a platform call."
-  },
-  {
-   "id": "get_auto_runs",
-   "doc": "Runs lists the caller's run records, newest first — optionally one flow's.\nEach record carries the run's status (queued, running, completed, failed),\nits input, and its output once the run finished."
-  },
-  {
-   "id": "get_auto_runs_by_run",
-   "doc": "Run reads one run record: status, input, output (each executed node's\nresult keyed by node id once completed), error detail if it failed, and\ntimestamps. A run outside the caller's org answers 404."
-  },
-  {
-   "id": "get_auto_status",
-   "doc": "Status reports whether the auto service is reachable — its own health\nendpoint as an honest lens for \"is the automation plane up\"."
-  },
-  {
-   "id": "patch_auto_flows_by_flow",
-   "doc": "Patches one of the caller's flows: the name, the graph, or both\n— only the stated fields move."
-  },
-  {
-   "id": "post_auto_flows",
-   "doc": "Creates a flow in the caller's org. The org is stamped\nserver-side from the validated principal — there is no field by which a\ncaller could place a flow in another org."
-  },
-  {
-   "id": "post_auto_flows_by_flow_publish",
-   "doc": "Publish snapshots the flow's current graph as its next immutable version\nand arms the flow's triggers. Past versions stay addressable in the product\nfor rollback; runs always execute the graph as it was dispatched."
-  },
-  {
-   "id": "post_auto_runs",
-   "doc": "Start begins one asynchronous run of a flow: the product dispatches the\ngraph to its durable execution engine (the hanzo tasks plane) and answers\nimmediately with the run record in status running. Poll the run until it\nreaches completed — its output then holds each node's result keyed by node\nid — or failed, with the error. A flow whose engine is unreachable answers\nthe product's 503: dispatch is real or it is refused, never queued into the\nvoid."
-  }
- ],
  "automations": [
   {
-   "id": "delete_automations_flows_by_id",
+   "id": "delete_auto_flows_by_id",
    "doc": "Deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found."
   },
   {
-   "id": "get_automations_connectors",
+   "id": "get_auto_connectors",
    "doc": "Connectors returns the connector catalogue. Each entry is an external service a\nflow step can invoke, carrying its auth descriptor and the input properties of its\nactions and triggers. The catalogue is the same for every tenant, so the gate is a\nvalidated principal rather than a per-org view."
   },
   {
-   "id": "get_automations_flows",
+   "id": "get_auto_flows",
    "doc": "Returns the caller org's automations, most-recently-updated first. The\noptional `limit` query bounds the page."
   },
   {
-   "id": "get_automations_flows_by_id",
+   "id": "get_auto_flows_by_id",
    "doc": "Returns one automation and its latest version. That is the flow record\nplus the step tree the builder edits; a flow of another org answers not-found."
   },
   {
-   "id": "get_automations_flows_by_id_versions",
+   "id": "get_auto_flows_by_id_versions",
    "doc": "Returns one flow's versions, newest first. The optional `limit`\nquery bounds the page."
   },
   {
-   "id": "get_automations_pieces",
+   "id": "get_auto_pieces",
    "doc": "Pieces is the retired-name alias of the connector catalogue. It serves exactly\nwhat GET /v1/automations/connectors serves, under the name this surface used\nbefore \"piece\" (the ActivePieces term) became \"connector\", and stays valid for\nclients pinned to the old path. Prefer /connectors."
   },
   {
-   "id": "get_automations_runs",
+   "id": "get_auto_runs",
    "doc": "Returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page."
   },
   {
-   "id": "get_automations_runs_by_id",
+   "id": "get_auto_runs_by_id",
    "doc": "Returns one run. A run that has not reached a terminal status is refreshed\nfrom the durable engine first — scoped to the org's own namespace — so the caller\nsees live progress rather than the last status that happened to be persisted."
   },
   {
-   "id": "patch_automations_flows_by_id",
+   "id": "patch_auto_flows_by_id",
    "doc": "Updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow."
   },
   {
-   "id": "post_automations_connectors_by_id_run",
-   "doc": "Run executes one connector action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the connector does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown connector is 404 and a\nmissing action 422."
-  },
-  {
-   "id": "post_automations_flows",
+   "id": "post_auto_flows",
    "doc": "Creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/automations/flows/{id}/enable does that."
   },
   {
-   "id": "post_automations_flows_by_id_disable",
+   "id": "post_auto_flows_by_id_disable",
    "doc": "Disarms a flow's trigger and marks it DISABLED. Its schedule and its\nevent subscriptions are dropped, so a disabled flow is never a live target; runs\nalready in flight are unaffected, and it can still be started on demand."
   },
   {
-   "id": "post_automations_flows_by_id_enable",
+   "id": "post_auto_flows_by_id_enable",
    "doc": "Arms a flow's trigger and marks it ENABLED. A POLLING trigger gets a\ncron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the\nrouting index, so an inbound event starts it; a MANUAL trigger arms nothing and\nstill runs on demand."
   },
   {
-   "id": "post_automations_flows_by_id_run",
+   "id": "post_auto_flows_by_id_run",
    "doc": "Starts one durable run of a flow now. It runs the flow's published\nversion if one is pinned, else its latest, and answers the run record it created.\nThe run is bounded by the org's per-minute run-start budget and its in-flight\nconcurrency ceiling; over either, or with the engine not ready, no run is started\nand no run id is burned."
   },
   {
-   "id": "post_automations_flows_by_id_versions",
+   "id": "post_auto_flows_by_id_versions",
    "doc": "Adds a new DRAFT version to a flow. The version is created invalid\nunless it carries a trigger, and it does not become the running version until it\nis published (PATCH the flow's publishedVersionId) or becomes the latest."
   }
  ],
