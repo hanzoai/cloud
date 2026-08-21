@@ -4,18 +4,18 @@ package pubsub
 // plane — no fakes anywhere in the path: every assertion below rides Mount's
 // own JetStream node on an ephemeral port.
 //
-//   - the produce → store → consume loop: create stream, durable publish with
-//     Nats-Msg-Id dedup, core fallback for uncaptured subjects, consumer
-//     create, pull fetch, and the 404s of absence;
 //   - request/reply against a live responder on the NATS port, plus the honest
 //     404 (no responder) and 408 (responder silent);
-//   - the KV round trip: bucket, put/get/history revisions, tombstone reads;
+//   - publish: the core path, and the durable path through a stream that
+//     captures the subject, named the way the caller names it;
 //   - tenancy: the org comes from the validated principal only, one org's
-//     names never resolve to another's, and the org root never leaks into a
+//     subjects are not another's to name, and the org root never leaks into a
 //     response;
 //   - the route oracle: every served /v1/pubsub operation is a typed,
 //     described op — and the CLOSED refusal list, pinning each intent address
 //     this door deliberately does NOT serve to a route-level 404.
+//
+// Key-value is apps/kv's, and is proved there against this same plane.
 
 import (
 	"bytes"
@@ -133,8 +133,13 @@ func TestRequestReplyAnswersOverTheBus(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("request = %d: %s", code, raw)
 	}
-	if reply := obj(t, raw); reply["data"] != "ping" {
+	reply := obj(t, raw)
+	if reply["data"] != "ping" {
 		t.Errorf("reply = %v, want the echoed ping", reply)
+	}
+	// The caller's own namespace comes back, never the plane's.
+	if subj, _ := reply["subject"].(string); strings.Contains(subj, "pub."+org) {
+		t.Errorf("reply subject = %q — the org root leaked into the response", subj)
 	}
 
 	if code, _ := doJSON(t, app, http.MethodPost, "/v1/pubsub/request", org, map[string]any{
@@ -147,111 +152,112 @@ func TestRequestReplyAnswersOverTheBus(t *testing.T) {
 	}
 }
 
-// TestKVRoundTrip walks keyed state through its revisions: bucket create, two
-// puts, the read, the history, the tombstone, and the bucket teardown.
-func TestKVRoundTrip(t *testing.T) {
+// TestPublishTakesBothPaths walks one message out core — nothing captures the
+// subject, so the receipt is a bare ok — and one into a stream that does, where
+// the receipt names the stream the way the CALLER names it rather than by its
+// plane-wide name.
+func TestPublishTakesBothPaths(t *testing.T) {
 	app := mountWire(t)
-	const org = "org_kv"
+	const org = "org_pub"
 
-	code, raw := doJSON(t, app, http.MethodPost, "/v1/kv/CFG", org, map[string]any{"history": 5})
-	if code != http.StatusCreated {
-		t.Fatalf("create bucket = %d: %s", code, raw)
-	}
-	if b := obj(t, raw); b["bucket"] != "CFG" || b["history"] != float64(5) {
-		t.Errorf("bucket = %v, want CFG with history 5", b)
-	}
-
-	code, raw = doJSON(t, app, http.MethodPut, "/v1/kv/CFG/theme", org, map[string]any{"value": "light"})
+	code, raw := doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", org, map[string]any{
+		"subject": "nothing.captures.this", "data": "loose",
+	})
 	if code != http.StatusOK {
-		t.Fatalf("put = %d: %s", code, raw)
+		t.Fatalf("core publish = %d: %s", code, raw)
 	}
-	if ack := obj(t, raw); ack["revision"] != float64(1) {
-		t.Errorf("first put revision = %v, want 1", ack["revision"])
-	}
-	_, raw = doJSON(t, app, http.MethodPut, "/v1/kv/CFG/theme", org, map[string]any{"value": "dark"})
-	if ack := obj(t, raw); ack["revision"] != float64(2) {
-		t.Errorf("second put revision = %v, want 2", ack["revision"])
+	if ack := obj(t, raw); ack["ok"] != true || ack["stream"] != nil {
+		t.Errorf("core ack = %v, want {ok} with no stream — nothing retained it", ack)
 	}
 
-	code, raw = send(t, app, http.MethodGet, "/v1/kv/CFG/theme", org, "", "")
+	// A stream on the plane, created where streams are created: the cluster
+	// door. Its physical name is the org's, so the tenant door's receipt has a
+	// prefix to strip.
+	nc, err := natsio.Connect(srv.ClientURL())
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer nc.Close()
+	js, err := nc.JetStream()
+	if err != nil {
+		t.Fatalf("jetstream: %v", err)
+	}
+	if _, err := js.AddStream(&natsio.StreamConfig{
+		Name:     TenantPrefix + org + "-ORDERS",
+		Subjects: []string{"pub." + org + ".orders.>"},
+	}); err != nil {
+		t.Fatalf("add stream: %v", err)
+	}
+
+	code, raw = doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", org, map[string]any{
+		"subject": "orders.created", "data": `{"id":"o_1"}`,
+		"headers": map[string]string{"Nats-Msg-Id": "o_1"},
+	})
 	if code != http.StatusOK {
-		t.Fatalf("get = %d: %s", code, raw)
+		t.Fatalf("durable publish = %d: %s", code, raw)
 	}
-	if e := obj(t, raw); e["value"] != "dark" || e["revision"] != float64(2) || e["operation"] != "put" {
-		t.Errorf("entry = %v, want dark at revision 2", e)
+	ack := obj(t, raw)
+	if ack["stream"] != "ORDERS" {
+		t.Errorf("ack stream = %v, want ORDERS — the caller's name, not the plane's", ack["stream"])
 	}
-
-	code, raw = send(t, app, http.MethodGet, "/v1/kv/CFG/theme/history", org, "", "")
-	if code != http.StatusOK {
-		t.Fatalf("history = %d: %s", code, raw)
-	}
-	if page := obj(t, raw); len(page["data"].([]any)) != 2 {
-		t.Errorf("history = %v, want both revisions", page["data"])
+	if ack["seq"] != float64(1) {
+		t.Errorf("ack seq = %v, want 1", ack["seq"])
 	}
 
-	if code, _ := send(t, app, http.MethodDelete, "/v1/kv/CFG/theme", org, "", ""); code != http.StatusNoContent {
-		t.Errorf("delete key = %d, want 204", code)
-	}
-	if code, _ := send(t, app, http.MethodGet, "/v1/kv/CFG/theme", org, "", ""); code != http.StatusNotFound {
-		t.Errorf("get after delete = %d, want 404 (tombstone)", code)
-	}
-
-	if code, _ := send(t, app, http.MethodDelete, "/v1/kv/CFG", org, "", ""); code != http.StatusNoContent {
-		t.Errorf("delete bucket = %d, want 204", code)
-	}
-	if code, _ := send(t, app, http.MethodGet, "/v1/kv/CFG/theme", org, "", ""); code != http.StatusNotFound {
-		t.Errorf("get in a deleted bucket = %d, want 404", code)
+	// The same Nats-Msg-Id inside the dedup window is acknowledged as a
+	// duplicate rather than stored again.
+	_, raw = doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", org, map[string]any{
+		"subject": "orders.created", "data": `{"id":"o_1"}`,
+		"headers": map[string]string{"Nats-Msg-Id": "o_1"},
+	})
+	if dup := obj(t, raw); dup["duplicate"] != true {
+		t.Errorf("second publish of the same Nats-Msg-Id = %v, want duplicate", dup)
 	}
 }
 
 // Tenancy is a fact about the PRINCIPAL, never a field the caller can send.
 //
-// The property was proved twice here, once over streams and once over KV.
-// Streams moved to mq, which proves it there; KV proves it whole on its own —
-// the same addresses answer 404 for another org, and the same NAMES remain that
-// org's to claim.
+// One org's subjects are not another's to name: the door roots every subject in
+// the caller's own namespace, so a responder living in one org's root is simply
+// not there for another — the same address, a different plane.
 func TestPubsubTenancyIsNeverACallerField(t *testing.T) {
 	app := mountWire(t)
 
-	if code, raw := doJSON(t, app, http.MethodPost, "/v1/kv/VAULT", "acme", nil); code != http.StatusCreated {
-		t.Fatalf("seed bucket = %d: %s", code, raw)
+	nc, err := natsio.Connect(srv.ClientURL())
+	if err != nil {
+		t.Fatalf("connect responder: %v", err)
 	}
-	if code, _ := doJSON(t, app, http.MethodPut, "/v1/kv/VAULT/pin", "acme", map[string]any{"value": "1234"}); code != http.StatusOK {
-		t.Fatal("seed key")
+	defer nc.Close()
+	echo, err := nc.Subscribe("pub.acme.echo", func(m *natsio.Msg) { _ = m.Respond([]byte("acme")) })
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
 	}
-
-	// Another org: the same addresses answer 404. Writes carry a valid body so
-	// the 404 is tenancy's, not a bind refusal's.
-	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/v1/kv/VAULT/pin"},
-		{http.MethodGet, "/v1/kv/VAULT/pin/history"},
-		{http.MethodDelete, "/v1/kv/VAULT"},
-	} {
-		var body any
-		if tc.method == http.MethodPost || tc.method == http.MethodPut {
-			body = map[string]any{"value": "x"}
-		}
-		if code, _ := doJSON(t, app, tc.method, tc.path, "other", body); code != http.StatusNotFound {
-			t.Errorf("cross-org %s %s = %d, want 404", tc.method, tc.path, code)
-		}
+	defer func() { _ = echo.Unsubscribe() }()
+	if err := nc.Flush(); err != nil {
+		t.Fatalf("flush: %v", err)
 	}
 
-	// And the same name is another org's to claim, not a collision.
-	if code, _ := doJSON(t, app, http.MethodPost, "/v1/kv/VAULT", "other", nil); code != http.StatusCreated {
-		t.Errorf("the same bucket name in another org = %d, want its own 201", code)
+	if code, raw := doJSON(t, app, http.MethodPost, "/v1/pubsub/request", "acme", map[string]any{
+		"subject": "echo", "data": "x", "timeoutMs": 3000}); code != http.StatusOK {
+		t.Fatalf("acme reaching its own responder = %d: %s", code, raw)
+	}
+	if code, _ := doJSON(t, app, http.MethodPost, "/v1/pubsub/request", "other", map[string]any{
+		"subject": "echo", "data": "x", "timeoutMs": 1000}); code != http.StatusNotFound {
+		t.Errorf("another org reaching it = %d, want 404 — the subject is not theirs to name", code)
+	}
+
+	// A caller cannot climb out of its root, and cannot name a set.
+	for _, subject := range []string{"..", ">", "*", "orders.>"} {
+		if code, _ := doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", "acme", map[string]any{
+			"subject": subject, "data": "x"}); code != http.StatusBadRequest {
+			t.Errorf("publish to %q = %d, want 400", subject, code)
+		}
 	}
 
 	// No principal: every op is a 403, before any bus work.
-	for _, tc := range []struct{ method, path string }{
-		{http.MethodPost, "/v1/pubsub/publish"},
-		{http.MethodPost, "/v1/pubsub/request"},
-		{http.MethodPost, "/v1/kv/VAULT"},
-		{http.MethodGet, "/v1/kv/VAULT/pin"},
-		{http.MethodPut, "/v1/kv/VAULT/pin"},
-		{http.MethodDelete, "/v1/kv/VAULT"},
-	} {
-		if code, _ := send(t, app, tc.method, tc.path, "", "application/json", "{}"); code != http.StatusForbidden {
-			t.Errorf("no-principal %s %s = %d, want 403", tc.method, tc.path, code)
+	for _, path := range []string{"/v1/pubsub/publish", "/v1/pubsub/request"} {
+		if code, _ := send(t, app, http.MethodPost, path, "", "application/json", "{}"); code != http.StatusForbidden {
+			t.Errorf("no-principal POST %s = %d, want 403", path, code)
 		}
 	}
 }
@@ -271,17 +277,9 @@ func pubsubRoutes(t *testing.T, app *zip.App) (served map[string]bool, typed map
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
 	}
-	// The health route is Serve's, not this package's.
-	//
-	// TWO prefixes, because this app answers at two addresses: the bus at
-	// /v1/pubsub, and key-value at /v1/kv, which is a store rather than a
-	// message and says so in its address. One predicate names both, so a route
-	// added to either is counted — a census that knew only one prefix would
-	// report the other half as nothing to check.
+	// ONE prefix, because this app answers at one address. The health route is
+	// Serve's, not this package's.
 	ours := func(p string) bool {
-		if strings.HasPrefix(p, "/v1/kv") {
-			return true
-		}
 		return strings.HasPrefix(p, "/v1/pubsub") && p != "/v1/pubsub/health"
 	}
 	served, typed = map[string]bool{}, map[string]string{}
@@ -310,8 +308,8 @@ func TestEveryPubsubRouteIsTypedAndDescribed(t *testing.T) {
 	if len(served) == 0 {
 		t.Fatal("the router serves no pubsub routes")
 	}
-	if len(typed) != 8 {
-		t.Errorf("typed ops = %d, want the 8 the door declares (2 bus, 6 kv)", len(typed))
+	if len(typed) != 2 {
+		t.Errorf("typed ops = %d, want the 2 the door declares (publish, request)", len(typed))
 	}
 	var bad []string
 	for key := range served {
@@ -338,6 +336,26 @@ func TestEveryPubsubRouteIsTypedAndDescribed(t *testing.T) {
 	}
 }
 
+// TestKeyValueIsNotThisApps pins the split from this side: /v1/kv is another
+// capability's address and this binary must not answer it. A route that grew
+// back here would otherwise be invisible — the ratchet only measures the woven
+// document, and a duplicate mount reads there as one operation.
+func TestKeyValueIsNotThisApps(t *testing.T) {
+	app := mountWire(t)
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodPost, "/v1/kv/B"},
+		{http.MethodGet, "/v1/kv/B/K"},
+		{http.MethodPut, "/v1/kv/B/K"},
+		{http.MethodDelete, "/v1/kv/B/K"},
+		{http.MethodGet, "/v1/kv/B/K/history"},
+		{http.MethodPost, "/v1/pubsub/kv/B"},
+	} {
+		if code, raw := send(t, app, tc.method, tc.path, "org_kv", "", ""); code != http.StatusNotFound {
+			t.Errorf("%s %s = %d, want 404 — key-value answers under its own name: %s", tc.method, tc.path, code, raw)
+		}
+	}
+}
+
 // refusedByDesign is the CLOSED list of intent operations (hanzoai/openapi
 // d86248f^:pubsub/openapi.yaml) this door deliberately does NOT serve, each
 // with the reason. Addresses are the intent's own. The package doc carries the
@@ -345,7 +363,7 @@ func TestEveryPubsubRouteIsTypedAndDescribed(t *testing.T) {
 var refusedByDesign = map[string]string{
 	"GET /v1/pubsub/subscribe": "an SSE stream is not a typed op — zip's typed path answers ONE JSON Out " +
 		"and has no vocabulary for text/event-stream (the same measured fact that keeps POST /v1/ask " +
-		"untyped). Consumption is the pull op …/consumers/{name}/next and the NATS port's native subscriptions.",
+		"untyped). Consumption is the NATS port's native subscriptions and apps/mq's pull ops.",
 	"GET /v1/pubsub/objects/{bucket}":           "cloud's object door is /v1/storage; a second object store here would be two doors to one noun.",
 	"GET /v1/pubsub/objects/{bucket}/{name}":    "same: objects belong to /v1/storage.",
 	"PUT /v1/pubsub/objects/{bucket}/{name}":    "same: objects belong to /v1/storage.",
