@@ -55,6 +55,12 @@ const (
 	RingEndpointEnv = "CLOUD_KMS_MPC_ENDPOINT"
 	RingSealedEnv   = "CLOUD_KMS_MPC_SEALED_B64"
 	RingKeyIDEnv    = "CLOUD_KMS_MPC_KEY_ID"
+
+	// RingVaultEnv names the org the share set is filed under. The ring scopes
+	// every answer by it and refuses a request that names only a key, so
+	// without this the call cannot succeed — which is why this path, though
+	// written and shipped, had never once opened anything.
+	RingVaultEnv = "CLOUD_KMS_MPC_VAULT"
 )
 
 var (
@@ -184,15 +190,20 @@ func ringMaster(endpoint string) ([]byte, error) {
 	}
 	keyID := strings.TrimSpace(os.Getenv(RingKeyIDEnv))
 	if keyID == "" {
-		keyID = "kms/rek/v1"
+		keyID = "root"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	vault := strings.TrimSpace(os.Getenv(RingVaultEnv))
+	if vault == "" {
+		return nil, fmt.Errorf("master: %s is set but %s is not — the ring files a share set under an owner and will not answer for a key alone", RingEndpointEnv, RingVaultEnv)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return mpcrek.Bootstrap(ctx, mpcrek.Config{
 		Endpoint: endpoint,
+		Vault:    vault,
 		KeyID:    keyID,
 		NodeID:   "cloud-rek-bootstrap",
-		Timeout:  10 * time.Second,
+		Timeout:  30 * time.Second,
 		Sealed:   sealed,
 	})
 }
