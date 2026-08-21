@@ -23,7 +23,7 @@ import (
 // each with the wire fact that keeps it raw. A typed op is a route PLUS a
 // registry entry — the one value the OpenAPI operation, the MCP tool, the CLI
 // command and the SDK method all come from — so an operation missing from that
-// registry is invisible to all four. These 30 are missing on purpose. Addresses
+// registry is invisible to all four. These 18 are missing on purpose. Addresses
 // are written the way the DOCUMENT writes them, which is the identity every
 // projection keys on.
 var untypedByDesign = map[string]string{
@@ -34,8 +34,8 @@ var untypedByDesign = map[string]string{
 	"POST /v1/git/webhook": "retired: reads no request and returns no value, only a 410 naming the " +
 		"door that builds. A typed op needs an In or an Out; a tombstone has neither.",
 
-	// 2. The smart-HTTP git pack protocol, on both hosts. Neither direction is
-	// JSON: requests are application/x-git-*-request pack streams, responses are
+	// 2. The smart-HTTP git pack protocol. Neither direction is JSON: requests
+	// are application/x-git-*-request pack streams, responses are
 	// x-git-*-advertisement / -result, and upload-pack STREAMS a multi-GB pack
 	// (smart_http.go SendStream) rather than answering a value.
 	"GET /v1/git/{org}/{repo}/info/refs": "answers the pkt-line ref advertisement as " +
@@ -44,14 +44,8 @@ var untypedByDesign = map[string]string{
 		"stream and the response STREAMS the packfile; a typed op answers one JSON value.",
 	"POST /v1/git/{org}/{repo}/git-receive-pack": "the request body is an x-git-receive-pack-request pack " +
 		"stream and the response is the pkt-line report-status, not JSON.",
-	"GET /{org}/{repo}/info/refs": "the git-host root form of the ref advertisement; pkt-line bytes, and " +
-		"it falls THROUGH with c.Next() on a non-git Host (onGitHost), which a typed dispatch cannot do.",
-	"POST /{org}/{repo}/git-upload-pack": "the git-host root form: a pack stream in, a streamed packfile " +
-		"out, and a c.Next() fall-through on a non-git Host.",
-	"POST /{org}/{repo}/git-receive-pack": "the git-host root form: a pack stream in, pkt-line " +
-		"report-status out, and a c.Next() fall-through on a non-git Host.",
 
-	// The same six one segment deeper, for a project-scoped repo: identical
+	// The same three one segment deeper, for a project-scoped repo: identical
 	// handlers and identical non-JSON wire, addressed as :org/:project/:repo
 	// because a git client sends no headers and the scope has nowhere else to
 	// ride (git.go, cloneURL).
@@ -61,39 +55,20 @@ var untypedByDesign = map[string]string{
 		"pack stream in, a STREAMED packfile out.",
 	"POST /v1/git/{org}/{project}/{repo}/git-receive-pack": "project-scoped: an x-git-receive-pack-request " +
 		"pack stream in, pkt-line report-status out.",
-	"GET /{org}/{project}/{repo}/info/refs": "the git-host root form, project-scoped; pkt-line bytes and a " +
-		"c.Next() fall-through on a non-git Host.",
-	"POST /{org}/{project}/{repo}/git-upload-pack": "the git-host root form, project-scoped: a pack stream " +
-		"in, a streamed packfile out, and a c.Next() fall-through on a non-git Host.",
-	"POST /{org}/{project}/{repo}/git-receive-pack": "the git-host root form, project-scoped: a pack stream " +
-		"in, pkt-line report-status out, and a c.Next() fall-through on a non-git Host.",
 
 	// 3. The browser UI — Hanzo Git's server-rendered web surface (ui.go),
-	// text/html from html/template. A typed dispatch ends in c.JSON(out). The six
-	// root-level pages carry the same onGitHost c.Next() fall-through as family 2.
-	// The JSON twin of every one of these IS a typed op (/v1/git/repos/{name}/…
+	// text/html from html/template. A typed dispatch ends in c.JSON(out). The
+	// JSON twin of every one of these IS a typed op (/v1/git/repos/{name}/…
 	// refs|tree|blob|commits|readme), so the schema is not missing — it is at the
 	// address that answers JSON.
-	"GET /git":              "server-rendered text/html (the repo list page); a typed Out answers JSON.",
-	"GET /git/explore":      "server-rendered text/html (the public explore page); a typed Out answers JSON.",
-	"GET /git/{org}/{repo}": "server-rendered text/html (the repo page); a typed Out answers JSON.",
-	"GET /git/{org}/{repo}/tree/{wildcard1}": "server-rendered text/html (the tree browser); a typed Out " +
+	"GET /v1/git":              "server-rendered text/html (the repo list page); a typed Out answers JSON.",
+	"GET /v1/git/explore":      "server-rendered text/html (the public explore page); a typed Out answers JSON.",
+	"GET /v1/git/{org}/{repo}": "server-rendered text/html (the repo page); a typed Out answers JSON.",
+	"GET /v1/git/{org}/{repo}/tree/{wildcard1}": "server-rendered text/html (the tree browser); a typed Out " +
 		"answers JSON.",
-	"GET /git/{org}/{repo}/blob/{wildcard1}": "server-rendered text/html (the blob view); a typed Out " +
+	"GET /v1/git/{org}/{repo}/blob/{wildcard1}": "server-rendered text/html (the blob view); a typed Out " +
 		"answers JSON.",
-	"GET /git/{org}/{repo}/commits": "server-rendered text/html (the commit log); a typed Out answers JSON.",
-	"GET /": "the git-host root form of the repo list page: text/html, plus a c.Next() fall-through on a " +
-		"non-git Host.",
-	"GET /explore": "the git-host root form of the explore page: text/html, plus a c.Next() fall-through " +
-		"on a non-git Host.",
-	"GET /{org}/{repo}": "the git-host root form of the repo page: text/html, plus a c.Next() " +
-		"fall-through on a non-git Host.",
-	"GET /{org}/{repo}/tree/{wildcard1}": "the git-host root form of the tree browser: text/html, plus a " +
-		"c.Next() fall-through on a non-git Host.",
-	"GET /{org}/{repo}/blob/{wildcard1}": "the git-host root form of the blob view: text/html, plus a " +
-		"c.Next() fall-through on a non-git Host.",
-	"GET /{org}/{repo}/commits": "the git-host root form of the commit log: text/html, plus a c.Next() " +
-		"fall-through on a non-git Host.",
+	"GET /v1/git/{org}/{repo}/commits": "server-rendered text/html (the commit log); a typed Out answers JSON.",
 
 	// 4. The ZAP procedure adapters (zap.go). Their PUBLISHED envelope is the
 	// contract the bridge's clients parse: success is cloud.OK, failure is a
@@ -122,10 +97,9 @@ var untypedByDesign = map[string]string{
 
 // gitOps reads BOTH projections of the live router at their one shared address
 // form: what the document says is served, and which of those carry a typed
-// registry entry. EVERY served operation counts — git's surface is not confined
-// to /v1/git (the browser UI is at /git/*, and the git-host forms are at the
-// root), and a route being outside the prefix does not make it less of a product
-// surface. That is also what makes the gate total: a new route at an address
+// registry entry. EVERY served operation counts, at whatever address — git's
+// surface is /v1/git now, pages included, but the gate reads the document rather
+// than that prefix. That is what makes it total: a new route at an address
 // nobody expected is caught, not filtered out.
 func gitOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	t.Helper()
@@ -151,7 +125,7 @@ func gitOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 }
 
 // TestEveryRouteIsTypedOrNamed fails when a git operation is neither a typed op
-// nor one of the 30 above — so the next route added here is typed by default,
+// nor one of the 18 above — so the next route added here is typed by default,
 // and dropping one out of the registry takes a deliberate edit with a reason.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	served, typed := gitOps(t)
@@ -281,15 +255,11 @@ var declaredBodies = map[string]string{
 	"POST /v1/git/zap/deleteRepo":                          "application/json",
 	"POST /v1/git/{org}/{repo}/git-upload-pack":            "application/octet-stream",
 	"POST /v1/git/{org}/{repo}/git-receive-pack":           "application/octet-stream",
-	"POST /{org}/{repo}/git-upload-pack":                   "application/octet-stream",
-	"POST /{org}/{repo}/git-receive-pack":                  "application/octet-stream",
 	"POST /v1/git/{org}/{project}/{repo}/git-upload-pack":  "application/octet-stream",
 	"POST /v1/git/{org}/{project}/{repo}/git-receive-pack": "application/octet-stream",
-	"POST /{org}/{project}/{repo}/git-upload-pack":         "application/octet-stream",
-	"POST /{org}/{project}/{repo}/git-receive-pack":        "application/octet-stream",
 }
 
-// TestRefusedRoutesDeclareTheBodyTheyRead holds the description of the 30 refusals
+// TestRefusedRoutesDeclareTheBodyTheyRead holds the description of the 18 refusals
 // to the list above, in both directions.
 func TestRefusedRoutesDeclareTheBodyTheyRead(t *testing.T) {
 	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "git", Version: "v1"})

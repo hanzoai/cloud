@@ -12,7 +12,7 @@ import (
 func TestLeaderboard_FailClosedNoPrincipal(t *testing.T) {
 	installFakeDS(t, nil)
 	app := mountApp(t)
-	code, _ := doGet(t, app, "/v1/usage/leaderboard", map[string]string{"X-Org-Id": "acme"}) // NO X-User-Id
+	code, _ := doGet(t, app, "/v1/leaderboard", map[string]string{"X-Org-Id": "acme"}) // NO X-User-Id
 	if code != http.StatusUnauthorized {
 		t.Fatalf("forge path must be 401, got %d", code)
 	}
@@ -24,7 +24,7 @@ func TestLeaderboard_HonestEmptyWhenDatastoreDown(t *testing.T) {
 	installFakeDS(t, nil)
 	datastoreEnabled = func() bool { return false } // restored by installFakeDS cleanup
 	app := mountApp(t)
-	code, body := doGet(t, app, "/v1/usage/leaderboard?scope=personal", principalHeaders("acme", "alice"))
+	code, body := doGet(t, app, "/v1/leaderboard?scope=personal", principalHeaders("acme", "alice"))
 	if code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", code, body)
 	}
@@ -48,7 +48,7 @@ func TestLeaderboard_OrgAlwaysBoundNeverInterpolated(t *testing.T) {
 		return nil
 	})
 	app := mountApp(t)
-	code, _ := doGet(t, app, "/v1/usage/leaderboard?scope=personal&metric=tokens&period=month", principalHeaders("acme", "alice"))
+	code, _ := doGet(t, app, "/v1/leaderboard?scope=personal&metric=tokens&period=month", principalHeaders("acme", "alice"))
 	if code != http.StatusOK {
 		t.Fatalf("code=%d", code)
 	}
@@ -72,7 +72,7 @@ func TestLeaderboard_OrgAlwaysBoundNeverInterpolated(t *testing.T) {
 func TestLeaderboard_HostileOrgHeaderBound(t *testing.T) {
 	f := installFakeDS(t, nil)
 	app := mountApp(t)
-	code, _ := doGet(t, app, "/v1/usage/leaderboard?scope=personal", principalHeaders(hostileOrg, "alice"))
+	code, _ := doGet(t, app, "/v1/leaderboard?scope=personal", principalHeaders(hostileOrg, "alice"))
 	if code != http.StatusOK {
 		t.Fatalf("code=%d", code)
 	}
@@ -100,9 +100,9 @@ func TestLeaderboard_NoCrossTenantBleed(t *testing.T) {
 		return nil
 	})
 	app := mountApp(t)
-	doGet(t, app, "/v1/usage/leaderboard?scope=personal", principalHeaders("acme", "a"))
+	doGet(t, app, "/v1/leaderboard?scope=personal", principalHeaders("acme", "a"))
 	nAcme := len(f.allCalls())
-	doGet(t, app, "/v1/usage/leaderboard?scope=personal", principalHeaders("victim", "v"))
+	doGet(t, app, "/v1/leaderboard?scope=personal", principalHeaders("victim", "v"))
 	for i, c := range f.allCalls() {
 		who, other := "acme", "victim"
 		if i >= nAcme {
@@ -126,7 +126,7 @@ func TestLeaderboard_NamingPolicy(t *testing.T) {
 	app := mountApp(t)
 	seedUserOptin(t, "acme/bob", "acme", "BobBuilder", true) // opted-in with a handle
 
-	code, body := doGet(t, app, "/v1/usage/leaderboard?scope=personal&metric=tokens", principalHeaders("acme", "alice"))
+	code, body := doGet(t, app, "/v1/leaderboard?scope=personal&metric=tokens", principalHeaders("acme", "alice"))
 	if code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", code, body)
 	}
@@ -164,11 +164,11 @@ func TestLeaderboard_NamingPolicy(t *testing.T) {
 func TestLeaderboard_GlobalCostRequiresAdmin(t *testing.T) {
 	installFakeDS(t, nil)
 	app := mountApp(t)
-	code, _ := doGet(t, app, "/v1/usage/leaderboard?scope=global&metric=cost", principalHeaders("acme", "alice"))
+	code, _ := doGet(t, app, "/v1/leaderboard?scope=global&metric=cost", principalHeaders("acme", "alice"))
 	if code != http.StatusForbidden {
 		t.Fatalf("non-admin global cost must be 403, got %d", code)
 	}
-	code2, _ := doGet(t, app, "/v1/usage/leaderboard?scope=global&metric=cost", withHeader(principalHeaders("acme", "alice"), "X-User-IsAdmin", "true"))
+	code2, _ := doGet(t, app, "/v1/leaderboard?scope=global&metric=cost", withHeader(principalHeaders("acme", "alice"), "X-User-IsAdmin", "true"))
 	if code2 != http.StatusOK {
 		t.Fatalf("superadmin global cost must be 200, got %d", code2)
 	}
@@ -185,7 +185,7 @@ func TestLeaderboard_GlobalNonSuperOnlyOptedInOrgs(t *testing.T) {
 	})
 	app := mountApp(t)
 
-	code, body := doGet(t, app, "/v1/usage/leaderboard?scope=global&metric=tokens", principalHeaders("acme", "alice"))
+	code, body := doGet(t, app, "/v1/leaderboard?scope=global&metric=tokens", principalHeaders("acme", "alice"))
 	if code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", code, body)
 	}
@@ -202,7 +202,7 @@ func TestLeaderboard_GlobalNonSuperOnlyOptedInOrgs(t *testing.T) {
 
 	// Opt acme in → it appears, by its chosen display.
 	seedOrgOptin(t, "acme", "Acme Inc", true)
-	_, body2 := doGet(t, app, "/v1/usage/leaderboard?scope=global&metric=tokens", principalHeaders("acme", "alice"))
+	_, body2 := doGet(t, app, "/v1/leaderboard?scope=global&metric=tokens", principalHeaders("acme", "alice"))
 	var v2 LeaderboardView
 	_ = json.Unmarshal(body2, &v2)
 	if len(v2.Rows) != 1 || v2.Rows[0].Handle != "Acme Inc" {
@@ -214,7 +214,7 @@ func TestLeaderboard_GlobalNonSuperOnlyOptedInOrgs(t *testing.T) {
 func TestLeaderboard_BadMetricRejected(t *testing.T) {
 	f := installFakeDS(t, nil)
 	app := mountApp(t)
-	code, _ := doGet(t, app, "/v1/usage/leaderboard?metric=total_tokens;DROP", principalHeaders("acme", "alice"))
+	code, _ := doGet(t, app, "/v1/leaderboard?metric=total_tokens;DROP", principalHeaders("acme", "alice"))
 	if code != http.StatusBadRequest {
 		t.Fatalf("bad metric must be 400, got %d", code)
 	}
