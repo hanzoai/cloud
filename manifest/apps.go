@@ -290,6 +290,7 @@ var Apps = []App{
 	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
 	{Name: "validator", Prefixes: []string{"/v1/validator"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
+	{Name: "standing", Prefixes: []string{"/v1/standing"}},
 	// The INGESTION door is load-bearing, not decorative: apps/event/event.go's
 	// `doors` table serves /v1/event, and every beacon the products emit lands on it.
 	// Listing only the read endpoints (as this row did) sent every write to commerce's
