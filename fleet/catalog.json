@@ -196,7 +196,7 @@
  ],
  "authors": [],
  "authz": [],
- "automations": [
+ "auto": [
   {
    "id": "delete_auto_flows_by_id",
    "doc": "Deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found."
@@ -223,7 +223,7 @@
   },
   {
    "id": "get_auto_pieces",
-   "doc": "Pieces is the retired-name alias of the connector catalogue. It serves exactly\nwhat GET /v1/automations/connectors serves, under the name this surface used\nbefore \"piece\" (the ActivePieces term) became \"connector\", and stays valid for\nclients pinned to the old path. Prefer /connectors.",
+   "doc": "Pieces is the retired-name alias of the connector catalogue. It serves exactly\nwhat GET /v1/auto/connectors serves, under the name this surface used\nbefore \"piece\" (the ActivePieces term) became \"connector\", and stays valid for\nclients pinned to the old path. Prefer /connectors.",
    "read": true
   },
   {
@@ -242,7 +242,7 @@
   },
   {
    "id": "post_auto_flows",
-   "doc": "Creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/automations/flows/{id}/enable does that."
+   "doc": "Creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/auto/flows/{id}/enable does that."
   },
   {
    "id": "post_auto_flows_by_id_disable",

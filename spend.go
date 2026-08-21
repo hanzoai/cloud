@@ -283,16 +283,16 @@ var meteredApps = []string{
 	// is 402'd for free work. Removed rather than given a Price, because there
 	// is no surface to price.
 	//
-	// "auto" OUTLIVED ITS APP, which is the same failure arriving by a different
-	// road. apps/auto was deleted when the native backend replaced the proxy it
-	// duplicated, and the manifest routes /v1/auto to automations now — so this
-	// name pointed at nothing, while `automations` below declares Metered and was
-	// already billing that exact tree. An entry that prices no surface still gates
-	// one, so it cost nobody a charge and cost somebody a 402.
+	// "auto" was here once and named nothing, which is the same failure arriving by
+	// a different road: an older apps/auto was deleted when the native backend
+	// replaced the proxy it duplicated, the manifest kept routing /v1/auto to the
+	// app then called automations, and the entry priced no surface while still
+	// gating one — it cost nobody a charge and cost somebody a 402. The name is
+	// back and it is the app's now, so the entry gates exactly the tree it prices.
 	"agents",       // per-run agent fee.
 	"ai",           // LLM token costs (ai self-meters).
 	"ask",          // the answer engine's per-question fee.
-	"automations",  // per-run automation fee.
+	"auto",         // per-run automation fee.
 	"cloudflare",   // Workers AI + provisioning.
 	"company",      // the $999 formation, gated and debited in providers.go; the genesis anchor rides inside it.
 	"compliance",   // one identity inquiry opened at the vendor, on the deployment's key.

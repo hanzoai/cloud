@@ -84,7 +84,7 @@ string prefix.
 | `/v1/integrations/connectors` | Custody: per-user BYO external accounts | `apps/integrations` (both planes; user scope) | Shipped — 8 ops |
 | `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `apps/channels` | Shipped — 8 ops |
 | `/v1/sync` | Data: bidirectional sync engine | `apps/sync` | Shipped — 7 ops |
-| `/v1/auto` | Workflows: flows/runs, goja piece runtime | `apps/automations` | Shipped — 17 ops |
+| `/v1/auto` | Workflows: flows/runs, goja piece runtime | `apps/auto` | Shipped — 17 ops |
 | `/v1/flow` | Hanzo Flow: visual AI workflow orchestration (typed passthrough to the hanzoai/flow service; workflows CRUD + runs, org-scoped via the product's projects; the rest of the 87-path authored intent stays refused in `apps/flow/typed_wire_test.go`) | `apps/flow` | Shipped — 8 ops |
 | `/v1/engine` | Hanzo Engine: the serving runtime behind Hanzo's models (typed passthrough to the hanzoai/engine deployment's management plane — model table + load state, host/GPU inventory, reachability; inference stays on ai's metered /v1 door; the cluster-manager authored intent and all shared-runtime mutations stay refused in `apps/engine/typed_wire_test.go`) | `apps/engine` | Shipped — 4 ops |
 | `/v1/registry` | Hanzo Registry: management plane over the running registries — oci.hanzo.ai (distribution, IAM token auth) + pkg.hanzo.ai (verdaccio); org-namespace listings + pull-token mint; control-plane only, the OCI wire stays on oci.hanzo.ai; Harbor-shaped authored intent stays refused in `apps/registry/typed_wire_test.go` | `apps/registry` | Shipped — 6 ops |
@@ -2580,7 +2580,7 @@ are route only — no MCP tool, no CLI command, no SDK method, no schema, no
 prose.
 
 The typed packages are `apps/admin` and its eight sub-packages, plus `apps/account`,
-`apps/agents`, `apps/automations`, `apps/company`, `apps/compliance`, `apps/crm`, `apps/framework`,
+`apps/agents`, `apps/auto`, `apps/company`, `apps/compliance`, `apps/crm`, `apps/framework`,
 `apps/git`, `apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`,
 `apps/ml`, `apps/o11y`, `apps/plugin`, `apps/provisioning`, `apps/search`, `apps/team`, `apps/visor`.
 
@@ -2797,7 +2797,7 @@ turn that 200 into a 400 and retry-storm the platform. Do not group Teams and
 Telegram under "raw-byte signature": that was the prose's own error before it was
 checked against the code, and it is why the taxonomy now cites line numbers.
 
-`apps/automations` (14 of 18) converted with its wire pinned by its own HTTP
+`apps/auto` (14 of 18) converted with its wire pinned by its own HTTP
 tests (403 gating, 201 create, 204 delete, the byte-identical `/pieces` alias),
 and surfaced the two defects typing exists to surface: the group had NO
 `cloud.Bridge` — no typed op could ever have resolved its org there — and the
@@ -3457,7 +3457,7 @@ semantic is identical — fail closed once armed, allow before.
   repository invalidated an artifact in this one with nothing in the diff to say so
   — no generator on a hook here could ever have seen that trigger. There were also
   THREE hand-rolled registries for this one concept (`apps/tools/http.go`,
-  `apps/tools/builtin.go`, `apps/automations/mcp.go`); all three are deleted. Type an
+  `apps/tools/builtin.go`, `apps/auto/mcp.go`); all three are deleted. Type an
   op and it IS a tool — do not write a second JSON-RPC envelope, and note
   `manifest/mcp_test.go` turns one red (no served path may end in `/mcp`).
   `plugin/<app>/openapi.json` SURVIVES, for the one reason the catalogue could not:
@@ -3471,7 +3471,7 @@ semantic is identical — fail closed once armed, allow before.
   not code, so no build-time catalogue can hold them: they are reached through
   `POST /v1/tools/call` (a typed op, therefore itself a tool on the door) over the
   registry's one policy — precedence → activation → price → dispatch. Discovery is
-  `GET /v1/tools`. `apps/automations` contributes to it through
+  `GET /v1/tools`. `apps/auto` contributes to it through
   `connectorToolProvider`, whose `dispatchTool` is the ONE core (resolve
   `<connector>_<action>` → run with a Token bound to the VALIDATED org); the
   exported `automations.InvokeTool(ctx, org, tool, args)` is the same core for a
