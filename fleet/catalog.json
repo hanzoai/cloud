@@ -181,43 +181,6 @@
    "read": true
   }
  ],
- "analytics": [
-  {
-   "id": "get_analytics_health",
-   "doc": "Health reports whether the event plane can take a write and the warehouse can\nanswer a read.\n\nIt reports the analytics subsystem's own liveness in BOTH directions: plane is\nthe event plane it WRITES (the bus and the JetStream stream every accepted\nevent is published to, both named in the report), and datastore is the\nwarehouse it READS, with each read lens's table reported as it is provisioned\n(the LLM usage ledger and the product-event table).\n\nEITHER ONE DOWN IS A 503, and the report says WHICH — they are probed\nindependently and never collapse into a single bit. This endpoint used to\nreport the read half only, and answered 200/ok while every POST /v1/event\nfailed on a stream that could not bind: a total ingest outage behind a green\nprobe. A readiness gate here now gates on the write path too.\n\nplane.ready IS A REAL PROBE and walks the ingest path itself — the same\nconnection and the same stream a publish uses — so it cannot answer ready while\na publish would 503. plane.reason carries the plane's own error text when it is\nfalse.\n\ndatastore IS NOT PROBED WITH A QUERY. It is the state of the process's own\nshared client — established, and not since closed — so a warehouse accepting\nconnections and failing reads still reports true. Degraded CARRIES the report\n(status, the failing half, reason) as its body rather than an error envelope,\nso a gate reads the cause off the same object it got at 200.\n\nA MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens\nreported available:false answers honest-empty rather than erroring, so a fresh\ndeployment whose collector has not emitted yet is legitimately 200 with the\nproduct-event lens unavailable. The lens block is reported whenever the\nwarehouse is REACHABLE — including on a report degraded by the plane, where the\ntables genuinely were probed — and is absent only when the warehouse is not,\nhaving nothing to say about tables it could not reach.\n\nUnauthenticated on purpose — liveness has to be probe-able — and it reads NO\ntenant data: table existence and stream presence only, never a row and never an\nevent.",
-   "read": true
-  },
-  {
-   "id": "get_analytics_overview",
-   "doc": "Overview returns the caller org's analytics KPIs for one time window. Three lenses\nover one warehouse: llm is the live per-org LLM usage ledger (requests, tokens,\nspend, models, providers, errors) and is always real; web (pageviews, visitors,\nsessions) and commerce (orders, revenue, AOV) read the product-event table and\nreport available=false rather than fabricating zeros when it holds nothing yet.\n\nThe org is the validated principal's — never a parameter — so a caller can only\never read its own tenant. 403 without a validated bearer, 400 on an unknown range,\n503 when the warehouse is unreachable.",
-   "read": true
-  },
-  {
-   "id": "get_analytics_timeseries",
-   "doc": "Timeseries returns the caller org's LLM usage over time as an evenly-spaced series.\nOne point per hour or per day — the bucket the window implies, 24h giving hours and\n7d/30d giving days — carrying requests, total tokens and spend in cents. Empty\nbuckets are filled with zeros so a client charts a continuous line.\n\nThe org is the validated principal's — never a parameter. 403 without a validated\nbearer, 400 on an unknown range, 503 when the warehouse is unreachable.",
-   "read": true
-  },
-  {
-   "id": "get_analytics_top",
-   "doc": "Top returns the caller org's ranked lenses for one window, five of them at once.\nmodels ranks LLM models by spend and is always real; products ranks commerce orders\nby revenue; topPages ranks requested paths, topReferrers the external referrer\ndomains (\"(direct)\" for a missing or same-origin one) and topSources the utm_source\ncampaigns (\"(none)\" when absent), each by pageviews. Every lens carries each row's\nshare of the in-window total, so a top-N honestly shows the long tail.\n\nThe four event lenses report available=false rather than fabricating zeros when the\nproduct-event table holds nothing yet. The org is the validated principal's — never\na parameter. 403 without a validated bearer, 400 on an unknown range, 503 when the\nwarehouse is unreachable.",
-   "read": true
-  },
-  {
-   "id": "get_errors",
-   "doc": "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over event.error — the plane table the write core's error\nfacts land in (errors are DELIBERATELY not on event.event) — each with its captured\nexception surfaced from the attributes map as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
-   "read": true
-  },
-  {
-   "id": "get_insights_events",
-   "doc": "Returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
-   "read": true
-  },
-  {
-   "id": "get_insights_health",
-   "doc": "Reports that the unified insights surface is serving. It reads no\ntenant data and consults no dependency, so it answers 200 unconditionally and needs\nno principal — liveness must be probe-able. The warehouse-connectivity probe is a\ndifferent question and lives at GET /v1/analytics/health.",
-   "read": true
-  }
- ],
  "ask": [
   {
    "id": "research_web",
@@ -818,6 +781,43 @@
   {
    "id": "post_evals_scores",
    "doc": "Files one score event for the caller's org and answers 201 with it.\n\nThis is how human review and out-of-band graders land beside the automatic\nones: name the score, give it a value (or a stringValue for a categorical\nlabel), and attach it to a trace, a run, a dataset example, or any combination.\n\nScores are validated fail-closed. A value must be FINITE — NaN and Inf are 400\n— and if the org has declared a rubric for this name, that rubric decides the\ntype and the value must satisfy it: inside the numeric bounds, or one of the\nallowed categories. A caller cannot override the declared type by sending a\ndifferent dataType.\n\nA score is TELEMETRY, not metadata, so it needs the datastore: a deployment\nwith none wired answers 503 rather than accepting a score it cannot persist.\nRequires a validated principal; 403 without one, and the org is stamped from\nthe validated claim rather than read off the body."
+  }
+ ],
+ "event": [
+  {
+   "id": "get_event_errors",
+   "doc": "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over event.error — the plane table the write core's error\nfacts land in (errors are DELIBERATELY not on event.event) — each with its captured\nexception surfaced from the attributes map as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
+   "read": true
+  },
+  {
+   "id": "get_event_health",
+   "doc": "Health reports whether the event plane can take a write and the warehouse can\nanswer a read.\n\nIt reports the analytics subsystem's own liveness in BOTH directions: plane is\nthe event plane it WRITES (the bus and the JetStream stream every accepted\nevent is published to, both named in the report), and datastore is the\nwarehouse it READS, with each read lens's table reported as it is provisioned\n(the LLM usage ledger and the product-event table).\n\nEITHER ONE DOWN IS A 503, and the report says WHICH — they are probed\nindependently and never collapse into a single bit. This endpoint used to\nreport the read half only, and answered 200/ok while every POST /v1/event\nfailed on a stream that could not bind: a total ingest outage behind a green\nprobe. A readiness gate here now gates on the write path too.\n\nplane.ready IS A REAL PROBE and walks the ingest path itself — the same\nconnection and the same stream a publish uses — so it cannot answer ready while\na publish would 503. plane.reason carries the plane's own error text when it is\nfalse.\n\ndatastore IS NOT PROBED WITH A QUERY. It is the state of the process's own\nshared client — established, and not since closed — so a warehouse accepting\nconnections and failing reads still reports true. Degraded CARRIES the report\n(status, the failing half, reason) as its body rather than an error envelope,\nso a gate reads the cause off the same object it got at 200.\n\nA MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens\nreported available:false answers honest-empty rather than erroring, so a fresh\ndeployment whose collector has not emitted yet is legitimately 200 with the\nproduct-event lens unavailable. The lens block is reported whenever the\nwarehouse is REACHABLE — including on a report degraded by the plane, where the\ntables genuinely were probed — and is absent only when the warehouse is not,\nhaving nothing to say about tables it could not reach.\n\nUnauthenticated on purpose — liveness has to be probe-able — and it reads NO\ntenant data: table existence and stream presence only, never a row and never an\nevent.",
+   "read": true
+  },
+  {
+   "id": "get_event_insights_events",
+   "doc": "Returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
+   "read": true
+  },
+  {
+   "id": "get_event_insights_health",
+   "doc": "Reports that the unified insights surface is serving. It reads no\ntenant data and consults no dependency, so it answers 200 unconditionally and needs\nno principal — liveness must be probe-able. The warehouse-connectivity probe is a\ndifferent question and lives at GET /v1/event/health.",
+   "read": true
+  },
+  {
+   "id": "get_event_overview",
+   "doc": "Overview returns the caller org's analytics KPIs for one time window. Three lenses\nover one warehouse: llm is the live per-org LLM usage ledger (requests, tokens,\nspend, models, providers, errors) and is always real; web (pageviews, visitors,\nsessions) and commerce (orders, revenue, AOV) read the product-event table and\nreport available=false rather than fabricating zeros when it holds nothing yet.\n\nThe org is the validated principal's — never a parameter — so a caller can only\never read its own tenant. 403 without a validated bearer, 400 on an unknown range,\n503 when the warehouse is unreachable.",
+   "read": true
+  },
+  {
+   "id": "get_event_timeseries",
+   "doc": "Timeseries returns the caller org's LLM usage over time as an evenly-spaced series.\nOne point per hour or per day — the bucket the window implies, 24h giving hours and\n7d/30d giving days — carrying requests, total tokens and spend in cents. Empty\nbuckets are filled with zeros so a client charts a continuous line.\n\nThe org is the validated principal's — never a parameter. 403 without a validated\nbearer, 400 on an unknown range, 503 when the warehouse is unreachable.",
+   "read": true
+  },
+  {
+   "id": "get_event_top",
+   "doc": "Top returns the caller org's ranked lenses for one window, five of them at once.\nmodels ranks LLM models by spend and is always real; products ranks commerce orders\nby revenue; topPages ranks requested paths, topReferrers the external referrer\ndomains (\"(direct)\" for a missing or same-origin one) and topSources the utm_source\ncampaigns (\"(none)\" when absent), each by pageviews. Every lens carries each row's\nshare of the in-window total, so a top-N honestly shows the long tail.\n\nThe four event lenses report available=false rather than fabricating zeros when the\nproduct-event table holds nothing yet. The org is the validated principal's — never\na parameter. 403 without a validated bearer, 400 on an unknown range, 503 when the\nwarehouse is unreachable.",
+   "read": true
   }
  ],
  "exec": [

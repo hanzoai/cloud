@@ -22,7 +22,7 @@
 // are usage rows is the DESTINATION and not the door.
 //
 // OpenRouter meters KEYS, not orgs, and hanzo.cloud_usage carried no `openrouter`
-// provider at all: every money lens over that table — /v1/usage, /v1/analytics, the
+// provider at all: every money lens over that table — /v1/usage, /v1/event, the
 // admin board, the leaderboard — answered "what did we spend" with everything except
 // the upstream. A Broadcast destination POSTs one OTLP trace per generation here, and
 // each generation span becomes ONE cloud_usage row with provider `openrouter`. No
@@ -39,7 +39,7 @@
 // authentication is a Headers map the destination sends verbatim (OpenRouter's
 // X-OpenRouter-Signature belongs to the per-job video callback, a different door,
 // and Broadcast does not emit it). So the credential is one cloud already mints, and
-// it is admitted by the ONE sequence every keyed door admits by — analytics.Admit,
+// it is admitted by the ONE sequence every keyed door admits by — event.Admit,
 // which asks BOTH issuers: the project store a key minted with a project lives in,
 // then IAM. Either names the org every row is filed under, and a door that asks one
 // issuer refuses every key the other minted. No key, or a key naming no org, is 401
@@ -62,7 +62,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/zap-proto/zip"
 )
@@ -153,7 +153,7 @@ func (n *num) UnmarshalJSON(b []byte) error {
 func openrouterWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// THE CREDENTIAL IS READ FIRST, before the body is touched: a caller holding no
 	// key never buys a decode.
-	at, ok := analytics.Admit(c.Context(), presented(c))
+	at, ok := event.Admit(c.Context(), presented(c))
 	if !ok {
 		return zip.Errorf(http.StatusUnauthorized,
 			"a Hanzo key is required: send it as Authorization: Bearer")

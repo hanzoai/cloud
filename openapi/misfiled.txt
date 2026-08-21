@@ -13,12 +13,7 @@
 /v1/auto automations
 /v1/billing commerce
 /v1/bot bots
-/v1/errors analytics
-/v1/event analytics
-/v1/event.js analytics
-/v1/insights analytics
 /v1/logs metrics
-/v1/replay analytics
 /v1/sentinel o11y
 /v1/traces metrics
 /ws o11y

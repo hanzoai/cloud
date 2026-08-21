@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/zap-proto/zip"
 )
 
@@ -107,10 +107,10 @@ func TestDeliveryBecomesAUsageRow(t *testing.T) {
 }
 
 // keys is the PROJECT store: it holds one key, minted with a project, and knows
-// nothing about any other. The real analytics.Admit is what asks it.
-type keys map[string]analytics.Attribution
+// nothing about any other. The real event.Admit is what asks it.
+type keys map[string]event.Attribution
 
-func (k keys) Resolve(_ context.Context, key string) (analytics.Attribution, bool, error) {
+func (k keys) Resolve(_ context.Context, key string) (event.Attribution, bool, error) {
 	at, ok := k[key]
 	return at, ok, nil
 }
@@ -118,10 +118,10 @@ func (k keys) Resolve(_ context.Context, key string) (analytics.Attribution, boo
 // TestProjectKeyIsAdmitted is the defect this door was built with, in one test: a
 // key minted by `POST /v1/projects` lives in the PROJECT store and IAM has never
 // heard of it, so a door that resolves through IAM alone refuses the very key it
-// tells a destination to create. The door calls analytics.Admit, which asks the
+// tells a destination to create. The door calls event.Admit, which asks the
 // project store first — and admitting a key only that store holds is the proof the
 // door goes through it, since nothing else in the estate can answer for one.
-// analytics.Admit asks IAM second (TestAdmitAsksBothIssuers), so an IAM-issued key
+// event.Admit asks IAM second (TestAdmitAsksBothIssuers), so an IAM-issued key
 // arrives here by the same call.
 //
 // The two outcomes are DISTINGUISHABLE, which is what makes this a test of admission
@@ -179,8 +179,8 @@ func TestEmptyDeliveryIsAccepted(t *testing.T) {
 // down: the registry is package state in analytics, shared by every test here.
 func projects(t *testing.T, k keys) {
 	t.Helper()
-	analytics.SetKeyResolver(k)
-	t.Cleanup(func() { analytics.SetKeyResolver(nil) })
+	event.SetKeyResolver(k)
+	t.Cleanup(func() { event.SetKeyResolver(nil) })
 }
 
 // post drives one Broadcast delivery at the door.

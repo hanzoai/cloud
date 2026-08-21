@@ -29,7 +29,7 @@
 // made two subsystems owners of one subject space; JetStream answers that with
 // "subjects overlap with an existing stream", so the second owner to arrive delivers
 // nothing, on every stream, forever. The producer lives with the data now
-// (analytics.PublishEvents).
+// (event.PublishEvents).
 //
 // FAIL-SOFT MOUNT. The registry always mounts. The dispatcher is best-effort: a down bus
 // ⇒ background reconnect-retry. A messaging fault never crashes the process.

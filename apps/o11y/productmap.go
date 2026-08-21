@@ -53,7 +53,7 @@ var productAlias = map[string]string{
 	"api":       "cloud",
 	"llm":       "gateway",
 	"router":    "gateway",
-	"analytics": "insights-capture",
+	"event":     "insights-capture",
 	"observe":   "o11y",
 	"o11y":      "o11y",
 }
@@ -225,11 +225,10 @@ func resolveService(product string) (service, bool) {
 	// Routes come from the PRODUCT id, not the aliased workload, because the alias
 	// answers a different question. productAlias maps a console slug to the k8s
 	// workload that ANSWERS (for probing and the prom `service` label); the routing
-	// table is keyed by APP NAME. For analytics the two disagree in both
-	// directions — the app is `analytics` and serves five prefixes
-	// (/v1/analytics, /v1/errors, /v1/event, /v1/insights/*), while the workload is
-	// `insights-capture` and is not a routed app at all. Looking the routes up by
-	// workload silently lost four of those five prefixes.
+	// table is keyed by APP NAME. For the event plane the two disagree — the app is
+	// `event` and owns /v1/event, while the workload is `insights-capture` and is
+	// not a routed app at all. Looking the routes up by workload lost the prefixes
+	// entirely.
 	routes := fleetRoutes(p)
 	if len(routes) == 0 {
 		routes = fleetRoutes(workload)

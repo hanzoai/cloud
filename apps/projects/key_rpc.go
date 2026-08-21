@@ -6,7 +6,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	cloud "github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/plane"
 )
 
@@ -14,7 +14,7 @@ import (
 //
 // Same seam and same reason as sites_rpc.go: the reader (the /v1/event door) and
 // the owner of the fact (this store) are different processes in production, so
-// the package-level registry analytics.SetKeyResolver writes is nil where the
+// the package-level registry event.SetKeyResolver writes is nil where the
 // door reads it. In-process when they are co-resident, over the plane when they
 // are not.
 func exposeKeys() {
@@ -43,7 +43,7 @@ func planeResolveKey(ctx context.Context, in *plane.KeyIn) (*plane.Attribution, 
 }
 
 // The resolver this process serves plane answers from. Set at Mount beside
-// analytics.SetKeyResolver, so the two can never name different stores.
+// event.SetKeyResolver, so the two can never name different stores.
 var planeKeyResolver keyResolver
 
 func setKeyResolverForPlane(r keyResolver) { planeKeyResolver = r }
@@ -58,7 +58,7 @@ func currentKeyResolver() (keyResolver, error) {
 	return planeKeyResolver, nil
 }
 
-// analytics.KeyResolver is what the door consults; keyResolver is what answers it,
+// event.KeyResolver is what the door consults; keyResolver is what answers it,
 // in-process and over the plane. Pinned so a signature drift fails the build here
 // rather than at a nil dispatch on the ingest path.
-var _ analytics.KeyResolver = keyResolver{}
+var _ event.KeyResolver = keyResolver{}
