@@ -112635,8 +112635,8 @@ tags:
     them, held as assertions: somebody, at some moment, from some evidence, asserted
     that this thing stands in that relation to that other thing.'
   name: graph
-- description: Package guide is a step-by-step checklist that gets your business running
-    on AI.
+- description: Package guide is the AI that builds an agentic company with you, one
+    measured step at a time.
   name: guide
 - description: 'Package help is a support desk: customers file tickets, your team
     answers them.'
