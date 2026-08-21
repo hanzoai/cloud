@@ -82,16 +82,16 @@ func TestBetaIsNotPublic(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, published := pub.Paths["/v1/ads"]; published {
-		t.Error("public.yaml carries a beta address")
+		t.Error("the public contract carries a beta address")
 	}
 	if _, published := pub.Paths["/v1/iam"]; !published {
-		t.Error("public.yaml dropped a ga address")
+		t.Error("the public contract dropped a ga address")
 	}
 	// And the tag goes with it. A product named in the tag list with no operation
 	// under it is a section every documentation site renders empty.
 	for _, tag := range pub.Tags {
 		if tag.Name == "ads" {
-			t.Error("public.yaml names the beta capability in its tag list")
+			t.Error("the public contract names the beta capability in its tag list")
 		}
 	}
 }

@@ -76,7 +76,7 @@ func fleet(t *testing.T) *Document {
 	return d
 }
 
-// The root is the CUSTOMER surface, by the same rule public.yaml is: a beta
+// The root is the CUSTOMER surface, by the same rule openapi.yaml is: a beta
 // capability and the operator's product are in neither, and being missing from
 // the root is the same fact as 404ing one segment down — which is what keeps this
 // from telling an unflagged caller that something exists.

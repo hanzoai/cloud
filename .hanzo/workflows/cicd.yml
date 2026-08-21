@@ -32,7 +32,7 @@ name: CI/CD
 # SENT, and regenerating the CLI capture would have moved 15 operations.
 #
 # THE COUPLER IS THE DOCUMENT, PASSED BY VALUE AT A PINNED SHA. Every car below
-# carries (version, sha, sha256(openapi.yaml)). No car reads api.hanzo.ai to
+# carries (version, sha, sha256(openapi.yaml) — the customer contract). No car reads api.hanzo.ai to
 # GENERATE anything — at generation time the deploy has already happened, and
 # reading the host names whatever it is serving rather than the release that sent
 # it. The host is read for exactly one purpose: to prove the release is live.
@@ -251,7 +251,7 @@ jobs:
   #
   # The test gate, driven by hanzo.yml, whose `app-contract` step is
   # `make -f mk/fleet.mk check`: regenerate all 116 app subsets FROM
-  # SOURCE, re-weave openapi.yaml, and refuse any porcelain change. It
+  # SOURCE, re-weave both documents, and refuse any porcelain change. It
   # regenerates rather than comparing two derived artifacts (which is how
   # plugin/ingress silently lost eight paths) and checks with --porcelain rather
   # than `git diff` (so a NEW app's untracked subset cannot hide).
@@ -662,6 +662,9 @@ jobs:
           # THE DIGEST OF THE DOCUMENT, computed here and carried by every car
           # below. This is the coupler: a projection generated from any other
           # bytes is a projection of a release nobody shipped.
+          # openapi.yaml, because the projections this couples are generated from
+          # the CUSTOMER contract: the SDKs, the CLI and the docs. private.yaml is
+          # the operator's reading of the same commit and no car projects it.
           SPEC_SHA=$(sha256sum openapi.yaml | cut -d' ' -f1)
           echo "spec_sha256=$SPEC_SHA" >> "$GITHUB_OUTPUT"
 
@@ -1554,7 +1557,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Every published address is routed
-        run: go run ./cmd/reach openapi.yaml https://api.hanzo.ai openapi/unreachable.txt
+        run: go run ./cmd/reach private.yaml https://api.hanzo.ai openapi/unreachable.txt
 
       # THE MCP DOOR, AND WHETHER EVERY SUBSYSTEM ANSWERED IT.
       #
