@@ -466,7 +466,7 @@ On boot:
    exists for exactly this: *"a controller can steer a turn in flight
    (`queue_user_input`) rather than only interrupt it."*
 6. Terminal result: `POST /v1/agents/targets/:id/runs/:runId/report`.
-7. Heartbeat `Metrics{load1, memUsed, ...}` onto the target, so `/v1/fleet`
+7. Heartbeat `Metrics{load1, memUsed, ...}` onto the target, so `/v1/visor/fleet`
    shows boxes beside laptops and GPUs and **tabs.hanzo.ai gets them for free**.
 
 The session's `Target` field carries the box's target id; `Terminal` carries the
@@ -511,7 +511,7 @@ Each step is independently shippable and independently useful.
 5. **cloud** — rebind `apps/coding`'s `Runner` from `bots.Stream` to
    `apps/sandbox`.
 6. **app** — rewrite `lib/agent/sandbox-fs.ts` against `/v1/sandbox/boxes/:id/fs/*`.
-7. **cloud** — boxd's `/v1/agents` claim loop (§6); boxes appear in `/v1/fleet`.
+7. **cloud** — boxd's `/v1/agents` claim loop (§6); boxes appear in `/v1/visor/fleet`.
 
 ## 9. Open, and deliberately not decided here
 

@@ -197,11 +197,11 @@ func TestBotMachineSurfaceMovedToCompute(t *testing.T) {
 		paths[r.Method+" "+r.Path] = true
 	}
 	for _, want := range []string{
-		"GET /v1/compute/bots",
-		"POST /v1/compute/bots/launch",
-		"GET /v1/compute/bots/:id",
-		"DELETE /v1/compute/bots/:id",
-		"POST /v1/compute/bots/:id/:action",
+		"GET /v1/visor/compute/bots",
+		"POST /v1/visor/compute/bots/launch",
+		"GET /v1/visor/compute/bots/:id",
+		"DELETE /v1/visor/compute/bots/:id",
+		"POST /v1/visor/compute/bots/:id/:action",
 	} {
 		if !paths[want] {
 			t.Errorf("bot machine route %q is missing", want)
@@ -216,7 +216,7 @@ func TestBotMachineSurfaceMovedToCompute(t *testing.T) {
 }
 
 // The three values keep three namespaces: runs at /v1/bots, machines under
-// /v1/compute/bots, and the runtime passthrough at /v1/bot/*. Nothing in the run
+// /v1/visor/compute/bots, and the runtime passthrough at /v1/bot/*. Nothing in the run
 // namespace may be a wildcard, which would swallow every run id.
 func TestRunNamespaceHasNoWildcard(t *testing.T) {
 	app := mountFleet(t, &stubRuntime{})

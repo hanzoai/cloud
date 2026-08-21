@@ -80,7 +80,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 		t.Fatalf("openapi is not json: %v", err)
 	}
 
-	get, ok := doc.Paths["/v1/machines/{id}"]["get"]
+	get, ok := doc.Paths["/v1/visor/machines/{id}"]["get"]
 	if !ok {
 		t.Fatalf("GET /v1/machines/{id} is not in the document")
 	}
@@ -109,7 +109,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 	}
 
 	// A delete states 204 and promises no body.
-	del := doc.Paths["/v1/machines/{id}"]["delete"]
+	del := doc.Paths["/v1/visor/machines/{id}"]["delete"]
 	if _, ok := del.Responses["204"]; !ok {
 		t.Errorf("DELETE /v1/machines/{id} responses = %v, want a 204", del.Responses)
 	}
@@ -124,7 +124,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 
 	// The routes that stay raw are honestly absent — they carry no shape, so the
 	// document must not claim one for them.
-	for _, p := range []string{"/v1/compute/regions", "/v1/compute/sizes", "/v1/compute/bots/launch"} {
+	for _, p := range []string{"/v1/visor/compute/regions", "/v1/visor/compute/sizes", "/v1/visor/compute/bots/launch"} {
 		if _, ok := doc.Paths[p]; ok {
 			t.Errorf("%s is raw by design but appears in the document", p)
 		}
