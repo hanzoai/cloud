@@ -213,15 +213,73 @@
     ga: { page_view: 'page_view', view_content: 'view_item', add_to_cart: 'add_to_cart', lead: 'generate_lead', signup: 'sign_up', start_checkout: 'begin_checkout', purchase: 'purchase' },
     meta: { page_view: 'PageView', view_content: 'ViewContent', add_to_cart: 'AddToCart', lead: 'Lead', signup: 'CompleteRegistration', start_checkout: 'InitiateCheckout', purchase: 'Purchase' },
     tiktok: { page_view: 'Pageview', view_content: 'ViewContent', add_to_cart: 'AddToCart', lead: 'SubmitForm', signup: 'CompleteRegistration', start_checkout: 'InitiateCheckout', purchase: 'CompletePayment' },
-    x: { page_view: 'PageView', view_content: 'ViewContent', add_to_cart: 'AddToCart', lead: 'Lead', signup: 'SignUp', start_checkout: 'InitiateCheckout', purchase: 'Purchase' }
+    x: { page_view: 'PageView', view_content: 'ViewContent', add_to_cart: 'AddToCart', lead: 'Lead', signup: 'SignUp', start_checkout: 'InitiateCheckout', purchase: 'Purchase' },
+    // Google Ads speaks gtag, so it speaks GA4's vocabulary.
+    gads: { page_view: 'page_view', view_content: 'view_item', add_to_cart: 'add_to_cart', lead: 'generate_lead', signup: 'sign_up', start_checkout: 'begin_checkout', purchase: 'purchase' },
+    pinterest: { page_view: 'pagevisit', view_content: 'viewcategory', add_to_cart: 'addtocart', lead: 'lead', signup: 'signup', start_checkout: 'checkout', purchase: 'checkout' },
+    // Reddit has no checkout event, so start_checkout falls through to Custom.
+    reddit: { page_view: 'PageVisit', view_content: 'ViewContent', add_to_cart: 'AddToCart', lead: 'Lead', signup: 'SignUp', purchase: 'Purchase' }
   }
   function nativeName(t, n) { var s = STD[n]; return s ? (NATIVE[t] || {})[s] || null : null }
   function loadJS(u) { var e = document.createElement('script'); e.async = true; e.src = u; document.head.appendChild(e) }
   function eid() { try { return crypto.randomUUID() } catch (e) { return 'e-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10) } }
+  // GA4 and Google Ads are ONE loader with two configs: gtag.js is a single script
+  // and configuring it twice is how a site ends up fetching it twice and counting a
+  // pageview twice. A site running both gets one script, two config lines.
+  function gtagInit(id) {
+    if (!window.gtag) {
+      loadJS('https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id))
+      window.dataLayer = window.dataLayer || []
+      window.gtag = function () { dataLayer.push(arguments) }
+      gtag('js', new Date())
+    }
+    gtag('config', id)
+  }
+  function gtagFire(t, n, p, id) {
+    if (!window.gtag) return
+    var name = nativeName(t, n) || n
+    var o = {}; for (var k in p) o[k] = p[k]
+    o.event_id = id
+    if (STD[n] === 'purchase') o.transaction_id = id
+    gtag('event', name, o)
+  }
   var INJECT = {
     ga: {
-      load: function (id) { loadJS('https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id)); window.dataLayer = window.dataLayer || []; window.gtag = window.gtag || function () { dataLayer.push(arguments) }; gtag('js', new Date()); gtag('config', id) },
-      fire: function (n, p, id) { if (!window.gtag) return; var name = nativeName('ga', n) || n; var o = {}; for (var k in p) o[k] = p[k]; o.event_id = id; if (STD[n] === 'purchase') o.transaction_id = id; gtag('event', name, o) }
+      load: gtagInit,
+      fire: function (n, p, id) { gtagFire('ga', n, p, id) }
+    },
+    // Google Ads rides the same gtag. The browser half is remarketing and audience
+    // building -- a conversion ACTION is keyed by a label this config cannot name,
+    // and the server half already forwards conversions through the Ads API.
+    gads: {
+      load: gtagInit,
+      fire: function (n, p, id) { gtagFire('gads', n, p, id) }
+    },
+    linkedin: {
+      load: function (id) {
+        window._linkedin_partner_id = String(id)
+        window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || []
+        window._linkedin_data_partner_ids.push(String(id))
+        if (!window.lintrk) { window.lintrk = function (a, b) { window.lintrk.q.push([a, b]) }; window.lintrk.q = []; loadJS('https://snap.licdn.com/li.lms-analytics/insight.min.js') }
+      },
+      // The Insight Tag carries retargeting from load alone. A LinkedIn conversion is
+      // addressed by a numeric id minted in Campaign Manager, which a canonical event
+      // name cannot supply, so conversions ride the CAPI half rather than a guess.
+      fire: function () {}
+    },
+    pinterest: {
+      load: function (id) {
+        if (!window.pintrk) { window.pintrk = function () { window.pintrk.queue.push(Array.prototype.slice.call(arguments)) }; window.pintrk.queue = []; window.pintrk.version = '3.0'; loadJS('https://s.pinimg.com/ct/core.js') }
+        pintrk('load', id); pintrk('page')
+      },
+      fire: function (n, p, id) { if (!window.pintrk) return; pintrk('track', nativeName('pinterest', n) || 'custom', p || {}, { event_id: id }) }
+    },
+    reddit: {
+      load: function (id) {
+        if (!window.rdt) { var r = window.rdt = function () { r.sendEvent ? r.sendEvent.apply(r, arguments) : r.callQueue.push(arguments) }; r.callQueue = []; loadJS('https://www.redditstatic.com/ads/pixel.js') }
+        rdt('init', id); rdt('track', 'PageVisit')
+      },
+      fire: function (n, p, id) { if (!window.rdt) return; var o = {}; for (var k in p) o[k] = p[k]; o.conversionId = id; rdt('track', nativeName('reddit', n) || 'Custom', o) }
     },
     meta: {
       load: function (id) { if (!window.fbq) { var n = window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments) }; if (!window._fbq) window._fbq = n; n.push = n; n.loaded = true; n.version = '2.0'; n.queue = []; loadJS('https://connect.facebook.net/en_US/fbevents.js') } fbq('init', id); fbq('track', 'PageView') },

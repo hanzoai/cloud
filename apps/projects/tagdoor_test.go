@@ -13,9 +13,11 @@ func TestBuildTags(t *testing.T) {
 	tags := buildTags(map[string]string{
 		"ga4": "G-ABC", "meta": "123", "x": "o1",
 		"reddit": "a2", "google-ads": "9", "tiktok": "",
+		"insights": "hi-1",
 	})
-	if len(tags) != 3 {
-		t.Fatalf("want 3 (ga4/meta/x), got %d: %+v", len(tags), tags)
+	// tiktok is present with an EMPTY id, so it is omitted; the other five carry ids.
+	if len(tags) != 5 {
+		t.Fatalf("want 5 (ga4/google-ads/meta/reddit/x), got %d: %+v", len(tags), tags)
 	}
 	by := map[string]browserTagOut{}
 	for _, tg := range tags {
@@ -30,8 +32,16 @@ func TestBuildTags(t *testing.T) {
 	if by["x"].Type != "x" || by["x"].ID != "o1" {
 		t.Errorf("x → %+v", by["x"])
 	}
-	if _, has := by["reddit"]; has {
-		t.Error("reddit has no browser pixel and must be omitted")
+	if by["reddit"].Type != "reddit" || by["reddit"].ID != "a2" {
+		t.Errorf("reddit → %+v", by["reddit"])
+	}
+	if by["google-ads"].Type != "gads" || by["google-ads"].ID != "9" {
+		t.Errorf("google-ads → %+v", by["google-ads"])
+	}
+	// Hanzo Insights is a server-side destination with no browser pixel, so a site
+	// that has connected it contributes nothing to the tag.
+	if _, has := by["insights"]; has {
+		t.Error("insights forwards server-side only and must be omitted")
 	}
 	if _, has := by["tiktok"]; has {
 		t.Error("empty id must be omitted")
