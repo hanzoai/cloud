@@ -137,6 +137,14 @@ func requireBody(c *zip.Ctx) error { return c.Bind(&struct{}{}) }
 // ---- addressing inputs ----
 
 // projectsRef addresses ONE project by its org-unique slug.
+// projectsStar is what star/unstar answer with: the state the project is now
+// in for this person. It reports the RESULT rather than echoing the request, so
+// an idempotent re-star and a first star are indistinguishable to a caller —
+// which is the truth about what happened.
+type projectsStar struct {
+	Starred bool `json:"starred"`
+}
+
 type projectsRef struct {
 	// Slug is the project to act on, from the path. It is unique within the
 	// caller's org and nowhere else, so another tenant's slug is a 404.
