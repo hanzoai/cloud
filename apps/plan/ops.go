@@ -282,13 +282,6 @@ func (o ops) listSubscriptions(ctx context.Context, _ *planNoInput) (*planList, 
 	return routeOf[planList](ctx, o, "subscriptions", nil)
 }
 
-// ListCloudCapacityPlans returns the cloud plan catalog. It is the same section
-// ListCloudPlans answers and a separate operation because it is a separate
-// address, and an address is what every projection keys on.
-func (o ops) listCloud(ctx context.Context, _ *planNoInput) (*planList, error) {
-	return routeOf[planList](ctx, o, "cloud", nil)
-}
-
 // ListBlockchainPlans returns the blockchain RPC plan catalog: the tiers metered
 // in monthly compute units, with their prices, limits and overage terms. It is
 // the canonical catalog for every caller — these plans carry no reseller

@@ -111344,26 +111344,6 @@ paths:
       x-app: plan
       x-public: true
       x-tool: true
-  /v1/plan/cloud:
-    get:
-      description: |-
-        Returns the cloud plan catalog. It is the same section
-        ListCloudPlans answers and a separate operation because it is a separate
-        address, and an address is what every projection keys on.
-      operationId: get_plan_cloud
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/planList'
-          description: ok
-      summary: Returns the cloud plan catalog.
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
   /v1/plan/dns:
     get:
       description: |-
