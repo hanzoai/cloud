@@ -290,7 +290,8 @@ type DeployResult struct {
 // ---------------------------------------------------------------------------
 // Build — POST /v1/platform/runner (platform-native CI, no GitHub builders).
 // Authorized off the IAM login exactly like the surfaces above (or a dedicated
-// build token for machine automation). Unchanged wire contract.
+// build token for machine automation), and the build is attributed to the
+// organization that credential carries.
 // ---------------------------------------------------------------------------
 
 // BuildBinary is ONE hanzo.yml `binaries:` entry, sent verbatim. The recipe a
@@ -307,18 +308,21 @@ type BuildBinary struct {
 
 // BuildReq is the direct-enqueue body. Repo/SHA are required, plus EITHER Image
 // (build a container image) or Binaries (build the artifacts hanzo.yml declares).
+//
+// There is no organization field. The organization a build belongs to is read
+// off the credential that enqueued it, which is the one place an answer can come
+// from that the caller did not choose.
 type BuildReq struct {
-	Repo           string `json:"repo"`
-	SHA            string `json:"sha"`
-	Image          string `json:"image"`
-	Branch         string `json:"branch,omitempty"`
-	Ref            string `json:"ref,omitempty"`
-	Dockerfile     string `json:"dockerfile,omitempty"`
-	Context        string `json:"context,omitempty"`
-	DockerTarget   string `json:"dockerTarget,omitempty"`
-	OS             string `json:"os,omitempty"`
-	Arch           string `json:"arch,omitempty"`
-	OrganizationID string `json:"organizationId,omitempty"`
+	Repo         string `json:"repo"`
+	SHA          string `json:"sha"`
+	Image        string `json:"image"`
+	Branch       string `json:"branch,omitempty"`
+	Ref          string `json:"ref,omitempty"`
+	Dockerfile   string `json:"dockerfile,omitempty"`
+	Context      string `json:"context,omitempty"`
+	DockerTarget string `json:"dockerTarget,omitempty"`
+	OS           string `json:"os,omitempty"`
+	Arch         string `json:"arch,omitempty"`
 
 	// The artifact lane: `binaries:` + `bucket:` from the repo's hanzo.yml.
 	Binaries []BuildBinary `json:"binaries,omitempty"`
