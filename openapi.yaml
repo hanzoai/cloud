@@ -16572,15 +16572,6 @@ components:
           description: UpdatedAt is when the description or metadata last changed.
           type: string
       type: object
-    dayCount:
-      properties:
-        count:
-          description: Count is that day's total.
-          type: integer
-        date:
-          description: Date is the day, YYYY-MM-DD.
-          type: string
-      type: object
     decideBody:
       properties:
         winner:
@@ -44513,35 +44504,6 @@ components:
           description: Query is the natural-language question. Required.
           type: string
       type: object
-    searchIndex:
-      properties:
-        createdAt:
-          description: |-
-            CreatedAt is the index's creation time (RFC 3339); it falls back to now when
-            the index list could not be read.
-          type: string
-        docCount:
-          description: DocCount is how many documents the index currently holds.
-          type: integer
-        lastIndexedAt:
-          description: |-
-            LastIndexedAt is the index's last update time (RFC 3339), null when the
-            index list could not be read.
-          type: string
-        name:
-          description: Name is the index uid.
-          type: string
-      type: object
-    searchIndexList:
-      properties:
-        indexes:
-          description: |-
-            Indexes is one row per Meilisearch index, sorted by name. Empty — never
-            absent — when the search service cannot be reached.
-          items:
-            $ref: '#/components/schemas/searchIndex'
-          type: array
-      type: object
     searchOut:
       properties:
         degraded:
@@ -44576,25 +44538,6 @@ components:
         type:
           description: Type echoes the retrieval tier that ran, after defaulting.
           type: string
-      type: object
-    searchStats:
-      properties:
-        searchesPerDay:
-          description: SearchesPerDay is always empty, for the same reason as totalSearches.
-          items:
-            $ref: '#/components/schemas/dayCount'
-          type: array
-        totalDocuments:
-          description: TotalDocuments is the sum of every index's document count.
-          type: integer
-        totalSearches:
-          description: |-
-            TotalSearches is always 0: Meilisearch keeps no query-history counter, so
-            this surface reports the honest zero rather than an estimate.
-          type: integer
-        totalSessions:
-          description: TotalSessions is always 0, for the same reason as totalSearches.
-          type: integer
       type: object
     secretList:
       properties:
@@ -105689,77 +105632,6 @@ paths:
                 $ref: '#/components/schemas/Response'
           description: ok
       summary: Hybrid search over the org's own corpora
-      tags:
-      - search
-      x-app: search
-      x-public: true
-      x-tool: true
-  /v1/search/indexes:
-    get:
-      description: |-
-        Lists the search indexes with their document counts and timestamps.
-
-        It reads the in-cluster Meilisearch service and reshapes its /stats and
-        /indexes replies into the rows the console's Search panel renders. The read is
-        degrade-friendly by design: an unreachable Meilisearch answers 200 with an
-        EMPTY list, so the panel shows an honest empty state instead of an error.
-        createdAt falls back to now and lastIndexedAt to null when the index list is
-        unavailable.
-      operationId: get_search_indexes
-      parameters:
-      - description: |-
-          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
-          key is accepted too. It is not `validate:"required"` on purpose: requireKey
-          answers absence itself, so an unconfigured surface 503s and a missing bearer
-          401s — a validation refusal would rewrite both statuses.
-        in: header
-        name: Authorization
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/searchIndexList'
-          description: ok
-      summary: Lists the search indexes with their document counts and timestamps.
-      tags:
-      - search
-      x-app: search
-      x-public: true
-      x-tool: true
-  /v1/search/stats:
-    get:
-      description: |-
-        Totals the documents across every search index.
-
-        totalDocuments is summed from Meilisearch's own per-index counts. The other
-        three fields are structurally zero rather than estimated: Meilisearch keeps no
-        query-history counters, so searches, sessions and the per-day series are not
-        derivable from the index and this surface reports the honest zero instead of a
-        fabricated number. An unreachable Meilisearch answers 200 with all zeros.
-      operationId: get_search_stats
-      parameters:
-      - description: |-
-          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
-          key is accepted too. It is not `validate:"required"` on purpose: requireKey
-          answers absence itself, so an unconfigured surface 503s and a missing bearer
-          401s — a validation refusal would rewrite both statuses.
-        in: header
-        name: Authorization
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/searchStats'
-          description: ok
-      summary: Totals the documents across every search index.
       tags:
       - search
       x-app: search

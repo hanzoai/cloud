@@ -1,12 +1,12 @@
 ---
-name: search_stats
+name: admin_search
 version: "8.0.0"
-description: "Read search stats: Totals the documents across every search index.."
+description: "Read admin search: Lists the search indexes with their document counts and timestamps., Totals the documents across every search index.."
 ---
 
-# Zoo · SEARCH · stats
+# Zoo · ADMIN · search
 
-Read-only Zoo capability derived from the `search` OpenAPI product. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `admin` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,7 +14,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/search/stats` — Totals the documents across every search index.
+- `GET https://api.zoo.ngo/v1/admin/search/indexes` — Lists the search indexes with their document counts and timestamps.
+- `GET https://api.zoo.ngo/v1/admin/search/stats` — Totals the documents across every search index.
 
 ## Parameters
 
@@ -24,12 +25,13 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/search/stats` → `searchStats` object with fields: `searchesPerDay`, `totalDocuments`, `totalSearches`, `totalSessions`.
+- `/v1/admin/search/indexes` → `searchIndexList` object with fields: `indexes`.
+- `/v1/admin/search/stats` → `searchStats` object with fields: `searchesPerDay`, `totalDocuments`, `totalSearches`, `totalSessions`.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/v1/search/stats" \
+curl -sS "https://api.zoo.ngo/v1/admin/search/indexes" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
