@@ -163,8 +163,19 @@ func zapErr(c *zip.Ctx, err error) error {
 // none; getRepo/deleteRepo read name). Org + project scope come from the
 // request identity, NEVER the body — the body cannot widen the caller's org.
 type zapProcReq struct {
-	Name        string `json:"name"`
-	Project     string `json:"project"`
+	// Name is the repo's handle within the scope and the last segment of both
+	// clone URLs. It must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ once a trailing
+	// ".git" is stripped. Required by createRepo, getRepo and deleteRepo; listRepos
+	// and usage ignore it.
+	Name string `json:"name"`
+	// Project narrows the repo to a sub-scope of the org, matching the same pattern
+	// as Name. Only createRepo reads it, and only to OVERRIDE the caller's own
+	// X-Project-Id scope — empty falls back to that scope, and getRepo/deleteRepo
+	// use it and never this field. It cannot reach outside the caller's org: the
+	// org is the request identity's and is not in this body at all.
+	Project string `json:"project"`
+	// Description is a free-form blurb, at most 4 KiB, trimmed. Read by createRepo
+	// alone; the other procedures have nothing to do with it.
 	Description string `json:"description"`
 }
 

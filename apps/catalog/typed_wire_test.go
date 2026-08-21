@@ -121,3 +121,38 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the two gates
+// above cannot see. Typing a route documents its ADDRESS and its SHAPE; the shape's
+// FIELDS come from a different place — a doc comment on each one, which zipdoc lifts
+// one at a time — so a fully typed lens can still publish an unreadable document.
+//
+// It matters here because an Entry is mostly DERIVED and a reader cannot tell which
+// parts. `archetype` is a closed, ordered vocabulary computed from a repository's own
+// topics, and empty means unclassified rather than uncategorisable; `origin` cuts the
+// corpus into the lanes hanzo.app browses; `scope` says which of the two corpora a row
+// came from, which is what a client warns on before somebody shares a link; `license`
+// is undeclared when empty and never unencumbered; and `updated` is compared AS A
+// STRING to order the page, so its RFC 3339 UTC spelling is load-bearing.
+//
+// The gate checks presence, not meaning. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(mount(t), openapi.Info{Title: "catalog", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("catalog publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/catalog describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+}
