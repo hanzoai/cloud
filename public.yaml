@@ -12853,7 +12853,7 @@ components:
         id:
           description: |-
             ID is the org-derived id of the overlay network — the key
-            GET /v1/networks/{id} addresses.
+            GET /v1/network/{id} addresses.
           type: string
         name:
           description: Name is the org the overlay belongs to.
@@ -56261,35 +56261,6 @@ paths:
       - openapi
       x-app: openapi
       x-public: true
-  /v1/mesh/services:
-    get:
-      description: |-
-        Returns the Zero Trust edge services the caller's org owns.
-
-        One row per real ZT edge service tagged with the org's "org-<org>" role
-        attribute: mtls is "required" when the service mandates end-to-end encryption and
-        "enabled" otherwise (the fabric always mutually authenticates every link), and
-        status is "active" because a listed service is a configured, dialable entry. A
-        service tagged for another org, or tagged for none, is invisible here.
-
-        Unlike the network and router reads this does NOT degrade: an unconfigured
-        deployment answers 503 and an unreachable controller surfaces the upstream's
-        status, so a mesh page never renders "no services" for a fabric it simply could
-        not read.
-      operationId: get_mesh_services
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/meshServiceList'
-          description: ok
-      summary: Returns the Zero Trust edge services the caller's org owns.
-      tags:
-      - zt
-      x-app: zt
-      x-public: true
-      x-tool: true
   /v1/messages:
     post:
       description: Implements the Anthropic Messages API.
@@ -56883,7 +56854,7 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/networks:
+  /v1/network:
     get:
       description: |-
         Returns the caller's org overlay network on the Zero Trust fabric.
@@ -56896,7 +56867,7 @@ paths:
         The read degrades rather than erroring: a deployment with no ZT credential, and a
         controller that cannot be reached, both answer 200 with an empty list so the
         console's Networks page renders a clean empty state instead of an error.
-      operationId: get_networks
+      operationId: get_network
       responses:
         "200":
           content:
@@ -56906,11 +56877,11 @@ paths:
           description: ok
       summary: Returns the caller's org overlay network on the Zero Trust fabric.
       tags:
-      - zt
-      x-app: zt
+      - network
+      x-app: network
       x-public: true
       x-tool: true
-  /v1/networks/{id}:
+  /v1/network/{id}:
     get:
       description: |-
         Returns one overlay network by id, scoped to the caller's org.
@@ -56920,7 +56891,7 @@ paths:
         a peek across the tenant boundary. An org whose network exists but has no
         edge-routers is 404 too, for the same reason the list is empty: there is no
         overlay until something is on it.
-      operationId: get_networks_by_id
+      operationId: get_network_by_id
       parameters:
       - description: |-
           ID is the network id from the path. The URL is the addressing authority, so
@@ -56939,11 +56910,11 @@ paths:
           description: ok
       summary: Returns one overlay network by id, scoped to the caller's org.
       tags:
-      - zt
-      x-app: zt
+      - network
+      x-app: network
       x-public: true
       x-tool: true
-  /v1/networks/routers:
+  /v1/network/routers:
     get:
       description: |-
         Returns the Zero Trust routers the caller's org owns.
@@ -56956,7 +56927,7 @@ paths:
 
         The read degrades rather than erroring: a deployment with no ZT credential, and a
         controller that cannot be reached, both answer 200 with an empty list.
-      operationId: get_networks_routers
+      operationId: get_network_routers
       responses:
         "200":
           content:
@@ -56966,8 +56937,37 @@ paths:
           description: ok
       summary: Returns the Zero Trust routers the caller's org owns.
       tags:
-      - zt
-      x-app: zt
+      - network
+      x-app: network
+      x-public: true
+      x-tool: true
+  /v1/network/services:
+    get:
+      description: |-
+        Returns the Zero Trust edge services the caller's org owns.
+
+        One row per real ZT edge service tagged with the org's "org-<org>" role
+        attribute: mtls is "required" when the service mandates end-to-end encryption and
+        "enabled" otherwise (the fabric always mutually authenticates every link), and
+        status is "active" because a listed service is a configured, dialable entry. A
+        service tagged for another org, or tagged for none, is invisible here.
+
+        Unlike the network and router reads this does NOT degrade: an unconfigured
+        deployment answers 503 and an unreachable controller surfaces the upstream's
+        status, so a mesh page never renders "no services" for a fabric it simply could
+        not read.
+      operationId: get_network_services
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/meshServiceList'
+          description: ok
+      summary: Returns the Zero Trust edge services the caller's org owns.
+      tags:
+      - network
+      x-app: network
       x-public: true
       x-tool: true
   /v1/notify/health:
@@ -79425,6 +79425,11 @@ tags:
 - description: 'Package mq is queue and stream admin for your org: create them, watch
     them drain, ack what you pulled.'
   name: mq
+- description: 'Package network mounts the Hanzo Cloud NETWORKING surface: the tenant''s
+    Hanzo Zero Trust footprint — the overlay network, its routers and its services
+    — served as clean, org-scoped REST off the unified cloud binary and fronting the
+    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
+  name: network
 - description: Package notify is transactional email and SMS, sent through your org's
     own provider credential.
   name: notify
@@ -79507,8 +79512,3 @@ tags:
 - description: Package websearch is a web search and a page fetch your agents can
     call.
   name: websearch
-- description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
-    Hanzo Zero Trust footprint — overlay networks, their routers and mesh services
-    — served as clean, org-scoped REST off the unified cloud binary and fronting the
-    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
-  name: zt

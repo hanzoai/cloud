@@ -20,7 +20,7 @@
 // another's services or nodes. An untagged resource belongs to NO org and is
 // invisible to every tenant — honest-empty over a cross-tenant leak.
 
-package zt
+package network
 
 import (
 	"slices"
@@ -78,7 +78,7 @@ type ztEdgeRouter struct {
 // blockchain with an RPC), so those columns render blank rather than fabricated.
 type networkView struct {
 	// ID is the org-derived id of the overlay network — the key
-	// GET /v1/networks/{id} addresses.
+	// GET /v1/network/{id} addresses.
 	ID string `json:"id"`
 	// Name is the org the overlay belongs to.
 	Name string `json:"name"`
@@ -218,7 +218,7 @@ func toRouterView(r ztEdgeRouter) routerView {
 // never a fabricated overlay). nodes is the real router count; status is
 // "connected" when at least one router is online, else "provisioning" (routers
 // exist but none has dialed home yet). id/name are derived deterministically from
-// the org so /v1/networks/:id round-trips.
+// the org so /v1/network/:id round-trips.
 func networkFromRouters(org string, routers []ztEdgeRouter) *networkView {
 	if len(routers) == 0 {
 		return nil
@@ -239,5 +239,5 @@ func networkFromRouters(org string, routers []ztEdgeRouter) *networkView {
 }
 
 // networkID is the stable, org-derived id for the org's overlay network — the key
-// the /v1/networks/:id route addresses.
+// the /v1/network/:id route addresses.
 func networkID(org string) string { return orgRolePrefix + org }

@@ -1,4 +1,4 @@
-package zt
+package network
 
 import (
 	"encoding/json"
@@ -98,7 +98,7 @@ func (f *fakeZT) server(t *testing.T) *httptest.Server {
 // IS the composer, so it owes the same thing.
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
-// mountApp mounts the zt surface against the fake controller with a service
+// mountApp mounts the network surface against the fake controller with a service
 // credential configured.
 func mountApp(t *testing.T, f *fakeZT) *zip.App {
 	t.Helper()
@@ -144,11 +144,11 @@ func TestMeshServicesTenantScopedAndShape(t *testing.T) {
 	app := mountApp(t, f)
 
 	// No validated principal → 403, and the request never reaches the controller.
-	if code, _ := do(t, app, http.MethodGet, "/v1/mesh/services", ""); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/network/services", ""); code != http.StatusForbidden {
 		t.Fatalf("no-org list want 403, got %d", code)
 	}
 
-	code, body := do(t, app, http.MethodGet, "/v1/mesh/services", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/network/services", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d (%s)", code, body)
 	}
@@ -171,14 +171,14 @@ func TestMeshServicesTenantScopedAndShape(t *testing.T) {
 	}
 
 	// Cross-tenant isolation: "other" sees only its own (encryptionRequired=false → "enabled").
-	code, body = do(t, app, http.MethodGet, "/v1/mesh/services", "other")
+	code, body = do(t, app, http.MethodGet, "/v1/network/services", "other")
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Services) != 1 || listed.Services[0].Mtls != "enabled" {
 		t.Fatalf("other must see exactly its own service, got %d %+v", code, listed.Services)
 	}
 
 	// A tenant with no ZT footprint gets an honest empty list.
-	code, body = do(t, app, http.MethodGet, "/v1/mesh/services", "nobody")
+	code, body = do(t, app, http.MethodGet, "/v1/network/services", "nobody")
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Services) != 0 {
 		t.Fatalf("nobody must see zero services, got %d %+v", code, listed.Services)
@@ -194,7 +194,7 @@ func TestEdgeNodesTenantScopedShapeAndHealth(t *testing.T) {
 	}}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/networks/routers", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/network/routers", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("routers want 200, got %d (%s)", code, body)
 	}
@@ -235,7 +235,7 @@ func TestNetworksDerivedFromRouters(t *testing.T) {
 	app := mountApp(t, f)
 
 	// acme: one overlay network, 2 nodes, connected (≥1 online).
-	code, body := do(t, app, http.MethodGet, "/v1/networks", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/network", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("networks want 200, got %d (%s)", code, body)
 	}
@@ -254,21 +254,21 @@ func TestNetworksDerivedFromRouters(t *testing.T) {
 	}
 
 	// other: routers exist but none online → provisioning.
-	code, body = do(t, app, http.MethodGet, "/v1/networks", "other")
+	code, body = do(t, app, http.MethodGet, "/v1/network", "other")
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Networks) != 1 || listed.Networks[0].Status != "provisioning" {
 		t.Fatalf("other want 1 provisioning network, got %d %+v", code, listed.Networks)
 	}
 
 	// nobody: no routers → honest empty (no fabricated overlay).
-	code, body = do(t, app, http.MethodGet, "/v1/networks", "nobody")
+	code, body = do(t, app, http.MethodGet, "/v1/network", "nobody")
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Networks) != 0 {
 		t.Fatalf("nobody want zero networks, got %d %+v", code, listed.Networks)
 	}
 
 	// networks/:id round-trips for the org's own id, and 404s another id.
-	code, body = do(t, app, http.MethodGet, "/v1/networks/org-acme", "acme")
+	code, body = do(t, app, http.MethodGet, "/v1/network/org-acme", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("get own network want 200, got %d (%s)", code, body)
 	}
@@ -277,7 +277,7 @@ func TestNetworksDerivedFromRouters(t *testing.T) {
 		t.Fatalf("get network mismatch: %+v (err %v)", one, err)
 	}
 	// acme cannot address org-other's network id → 404 (an existence guard, not a peek).
-	if code, _ := do(t, app, http.MethodGet, "/v1/networks/org-other", "acme"); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/network/org-other", "acme"); code != http.StatusNotFound {
 		t.Fatalf("cross-tenant network id want 404, got %d", code)
 	}
 }
@@ -289,7 +289,7 @@ func TestReauthRetryOn401(t *testing.T) {
 	}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/mesh/services", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/network/services", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("after stale-session retry want 200, got %d (%s)", code, body)
 	}
@@ -314,7 +314,7 @@ func TestUnconfiguredFailsClosedExceptEmptyProjections(t *testing.T) {
 	// genuinely has no networks, and 503-ing every list turns a clean "nothing here
 	// yet" console into an error on every page load. Nothing is disclosed by an
 	// empty list, so this is presentation, not a relaxed gate.
-	for _, path := range []string{"/v1/networks", "/v1/networks/routers"} {
+	for _, path := range []string{"/v1/network", "/v1/network/routers"} {
 		code, body := do(t, app, http.MethodGet, path, "acme")
 		if code != http.StatusOK {
 			t.Fatalf("unconfigured GET %s: want 200 empty, got %d", path, code)
@@ -327,7 +327,7 @@ func TestUnconfiguredFailsClosedExceptEmptyProjections(t *testing.T) {
 	// inventory rather than a per-org projection, and a specific network lookup
 	// cannot be answered honestly as "empty" — so neither degrades. If either ever
 	// returns 200 here, the gate has gone, not just the list presentation.
-	for _, path := range []string{"/v1/mesh/services", "/v1/networks/zt-acme"} {
+	for _, path := range []string{"/v1/network/services", "/v1/network/zt-acme"} {
 		if code, _ := do(t, app, http.MethodGet, path, "acme"); code != http.StatusServiceUnavailable {
 			t.Fatalf("unconfigured GET %s: want 503, got %d", path, code)
 		}

@@ -315,15 +315,23 @@ var Apps = []App{
 	// it; the two are cross-referenced instead, which is what a reader actually
 	// follows. Adjacency in this list is documentation.
 	{Name: "lsp", Prefixes: []string{"/v1/lsp"}},
-	// zt held "/v1/edge/nodes" — a top-level name for something that was never a
+	// This row held "/v1/edge/nodes" — a top-level name for something that was never a
 	// product. Four unrelated things wore "edge": the on-device inference runtime
 	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud
 	// prefix and never should), the public catalogue cache, the gateway's policy role,
 	// and THESE — ZT fabric edge-routers, which are the nodes of an overlay network and
-	// are now addressed as such at "/v1/networks/routers". A prefix belongs to a product
+	// are now addressed as such at "/v1/network/routers". A prefix belongs to a product
 	// a customer calls, so "edge" gets none: /v1/edge 404s at every depth, and that is
 	// the right answer rather than a missing product.
-	{Name: "zt", Prefixes: []string{"/v1/mesh/services", "/v1/networks"}},
+	//
+	// The app was called zt and answered on two stems, /v1/networks and /v1/mesh.
+	// "zt" abbreviates the UPSTREAM controller and is not a word anyone says for the
+	// thing, so HIP-0139 §7.3 renames the app to the address's word — singular by
+	// §2.2, because an org has one overlay — and §3.1 folds the second stem under
+	// it: a mesh row IS an edge service of this network, exactly as an edge-router
+	// is one of its nodes. ONE prefix now, and the /v1/<name> convention covers it,
+	// so plugin/network states no Prefixes at all.
+	{Name: "network", Prefixes: []string{"/v1/network"}},
 	{Name: "share", Prefixes: []string{"/v1/share"}, Stage: Beta},
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}, Stage: Beta},
 	{Name: "explorer", Prefixes: []string{"/v1/explorer"}, Stage: Beta},

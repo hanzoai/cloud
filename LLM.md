@@ -3865,7 +3865,7 @@ Five unrelated things wore the word, which is why it read like a missing product
 | `hanzoai/catalog` | the public catalogue cache (Cloudflare Worker, `catalog.hanzo.ai`) | none — a cache is not a product |
 | `apps/gateway/edge` | the CORS allowlist + per-IP flood cap + per-org rate ceiling store | it IS the gateway role; `/v1/gateway/config` |
 | `apps/projects/edge.go` | the CDN in front of published sites — provider, reach, cache policy | it is a fact about projects; `/v1/projects/edge` |
-| `/v1/edge/nodes` (`apps/zt`) | ZT fabric **edge-routers** — the nodes of an overlay network | now `/v1/networks/routers` |
+| `/v1/edge/nodes` (`apps/network`) | ZT fabric **edge-routers** — the nodes of an overlay network | now `/v1/network/routers` |
 
 **A prefix belongs to a product a customer calls.** Edge names a *position* in
 every one of those senses, so it gets none. `hanzoai/edge` keeps the repo name —
@@ -3874,7 +3874,7 @@ the network, the user's device — and it gets no cloud prefix for the same reas
 the CLI has none. **`/v1/edge` 404s at every depth and that is CORRECT, not a
 gap.**
 
-`apps/zt`'s routers moved to `/v1/networks/routers`, under the prefix zt already
+`apps/network`'s routers moved to `/v1/network/routers`, under the prefix the app already
 owned, because an edge-router IS a node of the overlay — the resource belongs
 where its parent lives. The envelope moved with the address (`{routers:[…]}`,
 not `{nodes:[…]}`): an address and its payload naming one thing two ways is the

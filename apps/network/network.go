@@ -1,9 +1,16 @@
-// Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant's Hanzo Zero
-// Trust footprint — overlay networks, their routers and mesh services — served as
-// clean, org-scoped REST off the unified cloud binary and fronting the Hanzo Zero
-// Trust controller (hanzoai/zt, an OpenZiti-based fabric). It exists so the
-// console's Networks, Service Mesh and Routers pages read REAL per-org ZT state from
-// ONE place (api.hanzo.ai/v1/*) instead of rendering "not connected".
+// Package network mounts the Hanzo Cloud NETWORKING surface: the tenant's Hanzo
+// Zero Trust footprint — the overlay network, its routers and its services —
+// served as clean, org-scoped REST off the unified cloud binary and fronting the
+// Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric). It exists so
+// the console's Networks, Service Mesh and Routers pages read REAL per-org ZT state
+// from ONE place (api.hanzo.ai/v1/*) instead of rendering "not connected".
+//
+// The package answered to "zt" until the address took the name back. "zt" is an
+// abbreviation of the UPSTREAM controller, not a word anyone says for the thing —
+// the console pages say Networks, Routers and Service Mesh — and its build-name
+// twin "zero-trust" carries a hyphen HIP-0139 §2.3 refuses. So the capability is
+// network, singular by §2.2: an org has ONE overlay, and its routers and services
+// are resources under it.
 //
 // This subsystem OWNS no ZT state — the controller does. It is a thin, tenant-scoped
 // translator: it fronts the controller's Edge MANAGEMENT API (/edge/management/v1),
@@ -15,14 +22,19 @@
 //
 // Surface (every route org-scoped by the validated principal; HIP-0026):
 //
-//	GET /v1/networks          the org's ZT overlay network(s)  -> {networks:[networkView]}
-//	GET /v1/networks/routers  the org's ZT edge-routers        -> {routers:[routerView]}
-//	GET /v1/networks/:id      one overlay network by id        -> networkView (404 if absent)
-//	GET /v1/mesh/services     the org's ZT edge services       -> {services:[meshView]}
+//	GET /v1/network           the org's ZT overlay network(s)  -> {networks:[networkView]}
+//	GET /v1/network/routers   the org's ZT edge-routers        -> {routers:[routerView]}
+//	GET /v1/network/services  the org's ZT edge services       -> {services:[meshView]}
+//	GET /v1/network/:id       one overlay network by id        -> networkView (404 if absent)
 //
 // Networks maps to the fabric overview, its routers to the ZT edge-routers that ARE
 // that overlay's nodes, and Service Mesh to ZT edge services — the three ZT concepts
 // the three console pages need.
+//
+// SERVICES MOVED HERE FOR THE REASON THE ROUTERS DID. They were at /v1/mesh, a
+// second top-level name for one capability, and a mesh row IS an edge service of
+// this overlay — the resource belongs where its parent lives. /v1/mesh now 404s at
+// every depth.
 //
 // THE ROUTERS LIVE UNDER THE NETWORK, and this is the whole reason the route moved.
 // They were served at /v1/edge/nodes, which read as a top-level Hanzo product named
@@ -42,7 +54,7 @@
 // FAIL-CLOSED. Absent the ZT service credential (ZT_CLIENT_ID / ZT_CLIENT_SECRET,
 // KMS-injected) the subsystem mounts its full route space but every op returns an
 // honest 503; it NEVER fabricates a network, service or node.
-package zt
+package network
 
 import (
 	"context"
@@ -55,7 +67,7 @@ import (
 
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// state is zt's own data; shared deps live in the embedded cloud.Base.
+// state is this subsystem's own data; shared deps live in the embedded cloud.Base.
 type state struct {
 	cl *client
 }
@@ -63,20 +75,20 @@ type state struct {
 // Mount wires the networking surface onto app per HIP-0106 — one line over the
 // generic subsystem entrypoint.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "zt", build, routes)
+	return cloud.Mount(app, deps, "network", build, routes)
 }
 
-// build constructs the zt state: the ZT controller client from its env
+// build constructs the state: the ZT controller client from its env
 // (ZT_CLIENT_ID/ZT_CLIENT_SECRET are KMS-injected). It records the mount posture —
 // a fail-closed Warn when the service credential is absent (every op 503 until
 // configured), an Info with the controller target otherwise.
 func build(b cloud.Base) (state, error) {
 	cl := newClient()
 	if !cl.configured() {
-		b.Log.Warn("zt networking surface mounted fail-closed: ZT_CLIENT_ID/ZT_CLIENT_SECRET not set (all ops 503 until configured)",
+		b.Log.Warn("network surface mounted fail-closed: ZT_CLIENT_ID/ZT_CLIENT_SECRET not set (all ops 503 until configured)",
 			"controller", cl.target)
 	} else {
-		b.Log.Info("zt networking surface mounted", "controller", cl.target, "brand", b.Brand, "env", b.Env)
+		b.Log.Info("network surface mounted", "controller", cl.target, "brand", b.Brand, "env", b.Env)
 	}
 	return state{cl: cl}, nil
 }
@@ -90,62 +102,60 @@ func build(b cloud.Base) (state, error) {
 // below read what it parks off the context.
 //
 // IT USED TO BE TWO GROUP INSTALLS, and that defect is closed by the composer.
-// Middleware on a group wraps what is composed BENEATH it, and the two collection
-// ROOTS are declared on the App with their whole path — joining "/v1/networks" with
-// an empty leaf yields "/v1/networks/", a different address from the one they have
-// always served. So the group's enrichment covered /v1/networks/routers and /:id and
-// missed /v1/networks itself: a validated caller reached the op with no org parked
-// and was answered 403. The composer's root install covers every path, collection
-// roots included — TestValidatedOrgReachesEveryPrefix measures exactly that.
+// Middleware on a group wraps what is composed BENEATH it, and a collection ROOT is
+// declared on the App with its whole path — joining "/v1/network" with an empty
+// leaf yields "/v1/network/", a different address from the one it serves. So the
+// group's enrichment covered the children and missed the root: a validated caller
+// reached the op with no org parked and was answered 403. The composer's root
+// install covers every path, collection roots included —
+// TestValidatedOrgReachesEveryPrefix measures exactly that.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	o := ztOps{s: s}
+	o := ops{s: s}
 	zapp := cloud.ZipApp(app)
 
-	ng := app.Group("/v1/networks")
-	zip.Get(zapp, "/v1/networks", o.listNetworks)
-	// The overlay's routers hang off the network they belong to, so they register on
-	// the SAME group — one subtree, no second top-level name. "routers" is
-	// a literal beside ":id" and goes first, per this function's rule. That ordering is
-	// a convention here, not a load-bearing accident: measured on this router, the
-	// static segment wins over its param sibling in EITHER registration order, so
-	// nothing has to be frozen by a test to keep /v1/networks/routers reachable.
-	zip.Get(ng, "/routers", o.listRouters)
-	zip.Get(ng, "/:id", o.getNetwork)
-
-	mg := app.Group("/v1/mesh")
-	zip.Get(mg, "/services", o.listMeshServices)
+	g := app.Group("/v1/network")
+	zip.Get(zapp, "/v1/network", o.listNetworks)
+	// Routers and services hang off the network they belong to, so they register on
+	// the SAME group — one subtree, no second top-level name. Both are literals
+	// beside ":id" and go first, per this function's rule. That ordering is a
+	// convention here, not a load-bearing accident: measured on this router, a static
+	// segment wins over its param sibling in EITHER registration order, so nothing
+	// has to be frozen by a test to keep them reachable.
+	zip.Get(g, "/routers", o.listRouters)
+	zip.Get(g, "/services", o.listServices)
+	zip.Get(g, "/:id", o.getNetwork)
 }
 
-// ztOps binds the service to the typed networking ops. A TypedHandler takes no
+// ops binds the service to the typed networking ops. A TypedHandler takes no
 // service parameter, so the service arrives as a RECEIVER and every op is a method
 // value — also the only bound form cmd/zipdoc can lift prose from.
-type ztOps struct{ s *cloud.Service[state] }
+type ops struct{ s *cloud.Service[state] }
 
 // noIn is the input of an op that takes nothing: no body, no path parameter, no
 // query. GET carries no request body (zip's hasBody), so this publishes nothing.
 type noIn struct{}
 
-// networkRef addresses one overlay network by the id GET /v1/networks returns.
+// networkRef addresses one overlay network by the id GET /v1/network returns.
 type networkRef struct {
 	// ID is the network id from the path. The URL is the addressing authority, so
 	// it binds from there whatever else the request carries.
 	ID string `json:"id"`
 }
 
-// networkList is the GET /v1/networks envelope.
+// networkList is the GET /v1/network envelope.
 type networkList struct {
 	// Networks holds the org's overlay network, or is empty when the org has no
 	// edge-routers on the fabric (no nodes → no network, never a fabricated one).
 	Networks []networkView `json:"networks"`
 }
 
-// meshServiceList is the GET /v1/mesh/services envelope.
+// meshServiceList is the GET /v1/network/services envelope.
 type meshServiceList struct {
 	// Services is one row per ZT edge service tagged with the caller's org role.
 	Services []meshView `json:"services"`
 }
 
-// routerList is the GET /v1/networks/routers envelope.
+// routerList is the GET /v1/network/routers envelope.
 type routerList struct {
 	// Routers is one row per ZT edge-router tagged with the caller's org role.
 	Routers []routerView `json:"routers"`
@@ -183,7 +193,7 @@ func gate(s *cloud.Service[state], ctx context.Context) (string, error) {
 // The read degrades rather than erroring: a deployment with no ZT credential, and a
 // controller that cannot be reached, both answer 200 with an empty list so the
 // console's Networks page renders a clean empty state instead of an error.
-func (o ztOps) listNetworks(ctx context.Context, _ *noIn) (*networkList, error) {
+func (o ops) listNetworks(ctx context.Context, _ *noIn) (*networkList, error) {
 	s := o.s
 	if !s.State.cl.configured() {
 		// ZT not configured on this deployment — a READ returns an honest-EMPTY list
@@ -217,7 +227,7 @@ func (o ztOps) listNetworks(ctx context.Context, _ *noIn) (*networkList, error) 
 // a peek across the tenant boundary. An org whose network exists but has no
 // edge-routers is 404 too, for the same reason the list is empty: there is no
 // overlay until something is on it.
-func (o ztOps) getNetwork(ctx context.Context, in *networkRef) (*networkView, error) {
+func (o ops) getNetwork(ctx context.Context, in *networkRef) (*networkView, error) {
 	s := o.s
 	org, err := gate(s, ctx)
 	if err != nil {
@@ -239,9 +249,9 @@ func (o ztOps) getNetwork(ctx context.Context, in *networkRef) (*networkView, er
 	return nv, nil
 }
 
-// ---- mesh services (ZT edge services) ----
+// ---- services (ZT edge services) ----
 
-// listMeshServices returns the Zero Trust edge services the caller's org owns.
+// listServices returns the Zero Trust edge services the caller's org owns.
 //
 // One row per real ZT edge service tagged with the org's "org-<org>" role
 // attribute: mtls is "required" when the service mandates end-to-end encryption and
@@ -253,7 +263,7 @@ func (o ztOps) getNetwork(ctx context.Context, in *networkRef) (*networkView, er
 // deployment answers 503 and an unreachable controller surfaces the upstream's
 // status, so a mesh page never renders "no services" for a fabric it simply could
 // not read.
-func (o ztOps) listMeshServices(ctx context.Context, _ *noIn) (*meshServiceList, error) {
+func (o ops) listServices(ctx context.Context, _ *noIn) (*meshServiceList, error) {
 	s := o.s
 	org, err := gate(s, ctx)
 	if err != nil {
@@ -283,7 +293,7 @@ func (o ztOps) listMeshServices(ctx context.Context, _ *noIn) (*meshServiceList,
 //
 // The read degrades rather than erroring: a deployment with no ZT credential, and a
 // controller that cannot be reached, both answer 200 with an empty list.
-func (o ztOps) listRouters(ctx context.Context, _ *noIn) (*routerList, error) {
+func (o ops) listRouters(ctx context.Context, _ *noIn) (*routerList, error) {
 	s := o.s
 	if !s.State.cl.configured() {
 		// Same as listNetworks: an unconfigured ZT deployment yields an honest-EMPTY
@@ -309,8 +319,8 @@ func (o ztOps) listRouters(ctx context.Context, _ *noIn) (*routerList, error) {
 }
 
 // orgRouters lists the controller's edge-routers and filters to the caller's org —
-// the ONE place routers are fetched+scoped, shared by /v1/networks and
-// /v1/networks/routers so both derive from the identical tenant-filtered set.
+// the ONE place routers are fetched+scoped, shared by /v1/network and
+// /v1/network/routers so both derive from the identical tenant-filtered set.
 func orgRouters(s *cloud.Service[state], ctx context.Context, org string) ([]ztEdgeRouter, error) {
 	all, err := listAll[ztEdgeRouter](s.State.cl, ctx, "/edge-routers")
 	if err != nil {

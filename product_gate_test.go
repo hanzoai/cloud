@@ -44,8 +44,8 @@ var mismatched = map[string]string{
 var unwired = []string{
 	"admin", "analytics", "billing", "bot", "datastore", "dns",
 	"engine", "eval", "functions", "gateway", "git", "idv", "ingress", "kms",
-	"marketing", "ml", "mpc", "platform", "research", "skills", "social",
-	"team", "usage", "visor", "world", "zt",
+	"marketing", "ml", "mpc", "network", "platform", "research", "skills",
+	"social", "team", "usage", "visor", "world",
 }
 
 // unextracted apps have no upstream repo at all: the functionality lives only
