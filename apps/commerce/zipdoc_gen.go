@@ -7,13 +7,6 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /_/commerce/healthz", zip.Doc{
-		Description: "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated, and under /_ so the ingress withholds it\npublicly.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
-		Fields: map[string]string{
-			"liveness.service": "Service names the answering subsystem; it is always commerce.",
-			"liveness.status":  "Status is always ok: mounted is the only state that can answer.",
-		},
-	})
 	zip.Describe("GET /v1/billing/invoices/:id", zip.Doc{
 		Description: "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction — the store is namespaced to it — so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
@@ -36,7 +29,7 @@ func init() {
 			"InvoiceRefIn.id":            "ID is the invoice id.",
 		},
 	})
-	zip.Describe("GET /v1/cart/:id", zip.Doc{
+	zip.Describe("GET /v1/commerce/cart/:id", zip.Doc{
 		Description: "Reads one cart: its lines, its status and what it comes to.\n\nThis is what a storefront calls to render the basket, and what a support agent\ncalls to see what a shopper is looking at. The totals are the cart's STORED\ntally — shipping and tax stay zero until checkout resolves a shipping option\nand a tax region, so a cart total before checkout is the merchandise total and\nis meant to be.\n\nThe org scopes the read by construction: the store is namespaced to it, so a\ncart id belonging to another tenant is simply not found rather than found and\nthen filtered, and answers 404 rather than 403 so the id space cannot be probed.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Cart.createdAt":      "CreatedAt is when the cart was opened, RFC3339.",
@@ -65,7 +58,14 @@ func init() {
 			"CartRef.id":          "ID is the cart's id, as the open call answered it.",
 		},
 	})
-	zip.Describe("GET /v1/payments/:id", zip.Doc{
+	zip.Describe("GET /v1/commerce/health", zip.Doc{
+		Description: "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated: a probe that needs a credential is a probe that\nreports the credential.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"liveness.service": "Service names the answering subsystem; it is always commerce.",
+			"liveness.status":  "Status is always ok: mounted is the only state that can answer.",
+		},
+	})
+	zip.Describe("GET /v1/commerce/payments/:id", zip.Doc{
 		Description: "Reads one settled payment out of the caller's org ledger.\n\nThe org scopes the read by construction — the ledger is namespaced to it — so\nan id belonging to another tenant is simply not found rather than found and\nthen filtered. A ledger row that is not a payment is likewise not found, so\nthis cannot be used to walk the org's usage debits.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"PaymentRecord.amountCents": "AmountCents is the credited amount in whole cents.",
@@ -210,7 +210,7 @@ func init() {
 			"InvoiceRefIn.id":            "ID is the invoice id.",
 		},
 	})
-	zip.Describe("POST /v1/cart", zip.Doc{
+	zip.Describe("POST /v1/commerce/cart", zip.Doc{
 		Description: "Opens an empty cart for a shopper to fill, and answers it with its new id.\n\nThis is the first step of a sale: hold the id, add items to it with\nsetCartItem, then hand it to checkout. Every field of the request is optional —\nan empty body opens a perfectly good anonymous cart — and the fields exist only\nto pre-fill what is already known about the shopper.\n\nThe STORE defaults to the org's own default storefront, so a merchant selling\nthrough one storefront never has to name it. The CURRENCY defaults to usd; note\nthat checkout overrides it with the store's own currency when the sale is\nauthorized, so a currency set here is a hint rather than a commitment.\n\nThe cart is created in the CALLER'S OWN org namespace, taken from the validated\nprincipal and never from the body, so a cart can never be opened on another\ntenant's books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Cart.createdAt":      "CreatedAt is when the cart was opened, RFC3339.",
@@ -242,7 +242,7 @@ func init() {
 			"CartOpen.user":       "User is the id of the signed-in shopper this cart belongs to, when there is\none. Empty means a guest cart identified only by its own id.",
 		},
 	})
-	zip.Describe("POST /v1/cart/:id/discard", zip.Doc{
+	zip.Describe("POST /v1/commerce/cart/:id/discard", zip.Doc{
 		Description: "Discards a cart the shopper abandoned, and answers it in its final state.\n\nA discarded cart is CLOSED, not deleted: the row stays, so abandoned-basket\nreporting and any follow-up that keys on it still have something to read. It\nstops being a cart anything will check out, which is the point — it is how a\nstorefront says \"this basket is over\" without destroying the evidence that it\nexisted.\n\nDiscarding is idempotent: a cart already discarded answers its stored state\nrather than failing, so a retry is safe.\n\nThe cart is resolved inside the caller's own org namespace, so another tenant's\nid answers 404.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Cart.createdAt":      "CreatedAt is when the cart was opened, RFC3339.",
@@ -271,7 +271,7 @@ func init() {
 			"CartRef.id":          "ID is the cart's id, as the open call answered it.",
 		},
 	})
-	zip.Describe("POST /v1/cart/:id/item", zip.Doc{
+	zip.Describe("POST /v1/commerce/cart/:id/item", zip.Doc{
 		Description: "Sets how many of one item a cart holds, and answers the whole updated cart.\n\nThis is the ONE way a cart's contents change. The quantity is the RESULT, not a\ndelta: sending 3 leaves 3 however many were there before, so a retry is safe and\na double-submit cannot double an order. ZERO REMOVES the line — there is\ndeliberately no separate delete, because removal is the same act at the boundary\nvalue and a second spelling would be a second set of edge cases.\n\nName the item with EITHER product OR variant, never both. Prefer variant for\nanything sold in sizes, colours or tiers: the price and the stock belong to the\nvariant, so a product-level line on a varianted product prices the wrong thing.\nEither may be given as an id or as the human key — a product's URL slug, a\nvariant's SKU — which is what lets a storefront add to cart straight from a\nproduct page URL without a lookup first.\n\nThe item's price and name are CACHED onto the line as it is added, so the cart\nkeeps the price the shopper was shown even if the catalog moves underneath it.\n\nAn item that resolves to nothing in the catalog is refused 400 and the cart is\nleft exactly as it was; nothing is partially applied.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Cart.createdAt":       "CreatedAt is when the cart was opened, RFC3339.",
@@ -303,7 +303,7 @@ func init() {
 			"CartItemSet.variant":  "Variant names the specific sellable variant to set, by its id or its SKU.\nPrefer it over Product for anything sold in sizes, colours or tiers — the\nprice and the stock are the variant's, not the product's.",
 		},
 	})
-	zip.Describe("POST /v1/payments", zip.Doc{
+	zip.Describe("POST /v1/commerce/payments", zip.Doc{
 		Description: "Takes a payment: charges a single-use card token and credits the caller's org\nbalance, exactly once.\n\nThis is the operation behind \"collect money from a customer\". It runs the SAME\ncore the console's card top-up runs (commerce billing.TakePayment), so the\nserver-side amount bounds, the idempotency guard and the ledger credit are\nshared rather than reimplemented — a second charge path would eventually\ndouble-charge somebody.\n\nThe ORG is the caller's, taken from the validated principal and never from the\ninput, so a payment can only ever credit the account of whoever made the call.\n\nA payment is RISK-SCREENED before the card is charged, so this can be refused\nwithout any money moving: 403 means the screen did not authorise it, and 503 means\nthe screen could not reach a decision — that one is worth retrying, and no charge\nwas attempted either way.\n\nSend an idempotencyKey. An agent retries by construction, and the key is what\nturns a retry into a replay of the first receipt instead of a second charge.\n\nThe answer states whether it settled in SANDBOX or live mode (`test`), and\ncarries the processor's own reference (`processorRef`) so the charge can be\nreconciled against the processor rather than taken on trust.\n\nA named builder, not a closure, so zipdoc can lift this prose into the registry.\n\nIt BUILDS the handler rather than being it, because the screen has to sit inside\nthe value every projection of this op dispatches to — see exposePayments. `charge`\nis the money move, `take` is the screened door onto it, and the only registrable\none is the second.",
 		Fields: map[string]string{
 			"PaymentIn.amountCents":    "AmountCents is the amount to charge, in whole cents (5000 is $50.00).\nServer-side bounds apply and are authoritative — the default floor is $1\nand the ceiling $5,000, so a fat-fingered or hostile amount is refused\nbefore any money moves.",

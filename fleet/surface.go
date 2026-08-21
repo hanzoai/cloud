@@ -313,7 +313,7 @@ var authMarker = set("signin", "signon", "login", "auth", "oauth", "sso", "user"
 
 // filler are the positional words a derived operation id carries that name
 // nothing: zip renders a path param as `by_<name>`, so the word before `key` in
-// `delete_v1_store_by_storeid_listing_by_key` is grammar, not context. Every
+// `delete_v1_commerce_store_by_storeid_listing_by_key` is grammar, not context. Every
 // neighbour test skips them, in ONE place — see [before] and [after].
 var filler = set("by", "the", "a", "an", "of", "for", "my", "me", "all", "and")
 
