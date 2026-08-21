@@ -20,6 +20,16 @@ import (
 
 type ops struct{ s *cloud.Service[*state] }
 
+// zipdoc lifts the doc comment off each typed op — and off each field of its In
+// and Out types — into zipdoc_gen.go, which hands them to zip.Describe at init.
+// Go drops comments at compile time, so this build-time pass is the ONLY way the
+// prose in this file reaches the published document, the MCP tool list and the
+// generated clients. Without it every field below publishes as a bare type, and
+// `knowable`, `contested` and the direction of an edge are exactly the things a
+// bare type does not say.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 func routes(app cloud.Router, s *cloud.Service[*state]) {
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
@@ -69,39 +79,53 @@ type graphAssertIn struct {
 type graphFact struct {
 	// Entity is the thing being described, in the organization's own namespace.
 	// It is not created: an entity exists because something was asserted about it.
+	// Required, 512 bytes at most.
 	Entity string `json:"entity"`
 	// Relation is what is being asserted — `depends`, `owner`, `same`, `title`.
-	// It is open: this plane holds no vocabulary of its own.
+	// It is open: this plane holds no vocabulary of its own. Required, 128 bytes
+	// at most.
 	Relation string `json:"relation"`
 	// Value is what the relation points at. When Names is true it is another
 	// entity's key and the assertion is an EDGE; otherwise it is a scalar and
-	// the assertion is a property.
+	// the assertion is a property. 2048 bytes at most, or 512 when it names an
+	// entity.
 	Value string `json:"value"`
 	// Names says the value is an entity. A walk reads only the edges, so this is
 	// a declaration and never a guess about the value's shape.
 	Names bool `json:"names,omitempty"`
-	// At is when the thing was so, RFC 3339.
+	// At is when the thing was so, RFC 3339. Required, and refused when it sits
+	// more than five minutes ahead of the server clock — an assertion dated
+	// further out would never mature and would skew every read until it did.
 	At string `json:"at"`
-	// Seen is when this assertion became knowable, RFC 3339. Defaults to At.
-	// It is provenance and it decides nothing: the instant every read uses is
-	// derived as the later of Seen and the server's own clock.
+	// Seen is when this assertion became knowable, RFC 3339. Defaults to At and
+	// may not precede it. It is provenance and it decides nothing: the instant
+	// every read uses is derived as the later of Seen and the server's own clock.
 	Seen string `json:"seen,omitempty"`
 	// Source names who asserted. Required, because an assertion nobody is named
-	// for cannot be weighed against one that is.
+	// for cannot be weighed against one that is. Open text: this plane ranks no
+	// source above another.
 	Source string `json:"source"`
-	// Evidence points at the record this claim came from. Required.
+	// Evidence points at the record this claim came from, 512 bytes at most. An
+	// assertion without one is admitted and carries no defence.
 	Evidence string `json:"evidence"`
 	// Confidence in [0,1]. A tie-breaker within the order, never a substitute
-	// for it.
+	// for it. Absent is 0, the weakest an assertion can be.
 	Confidence float64 `json:"confidence,omitempty"`
 }
 
 // graphAssertOut reports what happened to each member. Recorded + Duplicate +
 // Refused is exactly the number sent, so a caller can reconcile without guessing.
 type graphAssertOut struct {
-	Recorded  int `json:"recorded"`
+	// Recorded is how many members became new rows.
+	Recorded int `json:"recorded"`
+	// Duplicate is how many members this plane already held. A redelivery
+	// collides on its content address and is counted here, not refused: it is
+	// the success a retrying caller depends on.
 	Duplicate int `json:"duplicate"`
-	Refused   int `json:"refused"`
+	// Refused is how many members were turned away at the door, before the store
+	// was touched — a missing entity, a timestamp that is not RFC 3339, a
+	// confidence outside [0,1]. The rest of the batch was still recorded.
+	Refused int `json:"refused"`
 	// Reasons names why each refused member was refused, in the order sent.
 	Reasons []string `json:"reasons,omitempty"`
 }
@@ -165,16 +189,26 @@ func fromWire(a graphFact, by string, now time.Time) (Fact, error) {
 // ── read ─────────────────────────────────────────────────────────────────────
 
 type graphReadIn struct {
-	Entity   string `json:"entity,omitempty"`
+	// Entity narrows to what was asserted ABOUT one entity. Absent matches every
+	// entity.
+	Entity string `json:"entity,omitempty"`
+	// Relation narrows to one relation. Absent matches every relation.
 	Relation string `json:"relation,omitempty"`
-	Value    string `json:"value,omitempty"`
+	// Value narrows to assertions pointing AT one value, which is how the edges
+	// into an entity are read.
+	Value string `json:"value,omitempty"`
 	// AsOf bounds the read to what was knowable at an instant, RFC 3339. Absent
 	// reads everything this plane holds.
-	AsOf  string `json:"as_of,omitempty"`
-	Limit int    `json:"limit,omitempty"`
+	AsOf string `json:"as_of,omitempty"`
+	// Limit caps how many assertions come back. Absent, zero, or anything above
+	// the walk ceiling is the ceiling.
+	Limit int `json:"limit,omitempty"`
 }
 
 type graphReadOut struct {
+	// Assertions are the matching rows in the order they were written, oldest
+	// first. Every version is here: this read resolves nothing and withholds
+	// nothing, so a superseded claim and the one that superseded it both appear.
 	Assertions []wireFact `json:"assertions"`
 }
 
@@ -199,7 +233,10 @@ func (o ops) read(ctx context.Context, in *graphReadIn) (*graphReadOut, error) {
 // ── resolve ──────────────────────────────────────────────────────────────────
 
 type graphResolveIn struct {
-	Entity   string `json:"entity"`
+	// Entity is the thing to answer about. Required.
+	Entity string `json:"entity"`
+	// Relation is the one relation to settle. Required: this answers a single
+	// (entity, relation) pair, never a whole entity at once.
 	Relation string `json:"relation"`
 	// AsOf is the instant to answer at, RFC 3339. Absent means now.
 	AsOf string `json:"as_of,omitempty"`
@@ -208,15 +245,27 @@ type graphResolveIn struct {
 // graphResolveOut carries the dissenters beside the winner. A contested relation
 // is visible as contested rather than resolved into silence.
 type graphResolveOut struct {
-	Entity   string `json:"entity"`
+	// Entity is the entity the question named, echoed so a stored answer still
+	// says what it is about.
+	Entity string `json:"entity"`
+	// Relation is the relation the question named, echoed for the same reason.
 	Relation string `json:"relation"`
-	AsOf     string `json:"as_of"`
+	// AsOf is the instant this answer was taken at, RFC 3339: the one asked for,
+	// or the server's clock when none was.
+	AsOf string `json:"as_of"`
 	// Known is false when this plane held nothing knowable at AsOf. That is an
 	// answer, not an error.
-	Known     bool       `json:"known"`
-	Winner    *wireFact  `json:"winner,omitempty"`
+	Known bool `json:"known"`
+	// Winner is the assertion in force — the strongest of those knowable at AsOf
+	// under the order `rule` names. Absent exactly when Known is false.
+	Winner *wireFact `json:"winner,omitempty"`
+	// Conflicts is every OTHER assertion knowable at AsOf, strongest first. They
+	// are not all disagreements: one that repeats the winner's value ranks below
+	// it and is listed here too.
 	Conflicts []wireFact `json:"conflicts,omitempty"`
-	Contested bool       `json:"contested"`
+	// Contested is true when at least one conflict claims a value different from
+	// the winner's. Any number of conflicts that all agree leaves it false.
+	Contested bool `json:"contested"`
 }
 
 func (o ops) resolve(ctx context.Context, in *graphResolveIn) (*graphResolveOut, error) {
@@ -252,23 +301,34 @@ func (o ops) resolve(ctx context.Context, in *graphResolveIn) (*graphResolveOut,
 type graphNeighborsIn struct {
 	// Seeds is where the walk starts. At least one.
 	Seeds []string `json:"seeds"`
-	// Relation narrows the walk to one edge relation. Absent follows all.
+	// Relation narrows the walk to one edge relation. Absent follows all. Only
+	// edges are ever followed: an assertion whose value is a scalar is a property
+	// and is never a hop.
 	Relation string `json:"relation,omitempty"`
-	// Direction is out, in or both. Absent is out.
+	// Direction is out, in or both. Out follows an edge from its entity to its
+	// value — what the node points at; in follows it the other way — what points
+	// at the node; both is the union of the two, not a third rule. Absent is out.
 	Direction string `json:"direction,omitempty"`
 	// Depth is how many hops. Absent is one.
 	Depth int `json:"depth,omitempty"`
-	// AsOf walks the graph as it stood at an instant, RFC 3339.
+	// AsOf walks the graph as it stood at an instant, RFC 3339. Absent walks it
+	// as it stands now.
 	AsOf string `json:"as_of,omitempty"`
 }
 
 type graphNeighborsOut struct {
+	// Entities is everything reached, the seeds included, ordered by the fewest
+	// hops that reach each one and then by key.
 	Entities []string `json:"entities"`
-	Depth    int      `json:"depth"`
+	// Depth is the deepest hop count actually reached. It is at most the depth
+	// asked for, and smaller when the walk ran out of edges first.
+	Depth int `json:"depth"`
 	// Truncated says the bound stopped the walk. The bound is part of the answer
 	// rather than a silent short read.
 	Truncated bool `json:"truncated"`
-	Bound     int  `json:"bound"`
+	// Bound is the ceiling this walk was held to, the same for every caller, so
+	// Truncated can be read against a number rather than guessed at.
+	Bound int `json:"bound"`
 }
 
 func (o ops) neighbors(ctx context.Context, in *graphNeighborsIn) (*graphNeighborsOut, error) {
@@ -329,17 +389,41 @@ func (o ops) vocabulary(ctx context.Context, _ *struct{}) (*graphVocabularyOut, 
 // wireFact is one assertion as a caller reads it. Seq and the hold are the
 // store's own business and are not on the wire.
 type wireFact struct {
-	ID         string  `json:"id"`
-	Entity     string  `json:"entity"`
-	Relation   string  `json:"relation"`
-	Value      string  `json:"value"`
-	Names      bool    `json:"names,omitempty"`
-	At         string  `json:"at"`
-	Seen       string  `json:"seen"`
-	Knowable   string  `json:"knowable"`
-	Source     string  `json:"source"`
-	Evidence   string  `json:"evidence,omitempty"`
-	By         string  `json:"by"`
+	// ID is the assertion's content address, minted by the server from what was
+	// asserted. Two callers who assert the identical thing land on one ID and one
+	// row; changing any asserted field makes a different ID and a second row.
+	ID string `json:"id"`
+	// Entity is the thing described, in the organization's own namespace.
+	Entity string `json:"entity"`
+	// Relation is what was asserted of it.
+	Relation string `json:"relation"`
+	// Value is what the relation points at: another entity's key when Names is
+	// true, otherwise a scalar.
+	Value string `json:"value"`
+	// Names true means the assertion is an edge and Value is an entity. A walk
+	// reads only these.
+	Names bool `json:"names,omitempty"`
+	// At is when the thing was so, RFC 3339, as the asserter gave it.
+	At string `json:"at"`
+	// Seen is when the asserter says it became knowable, RFC 3339. Provenance
+	// only — Knowable is what an as-of read is bounded by.
+	Seen string `json:"seen"`
+	// Knowable is the first instant this plane could have answered with the
+	// assertion, RFC 3339: the later of Seen and the server's clock at the write.
+	// Derived and never supplied, which is what stops history filed today from
+	// being backdated into a past read.
+	Knowable string `json:"knowable"`
+	// Source names who asserted, as the caller gave it. This plane ranks no
+	// source above another, so it never outweighs a later Knowable.
+	Source string `json:"source"`
+	// Evidence points at the record the claim came from. Absent when the asserter
+	// gave none.
+	Evidence string `json:"evidence,omitempty"`
+	// By is the identity that filed it — `owner` or `owner/user` — stamped from
+	// the validated principal at the write, never from the body.
+	By string `json:"by"`
+	// Confidence in [0,1] as the asserter gave it; absent is 0. It breaks a tie
+	// between two assertions equally knowable and decides nothing else.
 	Confidence float64 `json:"confidence,omitempty"`
 }
 

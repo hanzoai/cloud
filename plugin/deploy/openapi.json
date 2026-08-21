@@ -493,54 +493,66 @@
       "GitOpsApp": {
         "properties": {
           "automated": {
+            "description": "Automated is whether CD applies new commits without being asked. It reads the\nPRESENCE of spec.syncPolicy.automated, which is a block rather than a\nboolean; false means drift is reported and nothing moves.",
             "type": "boolean"
           },
           "health": {
-            "description": "Healthy|Degraded|Progressing|…",
+            "description": "Health is CD's verdict on the objects it manages, verbatim: Healthy,\nProgressing, Degraded, Suspended, Missing or Unknown.",
             "type": "string"
           },
           "history": {
+            "description": "History is the recent deploy log, NEWEST FIRST and capped at ten. CD appends\noldest-first and bounds the list itself; the reversal happens here so a\ncaller never has to know the storage order to show what shipped last. Empty\n(never null) for an Application that has deployed nothing.",
             "items": {
               "$ref": "#/components/schemas/GitOpsDeploy"
             },
             "type": "array"
           },
           "name": {
+            "description": "Name is what CD calls this tracked source, not the workload it deploys —\nthe Application CR's own metadata.name. The fleet ApplicationSet mints these\nas \u003cnamespace\u003e-\u003capp\u003e.",
             "type": "string"
           },
           "namespace": {
+            "description": "Namespace is where the Application OBJECT lives: CD's own controller\nnamespace, which is the same one for every row here. It is NOT the\ndestination the workloads land in — this endpoint lists cluster-wide and\nnever reads spec.destination.",
             "type": "string"
           },
           "operation": {
-            "$ref": "#/components/schemas/GitOpsOperation"
+            "$ref": "#/components/schemas/GitOpsOperation",
+            "description": "Operation is the last sync attempt and how it ended. Absent when CD has run\nnone, which is the honest gap between \"never tried\" and \"tried and failed\"."
           },
           "path": {
+            "description": "Path is the directory inside that repository CD renders, relative to its root.",
             "type": "string"
           },
           "project": {
+            "description": "Project is the AppProject fence the sync is admitted under: which repos this\nApplication may pull from and which destinations it may write to. Empty when\nthe CR declares none.",
             "type": "string"
           },
           "reconciledAt": {
+            "description": "ReconciledAt is when CD last COMPARED this Application against git, RFC 3339.\nIt moves on every comparison, including ones that applied nothing.",
             "type": "string"
           },
           "repoURL": {
+            "description": "RepoURL is the git repository CD polls for this Application's desired state.",
             "type": "string"
           },
           "resources": {
+            "description": "Resources is how MANY objects CD manages for this Application\n(len(status.resources)) — a count, not the objects. Zero for an Application\nCD has not reconciled.",
             "type": "integer"
           },
           "revision": {
-            "description": "the commit last applied",
+            "description": "Revision is the commit CD last APPLIED (status.sync.revision). Empty means it\nhas applied none — never read that as the head of TargetRevision.",
             "type": "string"
           },
           "selfHeal": {
+            "description": "SelfHeal is whether CD also reverts changes made directly in the cluster\n(syncPolicy.automated.selfHeal). Meaningless unless Automated.",
             "type": "boolean"
           },
           "sync": {
-            "description": "Synced|OutOfSync|Unknown",
+            "description": "Sync is CD's verdict on git versus cluster, verbatim: Synced, OutOfSync or\nUnknown. It is about the applied REVISION, so an Application can be Synced to\na commit that is several behind the branch it tracks.",
             "type": "string"
           },
           "targetRevision": {
+            "description": "TargetRevision is the git ref CD TRACKS — usually a branch such as \"main\".\nIt is what CD aims at; Revision is what it has reached.",
             "type": "string"
           }
         },
@@ -549,18 +561,23 @@
       "GitOpsDeploy": {
         "properties": {
           "automated": {
+            "description": "Automated is whether CD started this deploy itself, from its own polling of\nthe tracked git ref (initiatedBy.automated), rather than someone asking for it.",
             "type": "boolean"
           },
           "deployedAt": {
+            "description": "DeployedAt is when the apply finished, RFC 3339. Absent when CD recorded none.",
             "type": "string"
           },
           "id": {
+            "description": "ID is CD's own sequence number for this deploy (status.history[].id). It\nincreases with every applied revision, so the largest id in `history` is the\nmost recent deploy — which is the first entry, since the list is reversed.",
             "type": "integer"
           },
           "revision": {
+            "description": "Revision is the git commit this deploy applied, as CD recorded it.",
             "type": "string"
           },
           "startedAt": {
+            "description": "StartedAt is when CD began applying the revision (deployStartedAt), RFC 3339.\nAbsent when CD recorded none.",
             "type": "string"
           }
         },
@@ -569,18 +586,23 @@
       "GitOpsOperation": {
         "properties": {
           "finishedAt": {
+            "description": "FinishedAt is when it ended, RFC 3339. Absent while the phase is Running.",
             "type": "string"
           },
           "message": {
+            "description": "Message is CD's account of the phase — \"successfully synced (all tasks run)\"\nfor a Succeeded operation, the reason it stopped for a Failed one.",
             "type": "string"
           },
           "phase": {
+            "description": "Phase is how the last sync operation ended, in CD's own vocabulary: Running,\nSucceeded or Failed. It is never empty — an Application whose phase is empty\nhas no operation at all and omits this whole object.",
             "type": "string"
           },
           "revision": {
+            "description": "Revision is the commit this operation ATTEMPTED (operationState.syncResult).\nIt differs from the Application's own revision exactly when the attempt did\nnot land: revision is the last commit CD got applied, this is the last one it\ntried.",
             "type": "string"
           },
           "startedAt": {
+            "description": "StartedAt is when the operation began, RFC 3339.",
             "type": "string"
           }
         },
@@ -589,15 +611,18 @@
       "GitOpsPlane": {
         "properties": {
           "applications": {
+            "description": "Applications is every CD Application in the cluster, ordered by namespace\nthen name. Empty (never null) when the plane is not installed, and equally\nempty when it is installed and tracks nothing — Installed is what separates\nthose two.",
             "items": {
               "$ref": "#/components/schemas/GitOpsApp"
             },
             "type": "array"
           },
           "installed": {
+            "description": "Installed is whether this cluster serves the CD Application CRD at all. False\nis a fact about the cluster, not a failure of the request: the caller says\n\"no CD plane here\" rather than rendering an error it cannot act on.",
             "type": "boolean"
           },
           "reason": {
+            "description": "Reason says why the plane is absent, in words a caller can show. Empty when\nInstalled.",
             "type": "string"
           }
         },
@@ -606,19 +631,24 @@
       "argoApp": {
         "properties": {
           "apiVersion": {
+            "description": "APIVersion is the constant \"argoproj.io/v1alpha1\" — the shape, not the source.\nThese are projections of operator App CRs and Hanzo CD Applications; no\nargoproj.io object is stored anywhere behind this plane.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the constant \"Application\".",
             "type": "string"
           },
           "metadata": {
-            "$ref": "#/components/schemas/argoMeta"
+            "$ref": "#/components/schemas/argoMeta",
+            "description": "Metadata is the projected object's identity."
           },
           "spec": {
-            "$ref": "#/components/schemas/argoSpec"
+            "$ref": "#/components/schemas/argoSpec",
+            "description": "Spec is the desired state: where it comes from, where it lands, what project\nit belongs to."
           },
           "status": {
-            "$ref": "#/components/schemas/argoStatus"
+            "$ref": "#/components/schemas/argoStatus",
+            "description": "Status is what was observed: the sync verdict, the health, and the owned\nobjects when this is a detail read."
           }
         },
         "type": "object"
@@ -626,19 +656,23 @@
       "argoAppList": {
         "properties": {
           "apiVersion": {
+            "description": "APIVersion is the constant \"argoproj.io/v1alpha1\".",
             "type": "string"
           },
           "items": {
+            "description": "Items is one entry per operator App CR the caller may see — its own org's, or\nevery platform namespace's for a SuperAdmin — followed, for a SuperAdmin\nonly, by every Hanzo CD Application in the cluster. Empty (never null) rather\nthan absent when the caller owns nothing.",
             "items": {
               "$ref": "#/components/schemas/argoApp"
             },
             "type": "array"
           },
           "kind": {
+            "description": "Kind is the constant \"ApplicationList\".",
             "type": "string"
           },
           "metadata": {
-            "$ref": "#/components/schemas/argoListMeta"
+            "$ref": "#/components/schemas/argoListMeta",
+            "description": "Metadata is the list envelope the SPA expects; it carries no resume point."
           }
         },
         "type": "object"
@@ -646,15 +680,19 @@
       "argoCluster": {
         "properties": {
           "connectionState": {
-            "$ref": "#/components/schemas/argoConnectionState"
+            "$ref": "#/components/schemas/argoConnectionState",
+            "description": "ConnectionState is whether the destination is reachable."
           },
           "info": {
-            "$ref": "#/components/schemas/argoClusterInfo"
+            "$ref": "#/components/schemas/argoClusterInfo",
+            "description": "Info is the connection state again plus the count of applications targeting\nthis destination."
           },
           "name": {
+            "description": "Name is what the Destination column shows: \"in-cluster\" for this cluster,\notherwise whatever spec.destination.name declares, falling back to the server\nURL when it declares none.",
             "type": "string"
           },
           "server": {
+            "description": "Server is the destination's API URL, and the key the list is deduplicated by.\nhttps://kubernetes.default.svc is this cluster.",
             "type": "string"
           }
         },
@@ -663,12 +701,15 @@
       "argoClusterInfo": {
         "properties": {
           "applicationsCount": {
+            "description": "ApplicationsCount is how many of THE CALLER'S applications reconcile into\nthis cluster, so a tenant sees its own count and a SuperAdmin the fleet's. It\nis zero for the in-cluster destination when the caller owns nothing, since\nthat destination is listed whether or not anything targets it.",
             "type": "integer"
           },
           "connectionState": {
-            "$ref": "#/components/schemas/argoConnectionState"
+            "$ref": "#/components/schemas/argoConnectionState",
+            "description": "ConnectionState repeats the cluster's own connection state, which is where\nArgoCD's UI reads it from on this object."
           },
           "serverVersion": {
+            "description": "ServerVersion is the kubernetes version of the destination. Always absent:\nnothing here queries the API server for it.",
             "type": "string"
           }
         },
@@ -677,13 +718,15 @@
       "argoClusterList": {
         "properties": {
           "items": {
+            "description": "Items is one entry per distinct destination server, in first-seen order with\nthe in-cluster destination first. Never empty: an empty fleet still has the\none cluster it would deploy into.",
             "items": {
               "$ref": "#/components/schemas/argoCluster"
             },
             "type": "array"
           },
           "metadata": {
-            "$ref": "#/components/schemas/argoListMeta"
+            "$ref": "#/components/schemas/argoListMeta",
+            "description": "Metadata is the list envelope the SPA expects; it carries no resume point."
           }
         },
         "type": "object"
@@ -691,12 +734,15 @@
       "argoConnectionState": {
         "properties": {
           "attemptedAt": {
+            "description": "AttemptedAt is when the connection was last probed. Always absent: nothing is\nprobed, and a fabricated timestamp would claim a check that never ran.",
             "type": "string"
           },
           "message": {
+            "description": "Message is why a connection failed. Always absent, since none does.",
             "type": "string"
           },
           "status": {
+            "description": "Status is ArgoCD's ConnectionStatus — Successful, Failed or Unknown. Always\nSuccessful here: the destination is the cluster this process is already\nrunning in, so it is reachable by construction and there is no credential to\nprobe.",
             "type": "string"
           }
         },
@@ -709,9 +755,11 @@
             "type": "string"
           },
           "namespace": {
+            "description": "Namespace is where in that cluster the workload lands. \"*\" on a project's\ndestination fence means any namespace.",
             "type": "string"
           },
           "server": {
+            "description": "Server is the cluster API URL the application reconciles into. Everything\nthis plane projects lands in the cluster it runs in, so it is\nhttps://kubernetes.default.svc — except on a project's destination fence,\nwhere \"*\" means any cluster.",
             "type": "string"
           }
         },
@@ -720,9 +768,11 @@
       "argoGroupKind": {
         "properties": {
           "group": {
+            "description": "Group is the API group a project admits, \"*\" for any. Empty names the core\ngroup.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the kind it admits, \"*\" for any.",
             "type": "string"
           }
         },
@@ -731,9 +781,11 @@
       "argoHealth": {
         "properties": {
           "message": {
+            "description": "Message is why the status is what it is — \"Running: no replicas ready\",\n\"iam: CrashLoopBackOff\". A Healthy object carries one too (\"Running: all\nreplicas ready\"), so this is not a failure signal. Always absent on a CD row,\nwhich reports no health message.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the ArgoCD health vocabulary, Capitalized: Healthy, Progressing,\nDegraded, Suspended, Missing or Unknown. For an App CR it is derived per\nobject from what the operator reconciled (a workload with every replica ready\nis Healthy, one scaled to zero is Suspended, a crash-looping pod is\nDegraded); for a CD row it is the verdict CD wrote.",
             "type": "string"
           }
         },
@@ -742,9 +794,11 @@
       "argoInfoItem": {
         "properties": {
           "name": {
+            "description": "Name is the chip's label. The only one this projection produces is\n\"Image Tag\".",
             "type": "string"
           },
           "value": {
+            "description": "Value is the chip's value — for \"Image Tag\", the tag the node runs.",
             "type": "string"
           }
         },
@@ -753,6 +807,7 @@
       "argoListMeta": {
         "properties": {
           "resourceVersion": {
+            "description": "ResourceVersion is the k8s list version a watch would resume from. Always\nempty: every list on this plane is COMPUTED per request rather than read from\none etcd revision, so there is no point to resume from. The live view is the\nSSE stream, not a resumed watch.",
             "type": "string"
           }
         },
@@ -761,21 +816,26 @@
       "argoMeta": {
         "properties": {
           "creationTimestamp": {
+            "description": "CreationTimestamp is when the source object was created, RFC 3339 to the\nsecond. Empty for a synthesized project.",
             "type": "string"
           },
           "labels": {
             "additionalProperties": {
               "type": "string"
             },
+            "description": "Labels are the labels this projection puts on the row, not the source\nobject's full label set. An application projected from an App CR carries\nhanzo.ai/instance (its name), hanzo.ai/env (main, test or dev, from the\nnamespace it was read from) and hanzo.ai/org when the CR declares a tenant. A\nHanzo CD Application carries the CR's own labels verbatim. A project\nreflected from IAM carries hanzo.ai/org alone.",
             "type": "object"
           },
           "name": {
+            "description": "Name is the projected object's name: the App CR's metadata.name for an\napplication, the CD Application's name for a CD row, and the IAM project name\nfor a project.",
             "type": "string"
           },
           "namespace": {
+            "description": "Namespace is the namespace the source object was read from — the tenant or\nplatform namespace for an App CR, CD's controller namespace for a CD row.\nEmpty for a project synthesized here, which lives in no namespace.",
             "type": "string"
           },
           "uid": {
+            "description": "UID is the k8s metadata.uid of the source object, which is what the SPA keys\na row on across refreshes. Empty for a synthesized project — there is no\nobject to take one from.",
             "type": "string"
           }
         },
@@ -784,21 +844,25 @@
       "argoNode": {
         "properties": {
           "createdAt": {
+            "description": "CreatedAt is the object's creationTimestamp, RFC 3339 UTC to the second.\nAbsent when the object carries none.",
             "type": "string"
           },
           "group": {
             "type": "string"
           },
           "health": {
-            "$ref": "#/components/schemas/argoHealth"
+            "$ref": "#/components/schemas/argoHealth",
+            "description": "Health is the node's own derived health. Always present on a node of this\ntree; a kind with no health signal of its own reports Healthy, since a\nConfigMap existing IS its healthy state."
           },
           "images": {
+            "description": "Images are the container images running on this node. Always absent — the tag\ntravels as the \"Image Tag\" chip in Info instead, which is where the SPA reads\nit on a node.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "info": {
+            "description": "Info are the chips shown on the node. At most one: the image tag — the\nRUNNING tag on a Deployment, ReplicaSet or Pod, and the DECLARED tag on the\nApp CR at the root. Absent on a node that carries no image at all.",
             "items": {
               "$ref": "#/components/schemas/argoInfoItem"
             },
@@ -814,12 +878,14 @@
             "type": "string"
           },
           "parentRefs": {
+            "description": "ParentRefs are the node's edges UPWARD, which is how the SPA draws the DAG\nfrom this flat list. Exactly one entry where present: a depth-1 object points\nat the App CR, a ReplicaSet at its Deployment, a Pod at its ReplicaSet (or at\nthe Deployment whose selector matches it, when the ReplicaSet is gone).\nAbsent on the root.",
             "items": {
               "$ref": "#/components/schemas/argoResourceRef"
             },
             "type": "array"
           },
           "resourceVersion": {
+            "description": "ResourceVersion is the k8s version a watch would resume from. Always empty:\nthe tree is rebuilt from live reads on every request, including on every\nframe of the SSE stream, so there is no revision to resume from.",
             "type": "string"
           },
           "uid": {
@@ -834,19 +900,24 @@
       "argoProject": {
         "properties": {
           "apiVersion": {
+            "description": "APIVersion is the constant \"argoproj.io/v1alpha1\". A project here is an IAM\nresource wearing that shape; no argoproj.io object is stored behind it.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the constant \"AppProject\".",
             "type": "string"
           },
           "metadata": {
-            "$ref": "#/components/schemas/argoMeta"
+            "$ref": "#/components/schemas/argoMeta",
+            "description": "Metadata is the project's identity: its name is the key an application's\nspec.project matches, and is the same string an App CR carries in its\napp.kubernetes.io/part-of label."
           },
           "spec": {
-            "$ref": "#/components/schemas/argoProjectSpec"
+            "$ref": "#/components/schemas/argoProjectSpec",
+            "description": "Spec is the fence the SPA displays — repos, destinations, admitted kinds."
           },
           "status": {
-            "$ref": "#/components/schemas/argoProjectStat"
+            "$ref": "#/components/schemas/argoProjectStat",
+            "description": "Status is always the empty object. A project has no reconciled state here;\nthe field exists because the SPA reads it."
           }
         },
         "type": "object"
@@ -854,13 +925,15 @@
       "argoProjectList": {
         "properties": {
           "items": {
+            "description": "Items is the projects visible to the caller — its own organization's, or\nevery organization's for a SuperAdmin. A project named \"default\" is always\npresent and is prepended when IAM does not carry one, because that is what an\napplication with no project label groups under.",
             "items": {
               "$ref": "#/components/schemas/argoProject"
             },
             "type": "array"
           },
           "metadata": {
-            "$ref": "#/components/schemas/argoListMeta"
+            "$ref": "#/components/schemas/argoListMeta",
+            "description": "Metadata is the list envelope the SPA expects; it carries no resume point."
           }
         },
         "type": "object"
@@ -868,21 +941,25 @@
       "argoProjectSpec": {
         "properties": {
           "clusterResourceWhitelist": {
+            "description": "ClusterResourceWhitelist are the cluster-scoped kinds it may create —\n[{group:\"*\", kind:\"*\"}] on a synthesized project.",
             "items": {
               "$ref": "#/components/schemas/argoGroupKind"
             },
             "type": "array"
           },
           "description": {
+            "description": "Description is the project's human label: the IAM project's display name, or\nits description when it has no display name. Absent when IAM carries neither.",
             "type": "string"
           },
           "destinations": {
+            "description": "Destinations are the cluster/namespace pairs it may write to — a single\n{server:\"*\", namespace:\"*\"} on a synthesized project, for the same reason.",
             "items": {
               "$ref": "#/components/schemas/argoDestination"
             },
             "type": "array"
           },
           "sourceRepos": {
+            "description": "SourceRepos are the git repos applications in this project may pull from.\n[\"*\"] for every project this plane synthesizes or reflects from IAM: the\nboundary that actually holds on this platform is the IAM org, resolved before\na row is ever projected, so the projected fence is deliberately permissive\nand is NOT an authorization statement.",
             "items": {
               "type": "string"
             },
@@ -898,21 +975,27 @@
       "argoResourceRef": {
         "properties": {
           "group": {
+            "description": "Group is the object's API group: empty for the core group (Pod, Service,\nConfigMap), otherwise apps, networking.k8s.io, autoscaling or policy — and\nhanzo.ai for the App CR at the root.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the object kind. The root is the App CR; below it come Deployment,\nReplicaSet, Pod, Service, Ingress, HorizontalPodAutoscaler,\nPodDisruptionBudget and ConfigMap. Never Secret — the walk does not visit\nthem, so no materialized environment can reach the tree.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the object's metadata.name.",
             "type": "string"
           },
           "namespace": {
+            "description": "Namespace is the namespace the walk ran in, the same for every node of one\ntree.",
             "type": "string"
           },
           "uid": {
+            "description": "UID is the object's metadata.uid. Absent on a PARENT reference, which\naddresses its target by kind and name rather than by identity.",
             "type": "string"
           },
           "version": {
+            "description": "Version is the object's API version as the live object reports it: v1 for\nevery kind the walk reaches except the HorizontalPodAutoscaler, which is\nautoscaling/v2.",
             "type": "string"
           }
         },
@@ -921,24 +1004,31 @@
       "argoResourceStatus": {
         "properties": {
           "group": {
+            "description": "Group is the object's API group: empty for the core group (Pod, Service,\nConfigMap), otherwise apps, networking.k8s.io, autoscaling or policy — and\nhanzo.ai for the App CR itself.",
             "type": "string"
           },
           "health": {
-            "$ref": "#/components/schemas/argoHealth"
+            "$ref": "#/components/schemas/argoHealth",
+            "description": "Health is this object's own health, derived from its live state by the same\nrule the resource tree uses."
           },
           "kind": {
+            "description": "Kind is the object kind — App, Deployment, ReplicaSet, Pod, Service, Ingress,\nHorizontalPodAutoscaler, PodDisruptionBudget, ConfigMap. Never Secret: the\nwalk that produces these does not visit them.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the object's metadata.name.",
             "type": "string"
           },
           "namespace": {
+            "description": "Namespace is the namespace the object was found in — the same one for every\nentry of an application, since the walk is confined to it.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the APPLICATION's sync verdict repeated on every row, not a\nper-object one. The operator owns these children, so no child has a desired\nstate of its own to compare against.",
             "type": "string"
           },
           "version": {
+            "description": "Version is the object's API version as the live object reports it: v1 for\nevery kind here except the HorizontalPodAutoscaler, which is autoscaling/v2.",
             "type": "string"
           }
         },
@@ -947,18 +1037,23 @@
       "argoRevisionMetadata": {
         "properties": {
           "author": {
+            "description": "Author is the commit author. Always absent: an App CR pins an IMAGE, so this\nprocess has no commit to read one from and will not invent one.",
             "type": "string"
           },
           "date": {
+            "description": "Date is when the App CR was created, RFC 3339 UTC — the only real timestamp\nthere is here. It is NOT the date of the revision asked for.",
             "type": "string"
           },
           "message": {
+            "description": "Message is the revision asked for, echoed back — not a commit message. The\nempty revision and \"HEAD\" resolve to the image tag the CR declares\n(spec.image.tag), and anything longer than 256 characters is truncated to it.",
             "type": "string"
           },
           "signatureInfo": {
+            "description": "SignatureInfo is the GPG verification result for the revision. Always absent:\nnothing here verifies a signature, and an empty field says so rather than\nimplying an unsigned commit.",
             "type": "string"
           },
           "tags": {
+            "description": "Tags are the git tags pointing at the revision. Always absent, for the same\nreason as Author.",
             "items": {
               "type": "string"
             },
@@ -970,12 +1065,15 @@
       "argoSource": {
         "properties": {
           "path": {
+            "description": "Path is the directory within RepoURL. Display-only alongside a display-only\nRepoURL; CD's own value for a CD row.",
             "type": "string"
           },
           "repoURL": {
+            "description": "RepoURL is the git repository the desired state comes from. For an\napplication projected from an App CR it is the fleet manifest repo and is\nDISPLAY ONLY — an App CR pins an image, and nothing is rendered from this\nrepo to produce it. For a CD row it is the repo CD actually polls.",
             "type": "string"
           },
           "targetRevision": {
+            "description": "TargetRevision is the git ref tracked there — a branch such as \"main\".\nDisplay-only for a projected App CR; the ref CD tracks for a CD row.",
             "type": "string"
           }
         },
@@ -984,13 +1082,16 @@
       "argoSpec": {
         "properties": {
           "destination": {
-            "$ref": "#/components/schemas/argoDestination"
+            "$ref": "#/components/schemas/argoDestination",
+            "description": "Destination is which cluster and namespace it lands in. Zero-valued on a CD\nrow: this projection reports CD's source, not its destination."
           },
           "project": {
+            "description": "Project is the AppProject this application is grouped and filtered under. For\nan App CR it is the app.kubernetes.io/part-of label — the IAM project name —\nfalling back to \"default\" when the CR carries no such label.",
             "type": "string"
           },
           "source": {
-            "$ref": "#/components/schemas/argoSource"
+            "$ref": "#/components/schemas/argoSource",
+            "description": "Source is where the desired state is declared."
           }
         },
         "type": "object"
@@ -998,22 +1099,27 @@
       "argoStatus": {
         "properties": {
           "health": {
-            "$ref": "#/components/schemas/argoHealth"
+            "$ref": "#/components/schemas/argoHealth",
+            "description": "Health is the application's reconciled health."
           },
           "reconciledAt": {
+            "description": "ReconciledAt is when the desired state was last compared against the cluster,\nRFC 3339. Empty for an App CR — the projection derives its verdict at read\ntime and nothing records a comparison — and CD's own status.reconciledAt for\na CD row.",
             "type": "string"
           },
           "resources": {
+            "description": "Resources are the objects the application owns. EMPTY on the list — filling\nit would walk the cluster once per row — and populated only by the read of\nONE application, which is what makes that the detail view.",
             "items": {
               "$ref": "#/components/schemas/argoResourceStatus"
             },
             "type": "array"
           },
           "summary": {
-            "$ref": "#/components/schemas/argoSummary"
+            "$ref": "#/components/schemas/argoSummary",
+            "description": "Summary is the small aggregate the list column renders: the images."
           },
           "sync": {
-            "$ref": "#/components/schemas/argoSyncStatus"
+            "$ref": "#/components/schemas/argoSyncStatus",
+            "description": "Sync is the declared-versus-running verdict and what it was reached against."
           }
         },
         "type": "object"
@@ -1021,6 +1127,7 @@
       "argoSummary": {
         "properties": {
           "images": {
+            "description": "Images are the container images the application runs. One entry for an App\nCR, built from its spec.image as \"repository:tag\" — the bare repository when\nit declares no tag, and absent when it declares neither. Absent on a CD row,\nwhich tracks commits rather than images.",
             "items": {
               "type": "string"
             },
@@ -1032,9 +1139,11 @@
       "argoSyncStatus": {
         "properties": {
           "revision": {
+            "description": "Revision is what Status was reached against. For an App CR that is the\ndeclared IMAGE TAG, not a commit — the CR is image-pinned. For a CD row it is\nthe commit CD last applied.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the ArgoCD sync vocabulary, Capitalized: Synced, OutOfSync or\nUnknown. For an App CR it compares the tag the CR DECLARES against the tag\nthe cluster's Deployment is RUNNING — equal is Synced, both known and\ndifferent is OutOfSync, either unknown is Unknown. For a CD row it is CD's\nown git-versus-cluster verdict.",
             "type": "string"
           }
         },
@@ -1043,18 +1152,21 @@
       "argoSyncWindows": {
         "properties": {
           "activeWindows": {
+            "description": "ActiveWindows are the sync windows in force right now. Always null: this\nplatform declares none, so nothing is ever in force.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "assignedWindows": {
+            "description": "AssignedWindows are the windows configured for this application at all,\nwhether or not currently in force. Always null, for the same reason.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "canSync": {
+            "description": "CanSync is whether a sync would be permitted at this moment. Always true —\nwith no windows there is nothing to deny it. A caller must not read this as\n\"a sync will succeed\"; it only means no window is blocking one.",
             "type": "boolean"
           }
         },
@@ -1063,18 +1175,21 @@
       "argoTree": {
         "properties": {
           "hosts": {
+            "description": "Hosts is ArgoCD's per-node machine inventory. Always empty: this plane\nprojects applications and serves no cluster-node view.",
             "items": {
               "type": "object"
             },
             "type": "array"
           },
           "nodes": {
+            "description": "Nodes is the FLAT node list, root first: the App CR, then the objects the\noperator owns, then their ReplicaSets and Pods. The hierarchy is in\nParentRefs, not in the ordering.",
             "items": {
               "$ref": "#/components/schemas/argoNode"
             },
             "type": "array"
           },
           "orphanedNodes": {
+            "description": "OrphanedNodes are objects in the namespace belonging to no application.\nAlways empty: this walk reaches an object only THROUGH ownership from the App\nCR, so it can never hold one that is orphaned.",
             "items": {
               "$ref": "#/components/schemas/argoNode"
             },
