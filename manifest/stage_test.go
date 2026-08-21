@@ -34,6 +34,7 @@ var staged = map[string]string{
 	"bot": Beta, "bots": Beta, "books": Beta, "campaign": Beta,
 	"captable": Beta, "company": Beta, "compliance": Beta, "content": Beta,
 	"crm": Beta, "dataroom": Beta, "dataset": Beta, "esign": Beta,
+	"graph":       Alpha,
 	"experiments": Beta, "explorer": Beta, "framework": Beta, "guide": Beta,
 	"label": Beta, "legal": Beta, "licensing": Beta, "link": Beta,
 	"marketing": Beta, "marketplace": Beta, "meet": Beta, "ml": Beta,

@@ -27,7 +27,7 @@ var frozen = []string{
 	"billing", "rollingcap", "allowance", "platform", "projects",
 	"dns", "domain", "prompts", "agents", "link", "wallets",
 	"x402", "deploy", "functions", "todo", "templates", "blueprint",
-	"framework", "knowledge", "help", "content", "catalogsync", "webhooks",
+	"framework", "knowledge", "graph", "help", "content", "catalogsync", "webhooks",
 	"ml", "label", "reference", "risk", "dataset", "usage", "leaderboard", "crm", "marketing", "ads",
 	"campaign", "validators", "social", "analytics", "git", "sync",
 	"visor", "captable", "code", "lsp", "zt", "share",
