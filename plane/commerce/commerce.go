@@ -32,6 +32,7 @@ const App = "commerce"
 var Ops = []string{
 	plane.FinanceAuthorize,
 	plane.FinanceBalance,
+	plane.FinanceCosts,
 	plane.FinanceCredit,
 	plane.FinanceRecord,
 	plane.FinanceScopeRules,
@@ -39,6 +40,8 @@ var Ops = []string{
 	plane.FinanceSubs,
 	plane.FinanceTxns,
 	plane.FinanceUsage,
+	plane.StoreCurrent,
+	plane.StoreListing,
 }
 
 // FinanceAuthorize authorize one prepaid spend.
@@ -53,6 +56,13 @@ func FinanceAuthorize(ctx context.Context, in *plane.AuthorizeIn) (*plane.Verdic
 // Calls plane.FinanceBalance on commerce over the peer plane.
 func FinanceBalance(ctx context.Context, in *plane.BalanceIn) (*plane.Balance, error) {
 	return plane.Ask[plane.BalanceIn, plane.Balance](ctx, App, plane.FinanceBalance, in)
+}
+
+// FinanceCosts what we paid every vendor in a period.
+//
+// Calls plane.FinanceCosts on commerce over the peer plane.
+func FinanceCosts(ctx context.Context, in *plane.CostsIn) (*plane.Costs, error) {
+	return plane.Ask[plane.CostsIn, plane.Costs](ctx, App, plane.FinanceCosts, in)
 }
 
 // FinanceCredit credit one subject's prepaid ledger, exactly once per ref.
@@ -102,4 +112,18 @@ func FinanceTxns(ctx context.Context, in *plane.TxnsIn) (*plane.Txns, error) {
 // Calls plane.FinanceUsage on commerce over the peer plane.
 func FinanceUsage(ctx context.Context) (*plane.UsageRows, error) {
 	return plane.Ask[struct{}, plane.UsageRows](ctx, App, plane.FinanceUsage, &struct{}{})
+}
+
+// StoreCurrent this org's storefront.
+//
+// Calls plane.StoreCurrent on commerce over the peer plane.
+func StoreCurrent(ctx context.Context, in *plane.StoreIn) (*plane.Store, error) {
+	return plane.Ask[plane.StoreIn, plane.Store](ctx, App, plane.StoreCurrent, in)
+}
+
+// StoreListing upsert one product listing.
+//
+// Calls plane.StoreListing on commerce over the peer plane.
+func StoreListing(ctx context.Context, in *plane.ListingIn) (*plane.Listed, error) {
+	return plane.Ask[plane.ListingIn, plane.Listed](ctx, App, plane.StoreListing, in)
 }
