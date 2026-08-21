@@ -73,6 +73,70 @@ func exposeInvoices() {
 	zip.Post[plane.InvoiceRef, plane.Document](cloud.Plane(), "/billing/invoice/pdf", o.pdf,
 		zip.WithOperationID(plane.BillingInvoicePDF),
 		zip.WithSummary("Render one invoice as a PDF"))
+	zip.Post[plane.InvoicesIn, plane.Invoices](cloud.Plane(), "/billing/invoices", o.list,
+		zip.WithOperationID(plane.BillingInvoices),
+		zip.WithSummary("Invoices for this subject"))
+}
+
+// Lists one subject's invoices, with the count beside them.
+//
+// It sends the STORE'S own projection of an invoice — the billing period, the
+// tax and discount lines, the attempt count — which is a wider shape than the
+// lifecycle's [plane.Invoice] because it answers a different question: "what
+// have I been billed" rather than "what is on this invoice". The two are not
+// folded together; shapes that overlap are still two shapes.
+//
+// Every timestamp becomes RFC3339 text on the way out, because a time value
+// crosses this plane as an empty struct and would arrive as the zero instant
+// with nothing reporting the loss.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoices, error) {
+	org, err := payingOrg(ctx, "invoices")
+	if err != nil {
+		return nil, err
+	}
+	rows, ierr := commercebilling.ListInvoices(ctx, org, in.Subject, in.Status, in.SubscriptionID)
+	if ierr != nil {
+		return nil, zip.Errorf(502, "invoices: %v", ierr)
+	}
+	out := make([]plane.InvoiceRow, 0, len(rows))
+	for _, v := range rows {
+		row := plane.InvoiceRow{
+			ID: v.ID, UserID: v.UserID, CustomerEmail: v.CustomerEmail,
+			SubscriptionID: v.SubscriptionID,
+			PeriodStart:    stamp(v.PeriodStart), PeriodEnd: stamp(v.PeriodEnd),
+			Subtotal: v.Subtotal, Tax: v.Tax, Discount: v.Discount,
+			CreditApplied: v.CreditApplied, AmountDue: v.AmountDue, AmountPaid: v.AmountPaid,
+			Currency: string(v.Currency), Status: string(v.Status),
+			PaymentMethod: v.PaymentMethod, PaymentRef: v.PaymentRef,
+			Number: v.Number, NumberStr: v.NumberStr, AttemptCount: v.AttemptCount,
+			CreatedAt: stamp(v.CreatedAt), UpdatedAt: stamp(v.UpdatedAt),
+		}
+		if v.DueDate != nil {
+			row.DueDate = stamp(*v.DueDate)
+		}
+		if v.PaidAt != nil {
+			row.PaidAt = stamp(*v.PaidAt)
+		}
+		if v.VoidedAt != nil {
+			row.VoidedAt = stamp(*v.VoidedAt)
+		}
+		// The lines are left NIL when there are none, deliberately: the shape this
+		// reproduces sends `null` for an invoice with no lines, and an empty array
+		// is a different answer to "were there any".
+		for _, l := range v.LineItems {
+			row.LineItems = append(row.LineItems, plane.InvoiceLineItem{
+				ID: l.Id, Type: string(l.Type), Description: l.Description,
+				MeterID: l.MeterId, Quantity: l.Quantity, UnitPrice: l.UnitPrice,
+				PlanID: l.PlanId, PlanName: l.PlanName,
+				Amount: l.Amount, Currency: string(l.Currency),
+				PeriodStart: stamp(l.PeriodStart), PeriodEnd: stamp(l.PeriodEnd),
+			})
+		}
+		out = append(out, row)
+	}
+	return &plane.Invoices{Rows: out, Count: len(out)}, nil
 }
 
 // Renders one invoice as a PDF — the bytes and the filename they are offered
