@@ -65,8 +65,20 @@ func TestDegradationIsExplicit(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (a retrieval outage must not fail the caller's turn)", code)
 	}
-	if len(out.Backends) != 2 {
-		t.Fatalf("every leg must be reported on every response, got %+v", out.Backends)
+	// Asserted by NAME rather than by count: a new leg then goes red saying which
+	// one is missing from the report, and the fix is to name it here — where a
+	// bare number would be satisfied by any three legs, including the wrong three.
+	seen := map[string]bool{}
+	for _, b := range out.Backends {
+		seen[b.Name] = true
+	}
+	for _, want := range []string{BackendIndex, BackendVector, BackendCode} {
+		if !seen[want] {
+			t.Fatalf("every leg must be reported on every response; %q is missing from %+v", want, out.Backends)
+		}
+	}
+	if len(out.Backends) != len(seen) {
+		t.Fatalf("a leg is reported twice: %+v", out.Backends)
 	}
 	for _, b := range out.Backends {
 		if b.Status == StatusOK {

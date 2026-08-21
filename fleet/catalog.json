@@ -5984,16 +5984,6 @@
  ],
  "search": [
   {
-   "id": "get_search_indexes",
-   "doc": "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
-   "read": true
-  },
-  {
-   "id": "get_search_stats",
-   "doc": "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
-   "read": true
-  },
-  {
    "id": "search",
    "doc": "Is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg."
   }

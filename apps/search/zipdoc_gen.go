@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/search/indexes", zip.Doc{
+	zip.Describe("GET /v1/admin/search/indexes", zip.Doc{
 		Description: "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
 		Fields: map[string]string{
 			"keyedIn.authorization":     "Authorization carries the surface's bearer key (`Bearer <key>`); the bare\nkey is accepted too. It is not `validate:\"required\"` on purpose: requireKey\nanswers absence itself, so an unconfigured surface 503s and a missing bearer\n401s — a validation refusal would rewrite both statuses.",
@@ -18,7 +18,7 @@ func init() {
 			"searchIndexList.indexes":   "Indexes is one row per Meilisearch index, sorted by name. Empty — never\nabsent — when the search service cannot be reached.",
 		},
 	})
-	zip.Describe("GET /v1/search/stats", zip.Doc{
+	zip.Describe("GET /v1/admin/search/stats", zip.Doc{
 		Description: "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
 		Fields: map[string]string{
 			"dayCount.count":             "Count is that day's total.",
@@ -35,18 +35,18 @@ func init() {
 		Fields: map[string]string{
 			"BackendStatus.error":   "Error is the failure text from a leg whose status is degraded — the reason a\nconfigured backend could not answer. Absent otherwise.",
 			"BackendStatus.hits":    "Hits is how many results this leg returned, counted BEFORE fusion, so it is\nnot the number that survived into Response.Hits — fusion merges what both\nlegs found and the caller's limit and offset then page it. 0 for a leg that\ndid not run.",
-			"BackendStatus.name":    "Name is which leg this reports: \"index\", the lexical store, or \"vector\", the\nsemantic one. Match.Backend uses the same two names.",
+			"BackendStatus.name":    "Name is which leg this reports: \"index\", the lexical store, \"vector\", the\nsemantic one, or \"code\", the org's own repositories. Match.Backend uses the\nsame three names.",
 			"BackendStatus.status":  "Status is one of ok, degraded, disabled, skipped — four distinct operational\nfacts that are never collapsed. It ran and answered; it is configured and\nFAILED (Error says how, and only this one is a fault); this deployment never\nprovisioned it; or the request's mode excluded it.",
 			"BackendStatus.took_ms": "TookMS is how long this leg took, in milliseconds, timed around its own call\nand excluding fusion. 0 for a leg that was skipped or is disabled, since\nnothing was called.",
-			"Hit.corpus":            "Corpus is which store the document lives in. Both legs read the org's\nknowledge base, so it is \"kb\" on every hit today; it is provenance for the\nday a third corpus is fused, not a field to branch on.",
+			"Hit.corpus":            "Corpus is which store the document lives in: \"kb\" for a document either\nknowledge leg returned, \"code\" for a span out of one of the org's own\nrepositories. It is PROVENANCE — read it to say where a hit came from, not\nto branch on: the fused ranking is what decides order, and a caller that\nfilters by corpus wants the backend's own door instead.",
 			"Hit.doctype":           "DocType is the knowledge doctype: kb-page, kb-memory or kb-source from the\nsemantic leg, and a lexical row's own doctype/type field otherwise. Absent\nwhen the row carried neither.",
 			"Hit.id":                "ID is the document's identity inside its corpus — the KB document name from\nthe semantic leg, or a lexical row's own name/id/_id (falling back to\n\"row-<n>\" when the row carries none). It is unique with DocType, not alone:\nthe pair is the key the two legs are fused on.",
-			"Hit.matched":           "Matched is one entry per leg that returned this document, with that leg's\nrank and native score. Two entries mean both legs agreed, which is exactly\nwhy the hit outranks one a single leg found. Never empty on a returned hit.",
+			"Hit.matched":           "Matched is one entry per leg that returned this document, with that leg's\nrank and native score. More than one entry means the legs AGREED, which is\nexactly why the hit outranks one a single leg found. Never empty on a\nreturned hit.",
 			"Hit.project":           "Project is the project scope the document was indexed under. Absent for a\ndocument saved with none; Request.Project filters the semantic leg on it.",
-			"Hit.score":             "Score is the FUSED score, not a relevance or a similarity: Reciprocal Rank\nFusion sums 1/(60+rank) over each leg that returned the document, so it is\nbounded by roughly 1/61 per leg (about 0.033 for a document both legs put\nfirst) and hits are ordered by it, descending. Being built from ranks, it is\ncomparable only WITHIN one response — never across queries, and never against\na backend's own score, which stays in Matched.",
+			"Hit.score":             "Score is the FUSED score, not a relevance or a similarity: Reciprocal Rank\nFusion sums 1/(60+rank) over each leg that returned the document, so it is\nbounded by roughly 1/61 per leg (about 0.033 for a document two legs put\nfirst) and hits are ordered by it, descending. Being built from ranks, it is\ncomparable only WITHIN one response — never across queries, and never against\na backend's own score, which stays in Matched.",
 			"Hit.title":             "Title is the document's display title — the indexed title from the semantic\nleg, the row's title (falling back to its name) from the lexical one. Absent\nwhen the document has none.",
 			"Hit.url":               "URL is where the document can be opened, carried from the indexed payload —\nthe link back to the app a connector ingested it from. Absent for anything\nwritten in the product, which has no external address.",
-			"Match.backend":         "Backend is the leg that contributed this match: \"index\" (lexical) or\n\"vector\" (semantic). It is the same name that leg reports itself under in\nResponse.Backends, so a hit can be traced to a status.",
+			"Match.backend":         "Backend is the leg that contributed this match: \"index\" (lexical), \"vector\"\n(semantic) or \"code\" (the org's repositories). It is the same name that leg\nreports itself under in Response.Backends, so a hit can be traced to a\nstatus.",
 			"Match.rank":            "Rank is this document's 1-based position in THAT leg's own result list,\nbefore fusion — 1 is the leg's best hit. It is the only input to the fused\nscore: RRF adds 1/(60+rank) per leg, which is why a document two legs ranked\nsecond beats one a single leg ranked first.",
 			"Match.score":           "Score is the leg's NATIVE score, on that leg's own scale, reported for\nexplanation and never used in ranking — the scales are incomparable (a cosine\nsimilarity against a term-match count), which is why fusion works on ranks.\nThe vector leg reports Qdrant's cosine similarity; the lexical leg exposes no\nper-row score and reports 0, meaning \"unscored\", not \"scored zero\".",
 			"Request.doctypes":      "DocTypes restricts the semantic leg to a subset of indexed knowledge types.",
