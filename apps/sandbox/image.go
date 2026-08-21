@@ -26,11 +26,18 @@ import (
 // be checked. Hosts not listed here are pulled anonymously or not at all.
 var ours = []string{"oci.hanzo.ai", "registry.hanzo.ai"}
 
-// platformOrg owns the images WE publish (the sandbox classes themselves). Any
-// caller may name them: they are the same bytes `imageFor` would have chosen,
-// and refusing them would mean a caller could not pin the class image they are
-// already running.
-const platformOrg = "hanzoai"
+// hanzoai is the namespace on those hosts that holds the images WE publish (the
+// sandbox classes themselves). Any caller may name one: they are the same bytes
+// `imageFor` would have chosen, and refusing them would mean a caller could not
+// pin the class image they are already running.
+//
+// It is named for the value it is, because it is a REGISTRY namespace and not an
+// org id — the same company is `hanzo` to IAM (apps/taxonomy) and `platform` is a
+// third string again, the deployment's own store partition (cloud.Reserved). A
+// name like "the platform org" would read as any of the three, and repointing
+// this one at another of them opens somebody else's private images to our pull
+// credential.
+const hanzoai = "hanzoai"
 
 // checkImage refuses a caller-supplied image that would spend our pull
 // credential on somebody else's namespace. An empty image is not a request, so
@@ -50,12 +57,12 @@ func checkImage(org, image string) error {
 		return nil
 	}
 	ns, _, _ := strings.Cut(rest, "/")
-	if ns == platformOrg || ns == slug(org) {
+	if ns == hanzoai || ns == slug(org) {
 		return nil
 	}
 	return fmt.Errorf(
 		"image %q is in namespace %q on our registry; an org may name only its own images there (or %q)",
-		image, ns, platformOrg)
+		image, ns, hanzoai)
 }
 
 func isOurs(host string) bool {
