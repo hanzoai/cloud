@@ -315,83 +315,32 @@ func (c *idClaims) homeOrg() string {
 // PlatformSudo refuses every machine, so nothing can be both. Recognising the shape
 // alone would leave the two merely unlikely to coincide, which is a property that
 // holds until some issuer mints a token nobody anticipated.
-// IAM SAYS SO, AND ONLY THEN IS THE SHAPE CONSULTED. `type: application` is a
-// signed claim IAM stamps in one place — the client_credentials grant — and
-// leaves empty for every person, so it is the issuer stating the kind rather
-// than this file inferring it. The shape clauses below stay as corroboration,
-// not as the proof: a token that cannot produce the claim is refused here
-// whatever it looks like, which is what makes a person unable to arrive as a
-// machine by carrying no memberships.
+// IAM SAYS SO. `type: application` is a signed claim stamped in one place — the
+// client_credentials grant — and left empty for every person, so the kind is the
+// issuer's statement and this file does not infer it.
+//
+// THE HEADER OF THIS FILE WARNS AGAINST EXACTLY THIS, and the warning was right
+// when it was written: an earlier copy declared a `type` claim IAM emitted
+// nowhere and read it as the discriminator, so every machine arrived as a human.
+// What changed is the issuer, not the appetite for reading claims. Checked
+// there rather than here: iam declares it (internal/oidc/jwt.go), names it
+// (pkg/schema/user.go), and sets it at one call site inside
+// clientCredentialsGrant — and the version this binary embeds emits it, which
+// is the question the old copy never asked.
+//
+// There is nothing else to ask. Two shape readings used to stand here, one
+// matching an owner-bound KMS audience and one matching sub/azp/aud; both were
+// answering the question the claim now answers, and one of them answered it
+// WRONG — it required the sole audience to equal azp, which a machine token
+// minted with `?resource=` does not satisfy, so a legitimate program was refused
+// for naming what it was for.
+//
+// The API key stays out by its own fact: an sk- key resolves to a PERSON's row,
+// which is what subjectOrg records, so its authority is that person's and reading
+// it as an application would hand every member of an org whatever the org's own
+// machine identity may do.
 func appPrincipal(c *idClaims) bool {
-	if c == nil || c.subjectOrg != "" || !c.Program() {
-		return false
-	}
-	return isKMSMachinePrincipal(c) || isClientCredentialsPrincipal(c)
-}
-
-// isClientCredentialsPrincipal reports whether a validated token was minted by the
-// client_credentials grant — an application authenticating AS ITSELF, with no user
-// behind it.
-//
-// It is the same fact isKMSMachinePrincipal establishes, for every other app. KMS
-// could be recognised by audience alone because its client id is DERIVED from the org
-// it belongs to ("<org>-platform-kms"), so the audience proves the pairing. No other
-// app's id is derivable that way, so the recognition has to come from the token's
-// SHAPE instead.
-//
-// The shape is not forgeable by a human token. In a client_credentials token the
-// client IS the subject: IAM sets sub to "<org>/<app>", and azp — the authorized
-// party, i.e. the client that obtained the token — equals the sole audience, because
-// the app requested a token for itself. A human's token cannot look like that: its
-// subject is the user, and azp names whichever app they signed in through, which is
-// the very mis-attribution homeOrg exists to prevent. And every field read here is
-// signed by IAM; none is a header a caller can set.
-//
-// WHY THIS MATTERS, measured. studio authenticates this way. Its token carries
-// owner=hanzo and organization=hanzo but no `orgs` — correct-by-design for a machine,
-// exactly as an sk- key carries none — so Home() returned "" and SanitizeIdentity
-// minted X-User-Id with no X-Org-Id. Every org-scoped gate then refused it, and the
-// one that mattered was the durable queue: `POST /v1/tasks/.../activities` answered
-// 403 "identity required", so no render could be enqueued at all. Thirteen jobs sat
-// `queued` in studio's worklog for up to 19 hours while both GPUs polled an empty
-// namespace every two seconds and reported themselves healthy.
-//
-// It is NOT a widening of who may cross tenants. This resolves an org for a principal
-// that already has exactly one and can no more choose it than an API key can: `owner`
-// is the application's own organization, set by IAM when the app was created, and
-// obtaining the token at all requires that application's client secret. A human with
-// no `orgs` still resolves nothing and still fails closed — the case the estate rule
-// exists for is untouched.
-func isClientCredentialsPrincipal(c *idClaims) bool {
-	if c == nil || c.Owner == "" || c.Azp == "" {
-		return false
-	}
-	// The client obtained a token FOR ITSELF: one audience, and it is the client.
-	if len(c.Audience) != 1 || c.Audience[0] != c.Azp {
-		return false
-	}
-	// And it IS the subject: "<org>/<app>", naming that same client.
-	sub := c.Subject
-	i := strings.LastIndex(sub, "/")
-	return i > 0 && sub[i+1:] == c.Azp
-}
-
-// isKMSMachinePrincipal reports whether a validated token is a per-org KMS-sync
-// machine identity: its audience set contains the owner-bound machine audience
-// (<owner>-platform-kms). Such a principal is a client_credentials machine identity
-// scoped to exactly one org. SanitizeIdentity uses this to DENY it SuperAdmin
-// authority even if it somehow carries isAdmin=true and owner==adminOrg, so V6's
-// audience widening can never be leveraged (via an admin-org machine token) into a
-// cross-org read. Its org-scoped data access is unaffected — this gates ONLY the
-// admin grant, keeping the machine path decoupled from admin inside cloud (rather
-// than resting on the external invariant "IAM never stamps isAdmin=true on a
-// machine-aud token", which cloud cannot see or enforce).
-func isKMSMachinePrincipal(claims *idClaims) bool {
-	mach := kmsMachineAudience(claims.Owner)
-	if mach == "" {
-		return false
-	}
-	return slices.Contains(claims.Audience, mach)
+	return c != nil && c.subjectOrg == "" && c.Program()
 }
 
 // platformSudo and orgAdmin are cloud's reading of the two admin scopes. Each is
@@ -420,13 +369,13 @@ func isKMSMachinePrincipal(claims *idClaims) bool {
 // over the alternative: admitting an unidentifiable principal to the only
 // cross-tenant scope in the system.
 func platformSudo(claims *idClaims) bool {
-	return claims.Sudo() && !isKMSMachinePrincipal(claims)
+	return claims.Sudo()
 }
 
 // orgAdmin reports whether claims administer the org the request ACTS in. See
 // platformSudo for why the grant is authz's and the denial is cloud's.
 func orgAdmin(claims *idClaims, org string) bool {
-	return claims.OrgAdmin(org) && !isKMSMachinePrincipal(claims)
+	return claims.OrgAdmin(org)
 }
 
 // isMember reports whether org is in the token's signed membership set — the

@@ -253,7 +253,7 @@ func TestSanitizeIdentity(t *testing.T) {
 			// isKMSMachinePrincipal gates it out, pinned to its own org, never cross-org.
 			// A client_credentials machine identity must never wield platform-admin.
 			name:      "admin-org KMS-machine principal is denied SuperAdmin",
-			mutate:    bearer(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future))),
+			mutate:    bearer(signWith(t, key, asProgram(tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future)))),
 			wantAdmin: false,
 			wantOrg:   "admin",
 		},
@@ -402,7 +402,7 @@ func TestSanitizeIdentity_OrgAdminHeader(t *testing.T) {
 			// machine aud) but must get NEITHER global NOR org admin — the machine path
 			// stays decoupled from admin, so the audience widening is never an admin bypass.
 			name:         "admin-org machine principal gets neither bit",
-			mutate:       bearer(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future))),
+			mutate:       bearer(signWith(t, key, asProgram(tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future)))),
 			wantAdmin:    "",
 			wantOrgAdmin: "",
 			wantOrg:      "admin",
@@ -809,9 +809,21 @@ func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
 // home org at all, so removing the human test left every SuperAdmin probe green while
 // the ORG-admin bit opened up.
 //
-// A generic machine — no membership set, no owner-bound audience — carrying IAM's
-// org-role bit must be minted NEITHER admin header. The KMS-sync machine, which its
-// audience does identify and which therefore DOES resolve an org, must be refused too.
+// asProgram spells a machine the way IAM mints one: the signed kind, no person
+// behind it, and no membership set. A fixture that sets an email and a membership
+// and calls itself a machine describes a token no issuer produces — and the
+// audience it is addressed to never made it one.
+func asProgram(c idClaims) idClaims {
+	c.Type = authz.Program
+	c.Email = ""
+	c.Orgs = nil
+	return c
+}
+
+// A machine carrying IAM's org-role bit must be minted NEITHER admin header,
+// whatever its token is addressed to. The audience does not identify anything —
+// IAM signs the kind — so the cases below vary the audience precisely to show it
+// changes nothing.
 func TestMachineIsNeverMintedTheOrgAdminBit(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -825,17 +837,23 @@ func TestMachineIsNeverMintedTheOrgAdminBit(t *testing.T) {
 		name  string
 		shape func(*idClaims)
 	}{
-		{"a generic machine: no membership set", func(c *idClaims) { c.Orgs = nil }},
-		{"the KMS-sync machine, named by its own audience", func(c *idClaims) {
+		{"a machine with no membership set", func(c *idClaims) { c.Orgs = nil }},
+		{"a machine whose token is addressed to the KMS app", func(c *idClaims) {
 			c.Orgs = nil
 			c.Audience = jwt.ClaimStrings{kmsMachineAudience("acme")}
 		}},
-		{"a KMS-sync machine that also carries a membership set", func(c *idClaims) {
+		// The membership set does not outvote the signed kind. This case used to
+		// carry one WITHOUT the kind, which is a token no issuer mints: IAM's
+		// client_credentials grant never writes `orgs`. It passed on the audience
+		// match alone, so it pinned a heuristic rather than the rule.
+		{"a machine that also carries a membership set", func(c *idClaims) {
+			c.Type = authz.Program
 			c.Audience = jwt.ClaimStrings{kmsMachineAudience("acme")}
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			claims := tokenClaims("hanzo-console", "acme", "", true, future) // isAdmin=true
+			claims.Type = authz.Program                                      // and IAM says it is a program
 			tc.shape(&claims)
 
 			app, seen := newIdentityApp(t, v)

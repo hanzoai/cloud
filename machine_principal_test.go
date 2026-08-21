@@ -6,7 +6,7 @@ package cloud
 // SuperAdmin.
 //
 // The protection already exists and is STRUCTURAL rather than a list of names —
-// isClientCredentialsPrincipal reads the token's own shape. This pins that the
+// appPrincipal reads the kind IAM signed. This pins that the
 // new identity is covered by it, so nobody adds a second mechanism later (I
 // nearly did: a suffix allowlist beside a predicate that already answered).
 
@@ -35,7 +35,7 @@ func agentToken(org string) *idClaims {
 }
 
 func TestAgentIdentityIsAClientCredentialsPrincipal(t *testing.T) {
-	if !isClientCredentialsPrincipal(agentToken("acme")) {
+	if !appPrincipal(agentToken("acme")) {
 		t.Fatal("an <org>-agent token must be recognised as client-credentials — " +
 			"that recognition is what denies it the admin grant")
 	}
@@ -45,7 +45,7 @@ func TestAgentIdentityIsAClientCredentialsPrincipal(t *testing.T) {
 // owner=="admin", the predicate SuperAdmin is read from. It must still be
 // recognised as a machine.
 func TestAgentInAdminOrgIsDeniedSudo(t *testing.T) {
-	if !isClientCredentialsPrincipal(agentToken("admin")) {
+	if !appPrincipal(agentToken("admin")) {
 		t.Fatal("an agent identity in the admin org must be recognised as a machine — " +
 			"otherwise owner==\"admin\" reads as SuperAdmin, which is the exact " +
 			"escalation a previous run credential was reverted for")
@@ -62,7 +62,7 @@ func TestAPersonIsNotAMachine(t *testing.T) {
 			Subject:  "acme/z",
 		},
 	}}
-	if isClientCredentialsPrincipal(person) {
+	if appPrincipal(person) {
 		t.Fatal("a signed-in person must not be read as a machine")
 	}
 }
