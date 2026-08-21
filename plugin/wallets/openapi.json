@@ -354,27 +354,34 @@
             "type": "string"
           },
           "address": {
+            "description": "Address is the on-chain address. For kms/mpc/treasury it is the EOA a\nsignature from this wallet recovers to; for safe it is the CREATE2 address\nof the Safe CONTRACT, which holds no key — its approvals recover to the MPC\nowner instead. Rotating a kms wallet mints a new key and therefore a NEW\naddress, and funds and approvals at the old one do not follow; mpc,\ntreasury and safe addresses are invariant under rotation.",
             "type": "string"
           },
           "agent": {
             "type": "string"
           },
           "chain": {
+            "description": "Chain is the EVM chain the wallet is bound to, CAIP-2 \"eip155:\u003cn\u003e\" or a\nbare decimal chain id. Empty is chain-agnostic: the ring signs an unbound\ndigest, and a Safe falls back to the Hanzo L1 (36963) because a Safe and\nits EIP-712 domain must be chain-bound.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the wallet was provisioned, Unix seconds. Listings order\nby it, newest first.",
             "type": "integer"
           },
           "custody": {
+            "description": "Custody is the backend holding the signing material, fixed at creation:\n\"kms\" (a secp256k1 key sealed under KMS and opened in-process), \"mpc\" or\n\"treasury\" (an m-of-n threshold key on the deployed ring, which differ by\ngovernance and not by signing mechanics), or \"safe\" (a Safe contract owned\nby an MPC key). A kind the deployment has not wired refuses with 503 rather\nthan fabricating a signature.",
             "type": "string"
           },
           "financeAccount": {
+            "description": "FinanceAccount is the finance ledger account bound to this wallet — the\nlookup that turns a ledger account back into an on-chain signer. Absent is\nthe normal state and means unbound; the column is NULL until something\nbinds it.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the wallet id, minted by the server as \"wal_\" + 24 hex. It is the\nlast segment of the key ref, and it is the LEDGER SUBJECT an x402 payment\ninto this wallet credits — so it names money as well as key material.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the display label given at creation. It addresses nothing: the key\nref is derived from the scope and the id, so renaming moves no material.",
             "type": "string"
           },
           "org": {
@@ -384,6 +391,7 @@
             "type": "string"
           },
           "tier": {
+            "description": "Tier is the wallet tier the ring keys its TierPolicy on: hot, warm, cold,\ngas, bridge, contract_admin, validator, quarantine or disaster_recovery.\nIt defaults to hot and is refused at the boundary if it is none of the nine.",
             "type": "string"
           }
         },
@@ -392,15 +400,19 @@
       "WalletAccount": {
         "properties": {
           "createdAt": {
+            "description": "CreatedAt is when the account was opened, Unix seconds. Listings order by\nit, newest first.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the account id, minted by the server as \"acct_\" + 24 hex. Wallets\nname it as their accountId, and it becomes a segment of each of their key\nrefs — so it addresses key material and cannot be reassigned.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the label given at creation, trimmed and required. It groups\nwallets: it is not a key, holds no balance, and is not unique in the org.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant that owns the account, stamped from the validated\nprincipal rather than taken from the request. Every read is physically\nscoped to it, so another tenant's accounts are not reachable at all.",
             "type": "string"
           }
         },
