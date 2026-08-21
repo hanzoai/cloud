@@ -383,7 +383,7 @@ func TestTollChargesEveryDoorOnce(t *testing.T) {
 			// One movement, one balanced entry: one deposit, one debit, at the
 			// DECLARED price. A second debit here is the double-charge this seam's
 			// stand-down rule exists to prevent.
-			entries, err := r.led.fin.ListEntries(context.Background(), tollOrg, false, 0)
+			entries, err := r.led.fin.ListEntries(context.Background(), tollOrg, "", false, 0)
 			if err != nil {
 				t.Fatalf("read entries: %v", err)
 			}
@@ -459,7 +459,7 @@ func TestTollMovesNothingForUnpricedWork(t *testing.T) {
 						t.Fatalf("%s over %s left the balance at %dc, want the %dc paid in — "+
 							"something charged for work that costs nothing", op.name, d.name, got, tollFund)
 					}
-					entries, err := r.led.fin.ListEntries(context.Background(), tollOrg, false, 0)
+					entries, err := r.led.fin.ListEntries(context.Background(), tollOrg, "", false, 0)
 					if err != nil {
 						t.Fatalf("read entries: %v", err)
 					}

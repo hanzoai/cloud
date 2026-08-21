@@ -314,7 +314,7 @@ func prepaidOverTheWire(t *testing.T, p payer) {
 
 	// ── the books ───────────────────────────────────────────────────────────────
 	// One movement, one balanced entry: two deposits and four debits.
-	entries, err := led.fin.ListEntries(context.Background(), p.ledger, false, 0)
+	entries, err := led.fin.ListEntries(context.Background(), p.ledger, "", false, 0)
 	if err != nil {
 		t.Fatalf("read entries: %v", err)
 	}
@@ -509,7 +509,7 @@ func resourceMeterOverTheWire(t *testing.T, p payer) {
 	}
 
 	// ── the books ───────────────────────────────────────────────────────────────
-	entries, err := led.fin.ListEntries(context.Background(), pool.ledger, false, 0)
+	entries, err := led.fin.ListEntries(context.Background(), pool.ledger, "", false, 0)
 	if err != nil {
 		t.Fatalf("read entries: %v", err)
 	}

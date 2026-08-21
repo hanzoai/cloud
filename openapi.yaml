@@ -73389,7 +73389,7 @@ paths:
         funded it.
 
         Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
-        caller's own org; 401 without a validated principal. An org with no grants
+        caller's own wallet; 401 without a validated principal. A wallet with no grants
         gets an empty array — honest, never a fabricated figure.
       operationId: get_finance_credits
       responses:
@@ -73472,9 +73472,10 @@ paths:
         date must show up in a money list, not vanish from it. `balanceCents` is
         omitted: these are MOVEMENTS, and the standing balance is /v1/finance/balance.
 
-        Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
-        caller's own org, where the org's ledger file is the tenant boundary; 401
-        without a validated principal.
+        Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's
+        own WALLET — the org's ledger file is the tenant boundary and the subject is the
+        account within it, the same pair /v1/finance/balance totals, so this page is the
+        movements behind that number; 401 without a validated principal.
       operationId: get_finance_ledger
       parameters:
       - description: |-
@@ -73593,7 +73594,7 @@ paths:
         the same money, cut a different way.
 
         Cents are ROUNDED from the ledger's exact 18-decimal USD, so a window made of
-        sub-cent token calls totals LOW here. Scoped to the caller's own org; 401
+        sub-cent token calls totals LOW here. Scoped to the caller's own wallet; 401
         without a validated principal.
       operationId: get_finance_usage
       parameters:
