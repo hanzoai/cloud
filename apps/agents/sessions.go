@@ -79,40 +79,104 @@ func validKind(k string) bool {
 // ---- HTTP shapes (the published contract) ----
 
 type sessionView struct {
+	// ID is the session's handle, minted here as "sess_" + 32 hex characters. Every
+	// later read, patch, event append and control command is addressed with it, and
+	// a caller cannot choose it.
 	ID string `json:"id"`
 	// Org is the caller's OWN tenant, echoed so a client can build the public
 	// build URL (/builds/:org/:project) without a second call or a guess. It is
 	// never another tenant's — every read is org-scoped before it gets here.
-	Org             string `json:"org"`
-	Agent           string `json:"agent"`
-	Actor           string `json:"actor,omitempty"`
-	Status          string `json:"status"`
+	Org string `json:"org"`
+	// Agent is the label the surface running this session calls itself by
+	// ("hanzo-dev"), up to 128 characters. Required at register. It is free text,
+	// not a reference: it need not name a defined agent, and nothing resolves it.
+	Agent string `json:"agent"`
+	// Actor is WHO this session belongs to, as "org/sub" — the same identity a run
+	// is billed under. A register that names none takes the calling principal. It is
+	// what scopes a login revoke, so a session with the wrong actor is a session the
+	// right person cannot stop.
+	Actor string `json:"actor,omitempty"`
+	// Status is one of exactly four: running, paused, done, error. running and
+	// paused are LIVE; done and error are TERMINAL and monotonic — once a session
+	// reaches one it can never go back, because reopening a finished run would
+	// fabricate liveness. A control command never moves it: the surface running the
+	// agent reports the new status, and until it does the command is only recorded.
+	Status string `json:"status"`
+	// ParentSessionID is the session that spawned this one, making this a subagent
+	// of it. Empty means this session is a root — a flow of its own. A parent always
+	// belongs to the same org, so a tree never crosses a tenant.
 	ParentSessionID string `json:"parentSessionId,omitempty"`
-	RootSessionID   string `json:"rootSessionId"`
-	Title           string `json:"title,omitempty"`
-	TaskWorkflowID  string `json:"taskWorkflowId,omitempty"`
-	TaskRunID       string `json:"taskRunId,omitempty"`
+	// RootSessionID is the top of this session's tree, inherited from the parent and
+	// shared by every node in one flow. A root session's own id, when it has no
+	// parent. It is the key one indexed read pulls a whole flow by, and what ?root=
+	// narrows a list or a stream to.
+	RootSessionID string `json:"rootSessionId"`
+	// Title is the human line a card shows ("ship the landing page"), up to 512
+	// characters. Free text, and the one field a surface may rewrite as the work
+	// turns out to be something else.
+	Title string `json:"title,omitempty"`
+	// TaskWorkflowID is the hanzoai/tasks durable workflow that actually EXECUTES
+	// this session — this registry is the view, control and stream layer over it.
+	// Set, a control command is FORWARDED to that engine; empty, the running surface
+	// polls for commands instead, which is every session today.
+	TaskWorkflowID string `json:"taskWorkflowId,omitempty"`
+	// TaskRunID is that workflow's particular run. A workflow is the definition and
+	// a run is one execution of it, which is why both are carried.
+	TaskRunID string `json:"taskRunId,omitempty"`
 	// Execution context (mission-control): the machine/repo/cwd a card shows and
 	// the run-target a session is dispatched to. Omitted when a surface didn't report it.
 	Host string `json:"host,omitempty"`
-	Cwd  string `json:"cwd,omitempty"`
+	// Cwd is the directory the session is working in NOW, not the one it started in:
+	// a linked shell moves around, and a card showing where `hanzo link` was run
+	// answers "which work is this" with something that was true once.
+	Cwd string `json:"cwd,omitempty"`
+	// Repo is the code the session is working on, as the surface reported it. It is
+	// truth the SURFACE states, so it is a label rather than something resolved here.
 	Repo string `json:"repo,omitempty"`
 	// Terminal is where this session can be WATCHED — the URL the machine
 	// published for its live terminal. Omitted when it publishes none.
 	Terminal string `json:"terminal,omitempty"`
-	Target   string `json:"target,omitempty"`
+	// Target is the registered run-target this session is dispatched to — a machine
+	// the org claimed, resolved same-org when it was set, so it can never point at
+	// another tenant's computer. Empty means the session names no machine.
+	Target string `json:"target,omitempty"`
+	// Provider is the linked AI account's provider (claude | codex | hanzo | …) that
+	// served this run. Empty when the surface did not say.
 	Provider string `json:"provider,omitempty"`
-	Account  string `json:"account,omitempty"`
+	// Account is which subscription or API account under that provider served it.
+	// Together with Provider it is what a login revoke matches on to stop the
+	// sessions a withdrawn account was paying for.
+	Account string `json:"account,omitempty"`
 	// The readable build: the product this session built and whether its story
 	// is public (provenance.go).
-	Project   string `json:"project,omitempty"`
-	Published bool   `json:"published,omitempty"`
+	Project string `json:"project,omitempty"`
+	// Published is the author's decision to let anyone read this session's story at
+	// the public build route. It only ever widens READ access to a session that
+	// already exists and grants nothing else; false, an unpublished session is
+	// invisible there no matter who asks. It cannot be true without a Project,
+	// because that route is keyed on (org, project).
+	Published bool `json:"published,omitempty"`
 
-	Events    int    `json:"events"`
-	Children  int    `json:"children"`
+	// Events is how many turns the session's log holds, counted at read time. It is
+	// the whole log, however few of them RecentEvents carries.
+	Events int `json:"events"`
+	// Children is the DIRECT fan-out — how many sessions name this one as parent —
+	// and not the size of the subtree. Read the tree for that.
+	Children int `json:"children"`
+	// StartedAt is when the session opened, RFC 3339 in UTC to the second.
 	StartedAt string `json:"startedAt"`
-	EndedAt   string `json:"endedAt,omitempty"`
+	// EndedAt is when it reached done or error, same format. Empty while it is still
+	// running or paused, which is how absence reads here: not over yet.
+	EndedAt string `json:"endedAt,omitempty"`
+	// CreatedAt is when the row was written, same format. Every path that opens a
+	// session stamps it and StartedAt from one clock reading, so the two are equal
+	// on every session this surface has ever produced.
 	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is the session's last-activity clock, same format. It moves on a
+	// write to the row — a status, a title, a re-dispatch — AND on every appended
+	// turn, because the append bumps it in the same transaction. The list is ordered
+	// on CreatedAt, so this is the field that says whether a session is still saying
+	// anything.
 	UpdatedAt string `json:"updatedAt"`
 	// LastEvent is the compact latest-activity line for the list projection (nil in
 	// register/patch/tree responses; set by list + detail). It lets a swipe card show
@@ -124,11 +188,22 @@ type sessionView struct {
 // the list — kind + actor + a bounded payload preview + timestamp. The full event
 // (unbounded payload) is only ever returned in detail/stream, never the list.
 type lastEventView struct {
-	Seq     int64  `json:"seq"`
-	Kind    string `json:"kind"`
-	Actor   string `json:"actor,omitempty"`
+	// Seq is that event's position in the session's log — monotonic from 1, per
+	// session. A reader holding it can ask the detail or stream reads for
+	// everything after it, so this doubles as the list's resume cursor.
+	Seq int64 `json:"seq"`
+	// Kind is what the turn was, from the log's closed six: message, tool-call,
+	// spawn, log, status, control.
+	Kind string `json:"kind"`
+	// Actor is who produced the turn, defaulted to the calling principal when the
+	// writer named nobody.
+	Actor string `json:"actor,omitempty"`
+	// Preview is the first 240 bytes of the event's payload, cut without regard for
+	// the JSON inside it — it is a string to SHOW, never a value to parse. Read the
+	// detail or the stream for the whole payload.
 	Preview string `json:"preview,omitempty"`
-	At      string `json:"at"`
+	// At is when the turn was recorded, RFC 3339 in UTC to the second.
+	At string `json:"at"`
 }
 
 // lastEventPreviewCap bounds the payload snippet carried in a list row so a page of
@@ -144,13 +219,34 @@ func toLastEventView(e Event) *lastEventView {
 }
 
 type eventView struct {
-	ID        string          `json:"id"`
-	SessionID string          `json:"sessionId"`
-	Seq       int64           `json:"seq"`
-	Kind      string          `json:"kind"`
-	Actor     string          `json:"actor,omitempty"`
-	Payload   json.RawMessage `json:"payload,omitempty"`
-	CreatedAt string          `json:"createdAt"`
+	// ID is the event's own handle, minted as "evt_" + 32 hex characters. It
+	// identifies the turn; Seq is what ORDERS it.
+	ID string `json:"id"`
+	// SessionID is the session this turn belongs to. Carried on every event so a
+	// stream frame stands alone — a subscriber watching a whole tree gets turns from
+	// several sessions down one connection.
+	SessionID string `json:"sessionId"`
+	// Seq is the turn's position in this session's log: monotonic from 1, assigned
+	// by the store inside the insert, and unique PER SESSION rather than globally.
+	// It is the cursor a reader resumes from after a reconnect — ask for everything
+	// after your last-seen seq.
+	Seq int64 `json:"seq"`
+	// Kind is what the turn IS, from a closed six: message (a model turn),
+	// tool-call, spawn (a subagent started), log, status, control (a steering
+	// command the running surface consumes). Anything else is refused at the write.
+	Kind string `json:"kind"`
+	// Actor is who produced the turn. A write that names nobody takes the calling
+	// principal, so this is rarely empty in practice.
+	Actor string `json:"actor,omitempty"`
+	// Payload is the turn's body, embedded as JSON rather than as a string —
+	// whatever the writer sent, up to 64 KiB, checked for well-formedness and
+	// scanned for credentials before it was stored. Its SHAPE is the writer's
+	// business and varies by Kind; this surface does not interpret it.
+	Payload json.RawMessage `json:"payload,omitempty"`
+	// CreatedAt is when the turn was recorded, RFC 3339 in UTC to the second. Seconds
+	// are coarse enough that two turns can share one, which is why Seq and not this
+	// is the order.
+	CreatedAt string `json:"createdAt"`
 }
 
 // sessionDetail is one session plus what only the detail read carries: its direct
@@ -161,16 +257,29 @@ type eventView struct {
 // short of its promoted fields, and where that is fixed.
 type sessionDetail struct {
 	sessionView
-	Children     []sessionView `json:"childSessions"`
-	RecentEvents []eventView   `json:"recentEvents"`
+	// Children is the session's DIRECT children, one level down, each with its own
+	// counts. The promoted `children` integer beside it is how many there are; this
+	// is who they are. For the whole subtree, read the tree.
+	Children []sessionView `json:"childSessions"`
+	// RecentEvents is the 50 most recent turns, OLDEST of those first — a transcript
+	// to read down, not a feed. The promoted `events` integer says how many the log
+	// holds in total; page the rest from a seq.
+	RecentEvents []eventView `json:"recentEvents"`
 }
 
 // treeNode is one node of the subagent-flow graph: a session plus its children,
 // recursively. Node = {session, children:[...]} — the session's own Children int
 // is the direct fan-out count, the children array is the materialised subtree.
 type treeNode struct {
-	Session  sessionView `json:"session"`
-	Children []treeNode  `json:"children"`
+	// Session is this node's own session, carrying its event count and its direct
+	// fan-out. It is the same shape the list and detail reads answer with, minus the
+	// last-event preview, which the tree does not fetch.
+	Session sessionView `json:"session"`
+	// Children is this node's direct children, each a whole node, so the array nests
+	// to the depth of the flow. A leaf carries null rather than an empty array. The
+	// subtree is materialised in full, up to 10000 nodes, out of one indexed read of
+	// the root; nothing is walked node by node.
+	Children []treeNode `json:"children"`
 }
 
 func toSessionView(x Session, events, children int) sessionView {
@@ -380,17 +489,45 @@ type sessionList struct {
 // ---- register ----
 
 type registerReq struct {
-	Agent           string `json:"agent"`
-	Actor           string `json:"actor"`
-	Title           string `json:"title"`
-	Status          string `json:"status"`
+	// Agent is the label the surface opening this session calls itself by
+	// ("hanzo-dev"). REQUIRED, up to 128 characters, and free text — nothing
+	// resolves it against a defined agent.
+	Agent string `json:"agent"`
+	// Actor is the "org/sub" identity to record the session under, up to 256
+	// characters. Omit it and the calling principal is used, which is almost always
+	// what you want: it is what a login revoke matches on to stop this session.
+	Actor string `json:"actor"`
+	// Title is the human line a card shows, up to 512 characters. Optional, and
+	// changeable later.
+	Title string `json:"title"`
+	// Status opens the session in one of running, paused, done or error. Empty means
+	// running. A TERMINAL status here (done, error) records a session that has
+	// already finished — its end time is stamped now — and nothing can move it
+	// afterwards.
+	Status string `json:"status"`
+	// ParentSessionID makes this a subagent of that session: it inherits the
+	// parent's root, so one flow stays one tree. The parent must exist IN THE SAME
+	// ORG — a foreign or unknown id is a 400, never a tree across tenants. Empty
+	// opens a root session.
 	ParentSessionID string `json:"parentSessionId"`
-	TaskWorkflowID  string `json:"taskWorkflowId"`
-	TaskRunID       string `json:"taskRunId"`
+	// TaskWorkflowID links this session to the hanzoai/tasks workflow that executes
+	// it, up to 256 characters. Set it and control commands are forwarded to that
+	// engine; leave it and the running surface polls for them instead.
+	TaskWorkflowID string `json:"taskWorkflowId"`
+	// TaskRunID is that workflow's particular run, same bound. Recorded, not
+	// resolved: this surface does not check the workflow exists.
+	TaskRunID string `json:"taskRunId"`
 	// Execution context — where this session runs (all optional).
-	Host   string `json:"host"`
-	Cwd    string `json:"cwd"`
-	Repo   string `json:"repo"`
+	Host string `json:"host"`
+	// Cwd is the directory the session starts in, up to 1024 characters. It can be
+	// moved later, because a linked shell walks around.
+	Cwd string `json:"cwd"`
+	// Repo is the code being worked on, up to 512 characters. A label the surface
+	// states; nothing resolves it against the forge.
+	Repo string `json:"repo"`
+	// Target names a run-target the org has registered. Unlike Host and Repo it IS
+	// resolved: a target that does not exist in this org is a 400, so a session can
+	// never claim to run on another tenant's machine. Empty names no machine.
 	Target string `json:"target"`
 	// Terminal is the URL this session's live terminal is published at, so the
 	// console can watch it. Optional — a session that publishes nothing is still
@@ -398,11 +535,17 @@ type registerReq struct {
 	Terminal string `json:"terminal"`
 	// Account tag — the linked AI account this session ran under (login manager).
 	Provider string `json:"provider"`
-	Account  string `json:"account"`
+	// Account is which subscription or API account under that provider served the
+	// run, up to 256 characters. It is what lets a revoke of that login stop exactly
+	// the sessions it was paying for.
+	Account string `json:"account"`
 	// The readable build (provenance.go): which product this session builds, and
 	// whether its story may be read by the world.
-	Project   string `json:"project"`
-	Published bool   `json:"published"`
+	Project string `json:"project"`
+	// Published opens this session's story to the public build route. It is refused
+	// without a Project, because that route is keyed on (org, project) — a build
+	// with no product is not a story anyone can open. False keeps it org-only.
+	Published bool `json:"published"`
 }
 
 // RegisterSession opens a live agent session in the caller's org — the row every
@@ -733,9 +876,15 @@ func buildSubtree(nodes []Session, counts map[string]int, rootAtID string) treeN
 // only `id` and every generated client would be unable to send anything.
 type patchSessionIn struct {
 	// ID is the session to update, from the path.
-	ID     string  `json:"id"`
+	ID string `json:"id"`
+	// Status moves the session to running, paused, done or error. A session that has
+	// already finished refuses any change with 409 — done and error are monotonic —
+	// and moving INTO one stamps the end time. This is the surface REPORTING what
+	// happened; a control command never writes it.
 	Status *string `json:"status"`
-	Title  *string `json:"title"`
+	// Title rewrites the human line, up to 512 characters — usually because the work
+	// turned out to be something other than what it was opened as.
+	Title *string `json:"title"`
 	// Target re-dispatches a session to a run-target (the #48 association). "" detaches.
 	Target *string `json:"target"`
 	// Terminal publishes (or, with "", withdraws) the URL this session's live
@@ -745,8 +894,13 @@ type patchSessionIn struct {
 	// Project tags the product this session built; Published is the author's
 	// decision to let anyone read the story (provenance.go). Both are pointers so
 	// "absent" and "cleared" are different requests.
-	Project   *string `json:"project"`
-	Published *bool   `json:"published"`
+	Project *string `json:"project"`
+	// Published opens the session's story to the public build route; false withdraws
+	// it, and withdrawing is always allowed. PUBLISHING is refused unless the
+	// session names a Project — the one set in this same request, or the one already
+	// stored — because that route is keyed on (org, project). It widens READ access
+	// to what is already there and grants nothing else.
+	Published *bool `json:"published"`
 	// Cwd is where the session is working NOW.
 	//
 	// It was write-once — captured at register and never again — which is right

@@ -472,18 +472,22 @@
         "properties": {
           "data": {
             "contentEncoding": "base64",
+            "description": "Data is the file's bytes, verbatim, base64 on the wire. Empty for a directory\nand for an empty file alike; Dir is what tells those apart.",
             "type": "string"
           },
           "dir": {
+            "description": "Dir says which of the two answers this is: true and the path is a directory,\nso read Entries; false and it is a file, so read Data. Nothing else\ndistinguishes them — an empty file and an empty directory look alike here.",
             "type": "boolean"
           },
           "entries": {
+            "description": "Entries is a directory's contents as bare NAMES, not paths — one level, no\nrecursion, dotfiles included, \".\" and \"..\" excluded (`ls -1A`). Empty for a\nfile, and for an empty directory.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "path": {
+            "description": "Path is the RESOLVED absolute path that was read — the caller's relative path\njoined onto the sandbox's working directory (Leased.Workdir), so it names the\nsame file for a reader who does not know the class.",
             "type": "string"
           }
         },
@@ -530,9 +534,11 @@
       "Leased": {
         "properties": {
           "class": {
+            "description": "Class is what was actually leased, from the closed set LeaseIn.Class names:\nexec | dev | desktop | android. A request that named none leased an `exec`,\nso this is where a caller learns which kind of computer it is holding, and it\nis what Workdir below follows from.",
             "type": "string"
           },
           "id": {
+            "description": "ID names this computer for every later call — run, read, write, stop and end\nall take it, and a LeaseIn carrying it resumes THIS sandbox instead of leasing\na second one. Minted here; a caller cannot choose it, and a resumed lease that\nhad expired comes back under a new one.",
             "type": "string"
           },
           "runtime": {
@@ -540,9 +546,11 @@
             "type": "string"
           },
           "status": {
+            "description": "Status is where the pod stands, from the store's three: pending | running |\nerror. A lease that ANSWERS has already waited for the pod, so this reads\n`running` — a start that failed is a 503 and no sandbox at all. Read it\nanyway: exec refuses a sandbox that is not running, so anything else here is\nthe reason the next call will not work.",
             "type": "string"
           },
           "workdir": {
+            "description": "Workdir is the absolute directory this sandbox keeps files in, and what a\nrelative path in a later read, write or run resolves against — /work for dev,\ndesktop and android (the project volume's mount point), /mnt/data for exec\n(the artifact directory the code tool tells the model to write to). A path\nthat climbs above it is refused rather than rewritten.",
             "type": "string"
           }
         },
@@ -564,12 +572,15 @@
       "Ran": {
         "properties": {
           "exitCode": {
+            "description": "ExitCode is the PROGRAM's own status — 0 succeeded, anything else is what it\nreturned, and a Command runs under `sh -c` so its shell's conventions apply.\nA command that never reached an exit does not arrive here at all: a timeout\nor a stop cancels the channel, and that is an error on the call rather than a\ncode of ours invented to fill this field.",
             "type": "integer"
           },
           "stderr": {
+            "description": "Stderr is standard error, kept apart from Stdout so a caller reading a\nprogram's OUTPUT is not reading its diagnostics as data. Same 1 MiB cap, same\nredaction. A program that failed usually says why here and nowhere else.",
             "type": "string"
           },
           "stdout": {
+            "description": "Stdout is what the program wrote to standard output, collected whole rather\nthan streamed — to watch it arrive instead, name a RunIn.Session and read that\nsession's feed. Capped at 1 MiB, past which it ends in \"[truncated at 1MiB]\".\nEvery string named in RunIn.Blind is replaced by \"[redacted]\" before it gets\nhere, and before it reaches the session.",
             "type": "string"
           }
         },
@@ -621,6 +632,7 @@
       "StopIn": {
         "properties": {
           "id": {
+            "description": "ID is the sandbox to interrupt, from an earlier lease. Every command running\nin it stops; the lease itself survives, so the checkout and the half-written\nfiles are still there to read. Use EndIn to give the computer back.",
             "type": "string"
           }
         },
@@ -629,6 +641,7 @@
       "Stopped": {
         "properties": {
           "stopped": {
+            "description": "Stopped counts the commands that were still running and were interrupted.\nZero says the sandbox was idle, not that the stop failed — see above.",
             "type": "integer"
           }
         },
@@ -655,9 +668,11 @@
       "Wrote": {
         "properties": {
           "bytes": {
+            "description": "Bytes is how many bytes the file now holds. A write REPLACES the file, so this\nis its whole length and not an amount appended, and 0 is a legitimate answer:\na WriteIn with no Data truncates the file to nothing.",
             "type": "integer"
           },
           "path": {
+            "description": "Path is where the bytes actually landed: the caller's path resolved against\nthe sandbox's working directory (Leased.Workdir), which is what a later read\nor a shell line inside the sandbox has to name.",
             "type": "string"
           }
         },
