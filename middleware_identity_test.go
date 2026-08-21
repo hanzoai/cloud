@@ -250,7 +250,7 @@ func TestSanitizeIdentity(t *testing.T) {
 		{
 			// A KMS-sync MACHINE principal (aud=<owner>-platform-kms) in the admin org
 			// with isAdmin=true VALIDATES like any token but is DENIED SuperAdmin —
-			// isKMSMachinePrincipal gates it out, pinned to its own org, never cross-org.
+			// The signed kind gates it out, pinned to its own org, never cross-org.
 			// A client_credentials machine identity must never wield platform-admin.
 			name:      "admin-org KMS-machine principal is denied SuperAdmin",
 			mutate:    bearer(signWith(t, key, asProgram(tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future)))),

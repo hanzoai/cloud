@@ -1,5 +1,13 @@
 package kms_test
 
+// THE MECHANISM MOVED; THE QUESTION AND THE ANSWER DID NOT. This file was written
+// when a machine was RECOGNISED by an owner-bound audience and had admin subtracted
+// afterwards, so it asks whether a multi-value audience could slip past that
+// recognition. IAM now signs the kind (`type: application`) and Sudo refuses every
+// machine, so the audience decides nothing and there is nothing for an audience to
+// slip past. The assertions below still hold, for that reason rather than the old
+// one; the reasoning quoted in the comments describes the mechanism they replaced.
+//
 // RED adversarial coverage for the V6 machine-audience widening. Blue's
 // v6_aud_e2e_test proves the happy path + simple negatives (cross-tenant,
 // owner-mismatched aud, arbitrary aud, expiry, no-cred). It does NOT exercise:
@@ -170,7 +178,7 @@ func TestRed_MultiValueAud_OwnerStillGoverns(t *testing.T) {
 //
 //	real admin is SuperAdmin from any app (audience is not a gate), but a MACHINE
 //	principal — identified by its OWN <owner>-platform-kms aud — is DENIED SuperAdmin
-//	by isKMSMachinePrincipal and pinned to its own org. A client_credentials machine
+//	by the machine kind and pinned to its own org. A client_credentials machine
 //	identity must never wield platform-admin.
 //
 // THE ORACLE FOR "GOT SUPERADMIN" IS THE ORG-SWITCH, NOT A URL. Reaching a foreign
@@ -223,7 +231,7 @@ func TestRed_AdminOrgMachineToken(t *testing.T) {
 			"(a real admin is admin from any app)", got, paasValueA)
 	}
 	//     The ONE exception: a MACHINE principal (its OWN <owner>-platform-kms aud present)
-	//     is DENIED SuperAdmin by isKMSMachinePrincipal even with isAdmin=true, so the
+	//     is DENIED SuperAdmin by the machine kind even with isAdmin=true, so the
 	//     switch is inert and it stays pinned to owner=admin — a machine identity must
 	//     never wield platform-admin.
 	machAdminTrue := mintRed(t, key, "admin", []string{"admin-platform-kms"}, true, future)
