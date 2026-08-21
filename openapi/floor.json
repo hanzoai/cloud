@@ -1,6 +1,6 @@
 {
-  "paths": 1770,
-  "operations": 2398,
+  "paths": 1769,
+  "operations": 2397,
   "products": {
     "account": 10,
     "admin": 56,
@@ -14,7 +14,7 @@
     "audit": 1,
     "authors": 11,
     "authz": 3,
-    "auto": 17,
+    "auto": 16,
     "base": 1,
     "benchmark": 9,
     "billing": 4,
