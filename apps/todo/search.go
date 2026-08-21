@@ -51,21 +51,52 @@ type issueSearch struct {
 // issue without a second lookup — a search that returns rows you cannot address
 // is a list, not a tool.
 type issueHit struct {
-	Project  string `json:"project"`
-	Number   int    `json:"number"`
-	Kind     string `json:"kind"`
-	Source   string `json:"source"`
-	Repo     string `json:"repo"`
-	Title    string `json:"title"`
-	Status   string `json:"status"`
+	// Project is the board key the issue is on. It and Number are the issue's
+	// address in every other route on this surface, which is why a hit carries it.
+	Project string `json:"project"`
+	// Number is the issue's number on that board, from 1 and monotonic there.
+	// Unique per board, never across the org — so it addresses an issue only
+	// together with Project.
+	Number int `json:"number"`
+	// Kind is what the row IS: issue, pr or epic.
+	Kind string `json:"kind"`
+	// Source is which surface opened it: team, git, crm, helpdesk, cms or agent.
+	// "git" is how the mirrored forge and GitHub rows are spelled.
+	Source string `json:"source"`
+	// Repo is the git repository the issue is bound to, empty when it is not
+	// repo-bound.
+	Repo string `json:"repo"`
+	// Title is the issue's one-line summary — what the q filter matched, along with
+	// the description.
+	Title string `json:"title"`
+	// Status is the board column: backlog, todo, in_progress, done or canceled.
+	// Claiming moves backlog and todo to in_progress and leaves the other three
+	// where they are.
+	Status string `json:"status"`
+	// Priority is urgent, high, medium, low or none. Never empty — an unset
+	// priority is the value "none".
 	Priority string `json:"priority"`
+	// Assignee is who holds the work. EMPTY MEANS UNHELD, which is what makes the
+	// issue claimable: claiming one already held by someone else is refused with
+	// 409 rather than quietly taken.
 	Assignee string `json:"assignee"`
-	URL      string `json:"url"`
+	// URL is the row's external anchor — its extRef — which is a link only when the
+	// feeder sent one. A mirrored GitHub issue carries "github:owner/repo#123" and
+	// an agent's PR row carries the pushed branch. Empty for a row opened here.
+	URL string `json:"url"`
 }
 
+// issueHits is one answer to a search: the rows, and how many of them there are.
 type issueHits struct {
+	// Issues are the matching rows grouped by status and oldest-first within a
+	// group, capped by the search's limit (50 by default, 200 at most). The cap is
+	// applied to that order, so a broad search returns the head of it rather than a
+	// sample.
 	Issues []issueHit `json:"issues"`
-	Count  int        `json:"count"`
+	// Count is how many rows Issues carries — the size of THIS answer after the
+	// cap, not how many issues matched. A count equal to the limit means there are
+	// probably more; there is no total and no cursor.
+	Count int `json:"count"`
 }
 
 const (
