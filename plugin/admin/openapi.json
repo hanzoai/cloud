@@ -125,8 +125,8 @@
     "/v1/admin/applications": {
       "get": {
         "operationId": "adminApplications",
-        "summary": "Lists IAM applications for one owner org, forwarded VERBATIM from IAM's get-applications.",
-        "description": "Lists IAM applications for one owner org, forwarded VERBATIM from IAM's\nget-applications. These are the platform's OIDC clients — the console reads clientId\noff each row.",
+        "summary": "Lists IAM applications for one owner org, forwarded VERBATIM from IAM's application list.",
+        "description": "Lists IAM applications for one owner org, forwarded VERBATIM from IAM's\napplication list. These are the platform's OIDC clients — the console reads clientId\noff each row.",
         "tags": [
           "admin"
         ],
@@ -1984,7 +1984,7 @@
             "name": "pageSize",
             "in": "query",
             "required": false,
-            "description": "PageSize is rows per page. Defaults to \"200\", the shared admin page size.\nIt bounds the fan-out: the page decides how many per-org reads happen, so\nthe directory costs the same at eighty tenants and at eight thousand.",
+            "description": "PageSize is rows per page: 20 by default, 100 at most. It is deliberately\nbelow the 200 the rest of the admin surface uses, because a row here is not\na row of text — each one still costs its own wallet read. The page size IS\nthe fan-out width, so the directory costs the same at eighty tenants and at\neight thousand.",
             "schema": {
               "type": "string"
             }
@@ -2310,8 +2310,8 @@
     "/v1/admin/roles": {
       "get": {
         "operationId": "adminRoles",
-        "summary": "Lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.",
-        "description": "Lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.",
+        "summary": "Lists IAM roles for one owner org, forwarded VERBATIM from IAM's role list.",
+        "description": "Lists IAM roles for one owner org, forwarded VERBATIM from IAM's role list.",
         "tags": [
           "admin"
         ],
