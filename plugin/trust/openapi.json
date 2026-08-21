@@ -298,31 +298,6 @@
         "x-tool": true
       }
     },
-    "/v1/trust/health": {
-      "get": {
-        "operationId": "get_trust_health",
-        "summary": "Health reports that the trust subsystem is mounted and which inventory it is running.",
-        "description": "Health reports that the trust subsystem is mounted and which inventory it is\nrunning. Open: a liveness probe that needs a credential cannot answer the\nquestion it is asked.",
-        "tags": [
-          "trust"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/probe"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "security": [],
-        "x-public": true,
-        "x-tool": true
-      }
-    },
     "/v1/trust/policies": {
       "get": {
         "operationId": "get_trust_policies",
@@ -970,23 +945,6 @@
             "description": "Policies is the list.",
             "items": {},
             "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "probe": {
-        "properties": {
-          "service": {
-            "description": "Service names the subsystem answering, always \"trust\".",
-            "type": "string"
-          },
-          "status": {
-            "description": "Status is \"ok\" when the bundle is compiled and dispatching.",
-            "type": "string"
-          },
-          "version": {
-            "description": "Version is the embedded inventory's version — which inventory is running.",
-            "type": "string"
           }
         },
         "type": "object"
