@@ -134,7 +134,7 @@ vet: ## go vet this app and its entrypoint(s).
 describe: build ## Emit this app's own OpenAPI subset into plugin/<app>/.
 	@for a in $(APPS); do \
 	  echo ">> describe $$a"; \
-	  GIT_SSH_ADDR=127.0.0.1:0 $(BIN)/$$a describe $(ROOT)/plugin/$$a || exit 1; \
+	  GIT_SSH_ADDR=127.0.0.1:0 CLOUD_PUBSUB_PORT=0 $(BIN)/$$a describe $(ROOT)/plugin/$$a || exit 1; \
 	done
 
 # Binaries only. plugin/<app>/openapi.json is a committed artifact, like the

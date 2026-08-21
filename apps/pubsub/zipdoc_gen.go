@@ -9,20 +9,20 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/pubsub/kv/:bucket", zip.Doc{
+	zip.Describe("DELETE /v1/kv/:bucket", zip.Doc{
 		Description: "Removes one bucket of the caller's org — every key and every\nrevision with it — and answers 204 with no body. 404 when the org has no\nbucket of that name.",
 		Fields: map[string]string{
 			"bucketRef.bucket": "Bucket is the bucket's name, from the path.",
 		},
 	})
-	zip.Describe("DELETE /v1/pubsub/kv/:bucket/:key", zip.Doc{
+	zip.Describe("DELETE /v1/kv/:bucket/:key", zip.Doc{
 		Description: "Delete removes one key — a delete marker in the key's history, so watchers\nsee it and Get answers 404 — and answers 204 with no body. 404 when the\nbucket does not exist.",
 		Fields: map[string]string{
 			"keyRef.bucket": "Bucket is the bucket, from the path.",
 			"keyRef.key":    "Key is the key, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/pubsub/kv/:bucket/:key", zip.Doc{
+	zip.Describe("GET /v1/kv/:bucket/:key", zip.Doc{
 		Description: "Get returns one key's current value and revision. 404 when the bucket does\nnot exist, the key was never written, or its latest revision is a delete.",
 		Fields: map[string]string{
 			"keyRef.bucket":     "Bucket is the bucket, from the path.",
@@ -34,7 +34,7 @@ func init() {
 			"kvEntry.value":     "Value is the value as UTF-8 text; empty for delete and purge markers.",
 		},
 	})
-	zip.Describe("GET /v1/pubsub/kv/:bucket/:key/history", zip.Doc{
+	zip.Describe("GET /v1/kv/:bucket/:key/history", zip.Doc{
 		Description: "History returns one key's retained revisions, oldest first — every put and\nevery delete marker up to the bucket's History depth. 404 when the bucket\ndoes not exist or the key was never written.",
 		Fields: map[string]string{
 			"keyRef.bucket":     "Bucket is the bucket, from the path.",
@@ -47,7 +47,7 @@ func init() {
 			"kvPage.data":       "Data are the key's retained revisions.",
 		},
 	})
-	zip.Describe("POST /v1/pubsub/kv/:bucket", zip.Doc{
+	zip.Describe("POST /v1/kv/:bucket", zip.Doc{
 		Description: "Creates a KV bucket and returns it. A bucket is keyed state on\nthe same durable plane as the streams: each key holds up to History\nrevisions, entries can expire by TTL, and watchers on the NATS port see every\nwrite. 409 when the org already has a bucket of that name.",
 		Fields: map[string]string{
 			"bucketRecord.bucket":  "Bucket is the bucket's name within the org.",
@@ -89,7 +89,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"subject":"billing.quote","data":"{\"sku\":\"gpu_1\"}","timeoutMs":2000}`),
 	})
-	zip.Describe("PUT /v1/pubsub/kv/:bucket/:key", zip.Doc{
+	zip.Describe("PUT /v1/kv/:bucket/:key", zip.Doc{
 		Description: "Put sets one key to one value and returns the revision the write created.\nWrites are versioned: each put is a new revision and the bucket retains up to\nits History of them per key.",
 		Fields: map[string]string{
 			"kvAck.revision": "Revision is the revision the write created.",
