@@ -31,9 +31,11 @@ package provisioning
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/hanzoai/cloud/apps/principal"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -157,6 +159,181 @@ func tenantOf(ctx context.Context) (string, error) {
 // returned by a factory is a call expression with no doc comment to read, which
 // is exactly how these 21 operations came to publish nothing.
 type ops struct{ s *cloud.Service[state] }
+
+// ----- create ----------------------------------------------------------------
+
+// createOf provisions one resource of kind for the caller's org. Seven addresses
+// share it, because seven addresses ARE one create: the kind decides which
+// backend and nothing else about the preamble — tenancy, name validation, the
+// balance gate, the dedup check and the debit are the same code seven times over.
+//
+// So the SEVEN doc comments below say only what a kind gives you, and everything
+// true of all seven is stated ONCE as field prose on provisionRequest and
+// provisionResult — which zipdoc lifts from the shared types and the generator
+// publishes on every one of the seven. One statement, seven renderings, rather
+// than seven accounts of one handler.
+//
+// THE GATE IS THE LAST CHECK BEFORE THE FIRST WRITE, and that ordering is load
+// bearing. Lifting it into middleware would run it ahead of the body decode, so
+// an unfunded org sending an invalid name would be told it cannot pay for a
+// request that was never valid. The refusal is cloud.Denied, which carries the
+// fleet-wide {"error":{"code","message"}} money contract off a returned error.
+func (o ops) createOf(ctx context.Context, kind string, in *provisionRequest) (*provisionResult, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, principal.RefusedFrom(ctx)
+	}
+
+	name := strings.ToLower(strings.TrimSpace(in.Name))
+	if !nameRE.MatchString(name) {
+		return nil, zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+	}
+	// instance keys a k8s Secret name (<instance>-addons); constrain it to the
+	// same DNS/identifier-safe slug as name so it can never inject a malformed or
+	// path-traversing Secret reference. Empty is allowed (no binding).
+	instance := strings.ToLower(strings.TrimSpace(in.Instance))
+	if instance != "" && !nameRE.MatchString(instance) {
+		return nil, zip.ErrBadRequest("instance must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+	}
+
+	// Honest availability gate (now empty, kept as the mechanism). Refuse a gated
+	// kind BEFORE billing or any write, so a customer is never handed a
+	// cross-tenant capability nor charged for a resource we will not create. A
+	// dedicated kind is never in this map.
+	if reason, gated := unavailableKinds[kind]; gated {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s", reason)
+	}
+
+	fee := cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind)
+	project, projectValidated := principal.ValidatedProject(c)
+	if err := o.s.Bill.Gate(ctx, principal.Ledger(c), project, projectValidated, kind, fee); err != nil {
+		return nil, cloud.Denied(err)
+	}
+
+	// Fast duplicate check (the UNIQUE index is the authoritative guard).
+	if _, err := o.s.State.store.Get(ctx, org, kind, name); err == nil {
+		return nil, zip.ErrConflict("resource already exists")
+	} else if !errors.Is(err, errNotFound) {
+		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
+	}
+
+	// DEDICATED-instance strategy (sql, kv, docdb, datastore): the org's OWN
+	// isolated instance, launched via an operator Datastore CR in tenant-<org>.
+	if e, dedicated := dedicatedEngines[kind]; dedicated {
+		return createDedicated(o.s, c, ctx, kind, org, name, e, fee, instance)
+	}
+	return o.createShared(ctx, c, kind, org, name, project, fee)
+}
+
+// createShared is the SHARED-logical strategy: a logical resource inside an
+// already-live product backend (vector, search, s3), namespaced by a fixed-width
+// org hash so two tenants can never fold onto one backend resource.
+func (o ops) createShared(ctx context.Context, c *zip.Ctx, kind, org, name, project string, fee int64) (*provisionResult, error) {
+	// SHARED-logical strategy (vector, search, s3).
+	prov := o.s.State.reg[kind]
+	if prov == nil {
+		return nil, zip.Errorf(http.StatusNotImplemented, "kind %q not supported", kind)
+	}
+	physical := physicalName(org, name)
+
+	// Global uniqueness guard (across ALL orgs/kinds). The fixed-width org
+	// hash already makes a cross-tenant fold cryptographically negligible;
+	// this check plus the UNIQUE(physical_name) index make any residual fold
+	// (or hash collision) FAIL CLOSED with 409 BEFORE the backend is touched
+	// — never a silent shared resource, which on KV would be a cross-tenant
+	// credential takeover (idempotent ACL SETUSER overwriting another
+	// tenant's user) and elsewhere a cross-tenant DoS / existence oracle.
+	if exists, err := o.s.State.store.PhysicalExists(ctx, physical); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
+	} else if exists {
+		return nil, zip.ErrConflict("resource already exists")
+	}
+
+	user := physical
+	pw, err := genToken(24)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+
+	cs, host, port, db, err := prov.Create(ctx, physical, user, pw)
+	if err != nil {
+		if errors.Is(err, errAlreadyExists) {
+			return nil, zip.ErrConflict("resource already exists")
+		}
+		o.s.Log.Error("provision failed", "kind", kind, "org", org, "name", name, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "provision %s failed: %v", kind, err)
+	}
+
+	// Secret handling. Only secretful kinds carry a real per-resource
+	// password. Seal it in KMS when configured; otherwise return once and
+	// store nothing (never plaintext).
+	secretRef := fmt.Sprintf("orgs/%s/%s/%s", org, kind, name)
+	storedRef, returnPw, username := "", "", ""
+	if secretfulKinds[kind] {
+		returnPw, username = pw, user
+		if o.s.State.sec.Enabled() {
+			if err := o.s.State.sec.Put(secretRef, []byte(pw)); err != nil {
+				_ = prov.Drop(ctx, physical, user)
+				o.s.Log.Error("kms put failed; rolled back backend", "kind", kind, "err", err)
+				return nil, zip.Errorf(http.StatusInternalServerError, "store secret failed")
+			}
+			storedRef = secretRef
+		} else {
+			o.s.Log.Warn("KMS degraded: password returned once, not persisted", "kind", kind, "org", org, "name", name)
+		}
+	}
+
+	id, err := genID()
+	if err != nil {
+		_ = prov.Drop(ctx, physical, user)
+		if storedRef != "" {
+			_ = o.s.State.sec.Delete(storedRef)
+		}
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+
+	r := Resource{
+		ID: id, Org: org, Kind: kind, Name: name,
+		PhysicalName: physical, SecretRef: storedRef,
+		Host: host, Port: port, Username: username, DBName: db,
+		Status: "ready", CreatedAt: time.Now().Unix(),
+	}
+	if err := o.s.State.store.Insert(ctx, r); err != nil {
+		// Lost a concurrent race or DB error — undo the backend + secret.
+		_ = prov.Drop(ctx, physical, user)
+		if storedRef != "" {
+			_ = o.s.State.sec.Delete(storedRef)
+		}
+		if errors.Is(err, errConflict) {
+			return nil, zip.ErrConflict("resource already exists")
+		}
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+	}
+
+	// Resource is live + persisted — debit the caller's org ledger for the
+	// provision (per-org, env-attributed, async best-effort so the debit never
+	// blocks or corrupts this 201; a debit failure is logged for
+	// reconciliation). Recurring storage footprint reuses o.s.Bill.Meter with a
+	// GB-month amount once a live-size source exists.
+	o.s.Bill.Meter(principal.Ledger(c), project, kind, fee, c.RequestID(), cloud.ClientIP(c))
+
+	// Return the PUBLIC endpoint, never the internal admin host. Remap the
+	// connection string's host:port too so a copy-pasted DSN is routable.
+	ph, pp := publicEndpoint(kind)
+	pubCS := cs
+	if cs != "" {
+		pubCS = strings.ReplaceAll(cs, fmt.Sprintf("%s:%d", host, port), fmt.Sprintf("%s:%d", ph, pp))
+	}
+	return &provisionResult{
+		ID: id, Kind: kind, Name: name, Status: "ready",
+		Host: ph, Port: pp, Username: username, Database: db,
+		ConnectionString: pubCS, Password: returnPw,
+	}, nil
+}
 
 // ----- the three shared cores ------------------------------------------------
 
@@ -476,7 +653,97 @@ func (o ops) dropS3(ctx context.Context, in *resourceRef) (*noContent, error) {
 // The last two are the OPERATOR's, not a tenant's: they read the shared vector
 // backend whole, so they sit at /v1/admin/<name> where the public projection
 // drops them by address (inventory.go says why).
+// createFor is the create for one kind BY NAME. It exists for a caller that holds
+// the kind as a value rather than as a call site — the test harness mounting one
+// kind's surface — and it is the same createOf the seven ops below reach, so a
+// harness can never exercise a path the binary does not serve.
+func (o ops) createFor(kind string) func(context.Context, *provisionRequest) (*provisionResult, error) {
+	return func(ctx context.Context, in *provisionRequest) (*provisionResult, error) {
+		return o.createOf(ctx, kind, in)
+	}
+}
+
+// ── the seven creates ────────────────────────────────────────────────────────
+//
+// Each says only what its kind GIVES you. Everything true of all seven — the name
+// slug, the instance binding, the credential returned exactly once, the balance
+// gated before anything is built — is field prose on provisionRequest and
+// provisionResult, stated once and published on all seven by the generator.
+
+// CreateSQL launches your org's OWN PostgreSQL instance and answers with its
+// `postgres://` connection string.
+//
+// The instance is yours alone — a deployment in your own tenant namespace, so its
+// admin credential is naturally scoped to you and no other tenant shares the
+// process. Off-cluster, where there is no orchestrator to launch one, this fails
+// closed with 503 rather than handing back a shared one.
+func (o ops) createSQL(ctx context.Context, in *provisionRequest) (*provisionResult, error) {
+	return o.createOf(ctx, "sql", in)
+}
+
+// CreateKV launches your org's OWN key-value instance and answers with its `kv://`
+// connection string.
+//
+// The instance is yours alone — a deployment in your own tenant namespace, so its
+// admin credential is naturally scoped to you and no other tenant shares the
+// process. Off-cluster this fails closed with 503 rather than handing back a
+// shared one.
+func (o ops) createKV(ctx context.Context, in *provisionRequest) (*provisionResult, error) {
+	return o.createOf(ctx, "kv", in)
+}
+
+// CreateDocDB launches your org's OWN document-database instance and answers with
+// its `mongodb://` connection string. It speaks the MongoDB wire protocol, so
+// existing MongoDB drivers connect unchanged.
+//
+// The instance is yours alone — a deployment in your own tenant namespace, so its
+// admin credential is naturally scoped to you and no other tenant shares the
+// process. Off-cluster this fails closed with 503 rather than handing back a
+// shared one.
+func (o ops) createDocDB(ctx context.Context, in *provisionRequest) (*provisionResult, error) {
+	return o.createOf(ctx, "docdb", in)
+}
+
+// CreateDatastore launches your org's OWN Hanzo Datastore instance and answers
+// with its `datastore://` connection string.
+//
+// The instance is yours alone — a deployment in your own tenant namespace, so its
+// admin credential is naturally scoped to you and no other tenant shares the
+// process. Off-cluster this fails closed with 503 rather than handing back a
+// shared one.
+func (o ops) createDatastore(ctx context.Context, in *provisionRequest) (*provisionResult, error) {
+	return o.createOf(ctx, "datastore", in)
+}
+
+// CreateVector creates a vector collection inside the already-running shared
+// vector backend and answers with the endpoint that reaches it.
+func (o ops) createVector(ctx context.Context, in *provisionRequest) (*provisionResult, error) {
+	return o.createOf(ctx, "vector", in)
+}
+
+// CreateSearch creates a search index inside the already-running shared search
+// backend and answers with the endpoint that reaches it.
+func (o ops) createSearch(ctx context.Context, in *provisionRequest) (*provisionResult, error) {
+	return o.createOf(ctx, "search", in)
+}
+
+// CreateS3 creates an S3-compatible bucket inside the already-running shared
+// object store and answers with the endpoint that reaches it.
+func (o ops) createS3(ctx context.Context, in *provisionRequest) (*provisionResult, error) {
+	return o.createOf(ctx, "s3", in)
+}
+
 func mountTyped(z *zip.App, o ops) {
+	created := zip.WithStatus(http.StatusCreated)
+
+	zip.Post(z, "/v1/provisioning/sql", o.createSQL, created)
+	zip.Post(z, "/v1/provisioning/kv", o.createKV, created)
+	zip.Post(z, "/v1/provisioning/docdb", o.createDocDB, created)
+	zip.Post(z, "/v1/provisioning/datastore", o.createDatastore, created)
+	zip.Post(z, "/v1/provisioning/vector", o.createVector, created)
+	zip.Post(z, "/v1/provisioning/search", o.createSearch, created)
+	zip.Post(z, "/v1/provisioning/s3", o.createS3, created)
+
 	zip.Get(z, "/v1/provisioning/sql", o.listSQL)
 	zip.Get(z, "/v1/provisioning/sql/:name", o.getSQL)
 	zip.Delete(z, "/v1/provisioning/sql/:name", o.dropSQL)
