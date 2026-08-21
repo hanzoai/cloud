@@ -21,62 +21,6 @@
     }
   ],
   "paths": {
-    "/collaborator": {
-      "get": {
-        "operationId": "get_collaborator",
-        "summary": "Open the live collaborative-editing socket",
-        "description": "Upgrades to the hocuspocus WebSocket the Team editor syncs its Y.js documents over: binary frames of document name, message type and payload, with ONE socket multiplexing every document a tab has open. The server is a relay and an ordered update log, not a CRDT engine — it replays the log to each joining peer and broadcasts every update to the rest, which converges because Y.js updates are commutative and idempotent. There is no body; the response is a protocol upgrade.\n\nIT SITS OUTSIDE /v1 ON PURPOSE. The client derives both collaborator lanes from one configured URL — this socket at its root, the markup-snapshot RPC one segment in — so the path is fixed by the editor library's contract rather than chosen by this service.\n\nAUTH IS IN-BAND, PER DOCUMENT, NOT ON THE UPGRADE. The handshake gates only on browser Origin (403 outside the team surfaces; no Origin at all is admitted, which is what a non-browser sends), and then the first frame for a document must be an Auth message carrying the same session or workspace token every other team route verifies — a browser WebSocket cannot set an Authorization header, which is why the token rides inside the protocol. Anything else on an unauthenticated document is answered with one permission denial and nothing further.\n\nEvery document is authorized on its own: the document's workspace must be the token's workspace when the token pins one, and the caller must be a member of it. A mismatch, an unknown workspace and a non-member deny alike with \"document not found\". Rooms are keyed by org and workspace and the persisted log's key embeds both, so a foreign document id can neither join a room nor read a blob.\n\nThe server pings every twenty seconds and drops a socket silent for sixty, so a backgrounded tab — whose JS timers are throttled but whose network stack still auto-pongs — stays connected instead of dying into a reconnect loop."
-      }
-    },
-    "/collaborator/rpc/{documentId}": {
-      "post": {
-        "operationId": "post_collaborator_rpc_by_documentid",
-        "summary": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor speaks: createContent stores a document field's markup at a fresh, immutable blob ref and returns it, updateContent stores a new snapshot and answers nothing, and getContent reads back the exact snapshot a ref names.",
-        "description": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists.",
-        "parameters": [
-          {
-            "name": "documentId",
-            "in": "path",
-            "required": true,
-            "description": "DocumentID addresses the document field, as\n\"\u003cworkspaceUuid\u003e|\u003cobjectClass\u003e|\u003cobjectId\u003e|\u003cobjectAttr\u003e\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "6579…|tracker:class:Issue|issue-1|description"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "documentId": "6579…|tracker:class:Issue|issue-1|description",
-                "method": "getContent",
-                "payload": {
-                  "source": "issue-1-description-1730000000000"
-                }
-              },
-              "schema": {
-                "$ref": "#/components/schemas/collabRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/collabResult"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
     "/v1/team/account": {
       "post": {
         "operationId": "post_team_account",
@@ -297,6 +241,70 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/botSync"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/team/collaborator": {
+      "get": {
+        "operationId": "get_team_collaborator",
+        "summary": "Open the live collaborative-editing socket",
+        "description": "Upgrades to the hocuspocus WebSocket the Team editor syncs its Y.js documents over: binary frames of document name, message type and payload, with ONE socket multiplexing every document a tab has open. The server is a relay and an ordered update log, not a CRDT engine — it replays the log to each joining peer and broadcasts every update to the rest, which converges because Y.js updates are commutative and idempotent. There is no body; the response is a protocol upgrade.\n\nBOTH LANES SHARE ONE ROOT. The client derives them from one configured URL — this socket at its root, the markup-snapshot RPC one segment in — so pointing the editor at this service is one value, and the two lanes cannot drift apart.\n\nAUTH IS IN-BAND, PER DOCUMENT, NOT ON THE UPGRADE. The handshake gates only on browser Origin (403 outside the team surfaces; no Origin at all is admitted, which is what a non-browser sends), and then the first frame for a document must be an Auth message carrying the same session or workspace token every other team route verifies — a browser WebSocket cannot set an Authorization header, which is why the token rides inside the protocol. Anything else on an unauthenticated document is answered with one permission denial and nothing further.\n\nEvery document is authorized on its own: the document's workspace must be the token's workspace when the token pins one, and the caller must be a member of it. A mismatch, an unknown workspace and a non-member deny alike with \"document not found\". Rooms are keyed by org and workspace and the persisted log's key embeds both, so a foreign document id can neither join a room nor read a blob.\n\nThe server pings every twenty seconds and drops a socket silent for sixty, so a backgrounded tab — whose JS timers are throttled but whose network stack still auto-pongs — stays connected instead of dying into a reconnect loop.",
+        "tags": [
+          "team"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/team/collaborator/rpc/{documentId}": {
+      "post": {
+        "operationId": "post_team_collaborator_rpc_by_documentid",
+        "summary": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor speaks: createContent stores a document field's markup at a fresh, immutable blob ref and returns it, updateContent stores a new snapshot and answers nothing, and getContent reads back the exact snapshot a ref names.",
+        "description": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists.",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "description": "DocumentID addresses the document field, as\n\"\u003cworkspaceUuid\u003e|\u003cobjectClass\u003e|\u003cobjectId\u003e|\u003cobjectAttr\u003e\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "6579…|tracker:class:Issue|issue-1|description"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "documentId": "6579…|tracker:class:Issue|issue-1|description",
+                "method": "getContent",
+                "payload": {
+                  "source": "issue-1-description-1730000000000"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/collabRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/collabResult"
                 }
               }
             },
