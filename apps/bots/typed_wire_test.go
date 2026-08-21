@@ -9,7 +9,7 @@
 // ONE gate, because there is one capability. The node plane and the run plane each
 // carried their own copy of this file while they were two apps, which meant each
 // measured half a surface and neither could see a route that landed in the gap.
-package bot
+package bots
 
 import (
 	"encoding/json"
@@ -29,12 +29,12 @@ import (
 // written the way the DOCUMENT writes them, which is the identity every projection
 // keys on.
 var untypedByDesign = map[string]string{
-	"GET /v1/node/connect": "a WebSocket UPGRADE. It answers 101 and the connection then carries " +
+	"GET /v1/nodes/connect": "a WebSocket UPGRADE. It answers 101 and the connection then carries " +
 		"duplex frames for the life of the node (NodeWS, ws.go). A typed op answers one marshalled " +
 		"value at one declared success status, and zip's WithStatus refuses a non-2xx — there is no " +
 		"Out that can express a socket.",
 
-	"POST /v1/node/{id}/invoke": "a refusal here is a 403 carrying a DOMAIN body — " +
+	"POST /v1/nodes/{id}/invoke": "a refusal here is a 403 carrying a DOMAIN body — " +
 		"{\"error\":\"denied\",\"code\":…,\"reason\":…} — that a client switches on, returned both for " +
 		"the pre-flight system.run sanitize and for the node's own denial. A typed op's only refusal is " +
 		"a RETURNED error, which zip renders as its flat {status,code,error}; writing the body from " +
@@ -43,7 +43,7 @@ var untypedByDesign = map[string]string{
 		"also reads the caller's X-Device-Id (callerOf), which no In field may carry: a caller that " +
 		"could name its own device could pre-approve its own system.run.",
 
-	"POST /v1/node/peer/invoke": "a replica-to-replica machine hop served by a net/http handler " +
+	"POST /v1/nodes/peer/invoke": "a replica-to-replica machine hop served by a net/http handler " +
 		"(Registry.PeerHandler, registry.go). Its refusals are text/plain — 503 \"peer forwarding " +
 		"disabled\", 403 \"forbidden\", 405, 400 — while every zip error is JSON; it caps the forwarded " +
 		"body with http.MaxBytesReader, a bound a typed op cannot see; and its ORG arrives in the body, " +
@@ -67,22 +67,22 @@ var untypedByDesign = map[string]string{
 	//
 	// It gets typed in the same change that gives the bot runtime a launch
 	// operation, and not before.
-	"POST /v1/bot/runs": "answers 501 unconditionally — a typed op publishes a SUCCESS response it can " +
+	"POST /v1/bots/runs": "answers 501 unconditionally — a typed op publishes a SUCCESS response it can " +
 		"never send, and mints an MCP tool and CLI command for an operation that cannot succeed; it is also " +
 		"body-tolerant, which op.invoke's unconditional 400 on an unparseable body cannot express.",
 
 	// The relay face. All five ARE one registration —
-	// app.All("/v1/bot/runtime/*", s.proxy) in relay.go — so they share one reason.
+	// app.All("/v1/bots/runtime/*", s.proxy) in relay.go — so they share one reason.
 	//
 	// FIVE, not seven: the document publishes what was DECLARED, and OPTIONS and
 	// TRACE were never declared — they were methods the router happened to bind
 	// under All(). They left the document in ceff43ac, which is the change that
 	// drew that line, so they leave the ledger with it.
-	"DELETE /v1/bot/runtime/{wildcard1}": reasonProxy,
-	"GET /v1/bot/runtime/{wildcard1}":    reasonProxy,
-	"PATCH /v1/bot/runtime/{wildcard1}":  reasonProxy,
-	"POST /v1/bot/runtime/{wildcard1}":   reasonProxy,
-	"PUT /v1/bot/runtime/{wildcard1}":    reasonProxy,
+	"DELETE /v1/bots/runtime/{wildcard1}": reasonProxy,
+	"GET /v1/bots/runtime/{wildcard1}":    reasonProxy,
+	"PATCH /v1/bots/runtime/{wildcard1}":  reasonProxy,
+	"POST /v1/bots/runtime/{wildcard1}":   reasonProxy,
+	"PUT /v1/bots/runtime/{wildcard1}":    reasonProxy,
 }
 
 // botOps reads BOTH projections of the live router at their one shared address form:

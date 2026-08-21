@@ -1,6 +1,6 @@
 package cli
 
-// bot.go — `hanzo bot`: launch a computer-using agent (a "bot").
+// bots.go — `hanzo bots`: launch a computer-using agent (a "bot").
 //
 // A bot is the COMPUTER-USING flavor of an agent: it quick-boots a terminal or
 // desktop sandbox on the operative stack (Hanzo's computer-use runtime — noVNC
@@ -42,7 +42,7 @@ type BotRunResult struct {
 
 func newBotCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "bot",
+		Use:   "bots",
 		Short: "Launch a computer-using agent (booted desktop or terminal)",
 		Long: "Quick-boot a terminal or desktop sandbox on the operative computer-use\n" +
 			"runtime (visor-provisioned) and have an agent drive it to do a task —\n" +

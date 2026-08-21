@@ -32,7 +32,7 @@
 // Denials are values, not exceptions: a Decision carries a stable Code for the
 // wire and a Reason for a human.
 
-package bot
+package bots
 
 import (
 	"crypto/sha256"
