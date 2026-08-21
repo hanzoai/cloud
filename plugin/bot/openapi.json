@@ -1,0 +1,249 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package bots is a bot doing your work on a real desktop, live, while you watch.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "bot"
+    }
+  ],
+  "paths": {
+    "/v1/bot/runs": {
+      "get": {
+        "operationId": "get_bot_runs",
+        "summary": "List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here.",
+        "description": "List returns the caller org's live bot runs, read from the bot runtime and projected\ninto the console contract with each run's live session URL derived here.\n\nThe org is ALWAYS the validated principal's org, NEVER a request field, and it is\nwhat scopes the runtime's answer — so one tenant can never enumerate another's\nruns. A runtime that cannot answer is an error, not an empty list: [] would tell\nthe caller \"your org has no runs\", which is a different claim from \"we could not\nask\", and the difference is the whole reason this endpoint exists.",
+        "tags": [
+          "bot"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotRuns"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_bot_runs",
+        "summary": "Reserved address for launching a bot run — not implemented, always 501",
+        "description": "Answers 501 to every call. The bot runtime exposes no launch operation, so nothing here can start a sandbox, and this address is published rather than dropped because it is the collection every run is created in: GET lists them, POST would launch one.\n\nThe refusal is total and takes no input. The handler never reads the body, so any bytes at all — malformed JSON included — get the same 501; no run id is minted, no session URL is handed back, and no per-run fee is charged. That is the point: the earlier version minted an id the runtime had never heard of, pointed it at a VNC node that did not exist, and took real money for it.\n\nListing and stopping runs are live and org-scoped. Only the launch is missing, and it returns in the same change that can prove a bot boots.",
+        "tags": [
+          "bot"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/bot/runs/{runId}/stop": {
+      "post": {
+        "operationId": "post_bot_runs_by_runid_stop",
+        "summary": "Stop terminates one of the caller org's own bot runs and reports its terminal state.",
+        "description": "Stop terminates one of the caller org's own bot runs and reports its terminal state.\n\nThe own-key guard is the org: it is the caller's validated org, never theirs to\nchoose, and the runtime resolves the run id UNDER it. A run belonging to another\ntenant is not among this org's runs, so it answers absent — the same 404 a\nnonexistent id gets, which is what keeps this from being an oracle.\n\nAbsence is honoured ONLY when the runtime answers it. A runtime that does not\nserve stop reports nothing about the run, and reporting \"stopped\" on that basis\nwould be a stop that cannot fail — so it is a 502.",
+        "tags": [
+          "bot"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStopped"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/bot/runtime/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_bot_runtime_by_wildcard1",
+        "summary": "Relay one of the bot runtime's own operational paths",
+        "description": "Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it as /health.\n\nThis is the runtime's OPS face, not a control plane. A liveness probe is not a tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; everything a tenant can ACT on is native and typed at /v1/bot/runs.\n\nA validated principal is required and the request is refused with 403 before anything is forwarded — the runtime trusts the identity headers it receives as gateway-minted, so an unauthenticated call must never be allowed to hand it a victim tenant. The caller's Authorization, org, user, email, project and environment headers ride along; nothing is minted here. The runtime's own status code and Content-Type come back verbatim (frequently not JSON), the body is bounded at 16 MiB, and a runtime that cannot be reached is 502.\n\nOne registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.",
+        "tags": [
+          "bot"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_bot_runtime_by_wildcard1",
+        "summary": "Relay one of the bot runtime's own operational paths",
+        "description": "Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it as /health.\n\nThis is the runtime's OPS face, not a control plane. A liveness probe is not a tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; everything a tenant can ACT on is native and typed at /v1/bot/runs.\n\nA validated principal is required and the request is refused with 403 before anything is forwarded — the runtime trusts the identity headers it receives as gateway-minted, so an unauthenticated call must never be allowed to hand it a victim tenant. The caller's Authorization, org, user, email, project and environment headers ride along; nothing is minted here. The runtime's own status code and Content-Type come back verbatim (frequently not JSON), the body is bounded at 16 MiB, and a runtime that cannot be reached is 502.\n\nOne registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.",
+        "tags": [
+          "bot"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_bot_runtime_by_wildcard1",
+        "summary": "Relay one of the bot runtime's own operational paths",
+        "description": "Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it as /health.\n\nThis is the runtime's OPS face, not a control plane. A liveness probe is not a tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; everything a tenant can ACT on is native and typed at /v1/bot/runs.\n\nA validated principal is required and the request is refused with 403 before anything is forwarded — the runtime trusts the identity headers it receives as gateway-minted, so an unauthenticated call must never be allowed to hand it a victim tenant. The caller's Authorization, org, user, email, project and environment headers ride along; nothing is minted here. The runtime's own status code and Content-Type come back verbatim (frequently not JSON), the body is bounded at 16 MiB, and a runtime that cannot be reached is 502.\n\nOne registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.",
+        "tags": [
+          "bot"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_bot_runtime_by_wildcard1",
+        "summary": "Relay one of the bot runtime's own operational paths",
+        "description": "Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it as /health.\n\nThis is the runtime's OPS face, not a control plane. A liveness probe is not a tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; everything a tenant can ACT on is native and typed at /v1/bot/runs.\n\nA validated principal is required and the request is refused with 403 before anything is forwarded — the runtime trusts the identity headers it receives as gateway-minted, so an unauthenticated call must never be allowed to hand it a victim tenant. The caller's Authorization, org, user, email, project and environment headers ride along; nothing is minted here. The runtime's own status code and Content-Type come back verbatim (frequently not JSON), the body is bounded at 16 MiB, and a runtime that cannot be reached is 502.\n\nOne registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.",
+        "tags": [
+          "bot"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_bot_runtime_by_wildcard1",
+        "summary": "Relay one of the bot runtime's own operational paths",
+        "description": "Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it as /health.\n\nThis is the runtime's OPS face, not a control plane. A liveness probe is not a tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; everything a tenant can ACT on is native and typed at /v1/bot/runs.\n\nA validated principal is required and the request is refused with 403 before anything is forwarded — the runtime trusts the identity headers it receives as gateway-minted, so an unauthenticated call must never be allowed to hand it a victim tenant. The caller's Authorization, org, user, email, project and environment headers ride along; nothing is minted here. The runtime's own status code and Content-Type come back verbatim (frequently not JSON), the body is bounded at 16 MiB, and a runtime that cannot be reached is 502.\n\nOne registration owns this address for every method, so which methods actually answer is the runtime's decision, not this edge's.",
+        "tags": [
+          "bot"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BotRun": {
+        "properties": {
+          "runId": {
+            "description": "RunID is the run's id in the bot runtime, and the node id its live VNC session\nis registered under.",
+            "type": "string"
+          },
+          "sessionUrl": {
+            "description": "SessionURL is the live session the hanzo.app /vnc panel embeds to watch or\nattach to this run. Derived here from the run id, never sent by the runtime.",
+            "type": "string"
+          },
+          "startedAt": {
+            "description": "StartedAt is when the run began, RFC 3339, as the runtime stamped it.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the run's state as the runtime reports it; \"running\" when the runtime\nnames none of its own.",
+            "type": "string"
+          },
+          "surface": {
+            "description": "Surface is what the bot drives: the desktop or terminal sandbox it runs in.",
+            "type": "string"
+          },
+          "task": {
+            "description": "Task is the instruction the bot is executing.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BotRuns": {
+        "properties": {
+          "bots": {
+            "description": "Bots is the org's live runs. Always an array, never null.",
+            "items": {
+              "$ref": "#/components/schemas/BotRun"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "BotStopped": {
+        "properties": {
+          "runId": {
+            "description": "RunID is the run that was stopped.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the run's terminal state: \"stopped\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

@@ -417,8 +417,8 @@ func addressesOf(d *Document) *addresses {
 }
 
 // at matches a concrete path against the templates of its own depth. A template
-// made only of literals wins outright — /v1/nodes/peer is an address in its own
-// right and is not the /v1/nodes/{id} whose shape it also fits.
+// made only of literals wins outright — /v1/node/peer is an address in its own
+// right and is not the /v1/node/{id} whose shape it also fits.
 func (a *addresses) at(path string) (address, bool) {
 	segs := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	var hit address

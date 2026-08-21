@@ -1,0 +1,782 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package campaign is one go-to-market push across paid, organic and email at once.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "campaign"
+    }
+  ],
+  "paths": {
+    "/v1/campaign": {
+      "get": {
+        "operationId": "get_campaign",
+        "summary": "Returns the org's campaigns, newest first, optionally narrowed to one status.",
+        "description": "Returns the org's campaigns, newest first, optionally narrowed to\none status.\n\nA campaign is the top-level go-to-market object: a value that SPANS channels\n(paid, organic, email) and fans out to the executor for each. The listing is\norg-scoped server-side, so one org can never see another's campaigns.",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status keeps only campaigns in that state: draft, live, paused or failed.\nEmpty means any.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "live"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page. 0 or less means the default of 200; anything above\n1000 is clamped to 1000.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignPage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_campaign",
+        "summary": "Creates a campaign as a DRAFT and returns it.",
+        "description": "Creates a campaign as a DRAFT and returns it.\n\nA draft is inert: nothing is sent, no connector is touched and no budget is\ncommitted until the campaign is launched. The channels named here are validated\nand de-duplicated by kind (one executor per kind), and every channel starts\n\"pending\" whatever the caller claims — a client can never assert a launched\nstate.",
+        "tags": [
+          "campaign"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": 250000,
+                "channels": [
+                  {
+                    "kind": "paid",
+                    "platform": "meta"
+                  }
+                ],
+                "content": [
+                  "Ship faster"
+                ],
+                "name": "Spring launch"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/campaignWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignRecord"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/campaign/summary": {
+      "get": {
+        "operationId": "get_campaign_summary",
+        "summary": "Returns the org's go-to-market roll-up: how many campaigns exist, how many are live, their total budget in cents, and which channel executors this deployment can actually reach.",
+        "description": "Returns the org's go-to-market roll-up: how many campaigns\nexist, how many are live, their total budget in cents, and which channel\nexecutors this deployment can actually reach.\n\nThe channel list is the deployment's honest capability, not a wish: a kind\nmissing from it is one a launch will record as \"unavailable\" rather than fail\non.",
+        "tags": [
+          "campaign"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignSummary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/campaign/{id}": {
+      "delete": {
+        "operationId": "delete_campaign_by_id",
+        "summary": "Removes one campaign of the caller's org and answers 204 with no body.",
+        "description": "Removes one campaign of the caller's org and answers 204 with no\nbody. 404 when the org has no campaign with that id.\n\nIt deletes the RECORD, not the executions: a campaign whose channels are live\non a provider should be paused first, or those executions keep running with\nnothing here to report them.",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the campaign's server-minted handle, \"cmp_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_campaign_by_id",
+        "summary": "Returns one campaign of the caller's org — its name, audience, creatives, channels with their per-channel launch state, schedule, budget and status.",
+        "description": "Returns one campaign of the caller's org — its name, audience,\ncreatives, channels with their per-channel launch state, schedule, budget and\nstatus. 404 when the org has no campaign with that id.",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the campaign's server-minted handle, \"cmp_\"-prefixed.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignRecord"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_campaign_by_id",
+        "summary": "Rewrites a campaign's core fields — name, audience, creatives, schedule and budget — and returns the updated campaign.",
+        "description": "Rewrites a campaign's core fields — name, audience, creatives,\nschedule and budget — and returns the updated campaign.\n\nChannels are replaced ONLY while the campaign is still a draft. Once it is\nlaunched its channels carry provider state (an external id, a live status), so\nthey are added and removed explicitly through the channels sub-resource\ninstead; a whole-object write would silently orphan a running execution.",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the campaign to update, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": 500000,
+                "name": "Spring launch"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/campaignUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignRecord"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/campaign/{id}/channels": {
+      "post": {
+        "operationId": "post_campaign_by_id_channels",
+        "summary": "Adds a channel to a campaign, or REPLACES the one it already has of that kind, and returns the updated campaign.",
+        "description": "Adds a channel to a campaign, or REPLACES the one it already\nhas of that kind, and returns the updated campaign.\n\nA campaign carries at most one channel per kind, because the kind IS the\nexecutor: adding a second \"paid\" channel would mean two ad accounts running one\ncampaign with no way to tell their results apart. The new channel starts\n\"pending\" — adding it does not launch it.",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the campaign to add the channel to, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cmp_1f…"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "account": "list_42",
+                "id": "cmp_1f…",
+                "kind": "email",
+                "platform": "sendgrid"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/channelAdd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignRecord"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/campaign/{id}/channels/{kind}": {
+      "delete": {
+        "operationId": "delete_campaign_by_id_channels_by_kind",
+        "summary": "Drops one channel from a campaign and returns the updated campaign.",
+        "description": "Drops one channel from a campaign and returns the updated\ncampaign. 404 when the campaign carries no channel of that kind.\n\nIt removes the channel from the PLAN. A channel that is live at its provider\nshould be paused first — dropping the row here leaves nothing to pause it with\nafterwards.",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the campaign, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "description": "Kind is the channel to remove: paid, organic or email.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignRecord"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/campaign/{id}/launch": {
+      "post": {
+        "operationId": "post_campaign_by_id_launch",
+        "summary": "Launch a campaign across every channel it declares",
+        "description": "Pushes the campaign live on each of its channels through that channel's executor and answers the whole campaign with the per-channel outcome written back onto it.\n\nThe fan-out is BEST-EFFORT PER CHANNEL, and the honest reading of the result is the rule most callers get wrong: one channel failing never aborts the others, so each channel row carries its own `live`, `failed` or `unavailable` status and detail, and a paid launch can be live while an email launch failed. The campaign itself is `live` when AT LEAST ONE channel launched and `failed` only when none did — `live` is not a claim that every channel launched. Repeating the call is safe: a channel already live is skipped, never re-launched. A campaign carrying more than one creative has its variant assigned here by the experiment seam and tagged as `utm_content`.\n\nOrg-scoped and fails closed: a valid bearer is required (403 without one), the campaign is read under the caller's OWN org so another tenant's id is a 404, and a campaign with no channels is a 400 — there is nothing to launch. Each executor resolves its own org's connector token from the org passed to it, so a launch can never spend through another tenant's connector.",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/campaign/{id}/metrics": {
+      "get": {
+        "operationId": "get_campaign_by_id_metrics",
+        "summary": "Returns a campaign's results over a window: the analytics funnel (impressions, clicks, conversions, revenue, visitors), the spend each channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS.",
+        "description": "Returns a campaign's results over a window: the analytics\nfunnel (impressions, clicks, conversions, revenue, visitors), the spend each\nchannel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and\nROAS.\n\nThere is exactly ONE metrics plane and nothing is stored here: the funnel is an\nanalytics query over the campaign's utm_campaign-tagged events, and the spend is\neach provider's own number read through the org's connector. A warehouse that is\nnot emitting yet degrades to available:false with zeroes — honest-empty, never a\n500 and never a fabricated number. When the campaign runs more than one creative\nand an experiment is wired, abTest carries the A/B analysis.",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the campaign to report on, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cmp_1f…"
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the lookback window: 24h, 7d, 30d or 90d. Anything else, including\nempty, reads as 30d.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is an explicit RFC3339 window start. Honored only together with End,\nand only when End is after it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is an explicit RFC3339 window end.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignResults"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/campaign/{id}/pause": {
+      "post": {
+        "operationId": "post_campaign_by_id_pause",
+        "summary": "Pause every live channel on a campaign at its provider",
+        "description": "Pauses each live channel on its provider and answers the whole campaign, moved to `paused`, with the per-channel outcome written back onto it.\n\nOnly channels that are live and carry a provider reference are touched; a channel whose executor is no longer wired is marked `unavailable` and one whose pause errored is marked `failed`, with the reason on the row. The campaign still reports `paused` in both cases, and that is deliberate rather than sloppy: no live channel remains that this process will meter, and the rows say exactly which provider was not reached so it can be settled by hand.\n\nOrg-scoped and fails closed: a valid bearer is required (403 without one) and the campaign is read under the caller's OWN org, so another tenant's id is a 404.",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChannelMetric": {
+        "properties": {
+          "externalId": {
+            "description": "ExternalID is the provider-side id of the execution the spend belongs to.\nAbsent until the channel has launched.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is which channel this row is: paid, organic or email. It is also the\nrow's identity — a campaign carries at most one channel per kind.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the provider the spend was read from: meta, google, x, instagram,\nor the email provider.",
+            "type": "string"
+          },
+          "spendCents": {
+            "description": "SpendCents is what the provider itself reports this channel spent, in CENTS.\n0 when the channel never launched, when no executor is wired for it, or when\nthe read failed — SpendError tells the last case apart from a genuine zero.",
+            "type": "integer"
+          },
+          "spendError": {
+            "description": "SpendError is why this channel's spend could not be read (connector not\nconnected, provider error), as one secret-free line. Present only on failure;\nthe campaign total then simply omits this channel rather than failing.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the channel's launch state on the campaign — pending, live, paused,\nfailed or unavailable. Only a live channel is asked for its spend at all.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChannelSpec": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider account this channel runs under: an ad-account, a page\nor a mailing-list id. An executor may replace it at launch with the account it\nactually used.",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Detail is the last outcome in one secret-free line — the failure reason, or\nwhat the executor reported. Absent when there is nothing to explain.",
+            "type": "string"
+          },
+          "externalId": {
+            "description": "ExternalID is the provider-side id of the running execution, recorded by the\norchestrator at launch and handed back verbatim to read spend or to pause.\nServer-owned and absent until this channel has launched; anything a caller\nsends for it is dropped.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the channel and the identity a campaign holds at most one of: paid,\norganic or email. It picks the executor the launch fans out to.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the provider within the kind — meta, google, x, instagram, or the\nemail provider.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is this channel's own launch outcome, not the campaign's: pending (added,\nnever launched), live, paused, failed (Detail says why) or unavailable (no\nexecutor wired on this deployment). Server-owned — a caller can never assert it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "campaignPage": {
+        "properties": {
+          "data": {
+            "description": "Data are the campaigns on this page.",
+            "items": {
+              "$ref": "#/components/schemas/campaignRecord"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "campaignRecord": {
+        "properties": {
+          "audience": {
+            "description": "Audience is an opaque reference to the segment this campaign targets. It is\nstored and echoed but not yet handed to the executors — a channel targets\nthrough the provider account it runs under — so it is documentation for now.\nAbsent when never set.",
+            "type": "string"
+          },
+          "budget": {
+            "description": "Budget is the campaign's total budget in CENTS, handed to each executor as the\nbudget for its channel. 0 means none was set.",
+            "type": "integer"
+          },
+          "channels": {
+            "description": "Channels are the fan-out targets, at most one per kind and at most 12, each\ncarrying its own post-launch state. Empty means nothing to launch, which is\nwhat makes a launch of this campaign a 400.",
+            "items": {
+              "$ref": "#/components/schemas/ChannelSpec"
+            },
+            "type": "array"
+          },
+          "content": {
+            "description": "Content is the ordered creative set, at most 32, empty entries dropped.\nContent[0] is the creative that runs; the rest are A/B variants a wired\nexperiment can assign per launch.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the campaign was created, in unix seconds. Server-set.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the campaign's server-minted handle — \"cmp_\" and 128 random bits — and\nthe id every other campaign call is addressed by. Never read off the wire: a\ncreate that sends one has it ignored.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the campaign's display name. Required on write, trimmed, and capped at\n2048 characters.",
+            "type": "string"
+          },
+          "scheduleAt": {
+            "description": "ScheduleAt is when the campaign should run, in unix seconds. 0 (absent) means\nlaunch immediately. It is passed to each executor; nothing in this service\nwakes up to launch it for you.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle state, server-owned and never accepted from a caller.\nFour values actually occur: draft (inert and fully mutable — nothing is sent\nand no budget is committed), live, paused and failed. After a fan-out live\nmeans AT LEAST ONE channel launched — read the channel rows for the rest —\nand failed means none did.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is the last write in unix seconds — an edit, a launch or a pause.\nServer-set on every save.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "campaignResults": {
+        "properties": {
+          "abTest": {
+            "description": "ABTest is the creative A/B analysis from the experiments primitive\n(experiments.Analyze, pull-model), present only when the campaign runs\nmore than one creative and an experiment is wired. Opaque JSON — campaign\nstays decoupled from the experiments analysis type."
+          },
+          "available": {
+            "description": "Available is false when the analytics warehouse is not connected or the query\nfailed: the funnel below is then zero because nothing could be read, not\nbecause nothing happened. Spend and Channels are still real — they come from\nthe connectors, not the warehouse.",
+            "type": "boolean"
+          },
+          "cac": {
+            "description": "CAC is customer acquisition cost: spend DOLLARS per conversion, rounded to\ncents. 0 when nothing converted — that is \"not yet computable\", not \"free\".",
+            "type": "number"
+          },
+          "campaignId": {
+            "description": "CampaignID is the campaign these results are for, echoed from the request.",
+            "type": "string"
+          },
+          "channels": {
+            "description": "Channels is the per-channel spend breakdown that SpendCents sums, one row per\nchannel on the campaign including the ones that never launched.",
+            "items": {
+              "$ref": "#/components/schemas/ChannelMetric"
+            },
+            "type": "array"
+          },
+          "clicks": {
+            "description": "Clicks is the campaign's click events over the window.",
+            "type": "integer"
+          },
+          "conversions": {
+            "description": "Conversions is the terminal funnel events attributed to the campaign — orders\ncompleted, signups completed, explicit conversion events.",
+            "type": "integer"
+          },
+          "ctr": {
+            "description": "CTR is clicks per impression, a fraction rounded to 4 places (0.0123 = 1.23%),\nnot a percentage. 0 when there were no impressions to divide by.",
+            "type": "number"
+          },
+          "cvr": {
+            "description": "CVR is conversions per click, a fraction rounded to 4 places. 0 when there\nwere no clicks.",
+            "type": "number"
+          },
+          "end": {
+            "description": "End is the window's end, RFC3339 UTC — the read's own clock unless an explicit\npair was given. The window is a LOOKBACK, not the campaign's own lifetime.",
+            "type": "string"
+          },
+          "impressions": {
+            "description": "Impressions is how many times the campaign's creatives were shown, counted\nfrom its utm_campaign-tagged impression events.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the campaign's display name at read time, so a result can be labelled\nwithout a second fetch.",
+            "type": "string"
+          },
+          "range": {
+            "description": "Range is the window actually used: 24h, 7d, 30d, 90d, or \"custom\" when an\nexplicit start/end pair was honored. An unparseable or absent range reads 30d,\nso this is the value to trust, not the one that was sent.",
+            "type": "string"
+          },
+          "revenue": {
+            "description": "Revenue is the summed revenue attribute of the campaign's events, in whole\nCURRENCY UNITS (dollars) — the one money value here that is not in cents.",
+            "type": "number"
+          },
+          "roas": {
+            "description": "ROAS is return on ad spend: revenue per spend DOLLAR, rounded to 2 places\n(2.5 = $2.50 back per $1). 0 when nothing was spent.",
+            "type": "number"
+          },
+          "source": {
+            "description": "Source names the analytics table the funnel was read from, so an operator can\nsee exactly what was counted. Set even when Available is false.",
+            "type": "string"
+          },
+          "spendCents": {
+            "description": "SpendCents is the campaign's total spend in CENTS: the sum of what each live\nchannel's provider reports. A channel whose spend could not be read\ncontributes 0 and says so on its own row.",
+            "type": "integer"
+          },
+          "start": {
+            "description": "Start is the window's inclusive start, RFC3339 UTC.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the campaign's lifecycle state at read time — draft, live, paused,\ncompleted or failed. A draft has never run, so its funnel is legitimately zero.",
+            "type": "string"
+          },
+          "visitors": {
+            "description": "Visitors is how many distinct people the campaign reached, counted by event\nidentity across ALL its events in the window — not a subset of Impressions, so\nit can exceed them for a campaign whose provider reports clicks but not views.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "campaignSummary": {
+        "properties": {
+          "budget": {
+            "description": "Budget is the sum of every campaign's budget, in CENTS.",
+            "type": "integer"
+          },
+          "campaigns": {
+            "description": "Campaigns is how many campaigns the org has, in any state.",
+            "type": "integer"
+          },
+          "channels": {
+            "description": "Channels are the channel kinds this deployment has an executor wired for.\nA kind absent here is a kind a launch will honestly record as unavailable.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "live": {
+            "description": "Live is how many of them are currently live.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "campaignUpdate": {
+        "properties": {
+          "audience": {
+            "type": "string"
+          },
+          "budget": {
+            "type": "integer"
+          },
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelSpec"
+            },
+            "type": "array"
+          },
+          "content": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the campaign to update, from the path.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scheduleAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "campaignWrite": {
+        "properties": {
+          "audience": {
+            "description": "Audience is the segment or audience selector this campaign targets.",
+            "type": "string"
+          },
+          "budget": {
+            "description": "Budget is the campaign's total budget in CENTS. Negative reads as 0.",
+            "type": "integer"
+          },
+          "channels": {
+            "description": "Channels are the fan-out targets, at most one per kind (paid, organic,\nemail) and at most 12. A channel's status and provider id are server-owned:\nwhatever the caller sends for them is replaced with \"pending\".",
+            "items": {
+              "$ref": "#/components/schemas/ChannelSpec"
+            },
+            "type": "array"
+          },
+          "content": {
+            "description": "Content is the ordered creative set. Content[0] is the active creative and\nthe rest are A/B variants; at most 32, empty entries dropped.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the campaign's display name. Required; trimmed and capped at 2048\ncharacters.",
+            "type": "string"
+          },
+          "scheduleAt": {
+            "description": "ScheduleAt is when the campaign should run, in unix seconds. Negative reads\nas 0 (immediately).",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "channelAdd": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider account this channel runs under: an ad-account, a\npage, or a mailing-list id.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the campaign to add the channel to, from the path.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the channel kind and the identity a campaign holds at most one of:\npaid, organic or email.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the provider within the kind — meta, google, x, instagram, or\nthe email provider.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}
