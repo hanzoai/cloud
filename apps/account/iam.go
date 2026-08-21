@@ -283,7 +283,7 @@ func (c *iamClient) mintUserKey(ctx context.Context, id, typ, scope string) (str
 	if scope != "" {
 		form.Set("scope", scope)
 	}
-	env, err := c.do(ctx, http.MethodPost, "/v1/iam/mint-user-keys", form, nil)
+	env, err := c.do(ctx, http.MethodPost, "/v1/iam/keys/mint", form, nil)
 	if err != nil {
 		return "", err
 	}
@@ -323,7 +323,7 @@ func prefixForType(typ string) string {
 // revokeUserKey clears the user's key of `typ` (immediate revoke; the gateway key
 // cache lapses within ~5m). Scoped by the same field the mint takes.
 func (c *iamClient) revokeUserKey(ctx context.Context, id, typ string) error {
-	_, err := c.do(ctx, http.MethodPost, "/v1/iam/revoke-user-keys", url.Values{"id": {id}, "type": {typ}}, nil)
+	_, err := c.do(ctx, http.MethodPost, "/v1/iam/keys/revoke", url.Values{"id": {id}, "type": {typ}}, nil)
 	return err
 }
 

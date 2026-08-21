@@ -24253,6 +24253,14 @@ components:
           description: Relation is the relation the question named, echoed for the
             same reason.
           type: string
+        truncated:
+          description: |-
+            Truncated says this pair holds more assertions than one read returns, so
+            the winner was decided from the most recent ceiling-full of them. It is
+            reported because a provenance plane that trims silently is a plane that
+            answers confidently and wrongly; narrow the question with as_of to see
+            what it dropped.
+          type: boolean
         winner:
           $ref: '#/components/schemas/wireFact'
           description: |-
@@ -31069,7 +31077,7 @@ components:
         id:
           description: |-
             ID is the node's own identifier within the org — the value
-            POST /v1/bot/nodes/{id}/invoke addresses it by.
+            POST /v1/node/{id}/invoke addresses it by.
           type: string
         platform:
           description: Platform is the operating system and architecture the node
@@ -59028,7 +59036,7 @@ paths:
       tags:
       - admission
       x-app: admission
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/ads/campaigns:
     get:
@@ -68766,93 +68774,6 @@ paths:
       x-app: books
       x-public: true
       x-tool: true
-  /v1/bot/connect:
-    get:
-      description: |-
-        Upgrades to a WebSocket and keeps it for the life of the node. cloud writes a challenge frame immediately; the node answers with a connect frame naming the protocol range it speaks, the role `node`, its own node id, and the display name, platform, agent version, capabilities and commands it reports for itself. On acceptance the session is registered, the node appears in this org's node list, and invocations begin arriving as frames on the same connection.
-
-        The upgrade needs a validated principal and answers 403 without one. The org is the gateway's verdict — injected after IAM validation and after any client copy is stripped — and is never read from the request itself, because a caller that could name an org could attach a machine into someone else's tenant.
-
-        A request carrying an Origin header is refused outright. A node is a daemon and a browser has no business here; since no same-origin policy applies to WebSockets, a page could otherwise ride a signed-in viewer's session into registering a node. Removing the whole category is the gate, not an allowlist of brand domains. The handshake deadline is one fixed instant rather than a per-read timer, so a peer cannot hold a pre-handshake socket open indefinitely by sending frames this endpoint ignores.
-
-        Two things to get right. Everything the node declares about itself — capabilities, commands, platform — is a SELF-REPORT: it is useful to show and never load-bearing, because what the node may actually be asked to run is decided at this socket against the deployment's allowlist. And a node can only ever answer calls placed on its own connection: correlation ids are minted under the connection id and checked against it, so naming another node's in-flight call resolves nothing.
-      operationId: get_bot_connect
-      summary: The socket a bot node dials and holds open to become invokable.
-      tags:
-      - bot
-      x-app: bot
-      x-public: true
-  /v1/bot/nodes:
-    get:
-      description: |-
-        Returns the caller org's currently connected bot nodes: what each one
-        calls itself, the platform it runs on, its agent version, when its socket was
-        established, and the capabilities and commands it reported.
-
-        Only this org's nodes are listed — the org is half of every key in the table it
-        reads — and only nodes attached to THIS replica, because the list is of live
-        sockets rather than of registrations. The capability and command lists are the
-        node's own self-report: useful to show, never load-bearing, because what a node
-        may actually be asked to do is decided at the socket against the deployment's
-        allowlist.
-      operationId: get_bot_nodes
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/nodesView'
-          description: ok
-      summary: 'Returns the caller org''s currently connected bot nodes: what each
-        one calls itself, the platform it runs on, its agent version, when its socket
-        was established, and the capabilities and commands it reported.'
-      tags:
-      - bot
-      x-app: bot
-      x-public: true
-      x-tool: true
-  /v1/bot/nodes/{id}/invoke:
-    post:
-      description: |-
-        Sends {command, params, timeoutMs, idempotencyKey} to the named node and answers with what the node returned: {ok, payload, code, message}, where payload is the node's own JSON passed through — cloud routes the call, it does not interpret the result. A reply that is not valid JSON becomes an empty payload rather than corrupting the response, which ok and code already qualify.
-
-        Neither the node nor the org is a body field: the node is the path and the org is the caller's validated identity, and a field for either would be a field somebody could set to a stranger's. A validated principal is required (403 without one), and a node id that belongs to another org answers exactly like one that does not exist — not found — so this cannot be used to probe another tenant's fleet.
-
-        Authorization happened ONCE, at the socket, on the replica holding that node — the only place that knows what the node declared it can do. A node attached to a different replica is reached through the peer forward and is authorized by the same code with the same session in hand, so a local node and a forwarded one cannot get different answers. The timeout defaults to 30s and is clamped to 5 minutes, so one request can never pin a node's socket open indefinitely.
-
-        system.run is rewritten before dispatch: its approval control fields are re-derived from the approval record and whatever the caller claimed is discarded, because a caller that could pre-approve itself is the whole thing approvals exist to prevent. No approval registry is wired today, so an invocation CLAIMING an approval is refused while an ordinary one is unaffected.
-
-        The one thing to get right: a refusal is a 403 carrying a DOMAIN body — {error, code, reason} — not the flat error envelope the rest of cloud returns, and the same body comes back whether the pre-flight sanitize refused it or the node's own gate did. Switch on `code`. The remaining failures are ordinary statuses: the node not answering in time is 504, and a node that disconnected or could not be reached is 502.
-      operationId: post_bot_nodes_by_id_invoke
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: Ask one of your connected machines to run a command, and get its answer
-        back.
-      tags:
-      - bot
-      x-app: bot
-      x-public: true
-  /v1/bot/peer/invoke:
-    post:
-      description: |-
-        A machine hop, not a caller-facing route. A node's socket lands on one replica while invocations land on any, so the replica that took the request forwards it here to the one that actually holds the node, and returns that answer as its own.
-
-        It authenticates with the shared peer token, compared in constant time, and carries no user identity at all. That is why the org arrives IN THE BODY here: the forwarding replica already derived it from a gateway-validated header, so the value is a fact being relayed rather than a claim being made. On any caller-facing route the same field would be a cross-tenant invoke primitive.
-
-        It fails closed on its own configuration: with no peer token set, or a half-wired cluster that has presence but no way to forward, it serves 503 and forwards nothing — an unauthenticated endpoint that takes an org from a body is precisely the hole. A missing or wrong token is 403, and the forwarded body is bounded on read.
-
-        Two things to get right. Its refusals are text/plain rather than the JSON every zip error uses, so a client decoding them as JSON will fail on the error path only. And an invocation that RAN but was denied still answers 200 here, carrying a stable error token in the JSON body — no such node, timeout, node gone, denied, failed — which the calling replica maps back onto the status codes a caller sees. Authorization already ran on this replica at the socket and is deliberately not repeated.
-      operationId: post_bot_peer_invoke
-      summary: Replica-to-replica forward of one invocation to the pod holding the
-        node's socket.
-      tags:
-      - bot
-      x-app: bot
-      x-public: true
   /v1/bot/runs:
     get:
       description: |-
@@ -73424,22 +73345,22 @@ paths:
       x-public: true
   /v1/commerce/rates/entries:
     get:
-      description: Returns the authority rows as stored. Pass `?product=` to narrow
-        to a single surface, which is how an editor shows one product's prices rather
-        than all of them at once; omit it and you get everything. PLATFORM admin only
-        — this is cross-tenant pricing, and an org-level admin is refused 403 by the
-        handler itself, not merely by the route's middleware.
+      description: 'Returns the rate authority''s rows — the prices every metered
+        charge resolves against. Narrow with ?product= to show one surface at a time
+        rather than every rate at once. SuperAdmin only: a rate is cross-tenant money,
+        so the handler asks for the reserved admin org''s owner claim itself rather
+        than trusting the bundle''s token gate.'
       operationId: get_commerce_rates_entries
-      summary: Every rate in the authority, or one product's
+      summary: List what one unit of each metered thing costs
       tags:
       - commerce
       x-app: commerce
       x-public: true
     post:
-      description: |-
-        Creates a rate from the body and answers it at 201. Product and meter are BOTH required, and together they are the identity: a rate keyed on the metered thing alone would let one product's price overwrite another's for the same meter name. Missing either is 400, and a body whose derived slug is already taken is 409 rather than shadowing the row that holds it.
-
-        A rate created here is marked as an operator's, so a later import will not replace it — what a person entered outranks the document. PLATFORM admin only; an org-level admin is refused 403.
+      description: 'Creates one rate. Product AND meter are both required, because
+        together they are the identity: a rate keyed on the metered thing alone would
+        let one product''s price overwrite another''s under the same name. A slug
+        that already exists is refused rather than silently replaced. SuperAdmin only.'
       operationId: post_commerce_rates_entries
       summary: Add a rate
       tags:
@@ -73448,10 +73369,10 @@ paths:
       x-public: true
   /v1/commerce/rates/entries/{slug}:
     delete:
-      description: |-
-        Deletes the addressed rate and answers what it deleted. An unknown slug is 404.
-
-        ARCHIVING is usually what is wanted instead — set `status` to `archived` through PUT. A deleted row cannot price anything, including the past: an invoice that has to re-resolve its rate finds nothing to read, where an archived row is still there to answer for the charges it priced. PLATFORM admin only; an org-level admin is refused 403.
+      description: Deletes the row. ARCHIVING is usually what is wanted instead —
+        a deleted rate cannot price a historical charge, so a past invoice that has
+        to re-resolve its rate finds nothing to read. Reach for status=archived unless
+        the rate never priced anything. SuperAdmin only.
       operationId: delete_commerce_rates_entries_by_slug
       parameters:
       - in: path
@@ -73465,10 +73386,12 @@ paths:
       x-app: commerce
       x-public: true
     put:
-      description: |-
-        Applies the body over the addressed rate and answers the stored result. The slug comes from the path; an unknown one is 404.
-
-        The edit also MARKS the row as an operator's, and that mark is the whole contract with the importer: this price now outranks the document it came from, so a later import leaves the row alone. Without it a price set here would apply, work, and silently revert the next time the document was loaded. Only the editable fields move — identity and bookkeeping are not writable from a request body. PLATFORM admin only; an org-level admin is refused 403.
+      description: 'Edits one rate and MARKS it edited, which is the whole contract
+        with the importer: an operator''s price outranks the document it came from,
+        so a later import leaves this row alone. Without that mark a price set here
+        would apply, work, and silently revert on the next import. Only the editable
+        fields move; identity and bookkeeping are not writable from the body. SuperAdmin
+        only.'
       operationId: put_commerce_rates_entries_by_slug
       parameters:
       - in: path
@@ -73476,21 +73399,24 @@ paths:
         required: true
         schema:
           type: string
-      summary: Edit a rate, and protect it from the next import
+      summary: Edit a rate, and mark it as operator-set
       tags:
       - commerce
       x-app: commerce
       x-public: true
   /v1/commerce/rates/import:
     post:
-      description: |-
-        Takes an ARRAY of rates and loads them in one call — how hundreds of published prices reach the authority without any of them being compiled into a binary, which is what used to make a price change wait for a build. An empty array, or a body that is not an array, is 400.
-
-        It reconciles: a row that already matches is left alone, a row that has drifted is corrected, and a row an operator has edited is SKIPPED. So importing the same document twice does nothing the second time, and importing a corrected one moves exactly the rows that changed. The answer counts all four outcomes — received, created, corrected and unchanged — so an import that changes nothing reads as 'nothing to do' rather than as a failure.
-
-        Because the reconcile is idempotent, an import that fails partway is safe to rerun. PLATFORM admin only; an org-level admin is refused 403.
+      description: 'Takes an array of rates and seeds the authority from it. This
+        is the seed, driven from admin rather than compiled in, because 506 published
+        prices in an embed made a price change wait for a build. It RECONCILES: a
+        row that matches is left alone, a row that has drifted is corrected, and a
+        row an operator edited is skipped — so importing the same document twice is
+        a no-op and importing a corrected one moves exactly the rows that changed.
+        Answers what it received, created, corrected and left unchanged, so an import
+        that changes nothing reads as nothing to do rather than as a failure. An empty
+        array is refused 400. SuperAdmin only.'
       operationId: post_commerce_rates_import
-      summary: Load a whole rate document, reconciling rather than replacing
+      summary: Load the published price document, reconciling rather than replacing
       tags:
       - commerce
       x-app: commerce
@@ -80216,19 +80142,6 @@ paths:
       x-app: domain
       x-public: true
       x-tool: true
-  /v1/embed:
-    post:
-      description: |-
-        Handles POST /v1/embed — the multipart upload hanzo.chat's
-        uploadVectors() sends. It saves the upload to a temp file, then reuses
-        object.RagEmbedFile (same parse+chunk+index as the native surface).
-      operationId: post_embed
-      summary: Handles POST /v1/embed — the multipart upload hanzo.chat's uploadVectors()
-        sends.
-      tags:
-      - ai
-      x-app: ai
-      x-public: true
   /v1/embeddings:
     post:
       description: |-
@@ -98929,6 +98842,93 @@ paths:
       x-app: network
       x-public: true
       x-tool: true
+  /v1/node:
+    get:
+      description: |-
+        Returns the caller org's currently connected bot nodes: what each one
+        calls itself, the platform it runs on, its agent version, when its socket was
+        established, and the capabilities and commands it reported.
+
+        Only this org's nodes are listed — the org is half of every key in the table it
+        reads — and only nodes attached to THIS replica, because the list is of live
+        sockets rather than of registrations. The capability and command lists are the
+        node's own self-report: useful to show, never load-bearing, because what a node
+        may actually be asked to do is decided at the socket against the deployment's
+        allowlist.
+      operationId: get_node
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/nodesView'
+          description: ok
+      summary: 'Returns the caller org''s currently connected bot nodes: what each
+        one calls itself, the platform it runs on, its agent version, when its socket
+        was established, and the capabilities and commands it reported.'
+      tags:
+      - bot
+      x-app: bot
+      x-public: true
+      x-tool: true
+  /v1/node/{id}/invoke:
+    post:
+      description: |-
+        Sends {command, params, timeoutMs, idempotencyKey} to the named node and answers with what the node returned: {ok, payload, code, message}, where payload is the node's own JSON passed through — cloud routes the call, it does not interpret the result. A reply that is not valid JSON becomes an empty payload rather than corrupting the response, which ok and code already qualify.
+
+        Neither the node nor the org is a body field: the node is the path and the org is the caller's validated identity, and a field for either would be a field somebody could set to a stranger's. A validated principal is required (403 without one), and a node id that belongs to another org answers exactly like one that does not exist — not found — so this cannot be used to probe another tenant's fleet.
+
+        Authorization happened ONCE, at the socket, on the replica holding that node — the only place that knows what the node declared it can do. A node attached to a different replica is reached through the peer forward and is authorized by the same code with the same session in hand, so a local node and a forwarded one cannot get different answers. The timeout defaults to 30s and is clamped to 5 minutes, so one request can never pin a node's socket open indefinitely.
+
+        system.run is rewritten before dispatch: its approval control fields are re-derived from the approval record and whatever the caller claimed is discarded, because a caller that could pre-approve itself is the whole thing approvals exist to prevent. No approval registry is wired today, so an invocation CLAIMING an approval is refused while an ordinary one is unaffected.
+
+        The one thing to get right: a refusal is a 403 carrying a DOMAIN body — {error, code, reason} — not the flat error envelope the rest of cloud returns, and the same body comes back whether the pre-flight sanitize refused it or the node's own gate did. Switch on `code`. The remaining failures are ordinary statuses: the node not answering in time is 504, and a node that disconnected or could not be reached is 502.
+      operationId: post_node_by_id_invoke
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Ask one of your connected machines to run a command, and get its answer
+        back.
+      tags:
+      - bot
+      x-app: bot
+      x-public: true
+  /v1/node/connect:
+    get:
+      description: |-
+        Upgrades to a WebSocket and keeps it for the life of the node. cloud writes a challenge frame immediately; the node answers with a connect frame naming the protocol range it speaks, the role `node`, its own node id, and the display name, platform, agent version, capabilities and commands it reports for itself. On acceptance the session is registered, the node appears in this org's node list, and invocations begin arriving as frames on the same connection.
+
+        The upgrade needs a validated principal and answers 403 without one. The org is the gateway's verdict — injected after IAM validation and after any client copy is stripped — and is never read from the request itself, because a caller that could name an org could attach a machine into someone else's tenant.
+
+        A request carrying an Origin header is refused outright. A node is a daemon and a browser has no business here; since no same-origin policy applies to WebSockets, a page could otherwise ride a signed-in viewer's session into registering a node. Removing the whole category is the gate, not an allowlist of brand domains. The handshake deadline is one fixed instant rather than a per-read timer, so a peer cannot hold a pre-handshake socket open indefinitely by sending frames this endpoint ignores.
+
+        Two things to get right. Everything the node declares about itself — capabilities, commands, platform — is a SELF-REPORT: it is useful to show and never load-bearing, because what the node may actually be asked to run is decided at this socket against the deployment's allowlist. And a node can only ever answer calls placed on its own connection: correlation ids are minted under the connection id and checked against it, so naming another node's in-flight call resolves nothing.
+      operationId: get_node_connect
+      summary: The socket a bot node dials and holds open to become invokable.
+      tags:
+      - bot
+      x-app: bot
+      x-public: true
+  /v1/node/peer/invoke:
+    post:
+      description: |-
+        A machine hop, not a caller-facing route. A node's socket lands on one replica while invocations land on any, so the replica that took the request forwards it here to the one that actually holds the node, and returns that answer as its own.
+
+        It authenticates with the shared peer token, compared in constant time, and carries no user identity at all. That is why the org arrives IN THE BODY here: the forwarding replica already derived it from a gateway-validated header, so the value is a fact being relayed rather than a claim being made. On any caller-facing route the same field would be a cross-tenant invoke primitive.
+
+        It fails closed on its own configuration: with no peer token set, or a half-wired cluster that has presence but no way to forward, it serves 503 and forwards nothing — an unauthenticated endpoint that takes an org from a body is precisely the hole. A missing or wrong token is 403, and the forwarded body is bounded on read.
+
+        Two things to get right. Its refusals are text/plain rather than the JSON every zip error uses, so a client decoding them as JSON will fail on the error path only. And an invocation that RAN but was denied still answers 200 here, carrying a stable error token in the JSON body — no such node, timeout, node gone, denied, failed — which the calling replica maps back onto the status codes a caller sees. Authorization already ran on this replica at the socket and is deliberately not repeated.
+      operationId: post_node_peer_invoke
+      summary: Replica-to-replica forward of one invocation to the pod holding the
+        node's socket.
+      tags:
+      - bot
+      x-app: bot
+      x-public: true
   /v1/notify/health:
     get:
       description: |-
@@ -111417,26 +111417,6 @@ paths:
       x-app: plan
       x-public: true
       x-tool: true
-  /v1/plan/cloud:
-    get:
-      description: |-
-        Returns the cloud plan catalog. It is the same section
-        ListCloudPlans answers and a separate operation because it is a separate
-        address, and an address is what every projection keys on.
-      operationId: get_plan_cloud
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/planList'
-          description: ok
-      summary: Returns the cloud plan catalog.
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
   /v1/plan/dns:
     get:
       description: |-
@@ -114655,6 +114635,27 @@ paths:
       x-app: projects
       x-public: true
       x-tool: true
+  /v1/projects/{slug}/shot:
+    get:
+      description: 'Returns a screenshot of what this project currently serves, as
+        image/png. The capture is keyed by the deployment, so a redeploy invalidates
+        it by construction rather than by anyone remembering to clear a cache. A project
+        with nothing deployed answers 404 — that is a 404 about the PICTURE and not
+        about the project, which is still right there in the list. Scoped to the caller''s
+        org: a validated principal is required, and a slug belonging to another org
+        is not found rather than forbidden.'
+      operationId: get_projects_by_slug_shot
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      summary: Get a PNG of the project's live site
+      tags:
+      - projects
+      x-app: projects
+      x-public: true
   /v1/projects/edge:
     get:
       description: |-
@@ -116419,7 +116420,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
     post:
       description: |-
@@ -116453,7 +116454,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/research/artifacts/{sha256}:
     get:
@@ -116478,7 +116479,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
   /v1/research/experiments:
     get:
       description: |-
@@ -116515,7 +116516,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
     post:
       description: |-
@@ -116556,7 +116557,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/research/grants:
     post:
@@ -116592,7 +116593,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/research/projects:
     get:
@@ -116614,7 +116615,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/research/totals:
     get:
@@ -116643,7 +116644,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/responses:
     post:

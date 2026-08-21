@@ -7,19 +7,6 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/bot/nodes", zip.Doc{
-		Description: "Returns the caller org's currently connected bot nodes: what each one\ncalls itself, the platform it runs on, its agent version, when its socket was\nestablished, and the capabilities and commands it reported.\n\nOnly this org's nodes are listed — the org is half of every key in the table it\nreads — and only nodes attached to THIS replica, because the list is of live\nsockets rather than of registrations. The capability and command lists are the\nnode's own self-report: useful to show, never load-bearing, because what a node\nmay actually be asked to do is decided at the socket against the deployment's\nallowlist.",
-		Fields: map[string]string{
-			"nodeView.caps":        "Caps is the capability list the node reported. It is a self-report, useful\nto SHOW and never load-bearing: what a node may actually be asked to do is\ndecided at the socket by the deployment's allowlist.",
-			"nodeView.commands":    "Commands is the command list the node reported. Same standing as Caps: a\nself-report, checked again at the socket before anything runs.",
-			"nodeView.connectedAt": "ConnectedAt is when this node's socket was established, RFC3339 UTC.",
-			"nodeView.displayName": "DisplayName is the human name the node reported for itself.",
-			"nodeView.id":          "ID is the node's own identifier within the org — the value\nPOST /v1/bot/nodes/{id}/invoke addresses it by.",
-			"nodeView.platform":    "Platform is the operating system and architecture the node reported.",
-			"nodeView.version":     "Version is the node agent's own version string.",
-			"nodesView.nodes":      "Nodes is every node of the caller's org with a live socket to THIS replica,\nordered by id. A node connected to a different replica is not in it.",
-		},
-	})
 	zip.Describe("GET /v1/bot/runs", zip.Doc{
 		Description: "List returns the caller org's live bot runs, read from the bot runtime and projected\ninto the console contract with each run's live session URL derived here.\n\nThe org is ALWAYS the validated principal's org, NEVER a request field, and it is\nwhat scopes the runtime's answer — so one tenant can never enumerate another's\nruns. A runtime that cannot answer is an error, not an empty list: [] would tell\nthe caller \"your org has no runs\", which is a different claim from \"we could not\nask\", and the difference is the whole reason this endpoint exists.",
 		Fields: map[string]string{
@@ -30,6 +17,19 @@ func init() {
 			"BotRun.surface":    "Surface is what the bot drives: the desktop or terminal sandbox it runs in.",
 			"BotRun.task":       "Task is the instruction the bot is executing.",
 			"BotRuns.bots":      "Bots is the org's live runs. Always an array, never null.",
+		},
+	})
+	zip.Describe("GET /v1/node", zip.Doc{
+		Description: "Returns the caller org's currently connected bot nodes: what each one\ncalls itself, the platform it runs on, its agent version, when its socket was\nestablished, and the capabilities and commands it reported.\n\nOnly this org's nodes are listed — the org is half of every key in the table it\nreads — and only nodes attached to THIS replica, because the list is of live\nsockets rather than of registrations. The capability and command lists are the\nnode's own self-report: useful to show, never load-bearing, because what a node\nmay actually be asked to do is decided at the socket against the deployment's\nallowlist.",
+		Fields: map[string]string{
+			"nodeView.caps":        "Caps is the capability list the node reported. It is a self-report, useful\nto SHOW and never load-bearing: what a node may actually be asked to do is\ndecided at the socket by the deployment's allowlist.",
+			"nodeView.commands":    "Commands is the command list the node reported. Same standing as Caps: a\nself-report, checked again at the socket before anything runs.",
+			"nodeView.connectedAt": "ConnectedAt is when this node's socket was established, RFC3339 UTC.",
+			"nodeView.displayName": "DisplayName is the human name the node reported for itself.",
+			"nodeView.id":          "ID is the node's own identifier within the org — the value\nPOST /v1/node/{id}/invoke addresses it by.",
+			"nodeView.platform":    "Platform is the operating system and architecture the node reported.",
+			"nodeView.version":     "Version is the node agent's own version string.",
+			"nodesView.nodes":      "Nodes is every node of the caller's org with a live socket to THIS replica,\nordered by id. A node connected to a different replica is not in it.",
 		},
 	})
 	zip.Describe("POST /v1/bot/runs", zip.Doc{

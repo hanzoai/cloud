@@ -31,6 +31,37 @@
 # must hash to the line already committed, or the build fails loudly.
 set -euo pipefail
 
+# ASK THE IDENTITY PROVIDER, AND ASK IT FIRST. The forge signs people in through Hanzo
+# IAM and reads that same identity as a git credential, so a run already holding a client
+# credential needs no second, longer-lived secret kept somewhere for this.
+#
+# First rather than as a fallback, because the per-job token is not the narrower choice
+# here — it is the one that cannot see the repositories. Measured on run 95627: asking as
+# the per-job token, twenty-six private modules answer 404 (account, ai, commerce, orm,
+# namespace, types, zen and the rest), every one falls through to GitHub, and a hundred
+# and eight packages resolve to no source. A private repository and a missing one deny
+# identically, so that 404 is the token and not the address.
+#
+# Minted per run, scoped by RFC 8707 `resource` to this forge alone, masked, and never
+# stored: it names hanzo-git, the forge reads only tokens that do, and it is a credential
+# nowhere else. The per-job token stays behind it, so a deployment issuing a useful one is
+# unaffected.
+if [ -n "${IAM_CLIENT_ID:-}" ] && [ -n "${IAM_CLIENT_SECRET:-}" ]; then
+  # client_secret_basic, per HIP-0111, the same exchange the reviewer already makes.
+  IAM_TOKEN=$(curl -sS --max-time 20 "${IAM_ISSUER:-https://hanzo.id}/v1/iam/oauth/token" \
+    -u "${IAM_CLIENT_ID}:${IAM_CLIENT_SECRET}" \
+    -d 'grant_type=client_credentials' \
+    -d "resource=${FORGE_AUDIENCE:-hanzo-git}" 2>/dev/null \
+    | jq -r '.access_token // empty' 2>/dev/null || true)
+  if [ -n "${IAM_TOKEN:-}" ]; then
+    echo "::add-mask::${IAM_TOKEN}"
+    GIT_TOKEN=$IAM_TOKEN
+    echo "forge-rewrites: asking as the IAM identity, scoped to ${FORGE_AUDIENCE:-hanzo-git}"
+  else
+    echo "forge-rewrites: IAM minted no token — asking as the per-job token instead"
+  fi
+fi
+
 [ -n "${GIT_TOKEN:-}" ] || { echo "forge-rewrites: no GIT_TOKEN — every module stays on GitHub"; exit 0; }
 
 mods=$(sed -nE 's|^[[:space:]]+github\.com/hanzoai/([A-Za-z0-9._-]+) .*|\1|p' go.mod | sort -u)
@@ -39,7 +70,7 @@ mods=$(sed -nE 's|^[[:space:]]+github\.com/hanzoai/([A-Za-z0-9._-]+) .*|\1|p' go
 on=""; off=""
 for m in $mods; do
   code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
-    -H "Authorization: token ${GIT_TOKEN}" \
+    -u "x:${GIT_TOKEN}" \
     "https://git.hanzo.ai/v1/repos/hanzoai/${m}" 2>/dev/null || echo 000)
   if [ "$code" = "200" ]; then
     git config --global "url.https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/${m}.insteadOf" \

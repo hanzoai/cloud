@@ -104,7 +104,7 @@ func TestAbuseGate_TheScorerIsAskedAboutTheCallerNotTheHeader(t *testing.T) {
 	})
 	app, _ := abuseApp(t, edge.ModeLive)
 	abuseHit(app, "GET", "/v1/models", "", "junk-a", "203.0.113.210")
-	abuseHit(app, "POST", "/v1/iam/mint-user-keys", "", "junk-b", "203.0.113.210")
+	abuseHit(app, "POST", "/v1/iam/keys/mint", "", "junk-b", "203.0.113.210")
 
 	if len(subjects) < 2 {
 		t.Fatalf("the scorer was asked %d times, want at least 2", len(subjects))
@@ -149,7 +149,7 @@ func TestAbuseGate_AnUnmeasuredCallerIsNotScreenedAsNew(t *testing.T) {
 	// A privileged grant is still screened: that branch protects the grant, not
 	// the sensor.
 	before = asked
-	abuseHit(app, "POST", "/v1/iam/mint-user-keys", "", "", "198.51.200.1")
+	abuseHit(app, "POST", "/v1/iam/keys/mint", "", "", "198.51.200.1")
 	if asked == before {
 		t.Fatal("a privileged grant must be screened even when the sensor is saturated")
 	}
