@@ -14687,6 +14687,73 @@ components:
           description: Summary is the one line describing what the category groups.
           type: string
       type: object
+    centre:
+      properties:
+        controls:
+          description: |-
+            Controls is the control inventory, each entry naming what it asserts, the
+            mechanism, where it is enforced, how it is verified and the clauses it maps
+            to.
+          items: {}
+          type: array
+        coverage:
+          description: |-
+            Coverage is the per-framework counts, computed from Controls against each
+            framework's whole published clause list.
+          items:
+            $ref: '#/components/schemas/coverRow'
+          type: array
+        documents:
+          description: Documents are the artifacts, each saying whether this reader
+            may read it.
+          items:
+            $ref: '#/components/schemas/docRow'
+          type: array
+        faq:
+          description: Faq is the knowledge base — the questions a reviewer asks,
+            answered.
+          items: {}
+          type: array
+        frameworks:
+          description: Frameworks are the clause universes the coverage is computed
+            against.
+          items:
+            $ref: '#/components/schemas/frameworkRow'
+          type: array
+        generated:
+          description: Generated is when this answer was computed, unix milliseconds.
+          type: integer
+        inventory:
+          $ref: '#/components/schemas/trustTally'
+          description: Inventory is how the controls themselves stand, independent
+            of framework.
+        org:
+          description: Org is whose centre this is.
+          type: string
+        policies:
+          description: Policies are the published policies.
+          items: {}
+          type: array
+        profile:
+          description: Profile is the organization's own description of itself.
+        risk:
+          description: |-
+            Risk is the risk profile — label and value pairs describing what this
+            organization handles and how.
+        subprocessors:
+          description: Subprocessors are the third parties this organization sends
+            data to.
+          items: {}
+          type: array
+        updates:
+          description: Updates is the changelog, newest as the organization ordered
+            it.
+          items: {}
+          type: array
+        version:
+          description: Version is the embedded inventory's version.
+          type: string
+      type: object
     chainList:
       properties:
         chains:
@@ -14989,6 +15056,88 @@ components:
         total:
           description: Total is how many rows Data holds.
           type: integer
+      type: object
+    clauseCoverage:
+      properties:
+        automated:
+          description: |-
+            Automated is how many clauses have an automated control behind them that
+            something can fail on behalf of.
+          type: integer
+        clauses:
+          description: Clauses is every clause the standard publishes, with what stands
+            behind it.
+          items:
+            $ref: '#/components/schemas/clauseRow'
+          type: array
+        edition:
+          description: Edition is which edition this clause list is taken from.
+          type: string
+        framework:
+          description: Framework is the framework id — "soc2", "iso27001", "nist80053".
+          type: string
+        generated:
+          description: Generated is when this was computed, unix milliseconds.
+          type: integer
+        name:
+          description: Name is the published standard's name.
+          type: string
+        none:
+          description: None is how many have nothing behind them.
+          type: integer
+        note:
+          description: |-
+            Note is what this clause list is scoped to, when a count alone would
+            misrepresent it.
+          type: string
+        partial:
+          description: Partial is how many are answered in part.
+          type: integer
+        publisher:
+          description: Publisher is who publishes it — AICPA, ISO/IEC, NIST.
+          type: string
+        statement:
+          description: Statement is the counts as one sentence, carrying the unit.
+          type: string
+        total:
+          description: Total is the framework's WHOLE published clause list — the
+            denominator.
+          type: integer
+        unit:
+          description: Unit is what ONE clause is — "criterion", "control", "family".
+          type: string
+        units:
+          description: Units is the plural of Unit, for rendering a sentence.
+          type: string
+        version:
+          description: Version is the embedded inventory's version.
+          type: string
+      type: object
+    clauseRow:
+      properties:
+        controls:
+          description: |-
+            Controls are the ids behind it, strongest first. Empty when nothing covers
+            it — and an absent control is never listed here, however it maps.
+          items:
+            type: string
+          type: array
+        group:
+          description: Group is the clause's section within the standard, when it
+            has one.
+          type: string
+        id:
+          description: ID is the clause id as the standard publishes it — "CC6.1",
+            "A.5.15", "AC".
+          type: string
+        level:
+          description: |-
+            Level is what the strongest control pointed at this clause is worth:
+            "automated", "partial" or "none".
+          type: string
+        title:
+          description: Title is the standard's own words for that clause.
+          type: string
       type: object
     clickCount:
       properties:
@@ -15764,6 +15913,39 @@ components:
             this page, or the cursor sent in when the page is empty.
           type: integer
       type: object
+    controlList:
+      properties:
+        absent:
+          description: |-
+            Absent is how many the organization does not have. Each still names the
+            clause it would satisfy, and none of them moves a coverage number.
+          type: integer
+        automated:
+          description: Automated is how many run with nobody in the loop.
+          type: integer
+        controls:
+          description: Controls is every control, opaque because the organization
+            owns its shape.
+          items: {}
+          type: array
+        partial:
+          description: Partial is how many run but do not cover their whole claim.
+          type: integer
+        statement:
+          description: Statement is the counts as one sentence, safe to quote.
+          type: string
+        total:
+          description: Total is how many controls this organization publishes.
+          type: integer
+        unverified:
+          description: |-
+            Unverified is how many rest on somebody having read the source rather than
+            on a test or an audit row.
+          type: integer
+        version:
+          description: Version is the embedded inventory's version.
+          type: string
+      type: object
     cookieAck:
       properties:
         result:
@@ -15796,6 +15978,56 @@ components:
           items:
             $ref: '#/components/schemas/pointView'
           type: array
+      type: object
+    coverRow:
+      properties:
+        automated:
+          description: |-
+            Automated is how many clauses have an automated control behind them that
+            something can fail on behalf of.
+          type: integer
+        edition:
+          description: Edition is which edition the clause list is taken from.
+          type: string
+        framework:
+          description: Framework is the framework id — "soc2", "iso27001", "nist80053".
+          type: string
+        name:
+          description: Name is the published standard's name.
+          type: string
+        none:
+          description: |-
+            None is how many have nothing behind them. It stays visible rather than
+            dropping out of the fraction.
+          type: integer
+        note:
+          description: |-
+            Note is what the clause list itself is scoped to, when the framework's
+            catalog says something a count alone would misrepresent.
+          type: string
+        partial:
+          description: Partial is how many are answered in part.
+          type: integer
+        publisher:
+          description: Publisher is who publishes it — AICPA, ISO/IEC, NIST.
+          type: string
+        statement:
+          description: Statement is the counts as one sentence, carrying the unit.
+          type: string
+        total:
+          description: |-
+            Total is the framework's WHOLE published clause list — the denominator.
+            Counting only the clauses some control happened to name would report 100%
+            every time.
+          type: integer
+        unit:
+          description: |-
+            Unit is what ONE clause is — "criterion", "control", "family". A count
+            without its unit is not a fact, so it travels with every number here.
+          type: string
+        units:
+          description: Units is the plural of Unit, for rendering a sentence.
+          type: string
       type: object
     crawlDocument:
       properties:
@@ -17183,6 +17415,49 @@ components:
             row are gone.
           type: boolean
       type: object
+    docRow:
+      properties:
+        attested:
+          description: |-
+            Attested reports whether somebody OUTSIDE this organization put their name
+            to it. Those are the artifacts a reviewer asks for, and they are released
+            through a grant rather than published — there is no field that can say
+            otherwise.
+          type: boolean
+        href:
+          description: Href is where to read it, present only when this reader may.
+          type: string
+        id:
+          description: ID is the document's id within this organization's centre.
+          type: string
+        kind:
+          description: |-
+            Kind is the artifact type — soc2, iso, pentest, letter, caiq, sig, vsa,
+            questionnaire, policy or other.
+          type: string
+        label:
+          description: Label is the artifact type in words, for rendering.
+          type: string
+        note:
+          description: Note is anything the organization says about this artifact.
+          type: string
+        released:
+          description: |-
+            Released reports whether THIS reader may read it. False means the artifact
+            exists and is available on request.
+          type: boolean
+        tier:
+          description: |-
+            Tier is "public" or "gated". It defaults to gated, so a new artifact is
+            closed until somebody opens it deliberately.
+          type: string
+        title:
+          description: Title is what the document is called.
+          type: string
+        updated:
+          description: Updated is when the record last changed, unix milliseconds.
+          type: integer
+      type: object
     docTypeList:
       properties:
         data:
@@ -17369,6 +17644,19 @@ components:
         yellow:
           description: Yellow is how many have drifted within tolerance.
           type: integer
+      type: object
+    dropped:
+      properties:
+        deleted:
+          description: Deleted is always true; a record that was not there is a 404
+            instead.
+          type: boolean
+        id:
+          description: ID is the record removed.
+          type: string
+        kind:
+          description: Kind is the section.
+          type: string
       type: object
     edgeState:
       properties:
@@ -18396,6 +18684,13 @@ components:
           description: Total is how many rows Data holds.
           type: integer
       type: object
+    faqList:
+      properties:
+        faq:
+          description: Faq is the questions and their answers.
+          items: {}
+          type: array
+      type: object
     fileContent:
       properties:
         content:
@@ -18803,6 +19098,38 @@ components:
           items:
             $ref: '#/components/schemas/Founder'
           type: array
+      type: object
+    frameworkList:
+      properties:
+        frameworks:
+          description: Frameworks is each framework and how many clauses it publishes.
+          items:
+            $ref: '#/components/schemas/frameworkRow'
+          type: array
+      type: object
+    frameworkRow:
+      properties:
+        edition:
+          description: Edition is which edition this clause list is taken from.
+          type: string
+        framework:
+          description: Framework is the framework id.
+          type: string
+        name:
+          description: Name is the published standard's name.
+          type: string
+        publisher:
+          description: Publisher is who publishes it.
+          type: string
+        total:
+          description: Total is how many clauses the standard publishes.
+          type: integer
+        unit:
+          description: Unit is what one clause is; Units is its plural.
+          type: string
+        units:
+          description: Units is the plural of Unit.
+          type: string
       type: object
     functionDetail:
       properties:
@@ -38997,6 +39324,13 @@ components:
           description: how many invocations fell in it — a real count, never interpolated
           type: integer
       type: object
+    policyList:
+      properties:
+        policies:
+          description: Policies is the list.
+          items: {}
+          type: array
+      type: object
     poolCreate:
       properties:
         autoScale:
@@ -44905,6 +45239,28 @@ components:
           description: Namespace is the group the mounting function belongs to.
           type: string
       type: object
+    sectionWrite:
+      properties:
+        data:
+          description: |-
+            Data is the record. What may be in it depends on the section, and every
+            section's required fields are validated: a control is held to the same rule
+            a committed one is, a subprocessor must say what it is for, an update must
+            carry the date it describes.
+        id:
+          description: |-
+            ID is the record's id. Omit it on a create and one is minted; the
+            single-valued sections (profile, risk) hold one record whatever is named.
+          type: string
+        kind:
+          description: Kind is the section being written. The URL is the authority.
+          type: string
+        ord:
+          description: |-
+            Ord orders this record within its section, ascending, ties broken by id.
+            It is the organization's own ordering — the page renders in it.
+          type: integer
+      type: object
     seoAuditIn:
       properties:
         url:
@@ -46380,6 +46736,15 @@ components:
       required:
       - files
       type: object
+    subprocessorList:
+      properties:
+        subprocessors:
+          description: |-
+            Subprocessors is the list, each naming at least what it is and what it is
+            for — a name alone says nothing.
+          items: {}
+          type: array
+      type: object
     subscribeReq:
       properties:
         channel:
@@ -47327,6 +47692,60 @@ components:
           description: what kind of trigger it is; HTTP is the only one today
           type: string
       type: object
+    trustCoverage:
+      properties:
+        controls:
+          $ref: '#/components/schemas/trustTally'
+          description: Controls is how the controls stand, independent of any framework.
+        frameworks:
+          description: Frameworks is the per-framework counts.
+          items:
+            $ref: '#/components/schemas/coverRow'
+          type: array
+        generated:
+          description: Generated is when this was computed, unix milliseconds.
+          type: integer
+        version:
+          description: Version is the embedded inventory's version.
+          type: string
+      type: object
+    trustDocuments:
+      properties:
+        documents:
+          description: Documents is the list; a gated entry carries no address.
+          items:
+            $ref: '#/components/schemas/docRow'
+          type: array
+      type: object
+    trustTally:
+      properties:
+        absent:
+          description: |-
+            Absent is how many the organization does not have. An absent control still
+            names the clause it would satisfy — that is a roadmap — but it never moves
+            a coverage number.
+          type: integer
+        automated:
+          description: Automated is how many run with nobody in the loop.
+          type: integer
+        partial:
+          description: |-
+            Partial is how many run but do not cover their whole claim. Each says what
+            is missing.
+          type: integer
+        statement:
+          description: Statement is the counts as one sentence, safe to quote.
+          type: string
+        total:
+          description: Total is how many controls this organization publishes.
+          type: integer
+        unverified:
+          description: |-
+            Unverified is how many rest on somebody having READ the source rather than
+            on a test or an audit row. Only a check that can FAIL counts as verified,
+            and coverage counts those one rung weaker than they claim to be.
+          type: integer
+      type: object
     unreconciledOut:
       properties:
         questions:
@@ -47444,6 +47863,13 @@ components:
             URL is the https:// address each matching event is POSTed to. Required,
             max 2048 bytes; http:// and every other scheme is refused.
           type: string
+      type: object
+    updateList:
+      properties:
+        updates:
+          description: Updates is the entries, each carrying the date it describes.
+          items: {}
+          type: array
       type: object
     upkeepIn:
       properties:
@@ -48186,6 +48612,20 @@ components:
             enumerated in a document at all. Empty for a wire that describes itself
             over its own protocol.
           type: string
+      type: object
+    written:
+      properties:
+        id:
+          description: |-
+            ID is the record's id — the one supplied, or the one minted when the
+            caller supplied none.
+          type: string
+        kind:
+          description: Kind is the section written.
+          type: string
+        updated:
+          description: Updated is when it was written, unix milliseconds.
+          type: integer
       type: object
     zapProcReq:
       properties:
@@ -109857,6 +110297,497 @@ paths:
       x-app: treasury
       x-public: true
       x-tool: true
+  /v1/trust:
+    get:
+      description: |-
+        Reads YOUR organization's whole trust centre, including the addresses of your
+        own gated documents. Same shape as the published door; the difference is that
+        this one is resolved from your validated bearer and shows you your own
+        artifacts.
+      operationId: get_trust
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/centre'
+          description: ok
+      summary: Reads YOUR organization's whole trust centre, including the addresses
+        of your own gated documents.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/{kind}/{id}:
+    delete:
+      description: |-
+        Removes one record from a section of your organization's trust centre. A
+        record that is not there is a 404, never a silent success. A control that
+        belongs to the deployment's own inventory is removed by a commit, not by a
+        request.
+      operationId: delete_trust_by_kind_by_id
+      parameters:
+      - description: |-
+          Kind is the section — profile, control, document, subprocessor, policy,
+          faq, update or risk. Anything else is not found. The URL is the authority:
+          a value here is bound from the path, which zip binds last.
+        example: faq
+        in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+      - description: |-
+          ID is the record's id within that section. The single-valued sections
+          (profile, risk) hold one record whatever id is named.
+        example: where-is-data-held
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dropped'
+          description: ok
+      summary: Removes one record from a section of your organization's trust centre.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Writes one record into a section of YOUR organization's trust centre —
+        profile, control, document, subprocessor, policy, faq, update or risk.
+
+        A control written here is held to exactly the rule a control committed to the
+        deployment's own inventory is held to, by the same validator: its prose may
+        not claim a certificate and may not name a framework (a framework belongs in
+        the mappings, where it arrives attached to a number), anything short of
+        automated must say what is missing, and a mapping to a clause no framework
+        declares is refused rather than scored as nothing.
+
+        A document defaults to GATED. An artifact an independent auditor signed — a
+        SOC 2 report, an ISO certificate, a penetration test, an auditor letter —
+        cannot be made public at all; it is released through a grant. A
+        self-assessment can, because the organization is the one attesting it.
+
+        The deployment's OWN control inventory is governed in git and is not writable
+        here: naming one of its ids is a conflict, not an overwrite.
+      operationId: put_trust_by_kind_by_id
+      parameters:
+      - description: Kind is the section being written. The URL is the authority.
+        example: subprocessor
+        in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+      - description: |-
+          ID is the record's id. Omit it on a create and one is minted; the
+          single-valued sections (profile, risk) hold one record whatever is named.
+        example: acme-cloud
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              data:
+                name: A cloud
+                purpose: Compute
+              id: acme-cloud
+              kind: subprocessor
+            schema:
+              $ref: '#/components/schemas/sectionWrite'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/written'
+          description: ok
+      summary: Writes one record into a section of YOUR organization's trust centre
+        — profile, control, document, subprocessor, policy, faq, update or risk.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/controls:
+    get:
+      description: |-
+        Lists every control your organization publishes, with the counts.
+
+        A control names what it asserts, the mechanism behind it, the repository and
+        file where that mechanism is enforced, how it is verified, and the framework
+        clauses it maps to. Status is automated, partial or absent — and an absent one
+        still names the clause it would satisfy, which is a roadmap, while never
+        moving a coverage number.
+      operationId: get_trust_controls
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/controlList'
+          description: ok
+      summary: Lists every control your organization publishes, with the counts.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/controls/{id}:
+    get:
+      description: Reads one control by id.
+      operationId: get_trust_controls_by_id
+      parameters:
+      - description: ID is the control's id, dotted lowercase — "iam.pkce.s256".
+        example: iam.pkce.s256
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Reads one control by id.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/coverage:
+    get:
+      description: |-
+        Reads coverage: per framework, how many clauses have an automated control
+        behind them, how many are partial, and how many have none — each carrying the
+        unit it is counted in, because "12 of 20" is not a fact until you know what
+        the 20 are.
+
+        Nothing here is a verdict. There is no boolean, and a control that only a
+        person has read counts one rung weaker than it claims to be, because only a
+        check that can FAIL is evidence.
+      operationId: get_trust_coverage
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustCoverage'
+          description: ok
+      summary: 'Reads coverage: per framework, how many clauses have an automated
+        control behind them, how many are partial, and how many have none — each carrying
+        the unit it is counted in, because "12 of 20" is not a fact until you know
+        what the 20 are.'
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/coverage/{framework}:
+    get:
+      description: |-
+        Reads one framework clause by clause: every clause the standard publishes,
+        what covers it, and which controls stand behind it — so a coverage number can
+        be checked line by line rather than taken on trust.
+      operationId: get_trust_coverage_by_framework
+      parameters:
+      - description: Framework is the framework id — "soc2", "iso27001", "nist80053".
+        example: soc2
+        in: path
+        name: framework
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/clauseCoverage'
+          description: ok
+      summary: 'Reads one framework clause by clause: every clause the standard publishes,
+        what covers it, and which controls stand behind it — so a coverage number
+        can be checked line by line rather than taken on trust.'
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/documents:
+    get:
+      description: |-
+        Lists your organization's documents. Because this is your own centre, a gated
+        artifact carries its address here; through the published door it does not.
+      operationId: get_trust_documents
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustDocuments'
+          description: ok
+      summary: Lists your organization's documents.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/evidence:
+    get:
+      description: |-
+        Reads the audit rows that stand behind one control, over a window.
+
+        The inventory decides what evidences what: a control names the audit actions
+        that are its trail, and this resolves the control id to those actions and
+        reads them. So evidence cannot drift from the inventory, and it is scoped to
+        your own organization — the query carries no organization field for a caller
+        to fill in.
+
+        A control that nothing in the trail evidences says so plainly rather than
+        answering an empty page, because an empty page reads like a clean quarter. A
+        deployment with no audit store answers 501 and says the trail was not read,
+        for the same reason.
+      operationId: get_trust_evidence
+      parameters:
+      - description: Control is the control id whose trail to read. Required.
+        example: iam.refresh.rotation
+        in: query
+        name: control
+        required: false
+        schema:
+          type: string
+      - description: |-
+          From is the inclusive lower bound, an RFC 3339 date or instant
+          ("2026-01-01" or "2026-01-01T00:00:00Z"). Empty leaves it unbounded. A
+          malformed bound is refused rather than silently widening the window.
+        example: "2026-01-01"
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      - description: To is the upper bound, same form and same tolerance.
+        in: query
+        name: to
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps the rows returned, 1..1000, default 100. It is a string because
+          an unparseable value is refused rather than read as zero.
+        example: "50"
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Reads the audit rows that stand behind one control, over a window.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/faq:
+    get:
+      description: Lists your knowledge base — the questions a reviewer asks, answered
+        once.
+      operationId: get_trust_faq
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/faqList'
+          description: ok
+      summary: Lists your knowledge base — the questions a reviewer asks, answered
+        once.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/frameworks:
+    get:
+      description: |-
+        Lists the frameworks coverage is computed against, and how many clauses each
+        publishes. That count is the denominator of every coverage number, which is
+        what keeps an uncovered clause visible instead of dropping out of the
+        fraction.
+      operationId: get_trust_frameworks
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/frameworkList'
+          description: ok
+      summary: Lists the frameworks coverage is computed against, and how many clauses
+        each publishes.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/policies:
+    get:
+      description: Lists your organization's published policies.
+      operationId: get_trust_policies
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/policyList'
+          description: ok
+      summary: Lists your organization's published policies.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/profile:
+    get:
+      description: |-
+        Reads your organization's trust-centre profile — the name, tagline and
+        summary a visitor sees, whether the centre is published, and where to send
+        somebody who wants a gated document.
+      operationId: get_trust_profile
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Reads your organization's trust-centre profile — the name, tagline
+        and summary a visitor sees, whether the centre is published, and where to
+        send somebody who wants a gated document.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/published/{org}:
+    get:
+      description: |-
+        Reads a published trust centre — the whole thing in one answer: the
+        organization's profile, its control inventory, coverage computed against each
+        framework's whole published clause list, its documents, subprocessors,
+        policies, knowledge base, updates and risk profile.
+
+        This is the PUBLIC door and needs no credential, because a published trust
+        centre is a public document. It answers only for an organization that has
+        published one — an organization that has not is not found rather than empty,
+        since an empty centre and a centre nobody meant to show read the same and are
+        not the same thing.
+
+        A gated document appears here with its title, its type and its date and NO
+        address: the listing says the artifact exists and that reading it takes a
+        grant. Nothing an independent auditor signed is ever released through this
+        door.
+      operationId: get_trust_published_by_org
+      parameters:
+      - description: Org is the organization's slug — the name in its address.
+        example: hanzo
+        in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/centre'
+          description: ok
+      security: []
+      summary: 'Reads a published trust centre — the whole thing in one answer: the
+        organization''s profile, its control inventory, coverage computed against
+        each framework''s whole published clause list, its documents, subprocessors,
+        policies, knowledge base, updates and risk profile.'
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/risk:
+    get:
+      description: |-
+        Reads your risk profile — the label and value pairs describing what your
+        organization handles and how.
+      operationId: get_trust_risk
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Reads your risk profile — the label and value pairs describing what
+        your organization handles and how.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/subprocessors:
+    get:
+      description: |-
+        Lists the third parties your organization sends data to, each naming what it
+        is for.
+      operationId: get_trust_subprocessors
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/subprocessorList'
+          description: ok
+      summary: Lists the third parties your organization sends data to, each naming
+        what it is for.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/updates:
+    get:
+      description: Lists your trust-centre updates, newest as you ordered them.
+      operationId: get_trust_updates
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/updateList'
+          description: ok
+      summary: Lists your trust-centre updates, newest as you ordered them.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
   /v1/usage:
     post:
       description: |-
@@ -112818,6 +113749,10 @@ tags:
 - description: 'Package treasury is the reserve fund behind every payout: real capital,
     held and accounted for.'
   name: treasury
+- description: 'Package trust is your trust centre: the controls you publish, the
+    coverage they compute to, the documents a reviewer asks for, and who you send
+    data to.'
+  name: trust
 - description: Package usage is what your org ran and what it cost, broken down per
     account.
   name: usage
