@@ -1,7 +1,7 @@
 ---
 name: admin_roles
 version: "8.0.0"
-description: "Read admin roles: Lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.."
+description: "Read admin roles: Lists IAM roles for one owner org, forwarded VERBATIM from IAM's role list.."
 ---
 
 # Hanzo · ADMIN · roles
@@ -14,7 +14,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/admin/roles` — Lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.
+- `GET https://api.hanzo.ai/v1/admin/roles` — Lists IAM roles for one owner org, forwarded VERBATIM from IAM's role list.
 
 ## Parameters
 
