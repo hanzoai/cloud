@@ -341,4 +341,3 @@ func (s *recordingStore) writes() int {
 	defer s.mu.Unlock()
 	return s.puts
 }
-

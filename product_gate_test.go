@@ -93,6 +93,13 @@ var unextracted = []string{
 	"seo",
 	"settings", "share",
 	"sites",
+	// standing is the recurring cost of KEEPING a company — annual report,
+	// franchise tax, agent of record — as distinct from the one-off formation
+	// price apps/company charges. It imports only hanzoai/cloud and no
+	// hanzoai/standing exists to mount. The decision this pin owes leans to the
+	// second branch: it is the other half of company's own number, so it reads as
+	// cloud's machinery rather than a product with a daemon of its own.
+	"standing",
 	"sync",
 	// taxonomy is the product catalogue's own shape — the categories, tags and
 	// display order the console used to hold as a TypeScript array. It imports only
