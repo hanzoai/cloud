@@ -271,7 +271,23 @@ func init() {
 		Example: json.RawMessage(`{"listing":"com.stripe_mcp","authHeader":"Authorization","secret":"Bearer …"}`),
 	})
 	zip.Describe("POST /v1/tools/plugins/build", zip.Doc{
-		Description: "Builds, validates and stores one plugin for the caller's org.\n\nUNTYPED BY DESIGN — see untypedByDesign in typed_wire_test.go, which holds this\nroute as a closed-list entry. A failed build answers 422 carrying the BUILD\nDIAGNOSTICS as a domain body (the bundler's error, the source that failed, and\nwhether the model wrote it), which is the only reason a caller can fix the\nplugin. A typed op can refuse only by RETURNING an error, and zip renders that\nas the flat HTTPError {status, code, error} — there is nowhere in it for the\nsource or the generated flag. Writing the body from inside the op does not\nescape it either: a nil Out makes zip stamp cmp.Or(op.Status, 204) over the 422\n(zip@v1.18.11/typed.go:305). So this route is a 201-or-422 pair of DIFFERENT\nshapes, and zip has one Out and one declared status per op.",
+		Description: "Builds and stores one plugin for the caller's org. The 201 carries\nthe bundle's size, whether a model wrote the source, and the plugin as stored.\n\nPost `source` to build TypeScript as-is, or `spec` — an OpenAPI document or\nplain prose describing the endpoints — to have one generated; the generated\nsource comes back in the answer, so a caller reads what will run before it\nruns. Exactly one of the two, and `name` must be one lowercase path segment;\nboth or neither is 400.\n\nCOMPILING IS THE GATE. The source goes through the same pipeline the committed\nconnectors do — esbuild to one CommonJS program, then compiled in the goja\nruntime that will actually execute it — and anything that fails is rejected and\nNEVER stored. So a plugin in the store is one this deployment has already\nloaded once, not one a model claimed was fine. A failed build answers 422\ncarrying the diagnostics a caller needs to fix it: the bundler's error\n(`detail`), the source that failed, and whether the model wrote it.\n\nCREDENTIALS ARE NOT PART OF A PLUGIN. A plugin names the connectors `provider`\nit needs and reads that credential from `ctx.auth` at run time, under KMS\ncustody. Source that carries something key-shaped is REFUSED rather than\nsilently persisted — a scrubbed key looks like it worked.",
+		Fields: map[string]string{
+			"AuthoredPlugin.createdAt": "CreatedAt is when the plugin was last built, Unix seconds.",
+			"AuthoredPlugin.id":        "ID is the plugin's id within the org, and the id a delete addresses.",
+			"AuthoredPlugin.name":      "Name is the plugin's name: one lowercase path segment, the id it runs by.",
+			"AuthoredPlugin.org":       "Org is the org that built the plugin — the validated caller's.",
+			"AuthoredPlugin.provider":  "Provider is the connectors provider whose credential this plugin uses at\nrun time. Absent for a plugin that needs none. The credential itself is\nnever here — it stays under KMS custody in the connectors plane.",
+			"AuthoredPlugin.source":    "Source is the TypeScript as authored (or as generated from a spec).",
+			"buildOut.bytes":           "Bytes is the size of the bundled CommonJS the runtime will execute.",
+			"buildOut.generated":       "Generated is whether a model wrote the source from a spec, rather than the\ncaller posting the source itself.",
+			"buildOut.plugin":          "Plugin is the plugin as stored, with its derived id and build time.",
+			"buildRequest.name":        "Name is the plugin's name: one lowercase path segment (a-z0-9, _ or -),\nand the id the runtime loads it by.",
+			"buildRequest.provider":    "Provider is the connectors provider whose credential the plugin reads at\nrun time. Empty for a plugin that needs none.",
+			"buildRequest.source":      "Source is TypeScript to build as-is. Exactly one of Source or Spec.",
+			"buildRequest.spec":        "Spec is API documentation — an OpenAPI document, or prose describing the\nendpoints — that the generator turns into Source. The generated source is\nreturned in the response, so a caller can read what will run before it runs.",
+		},
+		Example: json.RawMessage(`{"name":"acme","provider":"acme","spec":"POST /v1/things creates a thing"}`),
 	})
 	zip.Describe("POST /v1/tools/skills", zip.Doc{
 		Description: "Adds or revises one of the caller org's own skills, and answers 201\nwith the stored record. The id is derived from the name, so writing the same\nname again REVISES that skill rather than accumulating near-duplicates that\nwould then collide in the registry. An org's skills are private to it by\nconstruction — they live in a different store from the brand's embedded\ncatalogue and have no path into the public gallery — and a brand skill always\nwins a name collision against an org's.",
