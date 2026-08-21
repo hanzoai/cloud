@@ -191,7 +191,15 @@ func edgeCORS(pol *edge.Store, proven verifiedHostFn) zip.Handler {
 			c.SetHeader("Access-Control-Allow-Origin", origin)
 			c.SetHeader("Access-Control-Allow-Credentials", "true")
 		}
-		if c.Method() == "OPTIONS" {
+		// A PREFLIGHT is defined by the header that makes it one (Fetch, CORS
+		// preflight request): an OPTIONS carrying Access-Control-Request-Method.
+		// A BARE OPTIONS is a different question — RFC 9110 §9.3.7, "what does this
+		// resource accept" — and answering it as a preflight told every non-browser
+		// caller 204 with no Allow, which is the one field the question is about.
+		// So this owns the preflight and only the preflight; the bare one carries on
+		// to the contract's own door (openapi.MountIndex), which knows the methods
+		// because it holds the document.
+		if c.Method() == "OPTIONS" && c.Header("Access-Control-Request-Method") != "" {
 			// This middleware OWNS the preflight: it is the only thing in the process
 			// that answers one, so it answers every one, and admission decides which
 			// headers ride along rather than whether there is a reply at all. A

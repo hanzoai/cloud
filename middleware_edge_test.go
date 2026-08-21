@@ -123,6 +123,12 @@ func TestEdgeCORS_PreflightShortCircuits(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodOptions, "/probe", nil)
 	req.Header.Set("Origin", "https://hanzo.ai")
+	// A preflight is DEFINED by this header (Fetch, CORS preflight request), and
+	// it is what tells the edge apart from a bare OPTIONS — the RFC 9110 §9.3.7
+	// question, which the contract's own door answers with Allow. Sending it is
+	// what makes this a model of a preflight rather than of something no browser
+	// emits.
+	req.Header.Set("Access-Control-Request-Method", "GET")
 	req.Header.Set("Access-Control-Request-Headers", "content-type, authorization")
 	res, err := app.Test(req)
 	if err != nil {
@@ -164,6 +170,7 @@ func TestEdgeCORS_PreflightAnswersAnyHeaderAsked(t *testing.T) {
 	} {
 		req := httptest.NewRequest(http.MethodOptions, "/probe", nil)
 		req.Header.Set("Origin", "https://billing.hanzo.ai")
+		req.Header.Set("Access-Control-Request-Method", "POST")
 		req.Header.Set("Access-Control-Request-Headers", ask)
 		res, err := app.Test(req)
 		if err != nil {
