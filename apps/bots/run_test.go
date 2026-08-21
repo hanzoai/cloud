@@ -1,4 +1,4 @@
-package bot
+package bots
 
 import (
 	"context"
@@ -179,11 +179,11 @@ func TestRunIsNotImplementedAndStartsNothing(t *testing.T) {
 	rt := newFake()
 	app := mountWith(t, rt)
 
-	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs", "acme"); code != http.StatusNotImplemented {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/runs", "acme"); code != http.StatusNotImplemented {
 		t.Fatalf("launch want 501, got %d", code)
 	}
 	// Nothing was started, so nothing may be listed as started.
-	_, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme")
+	_, body := call(t, app, http.MethodGet, "/v1/bots/runs", "acme")
 	if ids := listRunIDs(t, body); len(ids) != 0 {
 		t.Fatalf("a refused launch must not produce a run, got %v", ids)
 	}
@@ -199,7 +199,7 @@ func TestListIsScopedToTheCallerOrg(t *testing.T) {
 	rt.seed("globex", Run{ID: "run_globex", Task: "globex secret", Surface: "terminal", Status: "running", StartedAt: "2023-11-14T22:13:20Z"})
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme")
+	code, body := call(t, app, http.MethodGet, "/v1/bots/runs", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d (%s)", code, body)
 	}
@@ -219,7 +219,7 @@ func TestListRowShape(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_1", Task: "ship it", Surface: "terminal", Status: "running", StartedAt: "2023-11-14T22:13:20Z"})
 	app := mountWith(t, rt)
 
-	_, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme")
+	_, body := call(t, app, http.MethodGet, "/v1/bots/runs", "acme")
 	var v BotRuns
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -243,7 +243,7 @@ func TestListFailsClosedWithoutTenant(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_acme", Status: "running"})
 	app := mountWith(t, rt)
 
-	if code, _ := call(t, app, http.MethodGet, "/v1/bot/runs", ""); code != http.StatusForbidden {
+	if code, _ := call(t, app, http.MethodGet, "/v1/bots/runs", ""); code != http.StatusForbidden {
 		t.Fatalf("no-tenant list want 403, got %d", code)
 	}
 	if got := rt.listCalls(); len(got) != 0 {
@@ -258,7 +258,7 @@ func TestListRefusesForgedOrgWithoutValidatedPrincipal(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_acme", Task: "secret", Status: "running"})
 	app := mountWith(t, rt)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/bot/runs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/bots/runs", nil)
 	req.Header.Set("X-Org-Id", "acme") // forged: no X-User-Id
 	resp, err := app.Test(req, testCfg)
 	if err != nil {
@@ -280,7 +280,7 @@ func TestListReportsRuntimeFailureInsteadOfEmpty(t *testing.T) {
 	rt.listErr = fmt.Errorf("runtime is down")
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme")
+	code, body := call(t, app, http.MethodGet, "/v1/bots/runs", "acme")
 	if code != http.StatusBadGateway {
 		t.Fatalf("runtime failure want 502, got %d (%s)", code, body)
 	}
@@ -296,7 +296,7 @@ func TestStopCannotReachAnotherOrgsRun(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_victim", Task: "acme work", Status: "running"})
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodPost, "/v1/bot/runs/run_victim/stop", "globex")
+	code, body := call(t, app, http.MethodPost, "/v1/bots/runs/run_victim/stop", "globex")
 	if code != http.StatusNotFound {
 		t.Fatalf("cross-org stop want 404, got %d (%s)", code, body)
 	}
@@ -315,7 +315,7 @@ func TestStopCannotReachAnotherOrgsRun(t *testing.T) {
 // endpoint is not an oracle for which run ids exist.
 func TestStopUnknownRunIsNotFound(t *testing.T) {
 	app := mountWith(t, newFake())
-	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs/run_nope/stop", "acme"); code != http.StatusNotFound {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/runs/run_nope/stop", "acme"); code != http.StatusNotFound {
 		t.Fatalf("unknown stop want 404, got %d", code)
 	}
 }
@@ -327,7 +327,7 @@ func TestStopHaltsTheRun(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_1", Task: "work", Status: "running"})
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodPost, "/v1/bot/runs/run_1/stop", "acme")
+	code, body := call(t, app, http.MethodPost, "/v1/bots/runs/run_1/stop", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("stop want 200, got %d (%s)", code, body)
 	}
@@ -341,7 +341,7 @@ func TestStopHaltsTheRun(t *testing.T) {
 	if got := rt.stopCalls(); len(got) != 1 || got[0] != (runKey{"acme", "run_1"}) {
 		t.Fatalf("runtime must be driven once with the caller's org+run, got %v", got)
 	}
-	if _, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme"); len(listRunIDs(t, body)) != 0 {
+	if _, body := call(t, app, http.MethodGet, "/v1/bots/runs", "acme"); len(listRunIDs(t, body)) != 0 {
 		t.Fatal("a stopped run must leave the list")
 	}
 }
@@ -355,7 +355,7 @@ func TestStopFailsClosedWhenTheRuntimeDoesNotServeStop(t *testing.T) {
 	rt.stopErr = ErrNotServed
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodPost, "/v1/bot/runs/run_1/stop", "acme")
+	code, body := call(t, app, http.MethodPost, "/v1/bots/runs/run_1/stop", "acme")
 	if code != http.StatusBadGateway {
 		t.Fatalf("unserved stop want 502, got %d (%s)", code, body)
 	}
@@ -371,7 +371,7 @@ func TestStopWithUnreachableRuntimeIs502(t *testing.T) {
 	rt.stopErr = fmt.Errorf("connection refused")
 	app := mountWith(t, rt)
 
-	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs/run_1/stop", "acme"); code != http.StatusBadGateway {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/runs/run_1/stop", "acme"); code != http.StatusBadGateway {
 		t.Fatalf("unreachable runtime want 502, got %d", code)
 	}
 	if !rt.has("acme", "run_1") {
@@ -385,7 +385,7 @@ func TestStopFailsClosedWithoutTenant(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_1", Status: "running"})
 	app := mountWith(t, rt)
 
-	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs/run_1/stop", ""); code != http.StatusForbidden {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/runs/run_1/stop", ""); code != http.StatusForbidden {
 		t.Fatalf("no-tenant stop want 403, got %d", code)
 	}
 	if len(rt.stopCalls()) != 0 {
@@ -405,7 +405,7 @@ func TestStopOversizeRunIDIsNotFound(t *testing.T) {
 	for i := range long {
 		long[i] = 'a'
 	}
-	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs/"+string(long)+"/stop", "acme"); code != http.StatusNotFound {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/runs/"+string(long)+"/stop", "acme"); code != http.StatusNotFound {
 		t.Fatalf("oversize runId want 404, got %d", code)
 	}
 	if len(rt.stopCalls()) != 0 {
@@ -413,18 +413,18 @@ func TestStopOversizeRunIDIsNotFound(t *testing.T) {
 	}
 }
 
-// /v1/bot/runs is the launch literal, never a run id: the router resolves the
+// /v1/bots/runs is the launch literal, never a run id: the router resolves the
 // static segment over the :runId param regardless of registration order.
 func TestRunLiteralDoesNotBindAsARunID(t *testing.T) {
 	rt := newFake()
 	app := mountWith(t, rt)
 
-	// POST /v1/bot/runs reaches the launch handler (501), NOT the stop handler
+	// POST /v1/bots/runs reaches the launch handler (501), NOT the stop handler
 	// (which would 404 a run named "run" and would have driven the runtime).
-	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs", "acme"); code != http.StatusNotImplemented {
-		t.Fatalf("POST /v1/bot/runs must hit launch (501), got %d", code)
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/runs", "acme"); code != http.StatusNotImplemented {
+		t.Fatalf("POST /v1/bots/runs must hit launch (501), got %d", code)
 	}
 	if len(rt.stopCalls()) != 0 {
-		t.Fatalf("/v1/bot/runs bound as a run id and drove a stop: %v", rt.stopCalls())
+		t.Fatalf("/v1/bots/runs bound as a run id and drove a stop: %v", rt.stopCalls())
 	}
 }

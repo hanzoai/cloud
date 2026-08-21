@@ -32,11 +32,11 @@
 //   - NATIVE + TYPED, the run control plane (org-scoped; the console BotsApi and
 //     the CLI `hanzo bot run` call it):
 //
-//     GET  /v1/bot/runs              -> {bots:[{runId,task,surface,status,sessionUrl,startedAt}]}
-//     POST /v1/bot/runs              -> 501: no executor launch operation exists yet
-//     POST /v1/bot/runs/:runId/stop  -> {runId, status}
+//     GET  /v1/bots/runs              -> {bots:[{runId,task,surface,status,sessionUrl,startedAt}]}
+//     POST /v1/bots/runs              -> 501: no executor launch operation exists yet
+//     POST /v1/bots/runs/:runId/stop  -> {runId, status}
 //
-//   - RELAYED, the executor's own operational paths at /v1/bot/runtime/*
+//   - RELAYED, the executor's own operational paths at /v1/bots/runtime/*
 //     (relay.go). A liveness probe is not a tenant-scoped resource, so it stays a
 //     relay rather than being reimplemented in Go.
 //
@@ -47,7 +47,7 @@
 // over ZAP, and that swap is meant to be a change to transport.go plus each
 // caller's one stub, not a rewrite. apps/coding dispatches its coding tasks to the
 // same executor and uses the same Call.
-package bot
+package bots
 
 import (
 	"context"
@@ -120,7 +120,7 @@ type executor struct {
 	runtime Runtime
 }
 
-// BotRun is one row of GET /v1/bot/runs — the console list item. sessionUrl is
+// BotRun is one row of GET /v1/bots/runs — the console list item. sessionUrl is
 // derived control-plane side from runId (the ONE place a session URL is built), so
 // the runtime never has to know its own public origin.
 //
@@ -145,14 +145,14 @@ type BotRun struct {
 	StartedAt string `json:"startedAt"`
 }
 
-// BotRuns is the GET /v1/bot/runs envelope; Bots is always non-nil so an org with no
+// BotRuns is the GET /v1/bots/runs envelope; Bots is always non-nil so an org with no
 // runs serializes as {"bots":[]}, never {"bots":null}.
 type BotRuns struct {
 	// Bots is the org's live runs. Always an array, never null.
 	Bots []BotRun `json:"bots"`
 }
 
-// BotStopped is the POST /v1/bot/runs/{runId}/stop receipt.
+// BotStopped is the POST /v1/bots/runs/{runId}/stop receipt.
 type BotStopped struct {
 	// RunID is the run that was stopped.
 	RunID string `json:"runId"`
@@ -189,17 +189,17 @@ func mountRunPlane(app cloud.Router, deps cloud.Deps) error {
 // bound form cmd/zipdoc can lift prose from. It carries STATE and no logic.
 type runOps struct{ s *cloud.Service[executor] }
 
-// mountRuns registers the run control plane at /v1/bot/runs.
+// mountRuns registers the run control plane at /v1/bots/runs.
 //
 // THE LAUNCH IS A POST TO THE COLLECTION, and that is what the fold bought. The
 // run family lived at /v1/bots with the launch at the literal /v1/bots/run, one
 // segment away from /v1/bots/:runId/stop — a literal that had to out-rank its
-// param sibling or bind as a run id. Under /v1/bot/runs the verb is the method
+// param sibling or bind as a run id. Under /v1/bots/runs the verb is the method
 // (HIP-0128 §1): GET lists, POST launches, and there is no literal to shadow.
 //
 // The list and the stop are TYPED ops — one registry entry from which the REST
 // route, the OpenAPI operation, the MCP tool, the CLI command and every generated
-// SDK method follow. POST /v1/bot/runs stays a raw handler; see run for why.
+// SDK method follow. POST /v1/bots/runs stays a raw handler; see run for why.
 func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
 	// The composer owns cloud.Bridge: the fused host installs it once at its root
 	// and the plugin constructor does the same for a plugin program, so no
@@ -207,18 +207,18 @@ func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
 
 	// UNIFIED PAYWALL (server-side enforcement). To gate this group behind the
 	// caller's plan, prepend the middleware to the group:
-	//   g := app.Group("/v1/bot", entitlements.RequireProduct(deps.Commerce, "bot"))
+	//   g := app.Group("/v1/bots", entitlements.RequireProduct(deps.Commerce, "bot"))
 	// DEFERRED — DO NOT ENABLE YET: the "bot" product is ABSENT from @hanzo/plans
 	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
 	// once the catalog licenses "bot" to a tier. See clients/entitlements.
 	//
-	// The collection is declared on the /v1/bot PARENT with a non-empty leaf:
-	// zip.Get(g, "") would normalise to "/v1/bot/runs/", and op.Path is the
+	// The collection is declared on the /v1/bots PARENT with a non-empty leaf:
+	// zip.Get(g, "") would normalise to "/v1/bots/runs/", and op.Path is the
 	// identity every projection keys on, so the document, the operationId, the MCP
 	// tool and every generated SDK would carry a trailing slash for a path this
 	// API does not serve.
-	parent := app.Group("/v1/bot")
-	g := app.Group("/v1/bot/runs")
+	parent := app.Group("/v1/bots")
+	g := app.Group("/v1/bots/runs")
 	o := runOps{s: s}
 	zip.Get(parent, "/runs", o.list)
 	parent.Post("/runs", cloud.Handle(s, run))
@@ -235,7 +235,7 @@ func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
 // through the same registry Register uses, so it renders only while the router
 // actually serves the route.
 func init() {
-	openapi.Describe("/v1/bot/runs", http.MethodPost,
+	openapi.Describe("/v1/bots/runs", http.MethodPost,
 		"Reserved address for launching a bot run — not implemented, always 501",
 		"Answers 501 to every call. The bot runtime exposes no launch operation, so nothing "+
 			"here can start a sandbox, and this address is published rather than dropped because "+
