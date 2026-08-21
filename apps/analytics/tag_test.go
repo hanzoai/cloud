@@ -89,7 +89,7 @@ func TestTagServesOneIdentityChain(t *testing.T) {
 	}
 	// A snippet that spells a key has an opinion about identity, and there is one
 	// opinion now. Both names may appear only inside the vendored chain.
-	for _, key := range []string{"'hz_anon_id'", "'hz_id'"} {
+	for _, key := range []string{"'iam-anon-id'", "'hz_anon_id'", "'hz_id'"} {
 		if bytes.Contains(tagJS, []byte(key)) {
 			t.Errorf("tag.js names %s: identity belongs to anon.js alone", key)
 		}
