@@ -16,6 +16,8 @@ import (
 	"crypto/rsa"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/authz"
 )
 
 func TestIdentityValidator_KMSMachinePrincipal(t *testing.T) {
@@ -27,64 +29,76 @@ func TestIdentityValidator_KMSMachinePrincipal(t *testing.T) {
 	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 	future := time.Now().Add(time.Hour)
 
-	t.Run("own-org machine token validates and is recognised as a machine principal", func(t *testing.T) {
-		c, err := v.validate(signWith(t, key, tokenClaims("maxpower-platform-kms", "maxpower", "", false, future)))
+	// A program, spelled the way IAM spells one.
+	program := func(aud, owner string, isAdmin bool, exp time.Time) idClaims {
+		c := tokenClaims(aud, owner, "", isAdmin, exp)
+		c.Type = authz.Program
+		c.Orgs = nil
+		return c
+	}
+
+	t.Run("a machine token resolves the org it cannot choose", func(t *testing.T) {
+		c, err := v.validate(signWith(t, key, program("maxpower-platform-kms", "maxpower", false, future)))
 		if err != nil {
 			t.Fatalf("machine token rejected: %v", err)
 		}
-		if c.Owner != "maxpower" {
-			t.Fatalf("owner=%q, want maxpower", c.Owner)
+		if !appPrincipal(c) {
+			t.Fatal("IAM signed this as a program and cloud did not read it as one")
 		}
-		if !isKMSMachinePrincipal(c) {
-			t.Fatal("aud==<owner>-platform-kms must be recognised as a machine principal")
+		if got := c.homeOrg(); got != "maxpower" {
+			t.Fatalf("homeOrg=%q, want maxpower", got)
 		}
 	})
 
-	t.Run("admin-org machine token is recognised so SuperAdmin is denied", func(t *testing.T) {
-		c, err := v.validate(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "", true, future)))
+	// THE PROPERTY THIS FILE EXISTS FOR. It used to be enforced by recognising an
+	// owner-bound audience and subtracting sudo afterwards. The audience is no
+	// longer read: a program is one because IAM said so, and Sudo refuses every
+	// machine, so the denial is the same fact rather than a second one.
+	t.Run("a machine in the reserved org holds no platform authority", func(t *testing.T) {
+		c, err := v.validate(signWith(t, key, program("admin-platform-kms", "admin", true, future)))
 		if err != nil {
 			t.Fatalf("admin machine token rejected: %v", err)
 		}
-		if !isKMSMachinePrincipal(c) {
-			t.Fatal("admin-org machine token must be recognised (SanitizeIdentity denies it SuperAdmin)")
+		if platformSudo(c) {
+			t.Fatal("a client_credentials identity in the reserved org wielded platform admin")
+		}
+		if orgAdmin(c, "admin") {
+			t.Fatal("a machine held an org's self-service surface")
+		}
+		if !appPrincipal(c) {
+			t.Fatal("it is still a program, and still scoped to its own org")
 		}
 	})
 
-	t.Run("machine aud bound to a DIFFERENT org is not this owner's machine principal", func(t *testing.T) {
-		// owner=maxpower, aud=acme-platform-kms: the machine-principal match is bound to
-		// the token's OWN owner (maxpower-platform-kms), not a "*-platform-kms" wildcard.
-		// It validates (aud is not gated) and is owner-scoped to maxpower downstream.
-		c, err := v.validate(signWith(t, key, tokenClaims("acme-platform-kms", "maxpower", "", false, future)))
-		if err != nil {
-			t.Fatalf("token rejected: %v", err)
-		}
-		if isKMSMachinePrincipal(c) {
-			t.Fatal("a cross-org machine aud must not count as this owner's machine principal")
-		}
-	})
-
-	t.Run("ordinary app token is not a machine principal", func(t *testing.T) {
-		c, err := v.validate(signWith(t, key, tokenClaims("hanzo-console", "maxpower", "", false, future)))
-		if err != nil {
-			t.Fatalf("token rejected: %v", err)
-		}
-		if isKMSMachinePrincipal(c) {
-			t.Fatal("an ordinary app token is not a machine principal")
+	// The audience is not the proof and no longer needs to be bound: a foreign or
+	// absent one changes nothing, because the kind and the org are both claims.
+	t.Run("the audience decides nothing", func(t *testing.T) {
+		for _, aud := range []string{"acme-platform-kms", "hanzo-console", "-platform-kms"} {
+			c, err := v.validate(signWith(t, key, program(aud, "maxpower", false, future)))
+			if err != nil {
+				t.Fatalf("aud %q: token rejected: %v", aud, err)
+			}
+			if got := c.homeOrg(); got != "maxpower" {
+				t.Fatalf("aud %q: homeOrg=%q, want maxpower — the org is `owner`, not the audience", aud, got)
+			}
+			if platformSudo(c) {
+				t.Fatalf("aud %q: a machine gained platform authority", aud)
+			}
 		}
 	})
 
-	t.Run("empty-owner token is never a machine principal (fail closed)", func(t *testing.T) {
-		c, err := v.validate(signWith(t, key, tokenClaims("-platform-kms", "", "", false, future)))
+	t.Run("a person is not admitted as a program however its token is addressed", func(t *testing.T) {
+		c, err := v.validate(signWith(t, key, tokenClaims("maxpower-platform-kms", "maxpower", "z@example.test", false, future)))
 		if err != nil {
 			t.Fatalf("token rejected: %v", err)
 		}
-		if isKMSMachinePrincipal(c) {
-			t.Fatal(`empty-owner token must never be a machine principal (kmsMachineAudience("")=="")`)
+		if appPrincipal(c) {
+			t.Fatal("a token IAM never called a program was admitted as one")
 		}
 	})
 
 	t.Run("machine token expiry still enforced", func(t *testing.T) {
-		if _, err := v.validate(signWith(t, key, tokenClaims("maxpower-platform-kms", "maxpower", "", false, time.Now().Add(-time.Hour)))); err == nil {
+		if _, err := v.validate(signWith(t, key, program("maxpower-platform-kms", "maxpower", false, time.Now().Add(-time.Hour)))); err == nil {
 			t.Fatal("expired machine token must be rejected")
 		}
 	})

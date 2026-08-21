@@ -39,7 +39,7 @@ func machineClaims(app, owner string, exp time.Time) idClaims {
 func TestClientCredentialsPrincipalResolvesItsOwnerOrg(t *testing.T) {
 	c := machineClaims("hanzo-studio", "hanzo", time.Now().Add(time.Hour))
 
-	if !isClientCredentialsPrincipal(&c) {
+	if !appPrincipal(&c) {
 		t.Fatal("a token whose client is its own subject and sole audience is a machine principal")
 	}
 	if got := c.homeOrg(); got != "hanzo" {
@@ -121,7 +121,7 @@ func TestHumanWithoutOrgsStillFailsClosed(t *testing.T) {
 	c.Audience = jwt.ClaimStrings{"hanzo-console"}
 	c.ExpiresAt = jwt.NewNumericDate(time.Now().Add(time.Hour))
 
-	if isClientCredentialsPrincipal(&c) {
+	if appPrincipal(&c) {
 		t.Fatal("a human subject must never be read as a machine, whatever else matches")
 	}
 	if got := c.homeOrg(); got != "" {
@@ -129,49 +129,26 @@ func TestHumanWithoutOrgsStillFailsClosed(t *testing.T) {
 	}
 }
 
-// Each half of the shape is load-bearing. A token that matches only part of it is a
-// human token that happens to resemble a machine, and must not be admitted.
-func TestPartialMachineShapeIsRefused(t *testing.T) {
+// A MULTI-AUDIENCE MACHINE TOKEN IS STILL A MACHINE. The reading this replaces
+// required the sole audience to equal azp, so a program that named what its token
+// was for — the `resource` parameter IAM's client_credentials grant accepts — was
+// refused for saying so. The claim does not care what the token is addressed to.
+func TestAProgramIsOneWhateverItsTokenIsAddressedTo(t *testing.T) {
 	exp := time.Now().Add(time.Hour)
-
-	t.Run("azp is not the audience — the token was issued for a DIFFERENT client", func(t *testing.T) {
+	for _, aud := range []jwt.ClaimStrings{
+		{"some-other-app"},
+		{"hanzo-studio", "hanzo-console"},
+		nil,
+	} {
 		c := machineClaims("hanzo-studio", "hanzo", exp)
-		c.Audience = jwt.ClaimStrings{"some-other-app"}
-		if isClientCredentialsPrincipal(&c) {
-			t.Fatal("a client holding a token minted for another audience is not that audience")
+		c.Audience = aud
+		if !appPrincipal(&c) {
+			t.Fatalf("audience %v: a program was refused for what its token names", aud)
 		}
-	})
-
-	t.Run("more than one audience — not a token an app got for itself", func(t *testing.T) {
-		c := machineClaims("hanzo-studio", "hanzo", exp)
-		c.Audience = jwt.ClaimStrings{"hanzo-studio", "hanzo-console"}
-		if isClientCredentialsPrincipal(&c) {
-			t.Fatal("a multi-audience token is not the self-issued shape")
+		if got := c.homeOrg(); got != "hanzo" {
+			t.Fatalf("audience %v: homeOrg=%q, want hanzo", aud, got)
 		}
-	})
-
-	t.Run("subject does not name the client — a user signed in THROUGH the app", func(t *testing.T) {
-		c := machineClaims("hanzo-studio", "hanzo", exp)
-		c.Subject = "admin/somebody-else"
-		if isClientCredentialsPrincipal(&c) {
-			t.Fatal("the subject must BE the client; anything else is a human using it")
-		}
-	})
-
-	t.Run("no owner — nothing to resolve, and no guess to make", func(t *testing.T) {
-		c := machineClaims("hanzo-studio", "", exp)
-		if isClientCredentialsPrincipal(&c) {
-			t.Fatal("without an owner there is no org to return")
-		}
-	})
-
-	t.Run("bare subject with no org segment", func(t *testing.T) {
-		c := machineClaims("hanzo-studio", "hanzo", exp)
-		c.Subject = "hanzo-studio"
-		if isClientCredentialsPrincipal(&c) {
-			t.Fatal("<org>/<app> is the shape; a bare name is not it")
-		}
-	})
+	}
 }
 
 // THE SHAPE ALONE IS NOT THE PROOF.
@@ -190,9 +167,6 @@ func TestATokenShapedLikeAMachineIsNotOneWithoutTheClaim(t *testing.T) {
 	c.Orgs = nil
 	c.Type = "" // the one difference: IAM never signed this as a program
 
-	if isClientCredentialsPrincipal(&c) != true {
-		t.Fatal("precondition: this is exactly the shape the old reading accepted")
-	}
 	if appPrincipal(&c) {
 		t.Fatal("a token IAM never called a program was admitted as one on shape alone")
 	}
