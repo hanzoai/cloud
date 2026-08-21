@@ -31,6 +31,66 @@
 # must hash to the line already committed, or the build fails loudly.
 set -euo pipefail
 
+# The forge, named once. Defaulted to the real one; a test points it at a stand-in so the
+# probe-and-rewrite half can be exercised without the network.
+FORGE_URL=${FORGE_URL:-https://git.hanzo.ai}
+FORGE_HOST=${FORGE_URL#*://}
+
+# A GIT CONFIG OF THIS JOB'S OWN. `git config --global` with none set writes the runner's
+# ~/.gitconfig, and these runners are long-lived and shared: a credential written there is
+# readable by the next job, from any repository, for as long as the pod lives. Nothing
+# here belongs to the machine, so nothing here is written to it.
+#
+# IT IS OPENED FIRST, BEFORE ANY CREDENTIAL AND BEFORE EVERY RETURN BELOW, AND THAT ORDER
+# IS THE WHOLE CONTRACT. This file is the job's ENTIRE git config: naming it in
+# GIT_CONFIG_GLOBAL, with GIT_CONFIG_NOSYSTEM beside it, is also what makes git stop
+# reading the machine's. So a credential written anywhere else is not a fallback, it is
+# invisible — and a caller cannot write one here after us, because this export dies with
+# this subprocess and the GITHUB_ENV copy only reaches the NEXT step. Both hosts a module
+# can come from are therefore authenticated HERE, in this file, in one place.
+if [ -z "${GIT_CONFIG_GLOBAL:-}" ]; then
+  GIT_CONFIG_GLOBAL=$(mktemp)
+  export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM=1
+  # Later steps run the go build that spends these rewrites, so they need to be told
+  # where the config went.
+  if [ -n "${GITHUB_ENV:-}" ]; then
+    { echo "GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL"; echo "GIT_CONFIG_NOSYSTEM=1"; } >> "$GITHUB_ENV"
+  fi
+fi
+
+# THE CREDENTIAL TRAVELS IN A FILE, NOT IN A URL AND NOT IN ARGV.
+#
+# It used to be spliced into the rewritten URL, which put it in three bad places at once:
+# every `git config` invocation carried it in argv, where /proc/<pid>/cmdline shows it to
+# anything else on the runner; it was written verbatim into the config; and because the
+# token was part of the SECTION NAME, each run added a new section rather than replacing
+# the last, so the entries accumulated and git's longest-match could serve a later fetch
+# with an expired one.
+#
+# A helper keyed on the host has none of those properties: one entry per host, no secret
+# in the rewrite, and the file is readable only by this job. It is what lets GitHub be
+# authenticated without a rewrite at all — the address is already right, only the
+# credential was missing — so `insteadOf` is left to mean one thing: a change of host.
+cred=$(mktemp)
+chmod 600 "$cred"
+git config --global credential.helper "store --file=$cred"
+
+# One line per host: the forge, and GitHub for the modules the forge does not serve.
+# Written whole rather than appended, because the re-ask below replaces the forge
+# credential and a line appended once would go with it.
+write_store() {
+  : > "$cred"
+  if [ -n "${1:-}" ]; then
+    printf '%s://x:%s@%s\n' "${FORGE_URL%%:*}" "$1" "$FORGE_HOST" >> "$cred"
+  fi
+  if [ -n "${GH_PAT:-}" ]; then
+    printf 'https://x-access-token:%s@github.com\n' "$GH_PAT" >> "$cred"
+  fi
+}
+# GitHub is authenticated even on the returns below: "every module stays on GitHub" is
+# only true if GitHub can be read.
+write_store ""
+
 # ASK THE IDENTITY PROVIDER, AND ASK IT FIRST. The forge signs people in through Hanzo
 # IAM and reads that same identity as a git credential, so a run already holding a client
 # credential needs no second, longer-lived secret kept somewhere for this.
@@ -68,40 +128,8 @@ fi
 mods=$(sed -nE 's|^[[:space:]]+github\.com/hanzoai/([A-Za-z0-9._-]+) .*|\1|p' go.mod | sort -u)
 [ -n "$mods" ] || { echo "forge-rewrites: go.mod names no github.com/hanzoai module"; exit 0; }
 
-# A GIT CONFIG OF THIS JOB'S OWN. `git config --global` with none set writes the runner's
-# ~/.gitconfig, and these runners are long-lived and shared: a credential written there is
-# readable by the next job, from any repository, for as long as the pod lives. Nothing
-# here belongs to the machine, so nothing here is written to it.
-if [ -z "${GIT_CONFIG_GLOBAL:-}" ]; then
-  GIT_CONFIG_GLOBAL=$(mktemp)
-  export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM=1
-  # Later steps run the go build that spends these rewrites, so they need to be told
-  # where the config went.
-  if [ -n "${GITHUB_ENV:-}" ]; then
-    { echo "GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL"; echo "GIT_CONFIG_NOSYSTEM=1"; } >> "$GITHUB_ENV"
-  fi
-fi
-
-# THE CREDENTIAL TRAVELS IN A FILE, NOT IN A URL AND NOT IN ARGV.
-#
-# It used to be spliced into the rewritten URL, which put it in three bad places at once:
-# every `git config` invocation carried it in argv, where /proc/<pid>/cmdline shows it to
-# anything else on the runner; it was written verbatim into the config; and because the
-# token was part of the SECTION NAME, each run added a new section rather than replacing
-# the last, so the entries accumulated and git's longest-match could serve a later fetch
-# with an expired one.
-#
-# A helper keyed on the host has none of those properties: one entry, no secret in the
-# rewrite, and the file is readable only by this job.
-# The forge, named once. Defaulted to the real one; a test points it at a stand-in so the
-# probe-and-rewrite half can be exercised without the network.
-FORGE_URL=${FORGE_URL:-https://git.hanzo.ai}
-FORGE_HOST=${FORGE_URL#*://}
-
-cred=$(mktemp)
-chmod 600 "$cred"
-printf '%s://x:%s@%s\n' "${FORGE_URL%%:*}" "$GIT_TOKEN" "$FORGE_HOST" > "$cred"
-git config --global credential.helper "store --file=$cred"
+# The forge token is known now, so the store gets its line beside GitHub's.
+write_store "$GIT_TOKEN"
 
 on=""; off=""
 for m in $mods; do
@@ -126,7 +154,7 @@ done
 if [ -z "$on" ] && [ -n "${JOB_TOKEN:-}" ] && [ "$GIT_TOKEN" != "$JOB_TOKEN" ]; then
   echo "forge-rewrites: the IAM identity served nothing — asking again as the per-job token"
   GIT_TOKEN=$JOB_TOKEN
-  printf '%s://x:%s@%s\n' "${FORGE_URL%%:*}" "$GIT_TOKEN" "$FORGE_HOST" > "$cred"
+  write_store "$GIT_TOKEN"
   off=""
   for m in $mods; do
     code=$(printf 'user = "x:%s"\n' "$GIT_TOKEN" \
