@@ -1,7 +1,7 @@
 ---
 name: admin_applications
 version: "8.0.0"
-description: "Read admin applications: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's get-applications.."
+description: "Read admin applications: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's application list.."
 ---
 
 # Hanzo · ADMIN · applications
@@ -14,7 +14,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/admin/applications` — Lists IAM applications for one owner org, forwarded VERBATIM from IAM's get-applications.
+- `GET https://api.hanzo.ai/v1/admin/applications` — Lists IAM applications for one owner org, forwarded VERBATIM from IAM's application list.
 
 ## Parameters
 
