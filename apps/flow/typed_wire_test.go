@@ -53,7 +53,7 @@ var intentRefused = map[string]string{
 	"/v1/flow/app-connections": "the product has no app-connections primitive; connectors live at /v1/integrations",
 	"/v1/flow/trigger-events":  "the product has no trigger-event queue; automations owns triggers",
 	"/v1/flow/store-entries":   "the product has no key-value store surface; provisioning owns /v1/kv",
-	"/v1/flow/templates":       "the product's starter examples are not a template CRUD; /v1/templates is the fleet's template plane",
+	"/v1/flow/templates":       "the product's starter examples are not a template CRUD; /v1/template is the fleet's template plane",
 	// Product families that exist upstream but are NOT proven against a real
 	// backend yet, so they get no route until they are: the honest-slice bar.
 	"/v1/flow/folders":      "upstream projects/folders exist but only as this plane's INTERNAL tenant boundary — exposing them would let a caller address another org's project",

@@ -13,7 +13,7 @@ func init() {
 	zip.Describe("GET /:id/terminal/ws", zip.Doc{
 		Description: "Serves one terminal: a shell on a pseudo-terminal, for as long as\nsomebody is typing.",
 	})
-	zip.Describe("GET /v1/sandboxes/:id/fs", zip.Doc{
+	zip.Describe("GET /v1/sandbox/:id/fs", zip.Doc{
 		Description: "Answers text, because this address always has: a file as its bytes, a\ndirectory as one entry per line. The typed Entry the core returns is what the\nplane carries; here it is rendered back to the one shape this route has served.",
 	})
 	zip.Describe("POST /:id/screen/ticket", zip.Doc{
@@ -88,14 +88,14 @@ func init() {
 			"Wrote.path":   "Path is where the bytes actually landed: the caller's path resolved against\nthe sandbox's working directory (Leased.Workdir), which is what a later read\nor a shell line inside the sandbox has to name.",
 		},
 	})
-	zip.Describe("POST /v1/sandboxes/end", zip.Doc{
+	zip.Describe("POST /v1/sandbox/end", zip.Doc{
 		Description: "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
 		Fields: map[string]string{
 			"EndIn.id":    "ID is the sandbox whose lease ends, from an earlier lease.",
 			"EndIn.purge": "Purge deletes the project's DISK as well. It is opt-in because the disk holds\nthe only copy of the checkout: ending a lease is cheap and reversible,\ndeleting someone's uncommitted work is neither.",
 		},
 	})
-	zip.Describe("POST /v1/sandboxes/lease", zip.Doc{
+	zip.Describe("POST /v1/sandbox/lease", zip.Doc{
 		Description: "Leases the caller's sandbox, or returns the one it named if that\nlease is still running.\n\nWhat comes back is a real computer: a pod under a runtime boundary with a\ntoolchain already in it, its own filesystem, and a lease that ends it. Every\nother op here acts on the one this returns.",
 		Fields: map[string]string{
 			"LeaseIn.class":   "Class is what KIND of computer to lease, and the set is closed:\n\n\texec     a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a coding one, with the project's own disk attached. Hours.\n\tdesktop  a dev one that also has a screen.\n\tandroid  a desktop with a phone running on that screen.\n\nEmpty leases an `exec`, which is the right answer for running a program and\nthe wrong one for working on a repository, because it keeps nothing.\n\nAn `android` needs a node that can virtualise a CPU, so it is the one class\na deployment may not be able to place. Where the fleet has none, the lease\nsucceeds and the pod stays Pending naming the device it is waiting for —\nwhich is the honest answer, because the alternative is an emulator running\non an interpreted CPU and never finishing its boot.",
@@ -110,7 +110,7 @@ func init() {
 			"Leased.workdir":  "Workdir is the absolute directory this sandbox keeps files in, and what a\nrelative path in a later read, write or run resolves against — /work for dev,\ndesktop and android (the project volume's mount point), /mnt/data for exec\n(the artifact directory the code tool tells the model to write to). A path\nthat climbs above it is refused rather than rewritten.",
 		},
 	})
-	zip.Describe("POST /v1/sandboxes/read", zip.Doc{
+	zip.Describe("POST /v1/sandbox/read", zip.Doc{
 		Description: "Reads one path in the caller's sandbox: a file's bytes, or a\ndirectory's entries when the path names one.",
 		Fields: map[string]string{
 			"Blob.data":    "Data is the file's bytes, verbatim, base64 on the wire. Empty for a directory\nand for an empty file alike; Dir is what tells those apart.",
@@ -121,7 +121,7 @@ func init() {
 			"PathIn.path":  "Path is read relative to the sandbox's working directory unless it is\nabsolute, and a path that climbs out of it is refused rather than rewritten.\nEmpty names the working directory itself, which lists it.",
 		},
 	})
-	zip.Describe("POST /v1/sandboxes/run", zip.Doc{
+	zip.Describe("POST /v1/sandbox/run", zip.Doc{
 		Description: "Runs one command inside the caller's sandbox and answers its exit code,\nstdout and stderr. A non-zero exit is a successful call carrying a failed\nprogram, so it comes back as data and not as an error.\n\nName a `session` and the command NARRATES INTO IT: its output is appended to\nthat session's live log as the program produces it, so anything watching the\nsession — GET /v1/agents/sessions/stream, scoped to one run with ?root= —\nwatches the work happen rather than waiting for the verdict. Without it the\ncall is what it always was: silent until it returns, which for an agentic run\nis twenty-five minutes of blank screen.\n\nThe session is named; the TENANT is not. It is the org the caller already\nproved, so a session belonging to somebody else is absent from the org this\ncall acts for and the append is refused there.",
 		Fields: map[string]string{
 			"Ran.exitCode":     "ExitCode is the PROGRAM's own status — 0 succeeded, anything else is what it\nreturned, and a Command runs under `sh -c` so its shell's conventions apply.\nA command that never reached an exit does not arrive here at all: a timeout\nor a stop cancels the channel, and that is an error on the call rather than a\ncode of ours invented to fill this field.",
@@ -137,14 +137,14 @@ func init() {
 			"RunIn.timeoutSec": "TimeoutSec bounds this ONE command, so a wedged program holds the caller for\nits own timeout rather than for the whole lease.",
 		},
 	})
-	zip.Describe("POST /v1/sandboxes/stop", zip.Doc{
+	zip.Describe("POST /v1/sandbox/stop", zip.Doc{
 		Description: "Interrupts whatever the caller's sandbox is running and answers how\nmany commands it ended. The sandbox stays leased — stop ends the WORK, end ends\nthe RESOURCE — so whoever stopped a run can still read what it left behind.",
 		Fields: map[string]string{
 			"StopIn.id":       "ID is the sandbox to interrupt, from an earlier lease. Every command running\nin it stops; the lease itself survives, so the checkout and the half-written\nfiles are still there to read. Use EndIn to give the computer back.",
 			"Stopped.stopped": "Stopped counts the commands that were still running and were interrupted.\nZero says the sandbox was idle, not that the stop failed — see above.",
 		},
 	})
-	zip.Describe("POST /v1/sandboxes/write", zip.Doc{
+	zip.Describe("POST /v1/sandbox/write", zip.Doc{
 		Description: "Writes bytes to one path in the caller's sandbox, creating parents,\nand answers the resolved path.",
 		Fields: map[string]string{
 			"WriteIn.data": "Data is the file's bytes, and replaces whatever was there.",

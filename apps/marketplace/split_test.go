@@ -50,7 +50,7 @@ import (
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/tools"
-	"github.com/hanzoai/cloud/apps/wallets"
+	"github.com/hanzoai/cloud/apps/wallet"
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
@@ -102,8 +102,8 @@ func runChild(role string) int {
 			return childFail("kms.New: %v", err)
 		}
 		deps.KMS = k
-		if err := wallets.Mount(app, deps); err != nil {
-			return childFail("wallets.Mount: %v", err)
+		if err := wallet.Mount(app, deps); err != nil {
+			return childFail("wallet.Mount: %v", err)
 		}
 		id, err := seedWallet(app, sellerOrg)
 		if err != nil {
@@ -169,12 +169,12 @@ func seedWallet(app *zip.App, org string) (string, error) {
 	var acct struct {
 		ID string `json:"id"`
 	}
-	if _, b, err := childReq(app, http.MethodPost, "/v1/wallets/accounts", org, `{"name":"payee"}`); err != nil {
+	if _, b, err := childReq(app, http.MethodPost, "/v1/wallet/accounts", org, `{"name":"payee"}`); err != nil {
 		return "", err
 	} else if err := json.Unmarshal(b, &acct); err != nil || acct.ID == "" {
 		return "", fmt.Errorf("create account: %v (%s)", err, b)
 	}
-	code, b, err := childReq(app, http.MethodPost, "/v1/wallets", org,
+	code, b, err := childReq(app, http.MethodPost, "/v1/wallet", org,
 		`{"accountId":"`+acct.ID+`","name":"earnings","custody":"kms","tier":"hot","chain":"eip155:36963"}`)
 	if err != nil {
 		return "", err

@@ -46,7 +46,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/projects"
-	"github.com/hanzoai/cloud/apps/templates"
+	"github.com/hanzoai/cloud/apps/template"
 )
 
 // The four origins. A row always has exactly one: "nobody said" is the state
@@ -65,7 +65,7 @@ const (
 // curated is the ONE curated-gallery door (clients/templates owns the embedded
 // catalog and its variants). A package var for the same reason the corpus's two
 // other sources are: the derivation is testable without the embedded catalog.
-var curated = templates.List
+var curated = template.List
 
 // starters is every slug a demo of one of our curated starters can deploy under.
 // It is built FORWARD from the gallery rather than matched backward against a

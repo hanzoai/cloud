@@ -60,7 +60,7 @@ import (
 // working; a service that names no path at all is the same silence with better
 // manners, and would let the next 31 arrive one row at a time.
 //
-// A path resolves EXACTLY (/v1/wallets is a published path) or as a PREFIX
+// A path resolves EXACTLY (/v1/wallet is a published path) or as a PREFIX
 // (/v1/iam publishes 166 paths beneath it and none at the bare address). Both are
 // real answers to "where do I call this product", and the surfaces that count
 // products already count both — so counting them differently here would grade the

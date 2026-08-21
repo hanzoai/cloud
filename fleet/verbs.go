@@ -2,7 +2,11 @@
 
 package fleet
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/hanzoai/cloud/manifest"
+)
 
 // AN OPERATION IS NAMED FOR WHAT IT DOES. It was named for where it lived.
 //
@@ -81,6 +85,12 @@ import "strings"
 //	.../things        GET of a plural tail is a list and keeps it plural:
 //	                  list_project_deployments. Every other method acts on one
 //	                  member: create_project_domain.
+//	/v1/thing         GET at a capability's bare root is that capability's
+//	                  collection, whatever its number: list_sandboxes. The tail's
+//	                  SPELLING cannot answer this any more — HIP-0139 §2.2 makes
+//	                  every capability's address singular — so the shape does. One
+//	                  literal segment under /v1 is the root, and a root has no
+//	                  member to be confused with.
 //
 // The method supplies the verb when the route does not, and PUT and PATCH are
 // deliberately different words — `set` replaces, `update` merges — because they
@@ -97,7 +107,7 @@ func phrase(op string) string {
 	}
 
 	verb := methodVerb[method]
-	if method == "get" && !endsInID && plural(tail.word) {
+	if method == "get" && !endsInID && (plural(tail.word) || len(segs) == 1) {
 		verb = "list"
 	}
 	return join(verb, nouns(segs, verb == "list"))
@@ -155,7 +165,11 @@ func nouns(segs []segment, listing bool) []string {
 	out := make([]string, len(segs))
 	for i, s := range segs {
 		if listing && i == len(segs)-1 {
-			out[i] = s.word
+			// The thing being listed, in the plural — which the address no longer
+			// supplies. A capability answers at its singular name (HIP-0139 §2.2),
+			// so `GET /v1/sandbox` has to be pluralised HERE to read as
+			// list_sandboxes rather than collide with the member read.
+			out[i] = manifest.Plural(singular(s.word))
 			continue
 		}
 		out[i] = singular(s.word)
