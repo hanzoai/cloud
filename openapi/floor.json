@@ -10,20 +10,17 @@
     "agents": 37,
     "ai": 294,
     "allowance": 1,
-    "analytics": 12,
     "ask": 2,
     "audit": 1,
     "authors": 11,
     "authz": 3,
     "auto": 17,
-    "automations": 17,
     "base": 1,
     "benchmark": 9,
     "billing": 4,
     "blueprint": 3,
     "books": 25,
     "bot": 4,
-    "bots": 8,
     "campaign": 11,
     "captable": 31,
     "catalog": 1,
@@ -105,7 +102,6 @@
     "share": 2,
     "skills": 2,
     "social": 13,
-    "storage": 8,
     "sync": 6,
     "tasks": 20,
     "taxonomy": 5,
@@ -124,7 +120,6 @@
     "webhooks": 8,
     "websearch": 7,
     "world": 6,
-    "x402": 1,
-    "zt": 4
+    "x402": 1
   }
 }
