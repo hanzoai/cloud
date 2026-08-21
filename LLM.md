@@ -2239,6 +2239,60 @@ request side only. Count it from the subsets, never tally it in prose:
         if bare: print(os.path.basename(os.path.dirname(f)), len(bare), bare[:8])
     EOF
 
+**That count is now 3,207, and 253 of them are in packages this repo can write.**
+The pass that closed it covered 44 apps and is worth reading for the FOUR REASONS a
+published property can be bare, because after this pass every remaining one is one
+of them and each is a generator limitation with a citation rather than a diligence
+gap:
+
+1. **openapi.Register** derives its schema by REFLECTION and Go drops comments, so
+   no field prose can reach a Register-declared component (ask, provisioning,
+   cloudflare, platform, books, git, tools).
+2. **An embedded struct.** zip inlines the embedded fields into the outer component
+   and looks each description up as `<outer>.<field>`, while zipdoc files prose under
+   the type that DECLARES it — both halves right, the two keys never meet (agents,
+   visor, admin, legal, link, mq, web3, wallets, campaign, functions, marketplace).
+3. **An anonymous struct.** zipdoc keys prose by the declaring type's name, which an
+   inline `struct{…}` literal does not have (deploy, visor, projects, o11y).
+4. **A defined type** (`type legalTemplate Template`). zipdoc's field walk returns
+   unless the type spec is a struct LITERAL; a defined type's is an identifier, so
+   nothing lands under either name (legal, billing).
+
+Do not "fix" any of the four by unrolling an embedding, naming an inline struct or
+hand-writing a schema. Each turns a description task into a SHAPE change — an inline
+object becomes a `$ref` in every generated SDK — which is a decision somebody makes
+on purpose, not a side effect. Write the comment on the declaring type, where the
+document already publishes it, and name the promoted copy in a `proseless` ledger
+keyed by dotted property path, checked in BOTH directions (apps/projects/prose_test.go
+is the reference). An entry that starts publishing prose goes red, so the day zip
+learns, the ledger empties instead of outliving the gap.
+
+**`openapi.Bare(doc)` (openapi/bare.go) is the ONE walker; never write a second.**
+It reads the MARSHALLED document — Components.Schemas is open-typed, so walking the
+Go value silently skips whichever half it did not expect — and it DESCENDS into
+nested shapes, array items, additionalProperties and every alternative of
+allOf/anyOf/oneOf. That is why it finds 3,246 where the snippet above finds 3,207:
+the snippet reads top-level properties only, so an inline object inside a property
+can ship bare while the count reads clean. Use the snippet to rank the work, the
+walker to gate it. Bare REPORTS rather than refuses, unlike its operation-level
+sibling [Complete], because a relayed document's prose belongs to the repo that
+wrote it — the judgement is the app's.
+
+**Two apps cannot be gated over their whole subset, and the reason is the mount.**
+`o11y` is deliberately ONE product with ONE origin (apps/o11y/o11y.go Mount): cloud's
+native reads and the o11y module's relay table share the `o11y.` namespace, so 769 of
+its 777 components are another repository's and are indistinguishable by name, path
+or `x-app`. Its gate therefore quantifies over the types DECLARED IN THIS PACKAGE,
+read from the package's own source with go/parser at test time — a subject that
+follows the code instead of a list somebody has to remember. `iam` is the same shape
+with no cloud-side half worth gating. Their 2,653 properties are the bulk of what
+remains and none of it is writable here.
+
+The gate count went 27 packages → 68. The prose is the product surface: say the
+UNITS, the sign convention, the closed vocabulary, and what ABSENCE means. A
+description that restates the field's name is worse than none, and only a reader
+catches that.
+
 The same pass moved `dns` and `runtime` from a refusal written in prose at the
 registration to one that is GATED — `untypedByDesign` +
 `TestEveryRouteIsTypedOrNamed` in `apps/{dns,bots}/typed_wire_test.go` (the
