@@ -32,6 +32,8 @@ import (
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/authz/edge"
 	"github.com/hanzoai/cloud/apps/principal"
+
+	"github.com/hanzoai/cloud/internal/scrub"
 )
 
 // idClaims is what a token proved, plus the one thing cloud resolves itself.
@@ -440,10 +442,13 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 	return &idClaims{Claims: *claims}, nil
 }
 
-// APIKeyPrefixes is every opaque-key spelling cloud recognizes at the door.
-// This is the ONE authority. Admission mirrors it rather than importing it (it
-// stays free of cloud-internal imports); if this list changes, that copy must too.
-var APIKeyPrefixes = []string{"pk-", "sk-"}
+// APIKeyPrefixes is every opaque-key spelling cloud recognizes at the door, and
+// the value itself lives in internal/scrub — a leaf, so a caller that must not
+// link package cloud can still read the authority rather than keeping a copy in
+// step by hand. apps/admission used to keep such a copy, and this comment used to
+// ask the next reader to remember it; admission retired it (middleware.go says
+// why), and the leaf is what makes remembering unnecessary for the next one.
+var APIKeyPrefixes = scrub.Prefixes
 
 // PublishablePrefix is the ONE publishable spelling: pk- is the key you may ship
 // in a browser bundle, sk- is the one you may not. Stripe's split, same reason.
@@ -455,14 +460,7 @@ func IsPublishableKey(tok string) bool {
 
 // isAPIKey reports whether tok is an opaque, backend-validated key rather than a
 // JWT, so the sanitizer skips JWT parsing for it.
-func isAPIKey(tok string) bool {
-	for _, p := range APIKeyPrefixes {
-		if strings.HasPrefix(tok, p) {
-			return true
-		}
-	}
-	return false
-}
+func isAPIKey(tok string) bool { return scrub.IsKey(tok) }
 
 // bearerFromAuth extracts the token from a "Bearer <token>" header value.
 func bearerFromAuth(auth string) string {

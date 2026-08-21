@@ -8,6 +8,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/hanzoai/cloud/internal/scrub"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/zip"
@@ -332,7 +333,7 @@ func (d *Door) call(c *zip.Ctx, req message, at At, edge bool) error {
 		// tool is not available right now" and reacts, where a 503 body is a
 		// transport failure it cannot interpret.
 		return c.JSON(200, rpcResult(req.ID, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": ans.Err.Error()}},
+			"content": []map[string]any{{"type": "text", "text": scrub.Text(ans.Err.Error())}},
 			"isError": true,
 		}))
 	}
@@ -436,7 +437,7 @@ func (d *Door) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 
 	for _, a := range in {
 		if a.err != nil {
-			down = append(down, Outage{App: a.app, Error: a.err.Error()})
+			down = append(down, Outage{App: a.app, Error: scrub.Text(a.err.Error())})
 			continue
 		}
 		for _, t := range a.tools {
