@@ -100,12 +100,13 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
           GIT_TOKEN: ${{ github.token }}
-          # The client credential this job already holds. forge-rewrites.sh spends
-          # it on ONE short-lived token scoped to this forge, which is the identity
-          # that can SEE the private repositories -- asked as the per-job token,
-          # twenty-six of them answer 404 and fall through to GitHub.
-          IAM_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
-          IAM_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          # NO CLIENT CREDENTIAL HERE, and it is not an omission. The IAM identity
+          # widens which repositories the FORGE will serve; it is not what makes
+          # the sweep resolve. A repository the forge denies falls through to
+          # GitHub, which forge-rewrites.sh authenticates in the same credential
+          # store from GH_PAT -- so the per-job token this job already holds is
+          # sufficient, and asking for a longer-lived one would put a credential
+          # in a job that has no use for it.
         run: |
           set -euo pipefail
           # RUNNER_TEMP is unset on Hanzo Git. Unguarded, "$RUNNER_TEMP/x" is
@@ -136,7 +137,8 @@ jobs:
           #
           # The script asks the forge, repo by repo, what it will actually serve,
           # rewrites only those, and authenticates github.com in the same
-          # job-local credential store for the rest. One file, both hosts.
+          # job-local credential store for the rest. One file, both hosts, and
+          # nothing here needs an identity wider than the per-job token.
           bash .hanzo/ci/forge-rewrites.sh
 
       - name: Write the documents
