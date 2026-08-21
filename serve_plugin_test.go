@@ -28,7 +28,7 @@ func TestListenOn_PluginServesTheSocketItWasGiven(t *testing.T) {
 	// But zip makes that leg itself: plain(addr) is addr+".http" for a unix
 	// address and plainSibling serves it (transport.go:375). Naming it here as
 	// well asked for the same listener twice, and the second bind failed
-	// "address already in use" — taking pubsub down, then kafka and catalogsync
+	// "address already in use" — taking pubsub down, then kafka and amqp
 	// fail-closed behind it, then the host.
 	//
 	// So this asserts the ABSENCE. The derivation has one home, and a test that

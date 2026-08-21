@@ -807,7 +807,6 @@
    "read": true
   }
  ],
- "catalogsync": [],
  "channels": [
   {
    "id": "get_channels",
@@ -5943,7 +5942,6 @@
    "read": true
   }
  ],
- "rollingcap": [],
  "s3": [],
  "sandbox": [
   {

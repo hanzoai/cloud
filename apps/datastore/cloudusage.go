@@ -16,7 +16,7 @@ import (
 // path. The reason cloud cannot just call ai's: aiobject.EnsureCloudUsageTable
 // execs through object.DatastoreExec, whose connection is opened only by
 // object.InitDatastore, which runs only inside aimod.Mount. None of
-// cmd/{analytics,ask,evals,leaderboard,link,rollingcap,usage} link the ai module,
+// cmd/{analytics,ask,evals,leaderboard,link,usage} link the ai module,
 // so that call ALWAYS returned "datastore: not connected" and every caller
 // silently took its failure branch — an honest-empty dashboard on a warehouse
 // that was up. Meanwhile THIS package's connection is live in exactly those
@@ -24,7 +24,7 @@ import (
 //
 // The alternative to a copy is a func var the host injects. That seam is never
 // wired here by construction: the whole point of these binaries is that they do
-// not link ai, so the var is nil in all seven and the read path is dead again.
+// not link ai, so the var is nil in all six and the read path is dead again.
 // Two copies of idempotent DDL against one table converge; a nil hook does not.
 // Keep in lockstep with ai/object/cloud_usage.go and the zapWriteUsage INSERT.
 const cloudUsageTableDDL = `

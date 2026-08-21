@@ -34,8 +34,7 @@ own `plugin/<name>` binary serving its own prefixes through the same `cloud.List
 middleware it would serve standalone.
 
 Apps start **lazily**, on the first request that reaches their prefix; the four that own
-a listener or a background loop (`pubsub`, `kafka`, `o11y`, `catalogsync`) say so and
-start with the host. That is what makes the whole fleet affordable — an app nobody calls
+a listener (`pubsub`, `kafka`, `amqp`, `o11y`) say so and start with the host. That is what makes the whole fleet affordable — an app nobody calls
 costs a route entry and a struct, not a process and a resident set.
 
 This was one fused process once, and that binary is gone: it linked every subsystem's

@@ -304,11 +304,15 @@ var freeOfVendor = map[string]string{
 	// apps/automations both refuse every op when their package `mounted` is nil,
 	// and it is set only by their own Mount, which only their own plugin calls.
 	// cmd/cloud spawns each app as its OWN PROCESS, so there is no fused binary in
-	// which these could be co-resident. catalogsync calls content.EnsureCatalogAsset
-	// for real and it dead-ends at that nil check before Generate → studio:8188;
-	// guide and integrations reach content only through automations' dispatcher,
-	// which is not mounted either.
-	"catalogsync:studio:8188":  "calls content.EnsureCatalogAsset; content.mounted is nil in this process, so it dead-ends before the render",
+	// which these could be co-resident. guide and integrations reach content only
+	// through automations' dispatcher, which is not mounted either.
+	//
+	// catalogsync was the third entry and it is the reason this note is worth
+	// reading twice: it called content.EnsureCatalogAsset FOR REAL, meaning the
+	// render was its whole purpose and the nil check refused it every time. An
+	// entry here says a reach is harmless; for that one it also said the app could
+	// not do its job, and nobody read it that way for as long as it sat in a list
+	// of things that are fine.
 	"guide:studio:8188":        "reaches content only via automations.InvokeTool; automations.mounted is nil here",
 	"integrations:studio:8188": "reaches content only via automations.Deliver; automations.mounted is nil here",
 
