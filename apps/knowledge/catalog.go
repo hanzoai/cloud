@@ -40,11 +40,25 @@ func kindOf(provider string) string {
 
 // catalogEntry is one connectable source in the unified catalog.
 type catalogEntry struct {
-	Provider    string `json:"provider"`
+	// Provider is the source's id and the address every connector op takes it by
+	// (/v1/knowledge/connectors/:provider). One of github, slack, google, notion.
+	Provider string `json:"provider"`
+	// DisplayName is the label to show a person. First-party connectors carry a
+	// written name ("GitHub", "Google Drive"); a piece-backed one falls back to the
+	// provider capitalized, because the rich activepieces metadata lives behind a
+	// cross-service call this read will not make.
 	DisplayName string `json:"displayName"`
+	// Description is one line of shop copy: what connecting this source pulls in.
+	// Native connectors carry written prose; a piece-backed one reads
+	// "activepieces connector (<piece>)".
 	Description string `json:"description"`
 	Kind        string `json:"kind"` // "native" | "piece"
-	Configured  bool   `json:"configured"`
+	// Configured is whether THIS DEPLOYMENT holds the OAuth client credentials for
+	// the provider. False means Connect would dead-end, so the console can offer it
+	// disabled instead of broken. It is deployment-wide and says nothing about
+	// whether the caller's org has connected the source — that is the connector
+	// list's `status`.
+	Configured bool `json:"configured"`
 }
 
 // catalogOut is the unified connector catalog.

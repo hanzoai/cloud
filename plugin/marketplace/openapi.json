@@ -217,27 +217,34 @@
       "Listing": {
         "properties": {
           "category": {
+            "description": "Category groups the listing in the shop window. Free text — no vocabulary,\nnothing validates it — and unlike Description it is silently cut to 4096\nbytes rather than refused. Empty means ungrouped.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the listing was published, in Unix SECONDS, minted at\ninsert. Every listing read orders by it descending, so it is the shop's\nordering key as well as its age.",
             "type": "integer"
           },
           "currency": {
+            "description": "Currency is the ISO 4217 code Price is quoted in; Create defaults it to \"USD\"\nwhen the publisher names none. It is a LABEL that travels to the shop window:\npublish parses Price with money.ParseUSD and the x402 terms carry no\ncurrency, so another code here changes what is displayed, not what is charged.",
             "type": "string"
           },
           "description": {
+            "description": "Description is the long copy. Publish REFUSES one past 4096 bytes rather\nthan truncating it, so what is stored is what was sent; empty is allowed.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the listing's id, minted here as \"lst_\" + 16 hex characters. A\npublisher cannot choose it: Create overwrites whatever arrives. It is unique\nwithin PublisherOrg (the primary key is the pair), and it is the path segment\nDELETE /v1/marketplace/listings/:id takes.",
             "type": "string"
           },
           "price": {
             "description": "exact per-call price; 0 is free."
           },
           "public": {
+            "description": "Public is whether other orgs can discover the listing. It also decides\nENFORCEMENT: only public rows reach the price table, so a private listing\nwith a price charges nobody. False leaves the row visible to its publisher\nalone.",
             "type": "boolean"
           },
           "publisherOrg": {
+            "description": "PublisherOrg is the org that published the listing, taken from the validated\nprincipal and never off the wire. It is also the PAYEE org — Recipient is\nresolved inside it — and the isolation key: a publisher reads and deletes\nonly rows carrying its own org.",
             "type": "string"
           },
           "recipient": {
@@ -245,9 +252,11 @@
             "type": "string"
           },
           "title": {
+            "description": "Title is the shop-window name, required and refused past 200 bytes. It is\nwhat discovery paints over the tool's registry name.",
             "type": "string"
           },
           "tool": {
+            "description": "Tool is the registry name of the offered capability, in the flat fleet-wide\ntool namespace. It resolved in the publisher's own scope at publish time, so\nno listing advertises a capability that did not exist; it is also the key the\nprice table looks a dispatch up by.",
             "type": "string"
           }
         },
@@ -321,6 +330,7 @@
             "type": "boolean"
           },
           "category": {
+            "description": "Category is that same listing's grouping. Free text chosen by the publisher,\nabsent when there is no public listing or the publisher left it blank.",
             "type": "string"
           },
           "description": {
@@ -331,6 +341,7 @@
           },
           "inputSchema": {},
           "installed": {
+            "description": "Installed is whether the tool is activated for THIS caller's (org, project):\nthe same bit as Activated, under the shop's name for it, which install and\nuninstall are the writes for. It is per caller, so one listing reads\ninstalled for one org and not for another.",
             "type": "boolean"
           },
           "name": {
@@ -343,6 +354,7 @@
             "type": "string"
           },
           "title": {
+            "description": "Title is the shop-window name, painted over the registry Name from the\nCHEAPEST public listing for this tool — several orgs may list the same one,\nand the row shown is the one a buyer would pay. Absent when no org has listed\nthe tool publicly: that row is a plain capability, not an offer.",
             "type": "string"
           }
         },
