@@ -2974,9 +2974,9 @@ The typed packages are `apps/admin` and its eight sub-packages, plus `apps/accou
 `apps/git`, `apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`,
 `apps/ml`, `apps/o11y`, `apps/plugin`, `apps/provisioning`, `apps/search`, `apps/team`, `apps/visor`.
 
-`provisioning` is **21 of 28** — and the 28 were the WHOLE surface, every one of
-them publishing nothing: seven kinds × four verbs, registered from a loop over
-`kinds` with a computed path (`app.Post("/v1/"+k, create(s, k))`). That shape is
+`provisioning` is **30 of 30 — COMPLETE**, and the 28 were the WHOLE surface,
+every one of them publishing nothing: seven kinds × four verbs, registered from a
+loop over `kinds` with a computed path (`app.Post("/v1/"+k, create(s, k))`). That shape is
 untypable twice over and it is the general lesson, not a provisioning quirk: a
 computed path is not a constant, so `cmd/zipdoc` refuses it outright ("route path
 is not a constant string, so the operation has no identity to document",
@@ -2984,17 +2984,32 @@ extract.go:189), and a handler returned by a FACTORY is a call expression with n
 doc comment to lift. **A loop that registers N routes publishes prose for none of
 them, however well the handler is commented** — so the fix is one declaration per
 published operation (`apps/provisioning/typed.go`), which is what every projection
-keys on anyway. The 21 reads and deletes are typed ops; the 7 creates are refused
-for the `cloud.DenyResource` reason `apps/ml` and `apps/company` already carry (a
-402/503 whose body is the fleet's NESTED `{"error":{code,message}}`, which a typed
-op's error cannot be — `errorHandler` renders zip's flat `HTTPError`, and writing
-the nested body inside the op does not escape it because a nil Out makes zip stamp
-`cmp.Or(op.Status, 204)` over the 402). That refusal is GATED, not prose:
-`untypedByDesign` + `TestEveryRouteIsTypedOrNamed` + `TestEveryTypedOpIsDescribed`
-(apps/provisioning/typed_wire_test.go) read the router of the REAL `routes()` and
-require the two ledgers to SUM to the served surface. The seven still declare
-their bodies through `openapi.Register`, so `provisionRequest`/`provisionResult`
-reach the document and an SDK caller has somewhere to put the name.
+keys on anyway. The seven creates were the last holdouts and are typed now, closing the
+`cloud.DenyResource` refusal `apps/ml` and `apps/company` carried too — a refusal
+that had stopped being true: `cloud.Denied` carries the nested
+`{"error":{code,message}}` off a RETURNED error and `serve.go` installs
+`DenyEnvelope` app-wide. `untypedByDesign` is EMPTY and the gate still runs.
+
+**What made this one different from the other two is prose, not wire.** Seven
+addresses share ONE handler, so seven doc comments would be seven accounts of one
+create — which is exactly what the deleted `createContract` const existed to
+prevent. The split that resolves it: **an op's doc comment says what its KIND
+gives you; everything true of all seven is FIELD prose on the shared
+`provisionRequest`/`provisionResult`, stated once and published on all seven by
+the generator.** That is the same seam `TestEveryPublishedFieldIsDescribed`
+already gates, used for what it is good at.
+
+The `proseless` ledger is what measured the gain, and it went red in the RIGHT
+direction: it named twelve properties as "now described", because `openapi.Register`
+derives a schema by reflection and Go drops comments, so those twelve had been
+reaching openapi.yaml, every SDK and every MCP inputSchema bare. It is empty now —
+`password` finally says on the wire that it comes back exactly once and is stored
+nowhere. Measured on the regenerated subset: **+7 `x-tool`, +26 field descriptions**.
+
+The half of the old reason that was RIGHT is kept, in `createOf`: the gate runs
+LAST, after the decode and before the first write, so an unfunded org sending an
+invalid name is still told 400 rather than told it cannot afford a request that was
+never valid. That is why it does not lift into middleware.
 
 Two things this partition is worth reading for. **Tenancy could not go through
 `principal.OrgFrom`**, and the reason is a wire fact rather than a preference:
@@ -5373,6 +5388,45 @@ what proves the debit is real rather than cosmetic); and one org's spend never m
 another's ledger. The specs are `describe.configure({mode:'serial'})` — not by
 preference, but because they all move the same balance and the suite is otherwise
 `fullyParallel`.
+
+## The allowance leg — a spent plan falls through to credit
+
+`Stand` is the money ladder: an active licence admits, otherwise the prepaid
+ledger decides, and Unpaid requires BOTH authorities to have answered no. It
+admitted a subscriber UNCONDITIONALLY, so the usage windows a plan publishes —
+that the rollup reports and the account page renders — bound nothing on the
+request path.
+
+`StandWithin(ctx, lic, allow, w)` adds the leg. The policy it encodes: a plan
+INCLUDES usage and prepaid credit is money bought separately, so a subscriber who
+has spent their included usage does not stop — they fall through to the credit
+leg and pay as they go, and are refused only when they have neither. Allowance
+first, then credit.
+
+**It can only ever REMOVE an admission, so every uncertainty admits.** An absent
+reader, a plan declaring no windows, a ledger that did not answer: all
+`AllowanceUnknown`, all still `Subscribed`. Refusing a paying customer because a
+counter was unreadable is a worse failure than serving one request past a bound,
+and this ladder already takes that side everywhere — "a balance that cannot be
+read is unknown, never zero".
+
+**The unpaid clause had to widen or the leg would have been decorative.** A spent
+allowance counts as the subscription answering no, because it IS the subscription
+answering — the plan includes usage and that usage is gone. Left as
+`lic == LicenceNone`, such a caller fell through to `Unknown`, and **Unknown
+ADMITS** — so the windows would have been enforced only against callers with no
+subscription at all, which is nobody.
+
+`Stand` is now `StandWithin` with the leg unknown, so every existing seam behaves
+byte-identically. A test pins that equivalence across every licence x ledger
+combination; another pins each branch of the new leg. `AllowanceChecker` is
+OPTIONAL and resolved by type assertion the way `PlanChecker` is — a commerce
+that cannot answer simply does not implement it.
+
+Counting lives in commerce (`api/billing/windows.go`): four calendar-aligned
+windows over the `api-usage` ledger rows, one query, and `plan.LevelWindows`
+scales them by price level. See commerce/LLM.md "One way to price a UNIT".
+
 
 ## Encryption at rest: one key per database, derived
 
