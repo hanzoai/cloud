@@ -50,15 +50,11 @@ var depsFieldRationale = map[string]string{
 	//     is the thing that cannot bootstrap itself. ---
 	"IAM":      "identity client",
 	"KMS":      "secrets client — the canonical example: you cannot fetch your KMS credential from KMS",
-	"Base":     "embedded datastore client",
 	"Commerce": "typed inter-subsystem billing client",
 	"AI":       "chat-completions client (a WRITE endpoint), authenticated by the binary's M2M identity",
 	"Embed":    "embeddings client (READ-ONLY), split from AI so a publishable pk- key can never reach the completions path",
 	"O11y":     "telemetry client",
 	"VFS":      "object-store client",
-	"MQ":       "message-bus client",
-	"Payments": "out-of-process by PCI scope isolation; always ZAP-RPC",
-	"Vault":    "out-of-process by PCI scope isolation; always ZAP-RPC",
 	"Metering": "the commerce billing client the request-edge gate meters against",
 	"Audit":    "the append-only audit Recorder, constructed once so the query endpoint reads the store the middleware writes",
 
