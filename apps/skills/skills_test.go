@@ -262,3 +262,55 @@ func TestCatalogIntegrity(t *testing.T) {
 		t.Fatal("no skills embedded")
 	}
 }
+
+// floorSkills is the RATCHET: the catalogue may grow and may not quietly shrink.
+//
+// TestCatalogIntegrity above cannot see a shrink, and that is not an oversight in
+// it — it quantifies over the INDEX, so when the index and the files shrink
+// together every surviving entry still names a readable file with a matching
+// digest and the whole suite stays green. The only lower bound was "not empty".
+//
+// What makes that reachable rather than theoretical: the catalogue is generated
+// in ANOTHER REPO. `make skills` runs hanzoai/openapi's skills.py, which reads
+// THAT repo's per-service openapi.yaml files — not cloud's openapi.yaml — so the
+// output is a function of a checkout this repo does not pin. Measured against a
+// local checkout sitting on a feature branch: 357 skills per brand against the
+// 542 committed here, a 185-skill deletion that would have arrived looking
+// exactly like a routine regeneration.
+//
+// A deliberate deletion lowers this by hand in the same commit, where a reviewer
+// sees the number go down next to the reason — the same rule openapi/floor.json
+// carries for the document.
+const floorSkills = 542
+
+func TestTheCatalogMayNotQuietlyShrink(t *testing.T) {
+	sub, err := fs.Sub(catalogFS, "catalog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	brands, err := fs.ReadDir(sub, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range brands {
+		if !b.IsDir() {
+			continue
+		}
+		raw, err := fs.ReadFile(sub, path.Join(b.Name(), "index.json"))
+		if err != nil {
+			t.Fatalf("%s: index.json: %v", b.Name(), err)
+		}
+		var doc catalog
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatalf("%s: %v", b.Name(), err)
+		}
+		if len(doc.Skills) < floorSkills {
+			t.Errorf("%s publishes %d skills, below the floor of %d. A regeneration "+
+				"run against a stale or branched hanzoai/openapi checkout deletes "+
+				"skills silently, because the index and the files shrink together and "+
+				"every integrity check still passes. If this deletion is deliberate, "+
+				"lower floorSkills in this commit and say why.",
+				b.Name(), len(doc.Skills), floorSkills)
+		}
+	}
+}
