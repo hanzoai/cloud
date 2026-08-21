@@ -51,10 +51,23 @@ const (
 
 // Channel is one connected distribution channel for a brand (a social integration).
 type Channel struct {
-	ID       string `json:"id"`       // the social integration id to target in a post
-	Provider string `json:"provider"` // "x" | "instagram" | "tiktok" | ...
-	Name     string `json:"name"`
-	Disabled bool   `json:"disabled"`
+	// ID is the social integration id a post targets. It is the exact value to put
+	// in a content item's `channels` list to reach this one connected account.
+	ID string `json:"id"`
+	// Provider is the network behind the integration: "x", "instagram", "tiktok"
+	// and the rest of what the org connected. Naming a provider in a publish
+	// targets EVERY connected account of it, so it is the coarse handle where ID
+	// is the precise one.
+	Provider string `json:"provider"`
+	// Name is the account label as the org connected it — the handle a human
+	// recognises. It is never an address: a publish resolves channels by ID or by
+	// Provider and never by this.
+	Name string `json:"name"`
+	// Disabled is true for a channel the org switched off at the social edge. It
+	// is still listed — this is what the org has CONNECTED, not what it can post
+	// to — but a publish never targets it, neither by name nor as part of the
+	// "every channel" default.
+	Disabled bool `json:"disabled"`
 }
 
 // MediaRef is one media attachment on a post.
@@ -124,9 +137,16 @@ func (notConfiguredDistributor) Publish(context.Context, string, DistributeReque
 // PublishInput identifies the CMS item to distribute. The item's channels/caption/media
 // are read from the document, so callers name the item, not its content.
 type PublishInput struct {
-	DocType    string `json:"doctype"`
-	Name       string `json:"name"`
-	ScheduleAt string `json:"scheduleAt,omitempty"` // "" = now
+	// DocType is the content type holding the item: Campaign, SocialPost or Asset.
+	// Any other name is refused as an unknown content type.
+	DocType string `json:"doctype"`
+	// Name is the document within that type — the item to distribute. Its caption,
+	// media and channel list come off the stored document, so this names WHICH
+	// item and says nothing about what goes out.
+	Name string `json:"name"`
+	// ScheduleAt hands a future go-live to the channel's own scheduler, as an
+	// ISO-8601 time. Empty posts now.
+	ScheduleAt string `json:"scheduleAt,omitempty"`
 }
 
 // PublishResult reports the distribution outcome. Status is "distributed" |
@@ -136,10 +156,30 @@ type PublishInput struct {
 // "scheduled" with the per-channel truth in Results. Results is the per-channel
 // breakdown (which channel went out, which did not, and why).
 type PublishResult struct {
-	Status      string            `json:"status"`
-	Channels    []string          `json:"channels,omitempty"`
+	// Status is the ONE headline, drawn from: "distributed" (something is on
+	// record and went out now), "scheduled" (same, handed to the channel's own
+	// scheduler for later), "failed" (nothing is on record — this fan-out missed
+	// entirely and no earlier one landed), "in_progress" (another publisher holds
+	// the item, so this call posted NOTHING and the caller retries), and
+	// "not_configured" (no distribution edge is wired; a transition records it
+	// instead of failing). A partial fan-out is "distributed"/"scheduled", never
+	// "failed" — the per-channel truth is in Results.
+	Status string `json:"status"`
+	// Channels is the channel list read off the content document — integration ids
+	// or provider names, as the item declares them. Empty when the item names
+	// none, which targets every connected, enabled channel. It is what was ASKED
+	// for; Results is what happened.
+	Channels []string `json:"channels,omitempty"`
+	// ExternalIDs maps channel id → the post id that channel returned, merged with
+	// everything earlier publishes recorded. Successes only, and it is the
+	// idempotency ledger: a channel named here is skipped by every later publish
+	// of this item, so the map only ever grows.
 	ExternalIDs map[string]string `json:"externalIds,omitempty"`
-	Results     []ChannelResult   `json:"results,omitempty"`
+	// Results is the outcome per channel — which went out, which did not and why —
+	// covering the whole fan-out including failures, so partial success is never
+	// flattened into one verdict. A channel the org has not connected appears here
+	// as failed with "channel not connected".
+	Results []ChannelResult `json:"results,omitempty"`
 }
 
 // Publish distributes a CMS content item to its channels and records the returned post

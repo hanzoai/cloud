@@ -282,17 +282,19 @@
       "Channel": {
         "properties": {
           "disabled": {
+            "description": "Disabled is true for a channel the org switched off at the social edge. It\nis still listed — this is what the org has CONNECTED, not what it can post\nto — but a publish never targets it, neither by name nor as part of the\n\"every channel\" default.",
             "type": "boolean"
           },
           "id": {
-            "description": "the social integration id to target in a post",
+            "description": "ID is the social integration id a post targets. It is the exact value to put\nin a content item's `channels` list to reach this one connected account.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the account label as the org connected it — the handle a human\nrecognises. It is never an address: a publish resolves channels by ID or by\nProvider and never by this.",
             "type": "string"
           },
           "provider": {
-            "description": "\"x\" | \"instagram\" | \"tiktok\" | ...",
+            "description": "Provider is the network behind the integration: \"x\", \"instagram\", \"tiktok\"\nand the rest of what the org connected. Naming a provider in a publish\ntargets EVERY connected account of it, so it is the coarse handle where ID\nis the precise one.",
             "type": "string"
           }
         },
@@ -396,13 +398,15 @@
       "PublishInput": {
         "properties": {
           "doctype": {
+            "description": "DocType is the content type holding the item: Campaign, SocialPost or Asset.\nAny other name is refused as an unknown content type.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the document within that type — the item to distribute. Its caption,\nmedia and channel list come off the stored document, so this names WHICH\nitem and says nothing about what goes out.",
             "type": "string"
           },
           "scheduleAt": {
-            "description": "\"\" = now",
+            "description": "ScheduleAt hands a future go-live to the channel's own scheduler, as an\nISO-8601 time. Empty posts now.",
             "type": "string"
           }
         },
@@ -411,6 +415,7 @@
       "PublishResult": {
         "properties": {
           "channels": {
+            "description": "Channels is the channel list read off the content document — integration ids\nor provider names, as the item declares them. Empty when the item names\nnone, which targets every connected, enabled channel. It is what was ASKED\nfor; Results is what happened.",
             "items": {
               "type": "string"
             },
@@ -420,15 +425,18 @@
             "additionalProperties": {
               "type": "string"
             },
+            "description": "ExternalIDs maps channel id → the post id that channel returned, merged with\neverything earlier publishes recorded. Successes only, and it is the\nidempotency ledger: a channel named here is skipped by every later publish\nof this item, so the map only ever grows.",
             "type": "object"
           },
           "results": {
+            "description": "Results is the outcome per channel — which went out, which did not and why —\ncovering the whole fan-out including failures, so partial success is never\nflattened into one verdict. A channel the org has not connected appears here\nas failed with \"channel not connected\".",
             "items": {
               "$ref": "#/components/schemas/ChannelResult"
             },
             "type": "array"
           },
           "status": {
+            "description": "Status is the ONE headline, drawn from: \"distributed\" (something is on\nrecord and went out now), \"scheduled\" (same, handed to the channel's own\nscheduler for later), \"failed\" (nothing is on record — this fan-out missed\nentirely and no earlier one landed), \"in_progress\" (another publisher holds\nthe item, so this call posted NOTHING and the caller retries), and\n\"not_configured\" (no distribution edge is wired; a transition records it\ninstead of failing). A partial fan-out is \"distributed\"/\"scheduled\", never\n\"failed\" — the per-channel truth is in Results.",
             "type": "string"
           }
         },
@@ -437,15 +445,19 @@
       "StorefrontResult": {
         "properties": {
           "imageUrl": {
+            "description": "ImageURL is the absolute URL the listing's headerImage now points at. The\nimage is REFERENCED, not copied — it stays in the org's studio output\nbucket, so removing it there empties the storefront tile.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the product handle the image was attached to. It IS the asset's\n`design` field — that equality is the whole join between the studio and the\ncatalog, which is why an asset with no design produces no storefront result\nat all.",
             "type": "string"
           },
           "status": {
+            "description": "Status is one of \"published\" (the product image was set), \"not_configured\"\n(no commerce edge, no store provisioned for the org, or a token that is not\nadmin on the store — a fail-closed no-op) or \"failed\" (commerce answered and\nerrored). None of the three fails the transition that produced it.",
             "type": "string"
           },
           "store": {
+            "description": "Store is the commerce store id the image landed in, resolved for the org\nmid-call. Present only on \"published\": a result that never got that far\ncarries none.",
             "type": "string"
           }
         },
@@ -454,21 +466,27 @@
       "TransitionResult": {
         "properties": {
           "distribution": {
-            "$ref": "#/components/schemas/PublishResult"
+            "$ref": "#/components/schemas/PublishResult",
+            "description": "Distribution is the channel fan-out this move triggered. Present ONLY on the\nmove to published, the single edge that distributes — so its absence means\nno fan-out was attempted, never that one failed quietly. A fan-out that DID\nfail is present carrying its own honest status, because distribution never\nrolls the status change back."
           },
           "doctype": {
+            "description": "DocType is the content type that moved — Campaign, SocialPost or Asset —\nechoed from the path.",
             "type": "string"
           },
           "from": {
+            "description": "From is the state the item held when it was read. A document carrying no\nstatus yet reads as \"draft\".",
             "type": "string"
           },
           "name": {
+            "description": "Name is the document that moved, echoed from the path.",
             "type": "string"
           },
           "storefront": {
-            "$ref": "#/components/schemas/StorefrontResult"
+            "$ref": "#/components/schemas/StorefrontResult",
+            "description": "Storefront is the catalog side effect, present only when a published Asset\nwas product imagery — it carries a design and a kind of ecom, product or\nlifestyle. Absent for everything else, so absence reads as \"not catalog\nimagery\" rather than \"the catalog failed\"."
           },
           "to": {
+            "description": "To is the state it holds now. From == To on an idempotent re-transition,\nwhich is legal and is where a caller that lost a publish race lands.",
             "type": "string"
           }
         },
@@ -477,21 +495,27 @@
       "boardItem": {
         "properties": {
           "doctype": {
+            "description": "DocType is which content type the row came from: Campaign, SocialPost or\nAsset. The board spans all three at once, so this is what tells them apart.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the document within that type. (doctype, name) is the pair every\n/v1/content write addresses an item by.",
             "type": "string"
           },
           "project": {
+            "description": "Project is the brand/site sub-scope within the org. Absent for an item held\nat org level rather than under one brand.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the lifecycle state: draft, in_review, approved, queued, published\nor archived. It decides what a reader may see — the public site pulls\nexactly \"published\" and nothing else — so it is a visibility fact, not a\nworkflow label.",
             "type": "string"
           },
           "title": {
+            "description": "Title is the item's headline, read from its type's own title field. Empty\nfor a document that has none.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is unix seconds of the document's last write, and the key the\nboard sorts on, newest first.",
             "type": "integer"
           }
         },
@@ -528,12 +552,15 @@
       "stateGraph": {
         "properties": {
           "initial": {
+            "description": "Initial is the state a fresh document starts in — \"draft\". A stored document\nwith no status at all is read as this too.",
             "type": "string"
           },
           "live": {
+            "description": "Live is the ONE state that is publicly readable — \"published\". The site\npulls only documents in it, so reaching Live IS site-publish; every other\nstate is invisible to a reader.",
             "type": "string"
           },
           "states": {
+            "description": "States is every lifecycle state in canonical order: draft, in_review,\napproved, queued, published, archived. The console lays its board columns\nout in exactly this order, so the order is part of the answer.",
             "items": {
               "type": "string"
             },
@@ -546,6 +573,7 @@
               },
               "type": "array"
             },
+            "description": "Transitions maps each state to the states it may move to. A target absent\nfrom a state's list is REFUSED, at the endpoint and again at the storage\nboundary — this is the whole rule, not a hint for the UI. A state never\nlists itself; a move that changes nothing is always legal.",
             "type": "object"
           }
         },
