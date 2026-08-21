@@ -183,6 +183,16 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// The org's own postings, signed — the widest read of the same wallet the two
 	// above answer for. Typed, where they are raw (ledger.go says why).
 	mountLedger(app, o)
+
+	// The rest of /v1/billing. Each family is a relay onto the process that owns
+	// the merchant store (peer.go), because the address is this capability's and
+	// the rows are commerce's — one address, one owner, and no second copy of a
+	// question that already has an answer.
+	mountInvoices(app, o)
+	mountStatement(app, o)
+	mountCredits(app, o)
+	mountAlerts(app, o)
+	mountRails(app, o)
 }
 
 // The PROSE for the raw routes above. Each survivor is a raw *zip.Ctx handler

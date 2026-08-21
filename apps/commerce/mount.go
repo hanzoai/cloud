@@ -83,23 +83,6 @@ var Prefixes = []string{
 	// or cart open 402'd for want of an LLM balance it has nothing to do with
 	// (the karma /v1/store/current outage). One root claims them all.
 	"/v1/commerce",
-	// The tenant-admin surface. It is outside /v1, which HIP-0139 §3.3 does not
-	// allow, and it is the module's to move: hanzoai/commerce registers
-	// /_/commerce/deposits from its own setupRoutes (commerce.go, adminGroup),
-	// so the mount prefix changes there. Owned here until it does.
-	"/_/commerce",
-	// Payment-provider webhook receiver (POST /v1/billing/webhooks/:provider —
-	// Square et al). The provider's HMAC over the registered notification URL +
-	// body IS the auth; a bearer gate is impossible for provider callbacks.
-	"/v1/billing/webhooks",
-	// The platform auto-recharge sweep (PlatformOnly, POST .../run-all). The
-	// durable cron's poke carries the COMMERCE_SERVICE_TOKEN bearer; without
-	// this owner it landed on the account-bridge /v1/billing/* catch-all, whose
-	// session gate 403s a service token. That catch-all is gone, so the miss is
-	// now a 404 from the /v1 remainder instead of a 403 — still an outage, still
-	// this list's job to prevent. (Landed 5x before the unfork — #274 — and the
-	// pin test lives beside THIS list so it can't silently regress.)
-	"/v1/billing/recharge",
 }
 
 // commerceMasterKey answers ONE question — can this build actually use the key we
@@ -188,6 +171,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeTxns()
 	exposeSpend()
 	exposeScopeRules()
+	exposeInvoices()
+	exposeStatement()
+	exposeGrants()
+	exposeAlerts()
+	exposeRails()
 
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")
@@ -253,7 +241,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// rather than onto the router only REST is served through. exposePayments puts the
 	// screen on the WRITE only; the receipt read mints nothing.
 	exposePayments(zapp, screen)
-	exposeInvoices(zapp)
 	// The typed cart surface (cart.go). It reads and writes the embedded module's
 	// own cart store, so unlike the payment ops it is only useful when the embed
 	// below succeeds — and it is registered HERE anyway, ahead of it, so a cart
@@ -469,629 +456,47 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		nil,
 	)
 
-	// Provider webhook intake at the LIVE registered path. Chain mirrors the
+	// Provider webhook intake, under commerce's own root. Chain mirrors the
 	// commerce-standalone posture: gated request context, then the sessionless
 	// HMAC-verified handler. It stays raw because it speaks the provider's
 	// protocol: the signature verifies the raw payload bytes, so there is no
 	// typed input to declare.
-	app.Post("/v1/billing/webhooks/:provider", commercemid.RequestContext(), commercebilling.HandleProviderWebhook)
+	//
+	// IT STAYS IN THIS PROCESS while every other /v1/billing door moved to the
+	// billing capability, and the reason is the signature. The processor signs
+	// the RAW BODY — Square signs the notification URL concatenated with it — so
+	// the bytes have to be verified before anything can be typed out of them,
+	// and a relay that re-encoded them would be verifying a payload the
+	// processor never signed. It also SETTLES: the handler credits the wallet
+	// out of commerce's own store, which is the store this process owns.
+	//
+	// So the address follows the process rather than the product prefix
+	// (HIP-0139 §3.1), and the processor dashboards are repointed to it.
+	app.Post("/v1/commerce/webhooks/:provider", commercemid.RequestContext(), commercebilling.HandleProviderWebhook)
 
-	// Durable-cron auto-recharge poke (COMMERCE_SERVICE_TOKEN bearer) at its
-	// live path — the retired /v1/billing/* forwarder's session gate 403'd it. Same gate
-	// chain the commerce route table uses: TokenRequired authenticates the
-	// service token, PlatformOnly authorizes the mint. It is not typed yet —
-	// module work, per the module-handler note.
-	app.Post("/v1/billing/recharge/run-all",
-		commercemid.RequestContext(),
-		commercemid.TokenRequired(),
-		commercemid.PlatformOnly(),
-		commercebilling.RunAutoRechargeAllOrgs,
-	)
-
-	// POST /v1/billing/mode — the org's live/sandbox switch, and the ONLY way to
-	// move a tenant onto real card rails. organization.TestMode() is `!o.Live` and it is
-	// the SINGLE authority for both the Square environment and the ledger bucket, so an
-	// org that has never been flipped transacts in SANDBOX — fail-closed by design, and
-	// the reason a production-credentialled deployment can still hand a buyer a sandbox
-	// card form. Unrouted, that flip could not be performed at all in this binary: the
-	// switch lives on commerce's mint group, which the co-resident embed never compiles.
+	// EVERY /v1/billing DOOR IS GONE FROM THIS FILE, and what replaced them is
+	// beside them: the plane ops in this package's *_rpc.go files.
 	//
-	// Chain is auto-recharge/run-all's, because this is the same class of route — a
-	// money-MINT control, not a customer action. commerce gates it on `mint`
-	// (middleware.Mint: internal service token OR platform global admin, NEVER the
-	// org-level Admin bit), and TokenRequired + PlatformOnly is that gate here. An org
-	// admin must not be able to move their own org between sandbox and production.
-	// It is not typed yet — module work, per the module-handler note.
-	app.Post("/v1/billing/mode",
-		commercemid.RequestContext(),
-		commercemid.TokenRequired(),
-		commercemid.PlatformOnly(),
-		commercebilling.SetOrgTestMode,
-	)
-
-	// GET /v1/billing/plans — the public tier catalog the console renders. commerce's
-	// legacy api.Route() billing bundle (ListPlans, invoices, subscriptions, …) is NOT
-	// registered by the co-resident embed: setupRoutes wires only /v1/commerce/*, so
-	// /v1/billing/plans has NO handler in this binary. The account bridge's
-	// /v1/billing/* wildcard (order 122) then forwarded the read BACK to commerce at
-	// COMMERCE_URL — which defaults to the public api.hanzo.ai edge — re-entering the
-	// same bridge in an unbounded self-dispatch loop that surfaced as a 502
-	// ("commerce unreachable: Get https://api.hanzo.ai/v1/billing/plans"). Registering
-	// the static ListPlans handler HERE serves plans in-process — the same co-resident
-	// move billing.go makes for usage/balance. RequestContext supplies the namespaced
-	// context promo.Active reads.
+	// There used to be thirty-seven registrations here, each one a commerce
+	// module handler mounted at a /v1/billing address with its own gate chain
+	// re-derived by hand — the console reads, the mint writes, the service-token
+	// twins, the spend-cap CRUD. They were right to exist: commerce's own route
+	// bundle is never compiled into this binary, so an address nothing named here
+	// reached nobody, and the history each of them carried was a real outage.
 	//
-	// THE BRIDGE IS GONE (its manifest row with it), and this registration is why: the
-	// wildcard's whole allowlist ended up served co-resident, here and on billing, so it
-	// held two bare stems and answered nothing. Each address below is claimed on THIS
-	// app's manifest row, deeper than the bare /v1/billing stem, which is what makes the
-	// host route it here. The past-tense loops recorded below are the reason each of
-	// these registrations exists — history, not a live hazard — and dropping one now
-	// misses on the /v1 remainder instead of self-dispatching. It is not typed
-	// yet — module work, per the module-handler note.
-	app.Get("/v1/billing/plans", commercemid.RequestContext(), commercebilling.ListPlans)
-
-	// The rest of the console's billing READS, served co-resident for the SAME reason
-	// plans is: commerce's api.Route() billing bundle is never compiled here, so without
-	// these registrations every one of them fell through to the account bridge's
-	// /v1/billing/* wildcard, which forwarded to COMMERCE_URL — the public api.hanzo.ai
-	// edge, which is THIS binary — and self-dispatched into a 502 loop. In prod there is
-	// no separate commerce backend to point COMMERCE_URL at (the in-cluster `commerce`
-	// Service selects the cloud pods), so co-residence is the only way to serve them.
+	// They were also the wrong app's addresses. /v1/billing is the billing
+	// capability's root (HIP-0018 carries `capability: billing`; HIP-1220 §2 says
+	// commerce must not serve it), and every one of those thirty-seven was a line
+	// in openapi/misfiled.txt. So the doors moved to apps/billing and the ANSWERS
+	// stayed here, where the store is: each question is a plane op on a
+	// value-taking core exported by the module, and billing asks it by name.
 	//
-	// Chain: RequestContext (gated context) → IAMTokenRequired (resolves the org from the
-	// gateway-validated X-Org-Id into Locals("organization"), the namespace commerce's
-	// GetOrganization reads) → PinBillingSubject (pins the caller's OWN billing subject
-	// into the query — the isolation the bridge applied, carried onto the co-resident
-	// route so a read can never widen past the caller; fail-closed for an unvalidated
-	// caller) → the commerce handler. payment-config is
-	// org-scoped, not subject-scoped, but PinBillingSubject is still the auth gate that
-	// keeps an unvalidated caller from reaching GetOrganization; its pinned (unused)
-	// subject params are ignored by that handler.
-	//
-	// No row is typed yet — module work, per the module-handler note.
-	billingRead := []struct {
-		path string
-		h    zip.Handler
-	}{
-		{"/v1/billing/invoices", commercebilling.ListInvoices},
-		// The PDF download also serves bytes — an attachment, not a JSON shape —
-		// which keeps it off the typed plane on its own.
-		{"/v1/billing/invoices/:id/pdf", commercebilling.DownloadInvoicePDF},
-		{"/v1/billing/subscriptions", commercebilling.ListBillingSubscriptions},
-		{"/v1/billing/alerts", commercebilling.ListSpendAlerts},
-		{"/v1/billing/payouts", commercebilling.ListPayouts},
-		{"/v1/billing/settings", commercebilling.GetPaymentConfig},
-		// The Credits tab's read. It sat in the same hole as its siblings: the
-		// handler exists in the vendored module and no app in the fleet registered
-		// it, so the address reached nobody and billing.hanzo.ai's client swallowed
-		// the 404 into an empty list — a customer with grants saw none. Read-only
-		// and subject-scoped like the rest; MINTING credit stays where it is, on
-		// the mint-gated POST /v1/billing/credit.
-		{"/v1/billing/credits", commercebilling.ListCreditGrants},
-		// The per-key rate-limit tier the ai router reads on every request
-		// (hanzoai/ai routers/ratelimit.go commerceTierLookup). Naming the prefix in
-		// the manifest says WHO owns a path; it does not serve one, and commerce's
-		// api.Route() bundle that would is never compiled here — so this 404'd, every
-		// lookup failed, and the fallback is zen-free: 60 rpm against 500 for pro.
-		// It gave nothing away; it silently served every PAYING customer the most
-		// restrictive tier in the table.
-		//
-		// The wire top-up rail: the serving BRAND's receiving bank details
-		// (host→brand, org row hydrated from KMS /tenants/<brand>/wire) with the
-		// caller's billing key rendered into the payment reference — which is why
-		// it belongs on THIS chain: the reference is payer attribution, and an
-		// unpinned caller would be an unattributable wire. Nothing mints here;
-		// settlement is the admin wire/credit verb on bank receipt.
-		{"/v1/billing/wire", commercebilling.GetWireInstructions},
-		// The custody rail's live capability list (chains + tokens straight from
-		// the MPC processor) — the pay SPA renders its asset picker from this.
-		{"/v1/billing/crypto/options", commercebilling.GetCryptoOptions},
-		// A caller-scoped crypto deposit intent read (pending → confirming →
-		// succeeded); a foreign intent id answers 404.
-		{"/v1/billing/crypto/deposit/:id", commercebilling.GetCryptoDeposit},
-		// "What plan am I on, and how much of it is left" — the one question a
-		// subscriber asks and the one nothing could answer. Same hole as the
-		// credits tab and the tier lookup above: the handler has been in the
-		// vendored module all along (api/billing/allotment.go), and commerce's own
-		// api.Route() bundle that registers it is behind //go:build cloud and is
-		// never compiled here, so the address reached nobody.
-		//
-		// It composes the two figures that must never be added together: the plan
-		// side (what the subscription includes, what has been consumed against it,
-		// what remains) and the WALLET side (prepaid credit, a balance bought
-		// separately). One is usage a plan grants; the other is money the customer
-		// holds. The handler already keeps them in separate blocks, which is the
-		// reason it is worth mounting rather than rewriting.
-		//
-		// Subject-scoped like every row here, and that matters more than usual: the
-		// handler reads ?user= verbatim, and PinBillingSubject overwrites it with
-		// the validated caller before the handler runs. Unpinned, this is the same
-		// cross-customer read that GetTier turned out to be — every self-serve
-		// signup lands in one org with a per-person subject, so the org namespace
-		// closes nothing on its own.
-		{"/v1/billing/usage/rollup", commercebilling.GetUsageRollup},
-	}
-	for _, r := range billingRead {
-		app.Get(r.path,
-			commercemid.RequestContext(),
-			iammiddleware.IAMTokenRequired(),
-			accountclient.PinBillingSubject(),
-			r.h,
-		)
-	}
-
-	// GET /v1/billing/tier — the per-key rate-limit tier the ai router reads on
-	// every request (hanzoai/ai routers/ratelimit.go commerceTierLookup).
-	//
-	// It gets its OWN chain because its caller is a SERVICE, not a person, and the
-	// two resolve an org by different doors. IAMTokenRequired resolves one only
-	// from a gateway-validated user identity — ownerID AND X-User-Id AND email —
-	// and deliberately falls through on a bare X-Org-Id, because admitting on that
-	// alone once let an off-gateway caller name any victim org. The router sends
-	// exactly that: a service bearer plus X-Org-Id and no user. So it arrived with
-	// a nil org, GetTier's type assertion panicked, and every lookup answered 500.
-	//
-	// TokenRequired is the door for a caller that IS a credential: it verifies the
-	// service token FIRST and only then calls ensureIAMOrg, which resolves the
-	// header. Credential before trust, so nothing is admitted on a header alone —
-	// the same reason the catalog CRUD and the recharge poke above each carry
-	// their own TokenRequired rather than riding an IAM chain.
-	//
-	// Fixing the panic alone was not enough and it is worth saying why: the router
-	// maps ANY non-2xx to TierZenFree, so a refusal downgrades a paying customer
-	// exactly like the crash did — 60 rpm against 500 for pro — silently, with no
-	// error anywhere the customer or we would see. The tier has to RESOLVE, not
-	// merely stop crashing. It is not typed yet — module work, per the
-	// module-handler note.
-	// PinBillingSubject IS REQUIRED HERE, and its absence was a live leak.
-	//
-	// TokenRequired authenticates and does not pin, which is the whole hazard the
-	// comment on /v1/billing/methods already spells out: any authenticated browser
-	// could name another subject. GetTier reads ?user= verbatim and answers with
-	// that subject's wallet — prepaidAvailable, creditsRemaining, effectiveAvailable
-	// — so one signed-in customer could read every other customer's balance.
-	//
-	// It is CROSS-CUSTOMER, not merely cross-subject, because every self-serve
-	// signup lands in the SAME org (account.SignupOrg = "hanzo") with a per-person
-	// subject. The org namespace is closed; the subject was not. Measured live
-	// before this line: one caller, four wallets — hanzo/z 10966, hanzo 6375,
-	// hanzo/admin 10000, hanzo/dev 0.
-	//
-	// The pin does not break the S2S reader this route exists for: PinBillingSubject
-	// admits a verified service-token caller that names its own org and leaves its
-	// query untouched (apps/account/billing_coresident.go), which is exactly the
-	// shape ai's rate limiter and apps/metering send. TokenRequired stays after it
-	// so that caller still resolves an org.
-	app.Get("/v1/billing/tier",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercemid.TokenRequired(),
-		commercebilling.GetTier,
-	)
-
-	// POST /v1/billing/crypto/deposit — mint a per-payer MPC custody deposit
-	// address (commerce thirdparty/mpc → the hanzo-mpc signer fleet's /keygen).
-	// Same chain as the reads: the credited payer is the PINNED caller subject,
-	// never a body value, and the handler reuses the payer's open intent so a
-	// refresh cannot spray keygens. No balance moves here — the chain watcher
-	// credits on real confirmations. It is not typed yet — module work, per the
-	// module-handler note.
-	app.Post("/v1/billing/crypto/deposit",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.CreateCryptoDeposit,
-	)
-
-	// The PORTAL payment-method pair — the address the BILLING app proxies to.
-	//
-	// It is the SERVICE-TOKEN face of the same rows the customer family above answers,
-	// and it is a separate address because it admits a separate principal — not because
-	// anything forwards to it. It was born when billing still held the customer address
-	// and could not forward there (the forward was its own route and re-entered it — the
-	// depth-8 502 top-up hit); billing asked for /v1/billing/portal/methods all along
-	// while NOTHING in the fleet served it, so the proxy forwarded a 404 verbatim, the
-	// saved-card list was empty no matter how many cards were vaulted, and the DELETE had
-	// no owner at all. Both families live here now (manifest.Apps gives commerce both
-	// prefixes) and neither hops; what remains is the gate, which differs, which is why
-	// they remain two addresses rather than one.
-	//
-	// THE GATE IS THE POINT, and it is not the console chain above. Both handlers key
-	// their finer scope on a value the CALLER supplies — PortalPaymentMethods filters
-	// on ?customerId, DetachPaymentMethod resolves :id — so the chain has to pin the
-	// tenant on BOTH kinds of principal that reach here:
-	//
-	//   - TokenRequired (NOT IAMTokenRequired) authenticates the caller and resolves
-	//     the ORG from the gateway-pinned X-Org-Id into Locals("organization") — the
-	//     namespace GetOrganization reads — for an IAM member AND for the raw
-	//     COMMERCE_SERVICE_TOKEN the billing proxy presents. IAMTokenRequired admits
-	//     only the former and would leave the org unset for the latter (a 500, the
-	//     way GetTier found out). X-Org-Id is stripped from every client request by
-	//     the gateway, so the org is never a caller-supplied value.
-	//   - PinBillingSubject is the IDOR control. TokenRequired ALONE authenticates
-	//     without pinning, and that is the whole hazard: any authenticated browser
-	//     could then read another subject's cards by naming their customerId. The pin
-	//     OVERWRITES every billing-subject key (user/userId/customerId) with the
-	//     VALIDATED caller's own account.Payer subject and drops ?org, so a forged
-	//     query cannot widen scope; it passes the query through ONLY for a caller
-	//     whose bearer constant-time-matches COMMERCE_SERVICE_TOKEN (the billing
-	//     proxy, which pins the subject server-side to readerOrg before it calls);
-	//     and it fail-closes anyone who is neither, BEFORE the handler runs.
-	//
-	// Cross-ORG is the namespace and is closed for both principals — including the
-	// privileged one, which bypasses commerce's intra-org owner guard but never the
-	// namespace (commerce api/billing/payment_methods_tenant_test.go proves it).
-	// Neither is typed yet — module work, per the module-handler note.
-	app.Get("/v1/billing/portal/methods",
-		commercemid.RequestContext(),
-		commercemid.TokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.PortalPaymentMethods,
-	)
-	app.Delete("/v1/billing/portal/methods/:id",
-		commercemid.RequestContext(),
-		commercemid.TokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.DetachPaymentMethod,
-	)
-	// SAVING a card completes the family, and it had no owner at all: a customer
-	// could list saved cards and delete one, but never add one. The billing app's
-	// POST /v1/billing/methods forwards to commerce's /v1/billing/methods — an
-	// address commerce does NOT serve co-resident and which the in-cluster
-	// `commerce` Service resolves back to THESE pods, so the forward re-enters the
-	// forwarder. It never got the chance to: CLOUD_COMMERCE_HTTP_URL is unset, so
-	// the proxy is unconfigured and every saved-card call — GET and POST alike —
-	// answers 501 "billing is not configured". The whole feature is dark in
-	// production, which is why nothing can bill a monthly plan to a card on file.
-	//
-	// Co-resident on the portal face is the fix the GET and DELETE already model:
-	// no HTTP hop, so nothing can self-dispatch, and the same gate applies.
-	// commerce's CreatePaymentMethod vaults the Square nonce (providerRef) as a
-	// reusable card-on-file and stores the billing address with it — that vaulted
-	// card is what a subscription renewal charges later.
-	//
-	// PinBillingSubject is load-bearing on a WRITE, not decoration: this handler
-	// reads its subject from the BODY (customerId), and the pin overwrites the
-	// subject keys there while preserving card/type/sourceId — so a caller can
-	// only ever attach a card to its OWN account, whatever the body claims.
-	// THE CUSTOMER ADDRESS for saved cards. cloud's billing app used to forward
-	// these to commerce over HTTP, and that proxy is unconfigured here — so a
-	// signed-in customer got 401 listing their own cards and the checkout's
-	// prefill failed on every load. Served in-process instead: no hop to
-	// misconfigure, and the same pinned-subject gate as its portal twin, which
-	// is what keeps a caller inside its own account whatever it sends. None of
-	// the three is typed yet — module work, per the module-handler note.
-	app.Get("/v1/billing/methods",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.ListPaymentMethods,
-	)
-	app.Post("/v1/billing/methods",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.CreatePaymentMethod,
-	)
-	app.Delete("/v1/billing/methods/:id",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.DetachPaymentMethod,
-	)
-
-	// The portal save — the service-token twin of the customer POST above. It
-	// is not typed yet — module work, per the module-handler note.
-	app.Post("/v1/billing/portal/methods",
-		commercemid.RequestContext(),
-		commercemid.TokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.CreatePaymentMethod,
-	)
-
-	// GET /v1/billing/alerts/authorize — the per-request per-scope spend-CAP
-	// VERDICT the request-edge metering gate consumes (clients/metering scopeAuthorize,
-	// pathLimitsAuthorize). It is a SERVICE-token S2S read (COMMERCE_SERVICE_TOKEN +
-	// X-Org-Id), NOT a browser/IAM read — so it needs its OWN registration, distinct from
-	// the console billingRead block above: without a co-resident handler this authorize
-	// fell through to the account bridge's /v1/billing/* wildcard (order 122), which — being
-	// service-token-forwardable (its allowlist) — re-forwarded it to
-	// COMMERCE_URL (the public api.hanzo.ai edge = THIS binary) over the commerce transport's
-	// self-routing dispatch, re-entering the same wildcard until the depth-8 guard refused
-	// → 502 → the gate fails OPEN (the cap is a policy overlay, so no traffic was blocked,
-	// but ~135 502s/30m spammed the money path and each burned 8 full-app dispatches). The
-	// plain GET /v1/billing/alerts (registered above) already broke this loop for the
-	// CRUD read; this closes the /authorize sibling the metering gate hits on every call.
-	//
-	// Chain mirrors commerce's OWN gate on this route (api/billing/handlers.go: the `billing`
-	// group's userRequired = TokenRequired) plus the RequestContext the standalone supplies
-	// globally — NOT the IAM/PinBillingSubject console chain: a raw service token is not an
-	// IAM JWT, so IAMTokenRequired would leave GetOrganization unset and AuthorizeSpendCap
-	// would 500. TokenRequired authenticates the service token AND resolves the tenant from
-	// the gateway-pinned X-Org-Id into Locals("organization"), which AuthorizeSpendCap reads.
-	// No PlatformOnly:
-	// authorize is a per-org cap read, not a cross-org mint (unlike auto-recharge/run-all).
-	// It is not typed yet — module work, per the module-handler note.
-	app.Get("/v1/billing/alerts/authorize",
-		commercemid.RequestContext(),
-		commercemid.TokenRequired(),
-		commercebilling.AuthorizeSpendCap,
-	)
-
-	// Self-service spend-cap CRUD WRITES — the customer half of the cap: a customer
-	// (or the admin S2S) CREATES / EDITS / REMOVES their own usage caps. These are the
-	// write siblings of the co-resident GET /v1/billing/alerts list; without their
-	// own registration they too fell through the account bridge's /v1/billing/* wildcard
-	// (its allowlist included POST alerts) into the SAME 502 self-dispatch loop
-	// authorize hit — so a customer could not set a cap AT ALL in the unified binary
-	// (POST/PATCH/DELETE all 502'd). Same chain commerce's own route table gates them with
-	// (api/billing/handlers.go:322-325, the `user` group's userRequired = TokenRequired) +
-	// the global RequestContext — an IAM JWT OR the COMMERCE_SERVICE_TOKEN, org resolved
-	// from the gateway-pinned X-Org-Id into Locals("organization"). Org-scoped by that
-	// namespace (a caller only ever writes their OWN org's caps; a foreign :id is a
-	// not-found miss in the caller's namespace), so no PinBillingSubject — alerts are
-	// org-level, not billing-subject-level.
-	// A spend cap is a FINANCIAL SAFETY control, so its writes are gated to an ORG ADMIN
-	// (or SuperAdmin, or the trusted S2S service token for the SuperAdmin cap-oversight
-	// Forward) — never any authenticated member. commerce's own `user` group admits any
-	// member, which would let a compromised member key DELETE the org's cap (→ unbounded
-	// spend) or POST a 1¢ enforce cap (→ org-wide 402 DoS). requireSpendCapAdmin closes that.
-	// None of the three is typed yet — module work, per the module-handler note.
-	app.Post("/v1/billing/alerts",
-		commercemid.RequestContext(),
-		commercemid.TokenRequired(),
-		requireSpendCapAdmin(),
-		commercebilling.CreateSpendAlert,
-	)
-	app.Patch("/v1/billing/alerts/:id",
-		commercemid.RequestContext(),
-		commercemid.TokenRequired(),
-		requireSpendCapAdmin(),
-		commercebilling.UpdateSpendAlert,
-	)
-	app.Delete("/v1/billing/alerts/:id",
-		commercemid.RequestContext(),
-		commercemid.TokenRequired(),
-		requireSpendCapAdmin(),
-		commercebilling.DeleteSpendAlert,
-	)
-
-	// THE CUSTOMER'S OWN LEDGER — the four reads billing.hanzo.ai's Transactions,
-	// Credits, Team and Settings tabs call, and which NOTHING in this binary served.
-	//
-	// commerce declares them on its api.Route() `user` group (api/billing/handlers.go),
-	// but that route table is never compiled here: the co-resident embed registers on
-	// the HOST's router, so a commerce route reaches production only if this file names
-	// it. The library had the handlers all along — so the symptom read as a stale image
-	// and was not one. Every unnamed route falls through to the account bridge's
-	// /v1/billing/* wildcard, whose allowlist does not include these four, so all four
-	// answered a bare 404 and four tabs of the billing app rendered empty forever.
-	//
-	// THE CHAIN IS GetTier's, and each link earns its place on a MONEY READ:
-	//   - IAMTokenRequired resolves the org from the gateway-validated X-User-Id +
-	//     X-Org-Id into Locals("organization") — the namespace every handler reads.
-	//     It FALLS THROUGH when there is no validated principal rather than refusing.
-	//   - PinBillingSubject is therefore both the gate and the IDOR control. It
-	//     fail-closes that fall-through with 401 "sign in to view billing" (401, not
-	//     403 — a browser re-authenticates on 401 and merely reports 403), and it
-	//     OVERWRITES every billing subject key {user,userId,customerId} with the
-	//     caller's own account.Payer subject. That is load-bearing here and not
-	//     decoration: ListTransactions filters on ?user and GetCreditBalance on
-	//     ?userId, both unpinned client values — an unpinned read returns every
-	//     subject's rows in the org namespace. Because the pin SETS the key rather
-	//     than merely validating it, the handlers' "required parameter" 400 can never
-	//     fire for a real caller, and the subject is exactly the one account.Payer
-	//     debits, so a read can never disagree with the wallet it describes.
-	//   - TokenRequired (no masks) runs AFTER the pin so the trusted S2S reader still
-	//     resolves an org — IAMTokenRequired admits only IAM principals and would
-	//     leave GetOrganization unset for a service token, which panics on a nil
-	//     Locals assertion. With no masks it passes any authenticated principal, so
-	//     the browser path is unchanged.
-	//
-	// accounts/:id/members carries no subject key and guards itself (:id must equal
-	// the resolved org, else 403), but it takes the same chain: one chain for the
-	// family, and the pin is what turns an anonymous call into 401 instead of a panic.
-	// None is typed yet — module work, per the module-handler note.
-	app.Get("/v1/billing/transactions",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercemid.TokenRequired(),
-		commercebilling.ListTransactions,
-	)
-	app.Get("/v1/billing/credit-balance",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercemid.TokenRequired(),
-		commercebilling.GetCreditBalance,
-	)
-	// The same balance grouped by tag, which is how a reader tells trial credit
-	// from bought credit. Chat asks for it per session; an unregistered route
-	// answers 404 and the caller reads that as "no credit".
-	app.Get("/v1/billing/credit-balance/breakdown",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercemid.TokenRequired(),
-		commercebilling.GetCreditBalanceBreakdown,
-	)
-	app.Get("/v1/billing/accounts",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercemid.TokenRequired(),
-		commercebilling.ListBillingAccounts,
-	)
-	app.Get("/v1/billing/accounts/:id/members",
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercemid.TokenRequired(),
-		commercebilling.ListAccountMembers,
-	)
-
-	// POST /v1/billing/topup/token — the INLINE Square card top-up (the console's
-	// "Billing → Credits → add credits": the Square Web Payments SDK tokenizes the card
-	// IN THE BROWSER → a single-use nonce → this endpoint charges it and credits the
-	// caller's balance). commerce's api.Route() billing bundle is NOT compiled into the
-	// co-resident embed, so — exactly like plans/invoices/alerts above — without
-	// this registration the POST fell through to the account bridge's /v1/billing/*
-	// wildcard (order 122). That wildcard was service-token-forwardable for topup/token,
-	// so it re-forwarded to COMMERCE_URL (default the public api.hanzo.ai edge = THIS
-	// binary) over the commerce transport's self-routing dispatch, re-entering the SAME
-	// wildcard until the depth-8 guard refused → the "commerce transport: in-process
-	// dispatch depth 8 exceeded" 502 that broke top-up outright. Registering commerce's
-	// real TopupWithToken co-resident here serves the charge in-process at depth 1 — no
-	// HTTP hop, no self-dispatch — and it is the ONLY route to it now: the wildcard and
-	// its allowlist are gone, and the split-deploy case is the commerce transport's
-	// plain-HTTP fallback, not a second copy of this endpoint.
-	//
-	// Chain — the browser money-WRITE posture, byte-for-byte what the bridge applied:
-	//   RequireCSRF        — the ambient-cookie anti-CSRF gate the bridge's requireCSRF
-	//                        wrapped POST /v1/billing/* with (a Bearer/gateway caller is
-	//                        not CSRF-able; an ambient-cookie write needs the token).
-	//   RequestContext     — the gated request context commerce's handler + ledger read.
-	//   IAMTokenRequired   — resolves the org from the gateway-validated X-Org-Id into
-	//                        Locals("organization"), which TopupWithToken.GetOrganization
-	//                        + topupDestination read as the org billing key.
-	//   PinBillingSubject  — pins ?user= to the caller's OWN account.Payer subject (the
-	//                        SAME rule the ai spend-gate debits), so the credit lands on
-	//                        the caller's subject (person=org/name) and can never be
-	//                        widened; fail-closed for an unvalidated caller — the IDOR
-	//                        boundary stays exactly where the bridge put it.
-	// The card PAN never touches this binary: TopupWithToken charges the Square nonce only,
-	// and the settled charge itself is the mint authority (mintauth.WithAuthorized).
-	//   screen             — that mint authority is exactly why this route is screened.
-	//                        A settled charge on a stolen card IS spendable balance, so
-	//                        HANZO RISK judges the payer at the last moment before the
-	//                        charge, as a PRIVILEGED grant: a scorer that is present and
-	//                        cannot answer refuses rather than proceeds. It sits after
-	//                        PinBillingSubject so the subject it judges is the subject the
-	//                        charge credits, and before the handler so a refusal costs no
-	//                        card authorization. See risk.go.
-	// It is not typed yet — module work, per the module-handler note; the typed
-	// door onto this same charge core is POST /v1/commerce/payments (payments.go), and it holds
-	// the SAME `screen` value — that is what makes the control one control.
-	//
-	// THE SCREEN WRAPS THE HANDLER, at the same point in the same chain it always ran
-	// at: `screen.route(TopupWithToken)` is the last entry, so it still runs after
-	// PinBillingSubject and before any card is authorized. A raw route could carry the
-	// screen as its own chain entry instead — it has one projection, so the two are
-	// equivalent here — and it wraps the handler because the typed door MUST, and one
-	// composition point is what makes "every door onto the mint is screened" a property
-	// the structural test can read rather than a habit.
-	app.Post("/v1/billing/topup/token",
-		accountclient.RequireCSRF(),
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		screen.route(commercebilling.TopupWithToken),
-	)
-
-	// POST /v1/billing/topup — the SAVED-card top-up: charge a card the subject
-	// already has on file (paymentMethodId) and credit the same canonical balance.
-	// It is topup/token's card-on-file twin and the ONE saved-card top-up door
-	// (the auto-recharge cron shares its chargeAndCredit core). Until now it had
-	// NO co-resident route, so the four vaulted cards a customer could SEE were
-	// cards nothing could CHARGE — saving a card worked, spending it did not.
-	//
-	// Chain is topup/token's byte-for-byte, the risk screen included: both
-	// credit the SPENDABLE wallet, so both are screened before the charge.
-	// PinBillingSubject pins the body's userId to the caller's own subject; the
-	// handler itself refuses a paymentMethodId owned by any OTHER subject (404,
-	// no oracle) — paymentMethodId is not a subject key, so the pin cannot
-	// cover it.
-	app.Post("/v1/billing/topup",
-		accountclient.RequireCSRF(),
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		screen.route(commercebilling.Topup),
-	)
-
-	// POST /v1/billing/subscribe/card — the card-on-file MONTHLY subscription: vault a
-	// Square nonce as a reusable card, charge the first period at the SERVER-AUTHORITATIVE
-	// plan price, create the subscription. It is the paid path's front door, and it had NO
-	// route in this binary at all: commerce publishes it on its api.Route() `user` group
-	// (api/billing/handlers.go), which the co-resident embed never compiles, and mount
-	// never registered it — so the one endpoint that turns a visitor into a subscriber
-	// answered the account bridge's "sign in to view billing" no matter who called it.
-	//
-	// Chain is topup/token's byte-for-byte, and for the same reasons: both are browser
-	// money-WRITES that charge a single-use Square nonce. commerce's own gate is the
-	// `user` group (TokenRequired — any authenticated member may subscribe by paying);
-	// IAMTokenRequired is that gate here, resolving the org GetOrganization reads.
-	// PinBillingSubject pins the subject into query AND body, so subscribeSubject can
-	// only ever resolve the caller's OWN org (its `userId` is honored only inside that
-	// bound) — the IDOR boundary the bridge set. The PAN never touches this binary:
-	// the nonce goes to Square and the settled charge is its own mint authority.
-	// It is not typed yet — module work, per the module-handler note.
-	app.Post("/v1/billing/subscribe/card",
-		accountclient.RequireCSRF(),
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.SubscribeWithCard,
-	)
-
-	// The remaining console billing WRITES that share topup/token's self-dispatch loop
-	// class — each is a POST the console makes, each had NO co-resident handler, so each
-	// fell through to the account bridge's /v1/billing/* wildcard (order 122) and re-entered
-	// it over the commerce transport until the depth-8 guard refused (the same "in-process
-	// dispatch depth 8 exceeded" 502 that broke top-up). Each commerce handler exists in the
-	// vendored module (v1.49.13); registering them co-resident serves the write in-process at
-	// depth 1, and is now the only route to it. Chain matches the bridge's write posture
-	// byte-for-byte:
-	//
-	//   - RequireCSRF        — the ambient-cookie anti-CSRF gate the bridge wrapped POST
-	//                          /v1/billing/* with (Bearer/gateway callers are not CSRF-able).
-	//   - RequestContext     — the gated request context commerce's handlers read.
-	//   - IAMTokenRequired   — resolves the org from the gateway-validated X-Org-Id into
-	//                          Locals("organization") — the namespace GetOrganization reads.
-	//   - PinBillingSubject  — pins the caller's OWN account.Payer subject into BOTH query and
-	//                          body AND fail-closes an unvalidated caller. It is the auth gate
-	//                          on every one, and the IDOR control on the subject-scoped one.
-	//
-	// payment-methods is not in THIS block, and the reason is the chain, not the owner:
-	// the three verbs are registered above on the pinned-subject chain their portal twins
-	// use. THIS APP OWNS THAT ADDRESS — manifest.Apps names "/v1/billing/methods" on the
-	// commerce row and withholds it from billing, and apps/billing/billing.go says so at
-	// the spot the proxy used to sit ("served CO-RESIDENT by the commerce app, not proxied
-	// from here"). It reads the other way round in the history because it WAS billing's
-	// until the HTTP hop was deleted: that proxy pointed at a service compiled into the
-	// same binary and was unconfigured here besides, so every saved-card call answered
-	// 401/501 to a signed-in customer.
-	//
-	// One claim on one address is the whole requirement — openapi.Weave refuses a second
-	// one rather than pick a winner. Moving the verbs did not satisfy it on its own: the
-	// subset that PUBLISHES them was hand-edited to match, and copied the portal
-	// operationIds along with the prose, so two paths claimed one id and no document could
-	// be woven at all. A subset is generated (`make describe`) or it is wrong.
-	//
-	// subscriptions/:id/{cancel,reactivate} are org-NAMESPACE-scoped: commerce's handlers
-	// resolve the subscription by `:id` WITHIN the caller's org namespace (a foreign org's id
-	// is a 404 miss), so tenancy is the namespace IAMTokenRequired resolves and PinBillingSubject
-	// is the fail-closed-anon auth gate — its pinned subject params are ignored by these
-	// handlers (the SAME role it plays for the org-scoped payment-config read). The bridge's
-	// subject-pin was likewise a no-op for these, so nothing was dropped. Neither
-	// is typed yet — module work, per the module-handler note.
-	app.Post("/v1/billing/subscriptions/:id/cancel",
-		accountclient.RequireCSRF(),
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.CancelBillingSubscription,
-	)
-	app.Post("/v1/billing/subscriptions/:id/reactivate",
-		accountclient.RequireCSRF(),
-		commercemid.RequestContext(),
-		iammiddleware.IAMTokenRequired(),
-		accountclient.PinBillingSubject(),
-		commercebilling.ReactivateBillingSubscription,
-	)
+	// What that bought beyond conformance is the gate chains. A relayed op takes
+	// its tenant from the caller — there is no org field on any input — and its
+	// billing subject from the door that resolved it, so the pin that eight
+	// separate PinBillingSubject links used to apply per route is now a property
+	// of the types. A route cannot be added here that forgets it, because there is
+	// no route here to add.
 
 	// In-process seams:
 	//   - the commerce transport routes the S2S billing byte-stream into the co-resident
