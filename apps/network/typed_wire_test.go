@@ -1,4 +1,4 @@
-package zt
+package network
 
 import (
 	"net/http"
@@ -9,19 +9,19 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// untypedByDesign is the CLOSED list of zt operations that are NOT typed
+// untypedByDesign is the CLOSED list of network operations that are NOT typed
 // ops. It is EMPTY: all four routes are typed, and this list exists so that
 // dropping one back out takes a deliberate edit with a reason.
 var untypedByDesign = map[string]string{}
 
-// ztOpsUnderTest reads BOTH projections of the live router at their one shared
+// opsUnderTest reads BOTH projections of the live router at their one shared
 // address form: what the document says is served, and which of those carry a typed
 // registry entry. Reading the router (not the source) is what makes this a gate
 // rather than prose — a route added anywhere in routes() shows up here.
-func ztOpsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string, schemas map[string]any) {
+func opsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string, schemas map[string]any) {
 	t.Helper()
 	app := mountApp(t, &fakeZT{})
-	doc, err := openapi.Spec(app, openapi.Info{Title: "zt", Version: "v1"})
+	doc, err := openapi.Spec(app, openapi.Info{Title: "network", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
@@ -29,10 +29,9 @@ func ztOpsUnderTest(t *testing.T) (served map[string]bool, typed map[string]stri
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
 	}
-	ours := func(p string) bool {
-		return strings.HasPrefix(p, "/v1/networks") ||
-			strings.HasPrefix(p, "/v1/mesh")
-	}
+	// One prefix, because there is one capability: every route this app serves is
+	// under /v1/network. A second stem here would be the defect the rename closed.
+	ours := func(p string) bool { return strings.HasPrefix(p, "/v1/network") }
 	served, typed = map[string]bool{}, map[string]string{}
 	for path, item := range doc.Paths {
 		if !ours(path) {
@@ -50,12 +49,12 @@ func ztOpsUnderTest(t *testing.T) (served map[string]bool, typed map[string]stri
 	return served, typed, reg.Schemas
 }
 
-// TestEveryRouteIsTypedOrNamed fails when a zt operation is neither a
+// TestEveryRouteIsTypedOrNamed fails when a network operation is neither a
 // typed op nor named above — so the next route added here is typed by default.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
-	served, typed, _ := ztOpsUnderTest(t)
+	served, typed, _ := opsUnderTest(t)
 	if len(served) != 4 {
-		t.Errorf("zt serves %d operations, expected 4 — update this gate deliberately", len(served))
+		t.Errorf("network serves %d operations, expected 4 — update this gate deliberately", len(served))
 	}
 
 	var untyped []string
@@ -77,7 +76,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	}
 	for key := range untypedByDesign {
 		if !served[key] {
-			t.Errorf("untypedByDesign names %q, which zt no longer serves", key)
+			t.Errorf("untypedByDesign names %q, which network no longer serves", key)
 		}
 	}
 }
@@ -85,13 +84,13 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // TestEveryTypedOpIsDescribed holds the prose to the same bar as the schema,
 // because that prose IS the product surface.
 func TestEveryTypedOpIsDescribed(t *testing.T) {
-	_, typed, _ := ztOpsUnderTest(t)
+	_, typed, _ := opsUnderTest(t)
 	if len(typed) == 0 {
-		t.Fatal("no typed zt ops in the registry at all")
+		t.Fatal("no typed network ops in the registry at all")
 	}
 	for key, desc := range typed {
 		if strings.TrimSpace(desc) == "" {
-			t.Errorf("%s has no description — run: go generate -run zipdoc ./apps/zt/...", key)
+			t.Errorf("%s has no description — run: go generate -run zipdoc ./apps/network/...", key)
 		}
 	}
 }
@@ -99,9 +98,9 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
 // gate cannot see: the FIELDS of the published shapes.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	_, _, schemas := ztOpsUnderTest(t)
+	_, _, schemas := opsUnderTest(t)
 	if len(schemas) == 0 {
-		t.Fatal("no zt schemas in the typed registry at all")
+		t.Fatal("no network schemas in the typed registry at all")
 	}
 	var bare []string
 	for name, raw := range schemas {
@@ -142,7 +141,7 @@ func TestValidatedOrgReachesEveryPrefix(t *testing.T) {
 	app := mountApp(t, f)
 
 	for _, path := range []string{
-		"/v1/networks", "/v1/networks/routers", "/v1/networks/org-acme", "/v1/mesh/services",
+		"/v1/network", "/v1/network/routers", "/v1/network/org-acme", "/v1/network/services",
 	} {
 		if code, body := do(t, app, http.MethodGet, path, "acme"); code != http.StatusOK {
 			t.Errorf("GET %s as a validated caller = %d (%s), want 200 — did the root cloud.Bridge park the org?",
@@ -151,7 +150,7 @@ func TestValidatedOrgReachesEveryPrefix(t *testing.T) {
 	}
 	// The two routes that do NOT degrade must still refuse an anonymous caller —
 	// Bridge parks what it has and continues; it is the handler that refuses.
-	for _, path := range []string{"/v1/mesh/services", "/v1/networks/org-acme"} {
+	for _, path := range []string{"/v1/network/services", "/v1/network/org-acme"} {
 		if code, _ := do(t, app, http.MethodGet, path, ""); code != http.StatusForbidden {
 			t.Errorf("GET %s with no principal = %d, want 403", path, code)
 		}
