@@ -766,6 +766,27 @@ func init() {
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
 		},
 	})
+	zip.Describe("POST /v1/company/tariff", zip.Doc{
+		Description: "Itemises what a formation costs before anyone commits to it.\n\nIt answers what is due now and what recurs, as separate figures, and marks the\nstate's filing fee as money we collect and remit rather than keep. A caller can\ntherefore show a payer the whole bill — which is the point of quoting at all,\nand was impossible while the fee was one number in an error string.\n\nA jurisdiction whose filing fee this deployment has not been told REFUSES,\nnaming the setting that fixes it. Quoting our half as though it were the total\nis the one answer that would be worse than no answer.",
+		Fields: map[string]string{
+			"Charge.amountCents":     "AmountCents is what this line costs.",
+			"Charge.code":            "Code names the line so a caller can branch on it without reading prose.",
+			"Charge.label":           "Label is what the payer sees on the invoice.",
+			"Charge.passThrough":     "PassThrough marks money we collect and remit rather than keep — the state's\nfee is not our revenue, and a quote that hides that is a quote that reads\nas a bigger margin than it is.",
+			"Charge.recurring":       "Recurring marks a line that repeats. An agent of record is billed every\nyear for as long as the entity stands, and a payer agreeing to a one-time\ntotal is not agreeing to that.",
+			"Tariff.currency":        "Currency is the ISO code every amount on this quote is denominated in.",
+			"Tariff.dueNowCents":     "DueNowCents is what is charged to begin: every non-recurring line.",
+			"Tariff.jurisdiction":    "Jurisdiction is the state of formation the filing fee belongs to.",
+			"Tariff.lines":           "Lines are the charges, in the order a reader should see them.",
+			"Tariff.recurring":       "Recurring is how often RecurringCents repeats — \"yearly\" for an agent of\nrecord. Empty when nothing on this quote recurs.",
+			"Tariff.recurringCents":  "RecurringCents is what repeats, and Recurring says how often.",
+			"Tariff.structure":       "Structure is the entity this prices: c-corp, llc or dao-llc.",
+			"tariffIn.agentOfRecord": "AgentOfRecord puts us on file as the entity's agent, yearly.",
+			"tariffIn.expeditedEin":  "ExpeditedEIN prioritises the EIN.",
+			"tariffIn.jurisdiction":  "Jurisdiction is the state of formation.",
+			"tariffIn.structure":     "Structure is the entity being formed: c-corp, llc or dao-llc.",
+		},
+	})
 	zip.Describe("PUT /v1/company/structure", zip.Doc{
 		Description: "Records the entity kind, the state of formation and the proposed\nname. Available only at the structure stage; an unknown structure or\njurisdiction, or an empty name, is refused with 400.",
 		Fields: map[string]string{
