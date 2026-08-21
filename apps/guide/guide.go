@@ -974,7 +974,7 @@ func doStep(s *cloud.Service[state], c *zip.Ctx) error {
 			final, aerr := runAgent(ctx, d, orgC, payerC, step, emit)
 			end := map[string]any{"ok": aerr == nil, "state": final}
 			if aerr != nil {
-				end["error"] = aerr.Error()
+				end["error"] = cloud.ScrubText(aerr.Error())
 			}
 			writeSSE(w, "end", end)
 		})
@@ -984,7 +984,7 @@ func doStep(s *cloud.Service[state], c *zip.Ctx) error {
 	final, aerr := runAgent(c.Context(), d, org, payer, step, func(e event) { events = append(events, e) })
 	resp := map[string]any{"step": id, "events": events, "state": final}
 	if aerr != nil {
-		resp["error"] = aerr.Error()
+		resp["error"] = cloud.ScrubText(aerr.Error())
 	}
 	return c.JSON(http.StatusOK, resp)
 }
