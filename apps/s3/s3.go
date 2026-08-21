@@ -57,7 +57,6 @@
 package s3
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -252,13 +251,32 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//
 	// All three clear on the same zip change: an error that can carry a body, and a
 	// second declarable success status.
-	g := app.Group("/v1/s3")
-	g.Get("/health", cloud.Handle(s, health))
-	g.Get("/buckets", guard(s, cloud.Handle(s, listBuckets)))
-	g.Post("/buckets", guard(s, cloud.Handle(s, createBucket)))
-	g.Delete("/buckets/:bucket", guard(s, cloud.Handle(s, deleteBucket)))
-	g.Get("/buckets/:bucket/objects", guard(s, cloud.Handle(s, listObjects)))
-	g.Post("/buckets/:bucket/objects", guard(s, cloud.Handle(s, presignUpload)))
+	// Routes go on the concrete app so zip's typed registrars and cmd/zipdoc can
+	// both resolve the prefix; the scoped Router still owns any middleware, which
+	// is where the ownership guard applies. Same shape apps/meet and apps/blueprint
+	// use.
+	zapp := cloud.ZipApp(app)
+	g := zapp.Group("/v1/s3")
+	o := ops{s: s}
+
+	// The probe is NOT gated — liveness has to be probe-able without a token — and
+	// it declares BOTH of its statuses, so the answer says which one it is.
+	zip.Get(g, "/health", o.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+
+	// Everything else is gated. guard is a MIDDLEWARE, so the platform check, the
+	// org resolution and the balance gate all run before an op is entered — which
+	// is why a denial never passes through a typed handler and why these convert
+	// without touching the money wire at all.
+	// With WRAPS the leaves it registers and installs nothing at the prefix, so the
+	// probe above — registered on the bare group at the same address — stays
+	// ungated. Two scopes, one prefix, which is the split this surface has always
+	// had; it was per-route decoration before and is per-group now.
+	gd := zapp.With(guardMW(s)).Group("/v1/s3")
+	zip.Get(gd, "/buckets", o.listBuckets)
+	zip.Post(gd, "/buckets", o.createBucket, zip.WithStatus(http.StatusCreated))
+	zip.Delete(gd, "/buckets/:bucket", o.deleteBucket)
+	zip.Get(gd, "/buckets/:bucket/objects", o.listObjects)
+	zip.Post(gd, "/buckets/:bucket/objects", o.presignUpload)
 	g.Get("/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, presignDownload)))
 	g.Delete("/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, deleteObject)))
 
@@ -288,6 +306,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // (per-op fee, product "s3", async best-effort so the debit never blocks the
 // response). A handler error is surfaced and NOT billed — mirrors the edge gate
 // ("do not bill failed work"). fee==0 or unconfigured billing makes both no-ops.
+// guardMW is guard as the middleware form zip.App.With takes — the same gate, bound
+// to the service, so a typed op is wrapped by exactly what an untyped handler was.
+// One gate, two call shapes, never two gates.
+func guardMW(s *cloud.Service[state]) func(zip.Handler) zip.Handler {
+	return func(h zip.Handler) zip.Handler { return guard(s, h) }
+}
+
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	// The platform gate (cloud.Member — a validated principal, HIP-0519's one
 	// predicate set) wraps the org resolution and the meter, and is built once:
@@ -404,125 +429,11 @@ func friendlyBucket(org, physical string) (string, bool) {
 	return name, true
 }
 
-// ── health ──────────────────────────────────────────────────────────────────
-
-// health is a REAL probe: 200 only when admin credentials are present (the store
-// is reachable in principle); 503 + honest reason in health-only mode. Not
-// JWT-gated — liveness must be probe-able without a token.
-//
-// UNTYPED BY DESIGN, and the only route here refused for a reason other than the
-// money wire: it answers ONE JSON object under TWO statuses — 200 with
-// {service,status:"ok",ready,presign} and 503 with
-// {service,status:"degraded",ready:false,error}. A typed op declares exactly one
-// success status (zip.WithStatus), and its only other channel is a returned
-// error, which zip's errorHandler renders as the flat {"status","code","error"}
-// HTTPError (zip ctx.go:224) — a different body under a different key set. A
-// custom error type does not help: errorHandler matches *zip.HTTPError and
-// *fiber.Error and answers 500 for everything else, so the 503 would become a
-// 500. Typing this would change both the status and the body of every degraded
-// probe. It clears with the same zip change the metered routes above wait on.
-func health(s *cloud.Service[state], ctx *zip.Ctx) error {
-	res := map[string]any{"service": "s3", "status": "ok"}
-	if !s.State.admin.Configured() {
-		res["status"], res["ready"] = "degraded", false
-		res["error"] = "S3_ADMIN credentials not configured"
-		return ctx.JSON(http.StatusServiceUnavailable, res)
-	}
-	res["ready"] = true
-	res["presign"] = s.State.admin.PresignConfigured()
-	return ctx.JSON(http.StatusOK, res)
-}
-
 // ── buckets ─────────────────────────────────────────────────────────────────
 
 type bucketItem struct {
 	Name      string `json:"name"`      // friendly name
 	CreatedAt int64  `json:"createdAt"` // unix seconds
-}
-
-// listBuckets returns ONLY the caller's buckets (physical name has the caller's
-// org prefix), with the prefix stripped so the tenant sees friendly names.
-func listBuckets(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	cli, err := s.State.admin.Client()
-	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
-	}
-	all, err := cli.ListBuckets(ctx.Context())
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "list buckets: %v", err)
-	}
-	out := make([]bucketItem, 0, len(all))
-	for _, b := range all {
-		name, ok := friendlyBucket(org, b.Name)
-		if !ok {
-			continue // another tenant's bucket — invisible
-		}
-		out = append(out, bucketItem{Name: name, CreatedAt: b.CreationDate.Unix()})
-	}
-	return ctx.JSON(http.StatusOK, map[string]any{"buckets": out, "total": len(out)})
-}
-
-type createBucketRequest struct {
-	Name string `json:"name"`
-}
-
-// createBucket makes a new org-scoped bucket. The physical name is derived from
-// the caller's org, so a tenant can only ever create in its own namespace.
-func createBucket(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	var req createBucketRequest
-	if err := json.Unmarshal(ctx.Body(), &req); err != nil {
-		return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
-	}
-	// Validate AS-IS (no silent lowercasing) so create and reference agree on the
-	// one name shape — a client that creates "Photos" and lists "photos" would be
-	// confusing; bucketNameRE requires lowercase, so mixed case is a clean 400.
-	name := strings.TrimSpace(req.Name)
-	if !bucketNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
-	}
-	cli, err := s.State.admin.Client()
-	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
-	}
-	physical := physicalBucket(org, name)
-	exists, err := cli.BucketExists(ctx.Context(), physical)
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "bucket check: %v", err)
-	}
-	if exists {
-		return zip.ErrConflict("bucket already exists")
-	}
-	if err := cli.MakeBucket(ctx.Context(), physical, s3.MakeBucketOptions{Region: s.State.admin.Region()}); err != nil {
-		return zip.Errorf(http.StatusBadGateway, "create bucket: %v", err)
-	}
-	return ctx.JSON(http.StatusCreated, bucketItem{Name: name, CreatedAt: time.Now().Unix()})
-}
-
-// deleteBucket removes an EMPTY bucket (SeaweedFS refuses a non-empty one — we do not
-// cascade a delete of a tenant's objects behind a single bucket call).
-func deleteBucket(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	name, ok := friendlyParam(ctx.Param("bucket"))
-	if !ok {
-		return zip.ErrBadRequest("invalid bucket name")
-	}
-	cli, err := s.State.admin.Client()
-	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
-	}
-	physical := physicalBucket(org, name)
-	if err := cli.RemoveBucket(ctx.Context(), physical); err != nil {
-		if isNoSuchBucket(err) {
-			return zip.ErrNotFound("bucket not found")
-		}
-		if isBucketNotEmpty(err) {
-			return zip.ErrConflict("bucket is not empty")
-		}
-		return zip.Errorf(http.StatusBadGateway, "delete bucket: %v", err)
-	}
-	return ctx.NoContent(http.StatusNoContent)
 }
 
 // ── objects ─────────────────────────────────────────────────────────────────
@@ -535,107 +446,11 @@ type objectItem struct {
 	ETag         string `json:"etag,omitempty"`
 }
 
-// listObjects lists one folder level of a bucket. ?prefix= scopes to a
-// sub-"folder"; folder-style by default (a "/" delimiter, so sub-prefixes come
-// back as dir entries) unless ?recursive=true, which lists every key flat under
-// the prefix. Keys are returned RELATIVE to the requested prefix so the UI
-// renders a breadcrumb. The listing is bounded by maxListKeys (both the S3-side
-// MaxKeys page and a hard break) so a huge bucket cannot exhaust memory.
-func listObjects(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	bname, ok := friendlyParam(ctx.Param("bucket"))
-	if !ok {
-		return zip.ErrBadRequest("invalid bucket name")
-	}
-	prefix := cleanPrefix(ctx.Query("prefix"))
-	// Folder-style by default (SeaweedFS applies a "/" delimiter when Recursive is
-	// false, returning sub-prefixes as directory entries — the file-manager view).
-	// ?recursive=true lists every key flat under the prefix. The brief's
-	// ?delimiter=/ is the default and needs no param; only recursion is opt-in.
-	recursive := ctx.Query("recursive") == "true"
-
-	cli, err := s.State.admin.Client()
-	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
-	}
-	physical := physicalBucket(org, bname)
-
-	out := make([]objectItem, 0, 64)
-	opts := s3.ListObjectsOptions{Prefix: prefix, Recursive: recursive, MaxKeys: maxListKeys}
-	for obj := range cli.ListObjects(ctx.Context(), physical, opts) {
-		if obj.Err != nil {
-			if isNoSuchBucket(obj.Err) {
-				return zip.ErrNotFound("bucket not found")
-			}
-			return zip.Errorf(http.StatusBadGateway, "list objects: %v", obj.Err)
-		}
-		rel := strings.TrimPrefix(obj.Key, prefix)
-		if rel == "" {
-			continue // the prefix "folder" placeholder itself
-		}
-		isDir := strings.HasSuffix(obj.Key, "/")
-		out = append(out, objectItem{
-			Key:          rel,
-			IsDir:        isDir,
-			Size:         obj.Size,
-			LastModified: modTime(obj.LastModified),
-			ETag:         strings.Trim(obj.ETag, `"`),
-		})
-		if len(out) >= maxListKeys {
-			break
-		}
-	}
-	return ctx.JSON(http.StatusOK, map[string]any{
-		"bucket": bname, "prefix": prefix, "objects": out, "total": len(out),
-	})
-}
-
-type presignUploadRequest struct {
-	Key string `json:"key"` // object key to upload (relative to the bucket root)
-}
-
 type presignResponse struct {
 	URL    string `json:"url"`    // presigned URL the browser follows directly
 	Method string `json:"method"` // "PUT" (upload) or "GET" (download)
 	Key    string `json:"key"`
 	Expiry int64  `json:"expiresIn"` // seconds until the URL expires
-}
-
-// presignUpload returns a presigned PUT URL the browser uses to upload DIRECTLY
-// to S3 (bypassing this binary and the console proxy entirely — no large body
-// through the server, and the admin credential never leaves the server). The URL
-// is signed against the PUBLIC host and scoped to the exact bucket+key, and it
-// expires (presignTTL). The object key is path-cleaned so a "../" cannot escape
-// the bucket.
-func presignUpload(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	bname, ok := friendlyParam(ctx.Param("bucket"))
-	if !ok {
-		return zip.ErrBadRequest("invalid bucket name")
-	}
-	var req presignUploadRequest
-	if err := json.Unmarshal(ctx.Body(), &req); err != nil {
-		return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
-	}
-	key, ok := cleanKey(req.Key)
-	if !ok {
-		return zip.ErrBadRequest("key is required and must be a clean object path")
-	}
-	if !s.State.admin.PresignConfigured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "presigned upload is not available (no public endpoint configured)")
-	}
-	pub, err := s.State.admin.PublicClient()
-	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
-	}
-	physical := physicalBucket(org, bname)
-	u, err := pub.PresignedPutObject(ctx.Context(), physical, key, presignTTL)
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "presign upload: %v", err)
-	}
-	return ctx.JSON(http.StatusOK, presignResponse{
-		URL: u.String(), Method: http.MethodPut, Key: key, Expiry: int64(presignTTL.Seconds()),
-	})
 }
 
 // presignDownload returns a presigned GET URL for the object at the trailing
