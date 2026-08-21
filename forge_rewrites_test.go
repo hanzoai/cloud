@@ -327,3 +327,80 @@ func TestForgeRewrites_AnIdentityThatServesNothingFallsBack(t *testing.T) {
 		t.Errorf("an identity that served nothing did not fall back:\n%s", out)
 	}
 }
+
+// credStore returns what the credential helper the script installed actually holds. The
+// store is the only place a credential is allowed to be, so it is the only place worth
+// reading.
+func credStore(t *testing.T, gitconfig string) string {
+	t.Helper()
+	for _, line := range strings.Split(gitconfig, "\n") {
+		_, file, ok := strings.Cut(line, "store --file=")
+		if !ok {
+			continue
+		}
+		body, err := os.ReadFile(strings.TrimSpace(file))
+		if err != nil {
+			t.Fatalf("read the credential store the script named: %v", err)
+		}
+		return string(body)
+	}
+	t.Fatalf("the script installed no credential helper:\n%s", gitconfig)
+	return ""
+}
+
+// A MODULE THE FORGE DOES NOT SERVE IS STILL A MODULE THE BUILD HAS TO FETCH.
+//
+// Those keep the github.com address they already have — nothing rewrites them — so the
+// only thing that can make them resolvable is a credential for that host, and it has to
+// be in THIS config. Naming GIT_CONFIG_GLOBAL is also what makes git stop reading every
+// other config, so a credential written anywhere else is not a fallback, it is invisible:
+// `go list -m` stops on `could not read Username for 'https://github.com'` and the whole
+// module graph, not just the one module, resolves to no source.
+func TestForgeRewrites_GitHubIsAuthenticatedForWhatTheForgeDoesNotServe(t *testing.T) {
+	const pat = "pat-for-the-modules-left-on-github"
+	srv, _, _ := iamStub(t, "tok")
+
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404) // this forge serves nothing, so the module stays on GitHub
+	}))
+	defer forge.Close()
+
+	out, cfg, _ := runRewritesWithModule(t, map[string]string{
+		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
+		"GIT_TOKEN": "", "FORGE_URL": forge.URL, "GH_PAT": pat,
+	})
+	if !strings.Contains(out, "left on GitHub -> vfs") {
+		t.Fatalf("the module was not left on GitHub, so there is no fallback to judge:\n%s", out)
+	}
+	if store := credStore(t, cfg); !strings.Contains(store, "https://x-access-token:"+pat+"@github.com") {
+		t.Errorf("github.com carries no credential, so every module the forge denies resolves to no source:\n%s", store)
+	}
+	// The store is its ONE home: not the config, and not a rewrite.
+	if strings.Contains(cfg, pat) {
+		t.Errorf("the GitHub credential was written into the git config:\n%s", cfg)
+	}
+}
+
+// THE STORE IS REWRITTEN WHOLE WHEN THE FORGE CREDENTIAL IS REPLACED, so GitHub's line
+// has to survive that. It is one file; a fallback that disappears on the retry path is a
+// fallback only on the paths that did not need it.
+func TestForgeRewrites_GitHubSurvivesTheRetry(t *testing.T) {
+	const pat = "pat-that-must-outlive-the-retry"
+	srv, _, _ := iamStub(t, "iam-token")
+
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404) // nothing is served either time, so the per-job token is tried
+	}))
+	defer forge.Close()
+
+	out, cfg, _ := runRewritesWithModule(t, map[string]string{
+		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
+		"GIT_TOKEN": "per-job-token", "FORGE_URL": forge.URL, "GH_PAT": pat,
+	})
+	if !strings.Contains(out, "asking again as the per-job token") {
+		t.Fatalf("the retry did not run, so there is nothing to judge:\n%s", out)
+	}
+	if store := credStore(t, cfg); !strings.Contains(store, "@github.com") {
+		t.Errorf("the retry rewrote the store and took GitHub's credential with it:\n%s", store)
+	}
+}
