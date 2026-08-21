@@ -118,40 +118,59 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // ---- accounts ----
 
-// Account is an org-scoped connected social account (a Postiz-style "integration"
+// socialAccount is an org-scoped connected social account (a Postiz-style "integration"
 // on the live social stack). Provider is the network (x/facebook/instagram/…);
 // Status is the connection lifecycle (connected/disconnected/error) — both
 // validated at the write layer against the fixed vocabularies in social.go.
-type Account struct {
-	ID       string `json:"id"`
-	Org      string `json:"-"`
+type socialAccount struct {
+	// ID is the account's identifier, minted on connect and the id every later
+	// call addresses it by.
+	//
+	// Example: "acct_7f3c1a"
+	ID string `json:"id"`
+	// Org is the tenant the account belongs to, resolved server-side from the
+	// validated principal. It never crosses the wire in either direction.
+	Org string `json:"-"`
+	// Provider is the network this account is on: x, facebook, instagram,
+	// linkedin, tiktok, youtube or threads.
+	//
+	// Example: "x"
 	Provider string `json:"provider"`
-	Handle   string `json:"handle"`
-	Status   string `json:"status"`
+	// Handle is the account's public name on the network, as the customer knows
+	// it. Trimmed and bounded at 1024 characters.
+	//
+	// Example: "@acme"
+	Handle string `json:"handle"`
+	// Status is the connection lifecycle: connected, disconnected or error. Only
+	// a connected account is a publish target.
+	Status string `json:"status"`
 	// Token is the account's provider access token (written by the connect/OAuth
 	// flow, which has NOT landed yet). It is NEVER serialized to an API response
 	// (`json:"-"`), so it cannot leak to the browser; only the publisher reads it.
 	// At rest it is covered by the database's own key: the store is born encrypted
 	// or it does not open. (The live Postiz stack stores this token in PLAINTEXT
 	// in Postgres.)
-	Token     string `json:"-"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	Token string `json:"-"`
+	// CreatedAt is when the account was connected, as a unix timestamp in seconds.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when the account row last changed, as a unix timestamp in
+	// seconds. The listing is ordered by it, newest first.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 const accountCols = `id,org,provider,handle,status,token,created_at,updated_at`
 
-func scanAccount(sc interface{ Scan(...any) error }) (Account, error) {
-	var a Account
+func scanAccount(sc interface{ Scan(...any) error }) (socialAccount, error) {
+	var a socialAccount
 	err := sc.Scan(&a.ID, &a.Org, &a.Provider, &a.Handle, &a.Status, &a.Token, &a.CreatedAt, &a.UpdatedAt)
 	return a, err
 }
 
-func (s *Store) CreateAccount(ctx context.Context, a Account) (Account, error) {
+func (s *Store) CreateAccount(ctx context.Context, a socialAccount) (socialAccount, error) {
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO social_accounts (`+accountCols+`) VALUES (?,?,?,?,?,?,?,?)`,
 		a.ID, a.Org, a.Provider, a.Handle, a.Status, a.Token, a.CreatedAt, a.UpdatedAt); err != nil {
-		return Account{}, fmt.Errorf("insert account: %w", err)
+		return socialAccount{}, fmt.Errorf("insert account: %w", err)
 	}
 	return a, nil
 }
@@ -159,7 +178,7 @@ func (s *Store) CreateAccount(ctx context.Context, a Account) (Account, error) {
 // ListConnectedAccounts returns an org's CONNECTED accounts for one provider — the
 // publish targets for a post on that channel. status='connected' only (a disconnected
 // or errored account is never a publish target). Org-scoped like every other read.
-func (s *Store) ListConnectedAccounts(ctx context.Context, org, provider string) ([]Account, error) {
+func (s *Store) ListConnectedAccounts(ctx context.Context, org, provider string) ([]socialAccount, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+accountCols+` FROM social_accounts WHERE org=? AND provider=? AND status='connected' ORDER BY updated_at DESC`,
 		org, provider)
@@ -167,7 +186,7 @@ func (s *Store) ListConnectedAccounts(ctx context.Context, org, provider string)
 		return nil, fmt.Errorf("list connected accounts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]Account, 0, 4)
+	out := make([]socialAccount, 0, 4)
 	for rows.Next() {
 		a, err := scanAccount(rows)
 		if err != nil {
@@ -178,21 +197,21 @@ func (s *Store) ListConnectedAccounts(ctx context.Context, org, provider string)
 	return out, rows.Err()
 }
 
-func (s *Store) GetAccount(ctx context.Context, org, id string) (Account, error) {
+func (s *Store) GetAccount(ctx context.Context, org, id string) (socialAccount, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+accountCols+` FROM social_accounts WHERE org=? AND id=?`, org, id)
 	a, err := scanAccount(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Account{}, errNotFound
+		return socialAccount{}, errNotFound
 	}
 	if err != nil {
-		return Account{}, fmt.Errorf("get account: %w", err)
+		return socialAccount{}, fmt.Errorf("get account: %w", err)
 	}
 	return a, nil
 }
 
 // ListAccounts lists the org's accounts, optionally filtered by provider
 // (provider=="" means all). Most-recently-updated first.
-func (s *Store) ListAccounts(ctx context.Context, org, provider string, limit int) ([]Account, error) {
+func (s *Store) ListAccounts(ctx context.Context, org, provider string, limit int) ([]socialAccount, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -208,7 +227,7 @@ func (s *Store) ListAccounts(ctx context.Context, org, provider string, limit in
 		return nil, fmt.Errorf("list accounts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]Account, 0, 16)
+	out := make([]socialAccount, 0, 16)
 	for rows.Next() {
 		a, err := scanAccount(rows)
 		if err != nil {
@@ -219,15 +238,15 @@ func (s *Store) ListAccounts(ctx context.Context, org, provider string, limit in
 	return out, rows.Err()
 }
 
-func (s *Store) UpdateAccount(ctx context.Context, a Account) (Account, error) {
+func (s *Store) UpdateAccount(ctx context.Context, a socialAccount) (socialAccount, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE social_accounts SET provider=?,handle=?,status=?,updated_at=? WHERE org=? AND id=?`,
 		a.Provider, a.Handle, a.Status, a.UpdatedAt, a.Org, a.ID)
 	if err != nil {
-		return Account{}, fmt.Errorf("update account: %w", err)
+		return socialAccount{}, fmt.Errorf("update account: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return Account{}, errNotFound
+		return socialAccount{}, errNotFound
 	}
 	return s.GetAccount(ctx, a.Org, a.ID)
 }
@@ -243,18 +262,39 @@ func (s *Store) DeleteAccount(ctx context.Context, org, id string) (bool, error)
 
 // ---- posts ----
 
-// Post is an org-scoped social post. Channel is the target network
+// socialPost is an org-scoped social post. Channel is the target network
 // (x/facebook/instagram/…); Status is the lifecycle (draft/scheduled/published/
 // failed). ScheduleAt is a unix timestamp (0 = not scheduled / publish now) — a
 // post with Status=="scheduled" carries the future ScheduleAt. All validated at
 // the write layer against the fixed vocabularies in social.go.
-type Post struct {
-	ID         string `json:"id"`
-	Org        string `json:"-"`
-	Content    string `json:"content"`
-	Channel    string `json:"channel"`
-	Status     string `json:"status"`
-	ScheduleAt int64  `json:"scheduleAt"`
+type socialPost struct {
+	// ID is the post's identifier, minted on create and the id every later call
+	// addresses it by.
+	//
+	// Example: "post_91ab20"
+	ID string `json:"id"`
+	// Org is the tenant the post belongs to, resolved server-side from the
+	// validated principal. It never crosses the wire in either direction.
+	Org string `json:"-"`
+	// Content is the post's text, bounded at 8192 characters.
+	//
+	// Example: "Shipping today."
+	Content string `json:"content"`
+	// Channel is the network this post targets: x, facebook, instagram, linkedin,
+	// tiktok, youtube or threads. It is the channel whose CONNECTED accounts a
+	// publish fans out to.
+	//
+	// Example: "x"
+	Channel string `json:"channel"`
+	// Status is the post's lifecycle state: draft, scheduled, published or failed.
+	// A fifth, transient publishing state exists while a publish attempt holds the
+	// claim; it is never settable from a request and a caller sees it only if it
+	// reads a post mid-attempt.
+	Status string `json:"status"`
+	// ScheduleAt is when the post is due, as a unix timestamp in SECONDS. 0 means
+	// unscheduled. It is meaningful only while the status is scheduled — a
+	// scheduled post whose time has arrived is published by the scheduler.
+	ScheduleAt int64 `json:"scheduleAt"`
 	// Media is the post's attached media as a list of URLs (images today; the
 	// composer's URL field now, an S3 picker later, populate it). Stored as a JSON
 	// array in the media TEXT column and ALWAYS serialized as an array (never null),
@@ -265,17 +305,27 @@ type Post struct {
 	// the publish path (never by a client update): the account a post was published
 	// through, the provider's returned external post id (for reconciliation), and the
 	// last failure reason. Empty until a publish attempt lands.
-	AccountID  string `json:"accountId,omitempty"`
+	// AccountID is the connected account the post went out through. Absent until
+	// a publish succeeds.
+	AccountID string `json:"accountId,omitempty"`
+	// ExternalID is the id the network returned for the published post, which is
+	// what reconciles this row against the post on the network. Absent until a
+	// publish succeeds.
 	ExternalID string `json:"externalId,omitempty"`
-	Error      string `json:"error,omitempty"`
-	CreatedAt  int64  `json:"createdAt"`
-	UpdatedAt  int64  `json:"updatedAt"`
+	// Error is why the last publish attempt failed, verbatim and bounded. Absent
+	// when no attempt has failed; cleared by a later success.
+	Error string `json:"error,omitempty"`
+	// CreatedAt is when the post was created, as a unix timestamp in seconds.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when the post row last changed, as a unix timestamp in seconds.
+	// The listing is ordered by it, newest first.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 const postCols = `id,org,content,channel,status,schedule_at,account_id,external_id,error,media,created_at,updated_at`
 
-func scanPost(sc interface{ Scan(...any) error }) (Post, error) {
-	var p Post
+func scanPost(sc interface{ Scan(...any) error }) (socialPost, error) {
+	var p socialPost
 	var media string
 	err := sc.Scan(&p.ID, &p.Org, &p.Content, &p.Channel, &p.Status, &p.ScheduleAt,
 		&p.AccountID, &p.ExternalID, &p.Error, &media, &p.CreatedAt, &p.UpdatedAt)
@@ -287,7 +337,7 @@ func scanPost(sc interface{ Scan(...any) error }) (Post, error) {
 }
 
 // decodeMedia parses the stored JSON media array into a non-nil (possibly empty)
-// slice, so a Post always serializes `media` as [] rather than null. A malformed or
+// slice, so a post always serializes `media` as [] rather than null. A malformed or
 // empty stored value degrades to [] rather than erroring a read.
 func decodeMedia(s string) []string {
 	s = strings.TrimSpace(s)
@@ -314,12 +364,12 @@ func encodeMedia(m []string) string {
 	return string(b)
 }
 
-func (s *Store) CreatePost(ctx context.Context, p Post) (Post, error) {
+func (s *Store) CreatePost(ctx context.Context, p socialPost) (socialPost, error) {
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO social_posts (`+postCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Content, p.Channel, p.Status, p.ScheduleAt,
 		p.AccountID, p.ExternalID, p.Error, encodeMedia(p.Media), p.CreatedAt, p.UpdatedAt); err != nil {
-		return Post{}, fmt.Errorf("insert post: %w", err)
+		return socialPost{}, fmt.Errorf("insert post: %w", err)
 	}
 	if p.Media == nil {
 		p.Media = []string{}
@@ -327,21 +377,21 @@ func (s *Store) CreatePost(ctx context.Context, p Post) (Post, error) {
 	return p, nil
 }
 
-func (s *Store) GetPost(ctx context.Context, org, id string) (Post, error) {
+func (s *Store) GetPost(ctx context.Context, org, id string) (socialPost, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+postCols+` FROM social_posts WHERE org=? AND id=?`, org, id)
 	p, err := scanPost(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Post{}, errNotFound
+		return socialPost{}, errNotFound
 	}
 	if err != nil {
-		return Post{}, fmt.Errorf("get post: %w", err)
+		return socialPost{}, fmt.Errorf("get post: %w", err)
 	}
 	return p, nil
 }
 
 // ListPosts lists the org's posts, optionally filtered by status (status=="" means
 // all). Most-recently-updated first.
-func (s *Store) ListPosts(ctx context.Context, org, status string, limit int) ([]Post, error) {
+func (s *Store) ListPosts(ctx context.Context, org, status string, limit int) ([]socialPost, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -357,7 +407,7 @@ func (s *Store) ListPosts(ctx context.Context, org, status string, limit int) ([
 		return nil, fmt.Errorf("list posts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]Post, 0, 16)
+	out := make([]socialPost, 0, 16)
 	for rows.Next() {
 		p, err := scanPost(rows)
 		if err != nil {
@@ -368,15 +418,15 @@ func (s *Store) ListPosts(ctx context.Context, org, status string, limit int) ([
 	return out, rows.Err()
 }
 
-func (s *Store) UpdatePost(ctx context.Context, p Post) (Post, error) {
+func (s *Store) UpdatePost(ctx context.Context, p socialPost) (socialPost, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE social_posts SET content=?,channel=?,status=?,schedule_at=?,media=?,updated_at=? WHERE org=? AND id=?`,
 		p.Content, p.Channel, p.Status, p.ScheduleAt, encodeMedia(p.Media), p.UpdatedAt, p.Org, p.ID)
 	if err != nil {
-		return Post{}, fmt.Errorf("update post: %w", err)
+		return socialPost{}, fmt.Errorf("update post: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return Post{}, errNotFound
+		return socialPost{}, errNotFound
 	}
 	return s.GetPost(ctx, p.Org, p.ID)
 }
@@ -400,12 +450,12 @@ func (s *Store) DeletePost(ctx context.Context, org, id string) (bool, error) {
 // tick race for it. Returns (post, true) when THIS caller won the claim, (post,
 // false) when the post is not claimable (already published, or being published by
 // another caller), and errNotFound if the post is not the org's.
-func (s *Store) ClaimForPublish(ctx context.Context, org, id string, now int64) (Post, bool, error) {
+func (s *Store) ClaimForPublish(ctx context.Context, org, id string, now int64) (socialPost, bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE social_posts SET status='publishing',updated_at=? WHERE org=? AND id=? AND status IN ('draft','scheduled','failed')`,
 		now, org, id)
 	if err != nil {
-		return Post{}, false, fmt.Errorf("claim post: %w", err)
+		return socialPost{}, false, fmt.Errorf("claim post: %w", err)
 	}
 	claimed := int64(0)
 	if n, _ := res.RowsAffected(); n > 0 {
@@ -413,7 +463,7 @@ func (s *Store) ClaimForPublish(ctx context.Context, org, id string, now int64) 
 	}
 	p, err := s.GetPost(ctx, org, id) // errNotFound distinguishes absent from not-claimable
 	if err != nil {
-		return Post{}, false, err
+		return socialPost{}, false, err
 	}
 	return p, claimed > 0, nil
 }

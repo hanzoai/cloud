@@ -3,10 +3,10 @@
 // An org's connected channels (X, Facebook, Instagram, LinkedIn, TikTok,
 // YouTube, Threads) and the posts it publishes or schedules to them.
 //
-// Two entities. An Account is a connected channel (the hanzoai/social stack's
-// "integration": GET /public/v1/integrations), and a Post is content published or
+// Two entities. An account is a connected channel (the hanzoai/social stack's
+// "integration": GET /public/v1/integrations), and a post is content published or
 // scheduled to a channel (POST /public/v1/posts {type:now|schedule, date, …}).
-// Scheduling is not a third entity — it is a Post with Status=="scheduled"
+// Scheduling is not a third entity — it is a post with Status=="scheduled"
 // carrying a future ScheduleAt.
 //
 // This is the in-process fold of the standalone social pods onto the cloud
@@ -36,16 +36,16 @@
 //	GET    /v1/social/summary            per-org roll-up (posts/scheduled/published/accounts)
 //	GET    /v1/social/providers          publish-readiness per network (+ missing creds)
 //	GET    /v1/social/accounts           list accounts (?provider=)      -> {data:[…]}
-//	POST   /v1/social/accounts           connect an account             -> Account (201)
-//	GET    /v1/social/accounts/:id       account detail                 -> Account
-//	PUT    /v1/social/accounts/:id       update an account              -> Account
+//	POST   /v1/social/accounts           connect an account             -> socialAccount (201)
+//	GET    /v1/social/accounts/:id       account detail                 -> socialAccount
+//	PUT    /v1/social/accounts/:id       update an account              -> socialAccount
 //	DELETE /v1/social/accounts/:id       disconnect an account
 //	GET    /v1/social/posts              list posts (?status=)           -> {data:[…]}
-//	POST   /v1/social/posts              create/schedule a post          -> Post (201)
-//	GET    /v1/social/posts/:id          post detail                    -> Post
-//	PUT    /v1/social/posts/:id          update a post                  -> Post
+//	POST   /v1/social/posts              create/schedule a post          -> socialPost (201)
+//	GET    /v1/social/posts/:id          post detail                    -> socialPost
+//	PUT    /v1/social/posts/:id          update a post                  -> socialPost
 //	DELETE /v1/social/posts/:id          delete a post
-//	POST   /v1/social/posts/:id/publish  publish a post now              -> Post
+//	POST   /v1/social/posts/:id/publish  publish a post now              -> socialPost
 //
 // serve.go auto-registers GET /v1/social/health (this subsystem does not set
 // OwnsHealth, so the generic always-ok liveness route serves it).
@@ -63,10 +63,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/internal/shorten"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -83,7 +80,7 @@ const (
 	maxLimit     = 1000
 )
 
-// providers is the validation set for both an Account's provider and a Post's target
+// providers is the validation set for both an account's provider and a post's target
 // channel — a create/update with an unknown provider is rejected; empty defaults to x.
 // It is DERIVED from the ONE ordered vocabulary (providerOrder in publish.go), so adding
 // a network in one place makes it valid, ordered, and cred-checkable everywhere.
@@ -156,144 +153,44 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// scoped is the tenancy sentence all thirteen operations share. Each is read
-// alone in the document, so the boundary has to be stated on each one rather than
-// once in a package comment no consumer of the spec ever sees.
-const scoped = "\n\nA validated principal is required; 403 without one. Every row is keyed by the " +
-	"caller's org taken from that principal and never from the request, so an id belonging " +
-	"to another tenant reads as not found rather than as a refusal."
-
-// The prose for this subsystem's thirteen operations. None is a typed op — each
-// answers a value assembled in its handler — so there is no doc comment for
-// zipdoc to lift and the prose is declared beside the route table instead.
-func init() {
-	openapi.Describe("/v1/social/summary", http.MethodGet,
-		"Counts across your org's social presence",
-		"Returns four counts for the caller's org: total posts, how many are scheduled, how "+
-			"many have published, and how many accounts are connected. It is the dashboard "+
-			"roll-up, computed over the org's own rows in one read."+scoped)
-	openapi.Describe("/v1/social/providers", http.MethodGet,
-		"Which networks this deployment can actually publish to",
-		"Reports each supported network's publish-readiness: whether this deployment holds "+
-			"the OAuth application credentials for it and, when it does not, exactly which "+
-			"environment variables are missing.\n\n"+
-			"This is a live read of the deployment's own configuration, not a static list of "+
-			"networks — it answers \"can I connect this today\", which is what a connect "+
-			"affordance and a pre-cutover checklist both need. It says nothing about whether "+
-			"the caller has connected an account; that is the accounts listing."+scoped)
-	openapi.Describe("/v1/social/accounts", http.MethodGet,
-		"List the social accounts connected to your org",
-		"Returns the org's connected accounts — each one's id, network, handle, status and "+
-			"timestamps. `provider` filters to one network; `limit` bounds the page, "+
-			"defaulting to 200 and capped at 1000.\n\n"+
-			"An account's provider access token is NEVER included in any response on this "+
-			"surface. Only the publisher reads it."+scoped)
-	openapi.Describe("/v1/social/accounts", http.MethodPost,
-		"Connect a social account to your org",
-		"Records a social account for the org and answers 201 with the stored row, "+
-			"including the generated id later calls address it by.\n\n"+
-			"`provider` must be one of x, facebook, instagram, linkedin, tiktok, youtube or "+
-			"threads, defaulting to x when omitted. `status` is one of connected, "+
-			"disconnected or error, defaulting to connected. The handle is trimmed and "+
-			"bounded at 1024 characters."+scoped)
-	openapi.Describe("/v1/social/accounts/:id", http.MethodGet,
-		"Read one connected account",
-		"Returns one of the org's connected accounts by id — its network, handle, status "+
-			"and timestamps — or 404. The provider access token is not part of the "+
-			"response."+scoped)
-	openapi.Describe("/v1/social/accounts/:id", http.MethodPut,
-		"Replace one connected account",
-		"Replaces the account's network, handle and status with what the body carries, and "+
-			"answers with the stored row.\n\n"+
-			"This is a REPLACEMENT, not a merge, which is the rule most easily got wrong: a "+
-			"field the body omits is written as its default, so leaving out the handle "+
-			"blanks it and leaving out the status resets it to connected. Send the whole "+
-			"record. The same vocabularies as create apply, and an unknown network or status "+
-			"is refused rather than coerced."+scoped)
-	openapi.Describe("/v1/social/accounts/:id", http.MethodDelete,
-		"Disconnect one account",
-		"Removes one connected account from the org and answers 204 with no body; an id "+
-			"that is not there is 404.\n\n"+
-			"It removes the account record only. Posts that already published through it "+
-			"keep their published state and their recorded external ids — this does not "+
-			"retract anything from the network."+scoped)
-	openapi.Describe("/v1/social/posts", http.MethodGet,
-		"List your org's posts",
-		"Returns the org's posts — content, channel, status, scheduled time, media and "+
-			"timestamps. `status` filters to one of draft, scheduled, published or failed; "+
-			"`limit` bounds the page, defaulting to 200 and capped at 1000."+scoped)
-	openapi.Describe("/v1/social/posts", http.MethodPost,
-		"Create a post, and publish it if it is already due",
-		"Stores a post for the org and answers 201 with the stored row.\n\n"+
-			"A post created as scheduled for a time that has already passed is published "+
-			"IMMEDIATELY, and the row returned carries that outcome — this is the one "+
-			"behaviour a reader would otherwise miss. A future-scheduled post is left for "+
-			"the scheduler, and a draft is left alone. Publishing never fails the creation: "+
-			"the post is stored either way, and a publish that could not run leaves the row "+
-			"for the scheduler to retry.\n\n"+
-			"`content` is required and bounded at 8192 characters; `channel` is one of the "+
-			"seven supported networks, defaulting to x; `status` is one of draft, scheduled, "+
-			"published or failed, defaulting to draft; up to 10 media URLs are kept, each "+
-			"bounded at 1024 characters."+scoped)
-	openapi.Describe("/v1/social/posts/:id", http.MethodGet,
-		"Read one post",
-		"Returns one of the org's posts by id, with its current status, scheduled time, "+
-			"media and — once it has published — the account and external id it published "+
-			"under. 404 when there is no such post for this org."+scoped)
-	openapi.Describe("/v1/social/posts/:id", http.MethodPut,
-		"Replace one post",
-		"Replaces the post's content, channel, status, scheduled time and media with what "+
-			"the body carries, and answers with the stored row.\n\n"+
-			"A REPLACEMENT, not a merge: an omitted field is written as its default, so "+
-			"omitting media clears it and omitting the status resets the post to draft. "+
-			"`content` is required on every update. Unlike create, this never triggers a "+
-			"publish — moving a post's scheduled time into the past here leaves it for the "+
-			"scheduler; publish now is its own operation."+scoped)
-	openapi.Describe("/v1/social/posts/:id", http.MethodDelete,
-		"Delete one post",
-		"Removes one post from the org and answers 204 with no body; an id that is not "+
-			"there is 404.\n\n"+
-			"It deletes the record here only. A post that has already published is not "+
-			"retracted from the network by deleting it."+scoped)
-	openapi.Describe("/v1/social/posts/:id/publish", http.MethodPost,
-		"Publish one post now",
-		"Publishes the post immediately to the connected accounts on its channel and "+
-			"answers with the updated row, carrying the account and external id it "+
-			"published under.\n\n"+
-			"It is IDEMPOTENT: a post that has already published, or that another caller is "+
-			"publishing right now, comes back unchanged rather than being posted twice. "+
-			"That claim is taken before any network call, which is what makes a double "+
-			"submit safe.\n\n"+
-			"The two failure shapes differ on purpose. Having no connected account for the "+
-			"channel is the caller's to fix, so it is recorded ON the post as failed with "+
-			"the reason and answers normally. A deployment that lacks the network's own "+
-			"credentials cannot publish for anyone, so that is a 503 naming exactly what is "+
-			"missing."+scoped)
-}
-
-// routes registers the social surface: the account + post CRUD + the summary roll-up.
+// routes registers the social surface: the account + post CRUD, the publish
+// action, and the two read-only roll-ups. All thirteen are typed ops — see
+// typed.go — so each is one registry entry carrying its REST route, its OpenAPI
+// operation, its MCP tool, its CLI command and its generated SDK method.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/social")
-	g.Get("/summary", cloud.Handle(s, summary))
-	g.Get("/providers", cloud.Handle(s, listProviders))
+	// Bridge FIRST. A typed op receives only a context, so the validated org
+	// reaches it by being parked there — never as an In field, which is
+	// caller-supplied and would be a cross-tenant read the caller asserted for
+	// itself. fiber runs middleware in registration order, so one installed after
+	// the leaves below would never run. Serve installs this binary-wide too, but
+	// this package's own tests do not run Serve, so a typed op relying on that
+	// would 403 in every test here and work only in production.
+	g.Use(cloud.Bridge())
 
-	g.Get("/accounts", cloud.Handle(s, listAccounts))
-	g.Post("/accounts", cloud.Handle(s, createAccount))
-	g.Get("/accounts/:id", cloud.Handle(s, getAccount))
-	g.Put("/accounts/:id", cloud.Handle(s, updateAccount))
-	g.Delete("/accounts/:id", cloud.Handle(s, deleteAccount))
+	// Declared on the GROUP, so each op's path is the prefix composed with its
+	// leaf — the same composition the router does, and the identity every
+	// projection keys on. cmd/zipdoc resolves the prefix the same way, so the doc
+	// comments reach the document and the tool list.
+	o := ops{s: s}
+	zip.Get(g, "/summary", o.summary)
+	zip.Get(g, "/providers", o.providers)
 
-	g.Get("/posts", cloud.Handle(s, listPosts))
-	g.Post("/posts", cloud.Handle(s, createPost))
-	g.Get("/posts/:id", cloud.Handle(s, getPost))
-	g.Put("/posts/:id", cloud.Handle(s, updatePost))
-	g.Delete("/posts/:id", cloud.Handle(s, deletePost))
-	g.Post("/posts/:id/publish", cloud.Handle(s, publishPostHandler))
+	zip.Get(g, "/accounts", o.listAccounts)
+	zip.Post(g, "/accounts", o.createAccount, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/accounts/:id", o.getAccount)
+	zip.Put(g, "/accounts/:id", o.updateAccount)
+	zip.Delete(g, "/accounts/:id", o.deleteAccount)
+
+	zip.Get(g, "/posts", o.listPosts)
+	zip.Post(g, "/posts", o.createPost, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/posts/:id", o.getPost)
+	zip.Put(g, "/posts/:id", o.updatePost)
+	zip.Delete(g, "/posts/:id", o.deletePost)
+	zip.Post(g, "/posts/:id/publish", o.publish)
 }
 
 // ---- shared helpers (mirror clients/crm + clients/marketing) ----
-
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
 // clip trims and bounds a short text field to maxField.
 func clip(s string) string { return clipN(s, maxField) }
@@ -305,8 +202,14 @@ func clipN(s string, n int) string {
 	return shorten.To(strings.TrimSpace(s), n)
 }
 
-func limitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
+// limitOf reads the caller's ?limit token. It TRIMS before parsing and falls back
+// to the default on anything it cannot read, which is why the field carrying it is
+// a string: zip's own setScalar (typed.go:407) parses with strconv.ParseInt and no
+// trim, and leaves an unreadable value at the field's ZERO — so an int field would
+// refuse `?limit=%2050`, which is a page of fifty here, and could not tell
+// `?limit=0` from `?limit=abc`. One value, one parse rule.
+func limitOf(v string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n <= 0 {
 		return defaultLimit
 	}
@@ -383,254 +286,11 @@ func mapErr(err error, notFoundMsg string) error {
 	}
 }
 
-// ---- accounts ----
-
-func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	var body Account
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	provider, okPr := normProvider(body.Provider)
-	if !okPr {
-		return zip.ErrBadRequest("provider must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
-	}
-	status, okSt := normAccountStatus(body.Status)
-	if !okSt {
-		return zip.ErrBadRequest("status must be one of connected, disconnected, error")
-	}
-	now := time.Now().Unix()
-	acct := Account{
-		ID: mint.ID("acct"), Org: org, Provider: provider, Handle: clip(body.Handle), Status: status,
-		CreatedAt: now, UpdatedAt: now,
-	}
-	saved, err := s.State.store.CreateAccount(c.Context(), acct)
-	if err != nil {
-		return mapErr(err, "")
-	}
-	return c.JSON(http.StatusCreated, saved)
-}
-
-func listAccounts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	provider := strings.ToLower(strings.TrimSpace(c.Query("provider")))
-	rows, err := s.State.store.ListAccounts(c.Context(), org, provider, limitOf(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
-}
-
-func getAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	acct, err := s.State.store.GetAccount(c.Context(), org, idParam(c))
-	if err != nil {
-		return mapErr(err, "account not found")
-	}
-	return c.JSON(http.StatusOK, acct)
-}
-
-func updateAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	var body Account
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	provider, okPr := normProvider(body.Provider)
-	if !okPr {
-		return zip.ErrBadRequest("provider must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
-	}
-	status, okSt := normAccountStatus(body.Status)
-	if !okSt {
-		return zip.ErrBadRequest("status must be one of connected, disconnected, error")
-	}
-	acct := Account{
-		ID: idParam(c), Org: org, Provider: provider, Handle: clip(body.Handle), Status: status,
-		UpdatedAt: time.Now().Unix(),
-	}
-	saved, err := s.State.store.UpdateAccount(c.Context(), acct)
-	if err != nil {
-		return mapErr(err, "account not found")
-	}
-	return c.JSON(http.StatusOK, saved)
-}
-
-func deleteAccount(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	deleted, err := s.State.store.DeleteAccount(c.Context(), org, idParam(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
-	}
-	if !deleted {
-		return zip.ErrNotFound("account not found")
-	}
-	return c.NoContent(http.StatusNoContent)
-}
-
-// ---- posts ----
-
-func createPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	var body Post
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	content := clipBody(body.Content)
-	if content == "" {
-		return zip.ErrBadRequest("content is required")
-	}
-	channel, okCh := normProvider(body.Channel)
-	if !okCh {
-		return zip.ErrBadRequest("channel must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
-	}
-	status, okSt := normPostStatus(body.Status)
-	if !okSt {
-		return zip.ErrBadRequest("status must be one of draft, scheduled, published, failed")
-	}
-	now := time.Now().Unix()
-	post := Post{
-		ID: mint.ID("post"), Org: org, Content: content, Channel: channel, Status: status,
-		ScheduleAt: nonNeg(body.ScheduleAt), Media: normMedia(body.Media), CreatedAt: now, UpdatedAt: now,
-	}
-	saved, err := s.State.store.CreatePost(c.Context(), post)
-	if err != nil {
-		return mapErr(err, "")
-	}
-	// On-create fanout: a post scheduled for now-or-earlier publishes immediately
-	// (best effort — the post is already stored; the publish outcome, published or
-	// failed, is recorded on it and returned). A future-scheduled post is left for the
-	// scheduler. A publish NEVER fails the 201: the post exists regardless. Only the
-	// two outcome-bearing results (published, or a fail-closed not-configured) update
-	// the returned record; an infra error leaves it 'scheduled' for the scheduler.
-	if saved.Status == statusScheduled && saved.ScheduleAt <= now {
-		if updated, perr := publishPost(c.Context(), s, org, saved.ID); perr == nil || errors.Is(perr, errProviderNotConfigured) {
-			saved = updated
-		}
-	}
-	return c.JSON(http.StatusCreated, saved)
-}
-
-func listPosts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	rows, err := s.State.store.ListPosts(c.Context(), org, status, limitOf(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
-}
-
-func getPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	post, err := s.State.store.GetPost(c.Context(), org, idParam(c))
-	if err != nil {
-		return mapErr(err, "post not found")
-	}
-	return c.JSON(http.StatusOK, post)
-}
-
-func updatePost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	var body Post
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	content := clipBody(body.Content)
-	if content == "" {
-		return zip.ErrBadRequest("content is required")
-	}
-	channel, okCh := normProvider(body.Channel)
-	if !okCh {
-		return zip.ErrBadRequest("channel must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
-	}
-	status, okSt := normPostStatus(body.Status)
-	if !okSt {
-		return zip.ErrBadRequest("status must be one of draft, scheduled, published, failed")
-	}
-	post := Post{
-		ID: idParam(c), Org: org, Content: content, Channel: channel, Status: status,
-		ScheduleAt: nonNeg(body.ScheduleAt), Media: normMedia(body.Media), UpdatedAt: time.Now().Unix(),
-	}
-	saved, err := s.State.store.UpdatePost(c.Context(), post)
-	if err != nil {
-		return mapErr(err, "post not found")
-	}
-	return c.JSON(http.StatusOK, saved)
-}
-
-func deletePost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	deleted, err := s.State.store.DeletePost(c.Context(), org, idParam(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
-	}
-	if !deleted {
-		return zip.ErrNotFound("post not found")
-	}
-	return c.NoContent(http.StatusNoContent)
-}
-
-// ---- publish ----
-
-// publishPostHandler publishes a post NOW to its channel's connected accounts (the
-// explicit publish action, the twin of the on-create fanout). Idempotent: re-publishing
-// an already-published post returns it unchanged. 404 if the post is not the org's; 503
-// (with the exact missing credentials) if the deployment cannot publish the provider.
-func publishPostHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	post, err := publishPost(c.Context(), s, org, idParam(c))
-	if err != nil {
-		return mapPublishErr(err)
-	}
-	return c.JSON(http.StatusOK, post)
-}
-
-// listProviders reports each network's publish-readiness: whether this deployment has
-// its OAuth-app credentials and, if not, exactly which env vars are missing. Honest and
-// live (reads the environment), never fabricated — the console's connect affordance and
-// the coordinator's pre-cutover checklist of what to supply.
-func listProviders(_ *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := principal.Org(c); !ok {
-		return principal.Refused(c)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": providerCapabilities()})
-}
-
 // mapPublishErr maps a publishPost control error to an honest HTTP status: not-found →
 // 404, provider-not-configured → 503 (with the missing-credentials detail), else 500.
+// Each is a returned zip error, which is what the untyped handler returned too — so
+// typing moved no refusal: zip renders the same flat {status,code,error} envelope it
+// already did (ctx.go:201, errorHandler at ctx.go:224).
 func mapPublishErr(err error) error {
 	switch {
 	case errors.Is(err, errNotFound):
@@ -640,22 +300,6 @@ func mapPublishErr(err error) error {
 	default:
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-}
-
-// ---- summary ----
-
-func summary(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	posts, scheduled, published, accounts, err := s.State.store.Counts(c.Context(), org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"posts": posts, "scheduled": scheduled, "published": published, "accounts": accounts,
-	})
 }
 
 // Shutdown stops the scheduler and closes the social store, in that order (drain the

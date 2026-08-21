@@ -72,14 +72,14 @@ var errProviderNotConfigured = errors.New("social: provider not configured")
 // network and so the coordinator can swap the real edge in at Mount without touching the
 // machine.
 type Publisher interface {
-	Publish(ctx context.Context, org string, acct Account, post Post) (externalID string, err error)
+	Publish(ctx context.Context, org string, acct socialAccount, post socialPost) (externalID string, err error)
 }
 
 // notConfiguredPublisher is the fail-closed default. It never fakes a post — it returns
 // the honest, itemized not-configured error the handler maps to 503.
 type notConfiguredPublisher struct{}
 
-func (notConfiguredPublisher) Publish(_ context.Context, _ string, acct Account, _ Post) (string, error) {
+func (notConfiguredPublisher) Publish(_ context.Context, _ string, acct socialAccount, _ socialPost) (string, error) {
 	return "", providerNotConfiguredErr(acct.Provider)
 }
 
@@ -120,23 +120,35 @@ func providerNotConfiguredErr(provider string) error {
 		errProviderNotConfigured, provider)
 }
 
-// ProviderCapability is one row of the capabilities read (GET /v1/social/providers): a
+// socialProvider is one row of the capabilities read (GET /v1/social/providers): a
 // provider and whether this deployment has its OAuth-app credentials, plus the exact
 // env vars still missing. It is the console's honest connect affordance and the
 // coordinator's checklist of what to supply before cutover.
-type ProviderCapability struct {
-	Provider              string   `json:"provider"`
-	CredentialsConfigured bool     `json:"credentialsConfigured"`
-	MissingCredentials    []string `json:"missingCredentials,omitempty"`
+type socialProvider struct {
+	// Provider is the network: x, facebook, instagram, linkedin, tiktok, youtube
+	// or threads.
+	//
+	// Example: "x"
+	Provider string `json:"provider"`
+	// CredentialsConfigured is whether this deployment holds every OAuth
+	// application credential the network needs. It is a statement about the
+	// DEPLOYMENT, not about the caller: a connected account also needs its own
+	// access token before a post can go out.
+	CredentialsConfigured bool `json:"credentialsConfigured"`
+	// MissingCredentials names the environment variables still unset for this
+	// network, so the answer is an installation instruction rather than a refusal.
+	// Absent when the credentials are complete. Only the NAMES appear here; a
+	// credential value is never reported.
+	MissingCredentials []string `json:"missingCredentials,omitempty"`
 }
 
 // providerCapabilities reports the publish-readiness of every provider — real, live
 // (reads the environment), never fabricated.
-func providerCapabilities() []ProviderCapability {
-	out := make([]ProviderCapability, 0, len(providerOrder))
+func providerCapabilities() []socialProvider {
+	out := make([]socialProvider, 0, len(providerOrder))
 	for _, p := range providerOrder {
 		miss := missingCreds(p)
-		out = append(out, ProviderCapability{
+		out = append(out, socialProvider{
 			Provider:              p,
 			CredentialsConfigured: len(miss) == 0,
 			MissingCredentials:    miss,
@@ -156,10 +168,10 @@ func providerCapabilities() []ProviderCapability {
 // error (500). A per-account provider FAILURE is not returned as an error — it is recorded
 // on the post (status=failed, retryable) and returned as (post, nil), so a genuine push
 // failure surfaces on the record rather than as a server fault.
-func publishPost(ctx context.Context, s *cloud.Service[state], org, id string) (Post, error) {
+func publishPost(ctx context.Context, s *cloud.Service[state], org, id string) (socialPost, error) {
 	post, claimed, err := s.State.store.ClaimForPublish(ctx, org, id, time.Now().Unix())
 	if err != nil {
-		return Post{}, err // errNotFound or an infra error
+		return socialPost{}, err // errNotFound or an infra error
 	}
 	if !claimed {
 		return post, nil // already published, or being published by another caller — idempotent
@@ -182,7 +194,7 @@ func publishPost(ctx context.Context, s *cloud.Service[state], org, id string) (
 		}
 		if perr == nil {
 			if err := s.State.store.MarkPublished(ctx, org, id, a.ID, extID, time.Now().Unix()); err != nil {
-				return Post{}, err
+				return socialPost{}, err
 			}
 			return s.State.store.GetPost(ctx, org, id)
 		}
@@ -201,13 +213,13 @@ func publishPost(ctx context.Context, s *cloud.Service[state], org, id string) (
 
 // markFailed records a failed publish on the post and returns the refreshed record with
 // an optional control error to surface to the HTTP layer (errProviderNotConfigured → 503).
-func markFailed(ctx context.Context, s *cloud.Service[state], org, id, reason string, surface error) (Post, error) {
+func markFailed(ctx context.Context, s *cloud.Service[state], org, id, reason string, surface error) (socialPost, error) {
 	if err := s.State.store.MarkFailed(ctx, org, id, clipN(reason, maxError), time.Now().Unix()); err != nil {
-		return Post{}, err
+		return socialPost{}, err
 	}
 	post, err := s.State.store.GetPost(ctx, org, id)
 	if err != nil {
-		return Post{}, err
+		return socialPost{}, err
 	}
 	return post, surface
 }
