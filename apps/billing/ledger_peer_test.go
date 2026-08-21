@@ -1,13 +1,12 @@
 package billing
 
-// finance_peer_test.go — the commerce LEDGER fixture, served the way production
+// ledger_peer_test.go — the commerce LEDGER fixture, served the way production
 // serves it: a plane peer on commerce's own socket.
 //
-// The finance projections (credits, usage, ledger) read one list, and they used
-// to read it two ways — the plane when commerce answered, an HTTP GET of
-// /v1/billing/transactions when it did not. The HTTP half was the standalone
-// commerce's door, and there is no standalone commerce: it is a plugin in this
-// binary. Worse, the fallback could only fire on ErrNoPeer — "this fleet runs no
+// The ledger read used to reach that list two ways — the plane when commerce
+// answered, an HTTP GET of /v1/billing/transactions when it did not. The HTTP
+// half was the standalone commerce's door, and there is no standalone commerce:
+// it is a plugin in this binary. Worse, the fallback could only fire on ErrNoPeer — "this fleet runs no
 // commerce" — and it answered that by dialling CLOUD_COMMERCE_HTTP_URL, which
 // production points at commerce.hanzo.svc:8001, a Service selecting
 // `app.kubernetes.io/name: cloud` on targetPort 8000. That is this pod's own
