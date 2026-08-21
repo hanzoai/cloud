@@ -185,9 +185,16 @@ func (s *Store) fileContent(ctx context.Context, repo, path string) (string, str
 // TreeEntry is one file in a repo's structure: its path, language, and how many
 // top-level symbols it defines — enough for an agent to grasp module layout.
 type TreeEntry struct {
-	Path    string `json:"path"`
-	Lang    string `json:"lang"`
-	Symbols int    `json:"symbols"`
+	// Path is the file, relative to the repo root. The list is ordered by it, so a
+	// reader can see module layout without sorting.
+	Path string `json:"path"`
+	// Lang is the language the indexer parsed the file as ("go", "python", …), or
+	// empty when it recognised none — in which case Symbols is 0 because nothing was
+	// extracted, not because the file declares nothing.
+	Lang string `json:"lang"`
+	// Symbols is how many top-level declarations the file defines. A file with none
+	// is still listed: the file set is the authority here and the counts decorate it.
+	Symbols int `json:"symbols"`
 }
 
 // tree returns the repo's file structure with per-file symbol counts, ordered by
