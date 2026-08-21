@@ -311,11 +311,11 @@ var meteredApps = []string{
 	"projects",     // site hosting fee.
 	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
 	"risk",         // per-screen fee inside each op.
+	"s3",           // object-storage data plane.
 	"sandboxes",    // the lease, gated and debited around the pod (currently priced at zero).
 	"security",     // scan fee.
 	"share",        // one tunnel account provisioned on the fabric; reading it back is free.
 	"seo",          // measurement resold at the vendor's own per-call price.
-	"storage",      // object-storage data plane.
 	"tel",          // numbers, messages and calls, at the carrier's price.
 	"tools",        // per-tool dispatch.
 	"todo",         // per-project/issue fee.

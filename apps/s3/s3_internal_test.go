@@ -1,4 +1,4 @@
-package storage
+package s3
 
 // White-box unit tests for the pure security-critical helpers: object-key
 // traversal rejection, prefix normalization, and the tenant↔physical bucket

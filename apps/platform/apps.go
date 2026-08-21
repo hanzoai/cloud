@@ -24,7 +24,7 @@
 //	                                     declare. It deploys nothing.
 //
 // Static sites are NOT here. /v1/projects/sites already serves them (apps/projects,
-// S3-backed), and bucket listing is already /v1/s3/buckets (apps/storage). Adding
+// S3-backed), and bucket listing is already /v1/s3/buckets (apps/s3). Adding
 // either name under this prefix would be a second address for one fact.
 //
 // ── the two things a caller may never choose ────────────────────────────────
