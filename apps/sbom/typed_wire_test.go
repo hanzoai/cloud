@@ -120,7 +120,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 
 // TestResolveTakesASlashBearingRef is the MEASUREMENT behind the one refusal above.
 // The value this route addresses is an image REFERENCE, which carries slashes and a
-// colon (`registry.hanzo.ai/hanzo/cloud:v1`) — that is why it is a greedy wildcard
+// colon (`oci.hanzo.ai/hanzo/cloud:v1`) — that is why it is a greedy wildcard
 // and not a `:ref` segment, and it is what a typed op could not name today. The
 // harness has no datastore, so the honest answer is 503 rather than a match; what
 // this pins is that the ROUTE still matches a multi-segment ref at all.
@@ -128,8 +128,8 @@ func TestResolveTakesASlashBearingRef(t *testing.T) {
 	app := mountApp(t)
 	for _, ref := range []string{
 		"sha256:abc",
-		"registry.hanzo.ai/hanzo/cloud:v1",
-		"registry.hanzo.ai/hanzo/cloud@sha256:abc",
+		"oci.hanzo.ai/hanzo/cloud:v1",
+		"oci.hanzo.ai/hanzo/cloud@sha256:abc",
 	} {
 		code, body := do(t, app, "GET", "/v1/sbom/"+ref, "", false)
 		if code == 404 {

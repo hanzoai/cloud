@@ -233,7 +233,7 @@ type SbomIngested struct {
 // the (digest, name, version, purl) ORDER BY, so ReplacingMergeTree keeps the
 // latest by ingested_at (and resolve reads FINAL).
 //
-// Example: {"imageDigest": "sha256:abc", "imageRef": "registry.hanzo.ai/hanzo/cloud:v1", "format": "cyclonedx", "document": {"components": []}}
+// Example: {"imageDigest": "sha256:abc", "imageRef": "oci.hanzo.ai/hanzo/cloud:v1", "format": "cyclonedx", "document": {"components": []}}
 func (o ops) ingest(ctx context.Context, in *SbomIngest) (*SbomIngested, error) {
 	// The SuperAdmin gate needs more of the validated principal than the org — the
 	// X-User-IsAdmin claim — which principal.OrgFrom does not carry. Fails closed off
