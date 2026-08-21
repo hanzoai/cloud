@@ -96,6 +96,7 @@ const (
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
 	FinanceRecord    = "finance_record" // the meter
+	FinanceSubs      = "finance_subs"   // the org's subscriptions
 	FinanceTxns      = "finance_txns"
 	FinanceUsage     = "finance_usage"
 
@@ -745,6 +746,37 @@ type Txn struct {
 	Memo      string `json:"memo,omitempty"`
 	Amount    Money  `json:"amount"`
 	CreatedAt int64  `json:"createdAt"`
+}
+
+// Sub is one subscription: which plan, what state, and the period it is in.
+//
+// It carries the plan SLUG rather than the plan, because a caller deciding "is
+// this org on a paid tier" needs the name and not the catalog entry, and sending
+// the entry would make every reader inherit the plan model.
+type Sub struct {
+	ID        string `json:"id"`
+	UserID    string `json:"userId,omitempty"`
+	PlanID    string `json:"planId,omitempty"`
+	PlanSlug  string `json:"planSlug,omitempty"`
+	Status    string `json:"status"`
+	StartedAt int64  `json:"startedAt,omitempty"`
+}
+
+// SubsIn filters the org's subscriptions. Both fields are optional and an empty
+// one does not filter — the same meaning an absent query parameter has always
+// had on the HTTP door this shares its query with.
+//
+// There is no org field, for the reason every input here lacks one: the tenant
+// rides the caller, so a caller that could name an org could read another
+// tenant's subscriptions.
+type SubsIn struct {
+	UserID string `json:"userId,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
+// Subs is the org's subscriptions.
+type Subs struct {
+	Rows []Sub `json:"rows"`
 }
 
 // TxnsIn selects which books to read and how much of them.
