@@ -308,38 +308,13 @@
  "benchmark": [],
  "billing": [
   {
+   "id": "get_billing_ledger",
+   "doc": "Answers the org's own postings inside `range=`, each as a signed\nentry: a DEPOSIT CREDITS the wallet (positive, account `credits:\u003corg\u003e`) and\nevery other posting DEBITS it (negative, account `usage:\u003corg\u003e`), described by\nits notes or its tags. The sign is the posting's own meaning, read through ONE\nvocabulary shared with the ledger that wrote it — a reader with its own\nspelling for `deposit` rendered a customer's grant as a charge.\n\nThis is the closest projection of the truth. The org's double-entry postings\nare the source of record — balanced, only ever appended, one file per org —\nand this lane is that list, wider than either half of it: the deposits are the\ngrants /v1/billing/credits lists and the debits are the spend /v1/billing/usage\nrolls up. It answers 503 where this deployment runs no ledger, rather than\nreporting an empty wallet.\n\nA row whose timestamp will not parse is KEPT rather than dropped — a malformed\ndate must show up in a money list, not vanish from it. `balanceCents` is\nomitted: these are MOVEMENTS, and the standing balance is /v1/billing/balance.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the\ncaller's own org, where the org's ledger file is the tenant boundary; 401\nwithout a validated principal.",
+   "read": true
+  },
+  {
    "id": "get_billing_usage_accounts",
    "doc": "Answers per-account totals for the linked provider accounts the\ngateway ROUTED this caller's traffic through — requests, prompt and completion\ntokens, recorded cost — plus their honest sum.\n\nThis is the one read in the billing namespace scoped to the PERSON, not the\norg. Rows are keyed on (validated org, validated user), so a caller sees the\naccounts THEY linked and never a colleague's, even inside one org — everything\nelse under /v1/billing is org-wide. Neither key is ever read from the request\nbody or the query.\n\nIt is a ROUTING counter, not the money ledger. `costCents` is 0 for an account\nbilled by its own subscription, where the plan pays the provider directly, so\nthese totals do not reconcile against what the org was charged.\n/v1/billing/usage is the charged ledger.\n\n401 without a validated principal. Where the linked-account plane is not\nresident the answer is an honest 501 — never an empty breakdown, which would\nread as no usage.",
-   "read": true
-  },
-  {
-   "id": "get_finance_balance",
-   "doc": "Answers the org's spendable prepaid balance typed for the\nfinance surfaces: `availableCents`, `pendingCents`, `dueCents` and the `asOf`\ninstant it was read.\n\nIt is the SAME wallet read /v1/billing/balance answers — one function, called\nby both, so the two surfaces cannot drift into disagreeing about a customer's\nmoney. Reshaped, never re-metered. Co-resident the number comes straight out\nof the org's own double-entry ledger file.\n\n`dueCents` is a structural 0: this is a PREPAID wallet with no open-invoice\ndebt, so nothing is ever owed and a non-zero value here would be an invention.\n`pendingCents` is 0 on the co-resident ledger, where authorization holds are\nnever posted; only a split-deploy upstream reports holds, and there spendable\nis the balance NET of them, floored at 0 — a fully-held wallet reports 0\nrather than money the gate would refuse.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the\ncaller's own org from the validated IAM owner claim; 401 without a validated\nprincipal, and a balance that cannot be read is 502 — never 0, because unknown\nis not broke.",
-   "read": true
-  },
-  {
-   "id": "get_finance_credits",
-   "doc": "Answers the money PUT IN to the org's wallet — each staff\ngrant, promo and settled top-up as a positive row with its id, label, cents\nand grant time.\n\nSpend is not a credit. A posting counts here only when it moved money IN;\ndebits belong to /v1/finance/usage (aggregated) and /v1/finance/ledger\n(signed). All three project ONE read of the same ledger through ONE vocabulary\nfor what a posting means, so they cannot disagree about a row — nor silently\ndrop one, which is what an empty credits page against a funded wallet was.\n\n`label` falls back through the posting's notes, then its tags, then a bare\nCredit — it is a description, never an identifier. `remainingCents` is\nOMITTED: the wallet is one running balance, not per-grant buckets, so no grant\nhas a remainder to report and spend cannot be attributed to the credit that\nfunded it.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the\ncaller's own org; 401 without a validated principal. An org with no grants\ngets an empty array — honest, never a fabricated figure.",
-   "read": true
-  },
-  {
-   "id": "get_finance_invoices",
-   "doc": "Answers an empty typed array, always. The fleet bills a\nPREPAID wallet — money in, metered debits out — and issues no customer\ninvoices, so there is no invoice ledger to project. Nothing here is a\nfabricated figure and nothing is hidden behind a filter.\n\nThe shape is fixed, so the finance UI renders this lane today and the day an\ninvoice ledger exists it fills with ZERO client change. Spend that actually\nhappened is /v1/finance/usage; money in and out is /v1/finance/ledger; what is\nleft to spend is /v1/finance/balance.\n\nThe gate is real even though the body is empty: 401 without a validated\nprincipal. It is the only finance read that touches no store, so it is also\nthe only one that cannot 502.",
-   "read": true
-  },
-  {
-   "id": "get_finance_ledger",
-   "doc": "Answers the org's own postings inside `range=`, each as a signed\nentry: a DEPOSIT CREDITS the wallet (positive, account `credits:\u003corg\u003e`) and\nevery other posting DEBITS it (negative, account `usage:\u003corg\u003e`), described by\nits notes or its tags. The sign is the posting's own meaning, read through ONE\nvocabulary shared with the ledger that wrote it — a reader with its own\nspelling for `deposit` rendered a customer's grant as a charge.\n\nThis is the closest projection of the truth. The org's double-entry postings\nare the source of record — balanced, only ever appended, one file per org —\nand this lane is that list, widest of the three: /v1/finance/credits is its\ndeposit half and /v1/finance/usage is its withdrawal half rolled up. All three\ncome from ONE read, which is why they cannot contradict each other, and all\nthree answer 501 where no commerce link is configured rather than reporting an\nempty wallet.\n\nA row whose timestamp will not parse is KEPT rather than dropped — a malformed\ndate must show up in a money list, not vanish from it. `balanceCents` is\nomitted: these are MOVEMENTS, and the standing balance is /v1/finance/balance.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the\ncaller's own org, where the org's ledger file is the tenant boundary; 401\nwithout a validated principal.",
-   "read": true
-  },
-  {
-   "id": "get_finance_payment-methods",
-   "doc": "Answers the masked card descriptors for the caller's resolved\nWALLET — id, brand, last four, expiry, default flag — reshaped into the\nfinance contract.\n\nIt re-masks defensively: whatever the upstream sends, at most the trailing\nfour DIGITS survive into `last4`. No card number, no security code and no\nprocessor token exists in this shape at all, so an over-returning upstream\nstill cannot leak one through this lane.\n\nRead the sibling difference before trusting a mismatch. This keys the store on\nthe resolved wallet; /v1/billing/methods keys it on the org SLUG, which is\nalso the key a card is SAVED under — identical for an org paying from its\nshared pool, different wherever the payer is a person. When the two lists\ndisagree, the billing one is what was saved.\n\n401 without a validated principal. An upstream that answers non-2xx or cannot\nbe reached is 502 — never an empty list, because no cards and could not ask\nmust not look alike.",
-   "read": true
-  },
-  {
-   "id": "get_finance_usage",
-   "doc": "Answers metered spend inside `range=`: the window total, a time\nseries to plot, and one line per usage TAG. Aggregated from the same charged\nledger the balance comes off — projected, never re-metered.\n\nOnly DEBIT postings count; deposits are credits and are excluded. Buckets are\nhourly at 24h and daily otherwise, in UTC; a posting whose timestamp will not\nparse is dropped rather than mis-bucketed.\n\nLines group by the posting's tag (`Usage` where it carries none) and `units`\ncounts POSTINGS, not tokens. The dimensions here are time and tag. For\nper-request rows and a per-PRODUCT breakdown, read /v1/billing/usage instead —\nthe same money, cut a different way.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD, so a window made of\nsub-cent token calls totals LOW here. Scoped to the caller's own org; 401\nwithout a validated principal.",
    "read": true
   }
  ],
@@ -575,6 +550,11 @@
   {
    "id": "getPayment",
    "doc": "Reads one settled payment out of the caller's org ledger.\n\nThe org scopes the read by construction — the ledger is namespaced to it — so\nan id belonging to another tenant is simply not found rather than found and\nthen filtered. A ledger row that is not a payment is likewise not found, so\nthis cannot be used to walk the org's usage debits.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_commerce_health",
+   "doc": "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated: a probe that needs a credential is a probe that\nreports the credential.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
    "read": true
   },
   {
@@ -3795,11 +3775,6 @@
  ],
  "pricing": [
   {
-   "id": "get_enablement",
-   "doc": "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
-   "read": true
-  },
-  {
    "id": "get_pricing",
    "doc": "Returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing. Every model and provider it names is filtered to what\nthe caller's org may see — the same gate the leaf routes apply, so this can\nnever be an un-gated second source for what they hide.",
    "read": true
@@ -3847,6 +3822,11 @@
   {
    "id": "get_pricing_datastore",
    "doc": "Returns the Hanzo Datastore rate card: the tier list, the\nper-GB storage and egress usage rates, the annual discount and the trial. It is\nthe section as authored, un-gated — no provider identity appears in it.\n\nThe route was missing while the data existed, so this 404d and every visitor to\nhanzo.ai's Infrastructure tab was told pricing was \"temporarily unavailable\".",
+   "read": true
+  },
+  {
+   "id": "get_pricing_enablement",
+   "doc": "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
    "read": true
   },
   {
@@ -3920,11 +3900,11 @@
    "read": true
   },
   {
-   "id": "post_enablement_optin",
+   "id": "post_pricing_enablement_optin",
    "doc": "Opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org."
   },
   {
-   "id": "post_enablement_optout",
+   "id": "post_pricing_enablement_optout",
    "doc": "Removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent. The org is the caller's validated one,\nso this can never revoke another org's grant. Requires a signed-in caller with\nan org."
   },
   {
@@ -4575,13 +4555,13 @@
  "translate": [],
  "treasury": [
   {
-   "id": "get_finance_accounts",
-   "doc": "Returns the ledger accounts the caller may see, with their\nbalances. It is tenant-isolated SERVER-SIDE: an ordinary caller sees ONLY\naccounts under its own \"org:\u003ctenant\u003e:\" prefix, never house accounts and never\nanother tenant's. A SuperAdmin may widen with ?scope=house (the reserve,\nrevenue and payout house accounts) or ?org=\u003ctenant\u003e — the only way to cross the\ntenant boundary, and only for platform sudo. The answer is honestly empty until\na tenant has ledger postings.",
+   "id": "get_treasury",
+   "doc": "Returns the reserve fund's health and the current revenue-share\npolicy for any validated caller. It is a TRANSPARENCY view — a partner or\nauthor can see that the pool backing their payouts is solvent — and NOT per-org\nmoney, which is the customer's own commerce balance at /v1/billing/balance. The\npolicy is read-only here; only a SuperAdmin sets it.",
    "read": true
   },
   {
-   "id": "get_finance_treasury",
-   "doc": "Returns the reserve fund's health and the current revenue-share\npolicy for any validated caller. It is a TRANSPARENCY view — a partner or\nauthor can see that the pool backing their payouts is solvent — and NOT per-org\nmoney, which is the customer's own commerce balance at /v1/billing/balance. The\npolicy is read-only here; only a SuperAdmin sets it.",
+   "id": "get_treasury_accounts",
+   "doc": "Returns the ledger accounts the caller may see, with their\nbalances. It is tenant-isolated SERVER-SIDE: an ordinary caller sees ONLY\naccounts under its own \"org:\u003ctenant\u003e:\" prefix, never house accounts and never\nanother tenant's. A SuperAdmin may widen with ?scope=house (the reserve,\nrevenue and payout house accounts) or ?org=\u003ctenant\u003e — the only way to cross the\ntenant boundary, and only for platform sudo. The answer is honestly empty until\na tenant has ledger postings.",
    "read": true
   }
  ],

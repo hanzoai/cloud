@@ -22,7 +22,7 @@ package openapi
 //   - its product is not [Operator] — the first segment after /v1/ is the product
 //     (Product), the axis every tag is already read off, and /v1/admin/* is the
 //     one family the fleet reserves for the operator whichever app serves a leaf
-//     of it (admin itself, pricing's /v1/admin/catalog, affiliates' operator view);
+//     of it (admin itself, pricing's /v1/admin/pricing, affiliates' operator view);
 //   - it is not a relay door — a `{wildcardN}` address publishes whatever grows
 //     behind it and names nothing a client can call;
 //   - it is not tagged [Compat] — a legacy spelling is served so a pinned caller

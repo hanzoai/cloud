@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/catalog", zip.Doc{
+	zip.Describe("GET /v1/admin/pricing/catalog", zip.Doc{
 		Description: "Returns the full model and provider catalog annotated with\neach entry's enablement state, for the operator console. Nothing is hidden:\nthis is the admin's view of what exists and what is currently off, in beta or\ngenerally available. SuperAdmin only; every other caller is refused.",
 		Fields: map[string]string{
 			"adminCatalogOut.models":    "Models is every model the catalog holds — disabled ones included — each\ncarrying its enablement state under \"_overlay\".",
@@ -17,23 +17,11 @@ func init() {
 			"adminCatalogOut.updated":   "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
-	zip.Describe("GET /v1/admin/enablement", zip.Doc{
+	zip.Describe("GET /v1/admin/pricing/enablement", zip.Doc{
 		Description: "Returns every item an operator has set an enablement state on —\nits global state (off, beta or ga) and the orgs granted its beta. An item\nnobody has touched is absent, because an untouched item is generally\navailable; the console composes the candidate list from the live catalog.\nSuperAdmin only; every other caller is refused.",
 		Fields: map[string]string{
 			"adminEnablementBoard.items": "Items is every item an operator has set a state on. An item nobody has\ntouched is absent: it is generally available by default.",
 			"adminEnablementItem.state":  "off|beta|ga",
-		},
-	})
-	zip.Describe("GET /v1/enablement", zip.Doc{
-		Description: "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
-		Fields: map[string]string{
-			"enablementBoard.betas":        "Betas are the subset of Items the caller's org may still opt into.",
-			"enablementBoard.items":        "Items is every managed item, each resolved for the caller's org.",
-			"enablementBoard.org":          "Org is the org this view was resolved for; empty for a caller with no\nvalidated principal, who sees only the generally-available items.",
-			"userEnablementItem.canOptIn":  "beta && not yet opted in",
-			"userEnablementItem.effective": "visible to the caller's org",
-			"userEnablementItem.optedIn":   "caller's org on the beta list",
-			"userEnablementItem.state":     "off|beta|ga",
 		},
 	})
 	zip.Describe("GET /v1/pricing", zip.Doc{
@@ -80,6 +68,18 @@ func init() {
 	})
 	zip.Describe("GET /v1/pricing/datastore", zip.Doc{
 		Description: "Returns the Hanzo Datastore rate card: the tier list, the\nper-GB storage and egress usage rates, the annual discount and the trial. It is\nthe section as authored, un-gated — no provider identity appears in it.\n\nThe route was missing while the data existed, so this 404d and every visitor to\nhanzo.ai's Infrastructure tab was told pricing was \"temporarily unavailable\".",
+	})
+	zip.Describe("GET /v1/pricing/enablement", zip.Doc{
+		Description: "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
+		Fields: map[string]string{
+			"enablementBoard.betas":        "Betas are the subset of Items the caller's org may still opt into.",
+			"enablementBoard.items":        "Items is every managed item, each resolved for the caller's org.",
+			"enablementBoard.org":          "Org is the org this view was resolved for; empty for a caller with no\nvalidated principal, who sees only the generally-available items.",
+			"userEnablementItem.canOptIn":  "beta && not yet opted in",
+			"userEnablementItem.effective": "visible to the caller's org",
+			"userEnablementItem.optedIn":   "caller's org on the beta list",
+			"userEnablementItem.state":     "off|beta|ga",
+		},
 	})
 	zip.Describe("GET /v1/pricing/featured", zip.Doc{
 		Description: "Returns the models the catalog highlights, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks featured.",
@@ -166,14 +166,14 @@ func init() {
 			"pricingToolList.tools": "Tools are the metered tools, each an opaque object exactly as the pricing\nsource emits it — typically name, billing unit and price.",
 		},
 	})
-	zip.Describe("PATCH /v1/admin/catalog/providers/:name", zip.Doc{
+	zip.Describe("PATCH /v1/admin/pricing/catalog/providers/:name", zip.Doc{
 		Description: "Sets one provider's availability overlay.\n\nThe overlay decides whether a provider is off, in beta for named orgs, or\ngenerally available, and carries the price overrides applied on top of the\ncatalog. Only the fields the patch names change; every other field keeps the\nvalue it had, and an absent overlay starts from the catalog default (enabled).\nAnswers the new effective overlay, so a console needs no second read.\n\nSuperAdmin only.",
 		Fields: map[string]string{
 			"patchBody.state":      "State is the high-level tri-state setter (\"off\"|\"beta\"|\"ga\") that sets\nenabled+beta coherently; the low-level Enabled/Beta pointers (applied after)\noverride it for fine control.",
 			"providerPatchIn.name": "Name is the provider the overlay belongs to, from the URL.",
 		},
 	})
-	zip.Describe("POST /v1/enablement/optin", zip.Doc{
+	zip.Describe("POST /v1/pricing/enablement/optin", zip.Doc{
 		Description: "Opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org.",
 		Fields: map[string]string{
 			"enablementOptRef.id":          "ID is the item within that namespace.",
@@ -185,7 +185,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"kind":"feature","id":"labs"}`),
 	})
-	zip.Describe("POST /v1/enablement/optout", zip.Doc{
+	zip.Describe("POST /v1/pricing/enablement/optout", zip.Doc{
 		Description: "Removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent. The org is the caller's validated one,\nso this can never revoke another org's grant. Requires a signed-in caller with\nan org.",
 		Fields: map[string]string{
 			"enablementOptRef.id":          "ID is the item within that namespace.",
@@ -204,7 +204,7 @@ func init() {
 			"pricingSyncOut.updated": "Updated is the RFC 3339 time the refreshed catalog was stamped with.",
 		},
 	})
-	zip.Describe("PUT /v1/admin/enablement", zip.Doc{
+	zip.Describe("PUT /v1/admin/pricing/enablement", zip.Doc{
 		Description: "Sets one item's global enablement state — off, beta or ga — and\noptionally replaces the list of orgs granted its beta. It is generic over\nkind, so the same call manages models, providers and product features through\nthe one registry. `off` is an absolute kill switch: a self-service opt-in can\nnever re-open it. SuperAdmin only; every other caller is refused.",
 		Fields: map[string]string{
 			"adminEnablementItem.state":  "off|beta|ga",

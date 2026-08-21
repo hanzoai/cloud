@@ -70,35 +70,24 @@ func init() {
 //
 // It is exported because the composition root DECLARES it (apps.Wire's commerce
 // entry, Prefixes: commerce.Prefixes), which is what puts commerce on the light
-// host's manifest. Derived instead, the walk would read the `app.Group("/v1")`
-// this file opens for the store/catalog/plan bundle as a claim on ALL of /v1 and
-// hand commerce every request in the fleet. Same list, one owner, stated once.
+// host's manifest. Derived instead, the walk would read the group this file
+// opens for the store/catalog/plan bundle as a claim on whatever prefix that
+// group happens to carry. Same list, one owner, stated once.
 var Prefixes = []string{
-	"/v1/commerce", // public checkout + org + catalog + deposits
-	"/_/commerce",  // tenant-admin surface
-	// The BARE store surface: GET /v1/store/current (the org-scoped default
-	// store the admin dashboard AND the content storefront edge resolve), the
-	// per-listing upsert /v1/store/:id/listing/:slug the publish edge writes,
-	// and the public storefront reads karma.style serves at runtime. Without
-	// this owner, /v1/store/* fell through to the bare /v1/* AI catch-all —
-	// whose prepaid BALANCE gate 402'd every store read (a store-metadata read
-	// must never require an LLM balance).
-	"/v1/store",
-	// Platform-admin catalog CMS: GET/POST/PUT/DELETE /v1/catalog/entries +
-	// POST /v1/catalog/seed — the SuperAdmin CRUD admin.hanzo.ai's editor drives.
-	// commerce's setupRoutes wires only the PUBLIC read (/v1/commerce/catalog);
-	// the CRUD lives on the standalone /v1 bundle (api.Route → catalogApi.AdminRoute),
-	// which the co-resident embed skips, so Mount mounts it below on the
-	// same /v1 gate chain. Own the prefix here so it reaches commerce (each handler
-	// is requireSuperAdmin-gated) instead of the AI /v1/* balance catch-all.
-	"/v1/catalog",
-	// Platform-admin subscription/DNS plan authority CMS: GET/POST/PUT/DELETE
-	// /v1/plans/entries + POST /v1/plans/seed (increment 3a) — the SuperAdmin CRUD
-	// the console plan editor drives. The PUBLIC read stays GET /v1/billing/plans;
-	// this CRUD rides the /v1 bundle (api.Route → planApi.AdminRoute), which the
-	// embed skips, so Mount mounts it below. Own the prefix so it reaches
-	// commerce (each handler requireSuperAdmin-gated), not the AI /v1/* 402 gate.
-	"/v1/plans",
+	// ONE ROOT for every merchant noun (HIP-1220 §1). It carries the public
+	// checkout and org reads, the merchant resources, the storefront, the
+	// SuperAdmin catalog and plan CRUD, the typed cart and the typed payment
+	// door — each a leaf under /v1/commerce rather than a top-level address of
+	// its own. The reason the leaves were ever named here is the bare /v1/*
+	// AI catch-all: it refuses on a prepaid BALANCE, so an unclaimed store read
+	// or cart open 402'd for want of an LLM balance it has nothing to do with
+	// (the karma /v1/store/current outage). One root claims them all.
+	"/v1/commerce",
+	// The tenant-admin surface. It is outside /v1, which HIP-0139 §3.3 does not
+	// allow, and it is the module's to move: hanzoai/commerce registers
+	// /_/commerce/deposits from its own setupRoutes (commerce.go, adminGroup),
+	// so the mount prefix changes there. Owned here until it does.
+	"/_/commerce",
 	// Payment-provider webhook receiver (POST /v1/billing/webhooks/:provider —
 	// Square et al). The provider's HMAC over the registered notification URL +
 	// body IS the auth; a bearer gate is impossible for provider callbacks.
@@ -111,17 +100,6 @@ var Prefixes = []string{
 	// this list's job to prevent. (Landed 5x before the unfork — #274 — and the
 	// pin test lives beside THIS list so it can't silently regress.)
 	"/v1/billing/recharge",
-	// The typed payment ops (POST /v1/payments, GET /v1/payments/:id — payments.go).
-	// Own the prefix here or the bare /v1/* AI catch-all swallows them: that gate
-	// refuses on a prepaid BALANCE, which would make "take a payment" require the
-	// balance the payment exists to create.
-	paymentsPrefix,
-	// The typed cart ops (cart.go) — the first step of a sale, which this binary
-	// served the LAST three steps of and not the first. Own the prefix for the same
-	// reason payments owns its own: unclaimed, /v1/cart falls to the bare /v1
-	// remainder, whose prepaid balance gate would make filling a basket require the
-	// balance the basket exists to create.
-	cartPrefix,
 }
 
 // commerceMasterKey answers ONE question — can this build actually use the key we
@@ -233,7 +211,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// that mints.
 	//
 	// There are two, and they are registered a hundred lines apart: the browser's
-	// POST /v1/billing/topup/token below, and the agent's typed POST /v1/payments in
+	// POST /v1/billing/topup/token below, and the agent's typed POST /v1/commerce/payments in
 	// exposePayments. Both end in commerce's ONE card money move (billing.TakePayment),
 	// so both mint spendable balance from a settled charge — which is why the screen is
 	// named here, at the composition root, and handed to each registration rather than
@@ -268,7 +246,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// them here adds a door, never a second money path.
 	//
 	// AND A DOOR ONTO THE MINT IS SCREENED, which is why the screen is passed in. The
-	// shared core is the whole argument: POST /v1/payments reaches the same authorized
+	// shared core is the whole argument: POST /v1/commerce/payments reaches the same authorized
 	// deposit the top-up does, and it is published as an MCP tool besides — so the
 	// screen is composed onto its HANDLER, where every projection of the op runs it,
 	// rather than onto the router only REST is served through. exposePayments puts the
@@ -285,7 +263,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// The liveness probe, registered FIRST so it answers even when the embed
 	// fails below. Typed, so the probe is a published op like every other.
-	zip.Get(zapp, "/_/commerce/healthz", health)
+	//
+	// It was /_/commerce/healthz, which HIP-0139 §3.3 does not allow, and the
+	// address it folds to is the one serve.go would otherwise have invented:
+	// GET /v1/<name>/health. So this is not a rename onto a free address — the
+	// plugin declares OwnsHealth to take it, and commerce answers its own probe
+	// instead of the host's always-ok stub. Two health spellings under one root
+	// would be the second address nobody needs.
+	zip.Get(zapp, "/v1/commerce/health", health)
 
 	// GET /v1/commerce/org — the public org projection the pay SPA reads on every
 	// boot — is COMMERCE'S, and is deliberately not re-declared here.
@@ -357,23 +342,35 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 
-	// The BARE /v1/store surface (see Prefixes). Group-scoped chain
-	// mirrors the standalone /v1 bundle: gated request context, host, IAM
-	// resolution; store.Route's own tokenRequired arg gates the CRUD.
-	// The bundle binds the module's own route table, so no route in it is
-	// typed yet — module work, per the module-handler note.
-	storeV1 := app.Group("/v1")
-	storeV1.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
+	// THE ONE GROUP the module's own route tables bind onto, at commerce's own
+	// root. Chain mirrors the standalone /v1 bundle: gated request context, host,
+	// IAM resolution; each Route's own tokenRequired arg gates its CRUD. The
+	// bundles bind the module's route table, so no route in them is typed yet —
+	// module work, per the module-handler note.
+	//
+	// The prefix is what folds the addresses. Each of these tables registers
+	// RELATIVE to the group it is handed — store.Route at /store, catalogapi at
+	// /catalog, planapi at /plans — so opening the group at /v1/commerce puts
+	// every one of them under commerce's root and the top-level /v1/store,
+	// /v1/catalog and /v1/plans spellings cease to exist (HIP-1220 §1). It was
+	// /v1, which is also why this file needed a Global middleware grant and a
+	// commerceErrorScope guard to keep commerce's JSON error envelope off every
+	// sibling subsystem mounted after it.
+	//
+	// It is the SAME group the merchant resources bind onto further down: two
+	// groups at one prefix with one chain would run that chain twice per request.
+	commerceV1 := app.Group("/v1/commerce")
+	commerceV1.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
 	// Unconditional, exactly like the standalone bundle: IAMTokenRequired
 	// no-ops gracefully when IAM is not initialized.
-	storeV1.Use(iammiddleware.IAMTokenRequired())
-	commercestore.Route(storeV1, commercemid.TokenRequired())
+	commerceV1.Use(iammiddleware.IAMTokenRequired())
+	commercestore.Route(commerceV1, commercemid.TokenRequired())
 
-	// Platform-admin catalog CMS on the SAME /v1 bundle: GET/POST/PUT/DELETE
-	// /v1/catalog/entries + POST /v1/catalog/seed. setupRoutes wires only the
+	// Platform-admin catalog CMS on the SAME group: GET/POST/PUT/DELETE
+	// /v1/commerce/catalog/entries + POST /v1/commerce/catalog/seed. setupRoutes wires only the
 	// public read (/v1/commerce/catalog); the CRUD rides the standalone /v1 bundle
 	// (api.Route → catalogApi.AdminRoute), which the co-resident embed skips — so
-	// register it here, exactly as the standalone does. storeV1's IAMTokenRequired
+	// register it here, exactly as the standalone does. The group's IAMTokenRequired
 	// populates the claims each handler's requireSuperAdmin reads (anon → 403, a
 	// platform admin edits); it is cross-tenant data, never org-scoped.
 	//
@@ -386,10 +383,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// its own TokenRequired rather than relying on this group's chain.
 	// The bundle binds the module's own route table, so no route in it is
 	// typed yet — module work, per the module-handler note.
-	catalogapi.AdminRoute(storeV1, commercemid.TokenRequired())
+	catalogapi.AdminRoute(commerceV1, commercemid.TokenRequired())
 
-	// Platform-admin subscription/DNS plan authority CRUD on the SAME /v1 bundle:
-	// GET/POST/PUT/DELETE /v1/plans/entries + POST /v1/plans/seed (increment 3a).
+	// Platform-admin subscription/DNS plan authority CRUD on the SAME group:
+	// GET/POST/PUT/DELETE /v1/commerce/plans/entries + POST /v1/commerce/plans/seed (increment 3a).
 	// Mirrors the catalog mount: the standalone wires it on the /v1 bundle
 	// (api.Route → planApi.AdminRoute), which the co-resident embed skips. The
 	// embed seed SOURCE is injected here (the composition root) — commercebilling.
@@ -399,14 +396,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// gates score the IMMUTABLE embed, so an edit never moves a charge gate.
 	// The bundle binds the module's own route table, so no route in it is
 	// typed yet — module work, per the module-handler note.
-	planapi.AdminRoute(storeV1, commercebilling.SeedRows)
+	planapi.AdminRoute(commerceV1, commercebilling.SeedRows)
 
 	// Reconcile the plan authority to the catalog this binary ships, the way the
 	// standalone does at its own boot. GET /v1/billing/plans reads the authority
 	// and falls back to the embed only when the authority is empty, so without
 	// this a repriced catalog ships in the binary and never reaches a customer —
 	// the rows keep serving whatever a past seed wrote, and the only way to move
-	// them is a hand-driven POST /v1/plans/seed.
+	// them is a hand-driven POST /v1/commerce/plans/seed.
 	//
 	// Safe on every boot by construction: seeded values ARE the embed, so it
 	// moves no charge; rows an admin edited stay authoritative; a slug the
@@ -459,9 +456,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//
 	// productEvents is nil: the storefront publish loop belongs to the
 	// standalone's event bus, and the CRUD does not depend on it.
-	commerceV1 := app.Group("/v1/commerce")
-	commerceV1.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
-	commerceV1.Use(iammiddleware.IAMTokenRequired())
+	//
+	// It binds onto the group opened above rather than a second one at the same
+	// prefix: same address, same chain, so two groups would run AddHost,
+	// RequestContext and IAMTokenRequired twice on every merchant request.
 	commerceresources.Route(
 		commerceV1,
 		commercemid.TokenRequired(),
@@ -974,7 +972,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//                        charge credits, and before the handler so a refusal costs no
 	//                        card authorization. See risk.go.
 	// It is not typed yet — module work, per the module-handler note; the typed
-	// door onto this same charge core is POST /v1/payments (payments.go), and it holds
+	// door onto this same charge core is POST /v1/commerce/payments (payments.go), and it holds
 	// the SAME `screen` value — that is what makes the control one control.
 	//
 	// THE SCREEN WRAPS THE HANDLER, at the same point in the same chain it always ran
@@ -1139,8 +1137,8 @@ type liveness struct {
 // before the module embed boots, so it keeps answering even when the embed
 // failed and every business route serves the fail-closed 503 — which is the
 // point: it reports that the process is reachable, never that the money plane
-// is healthy. Unauthenticated, and under /_ so the ingress withholds it
-// publicly.
+// is healthy. Unauthenticated: a probe that needs a credential is a probe that
+// reports the credential.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func health(_ context.Context, _ *struct{}) (*liveness, error) {

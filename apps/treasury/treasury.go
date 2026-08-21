@@ -6,10 +6,9 @@
 // capital and never unbounded minting. Where finance tracks what each CUSTOMER holds
 // and spends, treasury tracks what the PLATFORM holds.
 //
-// It answers on TWO prefixes and owns neither whole: GET /v1/finance/{treasury,accounts}
-// beside billing's six commerce-projected /v1/finance/* customer reads, and the
-// SuperAdmin /v1/admin/treasury/* reserve mutations. The routes are disjoint; the full
-// table is below.
+// It answers under its own name: GET /v1/treasury{,/accounts} for the tenant and the
+// SuperAdmin /v1/admin/treasury/* reserve mutations (HIP-0139 §3.2 — the operator's
+// view of <name>, served by <name>). The full table is below.
 //
 // It is the cloud-facing adapter around the ledger-of-record PORT (ledger.Backend):
 // this file owns HTTP, tenant scoping, audit and the KMS-signed L1 anchor + the Hanzo
@@ -27,12 +26,12 @@
 // metering pipeline. datastore is NEVER the ledger of record; single-tenant drill-down
 // reads the authoritative ledger, cross-tenant aggregates read the projection.
 //
-// ONE scope-aware /v1/finance/* engine, three tenancy surfaces — the tenant is derived
+// ONE scope-aware engine, three tenancy surfaces — the tenant is derived
 // from the validated IAM identity, house/reserve is locked to SuperAdmin, and a
 // per-org caller only ever sees its own tenant:
 //
-//	GET  /v1/finance/treasury          (org)          reserve health + policy (the pool backing MY payouts)
-//	GET  /v1/finance/accounts          (org)          MY ledger accounts (admin: ?scope=house | ?org=<t>)
+//	GET  /v1/treasury                  (org)          reserve health + policy (the pool backing MY payouts)
+//	GET  /v1/treasury/accounts         (org)          MY ledger accounts (admin: ?scope=house | ?org=<t>)
 //	GET  /v1/admin/treasury            (SuperAdmin) full report + journal + anchor status
 //	POST /v1/admin/treasury/policy     (SuperAdmin) set the revenue-share %
 //	POST /v1/admin/treasury/sweep      (SuperAdmin) accrue the revenue-share into the fund for a period
@@ -47,7 +46,7 @@
 // existing /v1/admin/finance COGS/margin god-view in apps/admin — they compose,
 // never collide).
 //
-// serve.go auto-registers GET /v1/finance/health.
+// serve.go auto-registers GET /v1/treasury/health.
 package treasury
 
 import (
@@ -164,7 +163,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 	o := ops{s: s}
-	// ONE scope-aware /v1/finance/* engine, three tenancy surfaces (HIP finance):
+	// ONE scope-aware engine, three tenancy surfaces (HIP finance):
 	// per-org reads derive the tenant from the validated IAM identity and see ONLY
 	// their own accounts; the reserve fund + revenue-share + house mutations are
 	// locked to SuperAdmin under /v1/admin/treasury* (the console admin-proxy
@@ -173,9 +172,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Every route is a TYPED op: ONE registry entry that is at once the REST
 	// route, the OpenAPI operation with its schemas, the MCP tool, the CLI command
 	// and the generated SDK method. Declared on the App with WHOLE paths, because
-	// this subsystem owns three unrelated nouns and no single prefix.
-	zip.Get(zapp, "/v1/finance/treasury", o.myTreasury)           // per-org: reserve transparency + policy
-	zip.Get(zapp, "/v1/finance/accounts", o.myAccounts)           // per-org: own ledger accounts (admin: ?org=/?scope=house)
+	// the tenant surface and the operator surface are two roots, not one prefix.
+	zip.Get(zapp, "/v1/treasury", o.myTreasury)                   // per-org: reserve transparency + policy
+	zip.Get(zapp, "/v1/treasury/accounts", o.myAccounts)          // per-org: own ledger accounts (admin: ?org=/?scope=house)
 	zip.Get(zapp, "/v1/admin/treasury", o.adminReport)            // SuperAdmin: report + journal + anchor
 	zip.Post(zapp, "/v1/admin/treasury/policy", o.adminSetPolicy) // SuperAdmin: set revenue-share %
 	zip.Post(zapp, "/v1/admin/treasury/sweep", o.adminSweep)      // SuperAdmin: accrue revenue-share
@@ -335,7 +334,7 @@ func (o ops) myAccounts(ctx context.Context, in *accountsIn) (*accountsOut, erro
 // Every admin op answers the { status, msg, data } envelope the console's admin
 // proxy unwraps (cloud.OK — identical to clients/admin and clients/referrals), so
 // each Out spells that envelope out around its own data. The customer
-// /v1/finance surface stays bare JSON, read through the /cloud proxy.
+// /v1/treasury surface stays bare JSON, read through the /cloud proxy.
 
 // journalIn bounds one page of the double-entry journal.
 type journalIn struct {

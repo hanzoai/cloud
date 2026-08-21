@@ -89,30 +89,29 @@ var Apps = []App{
 	// OpenAI-compatible surface among them — landed on commerce and answered its
 	// 404. The "/v1" remainder is ai's row now, at the tail. Each subtree here is
 	// DEEPER than the sibling that shares its stem, because a static prefix outranks
-	// a sibling wildcard regardless of mount order: catalog keeps its bare
-	// /v1/catalog while commerce keeps /v1/catalog/{entries,models,seed}. Nobody
-	// claims the bare /v1/billing or /v1/commerce REMAINDER — every leaf either row
-	// serves is named deeper here or on billing's row below, so the remainder is
-	// surface no app answers, and claiming it would only re-create the catch-all
-	// that swallowed them.
+	// a sibling wildcard regardless of mount order. Nobody claims the bare
+	// /v1/billing or /v1/commerce REMAINDER — every leaf either row serves is named
+	// deeper here or on billing's row below, so the remainder is surface no app
+	// answers and claiming it would only re-create the catch-all that swallowed them.
 	// This is NOT commerce.Prefixes imported (that would re-fatten the host): the
 	// app states its fail-closed set once (apps/commerce/mount.go); this row states
 	// what the ROUTER may hand it, and router_test.go's oracle keeps the two honest.
-	// /v1/cart is the first step of a sale, and the fleet published the last three
-	// without it: /v1/store/:storeid/{authorize,capture,charge} have always been
-	// served here, while the cart they operate on had no address at all. The
-	// capability was never missing — hanzoai/commerce implements the whole noun —
-	// only the route was, so this row is what makes the documented flow completable
-	// rather than a new product. Named here or it falls to ai's bare "/v1"
-	// remainder, whose prepaid balance gate would make filling a basket require the
-	// balance the basket exists to create.
+	// The merchant nouns are LEAVES now, not roots (HIP-1220 §1): cart, catalog,
+	// payments, plans and store each answer under /v1/commerce, so this row names
+	// them nowhere — one claim covers them all. Those five used to be five
+	// top-level rows here, and each was here for one reason: unclaimed, a path
+	// falls to ai's bare "/v1" remainder, whose prepaid balance gate would make
+	// filling a basket require the balance the basket exists to create. /v1/catalog
+	// is apps/catalog's alone now, with no sibling holding two leaves inside it;
+	// /v1/plans is nobody's — apps/plan answers at /v1/plan, so what commerce
+	// vacated there is a stem no app claims rather than a stem it shares.
 	// /v1/billing/topup is the stem, not /v1/billing/topup/token, because commerce
 	// serves BOTH top-up doors and a prefix owns its whole subtree — naming the stem
 	// states that once instead of twice. The saved-card door was added beside the
 	// token one but never named here, so the fleet published it and routed it to
 	// ai's bare "/v1" remainder, whose prepaid balance gate would have made topping
-	// up require the balance the top-up exists to create — the same trap /v1/cart
-	// describes above, on the door that funds it.
+	// up require the balance the top-up exists to create — the same trap the merchant
+	// nouns describe above, on the door that funds it.
 	// The customer's own ledger — transactions, credit-balance, accounts (and its
 	// /:id/members child, which the accounts prefix covers) — is named here because
 	// naming it in mount.go is only half an address. mount.go says what the APP will
@@ -122,10 +121,10 @@ var Apps = []App{
 	// which is what made this bug survive a correct mount — the binary held the route
 	// and the host never delivered to it. credit-balance is its own entry and not
 	// covered by credits: they are sibling prefixes, not parent and child.
-	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/commerce", "/v1/billing/accounts", "/v1/billing/alerts", "/v1/billing/credit-balance", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/invoices", "/v1/billing/methods", "/v1/billing/mode", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/portal/methods", "/v1/billing/recharge", "/v1/billing/settings", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/topup", "/v1/billing/transactions", "/v1/billing/usage/rollup", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/cart", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/collection", "/v1/commerce/currencies", "/v1/commerce/disclosure", "/v1/commerce/discount", "/v1/commerce/movie", "/v1/commerce/note", "/v1/commerce/product", "/v1/commerce/return", "/v1/commerce/saleschannel", "/v1/commerce/stocklocation", "/v1/commerce/submission", "/v1/commerce/subscriber", "/v1/commerce/tokentransaction", "/v1/commerce/transfer", "/v1/commerce/variant", "/v1/commerce/wallet", "/v1/commerce/watchlist", "/v1/commerce/webhook", "/v1/payments", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
+	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/commerce", "/v1/billing/accounts", "/v1/billing/alerts", "/v1/billing/credit-balance", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/invoices", "/v1/billing/methods", "/v1/billing/mode", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/portal/methods", "/v1/billing/recharge", "/v1/billing/settings", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/topup", "/v1/billing/transactions", "/v1/billing/usage/rollup", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/collection", "/v1/commerce/currencies", "/v1/commerce/disclosure", "/v1/commerce/discount", "/v1/commerce/movie", "/v1/commerce/note", "/v1/commerce/product", "/v1/commerce/return", "/v1/commerce/saleschannel", "/v1/commerce/stocklocation", "/v1/commerce/submission", "/v1/commerce/subscriber", "/v1/commerce/tokentransaction", "/v1/commerce/transfer", "/v1/commerce/variant", "/v1/commerce/wallet", "/v1/commerce/watchlist", "/v1/commerce/webhook"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}, Stage: Beta},
 	{Name: "plan", Prefixes: []string{"/v1/plan"}},
-	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing"}},
+	{Name: "pricing", Prefixes: []string{"/v1/admin/pricing", "/v1/pricing"}},
 	// storage is the S3 DATA plane (buckets, objects, health). It shared this root
 	// with provisioning, which PROVISIONS an s3 resource: both rows once read
 	// "/v1/s3" — one prefix, two owners — so whichever mounted first took the
@@ -140,7 +139,7 @@ var Apps = []App{
 	// prefix is the operator's whole-backend view of the vector store it allocates
 	// into (apps/provisioning/inventory.go).
 	{Name: "provisioning", Prefixes: []string{"/v1/admin/provisioning", "/v1/provisioning"}},
-	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
+	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/ledger", "/v1/billing/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	// The free lane's ceiling, beside the priced lane's. rollingcap bounds how fast
 	// a caller may burn their OWN money; allowance bounds how much of OUR compute a
@@ -393,7 +392,7 @@ var Apps = []App{
 	// its product is connected machines, not a bot.
 	{Name: "bots", Prefixes: []string{"/v1/bot", "/v1/bots"}, Stage: Beta},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
-	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/admin/referrals", "/v1/affiliates"}, Stage: Beta},
+	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}, Stage: Beta},
 	{Name: "esign", Prefixes: []string{"/v1/esign"}, Stage: Beta},
 	// search is the QUERY surface — hybrid keyword+semantic over the org's own
 	// corpora at POST /v1/search — and, since product dissolved into the two
@@ -406,7 +405,7 @@ var Apps = []App{
 	{Name: "research", Prefixes: []string{"/v1/research"}, Stage: Beta},
 	{Name: "experiments", Prefixes: []string{"/v1/experiments"}, Stage: Beta},
 	{Name: "books", Prefixes: []string{"/v1/books/accounts", "/v1/books/ask", "/v1/books/bank/exchange", "/v1/books/bank/import", "/v1/books/bank/token", "/v1/books/bank/sync", "/v1/books/bank/transactions", "/v1/books/bank/unreconciled", "/v1/books/export", "/v1/books/gl", "/v1/books/inbox", "/v1/books/metrics", "/v1/books/pnl", "/v1/books/questions", "/v1/books/rules", "/v1/books/scan", "/v1/books/sync", "/v1/books/transactions", "/v1/books/position", "/v1/books/trial", "/v1/books/vendors"}, Stage: Beta},
-	{Name: "treasury", Prefixes: []string{"/v1/admin/treasury", "/v1/finance/accounts", "/v1/finance/treasury"}},
+	{Name: "treasury", Prefixes: []string{"/v1/admin/treasury", "/v1/treasury"}},
 	{Name: "admin", Prefixes: []string{"/v1/admin"}},
 	{Name: "admission", Prefixes: []string{"/v1/flags/waitlist"}},
 	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},

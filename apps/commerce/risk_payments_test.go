@@ -5,7 +5,7 @@ package commerce
 //
 // commerce holds ONE card money move (billing.TakePayment) and this binary opens TWO
 // addresses onto it: the browser's POST /v1/billing/topup/token and the agent's typed
-// POST /v1/payments. Both end in the same authorized deposit. So a screen on the first
+// POST /v1/commerce/payments. Both end in the same authorized deposit. So a screen on the first
 // address was never a bound on the mint — it was a bound on one entrance, with a second
 // entrance beside it that runs the same core, and the second one is the one published as
 // an MCP tool for an agent to call.
@@ -57,7 +57,7 @@ import (
 // because the structural check below reads it: a door added to the binary and not to
 // this list is the bug this whole file is about, so the list is also the place the
 // next one gets caught.
-var creditDoors = []string{"/v1/billing/topup/token", "/v1/payments"}
+var creditDoors = []string{"/v1/billing/topup/token", "/v1/commerce/payments"}
 
 // screenIsAValue anchors the structural check below to the REAL screen. The check
 // works over identifiers, so a rename of the type or of its resolver would silently
@@ -116,7 +116,7 @@ const screenType = "screen"
 // why the found-set is asserted below. Reading only what the framework reads is the
 // difference between a check and a habit.
 //
-// Mutation proof: register the typed op as `zip.Post(app, "/v1/payments", o.charge, …)`
+// Mutation proof: register the typed op as `zip.Post(app, "/v1/commerce/payments", o.charge, …)`
 // — the money core with no wrap — and this names the file, the line and the door.
 // Restore the old `zip.Post(app.With(screen).Group("/v1"), "/payments", o.charge)` and
 // it fails twice: once for the unscreened handler, once for the router composition.
@@ -489,7 +489,7 @@ func groupCall(e ast.Expr) (router, bool) {
 }
 
 // paymentsDoor is the typed door's address.
-const paymentsDoor = "/v1/payments"
+const paymentsDoor = "/v1/commerce/payments"
 
 // isolate gives one test its own risk plane: a socket directory with no listener in it
 // (so "not deployed" is the state of the world unless the test installs a scorer) and a
@@ -615,7 +615,7 @@ func realPaymentsApp(t *testing.T, s screen) *zip.App {
 }
 
 // unscreenedPaymentsApp IS THE MUTATION, kept as a fixture: the money core registered
-// as the op's handler with no wrap — `zip.Post(app, "/v1/payments", o.charge, …)` —
+// as the op's handler with no wrap — `zip.Post(app, "/v1/commerce/payments", o.charge, …)` —
 // which is what exposePayments would be if the screen were dropped from it, and what
 // the composition looked like from the MCP plane's point of view while the screen was
 // router middleware.
@@ -749,7 +749,7 @@ func tool(t *testing.T, app *zip.App, name, args string) (text string, isError b
 // either way and only what the model READS tells the two apart.
 //
 // Mutation proof, and it is the exact regression: register the op without the wrap
-// (unscreenedPaymentsApp — `zip.Post(app, "/v1/payments", o.charge, …)`, which is what
+// (unscreenedPaymentsApp — `zip.Post(app, "/v1/commerce/payments", o.charge, …)`, which is what
 // the handler looked like from this plane while the screen sat on the router) and the
 // frozen payment reaches the money core. That control runs below, in this test, so a
 // pass here is evidence about the screen rather than about the fixture.
@@ -889,7 +889,7 @@ func TestPayments_TheAgentsToolJudgesAndTeachesThePayer(t *testing.T) {
 }
 
 // TestPayments_TheReceiptReadIsNotScreened. A gate belongs on the act it can prevent.
-// GET /v1/payments/:id reads a receipt out of the caller's own ledger namespace and
+// GET /v1/commerce/payments/:id reads a receipt out of the caller's own ledger namespace and
 // mints nothing, so screening it would spend a scorer round trip — and, whenever a
 // scorer is present and mute, refuse a customer their own receipt — to guard a mint that
 // is not there.

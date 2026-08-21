@@ -45,6 +45,7 @@
 //	POST /v1/admin/affiliates/:id/suspend      (SuperAdmin) suspend
 //	POST /v1/admin/affiliates/:id/payout       (SuperAdmin) RECORD a payout (record-only; a human settles it)
 //	POST /v1/admin/affiliates/sweep            (SuperAdmin) accrue commission for every referred org this period
+//	GET  /v1/admin/affiliates/referrals        (SuperAdmin) cross-tenant referral board over this app's attribution spine
 //
 // serve.go auto-registers GET /v1/affiliates/health.
 package affiliates
@@ -323,8 +324,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(r, "/v1/admin/affiliates", o.adminList)
 	// The unified SuperAdmin referral analytics board (cross-tenant): top referrers,
 	// conversion, and the multi-level accrual liability. It reads the ONE attribution
-	// spine the affiliate accrual is built on.
-	zip.Get(r, "/v1/admin/referrals", o.adminReferrals)
+	// spine the affiliate accrual is built on — affiliate_referrals and
+	// affiliate_accruals, THIS app's own tables — so it is an operator view of
+	// affiliates and reads that way (HIP-0139 §3.2: the second segment is the
+	// serving capability). The referrals app keeps the bonuses and the sweep it
+	// genuinely serves at /v1/admin/referrals/*.
+	zip.Get(admin, "/referrals", o.adminReferrals)
 	zip.Post(admin, "/sweep", o.adminSweep)
 	zip.Post(admin, "/:id/approve", o.adminApprove)
 	zip.Post(admin, "/:id/suspend", o.adminSuspend)
@@ -948,7 +953,7 @@ type referralBoard struct {
 	TopReferrers []referrerRow `json:"topReferrers"`
 }
 
-// referralsOut is the enveloped GET /v1/admin/referrals answer.
+// referralsOut is the enveloped GET /v1/admin/affiliates/referrals answer.
 type referralsOut struct {
 	// Data is the referral board: leaders, funnel, tally and per-level liability.
 	Data referralBoard `json:"data"`
