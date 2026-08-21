@@ -54602,6 +54602,94 @@ components:
           description: what kind of trigger it is; HTTP is the only one today
           type: string
       type: object
+    trustAsk:
+      properties:
+        accept:
+          description: |-
+            Accept must be true when the centre states an NDA. The text accepted is
+            recorded verbatim on the request, so a later edit to the NDA cannot rewrite
+            what this party agreed to.
+          type: boolean
+        email:
+          description: |-
+            Email is where the grant will be sent, and the ONLY address the resulting
+            link admits. Required.
+          type: string
+        item:
+          description: |-
+            Item names one published item to ask for. Optional; omitting it asks for
+            everything released on request.
+          type: string
+        party:
+          description: Party is the company the asker is from. Optional, and recorded
+            as stated.
+          type: string
+        reason:
+          description: |-
+            Reason is why they want it. Optional, and recorded as stated — it is what the
+            person deciding reads.
+          type: string
+        slug:
+          description: Slug is the centre's public address, taken from the path.
+          type: string
+      type: object
+    trustAskView:
+      properties:
+        createdAt:
+          description: CreatedAt is when the ask arrived, in unix milliseconds.
+          type: integer
+        decidedAt:
+          description: DecidedAt is when it was answered, in unix milliseconds; 0
+            while open.
+          type: integer
+        decidedBy:
+          description: DecidedBy is who answered it.
+          type: string
+        email:
+          description: |-
+            Email is the address that asked, as stated and UNVERIFIED — it names a party
+            and proves nothing, which is why the grant is addressed to it rather than
+            trusting it.
+          type: string
+        expiresAt:
+          description: ExpiresAt is when a granted ask closes, in unix milliseconds.
+          type: integer
+        id:
+          description: ID is the request's id.
+          type: string
+        item:
+          description: Item is the item asked for, empty when the whole released tier
+            was asked for.
+          type: string
+        link:
+          description: Link is the share link a granted ask became.
+          type: string
+        nda:
+          description: Nda is the text this party accepted, verbatim as it stood when
+            they accepted.
+          type: string
+        note:
+          description: Note is what the decider wrote when refusing.
+          type: string
+        party:
+          description: Party is the company the asker stated.
+          type: string
+        reason:
+          description: Reason is why they said they want it.
+          type: string
+        state:
+          description: State is open, granted or refused.
+          type: string
+      type: object
+    trustAsked:
+      properties:
+        id:
+          description: ID is the request's id, so the asker can be told about it later.
+          type: string
+        state:
+          description: 'State is always "open": recording an ask decides nothing.'
+          type: string
+      type: object
     trustCoverage:
       properties:
         controls:
@@ -54619,6 +54707,53 @@ components:
           description: Version is the embedded inventory's version.
           type: string
       type: object
+    trustDecision:
+      properties:
+        days:
+          description: |-
+            Days is how long the grant stays open, from now. Optional; 14 by default and
+            365 at most — a longer release is describing a customer relationship rather
+            than a document.
+          type: integer
+        id:
+          description: ID is the request to answer, taken from the path.
+          type: string
+        note:
+          description: |-
+            Note is why. Recorded on the request either way, and it is what the record
+            shows a year later.
+          type: string
+      type: object
+    trustDesk:
+      properties:
+        grants:
+          description: Grants is every grant that has been made, newest first.
+          items:
+            $ref: '#/components/schemas/trustGrantView'
+          type: array
+        items:
+          description: Items is everything the org holds, both tiers, retired included.
+          items:
+            $ref: '#/components/schemas/trustItemView'
+          type: array
+        name:
+          description: Name is the centre's display name.
+          type: string
+        nda:
+          description: Nda is the text a party must accept before asking.
+          type: string
+        published:
+          description: Published is whether the centre answers at its public address.
+          type: boolean
+        requests:
+          description: Requests is every ask, newest first, open ones included.
+          items:
+            $ref: '#/components/schemas/trustAskView'
+          type: array
+        slug:
+          description: Slug is the public address, empty until the centre is published.
+          type: string
+      type: object
     trustDocuments:
       properties:
         documents:
@@ -54626,6 +54761,297 @@ components:
           items:
             $ref: '#/components/schemas/docRow'
           type: array
+      type: object
+    trustEdit:
+      properties:
+        body:
+          description: Body replaces the item's content.
+          type: string
+        document:
+          description: |-
+            Document replaces the file the item points at — this is how a report is
+            superseded by its next edition. The new document must already exist in the
+            caller org's own store.
+          type: string
+        framework:
+          description: Framework replaces the standard it speaks to.
+          type: string
+        id:
+          description: ID is the item to change, taken from the path.
+          type: string
+        name:
+          description: Name replaces its title.
+          type: string
+        retired:
+          description: |-
+            Retired withdraws the item, or true→false restores it. A retired item leaves
+            the public centre at once and can no longer be granted; grants already made
+            over it stand, because they are part of the record.
+          type: boolean
+        summary:
+          description: Summary replaces the line about it.
+          type: string
+        tier:
+          description: |-
+            Tier moves it between public and gated. Moving an auditor-signed item to
+            public is refused.
+          type: string
+      type: object
+    trustGrantView:
+      properties:
+        email:
+          description: Email is the one address the link admits.
+          type: string
+        expiresAt:
+          description: ExpiresAt is when the grant closes, in unix milliseconds.
+          type: integer
+        item:
+          description: Item is the item granted, empty when the whole released tier
+            was granted.
+          type: string
+        link:
+          description: |-
+            Link is the share link's id — the token the party opens. Reading it here does
+            not widen it: the link admits only Email whoever holds the id.
+          type: string
+        live:
+          description: Live is whether the grant is still open at the time of reading.
+          type: boolean
+      type: object
+    trustGranted:
+      properties:
+        delivery:
+          description: |-
+            Delivery is empty when the asker was mailed, and otherwise says what happened
+            instead — so an approver is never left believing a mail went out that did not.
+          type: string
+        expiresAt:
+          description: ExpiresAt is when the grant closes, in unix milliseconds.
+          type: integer
+        link:
+          description: Link is the share link's id. The link admits only the address
+            that asked.
+          type: string
+        state:
+          description: State is "granted".
+          type: string
+      type: object
+    trustItem:
+      properties:
+        available:
+          description: |-
+            Available is "now" when the item can be read immediately, or "on request"
+            when it is released only to a party who asks and is answered. It is the one
+            field a page renders the difference from.
+          type: string
+        body:
+          description: |-
+            Body is the item's content, for the kinds that are text rather than a file —
+            an article, a subprocessor entry, a note. Empty for anything released on
+            request: a summary of a document is still the document.
+          type: string
+        framework:
+          description: Framework is the standard the item speaks to, when it speaks
+            to one.
+          type: string
+        id:
+          description: |-
+            ID addresses the item — for reading it if it is available now, or for naming
+            it in a request if it is not.
+          type: string
+        kind:
+          description: |-
+            Kind is what the item is: report, letter, policy, questionnaire,
+            subprocessor, article or update.
+          type: string
+        name:
+          description: Name is the item's title.
+          type: string
+        signed:
+          description: |-
+            Signed is "self" when the org states it itself and "auditor" when an
+            independent auditor put their name to it. It is the reason an item is
+            available now or on request, so a reader can see the rule rather than infer it.
+          type: string
+        summary:
+          description: Summary is a line about the item.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the item last changed, in unix milliseconds.
+          type: integer
+      type: object
+    trustItemView:
+      properties:
+        attester:
+          description: 'Attester is who vouched for it: self or auditor.'
+          type: string
+        body:
+          description: Body is the item's content for the kinds that are text rather
+            than a file.
+          type: string
+        createdAt:
+          description: CreatedAt is when it was published, in unix milliseconds.
+          type: integer
+        document:
+          description: Document is the data-room document holding its bytes, empty
+            when it has none.
+          type: string
+        framework:
+          description: Framework is the standard it speaks to, when it speaks to one.
+          type: string
+        id:
+          description: ID addresses the item.
+          type: string
+        kind:
+          description: Kind is what it is.
+          type: string
+        name:
+          description: Name is its title.
+          type: string
+        retired:
+          description: |-
+            Retired is whether it has been withdrawn. A retired item is absent from the
+            public centre and cannot be granted; it is kept because a grant already made
+            over it is part of the record.
+          type: boolean
+        summary:
+          description: Summary is a line about it.
+          type: string
+        tier:
+          description: |-
+            Tier is public or gated. Gated is the default and an auditor-signed item can
+            only ever be gated.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when it last changed, in unix milliseconds.
+          type: integer
+      type: object
+    trustPage:
+      properties:
+        items:
+          description: |-
+            Items is everything the centre publishes: what can be read now, and what
+            exists and is released on request.
+          items:
+            $ref: '#/components/schemas/trustItem'
+          type: array
+        name:
+          description: Name is the org's display name for its centre.
+          type: string
+        nda:
+          description: |-
+            Nda is the text a party must accept to ask for the gated items, verbatim.
+            Empty when the org asks for none.
+          type: string
+        slug:
+          description: Slug is the centre's public address.
+          type: string
+      type: object
+    trustPublish:
+      properties:
+        attester:
+          description: |-
+            Attester is who vouched for it: "self" for anything the org states itself, or
+            "auditor" for anything an independent auditor put their name to. REQUIRED, and
+            anything other than "self" is read as "auditor" — the safe direction, since an
+            auditor-signed item can only ever be released on request.
+          type: string
+        body:
+          description: |-
+            Body is the item's content for the kinds that are text rather than a file: an
+            article, a subprocessor entry, a dated note.
+          type: string
+        document:
+          description: |-
+            Document is a data-room document holding the item's bytes, uploaded first
+            through POST /v1/dataroom/documents. Optional: an item can be content with no
+            file. The document must already exist in the caller org's own store.
+          type: string
+        framework:
+          description: |-
+            Framework is the standard it speaks to. Optional and free text — the value is
+            the org's own, not a list this API keeps.
+          type: string
+        kind:
+          description: |-
+            Kind is what the item is: report, letter, policy, questionnaire, subprocessor,
+            article or update. Required.
+          type: string
+        name:
+          description: Name is the item's title. Required.
+          type: string
+        summary:
+          description: Summary is a line about it. Optional.
+          type: string
+        tier:
+          description: |-
+            Tier is who may read it: "public" or "gated". It DEFAULTS TO GATED and
+            anything that is not exactly "public" is gated, so an item published by a
+            caller that says nothing is private and someone has to release it on purpose.
+            "public" is refused for an auditor-signed item.
+          type: string
+      type: object
+    trustRefused:
+      properties:
+        state:
+          description: State is "refused".
+          type: string
+      type: object
+    trustRoster:
+      properties:
+        grants:
+          description: Grants is how many grants that org has made.
+          type: integer
+        items:
+          description: Items is how many items it publishes, retired excluded.
+          type: integer
+        name:
+          description: Name is the centre's display name.
+          type: string
+        open:
+          description: |-
+            Open is how many requests are waiting on it — the number that says whether
+            anybody is being kept waiting.
+          type: integer
+        org:
+          description: Org is the tenant that owns it.
+          type: string
+        slug:
+          description: Slug is its public address.
+          type: string
+      type: object
+    trustRosters:
+      properties:
+        centers:
+          description: Centers is every published centre, by address.
+          items:
+            $ref: '#/components/schemas/trustRoster'
+          type: array
+      type: object
+    trustSettings:
+      properties:
+        name:
+          description: Name is the centre's display name. Required to publish.
+          type: string
+        nda:
+          description: |-
+            Nda is the text a party must accept before asking for a document. Optional;
+            empty asks for no acceptance. The text in force is copied onto each request as
+            it is accepted, so editing it never changes what anyone already agreed to.
+          type: string
+        publish:
+          description: |-
+            Publish makes the centre answer at its public address. False withdraws it: the
+            address stops answering while every item, grant and record stays exactly as it
+            was, so withdrawing is reversible and loses nothing.
+          type: boolean
+        slug:
+          description: |-
+            Slug is the public address to answer at — a lowercase label of letters,
+            digits and hyphens. Required to publish, unique across the deployment, and one
+            org holds one: publishing under a new address MOVES the centre rather than
+            leaving the old one answering.
+          type: string
       type: object
     trustTally:
       properties:
@@ -57718,6 +58144,36 @@ paths:
       tags:
       - admin
       x-app: admin
+      x-tool: true
+  /v1/admin/dataroom/trust:
+    get:
+      description: |-
+        Roster lists every published trust centre in the deployment with the size of its
+        queue — the platform's view of who is running one and who is leaving people
+        waiting.
+
+        It is the ONE cross-tenant read in this subsystem and it is refused to anyone who
+        is not a SuperAdmin: a member of the reserved admin org, the same predicate every
+        other subsystem asks. An org's own admin is a different, org-scoped fact and does
+        not pass here — reading it as platform authority is how one customer comes to see
+        every other customer's queue.
+
+        It counts and does not read: no item, request, address or grant of any org's
+        crosses into the answer.
+      operationId: get_admin_dataroom_trust
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustRosters'
+          description: ok
+      summary: Roster lists every published trust centre in the deployment with the
+        size of its queue — the platform's view of who is running one and who is leaving
+        people waiting.
+      tags:
+      - dataroom
+      x-app: dataroom
       x-tool: true
   /v1/admin/finance:
     get:
@@ -79879,6 +80335,354 @@ paths:
       summary: 'Grants access: it mints a public share link over one data room (`dataroomId`)
         or one document (`documentId`) — one of the two is required — and answers
         with the link, whose `id` is the token a visitor opens it with.'
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust:
+    get:
+      description: |-
+        Answers the caller org's OWN trust centre: its settings, every item it
+        holds in both tiers, the requests waiting on it, and the grants it has made.
+
+        The org is the caller's, taken from the validated bearer and from nothing else,
+        so this op cannot be pointed at another tenant — there is no field for one. An
+        org that has never opened a centre reads back an empty one rather than an error,
+        because having no trust centre is an ordinary state and this is the read that
+        tells you so.
+      operationId: get_dataroom_trust
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustDesk'
+          description: ok
+      summary: 'Answers the caller org''s OWN trust centre: its settings, every item
+        it holds in both tiers, the requests waiting on it, and the grants it has
+        made.'
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        SetCenter opens, publishes or withdraws the caller org's trust centre and answers
+        with the centre as it now stands.
+
+        Publishing requires a name and an address, and the address must be free: another
+        org already answering there is a conflict, never a takeover. Withdrawing closes
+        the public door only — items, grants and the access record are untouched, so an
+        org can go quiet and come back without losing anything.
+
+        Only an admin of the org may call it. The org is the caller's own, so there is no
+        field naming one and no way to point this at another tenant.
+      operationId: put_dataroom_trust
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustSettings'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustDesk'
+          description: ok
+      summary: SetCenter opens, publishes or withdraws the caller org's trust centre
+        and answers with the centre as it now stands.
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/artifacts:
+    post:
+      description: |-
+        Publish puts an item on the caller org's trust centre and answers with it.
+
+        The item is GATED unless it says otherwise, so a kind nobody has thought of yet
+        arrives private and someone has to release it deliberately — that default is what
+        keeps an auditor's report from becoming readable because a field went unset. An
+        item whose attester is "auditor" cannot be public at all: the database refuses the
+        pair, so no path through this API can publish one.
+
+        A file is optional and is uploaded FIRST, through POST /v1/dataroom/documents,
+        then named here — the data room is the one place bytes enter, so a trust centre
+        document is an ordinary data-room document and inherits its storage, its grants
+        and its page-by-page access record. A gated item that has a file is added to the
+        org's release room, which is what lets a party be granted the whole gated tier in
+        one link.
+
+        Only an admin of the org may call it.
+      operationId: post_dataroom_trust_artifacts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustPublish'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustItemView'
+          description: ok
+      summary: Publish puts an item on the caller org's trust centre and answers with
+        it.
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/artifacts/{id}:
+    patch:
+      description: |-
+        Amend changes an item on the caller org's trust centre — replace its file with a
+        newer edition, move it between public and gated, rewrite what it says, or retire
+        it — and answers with the item as it now stands.
+
+        Retiring is the withdrawal: the item leaves the public centre immediately and can
+        no longer be granted, while grants already made over it stand, because a release
+        that happened is part of the record and un-happening it in the record would be a
+        lie. Restoring is the same call with retired false.
+
+        Moving an item an independent auditor signed to the public tier is refused, and
+        refused by the database rather than only here. Only an admin of the org may call
+        it, and the item is resolved in that org's own store, so another org's id is not
+        found.
+      operationId: patch_dataroom_trust_artifacts_by_id
+      parameters:
+      - description: ID is the item to change, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustEdit'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustItemView'
+          description: ok
+      summary: Amend changes an item on the caller org's trust centre — replace its
+        file with a newer edition, move it between public and gated, rewrite what
+        it says, or retire it — and answers with the item as it now stands.
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/center/{slug}:
+    get:
+      description: |-
+        Answers an org's public trust centre: its name, the text a party must
+        accept to ask for a document, and every item it publishes.
+
+        An item is either available NOW — the things the org states itself, its policies,
+        its filled questionnaires, its subprocessor list, its knowledge base — or
+        available ON REQUEST, which is everything an independent auditor put their name
+        to. Both are listed by name and kind, so a reader can see WHAT exists before
+        asking for it; only the second withholds the content.
+
+        No principal is involved and none is accepted: the org is resolved from the
+        address, which answers only for a centre its owner has published. An address
+        nobody publishes at is not found, the same answer an unpublished one gets.
+      operationId: get_dataroom_trust_center_by_slug
+      parameters:
+      - description: |-
+          Slug is the centre's public address. It resolves only for an org that has
+          published; anything else is not found, so this cannot be used to learn which
+          orgs exist.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustPage'
+          description: ok
+      summary: 'Answers an org''s public trust centre: its name, the text a party
+        must accept to ask for a document, and every item it publishes.'
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/center/{slug}/file/{item}:
+    get:
+      description: |-
+        Streams the file behind an item a trust centre publishes openly — a policy, a filled questionnaire, a knowledge-base attachment — under its recorded content type.
+
+        No principal and no link: these are the things an org states about itself, so they are served to anyone who asks. The narrowing is in the lookup rather than in a check: the item must be public, must not be retired, and must belong to a centre its owner has published, so an item released only on request is NOT FOUND here rather than refused — the same answer an id that never existed gets, which is what stops this reporting what the released-on-request tier holds.
+
+        Bytes that cannot be fetched from object storage are 502, never a truncated file.
+      operationId: get_dataroom_trust_center_by_slug_file_by_item
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: item
+        required: true
+        schema:
+          type: string
+      summary: Read a public trust-centre item's bytes
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+  /v1/dataroom/trust/center/{slug}/requests:
+    post:
+      description: |-
+        Records a request to read what an independent auditor signed, and
+        answers with its id.
+
+        The org that owns the centre decides. Nothing is released here and no link is
+        minted: this writes the ask down, which is the whole promise the form makes.
+        The write is the answer — a request that could not be stored is an error, never
+        a receipt, so a form can never appear to have been sent and be gone.
+
+        `email` is required and is the ONLY address the eventual grant will admit, so an
+        address the asker cannot read is an ask that cannot be answered. Where the centre
+        states an NDA, `accept` must be true and the text in force is recorded verbatim
+        against the request.
+
+        Asking twice for the same thing from the same address is the SAME ask: the second
+        answers with the first's id rather than opening a second row, which is also what
+        keeps an anonymous door from filling a tenant's store.
+      operationId: post_dataroom_trust_center_by_slug_requests
+      parameters:
+      - description: Slug is the centre's public address, taken from the path.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustAsk'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustAsked'
+          description: ok
+      summary: Records a request to read what an independent auditor signed, and answers
+        with its id.
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/requests/{id}/grant:
+    post:
+      description: |-
+        Grant answers a request by opening access: it mints a share link over what was
+        asked for, addressed to the address that asked and closing at expiry, records the
+        decision, and mails the asker.
+
+        The link is NEVER a public URL. It carries the asker's address on its allow list,
+        so forwarding it to somebody else does not open it, and it expires. What the
+        party then does with it — which document, which page, for how long — is recorded
+        by the data room's own view tracking, which is where the access record for this
+        release lives; there is no second log.
+
+        A request that was already answered is refused rather than answered twice, so a
+        second click cannot mint a second link. Only an admin of the org may call it, and
+        the request is resolved in that org's own store, so another org's request id is
+        not found — which is also what stops one org deciding another's queue.
+
+        Mail is best effort and the grant does not depend on it: a deployment that sends
+        no mail still records the grant and says so in `delivery`, so the approver knows
+        to pass the address on themselves.
+      operationId: post_dataroom_trust_requests_by_id_grant
+      parameters:
+      - description: ID is the request to answer, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustDecision'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustGranted'
+          description: ok
+      summary: 'Grant answers a request by opening access: it mints a share link over
+        what was asked for, addressed to the address that asked and closing at expiry,
+        records the decision, and mails the asker.'
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/requests/{id}/refuse:
+    post:
+      description: |-
+        Refuse answers a request by declining it, recording who declined and why.
+
+        Nothing is released and no link is minted. The refusal STAYS on the record beside
+        the ask — a request that was turned down is part of the access record exactly as
+        one that was granted is, and deleting it would leave a queue that only ever shows
+        the decisions somebody liked.
+
+        A request that was already answered is refused rather than answered twice. Only an
+        admin of the org may call it, and the request is resolved in that org's own store,
+        so another org's request id is not found.
+      operationId: post_dataroom_trust_requests_by_id_refuse
+      parameters:
+      - description: ID is the request to answer, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustDecision'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustRefused'
+          description: ok
+      summary: Refuse answers a request by declining it, recording who declined and
+        why.
       tags:
       - dataroom
       x-app: dataroom
