@@ -139,7 +139,7 @@
             "type": "integer"
           },
           "name": {
-            "description": "Name is which leg this reports: \"index\", the lexical store, or \"vector\", the\nsemantic one. Match.Backend uses the same two names.",
+            "description": "Name is which leg this reports: \"index\", the lexical store, \"vector\", the\nsemantic one, or \"code\", the org's own repositories. Match.Backend uses the\nsame three names.",
             "type": "string"
           },
           "status": {
@@ -156,7 +156,7 @@
       "Hit": {
         "properties": {
           "corpus": {
-            "description": "Corpus is which store the document lives in. Both legs read the org's\nknowledge base, so it is \"kb\" on every hit today; it is provenance for the\nday a third corpus is fused, not a field to branch on.",
+            "description": "Corpus is which store the document lives in: \"kb\" for a document either\nknowledge leg returned, \"code\" for a span out of one of the org's own\nrepositories. It is PROVENANCE — read it to say where a hit came from, not\nto branch on: the fused ranking is what decides order, and a caller that\nfilters by corpus wants the backend's own door instead.",
             "type": "string"
           },
           "doctype": {
@@ -168,7 +168,7 @@
             "type": "string"
           },
           "matched": {
-            "description": "Matched is one entry per leg that returned this document, with that leg's\nrank and native score. Two entries mean both legs agreed, which is exactly\nwhy the hit outranks one a single leg found. Never empty on a returned hit.",
+            "description": "Matched is one entry per leg that returned this document, with that leg's\nrank and native score. More than one entry means the legs AGREED, which is\nexactly why the hit outranks one a single leg found. Never empty on a\nreturned hit.",
             "items": {
               "$ref": "#/components/schemas/Match"
             },
@@ -179,7 +179,7 @@
             "type": "string"
           },
           "score": {
-            "description": "Score is the FUSED score, not a relevance or a similarity: Reciprocal Rank\nFusion sums 1/(60+rank) over each leg that returned the document, so it is\nbounded by roughly 1/61 per leg (about 0.033 for a document both legs put\nfirst) and hits are ordered by it, descending. Being built from ranks, it is\ncomparable only WITHIN one response — never across queries, and never against\na backend's own score, which stays in Matched.",
+            "description": "Score is the FUSED score, not a relevance or a similarity: Reciprocal Rank\nFusion sums 1/(60+rank) over each leg that returned the document, so it is\nbounded by roughly 1/61 per leg (about 0.033 for a document two legs put\nfirst) and hits are ordered by it, descending. Being built from ranks, it is\ncomparable only WITHIN one response — never across queries, and never against\na backend's own score, which stays in Matched.",
             "type": "number"
           },
           "title": {
@@ -196,7 +196,7 @@
       "Match": {
         "properties": {
           "backend": {
-            "description": "Backend is the leg that contributed this match: \"index\" (lexical) or\n\"vector\" (semantic). It is the same name that leg reports itself under in\nResponse.Backends, so a hit can be traced to a status.",
+            "description": "Backend is the leg that contributed this match: \"index\" (lexical), \"vector\"\n(semantic) or \"code\" (the org's repositories). It is the same name that leg\nreports itself under in Response.Backends, so a hit can be traced to a\nstatus.",
             "type": "string"
           },
           "rank": {

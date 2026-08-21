@@ -1,9 +1,18 @@
 // Package search is one ranked result set over everything your org has stored.
 //
 // It answers "what is RELEVANT" over a tenant's own data: it owns no store and
-// fuses the two retrieval stores the platform already runs — the lexical index
-// (apps/index) and the vector index (apps/knowledge) — into one ranked result
-// set.
+// fuses the three retrieval stores the platform already runs — the lexical index
+// (apps/index), the vector index (apps/knowledge) and the org's own repositories
+// (apps/code) — into one ranked result set.
+//
+// THIS IS THE DOOR. A caller asks here and does not choose a backend. The other
+// three addresses stay exactly what they are — each backend's own surface, with
+// the shape and the vocabulary that backend's clients need — and none of them is
+// an address a caller should have to pick between. /v1/index speaks the
+// Meilisearch dialect because a Meilisearch client repoints by changing one host;
+// /v1/code/search answers spans with repo and line because that is what a coding
+// agent wants; /v1/knowledge/search is the KB's own semantic read. Fusing them is
+// not deleting them.
 //
 // IT IS MOUNTED. manifest/apps.go carries the row and plugin/search is built, so
 // POST /v1/search reaches the wire. This comment said the opposite for as long as
@@ -43,10 +52,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/code"
 	"github.com/hanzoai/cloud/apps/index"
 	"github.com/hanzoai/cloud/apps/knowledge"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -58,8 +69,9 @@ import (
 // Backend names. One constant per leg so the wire value is declared once and the
 // provenance a client reads always matches the status it reads.
 const (
-	BackendIndex  = "index"  // lexical, clients/index
-	BackendVector = "vector" // semantic, clients/knowledge → hanzoai/vector
+	BackendIndex  = "index"  // lexical, apps/index
+	BackendVector = "vector" // semantic, apps/knowledge → hanzoai/vector
+	BackendCode   = "code"   // the org's own repositories, apps/code
 )
 
 // Backend statuses — four DISTINCT operational facts, never collapsed:
@@ -74,8 +86,12 @@ const (
 	StatusSkipped  = "skipped"
 )
 
-// Search modes. `auto` is the default and resolves to hybrid when both legs are
-// available, else to whichever leg is.
+// Search modes. `auto` is the default and resolves to hybrid when both kinds of
+// retrieval are available, else to whichever is.
+//
+// The modes name RETRIEVAL KINDS, not legs: `text` runs every lexical leg (the
+// index and the code corpus), `semantic` runs the vector one. A caller chooses how
+// to search, never which subsystem answers — which is the whole point of one door.
 const (
 	ModeAuto     = "auto"
 	ModeText     = "text"
@@ -110,9 +126,10 @@ type Request struct {
 // from a hit only one leg saw, nor tell a healthy leg from one quietly returning
 // nothing.
 type Match struct {
-	// Backend is the leg that contributed this match: "index" (lexical) or
-	// "vector" (semantic). It is the same name that leg reports itself under in
-	// Response.Backends, so a hit can be traced to a status.
+	// Backend is the leg that contributed this match: "index" (lexical), "vector"
+	// (semantic) or "code" (the org's repositories). It is the same name that leg
+	// reports itself under in Response.Backends, so a hit can be traced to a
+	// status.
 	Backend string `json:"backend"`
 	// Rank is this document's 1-based position in THAT leg's own result list,
 	// before fusion — 1 is the leg's best hit. It is the only input to the fused
@@ -136,9 +153,11 @@ type Hit struct {
 	// "row-<n>" when the row carries none). It is unique with DocType, not alone:
 	// the pair is the key the two legs are fused on.
 	ID string `json:"id"`
-	// Corpus is which store the document lives in. Both legs read the org's
-	// knowledge base, so it is "kb" on every hit today; it is provenance for the
-	// day a third corpus is fused, not a field to branch on.
+	// Corpus is which store the document lives in: "kb" for a document either
+	// knowledge leg returned, "code" for a span out of one of the org's own
+	// repositories. It is PROVENANCE — read it to say where a hit came from, not
+	// to branch on: the fused ranking is what decides order, and a caller that
+	// filters by corpus wants the backend's own door instead.
 	Corpus string `json:"corpus"`
 	// DocType is the knowledge doctype: kb-page, kb-memory or kb-source from the
 	// semantic leg, and a lexical row's own doctype/type field otherwise. Absent
@@ -157,14 +176,15 @@ type Hit struct {
 	Project string `json:"project,omitempty"`
 	// Score is the FUSED score, not a relevance or a similarity: Reciprocal Rank
 	// Fusion sums 1/(60+rank) over each leg that returned the document, so it is
-	// bounded by roughly 1/61 per leg (about 0.033 for a document both legs put
+	// bounded by roughly 1/61 per leg (about 0.033 for a document two legs put
 	// first) and hits are ordered by it, descending. Being built from ranks, it is
 	// comparable only WITHIN one response — never across queries, and never against
 	// a backend's own score, which stays in Matched.
 	Score float64 `json:"score"`
 	// Matched is one entry per leg that returned this document, with that leg's
-	// rank and native score. Two entries mean both legs agreed, which is exactly
-	// why the hit outranks one a single leg found. Never empty on a returned hit.
+	// rank and native score. More than one entry means the legs AGREED, which is
+	// exactly why the hit outranks one a single leg found. Never empty on a
+	// returned hit.
 	Matched []Match `json:"matched"`
 }
 
@@ -172,8 +192,9 @@ type Hit struct {
 // response, including the ones that were skipped, so a client never has to infer
 // from absence.
 type BackendStatus struct {
-	// Name is which leg this reports: "index", the lexical store, or "vector", the
-	// semantic one. Match.Backend uses the same two names.
+	// Name is which leg this reports: "index", the lexical store, "vector", the
+	// semantic one, or "code", the org's own repositories. Match.Backend uses the
+	// same three names.
 	Name string `json:"name"`
 	// Status is one of ok, degraded, disabled, skipped — four distinct operational
 	// facts that are never collapsed. It ran and answered; it is configured and
@@ -290,7 +311,7 @@ func ForOrg(ctx context.Context, org string, in *Request) (*Response, error) {
 	// about documents.
 	var lists []rank.List
 	payload := map[string]Hit{}
-	backends := make([]BackendStatus, 0, 2)
+	backends := make([]BackendStatus, 0, 3)
 
 	// ---- lexical leg ----
 	st := BackendStatus{Name: BackendIndex, Status: StatusSkipped}
@@ -332,6 +353,33 @@ func ForOrg(ctx context.Context, org string, in *Request) (*Response, error) {
 				log.Warn("search leg failed", "backend", BackendVector, "org", org, "err", err)
 			} else {
 				l := semanticList(hits, payload)
+				st.Status, st.Hits = StatusOK, len(l.Keys)
+				lists = append(lists, l)
+			}
+		}
+	}
+	backends = append(backends, st)
+
+	// ---- code leg ----
+	//
+	// It runs whenever text is wanted, because a code search IS a text search over
+	// a corpus this org owns — the same reason the lexical leg runs. A deployment
+	// without the code index reports `disabled`, which is not a fault and does not
+	// make the answer partial.
+	st = BackendStatus{Name: BackendCode, Status: StatusSkipped}
+	if wantText {
+		switch {
+		case !code.Ready():
+			st.Status = StatusDisabled
+		default:
+			t0 := time.Now()
+			spans, err := code.Search(ctx, org, in.Query, window)
+			st.TookMS = time.Since(t0).Milliseconds()
+			if err != nil {
+				st.Status, st.Error = StatusDegraded, err.Error()
+				log.Warn("search leg failed", "backend", BackendCode, "org", org, "err", err)
+			} else {
+				l := codeList(spans, payload)
 				st.Status, st.Hits = StatusOK, len(l.Keys)
 				lists = append(lists, l)
 			}
@@ -466,6 +514,33 @@ func lexicalList(rows []json.RawMessage, payload map[string]Hit) rank.List {
 				URL:     firstString(d, "url"),
 				Project: firstString(d, "project"),
 			}
+		}
+	}
+	return l
+}
+
+// codeList turns the code leg's spans into a ranked list plus the hits to return.
+// A span's key is its ADDRESS — repo, file and start line — because that is what
+// makes it the same span across queries, and the corpus is "code" so a caller can
+// tell where a hit came from without branching on it.
+//
+// Scores are 0 across the board, meaning UNSCORED rather than "scored zero": the
+// engine returns spans in its own best-first order and exposes no per-span score,
+// which is the same thing the lexical leg reports and exactly why fusion ranks
+// rather than compares.
+func codeList(spans []code.Span, payload map[string]Hit) rank.List {
+	l := rank.List{Source: BackendCode, Keys: make([]string, 0, len(spans))}
+	for _, sp := range spans {
+		id := sp.Repo + ":" + sp.File + ":" + strconv.Itoa(sp.Line)
+		key := BackendCode + ":" + id
+		title := sp.Symbol
+		if title == "" {
+			title = sp.File
+		}
+		l.Keys = append(l.Keys, key)
+		l.Scores = append(l.Scores, 0)
+		if _, seen := payload[key]; !seen {
+			payload[key] = Hit{ID: id, Corpus: BackendCode, DocType: sp.Kind, Title: title}
 		}
 	}
 	return l
