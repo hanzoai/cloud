@@ -55,17 +55,45 @@ import (
 // source of truth for the binding shape (status/message are vm's honest,
 // reconciled values, never invented here).
 type agentBinding struct {
-	Owner       string `json:"owner,omitempty"`
-	Name        string `json:"name,omitempty"`
-	MachineId   string `json:"machineId,omitempty"`
-	Org         string `json:"org,omitempty"`
-	AgentName   string `json:"agentName,omitempty"`
-	Provider    string `json:"provider,omitempty"`
-	PublicIp    string `json:"publicIp,omitempty"`
-	BotVersion  string `json:"botVersion,omitempty"`
-	Status      string `json:"status,omitempty"`
-	Message     string `json:"message,omitempty"`
+	// Owner is the tenant vm filed the binding under, resolved from the ?owner it
+	// was called with — which is the caller's validated org and never a body field.
+	Owner string `json:"owner,omitempty"`
+	// Name is the binding's own key, which is the machine's id: a machine hosts at
+	// most one agent, so the binding is named for it. This is the key a bots list
+	// joins bindings onto machines by.
+	Name string `json:"name,omitempty"`
+	// MachineId is the bound machine as vm addresses it, owner-qualified
+	// ("<org>/<machine>"). The unqualified half is what this surface's :id routes
+	// take.
+	MachineId string `json:"machineId,omitempty"`
+	// Org is the Hanzo tenant the binding belongs to.
+	Org string `json:"org,omitempty"`
+	// AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a
+	// message to the bot is actually run against. It is the one field that decides
+	// what the bot DOES.
+	AgentName string `json:"agentName,omitempty"`
+	// Provider is the cloud the bound machine runs on, carried here so a bindings
+	// list says where each bot lives without a second read per machine.
+	Provider string `json:"provider,omitempty"`
+	// PublicIp is the bound machine's public address as vm recorded it on the
+	// binding. Empty while the machine has none yet.
+	PublicIp string `json:"publicIp,omitempty"`
+	// BotVersion pins the @hanzo/bot runtime version the machine runs. Empty means
+	// the machine took the default in force when it was bound.
+	BotVersion string `json:"botVersion,omitempty"`
+	// Status is the binding's lifecycle in VM's OWN words — "Pending" while the
+	// machine provisions and the runtime is unconfirmed, "running" once vm has
+	// confirmed it. The vocabulary is vm's and passes through unmapped, which is
+	// why its capitalization does not match the machine states beside it, and it is
+	// vm's reconciled reading rather than anything asserted here.
+	Status string `json:"status,omitempty"`
+	// Message is vm's human-readable detail on Status ("machine provisioning;
+	// @hanzo/bot runtime not yet confirmed") — the reason behind the state, not a
+	// second state.
+	Message string `json:"message,omitempty"`
+	// CreatedTime is when the binding was first made.
 	CreatedTime string `json:"createdTime,omitempty"`
+	// UpdatedTime is when vm last reconciled it — the age of Status.
 	UpdatedTime string `json:"updatedTime,omitempty"`
 }
 
@@ -80,7 +108,14 @@ func (b agentBinding) identifies() bool {
 // honest, vm-reconciled lifecycle status when present.
 type botView struct {
 	machineView
-	Agent   string        `json:"agent,omitempty"`
+	// Agent is the cloud Agent this machine runs, lifted out of the binding so a
+	// list of bots reads without following one. Empty means the machine is a bot
+	// machine with nothing bound — it costs money and answers nothing.
+	Agent string `json:"agent,omitempty"`
+	// Binding is the record joining this machine to that agent, carrying vm's own
+	// reconciled status and its reason. Absent means no runtime is bound, which is
+	// also what a stopped bot looks like: stopping unbinds and leaves the machine
+	// running.
 	Binding *agentBinding `json:"binding,omitempty"`
 }
 

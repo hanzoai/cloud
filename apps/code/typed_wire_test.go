@@ -259,3 +259,39 @@ func index(t *testing.T, app *zip.App) {
 func sortedOps(m map[string]bool) string {
 	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
+// gates cannot see. Typing a route documents its ADDRESS and its SHAPE; the
+// shape's FIELDS come from a different place — a doc comment on each one, which
+// zipdoc lifts one at a time — so a fully typed plane can still publish a wholly
+// unreadable document.
+//
+// The three that matter most here are all traps. `score` is comparable only
+// against the other spans in the SAME response — the hybrid tier returns a
+// reciprocal-rank sum in the tenths while the symbol tier returns a position
+// count — so a client that thresholds on it filters on noise. `degraded` on an ask
+// means retrieval worked and synthesis did not, which is a usable answer and not
+// an error. And an empty `answer` with citations is a real result, not a failure.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	app, _ := newTestApp(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "code", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("code publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/code describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+}

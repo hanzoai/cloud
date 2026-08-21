@@ -27,13 +27,27 @@ var ErrServiceNotFound = errors.New("admission: waitlist service not found")
 // waitlist MODE is intentionally absent — it is the platform switch waitlist.<svc>,
 // read through the engine; ListWaitlistServices composes the two into a ServiceView.
 type ServiceRow struct {
-	Service     string   `json:"service"`
-	DisplayName string   `json:"displayName"`
-	Description string   `json:"description"`
-	Hosts       []string `json:"hosts"`
-	CreatedAt   int64    `json:"createdAt"`
-	UpdatedAt   int64    `json:"updatedAt"`
-	UpdatedBy   string   `json:"updatedBy"`
+	// Service is the slug that identifies the service — lowercased, the registry's
+	// primary key, and the name of the switch that governs it (waitlist.<service>).
+	Service string `json:"service"`
+	// DisplayName is the name the launch board shows.
+	DisplayName string `json:"displayName"`
+	// Description is one line saying what the service is.
+	Description string `json:"description"`
+	// Hosts is every request host that resolves to this service, normalized
+	// (lowercased, port stripped) and sorted. A host appears under exactly one
+	// service; a request whose host is in no row is un-governed and passes through.
+	Hosts []string `json:"hosts"`
+	// CreatedAt is when the service was first registered, Unix seconds. A row from
+	// the deployment's brand seed carries the boot that seeded it.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when its metadata or hosts were last written, Unix seconds. It
+	// does NOT move when the waitlist mode is flipped — that write lands in the
+	// flag activity log, not here.
+	UpdatedAt int64 `json:"updatedAt"`
+	// UpdatedBy is the email of the admin who last wrote the row, or "seed" for a
+	// row this deployment created from its brand seed at boot.
+	UpdatedBy string `json:"updatedBy"`
 }
 
 // waitlistStore is the registry over one OrgDB handle. Two tables, normalized:

@@ -327,30 +327,39 @@
       "DeliveryRow": {
         "properties": {
           "attempt": {
+            "description": "Attempt is which try this row is, starting at 1. The ladder waits 1s, then 5s,\nthen 25s before the next one.",
             "type": "integer"
           },
           "created": {
+            "description": "Created is when the attempt was made, RFC3339 in UTC.",
             "type": "string"
           },
           "delivery": {
+            "description": "DeliveryID groups the attempts for ONE event to ONE endpoint. Rows sharing it\nare the same delivery being retried, not separate events.",
             "type": "string"
           },
           "durationMs": {
+            "description": "DurationMs is how long this attempt took end to end, in MILLISECONDS.",
             "type": "integer"
           },
           "endpoint": {
+            "description": "EndpointID is which subscriber this attempt was for.",
             "type": "string"
           },
           "error": {
+            "description": "Error says what went wrong on a non-ok attempt. Empty on success.",
             "type": "string"
           },
           "httpStatus": {
+            "description": "HTTPStatus is what the subscriber answered. ZERO means it never answered — a\nrefused connection, a DNS failure or a timeout — which is why a zero here is\nnot a 200.",
             "type": "integer"
           },
           "status": {
+            "description": "Status is \"ok\" when the subscriber accepted it, \"retrying\" while a further\nattempt will follow, and \"failed\" when none will. Exactly one row of a delivery\nis terminal.",
             "type": "string"
           },
           "subject": {
+            "description": "Subject is the event that was delivered (\"commerce.order.created\"). A manual\ntest send carries \"webhook.test\".",
             "type": "string"
           }
         },
@@ -359,40 +368,50 @@
       "Endpoint": {
         "properties": {
           "created": {
+            "description": "CreatedAt is when the endpoint was registered, RFC3339 in UTC — stored in that\nspelling because it sorts as a string.",
             "type": "string"
           },
           "deliveries7d": {
-            "description": "Deliveries7d / Failures7d are cheap usage counters computed from the delivery log\nover usageWindow (not stored columns) and populated ONLY on list/get. They are 0\nwhen there is no delivery history — never omitempty, so the console always sees them.",
+            "description": "Deliveries7d is how many deliveries SETTLED in the trailing 7 days — the\nattempts that ended ok or failed, so a delivery still retrying is in neither\ncounter yet. It is counted from the log at read time rather than stored, and\nit is filled only on a list or a get; a create answers 0 because there is no\nhistory, which is why it is never omitted.",
             "type": "integer"
           },
           "description": {
+            "description": "Description is the operator's own label for the endpoint. Never sent anywhere.",
             "type": "string"
           },
           "events": {
+            "description": "Events are the subject patterns this endpoint subscribes to\n(\"commerce.order.\u003e\"). An EMPTY list means every event, not none.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "failures7d": {
+            "description": "Failures7d is how many of those settled as failed — the subscriber never\naccepted it and no further attempt will be made. It is the numerator to\nDeliveries7d, over the same window.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the endpoint's handle, server-minted and stable for its life. It is what\nevery other route here addresses.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant that owns the endpoint, taken from the validated principal\nrather than from any request field.",
             "type": "string"
           },
           "secret": {
+            "description": "Secret is the HMAC-SHA256 signing key a subscriber recomputes the signature\nwith. It is returned exactly ONCE, on create: a later read of the endpoint\nomits it, so a lost secret is replaced rather than recovered.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"active\" or \"disabled\" — nothing else is accepted. A disabled\nendpoint keeps its subscription and receives no deliveries, except a manual\ntest send, which goes out anyway.",
             "type": "string"
           },
           "updated": {
+            "description": "UpdatedAt is when its url, events, status or description last changed.",
             "type": "string"
           },
           "url": {
+            "description": "URL is where the POST goes. Changing it is the one edit that redirects an\norg's events, which is why it is never bindable from a query string.",
             "type": "string"
           }
         },
@@ -449,15 +468,19 @@
       "testResult": {
         "properties": {
           "delivered": {
+            "description": "Delivered is whether the subscriber accepted the test POST. It is the whole\nanswer: the send is synchronous and is not retried.",
             "type": "boolean"
           },
           "durationMs": {
+            "description": "DurationMs is how long the single attempt took, in MILLISECONDS.",
             "type": "integer"
           },
           "error": {
+            "description": "Error says what stopped it. Empty when delivered.",
             "type": "string"
           },
           "httpStatus": {
+            "description": "HTTPStatus is what the subscriber answered, or 0 if it never answered.",
             "type": "integer"
           }
         },

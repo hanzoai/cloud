@@ -112,18 +112,23 @@
       "Source": {
         "properties": {
           "engine": {
+            "description": "Engine is the search backend the hit came from: bing, ddg, mojeek or brave.\nOmitted when the backend did not name itself. Results are merged across\nbackends, so two sources in one answer can carry different engines.",
             "type": "string"
           },
           "favicon": {
+            "description": "Favicon is a 64px icon URL derived from the host for the client to render\nbeside the citation. It is Google's s2 service, not something we host or\nfetched — an empty host yields the empty string.",
             "type": "string"
           },
           "snippet": {
+            "description": "Snippet is the engine's summary of the page, clipped to 600 runes. THIS IS\nWHAT THE CLIENT SHOWS. What the model reads is the fetched page, which is\nfar larger and deliberately never on the wire.",
             "type": "string"
           },
           "title": {
+            "description": "Title is the page title the engine reported, stripped of the bracketed\nfurniture engines staple on (\"[PDF]\", \"(Official Site)\"). It falls back to\nthe www-stripped host when the engine gave none, so it is never empty and\nis safe to use as link text.",
             "type": "string"
           },
           "url": {
+            "description": "URL is the page, absolute, exactly as the engine gave it. It is also the\ndedupe key — one source per URL, and at most hostCap per host — and what a\nmarkdown citation in the answer is checked against, so a link in the prose\nalways matches a URL here.",
             "type": "string"
           }
         },

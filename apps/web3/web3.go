@@ -261,17 +261,35 @@ type rpcIn struct {
 
 // rpcOut is a JSON-RPC 2.0 response.
 type rpcOut struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *rpcError       `json:"error,omitempty"`
+	// JSONRPC is always "2.0". An upstream that omits it has it filled in, so a
+	// client never has to cope with a response that is missing the one field
+	// telling it which protocol it is reading.
+	JSONRPC string `json:"jsonrpc"`
+	// ID is the request's id, echoed back untouched — any JSON value, because
+	// JSON-RPC lets the caller choose. A request with no id is sent upstream as 1.
+	ID json.RawMessage `json:"id,omitempty"`
+	// Result is the chain's answer, passed through unread: an eth_getBalance
+	// result is a 0x-quantity string, a block is an object. Absent when Error is
+	// present — JSON-RPC 2.0 requires exactly one of the two, and this is what the
+	// chain answered rather than something reassembled here.
+	Result json.RawMessage `json:"result,omitempty"`
+	// Error is the JSON-RPC error object, present instead of Result. Its presence
+	// is the ONLY way a failure shows up here: the HTTP status stays 200, because
+	// that is what a standard JSON-RPC client parses.
+	Error *rpcError `json:"error,omitempty"`
 }
 
 // rpcError is the JSON-RPC error object. An upstream error is returned AS a
 // JSON-RPC error at 200, because that is what a JSON-RPC client parses; turning
 // it into an HTTP 500 would break every standard client library.
 type rpcError struct {
-	Code    int    `json:"code"`
+	// Code is the JSON-RPC error code the chain reported, passed through as it
+	// came. -32603 (internal error) is the one value this deployment mints
+	// itself, for an upstream that could not be reached at all.
+	Code int `json:"code"`
+	// Message is the chain's own explanation, e.g. "execution reverted". It is
+	// "upstream unavailable" when the deployment minted the error rather than the
+	// chain — that is the one message this side writes.
 	Message string `json:"message"`
 }
 

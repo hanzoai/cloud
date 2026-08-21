@@ -325,36 +325,47 @@
       "Attempt": {
         "properties": {
           "answer": {
+            "description": "Answer is what the model answered, after the harness extracted it from the\nraw generation.",
             "type": "string"
           },
           "benchmark": {
+            "description": "Benchmark is the suite the item belongs to — gpqa_diamond, livecodebench.\nPart of the stable id (project, benchmark, item, model). Required on ingest.",
             "type": "string"
           },
           "correct": {
+            "description": "Correct is the producer's grade of Answer against Gold. This plane records\nthe verdict and re-grades nothing, so it is only ever as good as the\nharness that sent it.",
             "type": "boolean"
           },
           "gold": {
+            "description": "Gold is the expected answer for the item, as the benchmark states it.",
             "type": "string"
           },
           "item": {
+            "description": "Item is the one question or case that was scored, by the benchmark's own\nid for it. Part of the stable id. Required on ingest.",
             "type": "string"
           },
           "model": {
+            "description": "Model is what answered the item. Part of the stable id. Required on ingest.",
             "type": "string"
           },
           "response": {
+            "description": "Response is the raw generation the model produced. It is its own retention\nclass — it may carry personal or licensed material — and it is part of the\nversion's content identity, so a re-run that produced different text is a\nnew retained version.",
             "type": "string"
           },
           "revision": {
+            "description": "Revision is the producer's declared kind of this version: original,\ncorrected or retracted. Anything else, including empty, is read as\noriginal. A retracted latest version withdraws the item's canonical answer;\nevery earlier version stays retained.",
             "type": "string"
           },
           "source": {
+            "description": "Source names who measured this attempt. Empty is recorded as\nhanzo-measured; any other value is stored as sent, so an imported\nthird-party score is distinguishable from one this fleet ran.",
             "type": "string"
           },
           "status": {
+            "description": "Status is this attempt's execution state, the same vocabulary a run uses:\nempty is complete, faulted retains a negative result, and an unrecognized\nvalue is kept verbatim. faulted and failed are excluded from the answered\ncounts but never dropped.",
             "type": "string"
           },
           "ts": {
+            "description": "TS is when the attempt was measured, unix SECONDS. Display-only: a\nserver-assigned append clock, not this, decides which version is canonical.\n0 means the producer sent none.",
             "type": "integer"
           }
         },
@@ -363,70 +374,93 @@
       "Experiment": {
         "properties": {
           "canonical": {
+            "description": "Canonical is DERIVED on read, never stored and never taken from an upload:\na version is canonical when it is the latest-appended non-retracted version\nof its stable id. The listing returns only canonical versions, so it is\ntrue on every row it answers with.",
             "type": "boolean"
           },
           "cost_usd": {
+            "description": "CostUSD is what the run cost in US DOLLARS (not cents), as the producer\nreports it. It is summed as-is into the per-project and per-kind totals.",
             "type": "number"
           },
           "endpoint": {
+            "description": "Endpoint is the optional BYO URL naming the arm the run measured. It is\nchecked at ingest — https only, and every address the host resolves to must\nbe publicly routable — and then dropped: nothing stores it, no read returns\nit, and this plane never dials it.",
             "type": "string"
           },
           "git_branch": {
+            "description": "GitBranch is the branch that commit was on.",
             "type": "string"
           },
           "git_dirty": {
+            "description": "GitDirty says the working tree carried uncommitted changes, so GitSHA does\nnot fully describe what ran.",
             "type": "boolean"
           },
           "git_sha": {
+            "description": "GitSHA is the commit the run was measured at. Provenance is part of the\nversion's content identity, so the same number measured on a different\ncommit is a new RETAINED version rather than an idempotent no-op.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the run's stable id, `\u003ckind\u003e:\u003csubject\u003e:\u003ctask\u003e` by convention. It is\nthe key versions accrue under: a correction re-sent with this same id\nappends a new version beside the old one rather than replacing it.\nRequired on ingest.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the discriminator the whole plane is partitioned by: benchmark,\nkernel-perf, training, ablation, policy-eval, or ab for an A/B trial's\nper-arm evidence. Required on ingest, and open — an unknown kind is stored,\nnot refused.",
             "type": "string"
           },
-          "lib_versions": {},
-          "meta": {},
+          "lib_versions": {
+            "description": "LibVersions is the libraries in force, as a JSON object of name → version\n({\"harness\":\"0.1.0\"}). It is a queryable column and part of the content\nidentity, which is what makes \"which lib version regressed this task\"\nanswerable over the longitudinal record. Absent is {}."
+          },
+          "meta": {
+            "description": "Meta is whatever else the producer wants to carry, as a JSON object — the\nA/B rows put lift, z and p here. It is part of the version's content\nidentity, canonicalized (sorted keys, no whitespace) first so that a\nre-serialization of the same object does not mint a spurious version.\nAbsent or unparseable is stored as {}."
+          },
           "metric": {
+            "description": "Metric names the quantity Value carries — accuracy, tok/s, a conversion\nevent. It is the only place Value's unit is stated; this plane declares no\nvocabulary of metrics.",
             "type": "string"
           },
           "n": {
+            "description": "N is the sample size behind Value — items scored, or exposures for an A/B\narm.",
             "type": "integer"
           },
           "n_total": {
+            "description": "NTotal is the denominator the producer reports N against — the size of the\nset N was drawn from. The plane derives neither from the other, so a\nproducer that reports only N leaves this 0.",
             "type": "integer"
           },
           "project": {
+            "description": "Project is the sub-scope inside the org this run is filed under. On ingest\nit is the SERVER's value — the caller's project scope — and a project sent\nin the body is ignored; on a read it is the value the run was filed under.",
             "type": "string"
           },
           "publishable": {
+            "description": "Publishable is consent to publish this run to the commons. Ingest forces\nfalse; only a grant sets it.",
             "type": "boolean"
           },
           "revision": {
-            "description": "original | corrected | retracted",
+            "description": "Revision is the producer's declared kind of this version: original,\ncorrected or retracted. Anything else, including empty, is read as\noriginal. A retracted latest version WITHDRAWS the id — it has no canonical\nversion at all — and every earlier version is still retained.",
             "type": "string"
           },
           "status": {
-            "description": "planning | running | complete | faulted",
+            "description": "Status is the run's execution state: planning, running, complete or\nfaulted. Empty is complete (a backfilled historic run). An unrecognized\nvalue is kept verbatim rather than flattened, so a producer's own failure\nlabel is never displayed as a success. faulted and failed runs are retained\nbut are left out of the answered headline counts.",
             "type": "string"
           },
           "subject": {
+            "description": "Subject is what was measured: the model, the engine, the A/B arm. Required\non ingest.",
             "type": "string"
           },
           "task": {
+            "description": "Task is what it was measured ON — gpqa_diamond, livecodebench, prefill, or\nthe trial's id for A/B evidence.",
             "type": "string"
           },
           "trainable": {
+            "description": "Trainable is consent to train on this run. Ingest forces false; only a\ngrant sets it. An upload conveys no training right.",
             "type": "boolean"
           },
           "ts": {
+            "description": "TS is when the run was measured, unix SECONDS. It is display-only and it\ndoes NOT decide supersession — a server-assigned append clock does, so a\nlive correction that sends no ts still supersedes a backfill that stamped\none. 0 means the producer sent none.",
             "type": "integer"
           },
           "value": {
+            "description": "Value is the measurement, in whatever unit Metric names. It is NEVER\nnormalized: one producer files accuracy as 0.81 and another as 94.3 and\nboth are stored as sent, so compare values only within one (subject, task,\nmetric).",
             "type": "number"
           },
           "visibility": {
+            "description": "Visibility is private, org or public. Ingest forces private whatever the\nbody says; only a grant moves it.",
             "type": "string"
           }
         },
@@ -435,23 +469,27 @@
       "GrantRequest": {
         "properties": {
           "id": {
-            "description": "an experiment (run) stable id",
+            "description": "ID addresses an experiment (run) by its stable id. The grant lands on EVERY\nretained version of that id, because the decision is about the run and not\nabout one version of it.",
             "type": "string"
           },
           "project": {
+            "description": "Project locates WHICH project inside the caller's org holds the target;\nempty is the caller's own project scope. It is not a tenant key — the org\ncomes from the validated principal — so naming a project can only ever\naddress a record the caller's org already owns.",
             "type": "string"
           },
           "publishable": {
+            "description": "Publishable is consent to publish the run to the commons. Null leaves it\nunchanged; an artifact grant ignores it.",
             "type": "boolean"
           },
           "sha256": {
-            "description": "OR an artifact content hash",
+            "description": "SHA256 addresses an artifact by its content hash instead, and an artifact\ngrant sets visibility only. One of ID and SHA256 is required; when both are\nsent SHA256 wins and the run is untouched.",
             "type": "string"
           },
           "trainable": {
+            "description": "Trainable is consent to train on the run's records. Null leaves it\nunchanged; an artifact grant ignores it.",
             "type": "boolean"
           },
           "visibility": {
+            "description": "Visibility is private, org or public. Null leaves it unchanged, and it is\nthe one field an artifact grant requires.",
             "type": "string"
           }
         },
@@ -460,12 +498,14 @@
       "IngestRequest": {
         "properties": {
           "attempts": {
+            "description": "Attempts are the per-item attempt versions. Each needs a benchmark, an item\nand a model. The two arrays may not BOTH be empty, and they hold at most\n20000 members between them — split a larger upload.",
             "items": {
               "$ref": "#/components/schemas/Attempt"
             },
             "type": "array"
           },
           "experiments": {
+            "description": "Experiments are the run versions in this batch. Each needs an id, a kind\nand a subject. Re-sending byte-identical content appends nothing.",
             "items": {
               "$ref": "#/components/schemas/Experiment"
             },
@@ -477,12 +517,15 @@
       "KindTotal": {
         "properties": {
           "cost_usd": {
+            "description": "CostUSD is US DOLLARS (not cents) summed over those same runs.",
             "type": "number"
           },
           "experiments": {
+            "description": "Experiments counts the canonical answered runs of this kind — the same\npredicate as the headline count, sliced.",
             "type": "integer"
           },
           "kind": {
+            "description": "Kind is the discriminator this row aggregates: benchmark, kernel-perf,\ntraining, ablation, policy-eval, ab. A kind appears as soon as any RETAINED\nversion carries it, so a kind whose every run was retracted or faulted is\nlisted with zero experiments rather than dropped.",
             "type": "string"
           }
         },
@@ -491,35 +534,42 @@
       "ProjectSummary": {
         "properties": {
           "attempts": {
-            "description": "canonical",
+            "description": "Attempts counts the CANONICAL answered attempts, one per (benchmark, item,\nmodel).",
             "type": "integer"
           },
           "attempts_retained": {
+            "description": "AttemptsRetained counts every attempt version held, on the same terms as\nExperimentsRetained.",
             "type": "integer"
           },
           "benchmarks": {
+            "description": "Benchmarks is how many DISTINCT benchmarks those same attempts cover.",
             "type": "integer"
           },
           "cost_usd": {
+            "description": "CostUSD is US DOLLARS (not cents) summed over the canonical answered runs,\nso it is what the deduped view cost and not what the history cost.",
             "type": "number"
           },
           "experiments": {
-            "description": "canonical",
+            "description": "Experiments counts the CANONICAL answered runs: one per stable id, the\nlatest non-retracted version, faulted and failed left out.",
             "type": "integer"
           },
           "experiments_retained": {
+            "description": "ExperimentsRetained counts every run version the store holds for the\nproject — superseded and retracted included. Retained is always ≥\ncanonical, and the gap is history rather than loss.",
             "type": "integer"
           },
           "kinds": {
+            "description": "Kinds are the discriminators seen in the project, sorted, over ALL retained\nversions — so a kind stays listed after its runs are superseded or\nretracted, even when it contributes nothing to Experiments.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "models": {
+            "description": "Models is how many DISTINCT models appear across the canonical answered\nattempts.",
             "type": "integer"
           },
           "project": {
+            "description": "Project is the project these totals cover. Rows are one per project the org\nhas evidence under, sorted by this.",
             "type": "string"
           }
         },
@@ -528,43 +578,54 @@
       "ResearchArtifact": {
         "properties": {
           "content": {
-            "description": "base64 bytes on write; the server hashes + stores them (never returned)",
+            "description": "Content is the artifact's bytes, base64, on WRITE only, at most 16 MiB.\nNever returned: a read answers metadata and the address, and the bytes come\nfrom GET /v1/research/artifacts/{sha256}.",
             "type": "string"
           },
           "git_branch": {
+            "description": "GitBranch is the branch that commit was on.",
             "type": "string"
           },
           "git_dirty": {
+            "description": "GitDirty says the working tree carried uncommitted changes.",
             "type": "boolean"
           },
           "git_sha": {
+            "description": "GitSHA is the commit that produced the artifact. Unlike a run's, an\nartifact's provenance is NOT part of its identity: the bytes are.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is snapshot or report, and nothing else is accepted. It decides how\nthe bytes are served: image/png for a snapshot, application/octet-stream\nfor a report — from the recorded kind, never from sniffing the bytes.",
             "type": "string"
           },
-          "lib_versions": {},
+          "lib_versions": {
+            "description": "LibVersions is the libraries in force, as a JSON object of name → version.\nAbsent is {}."
+          },
           "project": {
+            "description": "Project is the project the artifact is filed under — the SERVER's value on\nwrite. It is part of the read predicate too: fetching a hash from the wrong\nproject is the same 404 as a hash that was never recorded.",
             "type": "string"
           },
           "ref": {
-            "description": "server-derived content address (sha256:\u003chash\u003e)",
+            "description": "Ref is the content address, \"sha256:\u003chash\u003e\", composed by the server from\nthe same bytes. A ref sent in the body is discarded, so it can never name\nsomewhere else.",
             "type": "string"
           },
           "retention_class": {
+            "description": "RetentionClass is the retention bucket the bytes fall in. Every write is\nrecorded as raw-artifact — the class for material that may be personal or\nlicensed — so it is the server's word, not the caller's.",
             "type": "string"
           },
           "run_id": {
+            "description": "RunID is the experiment stable id this artifact belongs to, which is what\nthe diary feed's ?run= filters on. It is free text: nothing checks that the\nrun exists.",
             "type": "string"
           },
           "sha256": {
-            "description": "SERVER-derived on write; the identity",
+            "description": "SHA256 is the SERVER's hash of the submitted bytes, hex, and the artifact's\nidentity — the key the blob route is addressed by. A caller MAY send one;\nit is not trusted, only checked, and a mismatch with the bytes refuses the\nwrite.",
             "type": "string"
           },
           "ts": {
+            "description": "TS is when the artifact was recorded, unix SECONDS, as the caller gives it\n— it is what the feed sorts newest-first on and what ?since= is compared\nagainst. 0 leaves the run unordered against timestamped siblings.",
             "type": "integer"
           },
           "visibility": {
+            "description": "Visibility is private, org or public. A write forces private; only a grant\nby sha256 moves it.",
             "type": "string"
           }
         },
@@ -573,38 +634,46 @@
       "ResearchTotals": {
         "properties": {
           "attempts": {
-            "description": "canonical",
+            "description": "Attempts counts the CANONICAL answered attempts, one per (benchmark, item,\nmodel).",
             "type": "integer"
           },
           "attempts_retained": {
+            "description": "AttemptsRetained counts every attempt version held, on the same terms as\nExperimentsRetained.",
             "type": "integer"
           },
           "benchmarks": {
+            "description": "Benchmarks is how many DISTINCT benchmarks those same attempts cover.",
             "type": "integer"
           },
           "by_kind": {
+            "description": "ByKind is the same headline split per discriminator, ordered by kind.",
             "items": {
               "$ref": "#/components/schemas/KindTotal"
             },
             "type": "array"
           },
           "cost_usd": {
+            "description": "CostUSD is US DOLLARS (not cents) summed over the canonical answered runs.",
             "type": "number"
           },
           "experiments": {
-            "description": "canonical",
+            "description": "Experiments counts the CANONICAL answered runs: one per stable id, the\nlatest non-retracted version, faulted and failed left out.",
             "type": "integer"
           },
           "experiments_retained": {
+            "description": "ExperimentsRetained counts every run version held — superseded and\nretracted included. Retained is always ≥ canonical, and the gap is history\nrather than loss, which is why both travel together.",
             "type": "integer"
           },
           "models": {
+            "description": "Models is how many DISTINCT models appear across the canonical answered\nattempts.",
             "type": "integer"
           },
           "project": {
+            "description": "Project echoes the project the aggregate was narrowed to. Absent means the\nfigures below span the whole org.",
             "type": "string"
           },
           "projects": {
+            "description": "Projects is how many DISTINCT projects the counted evidence spans, so it is\n1 whenever Project narrows to one.",
             "type": "integer"
           }
         },

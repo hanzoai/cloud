@@ -27,15 +27,26 @@ const (
 )
 
 type graphNode struct {
-	ID      string `json:"id"`             // "<doctype>:<name>" — globally unique, click-to-open key
-	Type    string `json:"type"`           // kb-page | kb-memory | kb-source | kb-connector | unresolved
-	Title   string `json:"title"`          // display label
-	Name    string `json:"name,omitempty"` // the document name (empty for synthetic nodes)
+	ID    string `json:"id"`             // "<doctype>:<name>" — globally unique, click-to-open key
+	Type  string `json:"type"`           // kb-page | kb-memory | kb-source | kb-connector | unresolved
+	Title string `json:"title"`          // display label
+	Name  string `json:"name,omitempty"` // the document name (empty for synthetic nodes)
+	// Project is the project scope the underlying document was saved under. Absent
+	// for a document saved with none, and for the synthetic nodes — unresolved link
+	// targets and connectors belong to no project. When ?project= narrows the
+	// graph, every page, memory and source node carries that value.
 	Project string `json:"project,omitempty"`
 }
 
 type graphEdge struct {
+	// From is the id of the node the edge starts at: the child page for a parent
+	// edge, the page holding the wikilink for a link edge, the kb-source for a
+	// provenance edge. Always one of Nodes.
 	From string `json:"from"`
+	// To is the id of the node the edge points at: the parent page, the linked
+	// page, the kb-connector. Always one of Nodes — a wikilink matching no page
+	// points at a synthetic "unresolved:<lowercased title>" node rather than
+	// dangling.
 	To   string `json:"to"`
 	Kind string `json:"kind"` // parent | link | provenance
 }

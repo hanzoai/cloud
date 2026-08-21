@@ -72,8 +72,12 @@ type Audience struct {
 	// WindowDays is how far back the event counts, ending now. 0 means 30 and
 	// nothing above 3650 is honoured. Ignored when Event is empty.
 	WindowDays int `json:"windowDays"`
-	// CreatedAt and UpdatedAt are unix seconds, both server-assigned.
+	// CreatedAt is unix seconds when the filter was saved, server-assigned.
 	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is unix seconds of the last write, server-assigned, and the key
+	// the audience list is ordered by (newest first). A saved audience has no
+	// update route, so in practice it stays equal to CreatedAt: to change a
+	// filter you save another one.
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
@@ -84,17 +88,25 @@ type AudiencePreview struct {
 	// Available is false when the roster or the warehouse could not be read; the
 	// counts are then zero because nothing was measured, not because the cohort
 	// is empty, and Reason says which read failed.
-	Available bool   `json:"available"`
-	Reason    string `json:"reason,omitempty"`
+	Available bool `json:"available"`
+	// Reason is the error text of the read that failed: the org's roster could
+	// not be loaded ("identity store unavailable…"), or the cohort query had no
+	// warehouse to run against ("analytics warehouse not configured"). Absent
+	// when the evaluation succeeded, so its presence and Available=false are one
+	// fact seen twice.
+	Reason string `json:"reason,omitempty"`
 	// Count is the cohort size: distinct warehouse identifiers for an event
 	// audience, mailable customers for an event-less (whole-org) one.
 	Count int64 `json:"count"`
-	// Deliverable is how many de-duplicated addresses a send would reach, and
-	// Unmatched how many cohort identifiers named no customer. Unmatched is
-	// reported rather than hidden: it is the honest explanation for a cohort of
-	// 500 that mails 3.
+	// Deliverable is how many de-duplicated mailboxes a send would reach. Two
+	// customers sharing an address count once, so it is <= Count.
 	Deliverable int `json:"deliverable"`
-	Unmatched   int `json:"unmatched"`
+	// Unmatched is how many cohort identifiers named nobody on the org's roster
+	// and so have no address to mail. It is reported rather than hidden: it is
+	// the honest explanation for a cohort of 500 that mails 3. Always 0 for an
+	// event-less (whole-org) audience, which starts from the roster and has
+	// nothing to match.
+	Unmatched int `json:"unmatched"`
 	// Sample is up to 1000 cohort IDENTIFIERS — never addresses, which product
 	// analytics does not hold. Empty for an event-less (whole-org) audience.
 	Sample []string `json:"sample"`

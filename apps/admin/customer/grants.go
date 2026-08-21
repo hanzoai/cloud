@@ -24,13 +24,27 @@ import (
 
 // GrantRow is one row in GET /v1/admin/grants.
 type GrantRow struct {
-	Org           string `json:"org"`
-	AmountCents   int64  `json:"amountCents"`
-	Currency      string `json:"currency"`
-	Source        string `json:"source"` // "trial" | "prepaid"
-	Reason        string `json:"reason,omitempty"`
-	Actor         string `json:"actor"` // staff email (or sub) who issued it
-	CreatedAt     string `json:"createdAt"`
+	// Org is the TARGET tenant the credit landed on — the audit row's resource id, not
+	// the actor's org. The `org` query filter matches the actor's, which is the one
+	// asymmetry on this surface.
+	Org string `json:"org"`
+	// AmountCents is the credit in USD cents, always positive. On a successful grant it
+	// is what was actually written to the ledger; on a REFUSED one it is what was asked
+	// for and never moved, so summing this column without filtering on Result overstates
+	// what the fleet gave away.
+	AmountCents int64 `json:"amountCents"`
+	// Currency is the ISO code the grant was denominated in, lower-cased. Defaults to
+	// "usd" for a row that recorded none.
+	Currency string `json:"currency"`
+	Source   string `json:"source"` // "trial" | "prepaid"
+	// Reason is the justification the operator typed. Omitted when blank — older rows
+	// predate the field.
+	Reason string `json:"reason,omitempty"`
+	Actor  string `json:"actor"` // staff email (or sub) who issued it
+	// CreatedAt is when the grant was attempted, RFC3339 in UTC. The list is newest first.
+	CreatedAt string `json:"createdAt"`
+	// TransactionID is the commerce ledger entry the money landed in, for reconciliation.
+	// Omitted on a refused grant, which wrote no entry.
 	TransactionID string `json:"transactionId,omitempty"`
 	Result        string `json:"result"` // success | error
 }
@@ -61,10 +75,19 @@ type GrantsIn struct {
 // GrantsOut is the GET /v1/admin/grants envelope. total is the store's total for the
 // filter, which can exceed len(data) when limit truncates.
 type GrantsOut struct {
-	Status string     `json:"status"`
-	Msg    string     `json:"msg"`
-	Data   []GrantRow `json:"data"`
-	Total  *int       `json:"total,omitempty"`
+	// Status is "ok" or "error". A deployment with no durable audit store has no history
+	// to project and still answers ok — with an empty list and a msg saying so.
+	Status string `json:"status"`
+	// Msg carries that "no audit store" note ALONGSIDE an ok status. Everywhere else on
+	// this app a non-empty msg means failure; here it means the history is unavailable,
+	// which is why an empty list must not be read as "no grants were ever made".
+	Msg string `json:"msg"`
+	// Data is the matching grants, newest first, capped by the request's limit. Refused
+	// grants are included — a refusal is as much a fact about who tried as a success is.
+	Data []GrantRow `json:"data"`
+	// Total is the store's count for the filter, which EXCEEDS len(data) when limit
+	// truncated. Omitted on an error.
+	Total *int `json:"total,omitempty"`
 }
 
 // GrantFilter is the ONE audit query that identifies a credit grant. Both the grants

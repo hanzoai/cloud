@@ -37,19 +37,30 @@ func init() {
 			"LeaseIn.project": "Project names the disk to attach, and is REQUIRED for every class but `exec`.\n\nOne live sandbox per project: the disk attaches to one computer at a time, so\na second lease over a project that already has one is refused by name rather\nthan handed a silently empty disk.",
 			"LeaseIn.runtime": "Runtime is the isolation boundary asked for: `gvisor` shares a filesystem\nand holds a project volume, `kata-fc` is a microVM that boots slower and\nreads files faster but has no shared filesystem at all. Empty asks for the\nfleet's default, which is the right answer unless you are measuring.\n\nIt is a REQUEST. The owner decides, and refuses a combination it cannot\nhonour — a volume under a runtime with no shared filesystem would write\ninto a tmpfs and lose the bytes at exit. Read Leased.Runtime for what the\nsandbox actually got.",
 			"LeaseIn.ttlSec":  "TTLSec bounds the lease in seconds. Unset takes the class default. Nothing\nruns forever, because a sandbox is somebody else's code on our nodes.",
+			"Leased.class":    "Class is what was actually leased, from the closed set LeaseIn.Class names:\nexec | dev | desktop | android. A request that named none leased an `exec`,\nso this is where a caller learns which kind of computer it is holding, and it\nis what Workdir below follows from.",
+			"Leased.id":       "ID names this computer for every later call — run, read, write, stop and end\nall take it, and a LeaseIn carrying it resumes THIS sandbox instead of leasing\na second one. Minted here; a caller cannot choose it, and a resumed lease that\nhad expired comes back under a new one.",
 			"Leased.runtime":  "Runtime is the boundary this sandbox GOT, which need not be the one asked\nfor — carried for the same reason Workdir is, that it is a fact only the\nowner knows and a caller assuming it would be holding a second copy. Empty\nis the node's default runtime, and a real answer.",
+			"Leased.status":   "Status is where the pod stands, from the store's three: pending | running |\nerror. A lease that ANSWERS has already waited for the pod, so this reads\n`running` — a start that failed is a 503 and no sandbox at all. Read it\nanyway: exec refuses a sandbox that is not running, so anything else here is\nthe reason the next call will not work.",
+			"Leased.workdir":  "Workdir is the absolute directory this sandbox keeps files in, and what a\nrelative path in a later read, write or run resolves against — /work for dev,\ndesktop and android (the project volume's mount point), /mnt/data for exec\n(the artifact directory the code tool tells the model to write to). A path\nthat climbs above it is refused rather than rewritten.",
 		},
 	})
 	zip.Describe("POST /sandbox/read", zip.Doc{
 		Description: "Reads one path in the caller's sandbox: a file's bytes, or a\ndirectory's entries when the path names one.",
 		Fields: map[string]string{
-			"PathIn.id":   "ID is the sandbox to read from, from an earlier lease.",
-			"PathIn.path": "Path is read relative to the sandbox's working directory unless it is\nabsolute, and a path that climbs out of it is refused rather than rewritten.\nEmpty names the working directory itself, which lists it.",
+			"Blob.data":    "Data is the file's bytes, verbatim, base64 on the wire. Empty for a directory\nand for an empty file alike; Dir is what tells those apart.",
+			"Blob.dir":     "Dir says which of the two answers this is: true and the path is a directory,\nso read Entries; false and it is a file, so read Data. Nothing else\ndistinguishes them — an empty file and an empty directory look alike here.",
+			"Blob.entries": "Entries is a directory's contents as bare NAMES, not paths — one level, no\nrecursion, dotfiles included, \".\" and \"..\" excluded (`ls -1A`). Empty for a\nfile, and for an empty directory.",
+			"Blob.path":    "Path is the RESOLVED absolute path that was read — the caller's relative path\njoined onto the sandbox's working directory (Leased.Workdir), so it names the\nsame file for a reader who does not know the class.",
+			"PathIn.id":    "ID is the sandbox to read from, from an earlier lease.",
+			"PathIn.path":  "Path is read relative to the sandbox's working directory unless it is\nabsolute, and a path that climbs out of it is refused rather than rewritten.\nEmpty names the working directory itself, which lists it.",
 		},
 	})
 	zip.Describe("POST /sandbox/run", zip.Doc{
 		Description: "Runs one command inside the caller's sandbox and answers its exit code,\nstdout and stderr. A non-zero exit is a successful call carrying a failed\nprogram, so it comes back as data and not as an error.\n\nName a `session` and the command NARRATES INTO IT: its output is appended to\nthat session's live log as the program produces it, so anything watching the\nsession — GET /v1/agents/sessions/stream, scoped to one run with ?root= —\nwatches the work happen rather than waiting for the verdict. Without it the\ncall is what it always was: silent until it returns, which for an agentic run\nis twenty-five minutes of blank screen.\n\nThe session is named; the TENANT is not. It is the org the caller already\nproved, so a session belonging to somebody else is absent from the org this\ncall acts for and the append is refused there.",
 		Fields: map[string]string{
+			"Ran.exitCode":     "ExitCode is the PROGRAM's own status — 0 succeeded, anything else is what it\nreturned, and a Command runs under `sh -c` so its shell's conventions apply.\nA command that never reached an exit does not arrive here at all: a timeout\nor a stop cancels the channel, and that is an error on the call rather than a\ncode of ours invented to fill this field.",
+			"Ran.stderr":       "Stderr is standard error, kept apart from Stdout so a caller reading a\nprogram's OUTPUT is not reading its diagnostics as data. Same 1 MiB cap, same\nredaction. A program that failed usually says why here and nowhere else.",
+			"Ran.stdout":       "Stdout is what the program wrote to standard output, collected whole rather\nthan streamed — to watch it arrive instead, name a RunIn.Session and read that\nsession's feed. Capped at 1 MiB, past which it ends in \"[truncated at 1MiB]\".\nEvery string named in RunIn.Blind is replaced by \"[redacted]\" before it gets\nhere, and before it reaches the session.",
 			"RunIn.argv":       "Argv is the program and its arguments, already split — the form no shell can\nmisread. Give this or Command, not both.",
 			"RunIn.blind":      "Blind is the set of secrets this command must never publish.\n\nIt exists because output is redacted where it is PRODUCED or not at all. A\ncaller that scrubbed the returned result would still have streamed the\nunredacted bytes into the session as they were written — to a durable event\nstore, an SSE feed and a chat thread — because the narration leaves the\nsandbox by a different door from the result. Nothing downstream can take a\nsecret back out of a message that has already been delivered.\n\nThe sandbox holds these only for the life of the one command, applies them\nto every stream leaving it, and never logs or stores them.",
 			"RunIn.command":    "Command is a shell line, run by `sh -c`. Use it when a pipeline or a\nredirection is the point, and Argv when it is not.",
@@ -62,6 +73,10 @@ func init() {
 	})
 	zip.Describe("POST /sandbox/stop", zip.Doc{
 		Description: "Interrupts whatever the caller's sandbox is running and answers how\nmany commands it ended. The sandbox stays leased — stop ends the WORK, end ends\nthe RESOURCE — so whoever stopped a run can still read what it left behind.",
+		Fields: map[string]string{
+			"StopIn.id":       "ID is the sandbox to interrupt, from an earlier lease. Every command running\nin it stops; the lease itself survives, so the checkout and the half-written\nfiles are still there to read. Use EndIn to give the computer back.",
+			"Stopped.stopped": "Stopped counts the commands that were still running and were interrupted.\nZero says the sandbox was idle, not that the stop failed — see above.",
+		},
 	})
 	zip.Describe("POST /sandbox/write", zip.Doc{
 		Description: "Writes bytes to one path in the caller's sandbox, creating parents,\nand answers the resolved path.",
@@ -69,6 +84,8 @@ func init() {
 			"WriteIn.data": "Data is the file's bytes, and replaces whatever was there.",
 			"WriteIn.id":   "ID is the sandbox to write into, from an earlier lease.",
 			"WriteIn.path": "Path is confined the same way PathIn.Path is. Missing parent directories are\ncreated.",
+			"Wrote.bytes":  "Bytes is how many bytes the file now holds. A write REPLACES the file, so this\nis its whole length and not an amount appended, and 0 is a legitimate answer:\na WriteIn with no Data truncates the file to nothing.",
+			"Wrote.path":   "Path is where the bytes actually landed: the caller's path resolved against\nthe sandbox's working directory (Leased.Workdir), which is what a later read\nor a shell line inside the sandbox has to name.",
 		},
 	})
 	zip.Describe("POST /v1/sandboxes/end", zip.Doc{
@@ -86,19 +103,30 @@ func init() {
 			"LeaseIn.project": "Project names the disk to attach, and is REQUIRED for every class but `exec`.\n\nOne live sandbox per project: the disk attaches to one computer at a time, so\na second lease over a project that already has one is refused by name rather\nthan handed a silently empty disk.",
 			"LeaseIn.runtime": "Runtime is the isolation boundary asked for: `gvisor` shares a filesystem\nand holds a project volume, `kata-fc` is a microVM that boots slower and\nreads files faster but has no shared filesystem at all. Empty asks for the\nfleet's default, which is the right answer unless you are measuring.\n\nIt is a REQUEST. The owner decides, and refuses a combination it cannot\nhonour — a volume under a runtime with no shared filesystem would write\ninto a tmpfs and lose the bytes at exit. Read Leased.Runtime for what the\nsandbox actually got.",
 			"LeaseIn.ttlSec":  "TTLSec bounds the lease in seconds. Unset takes the class default. Nothing\nruns forever, because a sandbox is somebody else's code on our nodes.",
+			"Leased.class":    "Class is what was actually leased, from the closed set LeaseIn.Class names:\nexec | dev | desktop | android. A request that named none leased an `exec`,\nso this is where a caller learns which kind of computer it is holding, and it\nis what Workdir below follows from.",
+			"Leased.id":       "ID names this computer for every later call — run, read, write, stop and end\nall take it, and a LeaseIn carrying it resumes THIS sandbox instead of leasing\na second one. Minted here; a caller cannot choose it, and a resumed lease that\nhad expired comes back under a new one.",
 			"Leased.runtime":  "Runtime is the boundary this sandbox GOT, which need not be the one asked\nfor — carried for the same reason Workdir is, that it is a fact only the\nowner knows and a caller assuming it would be holding a second copy. Empty\nis the node's default runtime, and a real answer.",
+			"Leased.status":   "Status is where the pod stands, from the store's three: pending | running |\nerror. A lease that ANSWERS has already waited for the pod, so this reads\n`running` — a start that failed is a 503 and no sandbox at all. Read it\nanyway: exec refuses a sandbox that is not running, so anything else here is\nthe reason the next call will not work.",
+			"Leased.workdir":  "Workdir is the absolute directory this sandbox keeps files in, and what a\nrelative path in a later read, write or run resolves against — /work for dev,\ndesktop and android (the project volume's mount point), /mnt/data for exec\n(the artifact directory the code tool tells the model to write to). A path\nthat climbs above it is refused rather than rewritten.",
 		},
 	})
 	zip.Describe("POST /v1/sandboxes/read", zip.Doc{
 		Description: "Reads one path in the caller's sandbox: a file's bytes, or a\ndirectory's entries when the path names one.",
 		Fields: map[string]string{
-			"PathIn.id":   "ID is the sandbox to read from, from an earlier lease.",
-			"PathIn.path": "Path is read relative to the sandbox's working directory unless it is\nabsolute, and a path that climbs out of it is refused rather than rewritten.\nEmpty names the working directory itself, which lists it.",
+			"Blob.data":    "Data is the file's bytes, verbatim, base64 on the wire. Empty for a directory\nand for an empty file alike; Dir is what tells those apart.",
+			"Blob.dir":     "Dir says which of the two answers this is: true and the path is a directory,\nso read Entries; false and it is a file, so read Data. Nothing else\ndistinguishes them — an empty file and an empty directory look alike here.",
+			"Blob.entries": "Entries is a directory's contents as bare NAMES, not paths — one level, no\nrecursion, dotfiles included, \".\" and \"..\" excluded (`ls -1A`). Empty for a\nfile, and for an empty directory.",
+			"Blob.path":    "Path is the RESOLVED absolute path that was read — the caller's relative path\njoined onto the sandbox's working directory (Leased.Workdir), so it names the\nsame file for a reader who does not know the class.",
+			"PathIn.id":    "ID is the sandbox to read from, from an earlier lease.",
+			"PathIn.path":  "Path is read relative to the sandbox's working directory unless it is\nabsolute, and a path that climbs out of it is refused rather than rewritten.\nEmpty names the working directory itself, which lists it.",
 		},
 	})
 	zip.Describe("POST /v1/sandboxes/run", zip.Doc{
 		Description: "Runs one command inside the caller's sandbox and answers its exit code,\nstdout and stderr. A non-zero exit is a successful call carrying a failed\nprogram, so it comes back as data and not as an error.\n\nName a `session` and the command NARRATES INTO IT: its output is appended to\nthat session's live log as the program produces it, so anything watching the\nsession — GET /v1/agents/sessions/stream, scoped to one run with ?root= —\nwatches the work happen rather than waiting for the verdict. Without it the\ncall is what it always was: silent until it returns, which for an agentic run\nis twenty-five minutes of blank screen.\n\nThe session is named; the TENANT is not. It is the org the caller already\nproved, so a session belonging to somebody else is absent from the org this\ncall acts for and the append is refused there.",
 		Fields: map[string]string{
+			"Ran.exitCode":     "ExitCode is the PROGRAM's own status — 0 succeeded, anything else is what it\nreturned, and a Command runs under `sh -c` so its shell's conventions apply.\nA command that never reached an exit does not arrive here at all: a timeout\nor a stop cancels the channel, and that is an error on the call rather than a\ncode of ours invented to fill this field.",
+			"Ran.stderr":       "Stderr is standard error, kept apart from Stdout so a caller reading a\nprogram's OUTPUT is not reading its diagnostics as data. Same 1 MiB cap, same\nredaction. A program that failed usually says why here and nowhere else.",
+			"Ran.stdout":       "Stdout is what the program wrote to standard output, collected whole rather\nthan streamed — to watch it arrive instead, name a RunIn.Session and read that\nsession's feed. Capped at 1 MiB, past which it ends in \"[truncated at 1MiB]\".\nEvery string named in RunIn.Blind is replaced by \"[redacted]\" before it gets\nhere, and before it reaches the session.",
 			"RunIn.argv":       "Argv is the program and its arguments, already split — the form no shell can\nmisread. Give this or Command, not both.",
 			"RunIn.blind":      "Blind is the set of secrets this command must never publish.\n\nIt exists because output is redacted where it is PRODUCED or not at all. A\ncaller that scrubbed the returned result would still have streamed the\nunredacted bytes into the session as they were written — to a durable event\nstore, an SSE feed and a chat thread — because the narration leaves the\nsandbox by a different door from the result. Nothing downstream can take a\nsecret back out of a message that has already been delivered.\n\nThe sandbox holds these only for the life of the one command, applies them\nto every stream leaving it, and never logs or stores them.",
 			"RunIn.command":    "Command is a shell line, run by `sh -c`. Use it when a pipeline or a\nredirection is the point, and Argv when it is not.",
@@ -111,6 +139,10 @@ func init() {
 	})
 	zip.Describe("POST /v1/sandboxes/stop", zip.Doc{
 		Description: "Interrupts whatever the caller's sandbox is running and answers how\nmany commands it ended. The sandbox stays leased — stop ends the WORK, end ends\nthe RESOURCE — so whoever stopped a run can still read what it left behind.",
+		Fields: map[string]string{
+			"StopIn.id":       "ID is the sandbox to interrupt, from an earlier lease. Every command running\nin it stops; the lease itself survives, so the checkout and the half-written\nfiles are still there to read. Use EndIn to give the computer back.",
+			"Stopped.stopped": "Stopped counts the commands that were still running and were interrupted.\nZero says the sandbox was idle, not that the stop failed — see above.",
+		},
 	})
 	zip.Describe("POST /v1/sandboxes/write", zip.Doc{
 		Description: "Writes bytes to one path in the caller's sandbox, creating parents,\nand answers the resolved path.",
@@ -118,6 +150,8 @@ func init() {
 			"WriteIn.data": "Data is the file's bytes, and replaces whatever was there.",
 			"WriteIn.id":   "ID is the sandbox to write into, from an earlier lease.",
 			"WriteIn.path": "Path is confined the same way PathIn.Path is. Missing parent directories are\ncreated.",
+			"Wrote.bytes":  "Bytes is how many bytes the file now holds. A write REPLACES the file, so this\nis its whole length and not an amount appended, and 0 is a legitimate answer:\na WriteIn with no Data truncates the file to nothing.",
+			"Wrote.path":   "Path is where the bytes actually landed: the caller's path resolved against\nthe sandbox's working directory (Leased.Workdir), which is what a later read\nor a shell line inside the sandbox has to name.",
 		},
 	})
 }

@@ -19,7 +19,6 @@ package projects
 // is worse than none, and only a reader catches that.
 
 import (
-	"encoding/json"
 	"sort"
 	"strings"
 	"testing"
@@ -66,44 +65,24 @@ var proseless = map[string]bool{
 // TestEveryPublishedFieldIsDescribed fails on any property of any published schema
 // that carries no description and is not named above.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	app := mountApp(t)
-	doc, err := openapi.Spec(app, openapi.Info{Title: "projects", Version: "v1"})
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "projects", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
-	// Read the MARSHALLED document, because that is the artifact. Components.Schemas
-	// is open-typed — openapi.Register contributes a *Schema and the typed fold
-	// contributes zip's own map — so walking the Go value would silently skip
-	// whichever half it did not expect, and a gate that skips passes for the wrong
-	// reason. The JSON is what an SDK generator actually reads.
-	raw, err := json.Marshal(doc)
-	if err != nil {
-		t.Fatalf("marshal doc: %v", err)
-	}
-	var published struct {
-		Components struct {
-			Schemas map[string]json.RawMessage `json:"schemas"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(raw, &published); err != nil {
-		t.Fatalf("decode doc: %v", err)
-	}
-	if len(published.Components.Schemas) == 0 {
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
 		t.Fatal("projects publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
 	}
 
 	var bare, stale []string
 	seen := map[string]bool{}
-	for name, schema := range published.Components.Schemas {
-		var node any
-		if err := json.Unmarshal(schema, &node); err != nil {
-			t.Fatalf("decode schema %s: %v", name, err)
-		}
-		for _, path := range bareProperties(node, name) {
-			seen[path] = true
-			if !proseless[path] {
-				bare = append(bare, path)
-			}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
 		}
 	}
 	for path := range proseless {
@@ -113,7 +92,6 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	}
 
 	if len(bare) > 0 {
-		sort.Strings(bare)
 		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
 			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
 			"the first of them alone — then run: make -C apps/projects describe",
@@ -125,39 +103,4 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
 			"delete the entr(ies).", strings.Join(stale, ", "))
 	}
-}
-
-// bareProperties walks one schema and returns the dotted paths of every property with
-// no description. It descends into NESTED shapes too: an inline object inside a
-// property is published exactly as an SDK reads it, so stopping at the top level would
-// let a whole sub-object ship bare — which is precisely how the two `repo` bodies hide.
-func bareProperties(node any, path string) []string {
-	m, ok := node.(map[string]any)
-	if !ok {
-		return nil
-	}
-	var bare []string
-	if props, ok := m["properties"].(map[string]any); ok {
-		for field, raw := range props {
-			p, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			if desc, _ := p["description"].(string); strings.TrimSpace(desc) == "" {
-				bare = append(bare, path+"."+field)
-			}
-			bare = append(bare, bareProperties(p, path+"."+field)...)
-		}
-	}
-	for _, key := range []string{"items", "additionalProperties"} {
-		bare = append(bare, bareProperties(m[key], path+"[]")...)
-	}
-	for _, key := range []string{"allOf", "anyOf", "oneOf"} {
-		if list, ok := m[key].([]any); ok {
-			for _, alt := range list {
-				bare = append(bare, bareProperties(alt, path)...)
-			}
-		}
-	}
-	return bare
 }

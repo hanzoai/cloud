@@ -29,15 +29,36 @@ const defaultLimit = 500
 // SubscriptionRow is one row of GET /v1/admin/subscriptions — a tenant's subscription at
 // a glance, tagged with its owning org. MRR is USD cents; timestamps are RFC3339 strings.
 type SubscriptionRow struct {
-	ID       string `json:"id"`
-	Org      string `json:"org"`
-	Display  string `json:"display"`
-	User     string `json:"user"`
-	Plan     string `json:"plan"`
-	Status   string `json:"status"`
-	MRRCents int64  `json:"mrrCents"`
-	Started  string `json:"started"`
-	Renews   string `json:"renews"`
+	// ID is commerce's subscription id — the row's identity and the warehouse GROUP BY
+	// key. One row per subscription, so an org on several plans has several rows.
+	ID string `json:"id"`
+	// Org is the tenant that holds the subscription, and what ?org= matches exactly.
+	Org string `json:"org"`
+	// Display is the same slug as Org. The warehouse holds no friendly name and this read
+	// does no per-org IAM fan-out, so it repeats the slug rather than inventing one.
+	Display string `json:"display"`
+	// User is the individual the subscription was created by, from the event's
+	// distinct_id. Empty for one created by a machine rather than a person.
+	User string `json:"user"`
+	// Plan is the plan's human label as of the subscription's latest event. A plan
+	// renamed mid-life reports the name it carries now.
+	Plan string `json:"plan"`
+	// Status is the EFFECTIVE lifecycle state: `canceled` when the latest event is a
+	// cancel, whatever the last status snapshot said, otherwise that snapshot, defaulting
+	// to `active`. Common values are `active`, `trialing`, `past_due`, `canceled`.
+	Status string `json:"status"`
+	// MRRCents is the subscription's monthly recurring revenue in USD cents — already
+	// interval-normalized and multiplied by seats by the emitter, so an annual plan
+	// reports a twelfth here and not its yearly price. Reported for EVERY row, including
+	// trialing and canceled ones, which are not revenue: filter on Status before summing.
+	MRRCents int64 `json:"mrrCents"`
+	// Started is the earliest event on this subscription, RFC3339 — when it first
+	// appeared in the warehouse. The tiebreaker in the ranking, newest first.
+	Started string `json:"started"`
+	// Renews is the current period's end, RFC3339 — when it next bills. On a canceled
+	// subscription it is the last period's end, so it is a date in the past, not a
+	// promise of a charge.
+	Renews string `json:"renews"`
 }
 
 // Subscriptions answers GET /v1/admin/subscriptions.
@@ -101,10 +122,17 @@ type SubscriptionsIn struct {
 // SubscriptionsOut is the GET /v1/admin/subscriptions envelope. total is the count
 // BEFORE limit truncates.
 type SubscriptionsOut struct {
-	Status string            `json:"status"`
-	Msg    string            `json:"msg"`
-	Data   []SubscriptionRow `json:"data"`
-	Total  *int              `json:"total,omitempty"`
+	// Status is "ok" or "error". A warehouse that is not connected answers ok with an
+	// empty list and total 0 — the honest not-yet-wired state, not a fleet with no
+	// subscribers.
+	Status string `json:"status"`
+	// Msg is the query failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the matching subscriptions, highest MRR first, then newest, capped by
+	// limit. Canceled subscriptions are included unless ?status= excludes them.
+	Data []SubscriptionRow `json:"data"`
+	// Total is how many matched BEFORE limit truncated. Omitted on an error.
+	Total *int `json:"total,omitempty"`
 }
 
 // subscriptionsSQL resolves each subscription's LATEST lifecycle state from
