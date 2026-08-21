@@ -1,4 +1,4 @@
-package bots
+package bot
 
 import (
 	"context"
@@ -94,32 +94,48 @@ func (f *fakeRuntime) has(org, id string) bool {
 	return ok
 }
 
-// compose installs what a host installs. A subsystem never installs cloud.Bridge:
-// the program's composer owns it — serve.go at the root of the fused host, the
-// plugin constructor for a plugin program. In a test the test is the composer, so
-// it owes the same install; skipping it drives a program where every org-scoped op
-// answers 403 for a reason production callers never see.
-func compose(app *zip.App) { app.Use(cloud.Bridge()) }
-
-// mountWith builds the surface over an injected runtime, exactly as Mount does over
-// the real one — routes() is the shared registration path, so what a test drives is
-// the code that ships.
+// mountWith builds the run plane over an injected runtime, exactly as Mount does
+// over the real one — mountRuns is the shared registration path, so what a test
+// drives is the code that ships. The relay rides along because it is the same
+// capability's ops face and the gate must read the WHOLE surface.
 func mountWith(t *testing.T, rt Runtime) *zip.App {
 	t.Helper()
 	t.Setenv(gatewayURLEnv, "https://bot.example.test")
-	s := &cloud.Service[state]{
-		Base:  cloud.NewBase(cloud.Deps{}, "bots"),
-		State: state{gateway: gatewayBase(), runtime: rt},
-	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	compose(app)
-	routes(app, s)
-	// The relay is the same product's second face, so the surface every gate reads
-	// is the WHOLE product — otherwise the typed-or-named gate goes blind on half
-	// of it. /v1/bot/* cannot shadow /v1/bots: the wildcard needs the slash.
+	runsOn(t, app, rt)
+	return app
+}
+
+// runsOn registers the run plane and the relay on an app the caller composed. It
+// exists so mountAll can put all three families on ONE router without a second
+// copy of this construction.
+func runsOn(t *testing.T, app *zip.App, rt Runtime) {
+	t.Helper()
+	s := &cloud.Service[executor]{
+		Base:  cloud.NewBase(cloud.Deps{}, "bot"),
+		State: executor{gateway: gatewayBase(), runtime: rt},
+	}
+	mountRuns(app, s)
 	if err := mountRelay(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mountRelay: %v", err)
 	}
+}
+
+// mountAll builds the whole capability on one router — node plane, run plane and
+// relay — which is what a projection gate has to read. Two apps measured two
+// halves and neither could see a route that landed in the gap between them.
+func mountAll(t *testing.T) *zip.App {
+	t.Helper()
+	t.Setenv(gatewayURLEnv, "https://bot.example.test")
+	deps := cloud.Deps{Version: "test"}
+	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	compose(app)
+	mountNodes(app, &cloud.Service[state]{
+		Base:  cloud.NewBase(deps, "bot"),
+		State: state{reg: gated()},
+	}, deps)
+	runsOn(t, app, newFake())
 	return app
 }
 
@@ -163,11 +179,11 @@ func TestRunIsNotImplementedAndStartsNothing(t *testing.T) {
 	rt := newFake()
 	app := mountWith(t, rt)
 
-	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run", "acme"); code != http.StatusNotImplemented {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs", "acme"); code != http.StatusNotImplemented {
 		t.Fatalf("launch want 501, got %d", code)
 	}
 	// Nothing was started, so nothing may be listed as started.
-	_, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
+	_, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme")
 	if ids := listRunIDs(t, body); len(ids) != 0 {
 		t.Fatalf("a refused launch must not produce a run, got %v", ids)
 	}
@@ -183,7 +199,7 @@ func TestListIsScopedToTheCallerOrg(t *testing.T) {
 	rt.seed("globex", Run{ID: "run_globex", Task: "globex secret", Surface: "terminal", Status: "running", StartedAt: "2023-11-14T22:13:20Z"})
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
+	code, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d (%s)", code, body)
 	}
@@ -203,7 +219,7 @@ func TestListRowShape(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_1", Task: "ship it", Surface: "terminal", Status: "running", StartedAt: "2023-11-14T22:13:20Z"})
 	app := mountWith(t, rt)
 
-	_, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
+	_, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme")
 	var v BotRuns
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -227,7 +243,7 @@ func TestListFailsClosedWithoutTenant(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_acme", Status: "running"})
 	app := mountWith(t, rt)
 
-	if code, _ := call(t, app, http.MethodGet, "/v1/bots", ""); code != http.StatusForbidden {
+	if code, _ := call(t, app, http.MethodGet, "/v1/bot/runs", ""); code != http.StatusForbidden {
 		t.Fatalf("no-tenant list want 403, got %d", code)
 	}
 	if got := rt.listCalls(); len(got) != 0 {
@@ -242,7 +258,7 @@ func TestListRefusesForgedOrgWithoutValidatedPrincipal(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_acme", Task: "secret", Status: "running"})
 	app := mountWith(t, rt)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/bots", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/bot/runs", nil)
 	req.Header.Set("X-Org-Id", "acme") // forged: no X-User-Id
 	resp, err := app.Test(req, testCfg)
 	if err != nil {
@@ -264,7 +280,7 @@ func TestListReportsRuntimeFailureInsteadOfEmpty(t *testing.T) {
 	rt.listErr = fmt.Errorf("runtime is down")
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
+	code, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme")
 	if code != http.StatusBadGateway {
 		t.Fatalf("runtime failure want 502, got %d (%s)", code, body)
 	}
@@ -280,7 +296,7 @@ func TestStopCannotReachAnotherOrgsRun(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_victim", Task: "acme work", Status: "running"})
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodPost, "/v1/bots/run_victim/stop", "globex")
+	code, body := call(t, app, http.MethodPost, "/v1/bot/runs/run_victim/stop", "globex")
 	if code != http.StatusNotFound {
 		t.Fatalf("cross-org stop want 404, got %d (%s)", code, body)
 	}
@@ -299,7 +315,7 @@ func TestStopCannotReachAnotherOrgsRun(t *testing.T) {
 // endpoint is not an oracle for which run ids exist.
 func TestStopUnknownRunIsNotFound(t *testing.T) {
 	app := mountWith(t, newFake())
-	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run_nope/stop", "acme"); code != http.StatusNotFound {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs/run_nope/stop", "acme"); code != http.StatusNotFound {
 		t.Fatalf("unknown stop want 404, got %d", code)
 	}
 }
@@ -311,7 +327,7 @@ func TestStopHaltsTheRun(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_1", Task: "work", Status: "running"})
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", "acme")
+	code, body := call(t, app, http.MethodPost, "/v1/bot/runs/run_1/stop", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("stop want 200, got %d (%s)", code, body)
 	}
@@ -325,7 +341,7 @@ func TestStopHaltsTheRun(t *testing.T) {
 	if got := rt.stopCalls(); len(got) != 1 || got[0] != (runKey{"acme", "run_1"}) {
 		t.Fatalf("runtime must be driven once with the caller's org+run, got %v", got)
 	}
-	if _, body := call(t, app, http.MethodGet, "/v1/bots", "acme"); len(listRunIDs(t, body)) != 0 {
+	if _, body := call(t, app, http.MethodGet, "/v1/bot/runs", "acme"); len(listRunIDs(t, body)) != 0 {
 		t.Fatal("a stopped run must leave the list")
 	}
 }
@@ -339,7 +355,7 @@ func TestStopFailsClosedWhenTheRuntimeDoesNotServeStop(t *testing.T) {
 	rt.stopErr = ErrNotServed
 	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", "acme")
+	code, body := call(t, app, http.MethodPost, "/v1/bot/runs/run_1/stop", "acme")
 	if code != http.StatusBadGateway {
 		t.Fatalf("unserved stop want 502, got %d (%s)", code, body)
 	}
@@ -355,7 +371,7 @@ func TestStopWithUnreachableRuntimeIs502(t *testing.T) {
 	rt.stopErr = fmt.Errorf("connection refused")
 	app := mountWith(t, rt)
 
-	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", "acme"); code != http.StatusBadGateway {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs/run_1/stop", "acme"); code != http.StatusBadGateway {
 		t.Fatalf("unreachable runtime want 502, got %d", code)
 	}
 	if !rt.has("acme", "run_1") {
@@ -369,7 +385,7 @@ func TestStopFailsClosedWithoutTenant(t *testing.T) {
 	rt.seed("acme", Run{ID: "run_1", Status: "running"})
 	app := mountWith(t, rt)
 
-	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", ""); code != http.StatusForbidden {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs/run_1/stop", ""); code != http.StatusForbidden {
 		t.Fatalf("no-tenant stop want 403, got %d", code)
 	}
 	if len(rt.stopCalls()) != 0 {
@@ -389,7 +405,7 @@ func TestStopOversizeRunIDIsNotFound(t *testing.T) {
 	for i := range long {
 		long[i] = 'a'
 	}
-	if code, _ := call(t, app, http.MethodPost, "/v1/bots/"+string(long)+"/stop", "acme"); code != http.StatusNotFound {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs/"+string(long)+"/stop", "acme"); code != http.StatusNotFound {
 		t.Fatalf("oversize runId want 404, got %d", code)
 	}
 	if len(rt.stopCalls()) != 0 {
@@ -397,18 +413,18 @@ func TestStopOversizeRunIDIsNotFound(t *testing.T) {
 	}
 }
 
-// /v1/bots/run is the launch literal, never a run id: the router resolves the
+// /v1/bot/runs is the launch literal, never a run id: the router resolves the
 // static segment over the :runId param regardless of registration order.
 func TestRunLiteralDoesNotBindAsARunID(t *testing.T) {
 	rt := newFake()
 	app := mountWith(t, rt)
 
-	// POST /v1/bots/run reaches the launch handler (501), NOT the stop handler
+	// POST /v1/bot/runs reaches the launch handler (501), NOT the stop handler
 	// (which would 404 a run named "run" and would have driven the runtime).
-	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run", "acme"); code != http.StatusNotImplemented {
-		t.Fatalf("POST /v1/bots/run must hit launch (501), got %d", code)
+	if code, _ := call(t, app, http.MethodPost, "/v1/bot/runs", "acme"); code != http.StatusNotImplemented {
+		t.Fatalf("POST /v1/bot/runs must hit launch (501), got %d", code)
 	}
 	if len(rt.stopCalls()) != 0 {
-		t.Fatalf("/v1/bots/run bound as a run id and drove a stop: %v", rt.stopCalls())
+		t.Fatalf("/v1/bot/runs bound as a run id and drove a stop: %v", rt.stopCalls())
 	}
 }

@@ -1,4 +1,4 @@
-// Package bots is a bot doing your work on a real desktop, live, while you watch.
+// run.go is a bot doing your work on a real desktop, live, while you watch.
 //
 // It is the whole cloud side of the headless bot: the CONTROL PLANE for a bot run
 // — a task executed on a surface (a desktop or terminal sandbox the bot drives)
@@ -32,13 +32,13 @@
 //   - NATIVE + TYPED, the run control plane (org-scoped; the console BotsApi and
 //     the CLI `hanzo bot run` call it):
 //
-//     POST /v1/bots/run           -> 501: no executor launch operation exists yet
-//     GET  /v1/bots               -> {bots:[{runId,task,surface,status,sessionUrl,startedAt}]}
-//     POST /v1/bots/:runId/stop   -> {runId, status}
+//     GET  /v1/bot/runs              -> {bots:[{runId,task,surface,status,sessionUrl,startedAt}]}
+//     POST /v1/bot/runs              -> 501: no executor launch operation exists yet
+//     POST /v1/bot/runs/:runId/stop  -> {runId, status}
 //
-//   - RELAYED, the executor's own operational paths at /v1/bot/* (relay.go). A
-//     liveness probe is not a tenant-scoped resource, so it stays a relay rather
-//     than being reimplemented in Go.
+//   - RELAYED, the executor's own operational paths at /v1/bot/runtime/*
+//     (relay.go). A liveness probe is not a tenant-scoped resource, so it stays a
+//     relay rather than being reimplemented in Go.
 //
 // The transport itself (transport.go) knows how to MOVE BYTES and nothing about
 // what they mean: a caller states WHAT it wants done (a Call) and gets back a
@@ -47,7 +47,7 @@
 // over ZAP, and that swap is meant to be a change to transport.go plus each
 // caller's one stub, not a rewrite. apps/coding dispatches its coding tasks to the
 // same executor and uses the same Call.
-package bots
+package bot
 
 import (
 	"context"
@@ -68,7 +68,7 @@ import (
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document
 // and the MCP tool list — Go drops comments at compile time. Run by
-// `make -C apps/bots openapi` and by the Dockerfile before every build.
+// `make -C apps/bot openapi` and by the Dockerfile before every build.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
@@ -112,7 +112,7 @@ type Run struct {
 	StartedAt string // RFC3339, as the runtime stamps it
 }
 
-type state struct {
+type executor struct {
 	// gateway is the browser-facing bot VNC gateway base (no trailing slash) that
 	// every returned sessionUrl is derived from.
 	gateway string
@@ -120,7 +120,7 @@ type state struct {
 	runtime Runtime
 }
 
-// BotRun is one row of GET /v1/bots — the console list item. sessionUrl is
+// BotRun is one row of GET /v1/bot/runs — the console list item. sessionUrl is
 // derived control-plane side from runId (the ONE place a session URL is built), so
 // the runtime never has to know its own public origin.
 //
@@ -145,14 +145,14 @@ type BotRun struct {
 	StartedAt string `json:"startedAt"`
 }
 
-// BotRuns is the GET /v1/bots envelope; Bots is always non-nil so an org with no
+// BotRuns is the GET /v1/bot/runs envelope; Bots is always non-nil so an org with no
 // runs serializes as {"bots":[]}, never {"bots":null}.
 type BotRuns struct {
 	// Bots is the org's live runs. Always an array, never null.
 	Bots []BotRun `json:"bots"`
 }
 
-// BotStopped is the POST /v1/bots/{runId}/stop receipt.
+// BotStopped is the POST /v1/bot/runs/{runId}/stop receipt.
 type BotStopped struct {
 	// RunID is the run that was stopped.
 	RunID string `json:"runId"`
@@ -170,55 +170,58 @@ type stopBotIn struct {
 // noArgs is the input of an op that takes none: no body, no query, no path param.
 type noArgs struct{}
 
-// Mount wires the bots surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// mountRunPlane wires the run control plane onto app. Mount (node.go) calls it:
+// one capability, three families, one entry point.
+func mountRunPlane(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("bots.Mount: nil app")
+		return fmt.Errorf("bot.Mount: nil app")
 	}
-	s := &cloud.Service[state]{
-		Base:  cloud.NewBase(deps, "bots"),
-		State: state{gateway: gatewayBase(), runtime: wire{}},
+	s := &cloud.Service[executor]{
+		Base:  cloud.NewBase(deps, "bot"),
+		State: executor{gateway: gatewayBase(), runtime: wire{}},
 	}
-	routes(app, s)
-	// The executor's ops face, on the same product: /v1/bot/* relayed verbatim.
-	// It mounts SECOND because the native control plane above is what a tenant
-	// acts on, and a relay must never be able to shadow it.
-	if err := mountRelay(app, deps); err != nil {
-		return err
-	}
-	s.Log.Info("bots surface mounted", "gateway", s.State.gateway, "brand", deps.Brand)
+	mountRuns(app, s)
+	s.Log.Info("bot run plane mounted", "gateway", s.State.gateway, "brand", deps.Brand)
 	return nil
 }
 
-// ops binds the mounted Service so each op can be a method value — the only bound
-// form cmd/zipdoc can lift prose from. It carries STATE and no logic.
-type ops struct{ s *cloud.Service[state] }
+// runOps binds the mounted Service so each op can be a method value — the only
+// bound form cmd/zipdoc can lift prose from. It carries STATE and no logic.
+type runOps struct{ s *cloud.Service[executor] }
 
-// routes registers the bots surface. The static /run literal and the :runId param
-// are resolved by specificity, so /v1/bots/run can never bind as a run id.
+// mountRuns registers the run control plane at /v1/bot/runs.
+//
+// THE LAUNCH IS A POST TO THE COLLECTION, and that is what the fold bought. The
+// run family lived at /v1/bots with the launch at the literal /v1/bots/run, one
+// segment away from /v1/bots/:runId/stop — a literal that had to out-rank its
+// param sibling or bind as a run id. Under /v1/bot/runs the verb is the method
+// (HIP-0128 §1): GET lists, POST launches, and there is no literal to shadow.
 //
 // The list and the stop are TYPED ops — one registry entry from which the REST
 // route, the OpenAPI operation, the MCP tool, the CLI command and every generated
-// SDK method follow. POST /v1/bots/run stays a raw handler; see run for why.
-func routes(app cloud.Router, s *cloud.Service[state]) {
+// SDK method follow. POST /v1/bot/runs stays a raw handler; see run for why.
+func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
 	// The composer owns cloud.Bridge: the fused host installs it once at its root
 	// and the plugin constructor does the same for a plugin program, so no
 	// subsystem installs it.
 
 	// UNIFIED PAYWALL (server-side enforcement). To gate this group behind the
 	// caller's plan, prepend the middleware to the group:
-	//   g := app.Group("/v1/bots", entitlements.RequireProduct(deps.Commerce, "bot"))
+	//   g := app.Group("/v1/bot", entitlements.RequireProduct(deps.Commerce, "bot"))
 	// DEFERRED — DO NOT ENABLE YET: the "bot" product is ABSENT from @hanzo/plans
 	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
 	// once the catalog licenses "bot" to a tier. See clients/entitlements.
-	g := app.Group("/v1/bots")
-	o := ops{s: s}
-	g.Post("/run", cloud.Handle(s, run))
-	// Declared on the /v1 PARENT with a non-empty leaf: zip.Get(g, "") would
-	// normalise to "/v1/bots/", and op.Path is the identity every projection keys on,
-	// so the document, the operationId, the MCP tool and every generated SDK would
-	// carry a trailing slash for a path this API has never served.
-	zip.Get(app.Group("/v1"), "/bots", o.list)
+	//
+	// The collection is declared on the /v1/bot PARENT with a non-empty leaf:
+	// zip.Get(g, "") would normalise to "/v1/bot/runs/", and op.Path is the
+	// identity every projection keys on, so the document, the operationId, the MCP
+	// tool and every generated SDK would carry a trailing slash for a path this
+	// API does not serve.
+	parent := app.Group("/v1/bot")
+	g := app.Group("/v1/bot/runs")
+	o := runOps{s: s}
+	zip.Get(parent, "/runs", o.list)
+	parent.Post("/runs", cloud.Handle(s, run))
 	zip.Post(g, "/:runId/stop", o.stop)
 }
 
@@ -232,12 +235,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // through the same registry Register uses, so it renders only while the router
 // actually serves the route.
 func init() {
-	openapi.Describe("/v1/bots/run", http.MethodPost,
+	openapi.Describe("/v1/bot/runs", http.MethodPost,
 		"Reserved address for launching a bot run — not implemented, always 501",
 		"Answers 501 to every call. The bot runtime exposes no launch operation, so nothing "+
 			"here can start a sandbox, and this address is published rather than dropped because "+
-			"it is reserved: routes resolve by specificity, so the `run` literal can never bind "+
-			"as a run id against its neighbour `/v1/bots/:runId/stop`.\n\n"+
+			"it is the collection every run is created in: GET lists them, POST would launch "+
+			"one.\n\n"+
 			"The refusal is total and takes no input. The handler never reads the body, so any "+
 			"bytes at all — malformed JSON included — get the same 501; no run id is minted, no "+
 			"session URL is handed back, and no per-run fee is charged. That is the point: the "+
@@ -266,7 +269,7 @@ func init() {
 // the body, so any bytes at all — malformed JSON included — answer 501, while
 // op.invoke 400s on an unparseable non-empty body before the handler runs. It gets
 // typed in the same change that can prove a bot boots, and not before.
-func run(_ *cloud.Service[state], _ *zip.Ctx) error {
+func run(_ *cloud.Service[executor], _ *zip.Ctx) error {
 	return zip.Errorf(http.StatusNotImplemented,
 		"launching a bot is not implemented: the bot runtime exposes no launch operation, so cloud cannot start one")
 }
@@ -279,7 +282,7 @@ func run(_ *cloud.Service[state], _ *zip.Ctx) error {
 // runs. A runtime that cannot answer is an error, not an empty list: [] would tell
 // the caller "your org has no runs", which is a different claim from "we could not
 // ask", and the difference is the whole reason this endpoint exists.
-func (o ops) list(ctx context.Context, _ *noArgs) (*BotRuns, error) {
+func (o runOps) list(ctx context.Context, _ *noArgs) (*BotRuns, error) {
 	// principal.OrgFrom parks nothing unless the request carried a VALIDATED
 	// principal, so this single check is both gates the raw handler spelled out: a
 	// bare, forgeable X-Org-Id (the direct-to-pod path) never reaches here.
@@ -299,7 +302,7 @@ func (o ops) list(ctx context.Context, _ *noArgs) (*BotRuns, error) {
 }
 
 // toBotRun projects a run into one list row, deriving sessionUrl from the run id.
-func toBotRun(s *cloud.Service[state], r Run) BotRun {
+func toBotRun(s *cloud.Service[executor], r Run) BotRun {
 	status := strings.TrimSpace(r.Status)
 	if status == "" {
 		status = statusRunning
@@ -324,7 +327,7 @@ func toBotRun(s *cloud.Service[state], r Run) BotRun {
 // Absence is honoured ONLY when the runtime answers it. A runtime that does not
 // serve stop reports nothing about the run, and reporting "stopped" on that basis
 // would be a stop that cannot fail — so it is a 502.
-func (o ops) stop(ctx context.Context, in *stopBotIn) (*BotStopped, error) {
+func (o runOps) stop(ctx context.Context, in *stopBotIn) (*BotStopped, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -354,7 +357,7 @@ func (o ops) stop(ctx context.Context, in *stopBotIn) (*BotStopped, error) {
 // gateway base + the node's VNC path. The run id IS the node id the runtime
 // registers the session under, so the tunnel is addressable by exactly the id the
 // client holds.
-func sessionURL(s *cloud.Service[state], runID string) string {
+func sessionURL(s *cloud.Service[executor], runID string) string {
 	return s.State.gateway + "/vnc?" + url.Values{"nodeId": {runID}}.Encode()
 }
 

@@ -88,8 +88,8 @@ string prefix.
 | `/v1/flow` | Hanzo Flow: visual AI workflow orchestration (typed passthrough to the hanzoai/flow service; workflows CRUD + runs, org-scoped via the product's projects; the rest of the 87-path authored intent stays refused in `apps/flow/typed_wire_test.go`) | `apps/flow` | Shipped — 8 ops |
 | `/v1/engine` | Hanzo Engine: the serving runtime behind Hanzo's models (typed passthrough to the hanzoai/engine deployment's management plane — model table + load state, host/GPU inventory, reachability; inference stays on ai's metered /v1 door; the cluster-manager authored intent and all shared-runtime mutations stay refused in `apps/engine/typed_wire_test.go`) | `apps/engine` | Shipped — 4 ops |
 | `/v1/registry` | Hanzo Registry: management plane over the running registries — oci.hanzo.ai (distribution, IAM token auth) + pkg.hanzo.ai (verdaccio); org-namespace listings + pull-token mint; control-plane only, the OCI wire stays on oci.hanzo.ai; Harbor-shaped authored intent stays refused in `apps/registry/typed_wire_test.go` | `apps/registry` | Shipped — 6 ops |
-| `/v1/bots` | A bot RUN on a surface | `apps/bots` | Shipped — 4 ops |
-| `/v1/visor/compute/bots` | A bot MACHINE (kind=bot + agent binding) | `apps/visor` — NOT `apps/bots` | Shipped — 5 ops |
+| `/v1/bot/runs` | A bot RUN on a surface | `apps/bot` | Shipped — 3 ops |
+| `/v1/visor/compute/bots` | A bot MACHINE (kind=bot + agent binding) | `apps/visor` — NOT `apps/bot` | Shipped — 5 ops |
 | `/v1/tasks` | Durable engine | `apps/tasks` | Shipped — 11 ops |
 | `/v1/visor` | Compute you rent: provisioned + BYO machines, GPUs, k8s clusters, the fleet board | `apps/visor` (+ `apps/fleet` registry) | Shipped — 33 ops |
 | `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `apps/blueprint` | Shipped — 3 ops |
@@ -97,9 +97,9 @@ string prefix.
 | `/v1/iam` | Identity: users, orgs, roles | `apps/iam` | Shipped — GRAFTED (155 paths / 182 ops / 94 typed with schema; see below) |
 | `/v1/kms` | Secret custody: sealed secrets | `apps/kms` | Shipped — 7 ops |
 
-`/v1/bots` and `/v1/visor/compute/bots` are two nouns with two owners; the row
+`/v1/bot/runs` and `/v1/visor/compute/bots` are two nouns with two owners; the row
 above pairs each with the package that REGISTERS it. Pairing the bot machine with
-`apps/bots` is the merge "Bot is three values" (below) exists to forbid.
+`apps/bot` is the merge "Bot is three values" (below) exists to forbid.
 
 Custody invariants: secrets sealed in KMS, never in SQLite rows; verify before
 store. One path, one rule — the path is built from the VALIDATED principal,
@@ -2162,7 +2162,7 @@ command, no typed SDK method. It was 38 operations. Two things it taught:
   `plugin/ai` is `github.com/hanzoai/ai`'s beego `ControllerRegister` behind
   `zip.AdaptNetHTTP`, `plugin/licensing` is `github.com/hanzoai/licensing`'s
   `http.Handler` behind the same. Each refusal is now written AT its registration
-  (apps/dns/dns.go, apps/bots/relay.go, apps/ai/ai.go) rather than only here.
+  (apps/dns/dns.go, apps/bot/relay.go, apps/ai/ai.go) rather than only here.
 - **`plugin/ai` is the largest hole in the fleet document, and it is upstream's.**
   That one wildcard stands for ~200 real routes — `/v1/chat/completions`,
   `/v1/models`, `/v1/messages` — so the AI API appears in openapi.yaml, in every
@@ -2256,7 +2256,7 @@ request side only. Count it from the subsets, never tally it in prose:
 The same pass moved `dns` and `runtime` from a refusal written in prose at the
 registration to one that is GATED — `untypedByDesign` +
 `TestEveryRouteIsTypedOrNamed` in `apps/{dns,bots}/typed_wire_test.go` (the
-runtime half moved to `apps/bots` at `a8b952f47`, gate intact), reading
+runtime half moved to `apps/bot` at `a8b952f47`, gate intact), reading
 the live router of the real `Mount`, so a route added to either is typed by
 default and a reason that stops being true goes red. `ai` and `licensing` stay
 ungated on purpose: their registrations are in another module, so there is no
@@ -3487,23 +3487,23 @@ semantic is identical — fail closed once armed, allow before.
   the app each address reaches, and that is the only statement of ownership here
   that cannot go stale.
 
-  (1) A bot RUN — a task the executor performs on a surface — is `apps/bots` at
+  (1) A bot RUN — a task the executor performs on a surface — is `apps/bot` at
   `/v1/bots` (3 ops: a 501 launch, list, stop). (2) A bot MACHINE — a
   visor-provisioned kind=bot machine plus its agent binding — is `apps/visor` at
   `/v1/visor/compute/bots` (apps/visor/bots.go); what it rents you is compute, so it
   nests in visor's domain. (3) The executor's own OPS FACE — the TS bot
-  (channels/skills), never reimplemented in Go — is `apps/bots` at `/v1/bot/*`
-  (apps/bots/relay.go), a verbatim relay carrying base address, identity, framing
+  (channels/skills), never reimplemented in Go — is `apps/bot` at `/v1/bot/*`
+  (apps/bot/relay.go), a verbatim relay carrying base address, identity, framing
   and cleartext policy. (4) A bot NODE — one of the org's OWN machines that
   dialled in and holds a socket — is `apps/bot` at `/v1/bot/connect`,
   `/v1/bot/nodes`, `/v1/bot/peer/invoke` (apps/bot/subsystem.go).
 
   **`apps/runtime` IS GONE** — deleted at `a8b952f47`, which folded the transport
-  into `apps/bots` (`runtime/ops.go`→`bots/relay.go`,
+  into `apps/bot` (`runtime/ops.go`→`bots/relay.go`,
   `runtime/runtime.go`→`bots/transport.go`) because the split was a LANGUAGE
   boundary (Go surface, TS executor) and not a product one. `plugin/runtime` went
   with it, and the untyped gate moved intact into
-  `apps/bots/typed_wire_test.go`. Sense (3) is therefore ALREADY merged: there is
+  `apps/bot/typed_wire_test.go`. Sense (3) is therefore ALREADY merged: there is
   nothing left to fold, and a plan that opens "fold the service sense into
   `apps/runtime`" is reading a record older than that commit. This bullet said
   three values and named `apps/runtime` for months after it was deleted, and it
@@ -3513,12 +3513,12 @@ semantic is identical — fail closed once armed, allow before.
   `apps/sandbox/runtime.go` already uses it for what a sandbox is MADE OF
   (`runtimes` maps runc / gvisor / kata-clh / kata-fc to `{kernel, shares}`;
   `runtimeFor` derives the isolation). A sandbox is an INSTANCE of a runtime.
-  What survives of the old squat is package-local to `apps/bots`: the `Runtime`
+  What survives of the old squat is package-local to `apps/bot`: the `Runtime`
   interface (imported by nothing outside it), the `state.runtime` field and ~10
   `"runtime: …"` error prefixes in transport.go. Renaming it moves no wire and no
   operationId, but its PROSE reaches `zipdoc_gen.go` and therefore the published
   document, every SDK docstring and every MCP tool description — so regenerate
-  (`make -C apps/bots describe`), never hand-edit.
+  (`make -C apps/bot describe`), never hand-edit.
 
   **TWO FOLDS THAT LOOK AVAILABLE AND ARE NOT.** A bot MACHINE is not a sandbox:
   `apps/sandbox` is a gVisor pod addressed by pod name through the apiserver, with
@@ -3555,7 +3555,7 @@ semantic is identical — fail closed once armed, allow before.
   WIRE BREAK and lands with its cloud caller in the same change; visor's `LLM.md`
   ("Typed ops") is the other half of this note.
 - **Cloud owns policy; the runtime owns the run. Do not copy state you do not
-  own.** `apps/bots` holds NO store. The sandbox lives in the bot runtime,
+  own.** `apps/bot` holds NO store. The sandbox lives in the bot runtime,
   keyed in the runtime's own tenant store, which is the only thing that knows
   whether a run is alive — so list and stop PROXY it, gated by cloud's
   principal/org. A cloud-side registry was tried and was wrong: it minted an id
