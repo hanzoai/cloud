@@ -15,7 +15,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.3.3
 	github.com/hanzoai/cek v0.2.7
-	github.com/hanzoai/commerce v1.50.62
+	github.com/hanzoai/commerce v1.50.63
 	github.com/hanzoai/dataroom v1.1.7
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
@@ -689,8 +689,7 @@ require (
 	github.com/hanzoai/authz v1.10.31
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.15
-	github.com/hanzoai/metrics v1.110.6
-	github.com/hanzoai/o11y v1.5.66
+	github.com/hanzoai/o11y v1.5.67
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.11
