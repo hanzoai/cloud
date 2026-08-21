@@ -122,13 +122,26 @@ func hostOf(raw string) (string, error) {
 //	live     the edge answers for this host now
 //	pending  claimed, awaiting DNS proof; Records is exactly what to publish
 type projectsDomain struct {
-	Host      string        `json:"host"`
-	Status    string        `json:"status"`
-	Verified  bool          `json:"verified"`
-	URL       string        `json:"url"`
-	Records   []fqdn.Record `json:"records,omitempty"`
-	Detail    string        `json:"detail,omitempty"`
-	CreatedAt int64         `json:"createdAt,omitempty"`
+	// Host is the custom hostname claimed for this site.
+	Host string `json:"host"`
+	// Status is `live` when the edge answers for this host now, `pending` while the
+	// claim is waiting on DNS proof of ownership. A pending host is claimed but
+	// serves nothing.
+	Status string `json:"status"`
+	// Verified is the same fact as a boolean, for a caller that only needs the yes
+	// or no. It cannot disagree with status.
+	Verified bool `json:"verified"`
+	// URL is where the host will serve once it is live — present on a pending claim
+	// too, so a console can show the destination before it works.
+	URL string `json:"url"`
+	// Records are EXACTLY the DNS records to publish to prove ownership and route
+	// the host. Present only while pending, because a live host has already proved
+	// it; absent is therefore "nothing left to do", not "we cannot say what to do".
+	Records []fqdn.Record `json:"records,omitempty"`
+	// Detail is what is holding the claim up, in words a person can act on.
+	Detail string `json:"detail,omitempty"`
+	// CreatedAt is when the host was claimed, as Unix seconds — not when it went live.
+	CreatedAt int64 `json:"createdAt,omitempty"`
 }
 
 // toDomain renders a claim, attaching the challenge records a pending one still owes.
@@ -168,8 +181,9 @@ type projectsDomains struct {
 	Claims []projectsDomain `json:"claims"`
 	// Domains are the hostnames that are VERIFIED and routing right now.
 	Domains []string `json:"domains"`
-	// Org and Slug identify the site the panel belongs to.
-	Org  string `json:"org"`
+	// Org is the organisation that owns the site.
+	Org string `json:"org"`
+	// Slug is the site the panel belongs to.
 	Slug string `json:"slug"`
 }
 
@@ -189,8 +203,9 @@ type projectsBoundDomains struct {
 	// Domains are the hostnames that are VERIFIED and routing right now, after
 	// this bind.
 	Domains []string `json:"domains"`
-	// Org and Slug identify the site the hosts were bound to.
-	Org  string `json:"org"`
+	// Org is the organisation that owns the site.
+	Org string `json:"org"`
+	// Slug is the site the hosts were bound to.
 	Slug string `json:"slug"`
 }
 

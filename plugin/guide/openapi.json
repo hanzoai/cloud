@@ -513,27 +513,35 @@
       "ActionRecord": {
         "properties": {
           "args": {
+            "description": "Args is the JSON the tool was called with, recorded as TEXT exactly as sent —\nincluding whatever the AI drafted into it — so a run can be read back and\nreproduced. It is a string, not an object.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the run was recorded, as Unix seconds. The ledger is read\nnewest-first on this column.",
             "type": "integer"
           },
           "err": {
+            "description": "Err is why the run failed, when it did. Empty on a successful run.",
             "type": "string"
           },
           "id": {
+            "description": "ID identifies this one execution. The ledger is append-only, so an id is\nnever reused and never updated.",
             "type": "string"
           },
           "ok": {
+            "description": "OK is whether the tool ran to completion. It is the ledger's own verdict, not\nthe tool's opinion of the outcome — a tool that succeeded at reporting bad\nnews is ok.",
             "type": "boolean"
           },
           "result": {
+            "description": "Result is the tool's own answer, likewise recorded as JSON text. Present on a\nfailed run too, where the tool answered but the answer was a refusal.",
             "type": "string"
           },
           "stepId": {
+            "description": "StepID is the checklist step the Business AI was acting on.",
             "type": "string"
           },
           "tool": {
+            "description": "Tool is the MCP tool that was dispatched, by name.",
             "type": "string"
           }
         },
@@ -542,18 +550,23 @@
       "Blog": {
         "properties": {
           "caseStudy": {
+            "description": "CaseStudy is one worked instance — somebody who ran it, and what happened.",
             "type": "string"
           },
           "how": {
+            "description": "How is the run book: the steps to execute the tactic.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the post's address — the last path segment it is published at.",
             "type": "string"
           },
           "title": {
+            "description": "Title is the post's headline.",
             "type": "string"
           },
           "why": {
+            "description": "Why is the mechanism: the reason the tactic works, stated as a principle\nrather than as instructions.",
             "type": "string"
           }
         },
@@ -562,46 +575,54 @@
       "Blueprint": {
         "properties": {
           "brand": {
+            "description": "Brand is the white-label key this playbook serves. Empty is the shared\ndefault every unbranded deployment falls back to.",
             "type": "string"
           },
           "enabled": {
+            "description": "Enabled is the whole-playbook lever. Absent reads as ON; an explicit false\nmakes resolution skip this playbook entirely and fall through to the next\ntier, rather than serving an empty journey.",
             "type": "boolean"
           },
           "principles": {
-            "description": "the 64-principle spine (Zen of Hanzo archetypes)",
+            "description": "Principles are the fixed 64-archetype spine a tactic files under. It is\nauthored data an operator organises the corpus by; nothing in the checklist\nengine reads it.",
             "items": {
               "$ref": "#/components/schemas/Principle"
             },
             "type": "array"
           },
           "sections": {
+            "description": "Sections are the journey's ordered phases.",
             "items": {
               "$ref": "#/components/schemas/Section"
             },
             "type": "array"
           },
           "steps": {
+            "description": "Steps are every checklist item, disabled ones included — this is the authored\ndocument, not the projection an org runs.",
             "items": {
               "$ref": "#/components/schemas/JourneyStep"
             },
             "type": "array"
           },
           "strategies": {
+            "description": "Strategies are the tactics corpus the recommendation reads narrow.",
             "items": {
               "$ref": "#/components/schemas/Strategy"
             },
             "type": "array"
           },
           "templates": {
+            "description": "Templates are the reusable prompts and snippets steps reference by id.",
             "items": {
               "$ref": "#/components/schemas/Page"
             },
             "type": "array"
           },
           "title": {
+            "description": "Title is the playbook's name as a person reads it.",
             "type": "string"
           },
           "version": {
+            "description": "Version is the playbook's own name for this edition of its content, chosen by\nwhoever authored it. It travels onto every journey projected from it. The\nstore's numeric revision is a separate value and lives beside it.",
             "type": "string"
           }
         },
@@ -610,15 +631,18 @@
       "Curriculum": {
         "properties": {
           "steps": {
+            "description": "Steps are the enabled steps in authoring order. Order is the tiebreak the\nnext-step logic walks, so it is part of the contract rather than cosmetic.",
             "items": {
               "$ref": "#/components/schemas/JourneyStep"
             },
             "type": "array"
           },
           "title": {
+            "description": "Title is the playbook's name as it heads the checklist.",
             "type": "string"
           },
           "version": {
+            "description": "Version identifies the authored playbook this journey was projected from, so\ntwo orgs on different playbooks can be told apart. It is the blueprint's own\n`version` string, not the store's numeric revision.",
             "type": "string"
           }
         },
@@ -627,24 +651,31 @@
       "Funnel": {
         "properties": {
           "available": {
+            "description": "Available separates \"this org has no traffic\" from \"we could not ask\". False\nmeans the warehouse was unreachable or the org has emitted nothing at all, and\nevery count below is then a placeholder zero rather than a measurement — a\ncaller must read this before reading any of them.",
             "type": "boolean"
           },
           "orders": {
+            "description": "Orders counts completed orders in the window — purchases, not carts started.",
             "type": "integer"
           },
           "pageviews": {
+            "description": "Pageviews counts page events in the window, one per view rather than per\nperson, so a single visitor reading ten pages counts ten.",
             "type": "integer"
           },
           "revenue": {
+            "description": "Revenue is the sum of the amounts those orders reported, in whatever currency\nthe beacon stamped on them (major units, e.g. 49.5 for $49.50) — NOT cents,\nand not converted to a single currency. Contrast revenueCents on the profile,\nwhich is the money of record.",
             "type": "number"
           },
           "signups": {
+            "description": "Signups counts completed signups in the window, the step where an anonymous\nvisitor becomes somebody with an account.",
             "type": "integer"
           },
           "visitors": {
+            "description": "Visitors is the number of DISTINCT people seen in the window, counted by the\nbeacon's distinct id — so it is unique visitors, not sessions and not views.",
             "type": "integer"
           },
           "windowDays": {
+            "description": "WindowDays is the length of the trailing window every count covers, so a\nreader knows whether 40 signups is a month or a day.",
             "type": "integer"
           }
         },
@@ -656,6 +687,7 @@
             "additionalProperties": {
               "type": "object"
             },
+            "description": "Args are the tool's default arguments, merged under whatever the caller\npasses at run time, so a step ships with the arguments that make it work.",
             "type": "object"
           },
           "deps": {
@@ -666,13 +698,15 @@
             "type": "array"
           },
           "detail": {
-            "description": "the prose/juncture — what the Guide asks/explains here",
+            "description": "Detail is the juncture — what the Guide explains, or asks for, at this step.",
             "type": "string"
           },
           "draft": {
+            "description": "Draft, when set, is the prompt the embedded AI answers first; its output is\nfolded into one of Args before the tool runs, so the model writes the\ncontent and the tool only delivers it.",
             "type": "string"
           },
           "draftInto": {
+            "description": "DraftInto names the argument the drafted text lands in. Empty means \"brief\".",
             "type": "string"
           },
           "enabled": {
@@ -680,10 +714,11 @@
             "type": "boolean"
           },
           "id": {
+            "description": "ID is the stable slug the whole plane addresses this step by — the value in\n`deps`, in `next`, in the progress rows, and in the URL of every step route.\nRenaming it orphans an org's recorded progress for this step.",
             "type": "string"
           },
           "section": {
-            "description": "the phase (section id) this step groups under",
+            "description": "Section is the id of the phase this step groups under. A disabled section\ntakes its steps out of the journey with it.",
             "type": "string"
           },
           "signal": {
@@ -691,10 +726,11 @@
             "type": "string"
           },
           "title": {
+            "description": "Title is the one-line quest as a person reads it in the checklist.",
             "type": "string"
           },
           "tool": {
-            "description": "Tool, when set, is the MCP tool the Business AI runs for \"do it for me\". Args\nare its default arguments; Draft is an optional AI prompt whose output fills the\nDraftInto arg (default \"brief\").",
+            "description": "Tool, when set, names the MCP tool the Business AI runs for \"do it for me\".\nA step with no tool can only be completed by a person; it is the field the\n`automatable` flag on every projection of this step is derived from.",
             "type": "string"
           }
         },
@@ -703,15 +739,19 @@
       "Page": {
         "properties": {
           "body": {
+            "description": "Body is the reusable prompt or snippet itself. It may carry {placeholder}\ntokens for the client-specific bits — {client_name}, {domain}, {product} —\nwhich are substituted where the template is used, not here.",
             "type": "string"
           },
           "enabled": {
+            "description": "Enabled is the admin lever. Absent reads as ON; an explicit false withdraws\nthe template from org-facing reads.",
             "type": "boolean"
           },
           "id": {
+            "description": "ID is the slug a step references to pull this template in.",
             "type": "string"
           },
           "title": {
+            "description": "Title names the template in the authoring plane and in a picker.",
             "type": "string"
           }
         },
@@ -757,18 +797,23 @@
       "Section": {
         "properties": {
           "detail": {
+            "description": "Detail is what this phase of the journey is for, in prose.",
             "type": "string"
           },
           "enabled": {
+            "description": "Enabled is the admin lever. Absent reads as ON, so only an explicit false\nturns a phase off — and it takes every step filed under it out of the\njourney, not just the heading.",
             "type": "boolean"
           },
           "id": {
+            "description": "ID is the slug a step's `section` names to file itself under this phase.",
             "type": "string"
           },
           "order": {
+            "description": "Order places the phase in the journey, ascending. Ties fall back to\nauthoring order, and an omitted order sorts as 0 — ahead of everything.",
             "type": "integer"
           },
           "title": {
+            "description": "Title is the phase heading a person reads above its steps.",
             "type": "string"
           }
         },
@@ -777,40 +822,46 @@
       "Strategy": {
         "properties": {
           "action": {
+            "description": "Action is the tactic itself: the thing to go and do, stated imperatively.",
             "type": "string"
           },
           "blog": {
             "$ref": "#/components/schemas/Blog",
-            "description": "long-form explainer (nil for un-blogged tactics)"
+            "description": "Blog is the tactic's long-form explainer; absent for tactics that have none."
           },
           "category": {
+            "description": "Category is the growth discipline the tactic belongs to — the axis\n`?category=` narrows the corpus on, and one of the facets a caller browses by.",
             "type": "string"
           },
           "enabled": {
+            "description": "Enabled is the admin lever. Absent reads as ON; an explicit false drops the\ntactic from every org-facing corpus read while leaving it in the document.",
             "type": "boolean"
           },
           "era": {
-            "description": "modern | heritage",
+            "description": "Era separates an AI-era tactic (`modern`) from a classical one (`heritage`).",
             "type": "string"
           },
           "id": {
+            "description": "ID is the tactic's stable slug, unique across the corpus.",
             "type": "string"
           },
           "principle": {
-            "description": "the spine slug this tactic files under",
+            "description": "Principle is the spine slug this tactic files under (a Principle.Slug).",
             "type": "string"
           },
           "source": {
-            "description": "provenance / attribution",
+            "description": "Source is where the tactic came from — the attribution a reader is owed.",
             "type": "string"
           },
           "tags": {
+            "description": "Tags are PRECONDITIONS, not labels — every one must be satisfied by the org's\nobserved profile before the tactic surfaces, so an untagged tactic is\nuniversally applicable. Two vocabularies: `stage:\u003cresearch|formed|launched|\nactivated|scaling\u003e` reads the org's growth stage, `has:\u003ccapability\u003e` reads an\nobserved signal.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "workload": {
+            "description": "Workload is how much effort running the tactic costs, so a corpus can be\nnarrowed to what an org has the hands for right now.",
             "type": "string"
           }
         },
@@ -819,12 +870,15 @@
       "VersionMeta": {
         "properties": {
           "brand": {
+            "description": "Brand is the white-label key this revision was authored under; empty is the\nshared base playbook. Revisions of two brands never share a number line.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is when this revision was written, as Unix seconds — the \"who\nchanged the playbook, and when\" half of the audit trail.",
             "type": "integer"
           },
           "version": {
+            "description": "Version is the store's own revision counter for that brand, starting at 1 for\nthe seeded playbook and incrementing on every edit. Nothing is overwritten, so\nthe highest number is the live one and every lower number is still readable.\nIt is not the playbook's authored `version` string.",
             "type": "integer"
           }
         },
@@ -861,18 +915,23 @@
       "blueprintCounts": {
         "properties": {
           "principles": {
+            "description": "Principles is how many spine archetypes the playbook carries (64 in the\nshipped corpus).",
             "type": "integer"
           },
           "sections": {
+            "description": "Sections is how many phases the journey has.",
             "type": "integer"
           },
           "steps": {
+            "description": "Steps is how many checklist items the playbook holds, DISABLED ONES INCLUDED\n— this counts the authored document, not the journey an org runs, so it is\nnormally larger than the `total` on a progress view.",
             "type": "integer"
           },
           "strategies": {
+            "description": "Strategies is how many tactics the corpus holds, again counting disabled ones.",
             "type": "integer"
           },
           "templates": {
+            "description": "Templates is how many reusable prompts the playbook carries.",
             "type": "integer"
           }
         },
@@ -980,24 +1039,30 @@
       "overviewView": {
         "properties": {
           "custom": {
+            "description": "Custom is true when the org replaced the shared playbook with one of its own\n— the difference between \"everyone's checklist\" and \"the one you authored\".",
             "type": "boolean"
           },
           "funnel": {
-            "$ref": "#/components/schemas/Funnel"
+            "$ref": "#/components/schemas/Funnel",
+            "description": "Funnel is the org's analytics lens, present only where the read asked for it\n— absent means it was not requested, never that the org has no traffic."
           },
           "progress": {
-            "$ref": "#/components/schemas/progressView"
+            "$ref": "#/components/schemas/progressView",
+            "description": "Progress is how far through the journey the org is."
           },
           "steps": {
+            "description": "Steps are every enabled step with the org's own state folded in, in\nauthoring order.",
             "items": {
               "$ref": "#/components/schemas/stepView"
             },
             "type": "array"
           },
           "title": {
+            "description": "Title is the playbook's name as it heads the checklist.",
             "type": "string"
           },
           "version": {
+            "description": "Version identifies the playbook this journey came from, so a caller can tell\nthat the checklist itself changed under them.",
             "type": "string"
           }
         },
@@ -1006,15 +1071,19 @@
       "profileMetrics": {
         "properties": {
           "funnel": {
-            "$ref": "#/components/schemas/Funnel"
+            "$ref": "#/components/schemas/Funnel",
+            "description": "Funnel is what the org's analytics observed over the trailing window. Read\nits `available` first: an org with no analytics reports zeros here, and zero\ntraffic and no measurement are different facts."
           },
           "launchProgress": {
-            "$ref": "#/components/schemas/progressView"
+            "$ref": "#/components/schemas/progressView",
+            "description": "LaunchProgress is the org's own position in the launch checklist, folded in\nso a profile carries both what the org has BUILT and what it has DONE."
           },
           "records": {
+            "description": "Records is how many business records the org holds — the volume that tells a\nreal book of customers from an empty account. It feeds the `customers`\nsignal, which crosses at a threshold rather than at one row.",
             "type": "integer"
           },
           "revenueCents": {
+            "description": "RevenueCents is the org's money OF RECORD — what its books say, in whole\ncents, never a float and never a display string. This is the number the\nscaling stage is decided on; funnel.revenue is the beacon's separate,\nunreconciled view of the same business. Zero when the org has none, and also\nzero when the books could not be read, which is why the `revenue` signal\nbeside it is the thing to trust.",
             "type": "integer"
           }
         },
@@ -1023,15 +1092,18 @@
       "profileResponse": {
         "properties": {
           "keyMetrics": {
-            "$ref": "#/components/schemas/profileMetrics"
+            "$ref": "#/components/schemas/profileMetrics",
+            "description": "KeyMetrics are the org's OWN numbers behind those signals — never another\norg's, and never a platform aggregate."
           },
           "signals": {
             "additionalProperties": {
               "type": "boolean"
             },
+            "description": "Signals is what was observed of the org right now, one boolean per probe.\nA probe that could not be run reports FALSE, not absent — the shape is stable\nso a caller never has to tell a missing key from a negative answer, and the\ncost is that \"not observed\" and \"not there\" look alike here. Keys are the\nprobe names, including the `module:\u003cname\u003e` and `connected:\u003cprovider\u003e`\nfamilies.",
             "type": "object"
           },
           "stage": {
+            "description": "Stage is how far the business itself has got — formed, launched, activated or\nscaling — decided purely from the signals below, and by what the org has\nACHIEVED rather than what it has configured. It reads the STRONGEST evidence\npresent, so money of record makes an org scaling even if an earlier rung's\nsignal was never observed. It is unrelated to checklist progress.",
             "type": "string"
           }
         },
@@ -1040,15 +1112,19 @@
       "progressView": {
         "properties": {
           "done": {
+            "description": "Done counts steps that are FINISHED — done and skipped alike, since a step\nthe org deliberately passed over is not still owed. It therefore rises when\nsomebody skips, which is the intended reading of a checklist.",
             "type": "integer"
           },
           "next": {
+            "description": "Next is the id of the step to do next: the first available, unfinished step\nin authoring order. Empty when the journey is complete, and also empty when\nevery remaining step is blocked by a dependency.",
             "type": "string"
           },
           "percent": {
+            "description": "Percent is done/total as a whole number 0-100, rounded, so a caller renders\na bar without recomputing it. Total zero reads as 0.",
             "type": "integer"
           },
           "total": {
+            "description": "Total is how many steps this org's journey holds — the ENABLED steps of the\nplaybook, so it shrinks when an operator disables one and does not match the\nauthored step count.",
             "type": "integer"
           }
         },
@@ -1060,6 +1136,7 @@
             "additionalProperties": {
               "type": "object"
             },
+            "description": "Args are the tool's default arguments, merged under whatever the caller\npasses at run time.",
             "type": "object"
           },
           "automatable": {
@@ -1089,9 +1166,11 @@
             "type": "string"
           },
           "draft": {
+            "description": "Draft, when set, is the prompt the embedded AI answers first; its output is\nfolded into one of Args before the tool runs.",
             "type": "string"
           },
           "draftInto": {
+            "description": "DraftInto names the argument the drafted text lands in. Empty means \"brief\".",
             "type": "string"
           },
           "enabled": {
@@ -1119,10 +1198,11 @@
             "type": "string"
           },
           "title": {
+            "description": "Title is the one-line quest as a person reads it in the checklist.",
             "type": "string"
           },
           "tool": {
-            "description": "Tool is the MCP tool the Business AI runs for \"do it for me\"; Args are its\ndefault arguments, Draft an optional AI prompt whose output fills the\nDraftInto arg (default \"brief\").",
+            "description": "Tool is the MCP tool the Business AI runs for \"do it for me\". A step naming\nnone can only be completed by a person.",
             "type": "string"
           }
         },
@@ -1131,21 +1211,26 @@
       "strategyView": {
         "properties": {
           "action": {
+            "description": "Action is the tactic itself: the thing to go and do.",
             "type": "string"
           },
           "category": {
+            "description": "Category is the growth discipline the tactic belongs to — the axis\n`?category=` narrows on.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the tactic's stable slug in the corpus.",
             "type": "string"
           },
           "tags": {
+            "description": "Tags are the PRECONDITIONS this tactic already satisfied to appear in the\nanswer — `stage:\u003cname\u003e` and `has:\u003ccapability\u003e` predicates over the org's\nobserved profile. They are carried back so a caller can show why a tactic\nsurfaced, not so it can filter again.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "workload": {
+            "description": "Workload is how much effort running the tactic costs, so a corpus can be cut\nto what the org has the hands for.",
             "type": "string"
           }
         },
@@ -1185,18 +1270,23 @@
       "suggestion": {
         "properties": {
           "automatable": {
+            "description": "Automatable is true when the step names a tool, so the Business AI can do it\nrather than only describe it.",
             "type": "boolean"
           },
           "detail": {
+            "description": "Detail is the step's own prose — what it asks for.",
             "type": "string"
           },
           "rationale": {
+            "description": "Rationale is why this step is being suggested NOW, written for the person\nreading it. It explains the ranking, not the step.",
             "type": "string"
           },
           "stepId": {
+            "description": "StepID is the checklist step being recommended — the id every step route\ntakes, so a caller can act on the suggestion directly.",
             "type": "string"
           },
           "title": {
+            "description": "Title is the step's own one-line quest.",
             "type": "string"
           },
           "unlocks": {

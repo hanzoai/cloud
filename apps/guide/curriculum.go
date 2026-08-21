@@ -50,10 +50,17 @@ import (
 // "simplify" this back to Step; that is the collision, not a tidier name. The wire is
 // unaffected either way — the JSON keys live on the fields.
 type JourneyStep struct {
-	ID      string `json:"id"`
-	Section string `json:"section,omitempty"` // the phase (section id) this step groups under
-	Title   string `json:"title"`
-	Detail  string `json:"detail,omitempty"` // the prose/juncture — what the Guide asks/explains here
+	// ID is the stable slug the whole plane addresses this step by — the value in
+	// `deps`, in `next`, in the progress rows, and in the URL of every step route.
+	// Renaming it orphans an org's recorded progress for this step.
+	ID string `json:"id"`
+	// Section is the id of the phase this step groups under. A disabled section
+	// takes its steps out of the journey with it.
+	Section string `json:"section,omitempty"`
+	// Title is the one-line quest as a person reads it in the checklist.
+	Title string `json:"title"`
+	// Detail is the juncture — what the Guide explains, or asks for, at this step.
+	Detail string `json:"detail,omitempty"`
 
 	// Dependencies are step ids that must be done/skipped before this step is
 	// available. The wire key is `deps` (the blueprint contract); the Go field keeps
@@ -70,13 +77,19 @@ type JourneyStep struct {
 	// reports the org's real state present, the step auto-marks done.
 	Signal string `json:"signal,omitempty"`
 
-	// Tool, when set, is the MCP tool the Business AI runs for "do it for me". Args
-	// are its default arguments; Draft is an optional AI prompt whose output fills the
-	// DraftInto arg (default "brief").
-	Tool      string         `json:"tool,omitempty"`
-	Args      map[string]any `json:"args,omitempty"`
-	Draft     string         `json:"draft,omitempty"`
-	DraftInto string         `json:"draftInto,omitempty"`
+	// Tool, when set, names the MCP tool the Business AI runs for "do it for me".
+	// A step with no tool can only be completed by a person; it is the field the
+	// `automatable` flag on every projection of this step is derived from.
+	Tool string `json:"tool,omitempty"`
+	// Args are the tool's default arguments, merged under whatever the caller
+	// passes at run time, so a step ships with the arguments that make it work.
+	Args map[string]any `json:"args,omitempty"`
+	// Draft, when set, is the prompt the embedded AI answers first; its output is
+	// folded into one of Args before the tool runs, so the model writes the
+	// content and the tool only delivers it.
+	Draft string `json:"draft,omitempty"`
+	// DraftInto names the argument the drafted text lands in. Empty means "brief".
+	DraftInto string `json:"draftInto,omitempty"`
 }
 
 // Curriculum is the ENGINE's view: an ordered set of steps plus metadata. It only ever
@@ -84,9 +97,15 @@ type JourneyStep struct {
 // so the next-step/gating logic never has to reason about enablement. Order is
 // authoring order and is the tiebreak the next-step logic walks.
 type Curriculum struct {
-	Version string        `json:"version"`
-	Title   string        `json:"title,omitempty"`
-	Steps   []JourneyStep `json:"steps"`
+	// Version identifies the authored playbook this journey was projected from, so
+	// two orgs on different playbooks can be told apart. It is the blueprint's own
+	// `version` string, not the store's numeric revision.
+	Version string `json:"version"`
+	// Title is the playbook's name as it heads the checklist.
+	Title string `json:"title,omitempty"`
+	// Steps are the enabled steps in authoring order. Order is the tiebreak the
+	// next-step logic walks, so it is part of the contract rather than cosmetic.
+	Steps []JourneyStep `json:"steps"`
 }
 
 // State is a step's per-org lifecycle state.

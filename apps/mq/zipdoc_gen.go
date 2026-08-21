@@ -7,20 +7,20 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/mq/streams/:name", zip.Doc{
+	zip.Describe("DELETE /v1/mq/stream/:name", zip.Doc{
 		Description: "Removes a stream with all its messages and consumers. Irreversible.",
 		Fields: map[string]string{
 			"nameIn.name": "Name is the stream name, from the path.",
 		},
 	})
-	zip.Describe("DELETE /v1/mq/streams/:name/messages/:seq", zip.Doc{
+	zip.Describe("DELETE /v1/mq/stream/:name/message/:seq", zip.Doc{
 		Description: "Erases one message by sequence; the sequence gap remains.",
 		Fields: map[string]string{
 			"seqIn.name": "Name is the stream name, from the path.",
 			"seqIn.seq":  "Seq is the message's stream sequence, from the path.",
 		},
 	})
-	zip.Describe("DELETE /v1/mq/streams/:stream/consumers/:name", zip.Doc{
+	zip.Describe("DELETE /v1/mq/stream/:stream/consumer/:name", zip.Doc{
 		Description: "Removes a consumer and its delivery state; unacknowledged messages\nstay in the stream.",
 		Fields: map[string]string{
 			"twoIn.name":   "Name is the consumer name, from the path.",
@@ -46,7 +46,7 @@ func init() {
 			"infoOut.version":     "Version is the broker's server version.",
 		},
 	})
-	zip.Describe("GET /v1/mq/streams", zip.Doc{
+	zip.Describe("GET /v1/mq/stream", zip.Doc{
 		Description: "Returns the org's streams, name-ordered, with their live state.",
 		Fields: map[string]string{
 			"Config.max_age":       "MaxAge caps message age, e.g. \"24h\" or \"7d\"; \"0\" (default) is unlimited.",
@@ -77,7 +77,7 @@ func init() {
 			"listIn.offset":        "Offset skips that many streams, name-ordered.",
 		},
 	})
-	zip.Describe("GET /v1/mq/streams/:name", zip.Doc{
+	zip.Describe("GET /v1/mq/stream/:name", zip.Doc{
 		Description: "Returns one stream's configuration and live state.",
 		Fields: map[string]string{
 			"Config.max_age":       "MaxAge caps message age, e.g. \"24h\" or \"7d\"; \"0\" (default) is unlimited.",
@@ -105,7 +105,7 @@ func init() {
 			"nameIn.name":          "Name is the stream name, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/mq/streams/:name/messages", zip.Doc{
+	zip.Describe("GET /v1/mq/stream/:name/message", zip.Doc{
 		Description: "Reads stored messages without a consumer: by sequence, by newest on a\nsubject, or walking a subject forward from a sequence.",
 		Fields: map[string]string{
 			"Delivery.data":          "Data is the payload, base64-encoded.",
@@ -123,7 +123,7 @@ func init() {
 			"readOut.messages":       "Messages is what was read, stream-ordered.",
 		},
 	})
-	zip.Describe("GET /v1/mq/streams/:stream/consumers", zip.Doc{
+	zip.Describe("GET /v1/mq/stream/:stream/consumer", zip.Doc{
 		Description: "Returns a stream's consumers, name-ordered, with delivery state.",
 		Fields: map[string]string{
 			"Consumer.ack_floor":       "AckFloor is the highest contiguously acknowledged sequence pair.",
@@ -156,7 +156,7 @@ func init() {
 			"pickOut.total":            "Total is the stream's consumer count before paging.",
 		},
 	})
-	zip.Describe("GET /v1/mq/streams/:stream/consumers/:name", zip.Doc{
+	zip.Describe("GET /v1/mq/stream/:stream/consumer/:name", zip.Doc{
 		Description: "Returns one consumer's configuration and delivery state.",
 		Fields: map[string]string{
 			"Consumer.ack_floor":       "AckFloor is the highest contiguously acknowledged sequence pair.",
@@ -186,7 +186,7 @@ func init() {
 			"twoIn.stream":             "Stream is the stream name, from the path.",
 		},
 	})
-	zip.Describe("POST /v1/mq/streams", zip.Doc{
+	zip.Describe("POST /v1/mq/stream", zip.Doc{
 		Description: "Creates a durable stream in the org's namespace and returns it.",
 		Fields: map[string]string{
 			"Config.max_age":       "MaxAge caps message age, e.g. \"24h\" or \"7d\"; \"0\" (default) is unlimited.",
@@ -213,7 +213,7 @@ func init() {
 			"Stream.state":         "State is the stream's current state.",
 		},
 	})
-	zip.Describe("POST /v1/mq/streams/:name/purge", zip.Doc{
+	zip.Describe("POST /v1/mq/stream/:name/purge", zip.Doc{
 		Description: "Removes messages from a stream, leaving its consumers in place.",
 		Fields: map[string]string{
 			"Purge.filter":    "Filter purges only messages on this org-relative subject (wildcards supported).",
@@ -222,7 +222,7 @@ func init() {
 			"purgeOut.purged": "Purged is the number of messages removed.",
 		},
 	})
-	zip.Describe("POST /v1/mq/streams/:stream/consumers", zip.Doc{
+	zip.Describe("POST /v1/mq/stream/:stream/consumer", zip.Doc{
 		Description: "Creates a durable pull consumer on a stream and returns it.",
 		Fields: map[string]string{
 			"Consumer.ack_floor":       "AckFloor is the highest contiguously acknowledged sequence pair.",
@@ -251,7 +251,7 @@ func init() {
 			"makeIn.stream":            "Stream is the stream name, from the path.",
 		},
 	})
-	zip.Describe("POST /v1/mq/streams/:stream/consumers/:name/next", zip.Doc{
+	zip.Describe("POST /v1/mq/stream/:stream/consumer/:name/next", zip.Doc{
 		Description: "Pulls the consumer's next batch. Delivered messages are acknowledged on\ndelivery — the broker will not redeliver what this call returns; an empty\nwait answers 408.",
 		Fields: map[string]string{
 			"Delivery.data":          "Data is the payload, base64-encoded.",
@@ -269,7 +269,7 @@ func init() {
 			"readOut.messages":       "Messages is what was read, stream-ordered.",
 		},
 	})
-	zip.Describe("PUT /v1/mq/streams/:name", zip.Doc{
+	zip.Describe("PUT /v1/mq/stream/:name", zip.Doc{
 		Description: "Reconfigures an existing stream; the path names the stream, and the\nimmutable fields (storage, retention) must restate what they are.",
 		Fields: map[string]string{
 			"Config.max_age":       "MaxAge caps message age, e.g. \"24h\" or \"7d\"; \"0\" (default) is unlimited.",

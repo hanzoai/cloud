@@ -24,14 +24,32 @@ import (
 
 // Txn is one register row — a booked voucher projected to a single line.
 type Txn struct {
-	Date         string `json:"date"`
-	Description  string `json:"description"`
-	Vendor       string `json:"vendor,omitempty"`
-	Category     string `json:"category"` // COA account number of the P&L line
+	// Date is when the voucher POSTED — the accounting date the reports window on,
+	// which for an imported bank row is the bank's date and not the day it landed
+	// here.
+	Date string `json:"date"`
+	// Description is the line a person reads: the memo carried in from the source.
+	Description string `json:"description"`
+	// Vendor is the counterparty, resolved from whatever the source knew — a bank
+	// row's merchant, a scanned bill's supplier. Absent when the source named none.
+	Vendor string `json:"vendor,omitempty"`
+	// Category is the chart-of-accounts NUMBER of the income or expense account this
+	// voucher touched — where it lands on the P&L, not a free-text label.
+	Category string `json:"category"`
+	// CategoryName is that account's human name, so a caller need not carry the
+	// chart to render the row.
 	CategoryName string `json:"categoryName,omitempty"`
-	Source       string `json:"source"` // source_kind: bank_txn | scan | commerce_txn
-	AmountCents  int64  `json:"amountCents"`
-	VoucherID    int64  `json:"voucherId"`
+	// Source is where the entry came from: bank_txn for an imported statement line,
+	// scan for a receipt or bill read by the scanner, commerce_txn for a sale
+	// booked by the store.
+	Source string `json:"source"`
+	// AmountCents is the voucher's total, in whole cents — its total debit, which
+	// equals its total credit because every voucher balances. It is the size of the
+	// entry and carries no direction; the category says which way it went.
+	AmountCents int64 `json:"amountCents"`
+	// VoucherID identifies the underlying double-entry voucher, so a caller can open
+	// the full set of legs behind this single register line.
+	VoucherID int64 `json:"voucherId"`
 }
 
 // txnFilter is the parsed query for a transactions read.
