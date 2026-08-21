@@ -152,18 +152,41 @@ var sigHeaders = []string{"X-Git-Signature", "X-Gitea-Signature", "X-Hub-Signatu
 // unlike the path parameters apps/git clones: encoding/json allocates a fresh
 // string per field rather than sub-slicing the request buffer fiber reuses.
 type push struct {
-	Ref        string `json:"ref"`
-	Before     string `json:"before"`
-	After      string `json:"after"`
+	// Ref is the full ref that moved — `refs/heads/main`, `refs/tags/v1.2.3`. A
+	// delivery carrying no ref under refs/ is not a push and is ignored. Tags
+	// reach the build trigger as well as branches, because releases are cut by tag.
+	Ref string `json:"ref"`
+	// Before is the commit the ref pointed at beforehand. Nothing here decides on
+	// it; it rides the lifecycle stream, where a subscriber reads the span.
+	Before string `json:"before"`
+	// After is the commit the ref points at NOW — the one a build would build.
+	// Git's all-zero id means the ref was deleted, which has nothing to build and
+	// is ignored, and this is part of the key that makes a redelivery build once.
+	After string `json:"after"`
+	// Repository is where the push landed. Its owner decides WHOSE build this is,
+	// through the closed forge-namespace table and nothing else in the delivery —
+	// an unmapped namespace is ignored rather than trusted to name its own tenant.
 	Repository struct {
-		Name  string `json:"name"`
+		// Name is the repository's name within the namespace. It is matched against
+		// an application's repo, and it composes the derived clone URL.
+		Name string `json:"name"`
+		// Owner is the forge namespace holding the repository.
 		Owner struct {
-			Login    string `json:"login"`
+			// Login is the namespace as this forge spells it; preferred.
+			Login string `json:"login"`
+			// Username is the same namespace under the older spelling, used when
+			// Login is absent.
 			Username string `json:"username"`
 		} `json:"owner"`
 	} `json:"repository"`
+	// Pusher is who pushed. Release and mirror automation pushes as the forge's own
+	// Actions user, and a bot author is ignored — else a release's own commit
+	// triggers the next release, forever.
 	Pusher struct {
-		Login    string `json:"login"`
+		// Login is the pusher as this forge spells it; preferred.
+		Login string `json:"login"`
+		// Username is the same pusher under the older spelling, used when Login is
+		// absent.
 		Username string `json:"username"`
 	} `json:"pusher"`
 }
@@ -184,12 +207,27 @@ type push struct {
 // page showing the same green for a push that built eleven services and one that
 // built nothing at all.
 type verdict struct {
-	Org    string `json:"org,omitempty"`
-	Repo   string `json:"repo,omitempty"`
-	Ref    string `json:"ref,omitempty"`
+	// Org is the tenant the push was attributed to, resolved from the forge
+	// namespace through the closed table — never read off the payload.
+	Org string `json:"org,omitempty"`
+	// Repo is the repository the push landed in, as the forge named it.
+	Repo string `json:"repo,omitempty"`
+	// Ref is the ref that moved, echoed so the delivery page shows which push this
+	// answer belongs to.
+	Ref string `json:"ref,omitempty"`
+	// Commit is the commit the ref moved to — the `after` this acted on.
 	Commit string `json:"commit,omitempty"`
-	Fired  bool   `json:"fired"`
-	Builds int    `json:"builds"`
+	// Fired says the push reached BOTH seams: the deploy trigger and the lifecycle
+	// stream. False is a delivery deliberately ignored, and Reason says which one.
+	Fired bool `json:"fired"`
+	// Builds is how many builds the push actually LAUNCHED. Zero is ordinary —
+	// most pushes track no application — and it is the fact `fired` cannot give:
+	// without it the delivery page shows one green for a push that built eleven
+	// services and for one that built nothing.
+	Builds int `json:"builds"`
+	// Reason is why nothing fired: not a push, ref deleted, malformed coordinate,
+	// bot push, a forge namespace that maps to no org, or already landed. Empty
+	// when it fired.
 	Reason string `json:"reason,omitempty"`
 }
 
