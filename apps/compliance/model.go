@@ -48,14 +48,33 @@ type SubjectKind = idv.Kind
 // owning org. Checks and accreditation records reference a subject by opaque id, so
 // nothing downstream (audit, logs, other records) needs to carry the PII.
 type Subject struct {
-	ID        string      `json:"id"`
-	Org       string      `json:"org"`
-	Kind      SubjectKind `json:"kind"`
-	Ref       string      `json:"ref,omitempty"` // the org's own opaque external id for this subject
-	Email     string      `json:"email,omitempty"`
-	Name      string      `json:"name,omitempty"`
-	CreatedAt int64       `json:"createdAt"`
-	UpdatedAt int64       `json:"updatedAt"`
+	// ID is the opaque handle every other record uses to point at this party. It is
+	// the only reference that leaves this type, which is what keeps the PII in one
+	// place: a check, an accreditation and an audit row all carry the id and none of
+	// them carry the name.
+	ID string `json:"id"`
+	// Org is the tenant that is doing the verifying — the party who must answer for
+	// this record, not the party being verified. A subject is returned only to it.
+	Org string `json:"org"`
+	// Kind is what is being verified: "individual" (a natural person, so KYC) or
+	// "business" (a legal entity, so KYB). It decides which provider flow runs.
+	Kind SubjectKind `json:"kind"`
+	// Ref is the org's OWN identifier for this party, carried so a caller can match a
+	// subject back to their system without keeping a second mapping. Opaque here:
+	// nothing in this plane parses or enforces it.
+	Ref string `json:"ref,omitempty"`
+	// Email is the party's address, when the org supplied one. It is PII: sealed at
+	// rest, returned only to the owning org, and never copied into a check record.
+	Email string `json:"email,omitempty"`
+	// Name is the party's name, under the same PII rule as Email. For a business it
+	// is the legal entity name rather than a trading name, since that is what a
+	// provider verifies against.
+	Name string `json:"name,omitempty"`
+	// CreatedAt is when the subject was first recorded, Unix SECONDS.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when the subject's own fields last changed, Unix seconds. A check
+	// moving to a new status does not touch it — that history lives on the check.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // Check is one KYC/KYB verification of a subject through the idv provider. Status is
