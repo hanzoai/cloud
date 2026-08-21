@@ -4,62 +4,65 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/hanzoai/cloud/apps/domain/namecom"
 )
 
 // --- mock backends ---------------------------------------------------------------
 
+// mockReg is a registrar written against the VOCABULARY, not against name.com — the
+// same contract a Route 53 or Gandi file satisfies. That it needs no vendor type is
+// the point: the orchestration below is exercised with no registrar wire at all.
 type mockReg struct {
-	avail      map[string]namecom.SearchResult
-	created    []namecom.CreateDomainRequest
+	avail      map[string]SearchResult
+	created    []CreateRequest
 	createErr  error
 	renewed    []string
 	configured bool
 }
 
-func (m *mockReg) Configured() bool { return m.configured }
-func (m *mockReg) CheckAvailability(_ context.Context, names ...string) (*namecom.SearchResponse, error) {
-	var out namecom.SearchResponse
+func (m *mockReg) ID() string                  { return "mock" }
+func (m *mockReg) Env() string                 { return "test" }
+func (m *mockReg) Needs() []string             { return []string{"MOCK_USER", "MOCK_TOKEN"} }
+func (m *mockReg) Configured() bool            { return m.configured }
+func (m *mockReg) Reach(context.Context) error { return nil }
+
+func (m *mockReg) Available(_ context.Context, names ...string) ([]SearchResult, error) {
+	var out []SearchResult
 	for _, n := range names {
 		if r, ok := m.avail[n]; ok {
-			out.Results = append(out.Results, r)
+			out = append(out, r)
 		} else {
-			out.Results = append(out.Results, namecom.SearchResult{DomainName: n, Purchasable: false})
+			out = append(out, SearchResult{Domain: n, Available: false})
 		}
-	}
-	return &out, nil
-}
-func (m *mockReg) Search(_ context.Context, _ string, _ ...string) (*namecom.SearchResponse, error) {
-	out := &namecom.SearchResponse{}
-	for _, r := range m.avail {
-		out.Results = append(out.Results, r)
 	}
 	return out, nil
 }
-func (m *mockReg) CreateDomain(_ context.Context, req namecom.CreateDomainRequest) (*namecom.CreateDomainResponse, error) {
+
+func (m *mockReg) Search(_ context.Context, _ string, _ ...string) ([]SearchResult, error) {
+	out := make([]SearchResult, 0, len(m.avail))
+	for _, r := range m.avail {
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func (m *mockReg) Create(_ context.Context, req CreateRequest) (*Registration, error) {
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
 	m.created = append(m.created, req)
-	return &namecom.CreateDomainResponse{
-		Domain:    &namecom.Domain{DomainName: req.Domain.DomainName, Nameservers: req.Domain.Nameservers, ExpireDate: "2027-01-01T00:00:00Z"},
-		Order:     1001,
-		TotalPaid: req.PurchasePrice,
+	return &Registration{
+		Domain: req.Domain, Nameservers: req.Nameservers,
+		ExpiresAt: "2027-01-01T00:00:00Z", Order: 1001,
 	}, nil
 }
-func (m *mockReg) RenewDomain(_ context.Context, d string, _ namecom.RenewDomainRequest) (*namecom.RenewDomainResponse, error) {
-	m.renewed = append(m.renewed, d)
-	return &namecom.RenewDomainResponse{Domain: &namecom.Domain{DomainName: d, ExpireDate: "2028-01-01T00:00:00Z"}}, nil
+
+func (m *mockReg) Renew(_ context.Context, req RenewRequest) (*Registration, error) {
+	m.renewed = append(m.renewed, req.Domain)
+	return &Registration{Domain: req.Domain, ExpiresAt: "2028-01-01T00:00:00Z"}, nil
 }
-func (m *mockReg) SetNameservers(_ context.Context, d string, ns []string) (*namecom.Domain, error) {
-	return &namecom.Domain{DomainName: d, Nameservers: ns}, nil
-}
-func (m *mockReg) CreateTransfer(_ context.Context, req namecom.TransferRequest) (*namecom.TransferResponse, error) {
-	return &namecom.TransferResponse{Transfer: &namecom.Transfer{DomainName: req.DomainName, Status: "pending"}, Order: 2002}, nil
-}
-func (m *mockReg) Hello(_ context.Context) (*namecom.HelloResponse, error) {
-	return &namecom.HelloResponse{Username: "test"}, nil
+
+func (m *mockReg) Transfer(_ context.Context, req TransferRequest) (*Registration, error) {
+	return &Registration{Domain: req.Domain, Order: 2002}, nil
 }
 
 // mockBill records authorize/capture and can refuse.
@@ -103,7 +106,6 @@ func newService(reg *mockReg, bill *mockBill, zones *mockZones) *Service {
 	return NewService(reg, bill, zones, NewMemStore(), Config{
 		Markup:      Markup{Multiplier: 1.15, MinMarginCents: 300},
 		Nameservers: []string{"ns1.hanzo.ai", "ns2.hanzo.ai"},
-		Env:         "test",
 	})
 }
 
@@ -129,8 +131,8 @@ func TestMarkupSell(t *testing.T) {
 }
 
 func TestAvailabilityPricesWithMarkup(t *testing.T) {
-	reg := &mockReg{configured: true, avail: map[string]namecom.SearchResult{
-		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99, RenewalPrice: 55.99, TLD: "ai"},
+	reg := &mockReg{configured: true, avail: map[string]SearchResult{
+		"acme.ai": {Domain: "acme.ai", Available: true, Price: 55.99, Renewal: 55.99, TLD: "ai"},
 	}}
 	svc := newService(reg, &mockBill{balance: -1}, &mockZones{ns: []string{"ns1.hanzo.ai"}})
 	qs, err := svc.Availability(context.Background(), "acme.ai")
@@ -147,8 +149,8 @@ func TestAvailabilityPricesWithMarkup(t *testing.T) {
 }
 
 func TestRegisterHappyPath_BillsAndPointsNameservers(t *testing.T) {
-	reg := &mockReg{configured: true, avail: map[string]namecom.SearchResult{
-		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99, RenewalPrice: 55.99, TLD: "ai"},
+	reg := &mockReg{configured: true, avail: map[string]SearchResult{
+		"acme.ai": {Domain: "acme.ai", Available: true, Price: 55.99, Renewal: 55.99, TLD: "ai"},
 	}}
 	bill := &mockBill{balance: 100000} // $1000
 	zones := &mockZones{ns: []string{"ns1.hanzo.ai", "ns2.hanzo.ai"}}
@@ -163,11 +165,11 @@ func TestRegisterHappyPath_BillsAndPointsNameservers(t *testing.T) {
 		t.Fatalf("expected 1 create, got %d", len(reg.created))
 	}
 	c := reg.created[0]
-	if len(c.Domain.Nameservers) != 2 || c.Domain.Nameservers[0] != "ns1.hanzo.ai" {
-		t.Fatalf("domain not born on Hanzo nameservers: %v", c.Domain.Nameservers)
+	if len(c.Nameservers) != 2 || c.Nameservers[0] != "ns1.hanzo.ai" {
+		t.Fatalf("domain not born on Hanzo nameservers: %v", c.Nameservers)
 	}
-	if c.PurchasePrice != 55.99 {
-		t.Fatalf("wholesale price cap = %v, want 55.99", c.PurchasePrice)
+	if c.Price != 55.99 {
+		t.Fatalf("wholesale price cap = %v, want 55.99", c.Price)
 	}
 	// Customer charged the SELL price exactly once, after the registrar succeeded, and to
 	// their OWN org. What is NOT asserted is a key: the debit carries none, so a second
@@ -186,8 +188,8 @@ func TestRegisterHappyPath_BillsAndPointsNameservers(t *testing.T) {
 }
 
 func TestRegisterRefusedWhenInsufficientBalance_NoRegistrarCall(t *testing.T) {
-	reg := &mockReg{configured: true, avail: map[string]namecom.SearchResult{
-		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99},
+	reg := &mockReg{configured: true, avail: map[string]SearchResult{
+		"acme.ai": {Domain: "acme.ai", Available: true, Price: 55.99},
 	}}
 	bill := &mockBill{balance: 100} // $1.00 — nowhere near $64.39
 	svc := newService(reg, bill, &mockZones{})
@@ -205,8 +207,8 @@ func TestRegisterRefusedWhenInsufficientBalance_NoRegistrarCall(t *testing.T) {
 }
 
 func TestRegisterRegistrarFailure_NoCharge(t *testing.T) {
-	reg := &mockReg{configured: true, createErr: errors.New("boom"), avail: map[string]namecom.SearchResult{
-		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99},
+	reg := &mockReg{configured: true, createErr: errors.New("boom"), avail: map[string]SearchResult{
+		"acme.ai": {Domain: "acme.ai", Available: true, Price: 55.99},
 	}}
 	bill := &mockBill{balance: 100000}
 	svc := newService(reg, bill, &mockZones{ns: []string{"ns1.hanzo.ai"}})
@@ -222,8 +224,8 @@ func TestRegisterRegistrarFailure_NoCharge(t *testing.T) {
 }
 
 func TestRegisterUnavailable(t *testing.T) {
-	reg := &mockReg{configured: true, avail: map[string]namecom.SearchResult{
-		"taken.ai": {DomainName: "taken.ai", Purchasable: false},
+	reg := &mockReg{configured: true, avail: map[string]SearchResult{
+		"taken.ai": {Domain: "taken.ai", Available: false},
 	}}
 	svc := newService(reg, &mockBill{balance: -1}, &mockZones{})
 	_, err := svc.Register(context.Background(), "acme", "taken.ai", 1, nil)
@@ -233,8 +235,8 @@ func TestRegisterUnavailable(t *testing.T) {
 }
 
 func TestRegisterAlreadyOwned(t *testing.T) {
-	reg := &mockReg{configured: true, avail: map[string]namecom.SearchResult{
-		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99},
+	reg := &mockReg{configured: true, avail: map[string]SearchResult{
+		"acme.ai": {Domain: "acme.ai", Available: true, Price: 55.99},
 	}}
 	bill := &mockBill{balance: 100000}
 	svc := newService(reg, bill, &mockZones{ns: []string{"ns1.hanzo.ai"}})
@@ -248,8 +250,8 @@ func TestRegisterAlreadyOwned(t *testing.T) {
 }
 
 func TestRegisterFallsBackToConfigNameserversWhenZoneFails(t *testing.T) {
-	reg := &mockReg{configured: true, avail: map[string]namecom.SearchResult{
-		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 10.00},
+	reg := &mockReg{configured: true, avail: map[string]SearchResult{
+		"acme.ai": {Domain: "acme.ai", Available: true, Price: 10.00},
 	}}
 	bill := &mockBill{balance: 100000}
 	zones := &mockZones{err: errors.New("dns down")}
@@ -259,15 +261,15 @@ func TestRegisterFallsBackToConfigNameserversWhenZoneFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Zone provisioning failed → registered against the configured Hanzo nameservers.
-	got := reg.created[0].Domain.Nameservers
+	got := reg.created[0].Nameservers
 	if len(got) != 2 || got[0] != "ns1.hanzo.ai" {
 		t.Fatalf("expected fallback nameservers, got %v", got)
 	}
 }
 
 func TestRenewOwnedDomainBills(t *testing.T) {
-	reg := &mockReg{configured: true, avail: map[string]namecom.SearchResult{
-		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99, RenewalPrice: 55.99},
+	reg := &mockReg{configured: true, avail: map[string]SearchResult{
+		"acme.ai": {Domain: "acme.ai", Available: true, Price: 55.99, Renewal: 55.99},
 	}}
 	bill := &mockBill{balance: 100000}
 	svc := newService(reg, bill, &mockZones{ns: []string{"ns1.hanzo.ai"}})

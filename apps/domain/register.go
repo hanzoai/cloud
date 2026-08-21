@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/hanzoai/cloud/apps/domain/namecom"
 )
 
 // Offer is a priced availability result: the wholesale cost and the customer sell
@@ -24,12 +22,12 @@ type Offer struct {
 }
 
 // quoteFrom prices a registrar search result through the markup.
-func (s *Service) quoteFrom(r namecom.SearchResult) Offer {
-	cost := dollarsToCents(r.PurchasePrice)
-	renewCost := dollarsToCents(r.RenewalPrice)
+func (s *Service) quoteFrom(r SearchResult) Offer {
+	cost := dollarsToCents(r.Price)
+	renewCost := dollarsToCents(r.Renewal)
 	return Offer{
-		Domain:            strings.ToLower(r.DomainName),
-		Available:         r.Purchasable,
+		Domain:            strings.ToLower(r.Domain),
+		Available:         r.Available,
 		Premium:           r.Premium,
 		CostCents:         cost,
 		PriceCents:        s.cfg.Markup.Sell(cost),
@@ -44,11 +42,11 @@ func (s *Service) Availability(ctx context.Context, names ...string) ([]Offer, e
 	if !s.reg.Configured() {
 		return nil, ErrNotConfigured
 	}
-	resp, err := s.reg.CheckAvailability(ctx, names...)
+	found, err := s.reg.Available(ctx, names...)
 	if err != nil {
 		return nil, err
 	}
-	return s.quotes(resp), nil
+	return s.quotes(found), nil
 }
 
 // Search runs a keyword search (with alternate-TLD suggestions) and returns priced
@@ -57,16 +55,16 @@ func (s *Service) Search(ctx context.Context, keyword string, tldFilter ...strin
 	if !s.reg.Configured() {
 		return nil, ErrNotConfigured
 	}
-	resp, err := s.reg.Search(ctx, keyword, tldFilter...)
+	found, err := s.reg.Search(ctx, keyword, tldFilter...)
 	if err != nil {
 		return nil, err
 	}
-	return s.quotes(resp), nil
+	return s.quotes(found), nil
 }
 
-func (s *Service) quotes(resp *namecom.SearchResponse) []Offer {
-	out := make([]Offer, 0, len(resp.Results))
-	for _, r := range resp.Results {
+func (s *Service) quotes(found []SearchResult) []Offer {
+	out := make([]Offer, 0, len(found))
+	for _, r := range found {
 		out = append(out, s.quoteFrom(r))
 	}
 	return out
@@ -85,7 +83,7 @@ type RegisterResult struct {
 //
 // contacts is optional; when nil the registrar uses the reseller account's default
 // WHOIS contacts. years defaults to 1.
-func (s *Service) Register(ctx context.Context, org, domainName string, years int, contacts *namecom.Contacts) (*RegisterResult, error) {
+func (s *Service) Register(ctx context.Context, org, domainName string, years int, contacts *Contacts) (*RegisterResult, error) {
 	if !s.reg.Configured() {
 		return nil, ErrNotConfigured
 	}
@@ -136,14 +134,12 @@ func (s *Service) Register(ctx context.Context, org, domainName string, years in
 	//    caps the wholesale charge at the quoted cost (a price change above it is
 	//    rejected by the registrar). This is the step that debits Hanzo's reseller
 	//    account; the customer is not charged yet.
-	created, err := s.reg.CreateDomain(ctx, namecom.CreateDomainRequest{
-		Domain: namecom.DomainInput{
-			DomainName:  domainName,
-			Nameservers: ns,
-			Contacts:    contacts,
-		},
-		PurchasePrice: float64(q.CostCents) / 100,
-		Years:         years,
+	created, err := s.reg.Create(ctx, CreateRequest{
+		Domain:      domainName,
+		Years:       years,
+		Nameservers: ns,
+		Contacts:    contacts,
+		Price:       float64(q.CostCents) / 100,
 	})
 	if err != nil {
 		// The registrar rejected/failed — the customer was NOT charged (no Capture).
@@ -162,11 +158,9 @@ func (s *Service) Register(ctx context.Context, org, domainName string, years in
 		CostCents:    q.CostCents,
 		Nameservers:  ns,
 	}
-	if created.Domain != nil {
-		rec.ExpiresAt = created.Domain.ExpireDate
-		if len(created.Domain.Nameservers) > 0 {
-			rec.Nameservers = created.Domain.Nameservers
-		}
+	rec.ExpiresAt = created.ExpiresAt
+	if len(created.Nameservers) > 0 {
+		rec.Nameservers = created.Nameservers
 	}
 	rec.Order = created.Order
 	if err := s.store.Put(rec); err != nil {
@@ -215,17 +209,18 @@ func (s *Service) Renew(ctx context.Context, org, domainName string, years int) 
 	if err := s.bill.Authorize(ctx, org, priceCents); err != nil {
 		return nil, err
 	}
-	renewed, err := s.reg.RenewDomain(ctx, domainName, namecom.RenewDomainRequest{
-		PurchasePrice: float64(costCents) / 100,
-		Years:         years,
+	renewed, err := s.reg.Renew(ctx, RenewRequest{
+		Domain: domainName,
+		Years:  years,
+		Price:  float64(costCents) / 100,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("domain: registrar renew failed: %w", err)
 	}
 	s.bill.Capture(org, priceCents)
 
-	if renewed.Domain != nil && renewed.Domain.ExpireDate != "" {
-		rec.ExpiresAt = renewed.Domain.ExpireDate
+	if renewed.ExpiresAt != "" {
+		rec.ExpiresAt = renewed.ExpiresAt
 	}
 	if err := s.store.Put(rec); err != nil {
 		return nil, err
@@ -271,11 +266,11 @@ func (s *Service) Transfer(ctx context.Context, org, domainName, authCode string
 	if err := s.bill.Authorize(ctx, org, q.PriceCents); err != nil {
 		return nil, err
 	}
-	res, err := s.reg.CreateTransfer(ctx, namecom.TransferRequest{
-		DomainName:    domainName,
-		AuthCode:      authCode,
-		PurchasePrice: float64(q.CostCents) / 100,
-		Years:         years,
+	res, err := s.reg.Transfer(ctx, TransferRequest{
+		Domain: domainName,
+		Auth:   authCode,
+		Years:  years,
+		Price:  float64(q.CostCents) / 100,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("domain: registrar transfer failed: %w", err)
