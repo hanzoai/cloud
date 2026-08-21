@@ -42,10 +42,10 @@ var mismatched = map[string]string{
 // functionality is (at least partly) duplicated on the cloud side. The worst
 // bucket, and the front of the migration worklist.
 var unwired = []string{
-	"admin", "analytics", "billing", "bot", "datastore", "dns",
-	"engine", "eval", "functions", "gateway", "git", "idv", "ingress", "kms",
-	"marketing", "ml", "mpc", "platform", "research", "skills", "social",
-	"team", "usage", "visor", "world", "zt",
+	"admin", "billing", "bot", "datastore", "dns",
+	"engine", "eval", "event", "functions", "gateway", "git", "idv", "ingress", "kms",
+	"marketing", "ml", "mpc", "network", "platform", "research", "skills",
+	"social", "team", "usage", "visor", "world",
 }
 
 // unextracted apps have no upstream repo at all: the functionality lives only
@@ -54,7 +54,7 @@ var unwired = []string{
 // either way the pin comes off.
 var unextracted = []string{
 	"admission", "ads", "affiliates", "agents", "allowance", "answer", "ask",
-	"auditlog", "authors", "automations", "benchmark", "blueprint", "books", "bots",
+	"auditlog", "authors", "auto", "benchmark", "blueprint", "books",
 	"campaign", "catalog", "catalogsync", "channels", "cloudflare", "cms",
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
 	"controlplane", "crawl", "crm", "cron", "dataset", "graph",
@@ -64,7 +64,7 @@ var unextracted = []string{
 	"leaderboard", "legal", "link", "lsp", "marketplace", "meet", "membership",
 	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
 	"projects", "prompts", "provisioning", "reference",
-	"referrals", "registry", "risk", "rollingcap", "s3admin",
+	"referrals", "registry", "risk", "rollingcap", "s3", "s3admin",
 	"samples", "sandbox", "sbom", "search", "security",
 	// seo is the search-visibility surface: a typed proxy onto a measurement
 	// vendor, metered at that vendor's own published prices. It imports only
@@ -75,7 +75,7 @@ var unextracted = []string{
 	"seo",
 	"settings", "share",
 	"sites",
-	"storage", "sync",
+	"sync",
 	// taxonomy is the product catalogue's own shape — the categories, tags and
 	// display order the console used to hold as a TypeScript array. It imports only
 	// hanzoai/cloud, and no hanzoai/taxonomy exists to mount, so the functionality

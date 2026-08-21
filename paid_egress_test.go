@@ -199,7 +199,7 @@ var paidVendor = map[string]string{
 	// plugin in the fleet links it and the check would fire on all of them. A
 	// credential that marks "this binary can talk to the object store" says nothing
 	// about whether serving a request spends anything. What costs money is the
-	// object DATA PLANE, and apps/storage — which owns it — is already Metered and
+	// object DATA PLANE, and apps/s3 — which owns it — is already Metered and
 	// debits per operation. Mark the act, never the library.
 }
 

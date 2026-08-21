@@ -60,7 +60,7 @@ const (
 	reasonKV = "keyed storage is already a cloud product (/v1/kv, /v1/datastore); " +
 		"a broker-flavoured second door would duplicate the capability"
 	// reasonObjects: object storage is the storage product (/v1/s3/buckets,
-	// apps/storage). Same door rule as KV.
+	// apps/s3). Same door rule as KV.
 	reasonObjects = "object storage is already a cloud product (/v1/s3); " +
 		"a broker-flavoured second door would duplicate the capability"
 	// reasonAccounts: the authored account/connection listings are broker

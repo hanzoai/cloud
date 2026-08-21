@@ -19,13 +19,13 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/o11y/pkg/types/llmobstypes"
 )
 
 // llmSpan is a fully-stated LLM span as the analytics fan-out hands it over.
-func llmSpan() analytics.SpanEvent {
-	return analytics.SpanEvent{
+func llmSpan() event.SpanEvent {
+	return event.SpanEvent{
 		MessageID:   "m-1",
 		Time:        time.Unix(1700000000, 0).UTC(),
 		Name:        "chat zen-1",
@@ -51,7 +51,7 @@ func llmSpan() analytics.SpanEvent {
 	}
 }
 
-// TestSpanRowMapsOntoPlaneColumns proves the ONE translate: an analytics.SpanEvent maps
+// TestSpanRowMapsOntoPlaneColumns proves the ONE translate: an event.SpanEvent maps
 // onto an event.span row in planeSpanColumns order, with every value in the column the
 // LLM views read it from. A positional Insert misaligns silently, so the width is
 // asserted with the values.
@@ -255,7 +255,7 @@ func TestLLMLensEnabled(t *testing.T) {
 // through, so NO sink is installed (spans stay on the event plane — honest degradation);
 // with one, the sink installs and clearSpanSink detaches it. The detach's EFFECT — that a
 // removed sink never fires again — is proven where the fan-out lives
-// (analytics.TestFanOutSpansNoSinksIsNoOp).
+// (event.TestFanOutSpansNoSinksIsNoOp).
 func TestInstallSpanSinkNeedsThePlaneSink(t *testing.T) {
 	log := luxlog.New("test")
 	prev := embeddedPlaneSink
@@ -301,7 +301,7 @@ func TestConsumeSpansWithoutPlaneSinkIsInert(t *testing.T) {
 	prev := embeddedPlaneSink
 	t.Cleanup(func() { embeddedPlaneSink = prev })
 	embeddedPlaneSink = nil
-	consumeSpans(luxlog.New("test"), "acme", []analytics.SpanEvent{llmSpan()})
+	consumeSpans(luxlog.New("test"), "acme", []event.SpanEvent{llmSpan()})
 }
 
 // TestConsumeSpansRefusesAnOrglessBatch: the tenant is the whole boundary of every LLM
@@ -312,7 +312,7 @@ func TestConsumeSpansRefusesAnOrglessBatch(t *testing.T) {
 	// A sink whose datastore connection would panic if it were ever reached: the guard
 	// must return before any write is attempted.
 	embeddedPlaneSink = &planeSink{}
-	consumeSpans(luxlog.New("test"), "", []analytics.SpanEvent{llmSpan()})
+	consumeSpans(luxlog.New("test"), "", []event.SpanEvent{llmSpan()})
 }
 
 // TestClearSpanSinkIsSafe: clearing when never installed is a no-op (idempotent), which
@@ -331,7 +331,7 @@ func TestSpanSinkNamesTheOneWritePath(t *testing.T) {
 		t.Fatalf("the lens writes %s and its summary %s", planeSpanTable, planeTraceTable)
 	}
 	rows := [][]any{}
-	for _, s := range []analytics.SpanEvent{llmSpan()} {
+	for _, s := range []event.SpanEvent{llmSpan()} {
 		row, ok := spanRow("acme", s)
 		if !ok {
 			t.Fatal("must project")

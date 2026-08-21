@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 )
 
 // TestTranslateStandardMapping verifies the canonical EVENTS vocabulary maps onto the
@@ -21,7 +21,7 @@ func TestTranslateStandardMapping(t *testing.T) {
 		"chat_started":     EventCustom,
 	}
 	for name, want := range cases {
-		got := Translate(analytics.SinkEvent{Name: name}).Standard
+		got := Translate(event.SinkEvent{Name: name}).Standard
 		if got != want {
 			t.Errorf("Translate(%q).Standard = %q, want %q", name, got, want)
 		}
@@ -32,17 +32,17 @@ func TestTranslateStandardMapping(t *testing.T) {
 // from properties, and the USD default.
 func TestTranslateCommerce(t *testing.T) {
 	// First-class fields win.
-	cv := Translate(analytics.SinkEvent{Name: "order_completed", Revenue: 49, Currency: "usd"})
+	cv := Translate(event.SinkEvent{Name: "order_completed", Revenue: 49, Currency: "usd"})
 	if cv.Value != 49 || cv.Currency != "USD" {
 		t.Fatalf("first-class commerce: got value=%v currency=%q", cv.Value, cv.Currency)
 	}
 	// Fall back to properties.
-	cv = Translate(analytics.SinkEvent{Name: "order_completed", Properties: map[string]any{"value": 12.5, "currency": "eur"}})
+	cv = Translate(event.SinkEvent{Name: "order_completed", Properties: map[string]any{"value": 12.5, "currency": "eur"}})
 	if cv.Value != 12.5 || cv.Currency != "EUR" {
 		t.Fatalf("property commerce: got value=%v currency=%q", cv.Value, cv.Currency)
 	}
 	// No currency ⇒ USD default; no value ⇒ 0.
-	cv = Translate(analytics.SinkEvent{Name: "$pageview"})
+	cv = Translate(event.SinkEvent{Name: "$pageview"})
 	if cv.Value != 0 || cv.Currency != "USD" {
 		t.Fatalf("default commerce: got value=%v currency=%q", cv.Value, cv.Currency)
 	}
@@ -63,12 +63,12 @@ func TestTranslateEcommerce(t *testing.T) {
 		"purchase":         EventPurchase,
 	}
 	for name, want := range names {
-		if got := Translate(analytics.SinkEvent{Name: name}).Standard; got != want {
+		if got := Translate(event.SinkEvent{Name: name}).Standard; got != want {
 			t.Errorf("Translate(%q).Standard = %q, want %q", name, got, want)
 		}
 	}
 	// Items lift from a properties array, tolerating GA4/Segment/schema.org keys.
-	cv := Translate(analytics.SinkEvent{
+	cv := Translate(event.SinkEvent{
 		Name: "order_completed",
 		Properties: map[string]any{
 			"items": []any{
@@ -87,12 +87,12 @@ func TestTranslateEcommerce(t *testing.T) {
 		t.Errorf("item1: %+v", cv.Items[1])
 	}
 	// A first-class product id synthesizes a single item when no array is present.
-	cv2 := Translate(analytics.SinkEvent{Name: "product_added", ProductID: "SKU9", Quantity: 3})
+	cv2 := Translate(event.SinkEvent{Name: "product_added", ProductID: "SKU9", Quantity: 3})
 	if len(cv2.Items) != 1 || cv2.Items[0].ID != "SKU9" || cv2.Items[0].Quantity != 3 {
 		t.Fatalf("synthesized item: %+v", cv2.Items)
 	}
 	// No commerce data ⇒ no items (a non-commerce event carries none).
-	if items := Translate(analytics.SinkEvent{Name: "$pageview"}).Items; items != nil {
+	if items := Translate(event.SinkEvent{Name: "$pageview"}).Items; items != nil {
 		t.Errorf("pageview items = %+v, want nil", items)
 	}
 }
@@ -100,7 +100,7 @@ func TestTranslateEcommerce(t *testing.T) {
 // TestTranslateLiftUser verifies the match-key set is lifted from the raw properties
 // and the distinct id — the keys the adapters hash before send.
 func TestTranslateLiftUser(t *testing.T) {
-	cv := Translate(analytics.SinkEvent{
+	cv := Translate(event.SinkEvent{
 		Name:       "signup_completed",
 		DistinctID: "user-123",
 		Time:       time.Unix(1700000000, 0),
@@ -155,7 +155,7 @@ func TestTranslateLiftUser(t *testing.T) {
 // and this server event collapse onto one conversion, and a settlement replayed by a
 // webhook does not report the sale twice.
 func TestTranslateAServerSidePurchase(t *testing.T) {
-	cv := Translate(analytics.SinkEvent{
+	cv := Translate(event.SinkEvent{
 		Name:       "order_completed",
 		MessageID:  "minted-per-call",
 		DistinctID: "person_42",

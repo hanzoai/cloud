@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/o11y/pkg/modules/errortracking/implerrortracking"
 	"github.com/hanzoai/o11y/pkg/modules/sentry"
 	"github.com/hanzoai/o11y/pkg/types/sentrytypes"
@@ -52,12 +52,12 @@ func TestDeriveOrgUUID(t *testing.T) {
 	}
 }
 
-// TestBuildSentryEventNormalizes proves the ONE translate: an analytics.ErrorEvent maps
+// TestBuildSentryEventNormalizes proves the ONE translate: an event.ErrorEvent maps
 // onto the Sentry wire and through o11y's normalizer to a fingerprinted, correctly-scoped
 // Occurrence — the value the Sentry module ingests.
 func TestBuildSentryEventNormalizes(t *testing.T) {
 	handled := false
-	e := analytics.ErrorEvent{
+	e := event.ErrorEvent{
 		MessageID: "evt-1", Time: time.Unix(1700000000, 0).UTC(),
 		ExceptionType: "TypeError", Message: "x is not a function",
 		Stack: "at f (app.js:1:1)", Handled: &handled, Level: "error",
@@ -104,7 +104,7 @@ func TestBuildSentryEventNormalizes(t *testing.T) {
 // TestBuildSentryEventBareError proves a bare error-typed event (no exception) still
 // normalizes to a fingerprinted occurrence rather than being dropped.
 func TestBuildSentryEventBareError(t *testing.T) {
-	occ := implerrortracking.NormalizeEvent(buildSentryEvent(analytics.ErrorEvent{
+	occ := implerrortracking.NormalizeEvent(buildSentryEvent(event.ErrorEvent{
 		MessageID: "e", Time: time.Now().UTC(), Level: "error", Transaction: "/x",
 	}), false)
 	if occ == nil || occ.Fingerprint == "" {

@@ -27,7 +27,7 @@
 // others "unavailable" — honest, never a faked launch. Until those two executors
 // exist, /v1/social and /v1/marketing are the ONLY way to run those channels, and
 // each is ALSO usable standalone once they are; this plane composes them. Metrics are NOT stored here — a campaign's results are read at query time
-// from the ONE analytics plane (metrics.go: analytics.CampaignMetrics over the
+// from the ONE analytics plane (metrics.go: event.CampaignMetrics over the
 // utm_campaign-tagged events) plus each channel connector's reported spend. A
 // creative A/B is an experiment whose variant = creative and whose metric = the
 // campaign result from analytics; it composes the experiment seam (experiment.go),

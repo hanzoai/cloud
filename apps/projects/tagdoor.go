@@ -13,7 +13,7 @@ import (
 )
 
 // tagdoor.go — GET /v1/projects/tags, the PUBLIC per-site browser-tag config the
-// hosted tag (track.js / /v1/event.js) fetches to know which client-side pixels to
+// hosted tag (track.js / /v1/event/tag.js) fetches to know which client-side pixels to
 // inject. Under /v1/projects because the door follows the store it reads, which is
 // this app's (HIP-0139 §3.1).
 //
@@ -61,7 +61,8 @@ func init() {
 }
 
 // mountTagDoor registers GET /v1/projects/tags as a public, raw net/http handler
-// (like analytics' /v1/event.js) that reads THIS process's project store directly.
+// (like the event plane's /v1/event/tag.js) that reads THIS process's project store
+// directly.
 func mountTagDoor(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/projects/tags", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveTags(s, w, r)
@@ -154,7 +155,7 @@ func resolveSiteTags(s *cloud.Service[state], r *http.Request) (map[string]strin
 }
 
 // serveTags writes the site's browser tag config. Public + cross-origin, non-secret,
-// fail-safe. A raw net/http handler so it sets CORS + cache directly, like /v1/event.js.
+// fail-safe. A raw net/http handler so it sets CORS + cache directly, like /v1/event/tag.js.
 func serveTags(s *cloud.Service[state], w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")

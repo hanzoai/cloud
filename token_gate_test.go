@@ -70,7 +70,7 @@ var allowedTokenPrimitives = map[string]string{
 		"authorize the workspace the client NAMES through admit — and the client that must send that frame is " +
 		"the team front (hanzoai/team, live at team.hanzo.ai), a different repo. So this entry does not shrink " +
 		"from inside cloud, and neither does the one above it.",
-	"apps/analytics/team.go": "reader of the condemned team token — the ingest trust order already resolves " +
+	"apps/event/team.go": "reader of the condemned team token — the ingest trust order already resolves " +
 		"a validated IAM bearer ahead of it (eventTenant step 1), so this arm dies with the cutover and " +
 		"needs no IAM lane of its own.",
 	"apps/meet/meet.go": "ONE half now: mints the LiveKit room-join token — the media server's own wire " +
