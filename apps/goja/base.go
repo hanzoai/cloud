@@ -62,7 +62,10 @@ type BlobStore interface {
 // BaseRequest is the dispatch envelope. The binding adds the tenant (as orgId) and
 // the Base bridge; the caller supplies route/params/query/body.
 type BaseRequest struct {
-	Route  string
+	Route string
+	// Method is the HTTP method this dispatch stands for, passed to handle as
+	// req.method. Empty leaves the bundle its own default.
+	Method string
 	Params map[string]string
 	Query  map[string]string
 	Body   any
@@ -101,6 +104,17 @@ type BaseConfig struct {
 	// bundle never handles raw bytes. nil ⇒ no __blob is injected. This is the ONE
 	// way a bundle keeps big binaries out of its per-tenant SQLite.
 	Blob BlobStore
+	// Bind is the TENANT-SCOPED form of HostFns: an OPTIONAL hook returning extra
+	// host globals bound to the tenant of THIS dispatch. HostFns answers the same
+	// way for every organization; Bind is for a capability whose answer depends on
+	// who is asking — trust injects __own (is this tenant the one whose inventory
+	// is compiled in) and __audit (the trail, already bound to this tenant, so the
+	// bundle has no field in which to name another one).
+	//
+	// It takes the tenant rather than letting the bundle pass one, which is the
+	// same property __blob gets from namespacing its keys host-side: a tenant the
+	// bundle cannot express is a tenant the bundle cannot cross. May be nil.
+	Bind func(ctx context.Context, tenant string) map[string]any
 }
 
 // BaseHost is a compiled bundle + its per-tenant Base stores. Safe for concurrent use.
@@ -110,6 +124,7 @@ type BaseHost struct {
 	stores  *stores
 	hostFns map[string]any
 	blob    BlobStore
+	bind    func(context.Context, string) map[string]any
 }
 
 // NewBase compiles the bundle (via the goja engine, New) and prepares the
@@ -135,6 +150,7 @@ func NewBase(cfg BaseConfig) (*BaseHost, error) {
 		stores:  newStores(cfg.Name, cfg.DataDir, cfg.Schema, cfg.OnOpen),
 		hostFns: cfg.HostFns,
 		blob:    cfg.Blob,
+		bind:    cfg.Bind,
 	}, nil
 }
 
@@ -160,22 +176,31 @@ func (h *BaseHost) Dispatch(ctx context.Context, tenant string, req BaseRequest)
 		}
 	}()
 
-	globals := map[string]any{
-		"__db":    newBridge(ctx, tx),
-		"__newId": newID,
-		"__now":   func() int64 { return time.Now().UnixMilli() },
+	// A subsystem's own capabilities go in FIRST and the reserved globals go in
+	// LAST, so the rule "a subsystem must not shadow db/newId/now/blob" is
+	// enforced by the order rather than by a comment nobody runs. Bind beats
+	// HostFns for the same reason a tenant-scoped answer beats a process-global
+	// one: it knows more.
+	globals := map[string]any{}
+	// Extra Go-backed host capabilities, the same for every tenant (esign's __pdf).
+	maps.Copy(globals, h.hostFns)
+	// The tenant-scoped ones (trust's __own and __audit), which need to know who
+	// is asking.
+	if h.bind != nil {
+		maps.Copy(globals, h.bind(ctx, tenant))
 	}
+	globals["__db"] = newBridge(ctx, tx)
+	globals["__newId"] = newID
+	globals["__now"] = func() int64 { return time.Now().UnixMilli() }
 	// Tenant-bound object-storage seam (e.g. sign's PDFs). Keys are namespaced to
 	// {Name}/{TenantSegment} inside the bridge, so a bundle can only ever reach its
 	// OWN tenant's blobs.
 	if h.blob != nil {
 		globals["__blob"] = h.blobBridge(ctx, tenant)
 	}
-	// Extra Go-backed host capabilities (e.g. esign's __pdf). Injected after the
-	// reserved db/newId/now/blob globals; a subsystem must not shadow those.
-	maps.Copy(globals, h.hostFns)
 	resp, err := h.engine.DispatchWith(ctx, Request{
 		Route:  req.Route,
+		Method: req.Method,
 		Params: req.Params,
 		Query:  req.Query,
 		OrgID:  tenant,
