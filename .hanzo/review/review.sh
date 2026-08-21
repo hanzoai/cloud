@@ -25,15 +25,47 @@ API="${REVIEW_API:-https://api.hanzo.ai}"
 # `fireworks/gpt-oss-120b` named a provider we do not use and an id the catalog
 # does not serve, so every review call failed and the train stopped for far
 # longer. The gate refused correctly both times — there was nothing on the other
-# end. Check an id against the live catalog before it stands here:
+# end.
 #
-#   curl -s https://api.hanzo.ai/v1/models | jq -r '.data[].id' | grep -v /
+# BEING IN THE CATALOG IS NOT BEING SERVED, and that is the check this comment
+# used to prescribe wrongly. The catalog names what the gateway KNOWS; whether an
+# upstream will answer for that id today is a different fact, and the two have
+# disagreed on every id above. So ask the id to answer, and read the body:
 #
-# zen5-coder is the Zen family's coding model: premium rather than the shared
-# free pool (this reviewer is handed the diff of a private repository), and a
-# 1,000,000-token context against the 400 KB diff bound below — zen5-flash's
-# 65536 would truncate exactly the hunk the bound exists to keep whole.
-MODEL="${REVIEW_MODEL:-zen5-coder}"
+#   curl -s https://api.hanzo.ai/v1/chat/completions -H "Authorization: Bearer $TOK" \
+#     -H 'content-type: application/json' \
+#     -d '{"model":"<id>","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}'
+#
+# A 200 carrying an upstream refusal in the body counts as no answer — the
+# gateway relays some of them at 200, so `-w '%{http_code}'` alone reads a dead
+# id as live.
+#
+# enso is the house long-context model — owned_by=hanzo, no provider prefix,
+# premium rather than the shared free pool (this reviewer is handed the diff of a
+# private repository), and a 1,000,000-token context against the 400 KB diff
+# bound below, where a 65,536 context would truncate exactly the hunk the bound
+# exists to keep whole. Measured on this range before it stood here: it reads a
+# hostile diff and refuses it naming both findings, and it answers the schema
+# below as strict JSON.
+MODEL="${REVIEW_MODEL:-enso}"
+
+# WHEN THE PREMIUM MODEL CANNOT BE PAID FOR, FALL BACK RATHER THAN STOP THE TRAIN.
+# A 402 is not a verdict and it is not a transient — it is the gateway saying the
+# ACCOUNT cannot buy this model right now, which says nothing about the change
+# under review. Refusing on it stops every release for a billing fact, and that
+# has happened: the upstream provider account emptied and the gate refused 254
+# commits, including a fix for an unauthenticated admin surface.
+#
+# So a 402 drops to the next model that can answer. The order is deliberate —
+# premium first, because this reviewer reads a private diff and the best judgment
+# is worth paying for; then the models served by a provider we hold capacity
+# with. FALLBACKS is overridable for the same reason MODEL is, and an empty value
+# turns the ladder off and restores the old behaviour exactly.
+#
+# Fail-closed is UNTOUCHED. Exhausting the ladder still reaches `die`: this makes
+# the gate try harder to get a verdict, never accept the absence of one. Nothing
+# here can turn a refusal into a pass — only a real answer from a real model can.
+FALLBACKS="${REVIEW_FALLBACKS:-fireworks/gpt-oss-120b fireworks/gpt-oss-20b}"
 
 # An IAM access token, minted for this run by whoever invokes the reviewer.
 # There is no API key here and there is not meant to be one: IAM issues tokens,
@@ -72,8 +104,15 @@ die() { echo "::error::review: $*" >&2; exit 1; }
 #
 # The bound stays 400,000B. What changed is that the budget is spent on prose a
 # person wrote: the same range measures 118,143B once these are dropped.
+# public.yaml is the name openapi.yaml used to carry, so it appears only in
+# history — but the base is the last release reachable from HEAD, and during a
+# release drought that reaches back past the rename. One commit's regeneration of
+# it measures 480,741B against the 400,000B bound, and a single FILE over the
+# bound is the one shape the slicer cannot split, so the run refuses naming
+# itself and every later run refuses the same way. A retired generated document
+# is still a generated document.
 generated=(
-  ':(exclude)openapi.yaml' ':(exclude)private.yaml'
+  ':(exclude)openapi.yaml' ':(exclude)private.yaml' ':(exclude)public.yaml'
   ':(exclude)openapi/floor.json' ':(exclude)openapi/closure.json'
   ':(exclude)fleet/catalog.json' ':(exclude)plugin/*/openapi.json'
 )
@@ -150,7 +189,14 @@ user += f"{files} files changed.\n\nDIFF:\n{diff}"
 # JSON and nothing else" and a prompt is a request; response_format is a
 # constraint the gateway enforces. Verified against api.hanzo.ai on this model:
 # the content comes back bare and parses directly.
-json.dump({"model": model, "max_tokens": 1500, "temperature": 0,
+# THE ANSWER'S BUDGET IS PART OF THE WIRE, and too small a one reads as a hostile
+# change rather than as a truncated reply: the verdict comes back cut off, which
+# is not valid JSON, and this gate refuses what it cannot parse. Measured before
+# this number stood here — one commit costs ~1,000 tokens, a 33 KB eleven-file
+# slice 2,238 to 3,033, and the 1,500 this replaces returned NO content at all on
+# that slice. 8,000 leaves headroom over the largest observed answer without
+# leaving the budget unbounded.
+json.dump({"model": model, "max_tokens": 8000, "temperature": 0,
            "response_format": {"type": "json_object"},
            "messages": [{"role":"system","content":system},{"role":"user","content":user}]}, sys.stdout)
 PY
@@ -171,19 +217,46 @@ PY
 # fallback APPENDS to that rather than standing in for it, and the refusal read
 # `answered 000000` — a status nothing can look up. Take curl's own word, and
 # default only the case where it printed nothing at all.
-attempt=1
-while :; do
-  code=$(curl -sS -m 180 -o "$resp" -w '%{http_code}' "$API/v1/chat/completions" \
-    -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @"$req" || true)
-  code=${code:-000}
-  case "$code" in
-    000|429|502|503|504) : ;;
-    *) break ;;
-  esac
-  if [ "$attempt" -ge 3 ]; then break; fi
-  echo "review: $LABEL — reviewer answered $code, which is no answer; asking again ($attempt of 3)"
-  sleep $(( attempt * 5 ))
-  attempt=$(( attempt + 1 ))
+# The ladder is walked from the outside: each rung is a whole ask, retries and
+# all, so a fallback model is given exactly the patience the first one had.
+for try_model in $MODEL $FALLBACKS; do
+  if [ "$try_model" != "$MODEL" ]; then
+    echo "review: $LABEL — $MODEL could not be paid for; asking $try_model instead"
+    python3 -c 'import json,sys; b=json.load(open(sys.argv[1])); b["model"]=sys.argv[2]; json.dump(b, open(sys.argv[1],"w"))' "$req" "$try_model"
+  fi
+  # HOW MUCH PATIENCE A TRANSIENT IS OWED IS A MEASUREMENT, and three tries over
+  # fifteen seconds of pause was under it. The 502 here is not a gateway being
+  # rolled: the model plane's child process dies and is restarted, so EVERY
+  # request in flight at that instant is cut mid-body, and the ones queued behind
+  # it are cut by the next one. Measured on this deployment — three consecutive
+  # 502s spanning 90 seconds on one slice, `mount /v1: http: read response: EOF`,
+  # while a fourth ask seconds later answered normally. So the burst outlives the
+  # budget, and a release is refused for a change nobody read.
+  #
+  # Six tries with a widening pause spans about four minutes, which covers the
+  # bursts observed while still ending. FAIL-CLOSED IS UNTOUCHED, and that is the
+  # only property that matters here: exhausting the tries falls through to the
+  # same `die`, so this buys the reviewer a chance to answer and can never turn
+  # the absence of an answer into a pass.
+  tries=6
+  attempt=1
+  while :; do
+    code=$(curl -sS -m 180 -o "$resp" -w '%{http_code}' "$API/v1/chat/completions" \
+      -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @"$req" || true)
+    code=${code:-000}
+    case "$code" in
+      000|429|502|503|504) : ;;
+      *) break ;;
+    esac
+    if [ "$attempt" -ge "$tries" ]; then break; fi
+    echo "review: $LABEL — reviewer answered $code, which is no answer; asking again ($attempt of $tries)"
+    sleep $(( attempt * 10 ))
+    attempt=$(( attempt + 1 ))
+  done
+  # 402 is the ONLY status that moves to the next rung. A 401 is a bad bearer and
+  # a 400 a bad body — both fail identically on every model, so walking the ladder
+  # on them turns one legible refusal into three slow ones.
+  [ "$code" = "402" ] || break
 done
 # A REFUSED BEARER NAMES ITSELF. The gateway answers `jwt: audience not allowed`
 # without saying which audience it saw or which it wanted, and the two live in
@@ -216,6 +289,17 @@ try:
     text = raw["choices"][0]["message"]["content"]
 except Exception:
     print("::error::review: no answer in the reviewer's response"); sys.exit(1)
+# AN ANSWER THAT RAN OUT OF ROOM NAMES ITSELF. A model that spends its whole
+# budget returns content `null` rather than a short object, and every reader
+# below expects a string — so this arrived as a TypeError traceback out of the
+# balanced-object scan, which refuses the release (correctly, it is fail-closed)
+# while naming neither the budget nor the model. Say which it was, so the remedy
+# is the number above rather than a bisect.
+if not text:
+    fin = (raw.get("choices") or [{}])[0].get("finish_reason")
+    used = (raw.get("usage") or {}).get("completion_tokens")
+    print(f"::error::review: the reviewer returned no content (finish_reason={fin}, completion_tokens={used})"
+          " — it did not fit in the answer budget, so there is no verdict to read"); sys.exit(1)
 # THE VERDICT IS AN OBJECT, NOT A SPAN OF TEXT.
 #
 # This used to be re.search(r"\{.*\}", text, re.S) — GREEDY, so it took from the

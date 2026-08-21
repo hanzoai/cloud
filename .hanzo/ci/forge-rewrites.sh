@@ -115,7 +115,16 @@ if [ -n "${IAM_CLIENT_ID:-}" ] && [ -n "${IAM_CLIENT_SECRET:-}" ]; then
     | jq -r '.access_token // empty' 2>/dev/null || true)
   if [ -n "${IAM_TOKEN:-}" ]; then
     echo "::add-mask::${IAM_TOKEN}"
-    JOB_TOKEN=${GIT_TOKEN:-}   # kept, so a forge that will not spend the IAM token has something to fall back to
+    [ -n "${FALLBACK_TOKEN:-}" ] && echo "::add-mask::${FALLBACK_TOKEN}"
+    # Kept so a forge that will not spend the IAM token has something to fall back to.
+    # FALLBACK_TOKEN is that something while the IAM path is still being brought up:
+    # the audience the forge requires is stamped by a release that cannot be built until
+    # the modules resolve, and the modules cannot resolve until the audience is stamped.
+    # One credential that already works breaks the circle, and the retry below reaches
+    # for it only after the IAM identity has been asked and served nothing. When the
+    # release carrying the audience is running, that retry stops firing and this comes out.
+    JOB_TOKEN=${GIT_TOKEN:-}
+    [ -n "${FALLBACK_TOKEN:-}" ] && JOB_TOKEN=$FALLBACK_TOKEN
     GIT_TOKEN=$IAM_TOKEN
     echo "forge-rewrites: asking as the IAM identity, scoped to ${FORGE_AUDIENCE:-hanzo-git}"
   else
@@ -168,12 +177,24 @@ done
 # or an identity with no account here, reads exactly like a fleet of private repositories.
 # If the IAM identity served nothing and a per-job token was displaced to try it, put the
 # per-job token back and ask again rather than reporting a lane that fetches nothing.
-if [ -z "$on" ] && [ -n "${JOB_TOKEN:-}" ] && [ "$GIT_TOKEN" != "$JOB_TOKEN" ]; then
-  echo "forge-rewrites: the IAM identity served nothing — asking again as the per-job token"
+# WHAT THE IAM IDENTITY COULD NOT REACH, ASKED FOR AGAIN.
+#
+# The identity serves what its account can see, and a repository it cannot see denies
+# exactly as one that does not exist — so the answer is a 404 either way. The case is
+# PARTIAL, not total: on the run that found this, twenty-two modules were served and
+# twenty-six were refused, so a retry conditioned on nothing having been served never
+# fired and the twenty-six stayed on GitHub with no credential to fetch them.
+#
+# Only the refused ones are asked again. A module the IAM identity already served is
+# left alone: it resolved, and re-deciding it would put a second answer where there is
+# already a good one.
+if [ -n "$off" ] && [ -n "${JOB_TOKEN:-}" ] && [ "$GIT_TOKEN" != "$JOB_TOKEN" ]; then
+  retry=$(printf '%s\n' $off | sed -E 's/\(.*//')
+  echo "forge-rewrites: asking again for what the IAM identity could not reach"
   GIT_TOKEN=$JOB_TOKEN
   write_store "$GIT_TOKEN"
   off=""
-  for m in $mods; do
+  for m in $retry; do
     code=$(printf 'user = "x:%s"\n' "$GIT_TOKEN" \
       | curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --config - \
         "${FORGE_URL}/v1/repos/hanzoai/${m}" 2>/dev/null || echo 000)

@@ -95,12 +95,8 @@ func TestDeclaredArgsCannotForgeTheReceipts(t *testing.T) {
 }
 
 func TestOurOwnRegistryIsNameableByItsCanonicalHost(t *testing.T) {
-	// oci.hanzo.ai and registry.hanzo.ai are ONE store. Refusing the canonical
-	// name while accepting the deprecated alias is a rule about spelling, not
-	// about reach.
 	for _, image := range []string{
 		"oci.hanzo.ai/hanzoai/sandbox:1.0.1-dev",
-		"registry.hanzo.ai/hanzoai/sandbox:1.0.1-dev",
 		"ghcr.io/hanzoai/cloud:v1",
 	} {
 		if !imageAllowed(image) {
@@ -108,10 +104,13 @@ func TestOurOwnRegistryIsNameableByItsCanonicalHost(t *testing.T) {
 		}
 	}
 	// And the bound still holds: a host we do not operate, and a namespace we do
-	// not own on a host we do.
+	// not own on a host we do. registry.hanzo.ai is the first kind — the name
+	// resolves to a Cloudflare edge rather than to the registry, so trusting it
+	// on the privileged build path would trust whatever answers there.
 	for _, image := range []string{
 		"docker.io/library/node:22",
 		"evil.example.com/hanzoai/sandbox:1",
+		"registry.hanzo.ai/hanzoai/sandbox:1.0.1-dev",
 		"oci.hanzo.ai/globex/private:v1",
 	} {
 		if imageAllowed(image) {

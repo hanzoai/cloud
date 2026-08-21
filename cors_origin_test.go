@@ -257,6 +257,13 @@ func do(t *testing.T, app *zip.App, method, origin string) *http.Response {
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
+	// An OPTIONS with an Origin is a PREFLIGHT here, and a preflight is defined by
+	// carrying this (Fetch). Without it the request is the RFC 9110 §9.3.7
+	// question instead — a different question, answered by a different door — so a
+	// preflight test that omitted it was modelling neither.
+	if method == http.MethodOptions && origin != "" {
+		req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	}
 	res, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)

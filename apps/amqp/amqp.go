@@ -10,10 +10,17 @@
 // becomes a durable JetStream consumer, and basic.ack becomes an Ack; see the
 // gateway's route.go for the whole map.
 //
-// It mounts NO HTTP routes of its own; cloud's generic per-subsystem liveness
-// route answers /v1/amqp/health and the K8s Service TCP-probes :5672 — which
-// is what a broker's readiness actually is, and asking it twice in two
-// protocols would be two answers to one question.
+// It mounts NO HTTP routes of its own, so cloud's generic per-subsystem
+// liveness route answers /v1/amqp/health with an unconditional ok. That route
+// does NOT by itself prove the broker is up; readiness here is structural
+// instead. This app is Eager and Mount fails CLOSED (below), so a broker that
+// cannot bind :5672 or reach the bus at boot takes the whole process down and
+// the pod never goes Ready. A broker that dies AFTER boot is reported through
+// cloud.Degraded, which surfaces on the binary's /v1/health `degraded` field
+// and is what the release smoke refuses an image on. The :5672 listener is an
+// in-pod socket: the K8s Service exposes only the HTTP/metrics/ZAP ports, so
+// reaching the broker beyond the pod is a Service (and NetworkPolicy) decision
+// this app does not make.
 //
 // It ALWAYS serves, like the PubSub plane it rides. Mount fails CLOSED: it
 // waits for the gateway to report ready — the bus answered, the stream and the
@@ -86,10 +93,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	gateway = b
-	// Watch for a later exit (an accept error, say) and log it. A clean
-	// Shutdown makes Serve return nil, which is silent.
+	// Watch for a later exit (an accept error, say). A clean Shutdown makes Serve
+	// return nil, which is silent; an UNEXPECTED exit is a broker that died after
+	// a healthy boot, and nothing above K8s would notice it — the container probes
+	// are on :8080/:9090 and the generic /v1/amqp/health answers ok regardless. So
+	// record a degradation: it surfaces on the binary's /v1/health `degraded`
+	// field and is what the release smoke reads to refuse an image.
 	go func() {
 		if err := <-errc; err != nil {
+			cloud.Degraded("amqp", err)
 			log.Error("amqp gateway serve exited", "err", err)
 		}
 	}()

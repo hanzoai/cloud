@@ -55,7 +55,7 @@ var unwired = []string{
 var unextracted = []string{
 	"admission", "ad", "affiliate", "agents", "allowance", "answer", "ask",
 	"auditlog", "author", "auto", "benchmark", "blueprint", "books",
-	"campaign", "catalog", "catalogsync", "channels", "cloudflare", "cms",
+	"campaign", "catalog", "channels", "cloudflare", "cms",
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
 	"controlplane", "crawl", "crm", "cron", "dataset", "graph",
 	"destination", "domain", "entitlement", "erp", "esign", "exec",
@@ -82,7 +82,7 @@ var unextracted = []string{
 	"node",
 	"payout", "plan", "plugin", "pref", "principal",
 	"projects", "prompt", "provisioning", "reference",
-	"referral", "registry", "risk", "rollingcap", "s3", "s3admin",
+	"referral", "registry", "risk", "s3", "s3admin",
 	"samples", "sandbox", "sbom", "search", "security",
 	// seo is the search-visibility surface: a typed proxy onto a measurement
 	// vendor, metered at that vendor's own published prices. It imports only
@@ -93,6 +93,13 @@ var unextracted = []string{
 	"seo",
 	"settings", "share",
 	"sites",
+	// standing is the recurring cost of KEEPING a company — annual report,
+	// franchise tax, agent of record — as distinct from the one-off formation
+	// price apps/company charges. It imports only hanzoai/cloud and no
+	// hanzoai/standing exists to mount. The decision this pin owes leans to the
+	// second branch: it is the other half of company's own number, so it reads as
+	// cloud's machinery rather than a product with a daemon of its own.
+	"standing",
 	"sync",
 	// taxonomy is the product catalogue's own shape — the categories, tags and
 	// display order the console used to hold as a TypeScript array. It imports only

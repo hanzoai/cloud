@@ -56,9 +56,6 @@ type Org struct {
 	Name string
 }
 
-// DBHandle is the per-org database handle Base hands out.
-type DBHandle interface{ Close() error }
-
 // OrgConfig is the commerce-served org settings struct.
 type OrgConfig struct {
 	OrgID string
@@ -300,39 +297,6 @@ type (
 	Span    interface{ End() }
 )
 
-// IntentRequest creates a payments intent. Commerce never sees PAN;
-// it only ever passes the vault token + amount + currency.
-type IntentRequest struct {
-	Token       string
-	Currency    string
-	AmountCents int64
-}
-
-// IntentResponse acknowledges intent creation / state.
-type IntentResponse struct {
-	ID     string
-	Status string
-}
-
-// IntentStatus is the status-poll response.
-type IntentStatus struct{ Status string }
-
-// VaultChargeRequest is the payments→vault charge request. Vault is
-// the only system that sees PAN — it dereferences the token and
-// makes the processor call.
-type VaultChargeRequest struct {
-	Token       string
-	ProcessorID string
-	Currency    string
-	AmountCents int64
-}
-
-// VaultChargeResponse is the vault→payments charge response.
-type VaultChargeResponse struct {
-	ProcessorRef string
-	Status       string
-}
-
 // IAMClient is the inter-subsystem interface to IAM. Co-resident:
 // direct Go call. Split: ZAP-RPC.
 type IAMClient interface {
@@ -350,11 +314,6 @@ type KMSClient interface {
 	// without this, disconnecting drops the connection row and leaves the material.
 	DeleteSecret(ctx context.Context, ref string) error
 	Sign(ctx context.Context, keyRef string, payload []byte) ([]byte, error)
-}
-
-// BaseClient is the inter-subsystem interface to Base.
-type BaseClient interface {
-	Open(ctx context.Context, orgID, serviceName string) (DBHandle, error)
 }
 
 // DepositInput is a native credit write (grant / prefund / settlement) to a
@@ -503,24 +462,4 @@ type VFSClient interface {
 	Put(ctx context.Context, key string, payload []byte) error
 	Get(ctx context.Context, key string) ([]byte, error)
 	Delete(ctx context.Context, key string) error
-}
-
-// MQClient is the inter-subsystem interface to mq.
-type MQClient interface {
-	Publish(ctx context.Context, subject string, payload []byte) error
-	Subscribe(ctx context.Context, subject string, handler func([]byte) error) error
-}
-
-// PaymentsClient is the inter-subsystem interface to payments. Always
-// ZAP-RPC; never co-resident (PCI scope isolation).
-type PaymentsClient interface {
-	CreateIntent(ctx context.Context, req *IntentRequest) (*IntentResponse, error)
-	ConfirmIntent(ctx context.Context, intentID string) (*IntentResponse, error)
-	GetIntentStatus(ctx context.Context, intentID string) (*IntentStatus, error)
-}
-
-// VaultClient is the inter-subsystem interface to vault. The ONLY
-// system that touches PAN. Always ZAP-RPC; never co-resident.
-type VaultClient interface {
-	Charge(ctx context.Context, req *VaultChargeRequest) (*VaultChargeResponse, error)
 }

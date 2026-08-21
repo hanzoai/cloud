@@ -265,6 +265,10 @@ func MountIndex(app *zip.App, subsets func() ([]Part, error)) {
 			refer(c, r)
 			return c.Bytes(http.StatusOK, body)
 		}
+		if options(c, r) {
+			refer(c, r)
+			return c.Bytes(http.StatusNoContent, nil)
+		}
 		err := c.Next()
 		refer(c, r)
 		return err
@@ -289,6 +293,37 @@ func answer(c *zip.Ctx, r *rendered) ([]byte, bool) {
 	}
 	body, mine := r.doors[path]
 	return body, mine
+}
+
+// options answers a BARE OPTIONS — RFC 9110 §9.3.7, "what does this resource
+// accept" — for any address the contract carries, and reports whether it did.
+//
+// It is the same question refer already answers as a header on a GET, asked the
+// way HTTP has a method for asking it: a client that holds an address and wants
+// to know what it can do there sends OPTIONS and reads Allow, without a body and
+// without fetching a document. That completes the self-describing story the two
+// index doors start — root names the capabilities, a capability names its
+// operations, and every address names its own methods.
+//
+// It answers 204 and never a body, because Allow IS the answer (refer sets it,
+// from the same address table). An address the contract does not carry is not
+// this middleware's to answer: it yields, and the capability that owns the
+// subtree decides — a 404 for a path nobody serves, or its own OPTIONS if it
+// grew one.
+//
+// A CORS PREFLIGHT NEVER REACHES HERE. It is an OPTIONS carrying
+// Access-Control-Request-Method, and cloud's edge middleware owns and
+// short-circuits exactly those — the split is on the header that defines the
+// preflight, so neither question is answered as if it were the other.
+func options(c *zip.Ctx, r *rendered) bool {
+	if c.Method() != http.MethodOptions || r == nil {
+		return false
+	}
+	if c.Header("Access-Control-Request-Method") != "" {
+		return false // a preflight; the edge owns it
+	}
+	a, ok := r.at(c.Path())
+	return ok && a.allow != ""
 }
 
 // refer stamps the RFC 8288 links on a /v1 answer: where this response came
