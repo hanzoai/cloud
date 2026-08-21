@@ -107,13 +107,13 @@ func writable(ctx context.Context) (string, error) {
 		return "", cloud.Super.Refusal()
 	}
 	if cloud.Super.Admits(cloud.AuthorityOf(c)) {
-		return platformOrg, nil
+		return hanzo, nil
 	}
 	org, ok := principal.Org(c)
 	if !ok || !principal.IsOrgAdmin(c) {
 		return "", zip.ErrForbidden("an org admin edits their own catalogue; the platform's needs a SuperAdmin")
 	}
-	if org == platformOrg {
+	if org == hanzo {
 		return "", zip.ErrForbidden("the platform catalogue is edited by a SuperAdmin, not by an admin of the platform's own org")
 	}
 	return org, nil
@@ -143,7 +143,7 @@ func (t Taxon) key() (string, string)    { return t.Owner, t.ID }
 // platform is possible, so this decides it — rather than leaving the console to
 // take whichever row it read last.
 func own[T keyed](rows []T, org string) []T {
-	if org == "" || org == platformOrg {
+	if org == "" || org == hanzo {
 		return rows
 	}
 	shadowed := make(map[string]bool, len(rows))

@@ -103,10 +103,10 @@ func (s *Store) Close() error { return s.db.Close() }
 // it is built from the VALIDATED principal's org — never from a request field, so
 // there is no argument a caller can pass to widen it.
 func owners(org string) []any {
-	if org == "" || org == platformOrg {
-		return []any{platformOrg}
+	if org == "" || org == hanzo {
+		return []any{hanzo}
 	}
-	return []any{platformOrg, org}
+	return []any{hanzo, org}
 }
 
 // Categories returns the categories visible to org, in display order. The id
@@ -218,7 +218,7 @@ func (s *Store) HasCategory(ctx context.Context, org, id string) (bool, error) {
 // only platform sudo can delete one — a scope that is cross-tenant by definition.
 func (s *Store) CountTaxa(ctx context.Context, owner, category string) (int, error) {
 	q, args := `SELECT COUNT(*) FROM taxon WHERE category=? AND owner=?`, []any{category, owner}
-	if owner == platformOrg {
+	if owner == hanzo {
 		q, args = `SELECT COUNT(*) FROM taxon WHERE category=?`, []any{category}
 	}
 	var n int
