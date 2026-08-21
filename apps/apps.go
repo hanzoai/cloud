@@ -29,7 +29,6 @@ import (
 	"github.com/hanzoai/cloud/clients/auditlog"
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/code"
-	"github.com/hanzoai/cloud/clients/connectors"
 	"github.com/hanzoai/cloud/clients/dns"
 	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/exec"
@@ -81,10 +80,6 @@ func Wire() []cloud.MountSpec {
 		{Name: "security", Mount: security.Mount, Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
 		{Name: "exec", Mount: exec.Mount},
 		{Name: "gateway", Mount: gateway.Mount},
-		// Connect-a-third-party-account plane /v1/connectors/*: an org links its
-		// X / GitHub / Google / Slack / … account and the token is sealed into
-		// that org's KMS namespace. Owns a store handle, so it closes on stop.
-		{Name: "connectors", Mount: connectors.Mount, Shutdown: connectors.Shutdown},
 		{Name: "audit", Mount: auditlog.Mount},
 
 		// The local apps. Each is a REAL implementation over the embedded store,
