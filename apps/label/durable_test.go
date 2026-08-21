@@ -146,7 +146,7 @@ func TestAnAcknowledgedRecordSurvivesATakeover(t *testing.T) {
 	// NOTHING IS CLOSED HERE. That is the point.
 
 	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint()), &recorder{})
-	code, raw := req(t, succ, http.MethodGet, "/v1/risk/labels?subject=tx-durable", "acme", "u_acme", "")
+	code, raw := req(t, succ, http.MethodGet, "/v1/label?subject=tx-durable", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("the successor's read = %d %s", code, raw)
 	}
@@ -185,7 +185,7 @@ func TestAWriteOnANonOwnerFailsClosed(t *testing.T) {
 
 	app, _ := wireDurable(t, org.NewDurability(cas, m, nil, shipCheckpoint()), &recorder{})
 	at := time.Now().UTC().Add(-100 * 24 * time.Hour).Truncate(time.Second)
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels", orgID, "u_acme", batch(
+	code, raw := req(t, app, http.MethodPost, "/v1/label", orgID, "u_acme", batch(
 		assertion("transaction", "tx-nonowner", at, at.Add(24*time.Hour), Productive, Dispute, "dp-1", 1)))
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("a write on a non-owner = %d %s, want 503: acknowledging it would create a second divergent copy of the tenant's record", code, raw)
@@ -220,11 +220,11 @@ func TestADeposedWriterDoesNotAcknowledge(t *testing.T) {
 	// it still believes it is the writer, which is exactly the split it must not
 	// acknowledge a record through.
 	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint()), &recorder{})
-	if code, raw := req(t, succ, http.MethodGet, "/v1/risk/labels", "acme", "u_acme", ""); code != http.StatusOK {
+	if code, raw := req(t, succ, http.MethodGet, "/v1/label", "acme", "u_acme", ""); code != http.StatusOK {
 		t.Fatalf("the successor's read = %d %s", code, raw)
 	}
 
-	code, raw := req(t, owner, http.MethodPost, "/v1/risk/labels", "acme", "u_acme", batch(
+	code, raw := req(t, owner, http.MethodPost, "/v1/label", "acme", "u_acme", batch(
 		assertion("transaction", "tx-deposed", at, at.Add(24*time.Hour), Productive, Dispute, "dp-deposed", 1)))
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("a write on a DEPOSED writer = %d %s, want 503: the ship was refused at a stale round with no error, and answering 200 there acknowledges a record only this pod will ever see", code, raw)
@@ -232,7 +232,7 @@ func TestADeposedWriterDoesNotAcknowledge(t *testing.T) {
 
 	// And the refusal is honest: the record really is not in the durable copy the
 	// next reader opens.
-	code, raw = req(t, succ, http.MethodGet, "/v1/risk/labels?subject=tx-deposed", "acme", "u_acme", "")
+	code, raw = req(t, succ, http.MethodGet, "/v1/label?subject=tx-deposed", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("the successor's read = %d %s", code, raw)
 	}
@@ -266,7 +266,7 @@ func TestADisposalIsShippedBeforeItIsAcknowledged(t *testing.T) {
 	}
 
 	body := fmt.Sprintf(`{"before":%q}`, time.Now().UTC().Add(-minRetention-24*time.Hour).Format(time.RFC3339))
-	code, raw := req(t, owner, http.MethodPost, "/v1/risk/labels/dispose", "acme", "u_acme", body)
+	code, raw := req(t, owner, http.MethodPost, "/v1/label/dispose", "acme", "u_acme", body)
 	if code != http.StatusOK {
 		t.Fatalf("dispose = %d %s", code, raw)
 	}
@@ -279,7 +279,7 @@ func TestADisposalIsShippedBeforeItIsAcknowledged(t *testing.T) {
 	}
 	// The owner is gone, ungracefully.
 	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint()), &recorder{})
-	code, raw = req(t, succ, http.MethodGet, "/v1/risk/labels", "acme", "u_acme", "")
+	code, raw = req(t, succ, http.MethodGet, "/v1/label", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("the successor's read = %d %s", code, raw)
 	}

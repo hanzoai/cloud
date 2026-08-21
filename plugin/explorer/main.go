@@ -6,7 +6,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/explorer"
-	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the explorer app.
@@ -18,13 +17,9 @@ import (
 // `explorer openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name: "explorer",
-		// Declared: undeclared falls back to /v1/explorer, which this app does not
-		// serve — the scope then guards a path with no routes and zip refuses to
-		// compose (see plugin/account/main.go).
-		Prefixes: manifest.PrefixesFor("explorer"),
-		Price:    cloud.Free,
-		Mount:    explorer.Mount,
+		Name:  "explorer",
+		Price: cloud.Free,
+		Mount: explorer.Mount,
 	}}, []string{"explorer"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -469,36 +469,42 @@ func (o ops) dropS3(ctx context.Context, in *resourceRef) (*noContent, error) {
 // the document nor the MCP tool list.
 //
 // Registered on the *zip.App with absolute paths, which is the same address the
-// untyped POST beside it uses — provisioning owns seven top-level nouns, not one
-// prefix, so there is no group to hang them on. cloud.Bridge is already installed
-// app-wide by Serve, ahead of every mount, which is what parks the request these
-// ops resolve their tenant from.
+// untyped POST beside it uses. cloud.Bridge is already installed app-wide by
+// Serve, ahead of every mount, which is what parks the request these ops resolve
+// their tenant from.
+//
+// The last two are the OPERATOR's, not a tenant's: they read the shared vector
+// backend whole, so they sit at /v1/admin/<name> where the public projection
+// drops them by address (inventory.go says why).
 func mountTyped(z *zip.App, o ops) {
-	zip.Get(z, "/v1/instances/sql", o.listSQL)
-	zip.Get(z, "/v1/instances/sql/:name", o.getSQL)
-	zip.Delete(z, "/v1/instances/sql/:name", o.dropSQL)
+	zip.Get(z, "/v1/provisioning/sql", o.listSQL)
+	zip.Get(z, "/v1/provisioning/sql/:name", o.getSQL)
+	zip.Delete(z, "/v1/provisioning/sql/:name", o.dropSQL)
 
-	zip.Get(z, "/v1/instances/kv", o.listKV)
-	zip.Get(z, "/v1/instances/kv/:name", o.getKV)
-	zip.Delete(z, "/v1/instances/kv/:name", o.dropKV)
+	zip.Get(z, "/v1/provisioning/kv", o.listKV)
+	zip.Get(z, "/v1/provisioning/kv/:name", o.getKV)
+	zip.Delete(z, "/v1/provisioning/kv/:name", o.dropKV)
 
-	zip.Get(z, "/v1/instances/datastore", o.listDatastore)
-	zip.Get(z, "/v1/instances/datastore/:name", o.getDatastore)
-	zip.Delete(z, "/v1/instances/datastore/:name", o.dropDatastore)
+	zip.Get(z, "/v1/provisioning/datastore", o.listDatastore)
+	zip.Get(z, "/v1/provisioning/datastore/:name", o.getDatastore)
+	zip.Delete(z, "/v1/provisioning/datastore/:name", o.dropDatastore)
 
-	zip.Get(z, "/v1/instances/docdb", o.listDocDB)
-	zip.Get(z, "/v1/instances/docdb/:name", o.getDocDB)
-	zip.Delete(z, "/v1/instances/docdb/:name", o.dropDocDB)
+	zip.Get(z, "/v1/provisioning/docdb", o.listDocDB)
+	zip.Get(z, "/v1/provisioning/docdb/:name", o.getDocDB)
+	zip.Delete(z, "/v1/provisioning/docdb/:name", o.dropDocDB)
 
-	zip.Get(z, "/v1/instances/vector", o.listVector)
-	zip.Get(z, "/v1/instances/vector/:name", o.getVector)
-	zip.Delete(z, "/v1/instances/vector/:name", o.dropVector)
+	zip.Get(z, "/v1/provisioning/vector", o.listVector)
+	zip.Get(z, "/v1/provisioning/vector/:name", o.getVector)
+	zip.Delete(z, "/v1/provisioning/vector/:name", o.dropVector)
 
-	zip.Get(z, "/v1/instances/search", o.listSearch)
-	zip.Get(z, "/v1/instances/search/:name", o.getSearch)
-	zip.Delete(z, "/v1/instances/search/:name", o.dropSearch)
+	zip.Get(z, "/v1/provisioning/search", o.listSearch)
+	zip.Get(z, "/v1/provisioning/search/:name", o.getSearch)
+	zip.Delete(z, "/v1/provisioning/search/:name", o.dropSearch)
 
-	zip.Get(z, "/v1/instances/s3", o.listS3)
-	zip.Get(z, "/v1/instances/s3/:name", o.getS3)
-	zip.Delete(z, "/v1/instances/s3/:name", o.dropS3)
+	zip.Get(z, "/v1/provisioning/s3", o.listS3)
+	zip.Get(z, "/v1/provisioning/s3/:name", o.getS3)
+	zip.Delete(z, "/v1/provisioning/s3/:name", o.dropS3)
+
+	zip.Get(z, "/v1/admin/provisioning/vector/collections", o.adminVectorCollections)
+	zip.Get(z, "/v1/admin/provisioning/vector/stats", o.adminVectorStats)
 }

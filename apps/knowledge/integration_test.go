@@ -267,7 +267,7 @@ func TestKBSpinePerOrgRAG(t *testing.T) {
 	}
 
 	// Org A retrieves its knowledge via the RAG entry point.
-	code, b := req(t, app, http.MethodPost, "/v1/kb/search", "A", map[string]any{"query": "how do I handle an incident"})
+	code, b := req(t, app, http.MethodPost, "/v1/knowledge/search", "A", map[string]any{"query": "how do I handle an incident"})
 	if code != http.StatusOK {
 		t.Fatalf("search as A: %d %s", code, b)
 	}
@@ -280,7 +280,7 @@ func TestKBSpinePerOrgRAG(t *testing.T) {
 	}
 
 	// Org B searches the SAME query — its namespace is empty. No cross-org leak.
-	code, b = req(t, app, http.MethodPost, "/v1/kb/search", "B", map[string]any{"query": "how do I handle an incident"})
+	code, b = req(t, app, http.MethodPost, "/v1/knowledge/search", "B", map[string]any{"query": "how do I handle an incident"})
 	if code != http.StatusOK {
 		t.Fatalf("search as B: %d %s", code, b)
 	}
@@ -301,7 +301,7 @@ func TestSearchRefusesWithoutPrincipal(t *testing.T) {
 	app := mountKB(t)
 
 	// No X-User-Id → not a validated principal → 403 before any store/index access.
-	hr := httptest.NewRequest(http.MethodPost, "/v1/kb/search", strings.NewReader(`{"query":"x"}`))
+	hr := httptest.NewRequest(http.MethodPost, "/v1/knowledge/search", strings.NewReader(`{"query":"x"}`))
 	hr.Header.Set("Content-Type", "application/json")
 	hr.Header.Set("X-Org-Id", "victim") // forged org, no principal
 	resp, err := app.Test(hr)

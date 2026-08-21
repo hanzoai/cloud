@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/kb/connectors/:provider", zip.Doc{
+	zip.Describe("DELETE /v1/knowledge/connectors/:provider", zip.Doc{
 		Description: "Revokes a connection: it tombstones the stored credential\nso a later sync cannot reuse it, purges this provider's points from the org's\nvector namespace, and marks the connector disconnected. The documents already\ningested stay in the org's store — they are the org's own data — but stop being\nretrievable by search; a caller deletes them through the document surface.",
 		Fields: map[string]string{
 			"connectionOut.account":  "Account names the connected external account, when the provider reports one.",
@@ -18,7 +18,7 @@ func init() {
 			"providerIn.provider":    "Provider is the connector to act on: github, slack, google or notion.",
 		},
 	})
-	zip.Describe("GET /v1/kb/connectors", zip.Doc{
+	zip.Describe("GET /v1/knowledge/connectors", zip.Doc{
 		Description: "Returns every supported knowledge connector with THIS org's\nconnection state and the REAL number of documents each has ingested into the\norg's store. A provider that is configured for the deployment but not yet\nconnected appears as disconnected, so the console can offer a Connect button.\nNo secret is ever returned.",
 		Fields: map[string]string{
 			"connectorView.account":      "Account names the connected external account. Absent until the org connects.",
@@ -32,7 +32,7 @@ func init() {
 			"kbConnectorsOut.connectors": "Connectors is every supported provider with this org's connection state.",
 		},
 	})
-	zip.Describe("GET /v1/kb/connectors/:provider/callback", zip.Doc{
+	zip.Describe("GET /v1/knowledge/connectors/:provider/callback", zip.Doc{
 		Description: "CompleteConnectorOAuth finishes an OAuth connection: it exchanges the\nprovider's code for a token, seals that token in KMS, and records the\nconnection. THE ORG COMES FROM THE SIGNED STATE, not from a header and not from\nthe provider, so an attacker cannot bind their own account to someone else's\norg — a tampered, expired or foreign-provider state is refused outright. The\ntoken itself is never returned, never written into the document, and never\nlogged; the document holds only its KMS path.",
 		Fields: map[string]string{
 			"callbackIn.code":        "Code is the provider's authorization code, exchanged for a token.",
@@ -44,14 +44,14 @@ func init() {
 			"connectionOut.status":   "Status is the connection state: connected or disconnected.",
 		},
 	})
-	zip.Describe("GET /v1/kb/connectors/:provider/connect", zip.Doc{
+	zip.Describe("GET /v1/knowledge/connectors/:provider/connect", zip.Doc{
 		Description: "StartConnectorOAuth returns the provider authorize URL the console opens to\nconnect this org's account. There is no server-side redirect — the console\nstays in control of the navigation. The URL carries a state this server SIGNED\nover the caller's validated org, so the connection the callback completes can\nonly ever land in that org.",
 		Fields: map[string]string{
 			"kbAuthorizeOut.authorizeUrl": "AuthorizeURL is the provider's authorize endpoint with an org-bound signed state.",
 			"providerIn.provider":         "Provider is the connector to act on: github, slack, google or notion.",
 		},
 	})
-	zip.Describe("GET /v1/kb/connectors/catalog", zip.Doc{
+	zip.Describe("GET /v1/knowledge/connectors/catalog", zip.Doc{
 		Description: "Returns the ONE catalog of everything a caller can\nconnect: every first-party connector and every long-tail one, in a single list\nsorted by provider. `configured` reports whether this deployment holds OAuth\ncredentials for a source, so the console can show Connect rather than a dead\nbutton, and `kind` is a badge only — the connect and sync lifecycle is\nidentical for both. The catalog itself is org-independent; a validated\nprincipal is still required. It is metadata only: no secret is ever returned.",
 		Fields: map[string]string{
 			"catalogEntry.kind":     "\"native\" | \"piece\"",
@@ -59,7 +59,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"connectors":[{"provider":"github","displayName":"GitHub","description":"Repositories, READMEs, and issues.","kind":"native","configured":true}]}`),
 	})
-	zip.Describe("GET /v1/kb/graph", zip.Doc{
+	zip.Describe("GET /v1/knowledge/graph", zip.Doc{
 		Description: "Returns the caller org's knowledge as a node/edge graph\nshaped for a force-directed renderer: pages, memories and synced sources as\nnodes; the page parent tree, the wikilinks between pages, and each source's\nconnector provenance as edges. Wikilink targets are resolved HERE by title or\nslug, so a rename never needs an edge rewrite and a link that matches no page\nrenders as its own \"unresolved\" node instead of vanishing. ?project= narrows\nit. A store outage degrades to an honest empty graph, never a 5xx.",
 		Fields: map[string]string{
 			"graphEdge.kind":    "parent | link | provenance",
@@ -73,7 +73,7 @@ func init() {
 			"graphOut.nodes":    "Nodes are the pages, memories, sources, connectors and unresolved link targets.",
 		},
 	})
-	zip.Describe("POST /v1/kb/connectors/:provider/sync", zip.Doc{
+	zip.Describe("POST /v1/knowledge/connectors/:provider/sync", zip.Doc{
 		Description: "Pulls the provider's documents for the caller's org and files\nthem as knowledge sources, which the store's own hook then indexes — so a\nsynced document is retrievable exactly like a hand-written page. The org is the\nvalidated tenant and the credential is read from KMS, so an org can only ever\nsync its own connection. A provider failure is reported honestly (502) and\nrecorded on the connector rather than silently swallowed.",
 		Fields: map[string]string{
 			"kbSyncOut.ingested":  "Ingested is how many documents landed in the org's knowledge store.",
@@ -81,10 +81,10 @@ func init() {
 			"providerIn.provider": "Provider is the connector to act on: github, slack, google or notion.",
 		},
 	})
-	zip.Describe("POST /v1/kb/import", zip.Doc{
+	zip.Describe("POST /v1/knowledge/import", zip.Doc{
 		Description: "Reads the uploaded export, dispatches to the format normalizer, and\nfiles the resulting pages. `format` (query) selects the normalizer; `project`\n(query, optional) scopes every imported page to a project.",
 	})
-	zip.Describe("POST /v1/kb/search", zip.Doc{
+	zip.Describe("POST /v1/knowledge/search", zip.Doc{
 		Description: "Runs a semantic search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced —\nand returns the matching passages. This is the RAG entry point: an agent asks\n\"what does this org know about X\" and the org's OWN vector namespace answers.\nThe org comes from the validated principal, and both the collection and the\npayload filter are pinned to it, so cross-tenant retrieval is impossible. An\nunreachable index returns an honest empty result set with degraded=true, never\na 5xx.",
 		Fields: map[string]string{
 			"searchIn.doctypes":  "DocTypes restricts retrieval to a subset of the indexed knowledge doctypes\n(kb-page, kb-memory, kb-source). An empty or foreign list reads all of them.",
