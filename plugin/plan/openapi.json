@@ -69,30 +69,6 @@
         "x-tool": true
       }
     },
-    "/v1/plan/cloud": {
-      "get": {
-        "operationId": "get_plan_cloud",
-        "summary": "Returns the cloud plan catalog.",
-        "description": "Returns the cloud plan catalog. It is the same section\nListCloudPlans answers and a separate operation because it is a separate\naddress, and an address is what every projection keys on.",
-        "tags": [
-          "plan"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/planList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
     "/v1/plan/dns": {
       "get": {
         "operationId": "get_plan_dns",

@@ -109,7 +109,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// catalogTenant).
 	zip.Get(zapp, "/v1/plan", o.listPlans)
 	zip.Get(zapp, "/v1/plan/subscriptions", o.listSubscriptions)
-	zip.Get(zapp, "/v1/plan/cloud", o.listCloud)
 	zip.Get(zapp, "/v1/plan/blockchain", o.listBlockchain)
 	zip.Get(zapp, "/v1/plan/dns", o.listDNS)
 	zip.Get(zapp, "/v1/plan/gpu", o.listGPU)
