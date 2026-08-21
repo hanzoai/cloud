@@ -123310,7 +123310,9 @@ tags:
 - description: 'Package authors is a royalty for open-source work: your repo runs,
     you get paid.'
   name: authors
-- name: authz
+- description: 'Package serve is the access decision behind an org-scoped call: who
+    may do what, where, answered allow or deny.'
+  name: authz
 - description: Package auto is workflows that run themselves, on a schedule or a webhook.
   name: auto
 - description: 'Package base is managed Hanzo Base: a hosted backend for your app
@@ -123465,7 +123467,9 @@ tags:
 - description: Package legal is the paperwork your company needs, drafted, signed
     and filed.
   name: legal
-- name: licensing
+- description: 'Package licensing is what an org has bought and may run: signed licenses
+    to issue, verify and revoke, and the releases they unlock.'
+  name: licensing
 - description: 'Package link is the unified AI login manager''s registry: the org+user-scoped
     record of WHICH provider accounts (Claude Max, ChatGPT Plus, a Hanzo API key,
     a raw provider key) a developer has signed into, ON WHICH MACHINES, with each
