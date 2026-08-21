@@ -90,7 +90,9 @@ Global flags: `--org`, `-o/--output table|json`, `--platform-url`, `--iam-issuer
 the IAM user token is the identity; the platform control plane is service-token
 authed (it cannot validate user tokens), so `apps`/`deploy`/`clusters` use
 `--platform-token` / `HANZO_PLATFORM_TOKEN` / `PLATFORM_SERVICE_TOKEN`, and
-`build` uses `HANZO_BUILD_TOKEN` / `PLATFORM_BUILD_CALLBACK_TOKEN`.
+`build` uses `HANZO_BUILD_TOKEN`, falling back to the IAM login — a build is
+attributed to the organization its credential carries, so it presents one that
+names an organization.
 
 Install the Rust CLI: `curl -fsSL https://hanzo.sh | sh`, or
 `brew install hanzoai/tap/hanzo`. It is `hanzoai/cli`; this module serves `/v1`, ships
