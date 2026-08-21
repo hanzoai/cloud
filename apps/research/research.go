@@ -83,29 +83,100 @@ var visibilities = map[string]bool{"private": true, "org": true, "public": true}
 // derived Canonical flag and current visibility/consent. TS (unix seconds) orders
 // versions. Endpoint is the OPTIONAL BYO arm the run measured — SSRF-gated at ingest.
 type Experiment struct {
-	Project     string          `json:"project"`
-	ID          string          `json:"id"`
-	Revision    string          `json:"revision"` // original | corrected | retracted
-	Status      string          `json:"status"`   // planning | running | complete | faulted
-	Canonical   bool            `json:"canonical"`
-	Visibility  string          `json:"visibility"`
-	Trainable   bool            `json:"trainable"`
-	Publishable bool            `json:"publishable"`
-	Kind        string          `json:"kind"`
-	Subject     string          `json:"subject"`
-	Task        string          `json:"task"`
-	Metric      string          `json:"metric"`
-	Value       float64         `json:"value"`
-	N           int             `json:"n"`
-	NTotal      int             `json:"n_total"`
-	CostUSD     float64         `json:"cost_usd"`
-	Meta        json.RawMessage `json:"meta,omitempty"`
-	GitSHA      string          `json:"git_sha"`
-	GitBranch   string          `json:"git_branch"`
-	GitDirty    bool            `json:"git_dirty"`
+	// Project is the sub-scope inside the org this run is filed under. On ingest
+	// it is the SERVER's value — the caller's project scope — and a project sent
+	// in the body is ignored; on a read it is the value the run was filed under.
+	Project string `json:"project"`
+	// ID is the run's stable id, `<kind>:<subject>:<task>` by convention. It is
+	// the key versions accrue under: a correction re-sent with this same id
+	// appends a new version beside the old one rather than replacing it.
+	// Required on ingest.
+	ID string `json:"id"`
+	// Revision is the producer's declared kind of this version: original,
+	// corrected or retracted. Anything else, including empty, is read as
+	// original. A retracted latest version WITHDRAWS the id — it has no canonical
+	// version at all — and every earlier version is still retained.
+	Revision string `json:"revision"`
+	// Status is the run's execution state: planning, running, complete or
+	// faulted. Empty is complete (a backfilled historic run). An unrecognized
+	// value is kept verbatim rather than flattened, so a producer's own failure
+	// label is never displayed as a success. faulted and failed runs are retained
+	// but are left out of the answered headline counts.
+	Status string `json:"status"`
+	// Canonical is DERIVED on read, never stored and never taken from an upload:
+	// a version is canonical when it is the latest-appended non-retracted version
+	// of its stable id. The listing returns only canonical versions, so it is
+	// true on every row it answers with.
+	Canonical bool `json:"canonical"`
+	// Visibility is private, org or public. Ingest forces private whatever the
+	// body says; only a grant moves it.
+	Visibility string `json:"visibility"`
+	// Trainable is consent to train on this run. Ingest forces false; only a
+	// grant sets it. An upload conveys no training right.
+	Trainable bool `json:"trainable"`
+	// Publishable is consent to publish this run to the commons. Ingest forces
+	// false; only a grant sets it.
+	Publishable bool `json:"publishable"`
+	// Kind is the discriminator the whole plane is partitioned by: benchmark,
+	// kernel-perf, training, ablation, policy-eval, or ab for an A/B trial's
+	// per-arm evidence. Required on ingest, and open — an unknown kind is stored,
+	// not refused.
+	Kind string `json:"kind"`
+	// Subject is what was measured: the model, the engine, the A/B arm. Required
+	// on ingest.
+	Subject string `json:"subject"`
+	// Task is what it was measured ON — gpqa_diamond, livecodebench, prefill, or
+	// the trial's id for A/B evidence.
+	Task string `json:"task"`
+	// Metric names the quantity Value carries — accuracy, tok/s, a conversion
+	// event. It is the only place Value's unit is stated; this plane declares no
+	// vocabulary of metrics.
+	Metric string `json:"metric"`
+	// Value is the measurement, in whatever unit Metric names. It is NEVER
+	// normalized: one producer files accuracy as 0.81 and another as 94.3 and
+	// both are stored as sent, so compare values only within one (subject, task,
+	// metric).
+	Value float64 `json:"value"`
+	// N is the sample size behind Value — items scored, or exposures for an A/B
+	// arm.
+	N int `json:"n"`
+	// NTotal is the denominator the producer reports N against — the size of the
+	// set N was drawn from. The plane derives neither from the other, so a
+	// producer that reports only N leaves this 0.
+	NTotal int `json:"n_total"`
+	// CostUSD is what the run cost in US DOLLARS (not cents), as the producer
+	// reports it. It is summed as-is into the per-project and per-kind totals.
+	CostUSD float64 `json:"cost_usd"`
+	// Meta is whatever else the producer wants to carry, as a JSON object — the
+	// A/B rows put lift, z and p here. It is part of the version's content
+	// identity, canonicalized (sorted keys, no whitespace) first so that a
+	// re-serialization of the same object does not mint a spurious version.
+	// Absent or unparseable is stored as {}.
+	Meta json.RawMessage `json:"meta,omitempty"`
+	// GitSHA is the commit the run was measured at. Provenance is part of the
+	// version's content identity, so the same number measured on a different
+	// commit is a new RETAINED version rather than an idempotent no-op.
+	GitSHA string `json:"git_sha"`
+	// GitBranch is the branch that commit was on.
+	GitBranch string `json:"git_branch"`
+	// GitDirty says the working tree carried uncommitted changes, so GitSHA does
+	// not fully describe what ran.
+	GitDirty bool `json:"git_dirty"`
+	// LibVersions is the libraries in force, as a JSON object of name → version
+	// ({"harness":"0.1.0"}). It is a queryable column and part of the content
+	// identity, which is what makes "which lib version regressed this task"
+	// answerable over the longitudinal record. Absent is {}.
 	LibVersions json.RawMessage `json:"lib_versions,omitempty"`
-	TS          int64           `json:"ts"`
-	Endpoint    string          `json:"endpoint,omitempty"`
+	// TS is when the run was measured, unix SECONDS. It is display-only and it
+	// does NOT decide supersession — a server-assigned append clock does, so a
+	// live correction that sends no ts still supersedes a backfill that stamped
+	// one. 0 means the producer sent none.
+	TS int64 `json:"ts"`
+	// Endpoint is the optional BYO URL naming the arm the run measured. It is
+	// checked at ingest — https only, and every address the host resolves to must
+	// be publicly routable — and then dropped: nothing stores it, no read returns
+	// it, and this plane never dials it.
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // Attempt is one versioned measured attempt on one item, keyed by (project, benchmark,
@@ -113,24 +184,58 @@ type Experiment struct {
 // response is the raw artifact (own retention class; may carry personal/licensed
 // material). status=faulted retains a negative result.
 type Attempt struct {
+	// Benchmark is the suite the item belongs to — gpqa_diamond, livecodebench.
+	// Part of the stable id (project, benchmark, item, model). Required on ingest.
 	Benchmark string `json:"benchmark"`
-	Item      string `json:"item"`
-	Model     string `json:"model"`
-	Revision  string `json:"revision"`
-	Status    string `json:"status"`
-	Gold      string `json:"gold"`
-	Answer    string `json:"answer"`
-	Correct   bool   `json:"correct"`
-	Response  string `json:"response"`
-	Source    string `json:"source"`
-	TS        int64  `json:"ts"`
+	// Item is the one question or case that was scored, by the benchmark's own
+	// id for it. Part of the stable id. Required on ingest.
+	Item string `json:"item"`
+	// Model is what answered the item. Part of the stable id. Required on ingest.
+	Model string `json:"model"`
+	// Revision is the producer's declared kind of this version: original,
+	// corrected or retracted. Anything else, including empty, is read as
+	// original. A retracted latest version withdraws the item's canonical answer;
+	// every earlier version stays retained.
+	Revision string `json:"revision"`
+	// Status is this attempt's execution state, the same vocabulary a run uses:
+	// empty is complete, faulted retains a negative result, and an unrecognized
+	// value is kept verbatim. faulted and failed are excluded from the answered
+	// counts but never dropped.
+	Status string `json:"status"`
+	// Gold is the expected answer for the item, as the benchmark states it.
+	Gold string `json:"gold"`
+	// Answer is what the model answered, after the harness extracted it from the
+	// raw generation.
+	Answer string `json:"answer"`
+	// Correct is the producer's grade of Answer against Gold. This plane records
+	// the verdict and re-grades nothing, so it is only ever as good as the
+	// harness that sent it.
+	Correct bool `json:"correct"`
+	// Response is the raw generation the model produced. It is its own retention
+	// class — it may carry personal or licensed material — and it is part of the
+	// version's content identity, so a re-run that produced different text is a
+	// new retained version.
+	Response string `json:"response"`
+	// Source names who measured this attempt. Empty is recorded as
+	// hanzo-measured; any other value is stored as sent, so an imported
+	// third-party score is distinguishable from one this fleet ran.
+	Source string `json:"source"`
+	// TS is when the attempt was measured, unix SECONDS. Display-only: a
+	// server-assigned append clock, not this, decides which version is canonical.
+	// 0 means the producer sent none.
+	TS int64 `json:"ts"`
 }
 
 // IngestRequest is one upload batch: experiments and their attempts as two flat arrays —
 // the shape of the two tables, so the uploader streams rows through with no reshaping.
 type IngestRequest struct {
+	// Experiments are the run versions in this batch. Each needs an id, a kind
+	// and a subject. Re-sending byte-identical content appends nothing.
 	Experiments []Experiment `json:"experiments"`
-	Attempts    []Attempt    `json:"attempts"`
+	// Attempts are the per-item attempt versions. Each needs a benchmark, an item
+	// and a model. The two arrays may not BOTH be empty, and they hold at most
+	// 20000 members between them — split a larger upload.
+	Attempts []Attempt `json:"attempts"`
 }
 
 // artifactKinds is the allowed set for a diary artifact: a rendered snapshot of the
@@ -145,31 +250,80 @@ var artifactKinds = map[string]bool{"snapshot": true, "report": true}
 // default; public only via the separate visibility grant. Carries the same provenance as a
 // run.
 type ResearchArtifact struct {
-	SHA256         string          `json:"sha256"`            // SERVER-derived on write; the identity
-	Content        string          `json:"content,omitempty"` // base64 bytes on write; the server hashes + stores them (never returned)
-	Kind           string          `json:"kind"`
-	Ref            string          `json:"ref"` // server-derived content address (sha256:<hash>)
-	RunID          string          `json:"run_id"`
-	Project        string          `json:"project"`
-	Visibility     string          `json:"visibility"`
-	RetentionClass string          `json:"retention_class"`
-	GitSHA         string          `json:"git_sha"`
-	GitBranch      string          `json:"git_branch"`
-	GitDirty       bool            `json:"git_dirty"`
-	LibVersions    json.RawMessage `json:"lib_versions,omitempty"`
-	TS             int64           `json:"ts"`
+	// SHA256 is the SERVER's hash of the submitted bytes, hex, and the artifact's
+	// identity — the key the blob route is addressed by. A caller MAY send one;
+	// it is not trusted, only checked, and a mismatch with the bytes refuses the
+	// write.
+	SHA256 string `json:"sha256"`
+	// Content is the artifact's bytes, base64, on WRITE only, at most 16 MiB.
+	// Never returned: a read answers metadata and the address, and the bytes come
+	// from GET /v1/research/artifacts/{sha256}.
+	Content string `json:"content,omitempty"`
+	// Kind is snapshot or report, and nothing else is accepted. It decides how
+	// the bytes are served: image/png for a snapshot, application/octet-stream
+	// for a report — from the recorded kind, never from sniffing the bytes.
+	Kind string `json:"kind"`
+	// Ref is the content address, "sha256:<hash>", composed by the server from
+	// the same bytes. A ref sent in the body is discarded, so it can never name
+	// somewhere else.
+	Ref string `json:"ref"`
+	// RunID is the experiment stable id this artifact belongs to, which is what
+	// the diary feed's ?run= filters on. It is free text: nothing checks that the
+	// run exists.
+	RunID string `json:"run_id"`
+	// Project is the project the artifact is filed under — the SERVER's value on
+	// write. It is part of the read predicate too: fetching a hash from the wrong
+	// project is the same 404 as a hash that was never recorded.
+	Project string `json:"project"`
+	// Visibility is private, org or public. A write forces private; only a grant
+	// by sha256 moves it.
+	Visibility string `json:"visibility"`
+	// RetentionClass is the retention bucket the bytes fall in. Every write is
+	// recorded as raw-artifact — the class for material that may be personal or
+	// licensed — so it is the server's word, not the caller's.
+	RetentionClass string `json:"retention_class"`
+	// GitSHA is the commit that produced the artifact. Unlike a run's, an
+	// artifact's provenance is NOT part of its identity: the bytes are.
+	GitSHA string `json:"git_sha"`
+	// GitBranch is the branch that commit was on.
+	GitBranch string `json:"git_branch"`
+	// GitDirty says the working tree carried uncommitted changes.
+	GitDirty bool `json:"git_dirty"`
+	// LibVersions is the libraries in force, as a JSON object of name → version.
+	// Absent is {}.
+	LibVersions json.RawMessage `json:"lib_versions,omitempty"`
+	// TS is when the artifact was recorded, unix SECONDS, as the caller gives it
+	// — it is what the feed sorts newest-first on and what ?since= is compared
+	// against. 0 leaves the run unordered against timestamped siblings.
+	TS int64 `json:"ts"`
 }
 
 // GrantRequest is a SEPARATE authorization decision for a stable id's records:
 // visibility (private/org/public) and the training/commons consent flags. A nil field is
 // left unchanged. This is the only path that elevates a record beyond private.
 type GrantRequest struct {
-	Project     string  `json:"project"`
-	ID          string  `json:"id"`     // an experiment (run) stable id
-	SHA256      string  `json:"sha256"` // OR an artifact content hash
-	Visibility  *string `json:"visibility"`
-	Trainable   *bool   `json:"trainable"`
-	Publishable *bool   `json:"publishable"`
+	// Project locates WHICH project inside the caller's org holds the target;
+	// empty is the caller's own project scope. It is not a tenant key — the org
+	// comes from the validated principal — so naming a project can only ever
+	// address a record the caller's org already owns.
+	Project string `json:"project"`
+	// ID addresses an experiment (run) by its stable id. The grant lands on EVERY
+	// retained version of that id, because the decision is about the run and not
+	// about one version of it.
+	ID string `json:"id"`
+	// SHA256 addresses an artifact by its content hash instead, and an artifact
+	// grant sets visibility only. One of ID and SHA256 is required; when both are
+	// sent SHA256 wins and the run is untouched.
+	SHA256 string `json:"sha256"`
+	// Visibility is private, org or public. Null leaves it unchanged, and it is
+	// the one field an artifact grant requires.
+	Visibility *string `json:"visibility"`
+	// Trainable is consent to train on the run's records. Null leaves it
+	// unchanged; an artifact grant ignores it.
+	Trainable *bool `json:"trainable"`
+	// Publishable is consent to publish the run to the commons. Null leaves it
+	// unchanged; an artifact grant ignores it.
+	Publishable *bool `json:"publishable"`
 }
 
 // maxArtifactPage bounds a diary feed read.
