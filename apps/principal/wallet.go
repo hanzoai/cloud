@@ -26,6 +26,7 @@ package principal
 // every layer that touches money calls.
 
 import (
+	"context"
 	"strings"
 
 	"github.com/hanzoai/account"
@@ -181,4 +182,39 @@ func nameOf(id string) string {
 		return after
 	}
 	return id
+}
+
+// PayerFrom is [Payer] where only the CONTEXT crossed the seam — the ZAP plane,
+// MCP's tools/call, and the fleet-agent door, none of which carry an HTTP request.
+// It is the Org/OrgFrom pair again: one fact, one rule, read from either side.
+//
+// THE HOLE IT CLOSES. Every metered surface resolved its payer from the request
+// alone, so on a door with no request the wallet came back empty — and empty means
+// "nobody to bill", which every meter correctly treats as no gate and no debit.
+// The result was that an identified caller who reached a paid operation over the
+// agent plane got it free and unrecorded: a carrier number ordered on a zero
+// balance, with the platform paying. The caller was never anonymous; only the
+// TRANSPORT was different, and money must not be a property of the transport.
+//
+// It asks the SAME two questions the request path asks, through the same
+// functions: OrgOf refuses a blank user or org (the plane's form of "validated" —
+// these fields are server-minted by the identity boundary, never client-stated),
+// ledgerOf applies the masquerade rule, and account.Payer alone decides the
+// account within the ledger. The one input it cannot see is the signed
+// `billing_account` claim, which rides an HTTP header; absent it, account.Payer
+// falls back to exactly the rule it uses for a pre-claim token.
+func PayerFrom(ctx context.Context) string {
+	c := zip.CallerOf(ctx)
+	org, ok := OrgOf(c.User, c.Org)
+	if !ok {
+		return ""
+	}
+	name := strings.TrimSpace(c.Name)
+	if name == "" {
+		name = nameOf(strings.TrimSpace(c.User))
+	}
+	return account.Payer(account.Credential{
+		Owner: ledgerOf(org, strings.TrimSpace(c.Owner), c.Admin),
+		Name:  name,
+	}).Subject()
 }

@@ -284,23 +284,36 @@ var meteredApps = []string{
 	"ask",          // the answer engine's per-question fee.
 	"automations",  // per-run automation fee.
 	"cloudflare",   // Workers AI + provisioning.
+	"company",      // the $999 formation, gated and debited in providers.go; the genesis anchor rides inside it.
+	"compliance",   // one identity inquiry opened at the vendor, on the deployment's key.
 	"content",      // studio renders (GPU).
+	"crawl",        // the browser render a thin page escalates to; the static fetch is free.
 	"dataset",      // the scan that materialises a set, priced per source row read.
+	"domain",       // registrations, renewals and transfers, at the registrar's price.
+	"exec",         // one program run in a sandbox.
 	"flow",         // flow executions.
 	"functions",    // serverless invoke.
+	"knowledge",    // a connector piece executed on the engine's pods; native-Go pulls are free.
 	"lsp",          // code intelligence: a cold checkout+index is billed, a warm query is not.
+	"meet",         // one seat on the media server; the lobby beside it is a free read.
 	"ml",           // predict + train (compute).
 	"platform",     // builds and runs (compute).
 	"projects",     // site hosting fee.
 	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
 	"risk",         // per-screen fee inside each op.
+	"sandboxes",    // the lease, gated and debited around the pod (currently priced at zero).
 	"security",     // scan fee.
+	"share",        // one tunnel account provisioned on the fabric; reading it back is free.
 	"seo",          // measurement resold at the vendor's own per-call price.
 	"storage",      // object-storage data plane.
+	"tel",          // numbers, messages and calls, at the carrier's price.
 	"tools",        // per-tool dispatch.
 	"todo",         // per-project/issue fee.
 	"translate",    // per-character fee.
+	"validators",   // one validator node materialized on the cluster, 200Gi, until deleted.
 	"visor",        // GPU clusters (compute).
+	"wallets",      // ring keygen, threshold signing and Safe proposals; KMS custody is free.
+	"websearch",    // the bought engines (Brave, Mojeek API); the keyless ones are free.
 	"zen",          // zen SKU token costs (zen self-meters).
 }
 

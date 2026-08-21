@@ -126,10 +126,19 @@ func pieceSync(s *cloud.Service[state], ctx context.Context, org, provider, toke
 	if !ok {
 		return 0, "", fmt.Errorf("unknown provider %q", provider)
 	}
+	// A piece is executed on the engine's pods, which is real capacity — see
+	// meter.go. Authorized here, where the decision to run one is made, so the
+	// native-Go connectors beside it stay free.
+	ch, err := afford(s, ctx)
+	if err != nil {
+		return 0, "", err
+	}
+	defer ch.Release()
 	out, err := runPiece(s, ctx, org, conn.piece, conn.action, conn.auth(token), conn.props(""))
 	if err != nil {
 		return 0, "", err
 	}
+	charge(ch)
 	if !out.Ok {
 		return 0, "", fmt.Errorf("%s piece: %s", provider, out.Error)
 	}

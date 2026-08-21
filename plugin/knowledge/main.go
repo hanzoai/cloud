@@ -16,6 +16,12 @@ import (
 // and not the ~3040-package union the fused binary was. The light host loads it
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `knowledge openapi`. Hand-owned — edit the spec below directly.
+//
+// Metered, not Free: a long-tail connector's sync executes a JavaScript piece on
+// the auto engine's sandbox pods — the same capacity plugin/auto owns and prices.
+// Reaching it by in-cluster URL instead of through its door does not make the pod
+// cheaper. The meter is apps/knowledge/meter.go, and it fires only on a PIECE
+// run: the native-Go connectors beside it start no pod and stay free.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name: "knowledge",
@@ -23,7 +29,7 @@ func main() {
 		// serve — the scope then guards a path with no routes and zip refuses to
 		// compose (see plugin/account/main.go).
 		Prefixes: manifest.PrefixesFor("knowledge"),
-		Price:    cloud.Free,
+		Price:    cloud.Metered,
 		Mount:    knowledge.Mount,
 	}}, []string{"knowledge"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
