@@ -5786,6 +5786,34 @@
    "id": "get_provisioning_vector_by_name",
    "doc": "Returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
    "read": true
+  },
+  {
+   "id": "post_provisioning_datastore",
+   "doc": "Launches your org's OWN Hanzo Datastore instance and answers\nwith its `datastore://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one."
+  },
+  {
+   "id": "post_provisioning_docdb",
+   "doc": "CreateDocDB launches your org's OWN document-database instance and answers with\nits `mongodb://` connection string. It speaks the MongoDB wire protocol, so\nexisting MongoDB drivers connect unchanged.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one."
+  },
+  {
+   "id": "post_provisioning_kv",
+   "doc": "CreateKV launches your org's OWN key-value instance and answers with its `kv://`\nconnection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one."
+  },
+  {
+   "id": "post_provisioning_s3",
+   "doc": "Creates an S3-compatible bucket inside the already-running shared\nobject store and answers with the endpoint that reaches it."
+  },
+  {
+   "id": "post_provisioning_search",
+   "doc": "Creates a search index inside the already-running shared search\nbackend and answers with the endpoint that reaches it."
+  },
+  {
+   "id": "post_provisioning_sql",
+   "doc": "CreateSQL launches your org's OWN PostgreSQL instance and answers with its\n`postgres://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster, where there is no orchestrator to launch one, this fails\nclosed with 503 rather than handing back a shared one."
+  },
+  {
+   "id": "post_provisioning_vector",
+   "doc": "Creates a vector collection inside the already-running shared\nvector backend and answers with the endpoint that reaches it."
   }
  ],
  "pubsub": [

@@ -39,18 +39,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
@@ -270,268 +266,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the CRUD surface for each provisionable kind. The CREATE is
-// the one untyped verb left — it renders a billing denial as the fleet's nested
-// error body, which a typed op cannot express (typed.go states the wire fact) —
-// so it keeps its closure and declares its bodies through openapi.Register below.
-// The reads and the delete are typed ops, registered by mountTyped.
+// routes registers the CRUD surface for each provisionable kind. Every verb is a
+// typed op; mountTyped is the whole registration.
 func routes(z *zip.App, s *cloud.Service[state]) {
-	for _, kind := range kinds {
-		z.Post("/v1/provisioning/"+kind, create(s, kind))
-	}
 	mountTyped(z, ops{s: s})
-}
-
-// createProse is the PRODUCT half of each create's description — what the caller
-// actually gets, and the scheme its connection string carries. Keyed by the same
-// strings as kinds; a kind that arrives here without prose publishes an empty
-// description, which openapi.Describe refuses at init rather than shipping.
-//
-// The second half of every description is shared (createContract) because it is
-// the same code for all seven: one create closure, one preamble. Stating it once
-// is what keeps seven descriptions from becoming seven accounts of one handler.
-var createProse = map[string]struct{ summary, lead string }{
-	"sql": {"Provision a PostgreSQL database for your org",
-		"Launches your org's OWN PostgreSQL instance and answers with its `postgres://` connection string."},
-	"kv": {"Provision a key-value store for your org",
-		"Launches your org's OWN key-value instance and answers with its `kv://` connection string."},
-	"docdb": {"Provision a document database for your org",
-		"Launches your org's OWN document-database instance — it speaks the MongoDB wire protocol, so existing MongoDB drivers connect unchanged — and answers with its `mongodb://` connection string."},
-	"datastore": {"Provision a Hanzo Datastore instance for your org",
-		"Launches your org's OWN Hanzo Datastore instance and answers with its `datastore://` connection string."},
-	"vector": {"Provision a vector collection for your org",
-		"Creates a vector collection inside the already-running shared vector backend and answers with the endpoint that reaches it."},
-	"search": {"Provision a search index for your org",
-		"Creates a search index inside the already-running shared search backend and answers with the endpoint that reaches it."},
-	"s3": {"Provision an object storage bucket for your org",
-		"Creates an S3-compatible bucket inside the already-running shared object store and answers with the endpoint that reaches it."},
-}
-
-// dedicatedNote is the half of the story only the DEDICATED kinds can tell. It is
-// attached by MEMBERSHIP of dedicatedEngines — the same map create branches on —
-// so a kind that changes strategy changes its published prose in the same edit.
-const dedicatedNote = " The instance is yours alone: a deployment in your own " +
-	"tenant namespace, so its admin credential is naturally scoped to you and no " +
-	"other tenant shares the process. Off-cluster, where there is no orchestrator to " +
-	"launch one, this fails closed with 503 rather than handing back a shared one."
-
-// createContract is everything true of all seven creates, because all seven ARE
-// one create closure with one preamble.
-const createContract = "\n\n" +
-	"`name` is the org-unique slug every physical name derives from, and must match " +
-	"^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to " +
-	"one of your app instances: the DSN is injected into that instance's addons " +
-	"secret as <KIND>_URL, switching the app off its built-in store and onto this " +
-	"one. Omit it and the connection string is yours to wire.\n\n" +
-	"THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this " +
-	"response and nowhere else — every read beside it omits the password — so a " +
-	"caller that does not keep them has to provision again. Where KMS is configured " +
-	"the password is sealed there and only a reference is persisted; where it is " +
-	"not, it is returned this once and stored nowhere. It is never held in " +
-	"plaintext.\n\n" +
-	"Scoped to the caller's validated org (403 without one), which also namespaces " +
-	"the physical resource under a fixed-width hash, so two tenants can never fold " +
-	"onto one backend resource — a residual collision fails closed with 409 rather " +
-	"than silently sharing. A name already taken in your org is 409; an invalid name " +
-	"or instance slug is 400; a backend that refuses the create is 502. Where a " +
-	"later step fails after the backend resource already exists, it is torn back " +
-	"down rather than left orphaned.\n\n" +
-	"Billing is gated BEFORE anything is created: an unfunded org — or, in the " +
-	"fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and " +
-	"nothing is provisioned. The fee is per-kind and set by the deployment."
-
-// The seven creates state their request and response shapes here, next to their
-// registration. openapi.Register is the reflection seam for a route that is not a
-// typed op: it buys the document a body and a success shape — so a generated SDK
-// can actually construct the call. openapi.Describe is the seam for the other
-// half a reflection over Go types can never reach, the PROSE, and without it
-// these seven published a name and a body schema with no statement of what they
-// provision, that the credential is returned exactly once, or that the org is
-// charged before anything is built. Neither seam can add a route: both attach to
-// one the router already carries.
-//
-// init, not routes: both panic on a duplicate declaration, and routes runs once
-// per Mount.
-func init() {
-	for _, kind := range kinds {
-		openapi.Register("/v1/provisioning/"+kind, "POST", provisionRequest{}, provisionResult{})
-
-		p := createProse[kind]
-		desc := p.lead
-		if _, dedicated := dedicatedEngines[kind]; dedicated {
-			desc += dedicatedNote
-		}
-		openapi.Describe("/v1/provisioning/"+kind, "POST", p.summary, desc+createContract)
-	}
 }
 
 // create provisions a new resource of kind for the caller's org. Two strategies
 // share one preamble (auth, name validation, billing gate, dedup): the shared-
 // logical kinds create a resource inside a live shared backend; the dedicated
 // kinds (datastore, docdb) launch the org's OWN instance (createDedicated).
-func create(s *cloud.Service[state], kind string) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, ok := tenant(c)
-		if !ok {
-			return principal.Refused(c)
-		}
-
-		var body provisionRequest
-		if err := c.Bind(&body); err != nil {
-			return err
-		}
-		name := strings.ToLower(strings.TrimSpace(body.Name))
-		if !nameRE.MatchString(name) {
-			return zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
-		}
-		// instance keys a k8s Secret name (<instance>-addons); constrain it to the
-		// same DNS/identifier-safe slug as name so it can never inject a malformed
-		// or path-traversing Secret reference. Empty is allowed (no binding).
-		instance := strings.ToLower(strings.TrimSpace(body.Instance))
-		if instance != "" && !nameRE.MatchString(instance) {
-			return zip.ErrBadRequest("instance must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
-		}
-
-		// Honest availability gate (now empty, kept as the mechanism). Refuse a
-		// gated kind BEFORE billing or any write, so a customer is never handed a
-		// cross-tenant capability nor charged for a resource we won't create. A
-		// dedicated kind is never in this map.
-		if reason, gated := unavailableKinds[kind]; gated {
-			return zip.Errorf(http.StatusServiceUnavailable, "%s", reason)
-		}
-
-		ctx := c.Context()
-
-		// Pre-provision balance gate (fail-closed, per-org). Refuse BEFORE any
-		// resource is created: an unfunded org — or, in the default fail-closed
-		// posture, an unreachable commerce — gets 402/503 and nothing is
-		// provisioned. Scoped to THIS caller's org (the same slug that namespaces
-		// the resource, derived from a validated JWT, not a spoofable header), so
-		// the charge can never target another tenant. fee is computed once and
-		// reused by the post-success debit; fee==0 or unconfigured billing makes
-		// this a no-op. Applies to BOTH strategies.
-		fee := cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind)
-		project, projectValidated := principal.ValidatedProject(c)
-		if err := s.Bill.Gate(ctx, principal.Ledger(c), project, projectValidated, kind, fee); err != nil {
-			return cloud.DenyResource(c, err)
-		}
-
-		// Fast duplicate check (the UNIQUE index is the authoritative guard).
-		if _, err := s.State.store.Get(ctx, org, kind, name); err == nil {
-			return zip.ErrConflict("resource already exists")
-		} else if !errors.Is(err, errNotFound) {
-			return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
-		}
-
-		// DEDICATED-instance strategy (sql, kv, docdb, datastore): the org's OWN
-		// isolated instance, launched via an operator Datastore CR in tenant-<org>.
-		if e, dedicated := dedicatedEngines[kind]; dedicated {
-			return createDedicated(s, c, ctx, kind, org, name, e, fee, instance)
-		}
-
-		// SHARED-logical strategy (vector, search, s3).
-		prov := s.State.reg[kind]
-		if prov == nil {
-			return zip.Errorf(http.StatusNotImplemented, "kind %q not supported", kind)
-		}
-		physical := physicalName(org, name)
-
-		// Global uniqueness guard (across ALL orgs/kinds). The fixed-width org
-		// hash already makes a cross-tenant fold cryptographically negligible;
-		// this check plus the UNIQUE(physical_name) index make any residual fold
-		// (or hash collision) FAIL CLOSED with 409 BEFORE the backend is touched
-		// — never a silent shared resource, which on KV would be a cross-tenant
-		// credential takeover (idempotent ACL SETUSER overwriting another
-		// tenant's user) and elsewhere a cross-tenant DoS / existence oracle.
-		if exists, err := s.State.store.PhysicalExists(ctx, physical); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
-		} else if exists {
-			return zip.ErrConflict("resource already exists")
-		}
-
-		user := physical
-		pw, err := genToken(24)
-		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-		}
-
-		cs, host, port, db, err := prov.Create(ctx, physical, user, pw)
-		if err != nil {
-			if errors.Is(err, errAlreadyExists) {
-				return zip.ErrConflict("resource already exists")
-			}
-			s.Log.Error("provision failed", "kind", kind, "org", org, "name", name, "err", err)
-			return zip.Errorf(http.StatusBadGateway, "provision %s failed: %v", kind, err)
-		}
-
-		// Secret handling. Only secretful kinds carry a real per-resource
-		// password. Seal it in KMS when configured; otherwise return once and
-		// store nothing (never plaintext).
-		secretRef := fmt.Sprintf("orgs/%s/%s/%s", org, kind, name)
-		storedRef, returnPw, username := "", "", ""
-		if secretfulKinds[kind] {
-			returnPw, username = pw, user
-			if s.State.sec.Enabled() {
-				if err := s.State.sec.Put(secretRef, []byte(pw)); err != nil {
-					_ = prov.Drop(ctx, physical, user)
-					s.Log.Error("kms put failed; rolled back backend", "kind", kind, "err", err)
-					return zip.Errorf(http.StatusInternalServerError, "store secret failed")
-				}
-				storedRef = secretRef
-			} else {
-				s.Log.Warn("KMS degraded: password returned once, not persisted", "kind", kind, "org", org, "name", name)
-			}
-		}
-
-		id, err := genID()
-		if err != nil {
-			_ = prov.Drop(ctx, physical, user)
-			if storedRef != "" {
-				_ = s.State.sec.Delete(storedRef)
-			}
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-		}
-
-		r := Resource{
-			ID: id, Org: org, Kind: kind, Name: name,
-			PhysicalName: physical, SecretRef: storedRef,
-			Host: host, Port: port, Username: username, DBName: db,
-			Status: "ready", CreatedAt: time.Now().Unix(),
-		}
-		if err := s.State.store.Insert(ctx, r); err != nil {
-			// Lost a concurrent race or DB error — undo the backend + secret.
-			_ = prov.Drop(ctx, physical, user)
-			if storedRef != "" {
-				_ = s.State.sec.Delete(storedRef)
-			}
-			if errors.Is(err, errConflict) {
-				return zip.ErrConflict("resource already exists")
-			}
-			return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
-		}
-
-		// Resource is live + persisted — debit the caller's org ledger for the
-		// provision (per-org, env-attributed, async best-effort so the debit never
-		// blocks or corrupts this 201; a debit failure is logged for
-		// reconciliation). Recurring storage footprint reuses s.Bill.Meter with a
-		// GB-month amount once a live-size source exists.
-		s.Bill.Meter(principal.Ledger(c), principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
-
-		// Return the PUBLIC endpoint, never the internal admin host. Remap the
-		// connection string's host:port too so a copy-pasted DSN is routable.
-		ph, pp := publicEndpoint(kind)
-		pubCS := cs
-		if cs != "" {
-			pubCS = strings.ReplaceAll(cs, fmt.Sprintf("%s:%d", host, port), fmt.Sprintf("%s:%d", ph, pp))
-		}
-		return c.JSON(http.StatusCreated, provisionResult{
-			ID: id, Kind: kind, Name: name, Status: "ready",
-			Host: ph, Port: pp, Username: username, Database: db,
-			ConnectionString: pubCS, Password: returnPw,
-		})
-	}
-}
-
 // ----- tenancy + naming -----------------------------------------------------
 
 // tenant resolves the org for a request. Empty org is allowed only for admins,
