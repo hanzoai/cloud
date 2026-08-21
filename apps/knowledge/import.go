@@ -21,13 +21,13 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The import's prose. Every other /v1/kb route is a typed op whose doc comment
+// The import's prose. Every other /v1/knowledge route is a typed op whose doc comment
 // zipdoc lifts; this one is untyped for the reason stated at its registration
 // (subsystem.go), which leaves zipdoc nothing to lift. Declared through the same
 // registry the router projection consults, so it renders only while the route is
 // served, and the generated SDKs and the spec-derived CLI carry it.
 func init() {
-	openapi.Describe("/v1/kb/import", http.MethodPost,
+	openapi.Describe("/v1/knowledge/import", http.MethodPost,
 		"Import an Obsidian, Notion, Roam or Evernote export into the org's knowledge base",
 		"Ingests an uploaded export as a tree of kb-page documents with its link structure "+
 			"intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and "+
@@ -49,7 +49,7 @@ func init() {
 			"was sent.")
 }
 
-// import.go serves POST /v1/kb/import: an Obsidian-importer-equivalent that ingests
+// import.go serves POST /v1/knowledge/import: an Obsidian-importer-equivalent that ingests
 // an uploaded export (Obsidian vault zip, Notion export zip, Evernote .enex, Roam
 // JSON) as a tree of kb-page documents with the link structure intact. Each format
 // is normalized by a pure package (obsidian/notion/roam/evernote) into []vault.Page

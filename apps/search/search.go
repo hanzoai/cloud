@@ -12,7 +12,7 @@
 // live caller is apps/team's fulltext RPC, which calls ForOrg in-process; and in
 // the team BINARY neither leg is mounted, so index.Ready() is false there and the
 // lexical leg reports `disabled` on every query. Until a door is decided, a caller
-// still has to know which of /v1/kb/search, /v1/index/indexes/:uid/search and
+// still has to know which of /v1/knowledge/search, /v1/index/indexes/:uid/search and
 // /v1/code/search holds the answer, and gets a different request shape and a
 // different score scale from each — which is the problem this package was written
 // to end.
@@ -33,7 +33,7 @@
 // surviving legs plus an explicit `degraded` entry carrying the error — never a
 // silent empty. This is not a nicety: a silent empty is exactly how a vector-store
 // credential drift went unnoticed for five days behind a fail-empty
-// /v1/kb/search.
+// /v1/knowledge/search.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 package search
@@ -173,6 +173,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		zip.WithOperationID("search"),
 		zip.WithSummary("Hybrid search over the org's own corpora"),
 		zip.WithTags("search"))
+	mountInventory(z)
 	b.Log.Info("search surface mounted", "vector", knowledge.SemanticReady(), "index", index.Ready())
 	return nil
 }

@@ -5,12 +5,12 @@ import "context"
 // semantic.go is the vector leg's ONE export. /v1/search (clients/search) fuses
 // this with the lexical leg (clients/index) and must reach the SAME per-org
 // collection, the SAME embedding model, and the SAME payload filter that
-// /v1/kb/search reaches — so it calls the identical searchDoc rather than growing
+// /v1/knowledge/search reaches — so it calls the identical searchDoc rather than growing
 // a second retrieval path against the same store. Everything org-scoping and
 // tenant-isolating stays in index.go; this file only widens its visibility.
 
 // Hit is one semantic result. It is the retrieval hit shape verbatim (a type
-// alias, not a copy) so the wire contract cannot drift between /v1/kb/search and
+// alias, not a copy) so the wire contract cannot drift between /v1/knowledge/search and
 // /v1/search.
 type Hit = hit
 

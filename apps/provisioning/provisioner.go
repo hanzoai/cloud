@@ -106,6 +106,20 @@ func (p *qdrantProvisioner) Create(ctx context.Context, physical, _, _ string) (
 	return cs, p.host, p.port, physical, nil
 }
 
+// getJSON reads one Qdrant path into out. It is the READ half of this client —
+// the operator's inventory (inventory.go) uses it — so a collection is described
+// by the same base and api-key that created it.
+func (p *qdrantProvisioner) getJSON(ctx context.Context, path string, out any) error {
+	status, rb, err := httpRequest(ctx, http.MethodGet, p.base+path, p.headers(), nil)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("qdrant status %d: %s", status, truncate(rb))
+	}
+	return json.Unmarshal(rb, out)
+}
+
 func (p *qdrantProvisioner) Drop(ctx context.Context, physical, _ string) error {
 	status, rb, err := httpRequest(ctx, http.MethodDelete, p.base+"/collections/"+physical, p.headers(), nil)
 	if err != nil {
