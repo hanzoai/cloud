@@ -278,8 +278,8 @@ func TestConfigFieldGetSet(t *testing.T) {
 // independently of newRootCmd so that adding or deleting a command without
 // updating this list fails here instead of in a user's shell.
 var servedVerbs = []string{
-	"agent", "apps", "auth", "bots", "build", "cluster", "clusters", "completion",
-	"config", "deploy", "engine", "help", "links", "login", "logout", "run",
+	"agent", "apps", "auth", "bot", "build", "cluster", "clusters", "completion",
+	"config", "deploy", "engine", "help", "link", "login", "logout", "run",
 	"runner", "security", "unlink", "version", "whoami",
 }
 

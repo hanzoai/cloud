@@ -8,7 +8,7 @@
 // never a second store.
 //
 // The noun is the MACHINE that hosts a bot runtime — distinct from the bot RUN at
-// /v1/bots (clients/bots), which is a task the runtime executes. Two values, two
+// /v1/bot (clients/bots), which is a task the runtime executes. Two values, two
 // namespaces: this one nests under /v1/visor/compute because what it rents you
 // is compute.
 //

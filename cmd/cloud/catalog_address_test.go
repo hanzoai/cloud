@@ -12,7 +12,7 @@ package main
 //
 // GET /v1/commerce/catalog?brand=hanzo advertised 84 products. THIRTY-ONE named
 // an apiPath with nothing under it anywhere in the 1,800 paths this host
-// publishes — /v1/providers, /v1/containers, /v1/nodes, /v1/vpc, /v1/cdn,
+// publishes — /v1/providers, /v1/containers, /v1/node, /v1/vpc, /v1/cdn,
 // /v1/wallet, /v1/indexer and 24 more, most of them literally "/v1/" + the slug.
 // Every one was published "enabled", so a menu built from the catalogue rendered
 // dead links and reported them as working, and cloud.hanzo.ai's own derived
