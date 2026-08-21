@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/hanzoai/sqlite" // ONE Hanzo driver (registers "sqlite"); its !cgo backend is modernc — never import modernc directly
+	"github.com/hanzoai/sqlite" // ONE Hanzo driver (registers "sqlite"); its !cgo backend is modernc — never import modernc directly
 )
 
 // openDB opens a per-org SQLite at path with the SAME durability profile the HA
@@ -24,9 +24,29 @@ import (
 // request mutates.
 func openDB(t *testing.T, path string) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)")
+	// The driver builds the DSN. Its two backends spell a pragma differently in
+	// one and each ignores the other's spelling silently, so a hand-written
+	// profile applies on one build and evaporates on the other — which would make
+	// this test claim production's concurrency behaviour while running without WAL
+	// or a busy timeout.
+	db, err := sql.Open("sqlite", sqlite.PragmaDSN(path, []sqlite.Pragma{
+		{Name: "busy_timeout", Value: "10000"},
+		{Name: "journal_mode", Value: "WAL"},
+		{Name: "synchronous", Value: "NORMAL"},
+	}))
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
+	}
+	// Read the profile back rather than trusting the DSN: the spelling is exactly
+	// what differs between the driver's two backends, so a string is no evidence.
+	for pragma, want := range map[string]string{"journal_mode": "wal", "busy_timeout": "10000"} {
+		var got string
+		if err := db.QueryRow("PRAGMA " + pragma).Scan(&got); err != nil {
+			t.Fatalf("PRAGMA %s: %v", pragma, err)
+		}
+		if got != want {
+			t.Fatalf("%s = %q, want %q: this test claims production's concurrency behaviour", pragma, got, want)
+		}
 	}
 	if _, err := db.ExecContext(context.Background(), `CREATE TABLE IF NOT EXISTS effects(id TEXT PRIMARY KEY, val TEXT)`); err != nil {
 		t.Fatalf("create effects: %v", err)
