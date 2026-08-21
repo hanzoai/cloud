@@ -86,7 +86,7 @@ func ScopedOrgs(s *cloud.Service[State], ctx context.Context, c *zip.Ctx, cr iam
 	rows := make([]iam.Org, 0, len(sc.Orgs))
 	for _, name := range sc.Orgs {
 		row := iam.Org{Owner: s.State.AdminOrg, Name: name, DisplayName: name}
-		if full, err := s.State.IAM.Org(ctx, cr, s.State.AdminOrg+"/"+name); err == nil && full.Name != "" {
+		if full, err := s.State.IAM.Org(ctx, cr, s.State.AdminOrg, name); err == nil && full.Name != "" {
 			row = full
 		}
 		rows = append(rows, row)
