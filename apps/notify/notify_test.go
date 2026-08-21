@@ -111,9 +111,9 @@ func TestDefaultProviderSMSTwilio(t *testing.T) {
 		"orgs/hanzo/notify/twilio/auth-token":  "tok",
 		"orgs/hanzo/notify/twilio/from-number": "+15551230000",
 	}}}
-	got, err := s.defaultProvider(t.Context(), "hanzo", "sms")
+	got, err := s.pick(t.Context(), "hanzo", "sms")
 	if err != nil {
-		t.Fatalf("defaultProvider: %v", err)
+		t.Fatalf("pick: %v", err)
 	}
 	if got != "twilio" {
 		t.Errorf("want twilio, got %q", got)
@@ -128,10 +128,10 @@ func TestDefaultProviderScopedPerOrg(t *testing.T) {
 		"orgs/lux/notify/twilio/auth-token":  "tok",
 		"orgs/lux/notify/twilio/from-number": "+15551230000",
 	}}}
-	if _, err := s.defaultProvider(t.Context(), "hanzo", "sms"); err == nil {
+	if _, err := s.pick(t.Context(), "hanzo", "sms"); err == nil {
 		t.Fatal("expected error: hanzo has no twilio creds; lux's must not leak")
 	}
-	if got, err := s.defaultProvider(t.Context(), "lux", "sms"); err != nil || got != "twilio" {
+	if got, err := s.pick(t.Context(), "lux", "sms"); err != nil || got != "twilio" {
 		t.Fatalf("want twilio for lux, got %q err=%v", got, err)
 	}
 }
@@ -139,10 +139,10 @@ func TestDefaultProviderScopedPerOrg(t *testing.T) {
 func TestDefaultProviderSMSNoneConfigured(t *testing.T) {
 	// Empty KMS → no provider → fail closed. Also covers the nil-store case.
 	s := &service{kms: fakeKMS{m: map[string]string{}}}
-	if _, err := s.defaultProvider(t.Context(), "hanzo", "sms"); err == nil {
+	if _, err := s.pick(t.Context(), "hanzo", "sms"); err == nil {
 		t.Fatal("expected error when no SMS provider is configured")
 	}
-	if _, err := (&service{}).defaultProvider(t.Context(), "hanzo", "sms"); err == nil {
+	if _, err := (&service{}).pick(t.Context(), "hanzo", "sms"); err == nil {
 		t.Fatal("expected error when KMS store is nil (fail closed)")
 	}
 }
@@ -153,9 +153,9 @@ func TestDefaultProviderEmailMail(t *testing.T) {
 		"orgs/hanzo/notify/mail/smtp-host":    "smtp.example.com",
 		"orgs/hanzo/notify/mail/sender-email": "no-reply@hanzo.ai",
 	}}}
-	got, err := s.defaultProvider(t.Context(), "hanzo", "email")
+	got, err := s.pick(t.Context(), "hanzo", "email")
 	if err != nil {
-		t.Fatalf("defaultProvider: %v", err)
+		t.Fatalf("pick: %v", err)
 	}
 	if got != "mail" {
 		t.Errorf("want mail, got %q", got)
@@ -175,13 +175,13 @@ func TestCredsNeverReadEnv(t *testing.T) {
 
 func TestDefaultProviderUnsupportedChannel(t *testing.T) {
 	s := &service{}
-	if _, err := s.defaultProvider(t.Context(), "hanzo", "push"); err == nil {
+	if _, err := s.pick(t.Context(), "hanzo", "push"); err == nil {
 		t.Fatal("expected error for unsupported channel")
 	}
 }
 
 func TestConstructTwilioRequiresFromNumber(t *testing.T) {
-	_, err := constructProvider("twilio", map[string]string{
+	_, err := open("twilio", map[string]string{
 		"account-sid": "AC", "auth-token": "tok", // no from-number
 	}, []string{"+15550001111"})
 	if err == nil {
@@ -190,17 +190,17 @@ func TestConstructTwilioRequiresFromNumber(t *testing.T) {
 }
 
 func TestConstructProviderUnknown(t *testing.T) {
-	if _, err := constructProvider("carrier-pigeon", map[string]string{}, nil); err == nil {
+	if _, err := open("carrier-pigeon", map[string]string{}, nil); err == nil {
 		t.Fatal("expected error for an unwired provider")
 	}
 }
 
 func TestConstructPlivoOK(t *testing.T) {
-	n, err := constructProvider("plivo", map[string]string{
+	n, err := open("plivo", map[string]string{
 		"auth-id": "MA", "auth-token": "tok", "from-number": "+15550001111",
 	}, []string{"+15550002222"})
 	if err != nil {
-		t.Fatalf("constructProvider plivo: %v", err)
+		t.Fatalf("open plivo: %v", err)
 	}
 	if n == nil {
 		t.Fatal("nil notifier")

@@ -21,7 +21,7 @@ import (
 // the task's owner-scoped value, never a client header. provider "" selects the
 // org's configured default for the channel; channel is "email" or "sms". It
 // returns the provider service it used (for the caller's audit log) and any
-// delivery error. A missing credential fails closed inside constructProvider.
+// delivery error. A missing credential fails closed before any provider is built.
 //
 // Send performs NO suppression/opt-out check — that policy is the caller's, so
 // transactional sends (IAM OTP) are never suppressed while marketing sends pass
