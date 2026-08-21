@@ -46,11 +46,11 @@ package coding
 //
 // # Why the plane and not HTTP
 //
-// apps/bots' transport is net/http by its own admission — its doc says the bytes
+// apps/bot's transport is net/http by its own admission — its doc says the bytes
 // "should move over ZAP" and that the swap "is meant to be a change to THIS FILE
 // plus each caller's one stub". This is that stub, and it skips the migration
 // rather than performing it: a plane op IS ZAP, so there is no HTTP hop to port.
-// apps/bots keeps its transport for actual bot traffic, which is what it is for.
+// apps/bot keeps its transport for actual bot traffic, which is what it is for.
 //
 // # The five ops are the whole vocabulary
 //

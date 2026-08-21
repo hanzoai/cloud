@@ -1,5 +1,5 @@
 {
-  "paths": 1774,
+  "paths": 1773,
   "operations": 2421,
   "products": {
     "account": 10,
@@ -20,8 +20,7 @@
     "billing": 4,
     "blueprint": 3,
     "books": 25,
-    "bot": 4,
-    "bots": 8,
+    "bot": 12,
     "campaign": 11,
     "captable": 31,
     "catalog": 1,

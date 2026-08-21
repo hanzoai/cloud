@@ -1,15 +1,15 @@
-package bots
+package bot
 
 import (
 	"context"
 	"net/url"
 )
 
-// wire.go is bots' WIRE CONTRACT with the bot runtime — the stub behind the
+// wire.go is this app's WIRE CONTRACT with the bot runtime — the stub behind the
 // Runtime seam. It says WHAT bots asks the runtime (list this org's runs, halt one
 // of them); how the bytes get there is runtime's problem.
 //
-// This file is the ONE place in clients/bots that knows the runtime exists. The
+// This file is the ONE place in this package that knows the runtime exists. The
 // handlers (bots.go) never see it: they hold the Runtime seam, which a test fills
 // with a fake.
 //

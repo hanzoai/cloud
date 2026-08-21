@@ -31,7 +31,7 @@ func TestStageVocabulary(t *testing.T) {
 // test over a changed product. The list is the fact; its length is a consequence.
 var staged = map[string]string{
 	"ads": Beta, "affiliates": Beta, "authors": Beta, "benchmark": Beta,
-	"bot": Beta, "bots": Beta, "books": Beta, "campaign": Beta,
+	"bot": Beta, "books": Beta, "campaign": Beta,
 	"captable": Beta, "company": Beta, "compliance": Beta, "content": Beta,
 	"crm": Beta, "dataroom": Beta, "dataset": Beta, "esign": Beta,
 	"graph":       Alpha,
