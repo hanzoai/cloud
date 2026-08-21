@@ -261,8 +261,8 @@ func TestHTTPFormationFlow(t *testing.T) {
 	if code, _ := do(t, app, http.MethodPost, "/v1/company/payment", org, nil); code != http.StatusOK {
 		t.Fatalf("payment want 200, got %d", code)
 	}
-	if charge.charged != formationFeeCents {
-		t.Fatalf("charged %d, want %d", charge.charged, formationFeeCents)
+	if want := wantCharge(t, StructureCCorp, JurisdictionDE); charge.charged != want {
+		t.Fatalf("charged %d, want the quoted total %d (service + state filing)", charge.charged, want)
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "documents"}); code != http.StatusOK {
 		t.Fatalf("advance documents want 200, got %d", code)
@@ -483,4 +483,17 @@ func TestGenesisIdempotent(t *testing.T) {
 	if ct.seedCount != 1 {
 		t.Fatalf("genesis must seed the cap table exactly once, got %d", ct.seedCount)
 	}
+}
+
+// wantCharge is what the tariff says is due for this formation. The tests assert
+// against it rather than against formationFeeCents, because the charge is the
+// QUOTED total — our service fee plus the state's filing fee — and a test that
+// repeats one half of that is a second place the two can drift apart.
+func wantCharge(t *testing.T, s Structure, j Jurisdiction) int64 {
+	t.Helper()
+	q, err := TariffFor(s, j, Options{})
+	if err != nil {
+		t.Fatalf("tariff for %s/%s: %v", s, j, err)
+	}
+	return q.DueNowCents
 }

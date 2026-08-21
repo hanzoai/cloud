@@ -268,8 +268,8 @@ func TestPaymentChargesLast(t *testing.T) {
 		if status, _ := do(t, app, http.MethodPost, "/v1/company/payment", org, nil); status != http.StatusOK {
 			t.Fatalf("first payment want 200, got %d", status)
 		}
-		if charge.charged != formationFeeCents {
-			t.Fatalf("first payment charged %d, want %d", charge.charged, formationFeeCents)
+		if want := wantCharge(t, StructureCCorp, JurisdictionDE); charge.charged != want {
+			t.Fatalf("first payment charged %d, want the quoted total %d", charge.charged, want)
 		}
 		// A repeat must short-circuit on f.Paid — never reach the charger, which
 		// is armed to deny.

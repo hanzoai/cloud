@@ -686,7 +686,20 @@ func (o ops) pay(ctx context.Context, _ *noInput) (*formationView, error) {
 	if f.Paid {
 		return view(f), nil // idempotent — already paid
 	}
-	ref, err := o.s.State.prov.charge.Charge(ctx, org, feeCents(), "Hanzo Company formation fee")
+	// CHARGE WHAT THE TARIFF QUOTED, not our line of it. The tariff itemises the
+	// service fee AND the state's filing fee, and this used to charge only the
+	// first — so a customer quoted the total paid our half and we absorbed the
+	// state's on every formation. The quote and the charge have to be the same
+	// arithmetic or one of them is a lie.
+	//
+	// DueNowCents is the one-time total by construction: a recurring line (an
+	// agent of record) is summed separately and is a subscription, not a charge
+	// taken here.
+	quoted, err := TariffFor(f.Structure, f.Jurisdiction, Options{})
+	if err != nil {
+		return nil, err
+	}
+	ref, err := o.s.State.prov.charge.Charge(ctx, org, quoted.DueNowCents, "Hanzo Company formation")
 	if err != nil {
 		// Map the metering error to the canonical 402/503 billing contract.
 		return nil, cloud.Denied(err)
