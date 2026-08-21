@@ -153,7 +153,8 @@ func Subsets(apps []string, read func(app string) []byte, stage func(app string)
 }
 
 // core is the operations no app owns: the endpoint that serves the document, its
-// command projection, and the agent door (openapi/mcp.go). They are MOUNTED and
+// command projection, the agent door (openapi/mcp.go) and the hypermedia index
+// a client discovers the rest from (openapi/index.go). They are MOUNTED and
 // projected rather than written down — a hand-kept literal would be a second
 // definition of a route the host already serves, free to disagree with the
 // address the fleet actually answers on.
@@ -161,6 +162,7 @@ func core() (Part, error) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	Mount(app, Info{})
 	mountDoor(app)
+	stubIndex(app)
 	doc, err := FleetSpec(app)
 	if err != nil {
 		return Part{}, fmt.Errorf("core: %w", err)
@@ -170,7 +172,8 @@ func core() (Part, error) {
 	// app's package doc carries the rest of the fleet's.
 	doc.Info.Description = "The served contract: the OpenAPI document every client, " +
 		"tool list and command group is generated from, its command projection, " +
-		"and the agent door that offers the same operations over MCP."
+		"the agent door that offers the same operations over MCP, and the index a " +
+		"client follows from the API root to reach any of it."
 	return Part{App: "openapi", Doc: doc}, nil
 }
 
