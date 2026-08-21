@@ -1,12 +1,12 @@
 ---
-name: search_indexes
+name: admin_search
 version: "8.0.0"
-description: "Read search indexes: Lists the search indexes with their document counts and timestamps.."
+description: "Read admin search: Lists the search indexes with their document counts and timestamps., Totals the documents across every search index.."
 ---
 
-# Lux · SEARCH · indexes
+# Lux · ADMIN · search
 
-Read-only Lux capability derived from the `search` OpenAPI product. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `admin` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,7 +14,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/search/indexes` — Lists the search indexes with their document counts and timestamps.
+- `GET https://api.lux.network/v1/admin/search/indexes` — Lists the search indexes with their document counts and timestamps.
+- `GET https://api.lux.network/v1/admin/search/stats` — Totals the documents across every search index.
 
 ## Parameters
 
@@ -24,12 +25,13 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/search/indexes` → `searchIndexList` object with fields: `indexes`.
+- `/v1/admin/search/indexes` → `searchIndexList` object with fields: `indexes`.
+- `/v1/admin/search/stats` → `searchStats` object with fields: `searchesPerDay`, `totalDocuments`, `totalSearches`, `totalSessions`.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/v1/search/indexes" \
+curl -sS "https://api.lux.network/v1/admin/search/indexes" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
