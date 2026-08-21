@@ -19,20 +19,36 @@ func init() {
 	zip.Describe("GET /v1/flags/activity", zip.Doc{
 		Description: "Returns the caller's flag change log newest-first: every\ncreate, update and delete, with the actor and the time.",
 		Fields: map[string]string{
-			"activityIn.limit": "Limit caps the rows returned. 1–500; anything else takes the default 100.",
-			"activityOut.data": "Data is the change log newest-first: who created, updated or deleted which key, when.",
+			"ActivityRow.action": "Action is one of created, updated, deleted.",
+			"ActivityRow.actor":  "Actor is the email of the principal who made the change. Empty for a write\nby an in-process composer; a project key can never appear here, because\nevaluating flags is all a key may do.",
+			"ActivityRow.at":     "At is when the change was made, RFC 3339 UTC.",
+			"ActivityRow.detail": "Detail is free-form context about the change. Nothing writes it today, so\nit is absent from every row the store serves.",
+			"ActivityRow.id":     "ID is the log's own sequence number, rising with each entry. The log is\nserved newest-first, which is this descending.",
+			"ActivityRow.key":    "Key is the flag that changed. It survives a delete, so the log still names\nflags the definition store no longer holds.",
+			"activityIn.limit":   "Limit caps the rows returned. 1–500; anything else takes the default 100.",
+			"activityOut.data":   "Data is the change log newest-first: who created, updated or deleted which key, when.",
 		},
 	})
 	zip.Describe("GET /v1/flags/defs", zip.Doc{
 		Description: "Returns every flag definition in the caller's (org,\nproject) store, by key, with its version and who last changed it.",
 		Fields: map[string]string{
-			"defsOut.data": "Data is every definition in the caller's (org, project) store, by key.",
+			"DefRow.definition": "Definition is the flag-definition document the evaluator consumes, kept\nBYTE-FOR-BYTE as it was written. It is the engine's format rather than this\npackage's, so it carries fields no Go type here names — targeting groups,\nrollout percentages, variants, payloads — and a caller must round-trip it\nwhole rather than rebuilding it from the parts it recognizes.",
+			"DefRow.key":        "Key is the flag's primary key in the caller's (org, project) store, and the\nname evaluation looks it up by. On a write it is taken from the URL, never\nfrom the body: the stored document's own \"key\" is forced to match.",
+			"DefRow.updated_at": "UpdatedAt is when the definition was last written, RFC 3339 UTC.",
+			"DefRow.updated_by": "UpdatedBy is the email of the principal who last wrote it. Empty when the\nwrite came from an in-process composer (an experiment registering its own\nassignment flag) rather than from a signed-in person.",
+			"DefRow.version":    "Version is 1 when the key was created and rises by one on every overwrite.\nIt counts writes, not content changes: re-storing an identical document\nbumps it.",
+			"defsOut.data":      "Data is every definition in the caller's (org, project) store, by key.",
 		},
 	})
 	zip.Describe("GET /v1/flags/defs/:key", zip.Doc{
 		Description: "Returns one flag definition by key, or 404 when the caller's\nstore has none under that key.",
 		Fields: map[string]string{
-			"keyIn.key": "Key is the flag key to act on, from the path.",
+			"DefRow.definition": "Definition is the flag-definition document the evaluator consumes, kept\nBYTE-FOR-BYTE as it was written. It is the engine's format rather than this\npackage's, so it carries fields no Go type here names — targeting groups,\nrollout percentages, variants, payloads — and a caller must round-trip it\nwhole rather than rebuilding it from the parts it recognizes.",
+			"DefRow.key":        "Key is the flag's primary key in the caller's (org, project) store, and the\nname evaluation looks it up by. On a write it is taken from the URL, never\nfrom the body: the stored document's own \"key\" is forced to match.",
+			"DefRow.updated_at": "UpdatedAt is when the definition was last written, RFC 3339 UTC.",
+			"DefRow.updated_by": "UpdatedBy is the email of the principal who last wrote it. Empty when the\nwrite came from an in-process composer (an experiment registering its own\nassignment flag) rather than from a signed-in person.",
+			"DefRow.version":    "Version is 1 when the key was created and rises by one on every overwrite.\nIt counts writes, not content changes: re-storing an identical document\nbumps it.",
+			"keyIn.key":         "Key is the flag key to act on, from the path.",
 		},
 	})
 	zip.Describe("GET /v1/flags/health", zip.Doc{
@@ -72,6 +88,11 @@ func init() {
 	zip.Describe("PUT /v1/flags/defs/:key", zip.Doc{
 		Description: "Creates or replaces the flag definition at the path's key and\nreturns the stored row. The BODY IS THE DEFINITION DOCUMENT — the flag-definition\nJSON object the evaluator consumes — and it is stored verbatim except that its\n\"key\" is forced to the key in the URL, so a document can never be filed under a\nname other than the one it was addressed by. Every write bumps the version and\nappends to the change log under the caller's identity.",
 		Fields: map[string]string{
+			"DefRow.definition":   "Definition is the flag-definition document the evaluator consumes, kept\nBYTE-FOR-BYTE as it was written. It is the engine's format rather than this\npackage's, so it carries fields no Go type here names — targeting groups,\nrollout percentages, variants, payloads — and a caller must round-trip it\nwhole rather than rebuilding it from the parts it recognizes.",
+			"DefRow.key":          "Key is the flag's primary key in the caller's (org, project) store, and the\nname evaluation looks it up by. On a write it is taken from the URL, never\nfrom the body: the stored document's own \"key\" is forced to match.",
+			"DefRow.updated_at":   "UpdatedAt is when the definition was last written, RFC 3339 UTC.",
+			"DefRow.updated_by":   "UpdatedBy is the email of the principal who last wrote it. Empty when the\nwrite came from an in-process composer (an experiment registering its own\nassignment flag) rather than from a signed-in person.",
+			"DefRow.version":      "Version is 1 when the key was created and rises by one on every overwrite.\nIt counts writes, not content changes: re-storing an identical document\nbumps it.",
 			"putDefIn.definition": "Definition is the flag definition document, carried verbatim.",
 			"putDefIn.key":        "Key is the flag key to write, from the path.",
 		},
