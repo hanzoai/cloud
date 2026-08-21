@@ -176,14 +176,18 @@ func exposeTxns() {
 // of which read this one list.
 //
 // The org is the CALLER'S and cannot be named in the input, so one org can never
-// read another's entries. What the input DOES name is which books and how many
-// rows: `test` reads the SANDBOX ledger, a physically separate file, because a
-// caller that posted test rows into real revenue would have restated the
-// company's income with nothing downstream able to tell; `limit` is a page size
-// and 0 takes the default. Unlike the usage read the amount crosses as a DECIMAL
-// STRING with its currency rather than a bare quantity, because an entry is a
-// movement a customer reads rather than a number a gate does arithmetic on. A
-// ledger implementation that cannot list entries is an error, not an empty page.
+// read another's entries. What the input DOES name is which books, whose wallet
+// and how many rows: `test` reads the SANDBOX ledger, a physically separate file,
+// because a caller that posted test rows into real revenue would have restated the
+// company's income with nothing downstream able to tell; `subject` is a wallet
+// INSIDE the caller's org — the same key the balance op takes, so the movements
+// and the standing total answer for one account — and empty reads every wallet in
+// the org; `limit` is a page size and 0 takes the default.
+//
+// Unlike the usage read the amount crosses as a DECIMAL STRING with its currency
+// rather than a bare quantity, because an entry is a movement a customer reads
+// rather than a number a gate does arithmetic on. A ledger implementation that
+// cannot list entries is an error, not an empty page.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeTxns(ctx context.Context, in *plane.TxnsIn) (*plane.Txns, error) {
@@ -196,7 +200,7 @@ func planeTxns(ctx context.Context, in *plane.TxnsIn) (*plane.Txns, error) {
 		return nil, err
 	}
 	lister, ok := fin.(interface {
-		ListEntries(context.Context, string, bool, int) ([]financeclient.TxnRow, error)
+		ListEntries(context.Context, string, string, bool, int) ([]financeclient.TxnRow, error)
 	})
 	if !ok {
 		return nil, fmt.Errorf("txns: this ledger does not list entries")
@@ -205,7 +209,7 @@ func planeTxns(ctx context.Context, in *plane.TxnsIn) (*plane.Txns, error) {
 	if limit <= 0 {
 		limit = usageReadLimit
 	}
-	rows, err := lister.ListEntries(ctx, org, in.Test, limit)
+	rows, err := lister.ListEntries(ctx, org, in.Subject, in.Test, limit)
 	if err != nil {
 		return nil, fmt.Errorf("txns: %w", err)
 	}

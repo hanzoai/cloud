@@ -228,6 +228,14 @@ func (o ops) ledger(ctx context.Context, in *window) (*postings, error) {
 
 // ── finance helpers ──
 
+// THE LEDGER ANSWERS FOR THE SUBJECT THE BALANCE ANSWERS FOR. org names the books
+// and subject names the wallet inside them — the pair balance.go resolves through
+// principal.Subject, handed on unchanged — so a customer's movements and their
+// spendable total describe one account. Where the payer IS the org the subject
+// resolves to the org and the answer is the pool's; where the payer is a person
+// it is that person's. The org rides the caller (cloud.For) and the subject rides
+// the argument: an org in the payload would let a caller name another tenant's
+// books, while a subject can only address a wallet inside its own.
 // financeTxns reads the org's commerce ledger ONCE (the single transactions read the
 // credits/usage/ledger projections share). Tolerates the wrapped {transactions:[…]}
 // shape and a bare array.
@@ -235,7 +243,7 @@ func financeTxns(s *cloud.Service[state], ctx context.Context, org, subject stri
 	// The ledger's own entries, from the process that holds them. Credits, usage and
 	// the ledger page are three projections of this one list, and all three answered
 	// 501 from a process without the ledger — which is every process but commerce.
-	peer, served, err := peerTxns(ctx, org)
+	peer, served, err := peerTxns(ctx, org, subject)
 	if err != nil {
 		s.Log.Warn("finance transactions read failed", "org", org, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
@@ -311,13 +319,13 @@ func abs64(v int64) int64 {
 // at the boundary where commerceTxn is already a cents-shaped view. The wire keeps
 // the precision so the day that view stops being cents-shaped, nothing upstream has
 // to be re-plumbed to find it.
-func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool, error) {
+func peerTxns(ctx context.Context, org, subject string) ([]commerceTxn, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, txnsPeerTimeout)
 	defer cancel()
 	// The generated peer client, not three loose strings: it is this call with the
 	// app name, the op name and the In/Out pair already fixed to each other, so
 	// the compiler checks what only a running fleet could check here.
-	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{})
+	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{Subject: subject})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			return nil, false, nil
