@@ -401,6 +401,10 @@
             "description": "Relation is the relation the question named, echoed for the same reason.",
             "type": "string"
           },
+          "truncated": {
+            "description": "Truncated says this pair holds more assertions than one read returns, so\nthe winner was decided from the most recent ceiling-full of them. It is\nreported because a provenance plane that trims silently is a plane that\nanswers confidently and wrongly; narrow the question with as_of to see\nwhat it dropped.",
+            "type": "boolean"
+          },
           "winner": {
             "$ref": "#/components/schemas/wireFact",
             "description": "Winner is the assertion in force — the strongest of those knowable at AsOf\nunder the order `rule` names. Absent exactly when Known is false."

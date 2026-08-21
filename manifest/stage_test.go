@@ -30,7 +30,12 @@ func TestStageVocabulary(t *testing.T) {
 // spelled as names: a count that stays 44 while two rows swap stages is a green
 // test over a changed product. The list is the fact; its length is a consequence.
 var staged = map[string]string{
-	"graph": Alpha,
+	// Not customer surface: the R&D evidence plane and the launch-control gate for
+	// Hanzo's own hosted services. Both are ours, so neither belongs in the public
+	// contract, the generated SDKs or the agent tool list.
+	"admission": Alpha,
+	"graph":     Alpha,
+	"research":  Alpha,
 }
 
 func TestStagedRowsAreTheOnesDeclared(t *testing.T) {

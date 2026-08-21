@@ -20,7 +20,7 @@ require (
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.65
+	github.com/hanzoai/iam v1.34.69
 	github.com/hanzoai/kafka v1.3.2
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
@@ -47,7 +47,7 @@ require (
 	github.com/zap-proto/http v0.3.5
 	github.com/zap-proto/mcp v1.0.5
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.31.1
+	github.com/zap-proto/zip v1.31.2
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2
@@ -75,6 +75,7 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/go-webauthn/webauthn v0.17.4 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
+	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -685,7 +686,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.6
-	github.com/hanzoai/ai v1.833.107
+	github.com/hanzoai/ai v1.833.111
 	github.com/hanzoai/authz v1.10.33
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.16
@@ -719,7 +720,9 @@ replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190
 // the "sqlite" driver under both build tags — cgo through hanzoai/csqlite against
 // libsqlcipher, cgo-free through its vendored pure-Go engine and the
 // hanzoai/sqlcipher codec VFS. Every store imports that facade, never an engine.
-// apps/sqlite_test.go fails the gate if a second engine or driver name appears.
+// manifest/sqlite_test.go is that gate: it reads the linked module graph of the
+// commands, because database/sql.Register panics on a duplicate driver name at
+// init, and a transitive dependency links as hard as a direct one.
 
 replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13.1
 

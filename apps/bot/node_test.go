@@ -108,7 +108,7 @@ func TestNodesListIsOrgScoped(t *testing.T) {
 	app := mountBot(t, reg)
 
 	for _, org := range []string{"acme", "globex"} {
-		code, body := botCall(t, app, http.MethodGet, "/v1/bot/nodes", org, nil)
+		code, body := botCall(t, app, http.MethodGet, "/v1/node", org, nil)
 		if code != http.StatusOK {
 			t.Fatalf("%s list: %d (%s)", org, code, body)
 		}
@@ -122,7 +122,7 @@ func TestNodesListIsOrgScoped(t *testing.T) {
 	}
 
 	// A third org sees an empty list, never null.
-	code, body := botCall(t, app, http.MethodGet, "/v1/bot/nodes", "initech", nil)
+	code, body := botCall(t, app, http.MethodGet, "/v1/node", "initech", nil)
 	if code != http.StatusOK || !strings.Contains(string(body), `"nodes":[]`) {
 		t.Fatalf("an org with no nodes got %d %s", code, body)
 	}
@@ -135,17 +135,17 @@ func TestNodeRoutesRefuseAnUnvalidatedCaller(t *testing.T) {
 	connect(t, reg, "acme", "n1", "darwin", []string{"canvas.snapshot"}, `{}`)
 	app := mountBot(t, reg)
 
-	for _, path := range []string{"/v1/bot/nodes", "/v1/bot/connect"} {
+	for _, path := range []string{"/v1/node", "/v1/node/connect"} {
 		if code, _ := botCall(t, app, http.MethodGet, path, "", nil); code != http.StatusForbidden {
 			t.Fatalf("GET %s with no principal = %d, want 403", path, code)
 		}
 	}
-	if code, _ := botCall(t, app, http.MethodPost, "/v1/bot/nodes/n1/invoke", "", map[string]any{"command": "canvas.snapshot"}); code != http.StatusForbidden {
+	if code, _ := botCall(t, app, http.MethodPost, "/v1/node/n1/invoke", "", map[string]any{"command": "canvas.snapshot"}); code != http.StatusForbidden {
 		t.Fatalf("invoke with no principal = %d, want 403", code)
 	}
 
 	// A forged org with NO validated user is the same refusal.
-	req := httptest.NewRequest(http.MethodGet, "/v1/bot/nodes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/node", nil)
 	req.Header.Set("X-Org-Id", "acme") // forged; no X-User-Id
 	resp, err := app.Test(req, botTestCfg)
 	if err != nil {
@@ -162,7 +162,7 @@ func TestInvokeReachesTheNodeAndPassesItsAnswerBack(t *testing.T) {
 	connect(t, reg, "acme", "laptop-1", "darwin", []string{"canvas.snapshot"}, `{"shot":"ok"}`)
 	app := mountBot(t, reg)
 
-	code, body := botCall(t, app, http.MethodPost, "/v1/bot/nodes/laptop-1/invoke", "acme",
+	code, body := botCall(t, app, http.MethodPost, "/v1/node/laptop-1/invoke", "acme",
 		map[string]any{"command": "canvas.snapshot", "params": map[string]any{"full": true}})
 	if code != http.StatusOK {
 		t.Fatalf("invoke: %d (%s)", code, body)
@@ -184,8 +184,8 @@ func TestForeignNodeAnswersLikeAnAbsentOne(t *testing.T) {
 	app := mountBot(t, reg)
 
 	call := map[string]any{"command": "canvas.snapshot"}
-	foreignCode, foreignBody := botCall(t, app, http.MethodPost, "/v1/bot/nodes/laptop-1/invoke", "acme", call)
-	absentCode, absentBody := botCall(t, app, http.MethodPost, "/v1/bot/nodes/no-such-machine/invoke", "acme", call)
+	foreignCode, foreignBody := botCall(t, app, http.MethodPost, "/v1/node/laptop-1/invoke", "acme", call)
+	absentCode, absentBody := botCall(t, app, http.MethodPost, "/v1/node/no-such-machine/invoke", "acme", call)
 
 	if foreignCode != http.StatusNotFound {
 		t.Fatalf("another tenant's node answered %d (%s), want 404", foreignCode, foreignBody)
@@ -196,7 +196,7 @@ func TestForeignNodeAnswersLikeAnAbsentOne(t *testing.T) {
 	}
 
 	// And the node in the other org was never asked.
-	if code, _ := botCall(t, app, http.MethodGet, "/v1/bot/nodes", "acme", nil); code != http.StatusOK {
+	if code, _ := botCall(t, app, http.MethodGet, "/v1/node", "acme", nil); code != http.StatusOK {
 		t.Fatalf("list after the miss: %d", code)
 	}
 }
@@ -208,7 +208,7 @@ func TestInvokeIsPolicyChecked(t *testing.T) {
 	connect(t, reg, "acme", "n1", "darwin", []string{"canvas.snapshot"}, `{}`)
 	app := mountBot(t, reg)
 
-	code, body := botCall(t, app, http.MethodPost, "/v1/bot/nodes/n1/invoke", "acme",
+	code, body := botCall(t, app, http.MethodPost, "/v1/node/n1/invoke", "acme",
 		map[string]any{"command": "system.run", "params": map[string]any{"command": []string{"rm", "-rf", "/"}}})
 	if code != http.StatusForbidden {
 		t.Fatalf("an undeclared command answered %d (%s), want 403", code, body)
@@ -230,7 +230,7 @@ func TestDangerousCommandsNeedTheOperatorsOverlay(t *testing.T) {
 	closed := gated()
 	connect(t, closed, "acme", "n1", "darwin", declared, `{}`)
 	code, body := botCall(t, mountBot(t, closed), http.MethodPost,
-		"/v1/bot/nodes/n1/invoke", "acme", map[string]any{"command": "camera.snap"})
+		"/v1/node/n1/invoke", "acme", map[string]any{"command": "camera.snap"})
 	if code != http.StatusForbidden || !strings.Contains(string(body), CodeCommandNotAllowlisted) {
 		t.Fatalf("camera.snap was reachable by default: %d %s", code, body)
 	}
@@ -239,7 +239,7 @@ func TestDangerousCommandsNeedTheOperatorsOverlay(t *testing.T) {
 	open := NewRegistry(WithGate(gate(mode)))
 	connect(t, open, "acme", "n1", "darwin", declared, `{"jpg":"…"}`)
 	if code, body := botCall(t, mountBot(t, open), http.MethodPost,
-		"/v1/bot/nodes/n1/invoke", "acme", map[string]any{"command": "camera.snap"}); code != http.StatusOK {
+		"/v1/node/n1/invoke", "acme", map[string]any{"command": "camera.snap"}); code != http.StatusOK {
 		t.Fatalf("an operator-allowed command answered %d (%s), want 200", code, body)
 	}
 
@@ -247,7 +247,7 @@ func TestDangerousCommandsNeedTheOperatorsOverlay(t *testing.T) {
 	last := NewRegistry(WithGate(gate(denied)))
 	connect(t, last, "acme", "n1", "darwin", declared, `{}`)
 	if code, _ := botCall(t, mountBot(t, last), http.MethodPost,
-		"/v1/bot/nodes/n1/invoke", "acme", map[string]any{"command": "camera.snap"}); code != http.StatusForbidden {
+		"/v1/node/n1/invoke", "acme", map[string]any{"command": "camera.snap"}); code != http.StatusForbidden {
 		t.Fatalf("Deny did not win over Allow: %d", code)
 	}
 }
@@ -285,7 +285,7 @@ func TestSystemRunCannotSelfApprove(t *testing.T) {
 		{"named a run id", map[string]any{"command": []string{"whoami"}, "approved": true, "runId": "r-1"}, CodeApprovalsUnavail},
 		{"claimed a decision", map[string]any{"command": []string{"whoami"}, "approvalDecision": "allow-always"}, CodeMissingRunID},
 	} {
-		code, body := botCall(t, app, http.MethodPost, "/v1/bot/nodes/n1/invoke", "acme",
+		code, body := botCall(t, app, http.MethodPost, "/v1/node/n1/invoke", "acme",
 			map[string]any{"command": CommandSystemRun, "params": tc.params})
 		if code != http.StatusForbidden || !strings.Contains(string(body), tc.want) {
 			t.Fatalf("%s: %d %s, want 403 %s", tc.name, code, body, tc.want)
@@ -297,7 +297,7 @@ func TestSystemRunCannotSelfApprove(t *testing.T) {
 
 	// The same command without the claim runs, and what goes on the wire carries
 	// no approval at all.
-	code, body := botCall(t, app, http.MethodPost, "/v1/bot/nodes/n1/invoke", "acme",
+	code, body := botCall(t, app, http.MethodPost, "/v1/node/n1/invoke", "acme",
 		map[string]any{"command": CommandSystemRun, "params": map[string]any{"command": []string{"whoami"}}})
 	if code != http.StatusOK {
 		t.Fatalf("an ordinary system.run answered %d (%s)", code, body)
@@ -312,19 +312,22 @@ func TestSystemRunCannotSelfApprove(t *testing.T) {
 
 // The surface is /v1/bot/*. Never /api/, and nothing outside the subsystem's own
 // prefix.
-func TestRoutesLiveUnderV1Bot(t *testing.T) {
+func TestRoutesLiveUnderTheirOwnNoun(t *testing.T) {
 	app := mountBot(t, gated())
 	want := map[string]bool{
-		"GET /v1/bot/connect":           false,
-		"GET /v1/bot/nodes":             false,
-		"POST /v1/bot/nodes/:id/invoke": false,
-		"POST " + PeerInvokePath:        false,
+		"GET /v1/node/connect":     false,
+		"GET /v1/node":             false,
+		"POST /v1/node/:id/invoke": false,
+		"POST " + PeerInvokePath:   false,
 	}
 	for _, r := range app.Fiber().GetRoutes() {
 		if strings.Contains(r.Path, "/api/") {
 			t.Fatalf("route %s %s carries an /api/ prefix", r.Method, r.Path)
 		}
-		if !strings.HasPrefix(r.Path, "/v1/bot") {
+		// TWO prefixes, because there are two nouns. The machine surface is
+		// /v1/node and the run surface is /v1/bot; a filter that knew only one
+		// would walk past the other half and report nothing to check.
+		if !strings.HasPrefix(r.Path, "/v1/bot") && !strings.HasPrefix(r.Path, "/v1/node") {
 			continue
 		}
 		if r.Method == "HEAD" {
