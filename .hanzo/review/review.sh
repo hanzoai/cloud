@@ -104,8 +104,15 @@ die() { echo "::error::review: $*" >&2; exit 1; }
 #
 # The bound stays 400,000B. What changed is that the budget is spent on prose a
 # person wrote: the same range measures 118,143B once these are dropped.
+# public.yaml is the name openapi.yaml used to carry, so it appears only in
+# history — but the base is the last release reachable from HEAD, and during a
+# release drought that reaches back past the rename. One commit's regeneration of
+# it measures 480,741B against the 400,000B bound, and a single FILE over the
+# bound is the one shape the slicer cannot split, so the run refuses naming
+# itself and every later run refuses the same way. A retired generated document
+# is still a generated document.
 generated=(
-  ':(exclude)openapi.yaml' ':(exclude)private.yaml'
+  ':(exclude)openapi.yaml' ':(exclude)private.yaml' ':(exclude)public.yaml'
   ':(exclude)openapi/floor.json' ':(exclude)openapi/closure.json'
   ':(exclude)fleet/catalog.json' ':(exclude)plugin/*/openapi.json'
 )
