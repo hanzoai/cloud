@@ -1123,6 +1123,7 @@
    "doc": "Binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is."
   }
  ],
+ "graph": [],
  "guide": [],
  "help": [
   {
