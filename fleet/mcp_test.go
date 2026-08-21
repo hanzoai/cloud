@@ -138,6 +138,9 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// A bearer, because the edge door challenges a tools/call that carries none
+	// (challenge_test.go); these tests are about dispatch, which starts after that.
+	req.Header.Set("Authorization", "Bearer test")
 	resp, err := h.Test(req, zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("POST /v1/mcp: %v", err)

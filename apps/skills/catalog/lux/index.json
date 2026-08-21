@@ -5,7 +5,7 @@
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 530,
+  "skill_count": 542,
   "skills": [
     {
       "description": "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents..",
@@ -285,6 +285,14 @@
       "path": "allowance_allowance/SKILL.md",
       "service": "allowance",
       "sha256": "841ff8576b4a84638da206e6505dbb6def7eead81a83ab5494006f200833e32e",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read analytics event js: The Lux event tag — the one-line install for a surface with no bundler.",
+      "name": "analytics_event-js",
+      "path": "analytics_event-js/SKILL.md",
+      "service": "analytics",
+      "sha256": "29354e234cc8811b4152122910026a419467f6d0206b0576764b1e4bc0db12dd",
       "version": "8.0.0"
     },
     {
@@ -1016,6 +1024,14 @@
       "version": "8.0.0"
     },
     {
+      "description": "Read commerce commerce: Read the crypto deposit watcher's runtime state, asset by asset, Answers ok whenever the commerce subsystem is mounted..",
+      "name": "commerce_commerce",
+      "path": "commerce_commerce/SKILL.md",
+      "service": "commerce",
+      "sha256": "55a415da6207dec8a4f5e305a1cf55f33996c7c8194b5f6ec1a0cdf2037f70dc",
+      "version": "8.0.0"
+    },
+    {
       "description": "Read commerce disclosure: List your org's disclosures, as a page, Fetch one disclosure.",
       "name": "commerce_disclosure",
       "path": "commerce_disclosure/SKILL.md",
@@ -1077,14 +1093,6 @@
       "path": "commerce_stocklocation/SKILL.md",
       "service": "commerce",
       "sha256": "6d81bdd8ac55892b3b02b022bc0a5a81fd0656d89f8dbbe0dd5a2522e689a027",
-      "version": "8.0.0"
-    },
-    {
-      "description": "Read commerce submission: List your org's submissions, as a page, Fetch one submission.",
-      "name": "commerce_submission",
-      "path": "commerce_submission/SKILL.md",
-      "service": "commerce",
-      "sha256": "179e477c1dd8e9b5b776089c6aed5d55b82c9bc6fd0fbb92eda4ed409be1a9e3",
       "version": "8.0.0"
     },
     {
@@ -1992,11 +2000,43 @@
       "version": "8.0.0"
     },
     {
-      "description": "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client.",
+      "description": "Read git blob: View a file in a repository, View a file in a repository.",
+      "name": "git_blob",
+      "path": "git_blob/SKILL.md",
+      "service": "git",
+      "sha256": "fac583d22a0706fc412fdcf6ee2c895b6902684a7f7c385ff7ab01fb7b7ad9aa",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read git commits: Read a repository's commit log, Read a repository's commit log.",
+      "name": "git_commits",
+      "path": "git_commits/SKILL.md",
+      "service": "git",
+      "sha256": "f9d24e02c78269264a2fee105f3d18d3bb5425f125c9fc4209bddb5d826e5eed",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read git explore: Discover public repositories across every org, Discover public repositories across every org.",
+      "name": "git_explore",
+      "path": "git_explore/SKILL.md",
+      "service": "git",
+      "sha256": "3a8a010abc9a74ea830fd0093fa89033a93128ca046ad186bb01cad129a50892",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read git git: Browse your org's repositories, Browse your org's repositories, Open a repository's home page.",
+      "name": "git_git",
+      "path": "git_git/SKILL.md",
+      "service": "git",
+      "sha256": "cdba2ebb749e6063dd03a13d1cb4b036dedb6f56633ed325e430725d9f059cbc",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client, Advertise a repository's refs to a git client.",
       "name": "git_info",
       "path": "git_info/SKILL.md",
       "service": "git",
-      "sha256": "264d2562e56a66159f7b938e04c07488318f5c47fde55ba2a3d31ad02fa903e3",
+      "sha256": "8d97e4abc0a5a5c796f999c0fd793dda5669a3edd5f7fd172f6a5986a96ee33f",
       "version": "8.0.0"
     },
     {
@@ -2013,6 +2053,14 @@
       "path": "git_repos/SKILL.md",
       "service": "git",
       "sha256": "b5937a0b6686a41f11f531faa3d56eec033c7bac5b4921eb85c0c809f312c87e",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read git tree: Browse a directory inside a repository, Browse a directory inside a repository.",
+      "name": "git_tree",
+      "path": "git_tree/SKILL.md",
+      "service": "git",
+      "sha256": "0a94bf60bc254344aad0bc542c623266ee6a6803726585ef64c304f31e7b334e",
       "version": "8.0.0"
     },
     {
@@ -2204,7 +2252,7 @@
       "name": "iam_well-known",
       "path": "iam_well-known/SKILL.md",
       "service": "iam",
-      "sha256": "4d512f91160971af44ed2faef6c58b38e8fd35ba04ee62be4fd6cf2cc0c4ad3f",
+      "sha256": "818919add829b73c33cc3f918ff3594517c64ee50ad7210ff7cf4dce356f617e",
       "version": "8.0.0"
     },
     {
@@ -2688,6 +2736,14 @@
       "version": "8.0.0"
     },
     {
+      "description": "Read meet meet: The call client, The call client's assets and client-side routes.",
+      "name": "meet_meet",
+      "path": "meet_meet/SKILL.md",
+      "service": "meet",
+      "sha256": "bee6e6ecb1a3d603097c37f57eb26c4b18dd9ff0fef23cfb7e9fa9ba133911c4",
+      "version": "8.0.0"
+    },
+    {
       "description": "Read meet session: What this caller may open a room in.",
       "name": "meet_session",
       "path": "meet_session/SKILL.md",
@@ -2917,6 +2973,22 @@
       "path": "o11y_users/SKILL.md",
       "service": "o11y",
       "sha256": "72577e7d14a41665ba344704e66fb16bd4fd7cc395ef2c3d71613cd525a50058",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read openapi openapi json: The API description this SDK was generated from.",
+      "name": "openapi_openapi-json",
+      "path": "openapi_openapi-json/SKILL.md",
+      "service": "openapi",
+      "sha256": "edb727b8dcd372706fb28d41b0e917e62e6b03a74eb39a1d73520902159b42a6",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read openapi well known: The API description, at the conventional address.",
+      "name": "openapi_well-known",
+      "path": "openapi_well-known/SKILL.md",
+      "service": "openapi",
+      "sha256": "e7ac147b7785f38e1a8ade1c253a0a19c9251d5a999a6cf1532c3d4260271706",
       "version": "8.0.0"
     },
     {
@@ -3496,6 +3568,14 @@
       "version": "8.0.0"
     },
     {
+      "description": "Read runner releases: Lists the self-publish releases this process has run., Returns one self-publish release by the id its 202 returned..",
+      "name": "runner_releases",
+      "path": "runner_releases/SKILL.md",
+      "service": "runner",
+      "sha256": "9048d9f18dc14a1dea6a0d2e6c553b9e2f981f7c96ac567f607e261e54dd054e",
+      "version": "8.0.0"
+    },
+    {
       "description": "Read s3 buckets: List your org's buckets, Browse one level of a bucket, Get a URL to download one object directly.",
       "name": "s3_buckets",
       "path": "s3_buckets/SKILL.md",
@@ -3736,6 +3816,14 @@
       "version": "8.0.0"
     },
     {
+      "description": "Read skills well known: The brand's master catalogue of agent skills, One skill's document, as markdown.",
+      "name": "skills_well-known",
+      "path": "skills_well-known/SKILL.md",
+      "service": "skills",
+      "sha256": "167ef30c7df8ba8470b4d758cc2eb682374eb1439ae6e7b4629beb36b5aa0723",
+      "version": "8.0.0"
+    },
+    {
       "description": "Read social accounts: List the social accounts connected to your org, Read one connected account.",
       "name": "social_accounts",
       "path": "social_accounts/SKILL.md",
@@ -3856,11 +3944,11 @@
       "version": "8.0.0"
     },
     {
-      "description": "Read tasks tasks: Redirect to the tasks API root, Read workflow state from the durable engine.",
+      "description": "Read tasks tasks: The tasks console, The tasks console's assets and client-side routes, Redirect to the tasks API root.",
       "name": "tasks_tasks",
       "path": "tasks_tasks/SKILL.md",
       "service": "tasks",
-      "sha256": "1432267ebc681981d4a4c1e83e6403d0ebe33190dc0abad250ff95ddc8608eaa",
+      "sha256": "f5c1991bb569d3bf77ae18f4217db4fabef705fa746c1128697765cac73f9d39",
       "version": "8.0.0"
     },
     {
@@ -3893,6 +3981,14 @@
       "path": "team_bots/SKILL.md",
       "service": "team",
       "sha256": "89ec276860250c26f8c1ea82bc74931881659d2148261127a8087f555186071f",
+      "version": "8.0.0"
+    },
+    {
+      "description": "Read team collaborator: Open the live collaborative-editing socket.",
+      "name": "team_collaborator",
+      "path": "team_collaborator/SKILL.md",
+      "service": "team",
+      "sha256": "9e6364ec490c6dde6b0e352b07a2c25653a5594ac2968cc243f1f9183383a3e5",
       "version": "8.0.0"
     },
     {

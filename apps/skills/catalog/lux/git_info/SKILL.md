@@ -1,7 +1,7 @@
 ---
 name: git_info
 version: "8.0.0"
-description: "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client."
+description: "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client, Advertise a repository's refs to a git client."
 ---
 
 # Lux · GIT · info
@@ -16,6 +16,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 - `GET https://api.lux.network/v1/git/{org}/{project}/{repo}/info/refs` — Advertise a repository's refs to a git client
 - `GET https://api.lux.network/v1/git/{org}/{repo}/info/refs` — Advertise a repository's refs to a git client
+- `GET https://api.lux.network/{org}/{project}/{repo}/info/refs` — Advertise a repository's refs to a git client
+- `GET https://api.lux.network/{org}/{repo}/info/refs` — Advertise a repository's refs to a git client
 
 ## Parameters
 
@@ -29,6 +31,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 - `/v1/git/{org}/{project}/{repo}/info/refs` → JSON body.
 - `/v1/git/{org}/{repo}/info/refs` → JSON body.
+- `/{org}/{project}/{repo}/info/refs` → JSON body.
+- `/{org}/{repo}/info/refs` → JSON body.
 
 ## Example
 

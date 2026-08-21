@@ -1,6 +1,6 @@
 package mq
 
-// /v1/mq/streams/{stream}/consumers — durable pull consumers on the org's
+// /v1/mq/stream/{stream}/consumer — durable pull consumers on the org's
 // streams: list, create, inspect, delete, and pull the next batch. Delivery
 // here is the QUEUE half of the product (pull, at-least-once tracked by the
 // broker); the subject side (publish/subscribe) is pubsub's surface.

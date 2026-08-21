@@ -42,7 +42,13 @@ Site requirements:
 // It is the shape of BOTH the model's manifest entries AND the raw deploy_site
 // JSON body, so one validator (siteFromFiles) serves both paths.
 type projectsFile struct {
-	Path    string `json:"path"`
+	// Path is where the file lands in the site, RELATIVE to its root — so
+	// "index.html" is the page served at /. Leading slashes and any attempt to
+	// escape the root are refused.
+	Path string `json:"path"`
+	// Content is the file's whole text, inline. There is no upload step and no
+	// reference to fetch: a site is sent as its bytes, and each file and the site as
+	// a whole are size-bounded.
 	Content string `json:"content"`
 }
 
@@ -263,27 +269,49 @@ func stripFences(s string) string {
 
 // ---- request/response shapes ----
 
+// projectsBuildSite asks for a site to be WRITTEN and published from a description
+// of it. Everything but the brief is optional.
 type projectsBuildSite struct {
+	// Brief is what the site should be, in plain language. It is the whole input the
+	// model gets and it is size-bounded.
 	Brief string `json:"brief"`
-	Slug  string `json:"slug"`
-	Name  string `json:"name"`
+	// Slug is the handle and public host label to publish under. Derived from the
+	// name, or from the brief, when omitted.
+	Slug string `json:"slug"`
+	// Name is the site's display name. Taken from what the model writes when omitted.
+	Name string `json:"name"`
+	// Model names which model writes the site. Absent takes the deployment's
+	// default — this route spends inference on the caller's org either way.
 	Model string `json:"model"`
 }
 
+// projectsDeploySite publishes a site the caller has ALREADY written, sending its
+// files inline. It is the same shape build produces, minus the writing.
 type projectsDeploySite struct {
-	Slug  string         `json:"slug"`
-	Name  string         `json:"name"`
+	// Slug is the handle and public host label to publish under.
+	Slug string `json:"slug"`
+	// Name is the site's display name.
+	Name string `json:"name"`
+	// Files is the whole site, inline — every file it consists of. It REPLACES what
+	// is there rather than merging, so an omitted file is a deleted one.
 	Files []projectsFile `json:"files"`
 }
 
 // projectsSite is one live site in the org's list: the pretty URL it serves at,
 // and the project state behind it.
 type projectsSite struct {
-	Slug      string `json:"slug"`
-	URL       string `json:"url"`
-	Name      string `json:"name"`
-	Status    string `json:"status"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// Slug is the site's handle — also the label of the host it serves at.
+	Slug string `json:"slug"`
+	// URL is the pretty address readers use, not the object-store path behind it.
+	URL string `json:"url"`
+	// Name is the site's display name.
+	Name string `json:"name"`
+	// Status is the project's state behind the site — whether it is serving, still
+	// building, or failed its last build. A site that is listed is not necessarily
+	// one that answers.
+	Status string `json:"status"`
+	// UpdatedAt is when the project last changed, as Unix seconds.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // projectsSites is the org's live sites. A defined slice type, so the list has a

@@ -71,17 +71,15 @@ var (
 	// The same API, the same version, the same server — because it IS the same
 	// API, and a client generated from either document calls the same host. Only
 	// the description differs, and it differs because it has one fact to add that
-	// the reader cannot get anywhere else: this document is a SUBSET, and the
-	// absence of an operation from it is not evidence that the operation does not
-	// exist. A generator, a docs site or a person reading it without that sentence
-	// would take 18 paths for the whole of Hanzo Cloud.
+	// the reader cannot get anywhere else: this document is the customer surface,
+	// and the operator's /v1/admin family, the relay doors and the legacy
+	// spellings are served beside it without being part of it.
 	publicInfo = Info{
 		Title:   fleetInfo.Title,
 		Version: fleetInfo.Version,
-		Description: "The public Hanzo Cloud API: the operations declared part of the published " +
-			"contract, and only those. It is a SUBSET of the full document — an operation absent " +
-			"here may still be served, and is simply not part of what we publish. Tagged by " +
-			"product: the first path segment after /v1/.",
+		Description: "The Hanzo Cloud API as a customer calls it: every operation under /v1/ except " +
+			"the operator's admin product, relay doors and legacy spellings. The full document at " +
+			"/v1/openapi.json carries those too. Tagged by product: the first path segment after /v1/.",
 	}
 )
 
@@ -148,13 +146,15 @@ func Subsets(apps []string, read func(app string) []byte) ([]Part, error) {
 	return out, nil
 }
 
-// core is the one operation no app owns: the endpoint that serves the document.
-// It is MOUNTED and projected rather than written down — a hand-kept literal
-// would be a second definition of a route zip already knows, free to disagree
-// with the address the fleet actually answers on.
+// core is the operations no app owns: the endpoint that serves the document, its
+// command projection, and the agent door (openapi/mcp.go). They are MOUNTED and
+// projected rather than written down — a hand-kept literal would be a second
+// definition of a route the host already serves, free to disagree with the
+// address the fleet actually answers on.
 func core() (Part, error) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	Mount(app, Info{})
+	mountDoor(app)
 	doc, err := FleetSpec(app)
 	if err != nil {
 		return Part{}, fmt.Errorf("core: %w", err)

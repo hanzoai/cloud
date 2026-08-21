@@ -244,9 +244,17 @@ func (s *BlueprintStore) LatestResolved(ctx context.Context, brand string) (doc 
 // VersionMeta is one stored version's metadata (audit / PITR listing — never the full
 // doc, which the GET returns for the active version).
 type VersionMeta struct {
-	Brand     string `json:"brand"`
-	Version   int    `json:"version"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// Brand is the white-label key this revision was authored under; empty is the
+	// shared base playbook. Revisions of two brands never share a number line.
+	Brand string `json:"brand"`
+	// Version is the store's own revision counter for that brand, starting at 1 for
+	// the seeded playbook and incrementing on every edit. Nothing is overwritten, so
+	// the highest number is the live one and every lower number is still readable.
+	// It is not the playbook's authored `version` string.
+	Version int `json:"version"`
+	// UpdatedAt is when this revision was written, as Unix seconds — the "who
+	// changed the playbook, and when" half of the audit trail.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // ListVersions returns brand's versions, newest first — the PITR/audit trail.

@@ -38,11 +38,19 @@ const maxChatMessage = 4 * 1024
 
 // suggestion is one ranked next-best quest the Business AI recommends.
 type suggestion struct {
-	StepID      string `json:"stepId"`
-	Title       string `json:"title"`
-	Detail      string `json:"detail,omitempty"`
-	Rationale   string `json:"rationale"`
-	Automatable bool   `json:"automatable"`
+	// StepID is the checklist step being recommended — the id every step route
+	// takes, so a caller can act on the suggestion directly.
+	StepID string `json:"stepId"`
+	// Title is the step's own one-line quest.
+	Title string `json:"title"`
+	// Detail is the step's own prose — what it asks for.
+	Detail string `json:"detail,omitempty"`
+	// Rationale is why this step is being suggested NOW, written for the person
+	// reading it. It explains the ranking, not the step.
+	Rationale string `json:"rationale"`
+	// Automatable is true when the step names a tool, so the Business AI can do it
+	// rather than only describe it.
+	Automatable bool `json:"automatable"`
 	// Unlocks is how many downstream steps completing this one immediately makes
 	// available (its leverage) — the primary ranking key.
 	Unlocks int `json:"unlocks"`

@@ -196,6 +196,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -231,6 +232,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -259,6 +261,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -297,6 +300,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -332,6 +336,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -360,6 +365,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -393,6 +399,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -440,6 +447,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -503,6 +511,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -579,6 +588,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -634,6 +644,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -674,6 +685,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -723,6 +735,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -769,6 +782,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -816,6 +830,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -854,6 +869,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -913,6 +929,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -962,6 +979,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1007,6 +1025,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1052,6 +1071,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1114,6 +1134,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1164,6 +1185,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1209,6 +1231,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1257,6 +1280,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1307,6 +1331,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1345,6 +1370,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1411,6 +1437,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1449,6 +1476,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1459,7 +1487,8 @@
         "description": "GONE (410). This was the canonical forge's push-to-deploy door, and it never dispatched a build in its life.\n\nIt handed each verified push to cloud.OnGitPush, a single-registrant seam whose only registrant lives in apps/platform. cloud runs each app as its own OS process, so in the git process that builder is nil forever — and this handler answered 204 either way. Delivered, signature valid, green on the forge's hook page, and nothing built.\n\nPush-to-deploy now belongs to POST https://platform.hanzo.ai/v1/git-webhook, which owns the build system-of-record and dispatches BuildKit Jobs. git.hanzo.ai delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.\n\nThe route is kept, and answers 410 naming that address, precisely so a misdirected delivery says what is wrong. Deleting it would 404, and a 404 here reads as 'the API is switched off' — the wrong conclusion this estate has already drawn twice.",
         "tags": [
           "git"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/git/zap/createRepo": {
@@ -1478,7 +1507,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/git/zap/deleteRepo": {
@@ -1497,7 +1527,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/git/zap/getRepo": {
@@ -1516,7 +1547,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/git/zap/listRepos": {
@@ -1526,7 +1558,8 @@
         "description": "Answers every repository in the caller's org and project scope. It reads NO body — the scope is entirely the caller's identity — so a request with an empty object is correct.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
           "git"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/git/zap/usage": {
@@ -1536,7 +1569,8 @@
         "description": "Answers every repository in the caller's org with its size in bytes, plus the org's total — what git storage is actually being used, and by which repository. It reads NO body, and it is scoped to the caller's own org, so it is that org's footprint and never the fleet's.\n\nA ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.",
         "tags": [
           "git"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/git/{org}/{project}/{repo}/git-receive-pack": {
@@ -1582,7 +1616,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/git/{org}/{project}/{repo}/git-upload-pack": {
@@ -1628,7 +1663,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/git/{org}/{project}/{repo}/info/refs": {
@@ -1664,7 +1700,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/git/{org}/{repo}/git-receive-pack": {
@@ -1702,7 +1739,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/git/{org}/{repo}/git-upload-pack": {
@@ -1740,7 +1778,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/git/{org}/{repo}/info/refs": {
@@ -1768,7 +1807,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/{org}/{project}/{repo}/git-receive-pack": {

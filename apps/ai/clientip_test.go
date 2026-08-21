@@ -10,45 +10,47 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hanzoai/ai/address"
+	aictl "github.com/hanzoai/ai/controllers"
 	"github.com/hanzoai/cloud/clientip"
 	"github.com/zap-proto/zip"
 )
 
-// THE SEAM THAT WAS NEVER CROSSED.
+// THE SENDER AND THE READER, IN ONE PROCESS, ASKED THE ONLY QUESTION THAT MATTERS.
 //
-// ai's routes are reached through zip.AdaptNetHTTP, and the peer does not survive it:
-// r.RemoteAddr inside one of ai's handlers is the same value for every caller. ai's
-// public lane keys a per-visitor ceiling on the caller's address, so one address for
-// everyone made that ceiling one bucket for the whole internet — five calls a day,
-// globally. It failed safe and it was invisible in either repository alone, because
-// this crossing exists in neither.
+// This host resolves the caller and stamps it; ai's public lane keys a per-visitor
+// ceiling on what it reads back. Those two halves are written in two repositories and
+// they agree on a name — so the failure to test for is not a crash but a silence: a
+// stamp under one name and a read under another compile perfectly, the read finds
+// nothing, and the lane falls back to the socket peer. Behind the in-cluster ingress
+// that peer is one value for everyone, and a ceiling per visitor becomes a ceiling for
+// the internet.
 //
-// So the test has to BE the crossing. Every unit test on either side constructs an
-// http.Request with RemoteAddr set, which is exactly the fact the adapter destroys —
-// those tests passed throughout. This one drives the real middleware, the real
-// zip.AdaptNetHTTP, and the real reader ai is given, and asks the only question that
-// matters: do two different callers arrive as two different addresses.
-func TestTwoCallersCrossTheAdapterAsTwoAddresses(t *testing.T) {
+// So this drives ai's OWN reader — controllers.Visitor, the function the ceiling
+// actually calls — and not a stand-in with the same shape. A stand-in in this package
+// reads through cloud's constant at both ends and would agree with itself no matter
+// what ai was compiled to look for, which is the one thing that must not be assumed.
+//
+// TWO CALLERS, TWO VISITORS is the property the ceiling rests on, and every link in
+// the chain is load-bearing for it: resolve, stamp, cross the adapter, read, believe.
+// Break any one and both callers collapse onto the same visitor and this goes red.
+func TestTheHostsStampIsWhatTheCeilingCounts(t *testing.T) {
 	var seen []string
-	// Stands where ai's handler stands, and reads what ai reads.
-	landing := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = append(seen, clientip.ClientIPAcross(r))
-		w.WriteHeader(http.StatusNoContent)
-	})
-
+	// Stands where ai's handler stands, and asks ai what it makes of the caller.
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.Use(zip.H(clientip.StampClientIP))
-	app.All("/v1/*", zip.AdaptNetHTTP(landing))
+	app.All("/v1/*", func(c *zip.Ctx) error {
+		seen = append(seen, aictl.Visitor(c))
+		return c.NoContent(http.StatusNoContent)
+	})
 
 	call := func(forwarded string) {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodPost, "http://example.com/v1/chat/public", nil)
-		if forwarded != "" {
-			req.Header.Set("X-Forwarded-For", forwarded)
-		}
+		req.Header.Set("X-Forwarded-For", forwarded)
 		resp, err := app.Fiber().Test(req)
 		if err != nil {
-			t.Fatalf("serving through the adapter: %v", err)
+			t.Fatalf("serving: %v", err)
 		}
 		_ = resp.Body.Close()
 	}
@@ -57,20 +59,13 @@ func TestTwoCallersCrossTheAdapterAsTwoAddresses(t *testing.T) {
 	call("203.0.113.11")
 
 	if len(seen) != 2 {
-		t.Fatalf("the request did not reach the far side of the adapter: %d arrivals, want 2", len(seen))
+		t.Fatalf("the request did not reach ai's reader: %d arrivals, want 2", len(seen))
 	}
-	// WHAT THIS TEST OWNS is that the header CROSSES the adapter — not that it
-	// carries a particular value.
-	//
-	// It used to demand two distinct non-empty addresses and it passed, for months,
-	// while the lane was one bucket for the whole internet. It got those values from
-	// ClientIP walking a forwarded header, which app.Test can synthesise and a real
-	// deployment never provided. A test that can only be satisfied by the bug is
-	// worse than no test, so it now asserts the crossing and leaves the value to
-	// clientip's one-source test, which compares against the framework rather than
-	// against a header this harness invented.
-	if len(seen) != 2 {
-		t.Fatalf("the request did not reach the far side twice: %d arrivals", len(seen))
+	if seen[0] == "" || seen[1] == "" {
+		t.Fatalf("ai derived no visitor from a stamped caller: %q — the address did not survive the crossing", seen)
+	}
+	if seen[0] == seen[1] {
+		t.Fatalf("two callers arrived as one visitor %q; the ceiling is one bucket for everyone", seen[0])
 	}
 }
 
@@ -89,7 +84,7 @@ func TestACallerCannotNameItself(t *testing.T) {
 	app.All("/v1/*", zip.AdaptNetHTTP(landing))
 
 	req := httptest.NewRequest(http.MethodPost, "http://example.com/v1/chat/public", nil)
-	req.Header.Set(clientip.ClientIPHeader, "198.51.100.255") // the forgery
+	req.Header.Set(address.Header, "198.51.100.255") // the forgery
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
 		t.Fatalf("serving through the adapter: %v", err)

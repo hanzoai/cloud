@@ -77,14 +77,30 @@ func categoryAccount(id string) string {
 // InboxItem is one queued document as GET /v1/books/inbox surfaces it: its hash id,
 // filename, status, and — once scanned — the extracted summary and its confidence.
 type InboxItem struct {
-	ID         string     `json:"id"` // the file hash (== a scan's ScanID)
-	Filename   string     `json:"filename,omitempty"`
-	Status     string     `json:"status"`
-	CreatedAt  string     `json:"createdAt"`
-	Extracted  *Extracted `json:"extracted,omitempty"`
-	Vendor     string     `json:"vendor,omitempty"`
-	Category   string     `json:"category,omitempty"`
-	Confidence string     `json:"confidence,omitempty"`
+	// ID is the CONTENT HASH of the uploaded bytes, which is what makes the queue
+	// idempotent: re-uploading the same document returns this item rather than
+	// adding a second one. It is also the id the scan of this document carries.
+	ID string `json:"id"`
+	// Filename is the name the document was uploaded under, for a person to
+	// recognise it by. It is not part of the item's identity.
+	Filename string `json:"filename,omitempty"`
+	// Status is where the document is in the queue — unsorted until the scanner has
+	// read it, and thereafter whether it is waiting on a person or has been booked.
+	Status string `json:"status"`
+	// CreatedAt is when the document was uploaded.
+	CreatedAt string `json:"createdAt"`
+	// Extracted is what the scanner read off the document. Absent until it has been
+	// scanned, so its absence is "not read yet", never "nothing on it".
+	Extracted *Extracted `json:"extracted,omitempty"`
+	// Vendor is the supplier the scanner identified, surfaced beside the item so a
+	// queue renders without opening each document.
+	Vendor string `json:"vendor,omitempty"`
+	// Category is the expense account the scanner proposed, as a chart number — a
+	// PROPOSAL, not a posting: nothing is booked until it is accepted.
+	Category string `json:"category,omitempty"`
+	// Confidence is how sure the scanner is of that reading, and is the signal for
+	// whether a person needs to check it before it is booked.
+	Confidence string `json:"confidence,omitempty"`
 }
 
 // inboxSummary is the JSON blob persisted in books_inbox.extracted: enough of a scan draft

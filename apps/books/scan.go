@@ -139,8 +139,12 @@ func init() {
 
 // LineItem is one line of a scanned document — a description and its amount in exact cents.
 type LineItem struct {
+	// Description is the line as it appears on the document.
 	Description string `json:"description"`
-	AmountCents int64  `json:"amountCents"`
+	// AmountCents is that line's amount in whole cents. The scanner is instructed to
+	// return integer cents rather than a decimal, so no float rounding can enter the
+	// ledger through here.
+	AmountCents int64 `json:"amountCents"`
 }
 
 // Extracted is the structured shape the AI extracts from a receipt/invoice. Amounts are
@@ -148,14 +152,29 @@ type LineItem struct {
 // float rounding can enter downstream. Category is the AI's proposed slug — a HINT that
 // vendor/rule resolution overrides when it knows better.
 type Extracted struct {
-	Merchant   string     `json:"merchant"`
-	IssuedAt   string     `json:"issuedAt"` // YYYY-MM-DD
-	TotalCents int64      `json:"totalCents"`
-	TaxCents   int64      `json:"taxCents"`
-	Currency   string     `json:"currency"`
-	Category   string     `json:"category"` // proposed slug (software|cloud|office|…)
-	LineItems  []LineItem `json:"lineItems,omitempty"`
-	Note       string     `json:"note,omitempty"`
+	// Merchant is the supplier as printed on the document.
+	Merchant string `json:"merchant"`
+	// IssuedAt is the document's OWN date as YYYY-MM-DD — when the bill was issued,
+	// which is not when it was uploaded or when it will post.
+	IssuedAt string `json:"issuedAt"`
+	// TotalCents is the document total in whole cents, tax INCLUDED.
+	TotalCents int64 `json:"totalCents"`
+	// TaxCents is how much of that total is tax, in cents. It is part of totalCents,
+	// not additional to it.
+	TaxCents int64 `json:"taxCents"`
+	// Currency is the ISO code the document is denominated in.
+	Currency string `json:"currency"`
+	// Category is the expense bucket the SCANNER guessed, as a slug — a hint only.
+	// Vendor rules override it whenever they know better, so this is the model's
+	// reading and not the account the entry will land on.
+	Category string `json:"category"`
+	// LineItems are the individual lines read off the document, where it had any.
+	// They need not sum to totalCents: a document may carry lines the scanner could
+	// not read, and the total is taken from the total.
+	LineItems []LineItem `json:"lineItems,omitempty"`
+	// Note is anything else worth carrying from the document that has no field of
+	// its own.
+	Note string `json:"note,omitempty"`
 }
 
 // ScanDraft is the POST /v1/books/scan response: the extracted fields plus a PROPOSED
@@ -163,14 +182,34 @@ type Extracted struct {
 // resolved the category, else "low" — in which case Questions carries a clarifying prompt
 // and the frontend should confirm the category (and can persist a rule) before booking.
 type ScanDraft struct {
-	ScanID     string     `json:"scanId"` // file hash — the (scan, id) idempotency key
-	Extracted  Extracted  `json:"extracted"`
-	Vendor     string     `json:"vendor"`
-	Category   string     `json:"category"`   // resolved COA expense account number
-	Confidence string     `json:"confidence"` // auto | low
-	Voucher    Voucher    `json:"voucher"`    // PROPOSED — not yet posted
-	Balanced   bool       `json:"balanced"`   // Σdebit == Σcredit (always true when built)
-	Questions  []Question `json:"questions,omitempty"`
+	// ScanID is the CONTENT HASH of the scanned bytes — the same id the document
+	// carries in the inbox, and the key that makes booking it idempotent: scanning
+	// the same file twice cannot book it twice.
+	ScanID string `json:"scanId"`
+	// Extracted is what the scanner read off the document, before any of our rules
+	// were applied to it.
+	Extracted Extracted `json:"extracted"`
+	// Vendor is the supplier after resolution — the known counterparty the merchant
+	// text was matched to, where one matched.
+	Vendor string `json:"vendor"`
+	// Category is the RESOLVED chart-of-accounts expense number this would post to,
+	// after vendor rules had their say over the scanner's guess.
+	Category string `json:"category"`
+	// Confidence is `auto` when a vendor rule settled the category and `low` when
+	// only the model's guess is behind it — in which case a person should confirm
+	// before this is booked, and questions below says what to ask.
+	Confidence string `json:"confidence"`
+	// Voucher is the balanced double entry this document WOULD post. It is a
+	// proposal: nothing has been written to the ledger, and booking is a separate,
+	// explicit step.
+	Voucher Voucher `json:"voucher"`
+	// Balanced is whether that proposed voucher's debits equal its credits. It is
+	// computed rather than assumed, so a caller can refuse to book an entry that
+	// would not balance.
+	Balanced bool `json:"balanced"`
+	// Questions carries what to confirm before booking, when confidence is low.
+	// Empty means the draft can be booked as it stands.
+	Questions []Question `json:"questions,omitempty"`
 }
 
 // scanHandler answers POST /v1/books/scan: it reads the uploaded bytes, extracts text (PDF

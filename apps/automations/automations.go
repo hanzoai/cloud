@@ -203,7 +203,7 @@ type ops struct{ s *cloud.Service[state] }
 // REST wire and silently loses the MCP tool and the ZAP call, where the In is the whole
 // message and an address that lives only in the URL never arrives.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/automations")
+	g := app.Group("/v1/auto")
 	// cloud.Bridge is installed by whoever composes the app — the fused host at
 	// its root — never here: the validated org still reaches every typed op below
 	// because the root install parks it on the context.
@@ -603,7 +603,7 @@ func (o ops) createVersion(ctx context.Context, in *createVersionIn) (*FlowVersi
 // must be told the rules here. Declared through the same registry Register uses, so a
 // description renders only while the router actually serves the route.
 func init() {
-	openapi.Describe("/v1/automations/flows/:id/operations", http.MethodPost,
+	openapi.Describe("/v1/auto/flows/:id/operations", http.MethodPost,
 		"Edit a flow — rename it, retarget its trigger, or add, move and delete steps",
 		"Applies ONE flow operation and answers the thing it changed. The operation is named "+
 			"by `type`, with its arguments under `request`: `CHANGE_NAME`, `UPDATE_TRIGGER`, "+
@@ -618,7 +618,7 @@ func init() {
 			"would). Org-scoped and fails closed: a validated principal is required (403 without "+
 			"one), the flow and its version are read under the caller's OWN org so another "+
 			"tenant's id is a 404, and an operation whose `request` does not decode is a 400.")
-	openapi.Describe("/v1/automations/runs/:id/resume", http.MethodPost,
+	openapi.Describe("/v1/auto/runs/:id/resume", http.MethodPost,
 		"Release a run waiting at an approval step, with the approval payload",
 		"Delivers the durable `resume` signal to a run parked on a `wait_for_approval` "+
 			"waitpoint and answers `{resumed:true}` once the engine has taken it.\n\n"+
@@ -632,7 +632,7 @@ func init() {
 			"body that is not JSON is a 400, and a payload over the size limit is a 413 — it "+
 			"becomes durable engine state, so it is bounded here rather than after it lands. "+
 			"The resume is audited as `automations.run.resume`.")
-	openapi.Describe("/v1/automations/hooks/:source/:event", http.MethodPost,
+	openapi.Describe("/v1/auto/hooks/:source/:event", http.MethodPost,
 		"Fire an event that starts every enabled flow subscribed to it",
 		"Delivers one event to the org's automation triggers and answers `{matched:n}` — how "+
 			"many enabled flows had a webhook trigger on this `(source, event)` key and were "+

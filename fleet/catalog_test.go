@@ -41,6 +41,9 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 				// catalog carries what a child ANSWERS TO, so an unfiltered
 				// `want` reads the dispatchable catalog as permanently stale.
 				Tool bool `json:"x-tool"`
+				// x-public, the audience openapi.stamp derived; the door offers the
+				// public contract and nothing beside it, so the catalog carries only it.
+				Public bool `json:"x-public"`
 			} `json:"paths"`
 		}
 		if err := json.Unmarshal(raw, &doc); err != nil {
@@ -50,7 +53,7 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 		seen := map[string]bool{}
 		for _, methods := range doc.Paths {
 			for method, op := range methods {
-				if method == "parameters" || op.OperationID == "" || !op.Tool || seen[op.OperationID] {
+				if method == "parameters" || op.OperationID == "" || !op.Tool || !op.Public || seen[op.OperationID] {
 					continue
 				}
 				seen[op.OperationID] = true

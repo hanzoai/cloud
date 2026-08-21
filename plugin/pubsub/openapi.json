@@ -21,390 +21,6 @@
     }
   ],
   "paths": {
-    "/v1/pubsub/jetstream/streams": {
-      "get": {
-        "operationId": "get_pubsub_jetstream_streams",
-        "summary": "Returns the org's streams, sorted by name.",
-        "description": "Returns the org's streams, sorted by name.\n\nA stream is the durable log: it captures every message published to its\nsubjects and retains them by its own limits, independent of any consumer.\nThe listing is org-scoped server-side — one org can never see another's\nstreams, and the platform's own planes never appear.",
-        "tags": [
-          "pubsub"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/streamPage"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      },
-      "post": {
-        "operationId": "post_pubsub_jetstream_streams",
-        "summary": "Creates a durable stream capturing the given subjects and returns it.",
-        "description": "Creates a durable stream capturing the given subjects and\nreturns it. 409 when the org already has a stream of that name; the subjects\nare the org's own and cannot collide with another org's.",
-        "tags": [
-          "pubsub"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "maxAge": 86400,
-                "name": "ORDERS",
-                "subjects": [
-                  "orders.\u003e"
-                ]
-              },
-              "schema": {
-                "$ref": "#/components/schemas/streamWrite"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/streamRecord"
-                }
-              }
-            },
-            "description": "created"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/pubsub/jetstream/streams/{stream}": {
-      "delete": {
-        "operationId": "delete_pubsub_jetstream_streams_by_stream",
-        "summary": "Removes one stream of the caller's org — its retained messages and its consumers with it — and answers 204 with no body.",
-        "description": "Removes one stream of the caller's org — its retained messages\nand its consumers with it — and answers 204 with no body. 404 when the org\nhas no stream of that name.",
-        "tags": [
-          "pubsub"
-        ],
-        "parameters": [
-          {
-            "name": "stream",
-            "in": "path",
-            "required": true,
-            "description": "Stream is the stream's name, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "no content"
-          }
-        },
-        "x-tool": true
-      },
-      "get": {
-        "operationId": "get_pubsub_jetstream_streams_by_stream",
-        "summary": "Returns one stream of the caller's org — its configuration and its live state (messages, bytes, sequence range, consumer count).",
-        "description": "Returns one stream of the caller's org — its configuration and its\nlive state (messages, bytes, sequence range, consumer count). 404 when the\norg has no stream of that name.",
-        "tags": [
-          "pubsub"
-        ],
-        "parameters": [
-          {
-            "name": "stream",
-            "in": "path",
-            "required": true,
-            "description": "Stream is the stream's name, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/streamRecord"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      },
-      "put": {
-        "operationId": "put_pubsub_jetstream_streams_by_stream",
-        "summary": "Rewrites a stream's configuration — subjects, limits, discard — and returns the updated stream.",
-        "description": "Rewrites a stream's configuration — subjects, limits, discard —\nand returns the updated stream. It is a PUT: the spec sent replaces the spec\nheld, with one reading for the enums a caller omits — an empty storage,\nretention or discard keeps the stream's current one, because JetStream holds\nstorage and retention immutable and refuses a change with a 400 rather than\nthis door pretending it took.",
-        "tags": [
-          "pubsub"
-        ],
-        "parameters": [
-          {
-            "name": "stream",
-            "in": "path",
-            "required": true,
-            "description": "Stream is the stream to update, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "maxMsgs": 100000,
-                "subjects": [
-                  "orders.\u003e",
-                  "refunds.\u003e"
-                ]
-              },
-              "schema": {
-                "$ref": "#/components/schemas/streamUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/streamRecord"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/pubsub/jetstream/streams/{stream}/consumers": {
-      "get": {
-        "operationId": "get_pubsub_jetstream_streams_by_stream_consumers",
-        "summary": "Returns one stream's consumers, sorted by name.",
-        "description": "Returns one stream's consumers, sorted by name. 404 when the\norg has no stream of that name.",
-        "tags": [
-          "pubsub"
-        ],
-        "parameters": [
-          {
-            "name": "stream",
-            "in": "path",
-            "required": true,
-            "description": "Stream is the stream's name, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/consumerPage"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      },
-      "post": {
-        "operationId": "post_pubsub_jetstream_streams_by_stream_consumers",
-        "summary": "Creates a durable consumer on one stream and returns it.",
-        "description": "Creates a durable consumer on one stream and returns it. A\nconsumer is a named cursor: it tracks what has been delivered and what is\nacknowledged, so many workers can share it and none sees a message twice\noutside redelivery. 409 when the stream already has a consumer of that name\nwith a different configuration.",
-        "tags": [
-          "pubsub"
-        ],
-        "parameters": [
-          {
-            "name": "stream",
-            "in": "path",
-            "required": true,
-            "description": "Stream is the stream to consume, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "ack": "explicit",
-                "filter": "orders.created",
-                "name": "worker"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/consumerWrite"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/consumerRecord"
-                }
-              }
-            },
-            "description": "created"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/pubsub/jetstream/streams/{stream}/consumers/{name}": {
-      "delete": {
-        "operationId": "delete_pubsub_jetstream_streams_by_stream_consumers_by_name",
-        "summary": "Removes one consumer — its cursor, not the stream's messages — and answers 204 with no body.",
-        "description": "Removes one consumer — its cursor, not the stream's messages —\nand answers 204 with no body. 404 when the stream or the consumer does not\nexist.",
-        "tags": [
-          "pubsub"
-        ],
-        "parameters": [
-          {
-            "name": "stream",
-            "in": "path",
-            "required": true,
-            "description": "Stream is the stream, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "description": "Name is the consumer, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "no content"
-          }
-        },
-        "x-tool": true
-      },
-      "get": {
-        "operationId": "get_pubsub_jetstream_streams_by_stream_consumers_by_name",
-        "summary": "Returns one consumer of one org stream — its configuration and its cursor: delivered and acknowledged sequences, pending and redelivered counts.",
-        "description": "Returns one consumer of one org stream — its configuration and\nits cursor: delivered and acknowledged sequences, pending and redelivered\ncounts. 404 when the stream or the consumer does not exist.",
-        "tags": [
-          "pubsub"
-        ],
-        "parameters": [
-          {
-            "name": "stream",
-            "in": "path",
-            "required": true,
-            "description": "Stream is the stream, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "description": "Name is the consumer, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/consumerRecord"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/pubsub/jetstream/streams/{stream}/consumers/{name}/next": {
-      "post": {
-        "operationId": "post_pubsub_jetstream_streams_by_stream_consumers_by_name_next",
-        "summary": "Fetch pulls the next batch from a consumer and acknowledges it — the request/response way to consume a stream.",
-        "description": "Fetch pulls the next batch from a consumer and acknowledges it — the\nrequest/response way to consume a stream. The hand-off is at-most-once: a\nmessage returned here is acked here, so a caller that loses the response does\nnot see it again. Workers needing at-least-once delivery consume the same\nconsumer over the NATS port, where acks are theirs to send. An empty batch\nafter the wait is an empty page, not an error.",
-        "tags": [
-          "pubsub"
-        ],
-        "parameters": [
-          {
-            "name": "stream",
-            "in": "path",
-            "required": true,
-            "description": "Stream is the stream, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "description": "Name is the consumer, from the path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "batch": 10,
-                "waitMs": 2000
-              },
-              "schema": {
-                "$ref": "#/components/schemas/fetchQuery"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/messagePage"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
     "/v1/pubsub/kv/{bucket}": {
       "delete": {
         "operationId": "delete_pubsub_kv_by_bucket",
@@ -429,6 +45,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -475,6 +92,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -511,6 +129,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -552,6 +171,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "put": {
@@ -606,6 +226,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -649,6 +270,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -689,6 +311,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -727,6 +350,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }
@@ -871,116 +495,6 @@
         },
         "type": "object"
       },
-      "consumerPage": {
-        "properties": {
-          "data": {
-            "description": "Data are the stream's consumers.",
-            "items": {
-              "$ref": "#/components/schemas/consumerRecord"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "consumerRecord": {
-        "properties": {
-          "ack": {
-            "description": "Ack is the acknowledgement discipline: explicit, none or all.",
-            "type": "string"
-          },
-          "ackWait": {
-            "description": "AckWait is the redelivery timeout in seconds.",
-            "type": "integer"
-          },
-          "acked": {
-            "description": "Acked is the stream sequence acknowledged furthest.",
-            "type": "integer"
-          },
-          "deliver": {
-            "description": "Deliver is the starting point: all, last, new or lastPerSubject.",
-            "type": "string"
-          },
-          "delivered": {
-            "description": "Delivered is the stream sequence delivered furthest.",
-            "type": "integer"
-          },
-          "filter": {
-            "description": "Filter is the subject filter, in the org's namespace; empty means all.",
-            "type": "string"
-          },
-          "maxDeliver": {
-            "description": "MaxDeliver is the delivery-attempt cap; -1 means unlimited.",
-            "type": "integer"
-          },
-          "name": {
-            "description": "Name is the durable consumer name.",
-            "type": "string"
-          },
-          "pending": {
-            "description": "Pending is how many messages await delivery.",
-            "type": "integer"
-          },
-          "redelivered": {
-            "description": "Redelivered is how many messages are being redelivered.",
-            "type": "integer"
-          },
-          "stream": {
-            "description": "Stream is the stream it consumes, in the org's view.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "consumerWrite": {
-        "properties": {
-          "ack": {
-            "type": "string"
-          },
-          "ackWait": {
-            "type": "integer"
-          },
-          "deliver": {
-            "type": "string"
-          },
-          "filter": {
-            "type": "string"
-          },
-          "maxDeliver": {
-            "type": "integer"
-          },
-          "name": {
-            "description": "Name is the durable consumer name: 1–64 of [A-Za-z0-9_-].",
-            "type": "string"
-          },
-          "stream": {
-            "description": "Stream is the stream to consume, from the path.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "fetchQuery": {
-        "properties": {
-          "batch": {
-            "description": "Batch is the most messages to return. 0 or less means 1; anything above\n100 is clamped to 100.",
-            "type": "integer"
-          },
-          "name": {
-            "description": "Name is the consumer, from the path.",
-            "type": "string"
-          },
-          "stream": {
-            "description": "Stream is the stream, from the path.",
-            "type": "string"
-          },
-          "waitMs": {
-            "description": "WaitMs is how long to wait for the batch to fill before answering with\nwhat arrived. 0 or less means the default of 5000; clamped to 30000.",
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
       "kvAck": {
         "properties": {
           "revision": {
@@ -1040,160 +554,6 @@
           "value": {
             "description": "Value is the value, carried verbatim as UTF-8 text (typically JSON).",
             "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "messagePage": {
-        "properties": {
-          "data": {
-            "description": "Data are the messages in this batch — empty when nothing was pending\nwithin the wait.",
-            "items": {
-              "$ref": "#/components/schemas/busMessage"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "streamPage": {
-        "properties": {
-          "data": {
-            "description": "Data are the org's streams.",
-            "items": {
-              "$ref": "#/components/schemas/streamRecord"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "streamRecord": {
-        "properties": {
-          "bytes": {
-            "description": "Bytes is how many bytes the stream holds right now.",
-            "type": "integer"
-          },
-          "consumers": {
-            "description": "Consumers is how many consumers the stream carries.",
-            "type": "integer"
-          },
-          "created": {
-            "description": "Created is when the stream was created, RFC3339.",
-            "type": "string"
-          },
-          "discard": {
-            "description": "Discard says which end gives way at the limits: old or new.",
-            "type": "string"
-          },
-          "firstSeq": {
-            "description": "FirstSeq is the sequence of the oldest retained message.",
-            "type": "integer"
-          },
-          "lastSeq": {
-            "description": "LastSeq is the sequence of the newest message.",
-            "type": "integer"
-          },
-          "maxAge": {
-            "description": "MaxAge is the age cap in seconds; 0 means unlimited.",
-            "type": "integer"
-          },
-          "maxBytes": {
-            "description": "MaxBytes is the retained-byte cap; -1 means unlimited.",
-            "type": "integer"
-          },
-          "maxMsgs": {
-            "description": "MaxMsgs is the retained-message cap; -1 means unlimited.",
-            "type": "integer"
-          },
-          "messages": {
-            "description": "Messages is how many messages the stream holds right now.",
-            "type": "integer"
-          },
-          "name": {
-            "description": "Name is the stream's name within the org.",
-            "type": "string"
-          },
-          "retention": {
-            "description": "Retention is the discipline: limits, interest or workqueue.",
-            "type": "string"
-          },
-          "storage": {
-            "description": "Storage is the backend: file or memory.",
-            "type": "string"
-          },
-          "subjects": {
-            "description": "Subjects are the subjects it captures, in the org's namespace.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "streamUpdate": {
-        "properties": {
-          "discard": {
-            "type": "string"
-          },
-          "maxAge": {
-            "type": "integer"
-          },
-          "maxBytes": {
-            "type": "integer"
-          },
-          "maxMsgs": {
-            "type": "integer"
-          },
-          "retention": {
-            "type": "string"
-          },
-          "storage": {
-            "type": "string"
-          },
-          "stream": {
-            "description": "Stream is the stream to update, from the path.",
-            "type": "string"
-          },
-          "subjects": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "streamWrite": {
-        "properties": {
-          "discard": {
-            "type": "string"
-          },
-          "maxAge": {
-            "type": "integer"
-          },
-          "maxBytes": {
-            "type": "integer"
-          },
-          "maxMsgs": {
-            "type": "integer"
-          },
-          "name": {
-            "description": "Name is the stream's name within the org: 1–64 of [A-Za-z0-9_], no dash.",
-            "type": "string"
-          },
-          "retention": {
-            "type": "string"
-          },
-          "storage": {
-            "type": "string"
-          },
-          "subjects": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           }
         },
         "type": "object"

@@ -127,20 +127,33 @@ func TestInsideTheFleetTheCallerReachesTheOp(t *testing.T) {
 // TestForgedIdentityStillDiesAtTheEdge is the half that must NOT move. The SAME
 // headers, from outside, are a caller naming its own tenant with nothing behind it
 // — the F1 forge — and the boundary in front of the subsystem's edge door is what
-// refuses them. A fix that made the door work by trusting what it was handed would
-// pass the test above and fail this one.
+// refuses them. It refuses them EARLIER than it once did: a tools/call carrying no
+// credential is answered 401 at the door with a challenge naming where to sign in,
+// so the forged headers never reach an op at all. A fix that made the door work by
+// trusting what it was handed would pass the test above and fail this one.
 func TestForgedIdentityStillDiesAtTheEdge(t *testing.T) {
 	edge, _ := doors(t)
 
-	got := tool(t, edge, "victim-corp", "victim-corp/ceo@victim.test")
-
-	if got.Validated {
-		t.Error("ValidatedFrom = true for a forged identity at the public door — " +
-			"an anonymous caller passes every gate that reads it")
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + tenantOp + `","arguments":{}}}`
+	req, err := http.NewRequest("POST", "http://cloud"+manifest.MCPPath, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got.OrgOK {
-		t.Errorf("OrgFrom = (%q, true) for a forged X-Org-Id at the public door; "+
-			"that org key opens another tenant's store", got.Org)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(zip.HeaderOrg, "victim-corp")
+	req.Header.Set(zip.HeaderUser, "victim-corp/ceo@victim.test")
+	resp, err := edge.Test(req, zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("POST %s: %v", manifest.MCPPath, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("a forged identity with no credential got %d from the public door; "+
+			"the door challenges before it routes, so nothing it was handed is ever read", resp.StatusCode)
+	}
+	if h := resp.Header.Get("WWW-Authenticate"); !strings.Contains(h, "oauth-protected-resource") {
+		t.Errorf("WWW-Authenticate = %q; the challenge names the resource metadata an MCP client signs in from", h)
 	}
 }
 

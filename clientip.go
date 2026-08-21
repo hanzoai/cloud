@@ -41,9 +41,6 @@ const TrustedProxiesEnv = clientip.TrustedProxiesEnv
 // CountryHeader is the edge's country attestation.
 const CountryHeader = clientip.CountryHeader
 
-// ClientIPHeader carries the caller's address to a subsystem in another process.
-const ClientIPHeader = clientip.ClientIPHeader
-
 // ClientIP is the ONE answer to "which address is calling".
 func ClientIP(c *zip.Ctx) string { return clientip.ClientIP(c) }
 
