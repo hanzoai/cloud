@@ -239,12 +239,12 @@ func TestMetaEcommerceContents(t *testing.T) {
 	}
 }
 
-// ── Umami (Hanzo Analytics — public /api/send, credential-less) ───────────────
+// ── Analytics (Hanzo Analytics — public /api/send, credential-less) ───────────────
 
-func TestUmamiBuild(t *testing.T) {
-	// A pageview is sent WITHOUT a name (Umami's pageview vs. custom-event rule) and
+func TestAnalyticsBuild(t *testing.T) {
+	// A pageview is sent WITHOUT a name (Analytics's pageview vs. custom-event rule) and
 	// its URL splits into hostname + path.
-	pv := umamiBuild(Config{"websiteId": "W1"}, Conversion{
+	pv := analyticsBuild(Config{"websiteId": "W1"}, Conversion{
 		Standard: EventPageView, Name: "$pageview", URL: "https://shop.example/pricing?x=1", Referrer: "https://google.com",
 		User: UserData{ExternalID: "v1"},
 	})
@@ -260,13 +260,13 @@ func TestUmamiBuild(t *testing.T) {
 	if pv.Payload.Referrer != "https://google.com" || pv.Payload.DistinctID != "v1" {
 		t.Errorf("referrer/distinct: %+v", pv.Payload)
 	}
-	// The visitor id MUST serialize under Umami's `id` session key, never the ignored
+	// The visitor id MUST serialize under Analytics's `id` session key, never the ignored
 	// `distinctId` — the exact JSON-tag regression a struct-field assert cannot catch.
 	if raw, _ := json.Marshal(pv.Payload); !strings.Contains(string(raw), `"id":"v1"`) || strings.Contains(string(raw), "distinctId") {
 		t.Errorf("visitor id must serialize as `id`, got %s", raw)
 	}
 	// A commerce event carries its canonical name (sans $) + value/currency data.
-	pur := umamiBuild(Config{"websiteId": "W1"}, Conversion{
+	pur := analyticsBuild(Config{"websiteId": "W1"}, Conversion{
 		Standard: EventPurchase, Name: "order_completed", Value: 30, Currency: "USD", User: UserData{ExternalID: "v2"},
 	})
 	if pur.Payload.Name != "order_completed" {
@@ -277,8 +277,8 @@ func TestUmamiBuild(t *testing.T) {
 	}
 }
 
-func TestUmamiSendEndToEnd(t *testing.T) {
-	var gotEnv umamiEnvelope
+func TestAnalyticsSendEndToEnd(t *testing.T) {
+	var gotEnv analyticsEnvelope
 	var gotUA, gotXFF, gotPath, gotRaw string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
@@ -287,15 +287,15 @@ func TestUmamiSendEndToEnd(t *testing.T) {
 		b, _ := io.ReadAll(r.Body)
 		gotRaw = string(b)
 		_ = json.Unmarshal(b, &gotEnv)
-		_, _ = w.Write([]byte("token-abc")) // Umami returns a plain text token
+		_, _ = w.Write([]byte("token-abc")) // Analytics returns a plain text token
 	}))
 	defer srv.Close()
-	old := umamiHost
-	umamiHost = srv.URL
-	defer func() { umamiHost = old }()
+	old := analyticsHost
+	analyticsHost = srv.URL
+	defer func() { analyticsHost = old }()
 
 	// Credential-less: the secret argument is empty and ignored.
-	res, err := umami{}.Send(context.Background(), Config{"websiteId": "W9"}, "",
+	res, err := analytics{}.Send(context.Background(), Config{"websiteId": "W9"}, "",
 		[]Conversion{{Standard: EventPurchase, Name: "order_completed", Value: 5, Currency: "USD",
 			User: UserData{ExternalID: "v1", UserAgent: "Mozilla/5.0", IP: "203.0.113.7"}}})
 	if err != nil {
@@ -310,27 +310,27 @@ func TestUmamiSendEndToEnd(t *testing.T) {
 	if gotEnv.Payload.Website != "W9" || gotEnv.Payload.Name != "order_completed" {
 		t.Errorf("envelope: %+v", gotEnv.Payload)
 	}
-	// The END USER's UA + IP are forwarded so Umami attributes the session/geo.
+	// The END USER's UA + IP are forwarded so Analytics attributes the session/geo.
 	if gotUA != "Mozilla/5.0" || gotXFF != "203.0.113.7" {
 		t.Errorf("forwarded UA/IP: ua=%q xff=%q", gotUA, gotXFF)
 	}
-	// The visitor id lands on the wire under Umami's `id` session key (not `distinctId`),
+	// The visitor id lands on the wire under Analytics's `id` session key (not `distinctId`),
 	// so identity stitches to the known visitor instead of falling back to IP+UA.
 	if gotEnv.Payload.DistinctID != "v1" || !strings.Contains(gotRaw, `"id":"v1"`) || strings.Contains(gotRaw, "distinctId") {
 		t.Errorf("visitor id must serialize as `id`: distinct=%q raw=%s", gotEnv.Payload.DistinctID, gotRaw)
 	}
 }
 
-func TestUmamiRequiresWebsite(t *testing.T) {
-	if _, err := (umami{}).Send(context.Background(), Config{}, "", nil); err == nil {
+func TestAnalyticsRequiresWebsite(t *testing.T) {
+	if _, err := (analytics{}).Send(context.Background(), Config{}, "", nil); err == nil {
 		t.Fatal("missing websiteId must error")
 	}
 }
 
-// ── PostHog (Hanzo Insights — /v1/e capture, api_key in body) ─────────────────
+// ── Insights (Hanzo Insights — /v1/e capture, api_key in body) ─────────────────
 
-func TestPostHogBuild(t *testing.T) {
-	body := posthogBuild("phc_key", []Conversion{
+func TestInsightsBuild(t *testing.T) {
+	body := insightsBuild("phc_key", []Conversion{
 		{Standard: EventPurchase, Name: "order_completed", Value: 12, Currency: "USD", URL: "https://x.example/y", User: UserData{ExternalID: "v1"}},
 		{Standard: EventPageView, Name: "$pageview", User: UserData{ExternalID: ""}}, // no distinct id → dropped
 	})
@@ -349,8 +349,8 @@ func TestPostHogBuild(t *testing.T) {
 	}
 }
 
-func TestPostHogSendEndToEnd(t *testing.T) {
-	var gotBody posthogBatch
+func TestInsightsSendEndToEnd(t *testing.T) {
+	var gotBody insightsBatch
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
@@ -359,11 +359,11 @@ func TestPostHogSendEndToEnd(t *testing.T) {
 		_, _ = w.Write([]byte(`{"status":1}`))
 	}))
 	defer srv.Close()
-	old := posthogHost
-	posthogHost = srv.URL
-	defer func() { posthogHost = old }()
+	old := insightsHost
+	insightsHost = srv.URL
+	defer func() { insightsHost = old }()
 
-	res, err := posthog{}.Send(context.Background(), Config{}, "phc_secret",
+	res, err := insights{}.Send(context.Background(), Config{}, "phc_secret",
 		[]Conversion{{Standard: EventLead, Name: "plan_clicked", User: UserData{ExternalID: "v1"}}})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -380,8 +380,8 @@ func TestPostHogSendEndToEnd(t *testing.T) {
 	}
 }
 
-func TestPostHogRequiresKey(t *testing.T) {
-	if _, err := (posthog{}).Send(context.Background(), Config{}, "", nil); err == nil {
+func TestInsightsRequiresKey(t *testing.T) {
+	if _, err := (insights{}).Send(context.Background(), Config{}, "", nil); err == nil {
 		t.Fatal("missing api_key must error")
 	}
 }
