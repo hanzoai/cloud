@@ -15,6 +15,8 @@ package openapi
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -74,18 +76,84 @@ func TestSynopsisIsEmptyWithoutAPackageDoc(t *testing.T) {
 	}
 }
 
-// An app whose subsystem is another MODULE (authz, licensing, metrics) imports no
-// package in this repo. There is nothing to read and nothing to guess.
-func TestSynopsisIsEmptyForAnAppFromAnotherModule(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "plugin", "authz")
+// mount writes a plugin/<app> whose main imports these paths — in that order, no
+// package files of its own — under a root carrying THIS repo's go.mod and go.sum.
+// An import of another module therefore resolves to the directory the real app
+// resolves to: the module cache, at the version this repo pins.
+func mount(t *testing.T, app string, imports ...string) string {
+	t.Helper()
+	root := t.TempDir()
+	dir := filepath.Join(root, "plugin", app)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	main := "package main\n\nimport _ \"github.com/hanzoai/authz/serve\"\n"
-	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(main), 0o644); err != nil {
+	for _, f := range []string{"go.mod", "go.sum"} {
+		pin, err := os.ReadFile(filepath.Join("..", f)) // openapi/ sits one below the root
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, f), pin, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	main := "package main\n\nimport (\n"
+	for _, im := range imports {
+		main += "\t_ " + strconv.Quote(im) + "\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(main+")\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := Synopsis(dir); got != "" {
+	return dir
+}
+
+// A subsystem in ANOTHER MODULE is read out of the module cache, at the version
+// this repo pins — the same reading, from the other place a subsystem can live.
+//
+// plugin/authz's real import list, order intact, because two of those imports are
+// traps. luxfi/log documents itself ("Package log provides a high-performance
+// structured logging library") and comes FIRST, so a rule that took the first
+// import carrying a package doc would describe /v1/authz as a logging library;
+// what makes the subsystem the subsystem is that it is OURS. And cloud itself is
+// imported twice over, which the host exclusion answers.
+//
+// It asserts the package, not the sentence: the words belong to hanzoai/authz and
+// change whenever that repo has something better to say. What this repo owns is
+// that they ARRIVE.
+func TestSynopsisReadsASubsystemInAnotherModule(t *testing.T) {
+	dir := mount(t, "authz",
+		"github.com/luxfi/log",
+		"github.com/hanzoai/authz/serve",
+		"github.com/hanzoai/cloud",
+		"github.com/hanzoai/cloud/openapi",
+	)
+	if got := Synopsis(dir); !strings.HasPrefix(got, "Package serve is ") {
+		t.Errorf("Synopsis = %q, want the package doc of github.com/hanzoai/authz/serve", got)
+	}
+}
+
+// The first import that DOCUMENTS ITSELF wins, not the first that resolves.
+//
+// plugin/licensing imports two packages of one module: pkg/licensing, for the one
+// type its host's adapter has to name, and the front door it mounts. The type
+// package documents no package — resolving is not the test, having something to
+// say is — so "the first that resolves" would publish nothing here.
+func TestSynopsisTakesTheImportThatDocumentsItself(t *testing.T) {
+	dir := mount(t, "licensing",
+		"github.com/hanzoai/licensing/pkg/licensing",
+		"github.com/hanzoai/cloud",
+		"github.com/hanzoai/licensing",
+	)
+	if got := Synopsis(dir); !strings.HasPrefix(got, "Package licensing is ") {
+		t.Errorf("Synopsis = %q, want the package doc of github.com/hanzoai/licensing", got)
+	}
+}
+
+// The HOST is not a subsystem. metrics mounts a function of cloud's own and
+// imports nothing else of ours, so there is nothing here that says what metrics
+// is — and cloud's package doc, which is the FLEET's identity, must not be
+// published as one product's.
+func TestSynopsisIsEmptyForAnAppThatMountsTheHost(t *testing.T) {
+	if got := Synopsis(mount(t, "metrics", "github.com/hanzoai/cloud")); got != "" {
 		t.Errorf("Synopsis = %q, want \"\"", got)
 	}
 }
