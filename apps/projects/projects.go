@@ -505,6 +505,17 @@ func init() {
 	openapi.Register("/v1/projects/:slug/deploy", http.MethodPost, openapi.Binary{}, projectsDeployment{})
 	openapi.Describe("/v1/projects/:slug/deploy", http.MethodPost,
 		"Upload a built site as one archive and serve it", archiveProse)
+
+	// The shot is untyped for the same reason deploy is — it answers image bytes
+	// — so its sentence comes from here rather than from a typed op.
+	openapi.Describe("/v1/projects/:slug/shot", http.MethodGet,
+		"Get a PNG of the project's live site",
+		"Returns a screenshot of what this project currently serves, as image/png. The capture is "+
+			"keyed by the deployment, so a redeploy invalidates it by construction rather than by "+
+			"anyone remembering to clear a cache. A project with nothing deployed answers 404 — "+
+			"that is a 404 about the PICTURE and not about the project, which is still right there "+
+			"in the list. Scoped to the caller's org: a validated principal is required, and a slug "+
+			"belonging to another org is not found rather than forbidden.")
 }
 
 // routes registers the projects surface as TYPED ops, all of it under
