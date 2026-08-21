@@ -10,11 +10,18 @@ func init() {
 	zip.Describe("GET /v1/x402/settlements/:id", zip.Doc{
 		Description: "Settlement reads one x402 payment receipt by id.\n\nIt is scoped to the caller's PAYER org — the ledger that was debited — so one\ntenant can never read another's settlement, and an id that exists but belongs\nto somebody else is a 404 exactly like one that does not exist. A caller with\nno billable identity is refused outright.",
 		Fields: map[string]string{
-			"Receipt.amount":     "exact 18-dp USD (money.Amount string)",
-			"Receipt.from":       "payer address",
-			"Receipt.payee":      "recipient address",
-			"Receipt.payer":      "payer ORG (the debited ledger)",
-			"Receipt.settledVia": "\"ledger\" (live) | \"chain\" (seam)",
+			"Receipt.amount":     "Amount is what actually moved, as an exact 18-decimal-place USD string. It\nis NOT the atomic-unit figure the client signed: the challenge quotes the\nasset's own units (USDC's 6 dp) and truncates to fit them, while the ledger\nmoves this exact value.",
+			"Receipt.from":       "From is the payer's EVM address: the account that signed the EIP-3009\nauthorization, recovered from the signature rather than taken on trust.",
+			"Receipt.id":         "ID is the settle-once key: \"x402_\" + keccak(from|nonce) in hex. It is\nDERIVED, not minted, so a client that re-submits the same authorization\naddresses the same settlement and is served again for free rather than\ncharged twice. It is also the id GET /v1/x402/settlements/:id takes.",
+			"Receipt.network":    "Network is the CAIP-2 identifier the payment was settled under, e.g.\n\"eip155:36963\". Its eip155 reference is the chain id in the EIP-712 domain\nthe payer signed, so it is not a label — changing it invalidates the\nsignature.",
+			"Receipt.nonce":      "Nonce is the client-chosen nonce from the authorization, hex — up to 32\nbytes, left-padded to the contract's bytes32. It is the replay anchor: the\ntoken contract refuses a second on-chain transfer for one (from, nonce), and\nthis rail refuses a second settlement for the same pair, so a ledger\nsettlement inherits the identical guarantee.",
+			"Receipt.payee":      "Payee is the recipient's EVM address — the `payTo` the challenge advertised\nand the authorization named. A payment to any other address never settles.",
+			"Receipt.payeeOrg":   "PayeeOrg is the tenant that owns the recipient wallet, resolved at\nsettlement. It is who got PAID, as Payer is who paid.",
+			"Receipt.payer":      "Payer is the payer ORG — the tenant whose ledger was debited — and not an\naddress. It is the org the request was authenticated as, so it answers who\nis billed, which the payer address alone cannot.",
+			"Receipt.resource":   "Resource is what was paid for, in the same spelling the price table and the\nchallenge used: the request path for a priced route, \"tool:<id>\" for a\npriced tool.",
+			"Receipt.settledAt":  "SettledAt is when this settlement was CLAIMED, in unix seconds — the moment\nthe authorization was accepted, which is also the moment the time window it\ncarried stopped applying. A settlement finished later by reconciliation\nkeeps this instant.",
+			"Receipt.settledVia": "SettledVia is which rail moved the money: \"ledger\", the live default, or\n\"chain\" when the authorization is broadcast. Those two values and no others.",
+			"Receipt.txHash":     "TxHash is the chain transaction hash, present only for a \"chain\"\nsettlement. Empty on a ledger settlement — that is the normal case today,\nand it means the money moved without a chain, not that it failed. The\nwire's PAYMENT-RESPONSE `transaction` falls back to ID when this is empty.",
 			"settlementRef.id":   "ID is the settlement id from the URL — the deterministic keccak(from|nonce)\nkey an x402 receipt is issued under (the `id` field of a Receipt, and the\n`transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid\nrequest answers with).",
 		},
 	})
