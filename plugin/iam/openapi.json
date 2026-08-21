@@ -487,7 +487,7 @@
       "post": {
         "operationId": "upsertUser",
         "summary": "Creates a person or updates them in place, so a deployment can declare the accounts it needs and re-run that declaration safely.",
-        "description": "Creates a person or updates them in place, so a deployment can\ndeclare the accounts it needs and re-run that declaration safely.\n\nPasswords are hashed before they are stored. Leave the password out and their\ncurrent one is kept, so a redeploy never locks somebody out.",
+        "description": "Creates a person or updates them in place, so a deployment can\ndeclare the accounts it needs and re-run that declaration safely.\n\nIt DESCRIBES an account it meets and GRANTS only to one it creates: org-admin is\nnever raised on a row that already exists, and a machine identity is answered by\nname rather than adopted. Both are properties of the update itself, so a\nsteady-state reconcile — which changes neither — is unaffected.\n\nPasswords are hashed before they are stored. Leave the password out and their\ncurrent one is kept, so a redeploy never locks somebody out; send the same one\nagain and it is kept too, so a steady-state re-run is not a rotation.",
         "tags": [
           "iam"
         ],
@@ -2346,6 +2346,28 @@
         "x-public": true
       }
     },
+    "/v1/iam/keys/org": {
+      "get": {
+        "operationId": "get_iam_keys_org",
+        "summary": "Resolve a PUBLISHABLE key to the organization that owns it",
+        "description": "Answers which organization a publishable key belongs to — what a service calls to attribute a request that arrived carrying a key shipped in a browser. This is the noun spelling of `/v1/iam/resolve-key`, the same handler at the address that replaces it; both answer while callers migrate.\n\nIt names an ORGANIZATION and never a person. No path through it loads or returns a user, so a key placed in client code cannot become a way to learn who anyone is — which is the whole reason this is a separate door from the one below.\n\nA key that is expired, secret rather than publishable, or simply unknown all answer with the same sentence and a `code` saying which it was. Only a confidential service that has already proved it may resolve keys reads that code — there is no anonymous caller here to probe which keys exist — and telling those apart is what lets a holder be told to re-mint an expired key instead of hunting a configuration error.",
+        "tags": [
+          "iam"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/iam/keys/principal": {
+      "get": {
+        "operationId": "get_iam_keys_principal",
+        "summary": "Resolve a SECRET key to the principal it authenticates",
+        "description": "Answers who a secret key belongs to — the owner and name a gateway needs to attribute and bill a request that arrived carrying an `sk-`. This is the noun spelling of `/v1/iam/get-user?accessKey=`, the same handler at the address that replaces it; both answer while callers migrate.\n\nIt resolves a KEY and nothing else. The verb it replaces also reads a user by `?id=`, and carrying that here would make this a second address for the user read — the exact thing being retired. Ask for a person by name at the user read; ask here only what a credential resolves to.\n\nRequires a confidential caller: the resolver authenticates as an app, so a request without that credential resolves nothing rather than falling back to an anonymous lookup. An unresolvable key answers with a `code` distinguishing expired from wrong-door from unknown, so the holder can be told which one cure applies.",
+        "tags": [
+          "iam"
+        ],
+        "x-public": true
+      }
+    },
     "/v1/iam/keys/revoke": {
       "post": {
         "operationId": "post_iam_keys_revoke",
@@ -2694,7 +2716,7 @@
       "get": {
         "operationId": "listOrganizations",
         "summary": "Returns the organizations you can see, newest first.",
-        "description": "Returns the organizations you can see, newest first. Narrow it to one\nparent account, and set a limit and offset to page through the rest.",
+        "description": "Returns the organizations you can see, newest first. Narrow it to one\nparent account, and set a limit and offset to page through the rest.\n\nREADING THE REGISTRY IS AN OPERATOR ACT, and the handler now says so itself.\n\nIt never did: the scope lived only in the Guard, which refuses a non-operator\nGET with 403 before the handler runs. That was true and sufficient for as long\nas HTTP was the only way in. It stopped being sufficient when the same typed op\nbecame reachable over the agent door, where a request arrives at the handler\nwith no middleware in front of it — and this handler, reading no principal and\ntreating an absent Owner selector as no filter, answered with the whole table.\nMeasured on production: 670 organizations, 898KB, to a caller holding no\ncredential at all.\n\nSo the fact moves to where every door reaches it. The Guard keeps its own\nrefusal — two checks of one rule is not two rules, and the outer one still\nspends nothing to refuse — but the rule no longer depends on which door was\nused. A caller who wants the organizations they can ACT in asks Search, which\nanswers everyone from their own memberships.",
         "tags": [
           "iam"
         ],
@@ -6509,13 +6531,14 @@
       "iam.Key": {
         "properties": {
           "accessKey": {
-            "description": "AccessKey (pk-*) is the publishable identifier and lookup index;\nAccessSecret (sk-*) is the confidential secret.",
+            "description": "AccessKey (pk-*) is the publishable identifier and lookup index;\nAccessSecret (sk-*) is the confidential secret.\nAccessSecret IS NOT PERSISTED for a key minted at or after the digest\nchange: it carries the secret out to its holder once, in the mint response,\nand the row keeps only AccessSecretDigest. It stays on the struct because\nthat one-time reveal is the whole point of minting, and it stays in the\nschema because rows written before the change still hold a plaintext secret\nthat the resolver drains on first use.",
             "type": "string"
           },
           "accessSecret": {
             "type": "string"
           },
           "accessSecretDigest": {
+            "description": "AccessSecretDigest is how a presented secret finds its key: the resolver\ndigests what the caller sent and looks THAT up. It is what lets the row hold\nno plaintext and still be found in one indexed read — a salted hash cannot be\nlooked up by value, which is the reason the plaintext was here.",
             "type": "string"
           },
           "application": {

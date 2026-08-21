@@ -1,12 +1,12 @@
 ---
-name: bot_nodes
+name: node_node
 version: "8.0.0"
-description: "Read bot nodes: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.."
+description: "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.."
 ---
 
-# Hanzo · BOT · nodes
+# Hanzo · NODE · node
 
-Read-only Hanzo capability derived from the `bot` OpenAPI product. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `node` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/bot/nodes` — Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.
+- `GET https://api.hanzo.ai/v1/node` — Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.
 
 ## Response
 
-- `/v1/bot/nodes` → `nodesView` object with fields: `nodes`.
+- `/v1/node` → `nodesView` object with fields: `nodes`.
 
 ## Example
 
 ```bash
-curl -sS "https://api.hanzo.ai/v1/bot/nodes" \
+curl -sS "https://api.hanzo.ai/v1/node" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
