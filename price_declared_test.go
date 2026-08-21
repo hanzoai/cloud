@@ -120,6 +120,12 @@ var unpricedRoot = map[string]bool{
 	// It READS what every surface serves and emits a file; it registers no route
 	// and is never mounted, so there is nothing here for the edge to price.
 	"gen-fleet-catalog": true,
+	// Writes apps/skills/catalog from the apps' own published subsets — the same
+	// input gen-fleet-catalog reads — so the agent-skills surface is a projection
+	// of the routes this fleet serves rather than of another repo's authored
+	// intent. Same shape as its sibling above: it READS specs and emits files,
+	// registers no route and is never mounted, so the edge has nothing to price.
+	"gen-skills": true,
 }
 
 // isCloudPlugin reports whether an expression names the cloud.Plugin type.
