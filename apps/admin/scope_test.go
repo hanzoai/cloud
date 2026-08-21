@@ -33,28 +33,26 @@ func newScopeIAM() *scopeIAM {
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.URL.Path == "/v1/iam/get-organizations":
-			io.WriteString(w, `{"status":"ok","msg":"","data":[
+		case r.URL.Path == "/v1/iam/organizations":
+			io.WriteString(w, `{"organizations":[
 				{"owner":"admin","name":"hanzo","displayName":"Hanzo","createdTime":"2020-01-01T00:00:00Z"},
 				{"owner":"admin","name":"maxpower","displayName":"MaxPower","createdTime":"2021-02-02T00:00:00Z"}
-			],"total":2}`)
-		case r.URL.Path == "/v1/iam/get-organization":
-			id := r.URL.Query().Get("id") // owner/name
-			name := id
-			if i := strings.LastIndex(id, "/"); i >= 0 {
-				name = id[i+1:]
-			}
-			fmt.Fprintf(w, `{"status":"ok","msg":"","data":{"owner":"admin","name":%q,"displayName":%q,"createdTime":"2021-02-02T00:00:00Z"}}`, name, name)
-		case r.URL.Path == "/v1/iam/get-users":
+			],"count":2}`)
+		case r.URL.Path == "/v1/iam/organizations/get":
+			// SEPARATE owner and name — there is no id to split any more.
+			name := r.URL.Query().Get("name")
+			fmt.Fprintf(w, `{"owner":%q,"name":%q,"displayName":%q,"createdTime":"2021-02-02T00:00:00Z"}`,
+				r.URL.Query().Get("owner"), name, name)
+		case r.URL.Path == "/v1/iam/users":
 			f.mu.Lock()
 			f.lastUsersOwner = r.URL.Query().Get("owner")
 			f.mu.Unlock()
-			io.WriteString(w, `{"status":"ok","msg":"","data":[
+			io.WriteString(w, `{"users":[
 				{"owner":"maxpower","name":"dave","email":"dave@maxpower.test","displayName":"Dave","isAdmin":true}
 			],"total":3}`)
 		default:
 			w.WriteHeader(404)
-			io.WriteString(w, `{"status":"error","msg":"not found"}`)
+			io.WriteString(w, `{"status":404,"error":"not found"}`)
 		}
 	}))
 	return f

@@ -79431,7 +79431,10 @@ tags:
 - description: 'Package o11y is your logs, metrics and traces: ship them in, query
     them, chart them.'
   name: o11y
-- name: openapi
+- description: 'The served contract: the OpenAPI document every client, tool list
+    and command group is generated from, its command projection, and the agent door
+    that offers the same operations over MCP.'
+  name: openapi
 - description: 'Package plan is the plan catalog: every tier you can buy, what it
     costs, and what it grants.'
   name: plan

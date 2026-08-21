@@ -112,7 +112,7 @@ func (o ops) Records(ctx context.Context, in *RecordsIn) (*RecordsOut, error) {
 	// No local store configured → preserve the legacy federated IAM view so the endpoint
 	// never regresses to empty.
 	if s.State.AuditStore == nil {
-		res, err := s.State.IAM.List(ctx, core.CallerCreds(c), "/v1/iam/get-records", in.iamQuery())
+		res, err := s.State.IAM.List(ctx, core.CallerCreds(c), "/v1/iam/audit-logs", "auditLogs", in.iamQuery())
 		if err != nil {
 			return &RecordsOut{Status: core.Err, Msg: err.Error()}, nil
 		}
@@ -220,19 +220,18 @@ func (in *RecordsIn) filter() auditstore.Filter {
 	return f
 }
 
-// iamQuery builds the IAM get-records query for the federated fallback.
+// iamQuery builds the IAM audit-log query for the federated fallback.
+//
+// The trail is owner-scoped and already newest-first, and it takes no other
+// selector: no page, no sort, no per-actor or per-action narrowing. So the org is
+// the whole query, and the filters this endpoint's own store honours are simply
+// not carried — the alternative is sending selectors the far end ignores, which
+// reads as a filtered trail and is not one. Named orgs only: an unnamed one lets
+// IAM scope the read to the caller's own credential, which is what it does.
 func (in *RecordsIn) iamQuery() url.Values {
 	q := url.Values{}
 	if org := strings.TrimSpace(in.Org); org != "" {
-		q.Set("organizationName", org)
+		q.Set("owner", org)
 	}
-	q.Set("p", "1")
-	ps := strings.TrimSpace(in.PageSize)
-	if ps == "" {
-		ps = "100"
-	}
-	q.Set("pageSize", ps)
-	q.Set("sortField", "createdTime")
-	q.Set("sortOrder", "descend")
 	return q
 }

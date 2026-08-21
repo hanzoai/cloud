@@ -767,30 +767,26 @@ func (o ops) onboard(ctx context.Context, in *onboardReq) (*onboardResp, error) 
 	}
 
 	// FIRST-RUN: drive the ONE atomic IAM provision (org + admin move + hashed
-	// org-scoped credential), replacing the create-org + move-user pair — a mid-flight
-	// retry now converges on the founder's own org instead of orphaning it. The org
-	// starts at a zero balance (usage is pre-paid). Prefer it whenever the
-	// service-token path is wired; fall back to the legacy pair only when it is not,
-	// so a partial deploy still onboards.
-	if s.State.iam.provisionReady() {
-		resp, err := onboardFirstRun(rctx, s.State.iam, cr.id, slug, displayName, body.Personal)
-		if err != nil {
-			return nil, err
-		}
-		giveOrgAnAgent(rctx, s.State.iam, s.Log.Error, slug)
-		return &resp, nil
+	// org-scoped credential). A mid-flight retry converges on the founder's own org
+	// instead of orphaning it, and the org starts at a zero balance (usage is
+	// pre-paid).
+	//
+	// It is the only path, and the refusal below is what makes that true. Moving a
+	// founder into a new org is something only this op can do — the user update
+	// resolves the row it writes from that row's OWN owner, so the create-then-move
+	// pair that used to stand in here would leave the org created and its founder
+	// outside it. A deployment with no service token hears that before anything is
+	// written rather than after.
+	if !s.State.iam.provisionReady() {
+		return nil, zip.Errorf(http.StatusServiceUnavailable,
+			"onboarding is not configured on this deployment: IAM_SERVICE_TOKEN is unset")
 	}
-
-	// Legacy fallback (service token unset): create then move — the non-atomic pair.
-	org := buildOrg(s, rctx, slug, displayName, body.Personal, cr.owner)
-	if err := s.State.iam.createOrganization(rctx, org); err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "could not create the organization: %v", err)
+	resp, err := onboardFirstRun(rctx, s.State.iam, cr.id, slug, displayName, body.Personal)
+	if err != nil {
+		return nil, err
 	}
 	giveOrgAnAgent(rctx, s.State.iam, s.Log.Error, slug)
-	if err := s.State.iam.moveUserToOrg(rctx, cr.id, slug); err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "org created but could not assign you to it: %v", err)
-	}
-	return &onboardResp{Org: slug, DisplayName: displayName, Additional: false}, nil
+	return &resp, nil
 }
 
 // onboardFirstRun drives the ONE atomic IAM provision for a caller with no home

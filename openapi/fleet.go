@@ -165,6 +165,12 @@ func core() (Part, error) {
 	if err != nil {
 		return Part{}, fmt.Errorf("core: %w", err)
 	}
+	// The host is a capability too (HIP-0139 §1), and a capability describes
+	// itself in its own words: this sentence is what its tag carries, where an
+	// app's package doc carries the rest of the fleet's.
+	doc.Info.Description = "The served contract: the OpenAPI document every client, " +
+		"tool list and command group is generated from, its command projection, " +
+		"and the agent door that offers the same operations over MCP."
 	return Part{App: "openapi", Doc: doc}, nil
 }
 
