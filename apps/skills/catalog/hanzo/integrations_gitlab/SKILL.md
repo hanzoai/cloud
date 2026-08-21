@@ -6,7 +6,7 @@ description: "Read integrations gitlab: Lists the projects the org's GitLab conn
 
 # Hanzo · INTEGRATIONS · gitlab
 
-Read-only Hanzo capability derived from the `integrations` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `integrations` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

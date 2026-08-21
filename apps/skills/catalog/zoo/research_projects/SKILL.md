@@ -6,7 +6,7 @@ description: "Read research projects: Returns every research project in the call
 
 # Zoo · RESEARCH · projects
 
-Read-only Zoo capability derived from the `research` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `research` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

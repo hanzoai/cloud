@@ -6,7 +6,7 @@ description: "Read sandboxes terminal: The terminal, as a page, The terminal, as
 
 # Hanzo · SANDBOXES · terminal
 
-Read-only Hanzo capability derived from the `sandboxes` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `sandboxes` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/sandboxes/{id}/terminal` → JSON body.
-- `/v1/sandboxes/{id}/terminal/ws` → JSON body.
+- `/v1/sandboxes/{id}/terminal` → JSON object.
+- `/v1/sandboxes/{id}/terminal/ws` → JSON object.
 
 ## Example
 

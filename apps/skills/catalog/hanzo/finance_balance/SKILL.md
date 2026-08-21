@@ -6,7 +6,7 @@ description: "Read finance balance: Answers the org's spendable prepaid balance 
 
 # Hanzo · FINANCE · balance
 
-Read-only Hanzo capability derived from the `finance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `finance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

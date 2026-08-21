@@ -6,7 +6,7 @@ description: "Read pricing blockchain: Returns the blockchain access plans — t
 
 # Zoo · PRICING · blockchain
 
-Read-only Zoo capability derived from the `pricing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `pricing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read index tasks: Check a write task, which has already finished."
 
 # Zoo · INDEX · tasks
 
-Read-only Zoo capability derived from the `index` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `index` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/index/tasks/{uid}` → JSON body.
+- `/v1/index/tasks/{uid}` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read domain search: Finds names built from the keyword q, plus the
 
 # Lux · DOMAIN · search
 
-Read-only Lux capability derived from the `domain` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `domain` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

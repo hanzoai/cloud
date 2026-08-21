@@ -6,7 +6,7 @@ description: "Read help categories: Returns the knowledge-base sections for the 
 
 # Zoo · HELP · categories
 
-Read-only Zoo capability derived from the `help` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `help` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

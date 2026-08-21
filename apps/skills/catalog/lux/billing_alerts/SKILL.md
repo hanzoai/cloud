@@ -6,7 +6,7 @@ description: "Read billing alerts: List your org's spend caps and rate limits, T
 
 # Lux · BILLING · alerts
 
-Read-only Lux capability derived from the `billing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `billing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -19,8 +19,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/billing/alerts` → JSON body.
-- `/v1/billing/alerts/authorize` → JSON body.
+- `/v1/billing/alerts` → JSON object.
+- `/v1/billing/alerts/authorize` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read functions secrets: Is the NAMES of the secrets the caller org
 
 # Lux · FUNCTIONS · secrets
 
-Read-only Lux capability derived from the `functions` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `functions` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

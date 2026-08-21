@@ -6,7 +6,7 @@ description: "Read deploy applications: Returns the fleet as an argocd Applicati
 
 # Lux · DEPLOY · applications
 
-Read-only Lux capability derived from the `deploy` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `deploy` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -24,8 +24,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Name is the application to read, from the path. It must be a DNS-1123 label |
-| `revision` | path | yes | string | Revision is the revision to describe, from the path. The empty revision and |
+| `name` | path | yes | string | Name is the application to read, from the path. It must be a DNS-1123 label (lowercase alphanumerics and hyphens, starting and ending alphanumeric) — every operator App CR's metadata.name satisfies that, and anything else is a 400 rather than a lookup. |
+| `revision` | path | yes | string | Revision is the revision to describe, from the path. The empty revision and "HEAD" both mean "whatever this application currently declares". |
 
 ## Response
 

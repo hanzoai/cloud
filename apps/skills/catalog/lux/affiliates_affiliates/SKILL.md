@@ -6,7 +6,7 @@ description: "Read affiliates affiliates: Answers the caller org's OWN affiliate
 
 # Lux · AFFILIATES · affiliates
 
-Read-only Lux capability derived from the `affiliates` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `affiliates` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

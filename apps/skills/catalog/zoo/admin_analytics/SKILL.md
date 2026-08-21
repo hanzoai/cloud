@@ -6,7 +6,7 @@ description: "Read admin analytics: Is the SaaS product-analytics board over the
 
 # Zoo · ADMIN · analytics
 
-Read-only Zoo capability derived from the `admin` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `admin` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `range` | query | no | string | Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the |
+| `range` | query | no | string | Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the board's own default. |
 
 ## Response
 

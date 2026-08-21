@@ -6,7 +6,7 @@ description: "Read team files: Download a workspace file."
 
 # Lux · TEAM · files
 
-Read-only Lux capability derived from the `team` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `team` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,7 +25,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/team/files/{workspace}/{filename}` → JSON body.
+- `/v1/team/files/{workspace}/{filename}` → JSON object.
 
 ## Example
 

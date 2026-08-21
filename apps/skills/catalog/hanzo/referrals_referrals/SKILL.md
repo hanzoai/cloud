@@ -6,7 +6,7 @@ description: "Read referrals referrals: Returns the caller's referral code, shar
 
 # Hanzo · REFERRALS · referrals
 
-Read-only Hanzo capability derived from the `referrals` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `referrals` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

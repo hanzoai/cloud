@@ -6,7 +6,7 @@ description: "Read meet health: Health reports whether the office can mint join 
 
 # Hanzo · MEET · health
 
-Read-only Hanzo capability derived from the `meet` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `meet` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

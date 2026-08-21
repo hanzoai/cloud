@@ -6,7 +6,7 @@ description: "Read compliance verifications: Returns the org's KYC/KYB verificat
 
 # Lux · COMPLIANCE · verifications
 
-Read-only Lux capability derived from the `compliance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `compliance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read blueprint blueprint: Returns every deployable blueprint with 
 
 # Zoo · BLUEPRINT · blueprint
 
-Read-only Zoo capability derived from the `blueprint` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `blueprint` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read websearch search: Keyless web meta-search, in the SearXNG JSO
 
 # Hanzo · WEBSEARCH · search
 
-Read-only Hanzo capability derived from the `websearch` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `websearch` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/websearch/search` → JSON body.
+- `/v1/websearch/search` → JSON object.
 
 ## Example
 

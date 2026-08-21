@@ -6,7 +6,7 @@ description: "Read admin authors: Returns the platform's whole author program �
 
 # Lux · ADMIN · authors
 
-Read-only Lux capability derived from the `admin` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `admin` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -22,8 +22,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the author record's handle, from the path. |
-| `limit` | query | no | integer | Limit bounds the page. 0 or less means the default of 500; anything above |
-| `period` | query | no | string | Period is the UTC accrual month, YYYY-MM. Empty means every period; any other |
+| `limit` | query | no | integer | Limit bounds the page. 0 or less means the default of 500; anything above 1000 is clamped to 1000. |
+| `period` | query | no | string | Period is the UTC accrual month, YYYY-MM. Empty means every period; any other shape is refused with 400. |
 
 ## Response
 

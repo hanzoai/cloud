@@ -6,7 +6,7 @@ description: "Read o11y autocomplete: Lists the attributes usable as an aggregat
 
 # Hanzo · O11Y · autocomplete
 
-Read-only Hanzo capability derived from the `o11y` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `o11y` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -23,13 +23,13 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `aggregateAttribute` | query | no | string | AggregateAttribute is the metric the keys must appear on. |
-| `aggregateOperator` | query | no | string | AggregateOperator is the aggregation the attribute will be used under, e.g. |
+| `aggregateOperator` | query | no | string | AggregateOperator is the aggregation the attribute will be used under, e.g. count, avg, sum. The runtime requires it for non-metrics sources. |
 | `attributeKey` | query | no | string | AttributeKey is the key whose values to list. |
-| `dataSource` | query | no | string | DataSource is the telemetry the attributes come from — traces, logs, |
-| `filterAttributeKeyDataType` | query | no | string | FilterAttributeKeyDataType is the key's data type — string, int64, float64 |
+| `dataSource` | query | no | string | DataSource is the telemetry the attributes come from — traces, logs, metrics or meter. The runtime requires it. |
+| `filterAttributeKeyDataType` | query | no | string | FilterAttributeKeyDataType is the key's data type — string, int64, float64 or bool. Empty means unspecified. |
 | `limit` | query | no | integer | Limit caps how many attributes come back. Absent means 50. |
 | `searchText` | query | no | string | SearchText narrows the attributes to those containing it. |
-| `tagType` | query | no | string | TagType narrows the keys to one kind — tag or resource. Empty means all; |
+| `tagType` | query | no | string | TagType narrows the keys to one kind — tag or resource. Empty means all; an invalid value reads as empty. |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read finance treasury: Returns the reserve fund's health and the c
 
 # Hanzo · FINANCE · treasury
 
-Read-only Hanzo capability derived from the `finance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `finance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

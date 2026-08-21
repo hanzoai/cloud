@@ -6,7 +6,7 @@ description: "Read affiliates affiliates: Answers the caller org's OWN affiliate
 
 # Hanzo · AFFILIATES · affiliates
 
-Read-only Hanzo capability derived from the `affiliates` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `affiliates` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

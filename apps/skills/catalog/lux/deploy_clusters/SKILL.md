@@ -6,7 +6,7 @@ description: "Read deploy clusters: Returns the argocd ClusterList of the destin
 
 # Lux · DEPLOY · clusters
 
-Read-only Lux capability derived from the `deploy` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `deploy` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

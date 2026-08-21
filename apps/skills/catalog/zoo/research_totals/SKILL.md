@@ -6,7 +6,7 @@ description: "Read research totals: Returns the caller org's headline aggregate 
 
 # Zoo · RESEARCH · totals
 
-Read-only Zoo capability derived from the `research` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `research` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

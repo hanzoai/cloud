@@ -6,7 +6,7 @@ description: "Read benchmark leaderboard: Answers one row per model for the benc
 
 # Zoo · BENCHMARK · leaderboard
 
-Read-only Zoo capability derived from the `benchmark` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `benchmark` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

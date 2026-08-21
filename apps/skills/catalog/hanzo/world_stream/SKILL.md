@@ -6,7 +6,7 @@ description: "Read world stream: Live news refreshes for the caller's org and pr
 
 # Hanzo · WORLD · stream
 
-Read-only Hanzo capability derived from the `world` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `world` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/world/stream` → JSON body.
+- `/v1/world/stream` → JSON object.
 
 ## Example
 

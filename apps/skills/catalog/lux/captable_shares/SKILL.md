@@ -6,7 +6,7 @@ description: "Read captable shares: Returns the caller org's share certificates,
 
 # Lux · CAPTABLE · shares
 
-Read-only Lux capability derived from the `captable` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `captable` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

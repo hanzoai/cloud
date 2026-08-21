@@ -6,7 +6,7 @@ description: "Read flags activity: Returns the caller's flag change log newest-f
 
 # Lux · FLAGS · activity
 
-Read-only Lux capability derived from the `flags` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `flags` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read books metrics: Metrics returns the org's deterministic SaaS-m
 
 # Hanzo · BOOKS · metrics
 
-Read-only Hanzo capability derived from the `books` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `books` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read cart cart: Read one cart with its lines and totals."
 
 # Zoo · CART · cart
 
-Read-only Zoo capability derived from the `cart` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `cart` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

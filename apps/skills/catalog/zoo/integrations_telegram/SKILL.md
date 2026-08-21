@@ -6,7 +6,7 @@ description: "Read integrations telegram: Begin linking a Zoo account from Teleg
 
 # Zoo · INTEGRATIONS · telegram
 
-Read-only Zoo capability derived from the `integrations` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `integrations` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,9 +20,9 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/integrations/telegram/link` → JSON body.
-- `/v1/integrations/telegram/link/auth` → JSON body.
-- `/v1/integrations/telegram/link/callback` → JSON body.
+- `/v1/integrations/telegram/link` → JSON object.
+- `/v1/integrations/telegram/link/auth` → JSON object.
+- `/v1/integrations/telegram/link/callback` → JSON object.
 
 ## Example
 

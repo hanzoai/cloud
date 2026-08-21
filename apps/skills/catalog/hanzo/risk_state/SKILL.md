@@ -6,7 +6,7 @@ description: "Read risk state: Report your organisation's model: what it learned
 
 # Hanzo · RISK · state
 
-Read-only Hanzo capability derived from the `risk` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `risk` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

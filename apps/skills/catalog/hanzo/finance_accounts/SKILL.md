@@ -6,7 +6,7 @@ description: "Read finance accounts: Returns the ledger accounts the caller may 
 
 # Hanzo · FINANCE · accounts
 
-Read-only Hanzo capability derived from the `finance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `finance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read tel numbers: Lists the phone numbers this org HOLDS — the o
 
 # Hanzo · TEL · numbers
 
-Read-only Hanzo capability derived from the `tel` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `tel` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

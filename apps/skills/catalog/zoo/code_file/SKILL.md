@@ -6,7 +6,7 @@ description: "Read code file: Returns the INDEXED content of one file — read_f
 
 # Zoo · CODE · file
 
-Read-only Zoo capability derived from the `code` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `code` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

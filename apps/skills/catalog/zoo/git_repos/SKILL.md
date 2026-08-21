@@ -6,7 +6,7 @@ description: "Read git repos: Returns the repos in the caller's scope, most rece
 
 # Zoo · GIT · repos
 
-Read-only Zoo capability derived from the `git` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `git` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -31,9 +31,9 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Name is the repo's org-unique handle, from the :name path segment. A |
+| `name` | path | yes | string | Name is the repo's org-unique handle, from the :name path segment. A trailing ".git" is stripped. |
 | `number` | path | yes | integer | Number is the proposal's per-repo number, from the :number path segment. |
-| `glob` | query | no | string | Glob selects files, matched segment by segment so `*` never crosses a `/`. |
+| `glob` | query | no | string | Glob selects files, matched segment by segment so `*` never crosses a `/`. `**` matches zero or more whole segments. |
 | `limit` | query | no | integer | Limit caps the page. Anything not positive means 50; the cap is 100. |
 | `path` | query | no | string | Path is repo-relative; empty is the tree root. Traversal is stripped. |
 | `ref` | query | no | string | Ref is a branch, tag or commit; empty means the repo's HEAD. |

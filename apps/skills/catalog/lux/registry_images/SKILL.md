@@ -6,7 +6,7 @@ description: "Read registry images: Images lists the org's container repositorie
 
 # Lux · REGISTRY · images
 
-Read-only Lux capability derived from the `registry` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `registry` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

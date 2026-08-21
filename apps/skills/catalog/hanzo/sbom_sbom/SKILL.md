@@ -6,7 +6,7 @@ description: "Read sbom sbom: Resolve everything inside a container image."
 
 # Hanzo · SBOM · sbom
 
-Read-only Hanzo capability derived from the `sbom` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `sbom` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/sbom/{wildcard1}` → JSON body.
+- `/v1/sbom/{wildcard1}` → JSON object.
 
 ## Example
 

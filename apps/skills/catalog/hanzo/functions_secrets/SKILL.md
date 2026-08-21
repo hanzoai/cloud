@@ -6,7 +6,7 @@ description: "Read functions secrets: Is the NAMES of the secrets the caller org
 
 # Hanzo · FUNCTIONS · secrets
 
-Read-only Hanzo capability derived from the `functions` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `functions` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

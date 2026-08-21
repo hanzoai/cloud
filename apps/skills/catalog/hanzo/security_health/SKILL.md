@@ -6,7 +6,7 @@ description: "Read security health: Reports that the scanning subsystem is servi
 
 # Hanzo · SECURITY · health
 
-Read-only Hanzo capability derived from the `security` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `security` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read pricing cloud: Returns the public cloud section of the catalo
 
 # Zoo · PRICING · cloud
 
-Read-only Zoo capability derived from the `pricing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `pricing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

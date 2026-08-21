@@ -6,7 +6,7 @@ description: "Read experiments experiments: Is every experiment in the caller's 
 
 # Zoo · EXPERIMENTS · experiments
 
-Read-only Zoo capability derived from the `experiments` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `experiments` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

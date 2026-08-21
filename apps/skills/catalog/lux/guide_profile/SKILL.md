@@ -6,7 +6,7 @@ description: "Read guide profile: Profile returns the caller org's OBSERVED grow
 
 # Lux · GUIDE · profile
 
-Read-only Lux capability derived from the `guide` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `guide` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

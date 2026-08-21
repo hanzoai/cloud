@@ -6,7 +6,7 @@ description: "Read usage summary: Answers GET /v1/usage/summary: the caller's ow
 
 # Hanzo · USAGE · summary
 
-Read-only Hanzo capability derived from the `usage` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `usage` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,8 +21,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `end` | query | no | string | End is the exclusive window end, RFC3339. Read only when Range is custom. |
-| `range` | query | no | string | Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d — |
-| `start` | query | no | string | Start is the inclusive window start, RFC3339. Read only when Range is |
+| `range` | query | no | string | Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d — or day, week, month, all, custom. Empty means 24h. A label this surface does not know, or one reaching past the 730-day horizon, is refused rather than silently replaced. |
+| `start` | query | no | string | Start is the inclusive window start, RFC3339. Read only when Range is custom. |
 
 ## Response
 

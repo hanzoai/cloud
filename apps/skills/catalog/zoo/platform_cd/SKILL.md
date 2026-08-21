@@ -6,7 +6,7 @@ description: "Read platform cd: The delivery plane."
 
 # Zoo · PLATFORM · cd
 
-Read-only Zoo capability derived from the `platform` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `platform` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/platform/cd` → JSON body.
+- `/v1/platform/cd` → JSON object.
 
 ## Example
 

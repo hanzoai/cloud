@@ -6,7 +6,7 @@ description: "Read domain availability: Checks exact names rather than searching
 
 # Hanzo · DOMAIN · availability
 
-Read-only Hanzo capability derived from the `domain` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `domain` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `domain` | query | yes | string | Domain is one name, or several comma-separated, to check in one call. Names |
+| `domain` | query | yes | string | Domain is one name, or several comma-separated, to check in one call. Names are lowercased. It is required. |
 
 ## Response
 

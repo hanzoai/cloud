@@ -6,7 +6,7 @@ description: "Read dns dns: Read your org's DNS zones and records."
 
 # Lux · DNS · dns
 
-Read-only Lux capability derived from the `dns` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `dns` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/dns/{wildcard1}` → JSON body.
+- `/v1/dns/{wildcard1}` → JSON object.
 
 ## Example
 

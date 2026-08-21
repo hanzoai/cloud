@@ -6,7 +6,7 @@ description: "Read catalog catalog: Browse searches AND browses the cross-org ca
 
 # Lux · CATALOG · catalog
 
-Read-only Lux capability derived from the `catalog` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `catalog` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,15 +21,15 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `archetype` | query | no | string | Archetype narrows to one project archetype. Case-insensitive. |
-| `forkable` | query | no | string | Forkable is tri-state: "true" selects the forkable rows, "false" selects the |
+| `forkable` | query | no | string | Forkable is tri-state: "true" selects the forkable rows, "false" selects the rest, and anything else — including absent — applies no filter at all. |
 | `kind` | query | no | string | Kind narrows to repo \| site. Case-insensitive. |
 | `language` | query | no | string | Language narrows to one implementation language. Case-insensitive. |
-| `limit` | query | no | string | Limit caps the page at 200, default 50. A value that is not a non-negative |
+| `limit` | query | no | string | Limit caps the page at 200, default 50. A value that is not a non-negative integer falls back to the default. |
 | `offset` | query | no | string | Offset is where the page starts, default 0, with the same tolerance. |
 | `org` | query | no | string | Org narrows to one builder org: hanzo \| lux \| zoo. Case-insensitive. |
-| `origin` | query | no | string | Origin narrows to what a row IS to you: template \| community \| third-party \| |
-| `q` | query | no | string | Q is the free-text query the lexical index scores relevance on. Empty is a |
-| `template` | query | no | string | Template narrows a lane to ONE lineage: the id of the parent everything |
+| `origin` | query | no | string | Origin narrows to what a row IS to you: template \| community \| third-party \| product. This is the axis the two hanzo.app lanes are cut on. |
+| `q` | query | no | string | Q is the free-text query the lexical index scores relevance on. Empty is a browse rather than a search — the same request either way. |
+| `template` | query | no | string | Template narrows a lane to ONE lineage: the id of the parent everything returned was forked from. |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read world news: Returns the caller's merged world-news feed: ever
 
 # Hanzo · WORLD · news
 
-Read-only Hanzo capability derived from the `world` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `world` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

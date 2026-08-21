@@ -6,7 +6,7 @@ description: "Read billing balance: Prepaid credit the caller's org can still sp
 
 # Zoo · BILLING · balance
 
-Read-only Zoo capability derived from the `billing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `billing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/balance` → JSON body.
+- `/v1/billing/balance` → JSON object.
 
 ## Example
 

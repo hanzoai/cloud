@@ -6,7 +6,7 @@ description: "Read platform projects: Returns your org's projects, each with how
 
 # Zoo · PLATFORM · projects
 
-Read-only Zoo capability derived from the `platform` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `platform` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

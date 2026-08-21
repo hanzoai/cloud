@@ -6,7 +6,7 @@ description: "Read affiliates leaderboard: Answers the top affiliates by lifetim
 
 # Lux · AFFILIATES · leaderboard
 
-Read-only Lux capability derived from the `affiliates` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `affiliates` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

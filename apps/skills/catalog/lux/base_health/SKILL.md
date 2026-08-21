@@ -6,7 +6,7 @@ description: "Read base health: Reports that the base subsystem is serving.."
 
 # Lux · BASE · health
 
-Read-only Lux capability derived from the `base` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `base` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read campaign metrics: Returns a campaign's results over a window:
 
 # Lux · CAMPAIGN · metrics
 
-Read-only Lux capability derived from the `campaign` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `campaign` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -22,8 +22,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the campaign to report on, from the path. |
 | `end` | query | no | string | End is an explicit RFC3339 window end. |
-| `range` | query | no | string | Range is the lookback window: 24h, 7d, 30d or 90d. Anything else, including |
-| `start` | query | no | string | Start is an explicit RFC3339 window start. Honored only together with End, |
+| `range` | query | no | string | Range is the lookback window: 24h, 7d, 30d or 90d. Anything else, including empty, reads as 30d. |
+| `start` | query | no | string | Start is an explicit RFC3339 window start. Honored only together with End, and only when End is after it. |
 
 ## Response
 

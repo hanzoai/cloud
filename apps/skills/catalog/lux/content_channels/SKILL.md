@@ -6,7 +6,7 @@ description: "Read content channels: Lists the distribution channels the caller'
 
 # Lux · CONTENT · channels
 
-Read-only Lux capability derived from the `content` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `content` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

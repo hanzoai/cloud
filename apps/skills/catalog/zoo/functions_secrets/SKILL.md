@@ -6,7 +6,7 @@ description: "Read functions secrets: Is the NAMES of the secrets the caller org
 
 # Zoo · FUNCTIONS · secrets
 
-Read-only Zoo capability derived from the `functions` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `functions` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

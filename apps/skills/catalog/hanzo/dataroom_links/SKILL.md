@@ -6,7 +6,7 @@ description: "Read dataroom links: Returns every live share link in the caller o
 
 # Hanzo · DATAROOM · links
 
-Read-only Hanzo capability derived from the `dataroom` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `dataroom` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

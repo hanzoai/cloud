@@ -6,7 +6,7 @@ description: "Read insights health: Reports that the unified insights surface is
 
 # Lux · INSIGHTS · health
 
-Read-only Lux capability derived from the `insights` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `insights` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

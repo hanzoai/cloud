@@ -6,7 +6,7 @@ description: "Read s3 buckets: List your org's buckets, Browse one level of a bu
 
 # Lux · S3 · buckets
 
-Read-only Lux capability derived from the `s3` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `s3` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -27,9 +27,9 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/s3/buckets` → JSON body.
-- `/v1/s3/buckets/{bucket}/objects` → JSON body.
-- `/v1/s3/buckets/{bucket}/objects/{wildcard1}` → JSON body.
+- `/v1/s3/buckets` → JSON object.
+- `/v1/s3/buckets/{bucket}/objects` → JSON object.
+- `/v1/s3/buckets/{bucket}/objects/{wildcard1}` → JSON object.
 
 ## Example
 

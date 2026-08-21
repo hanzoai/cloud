@@ -6,7 +6,7 @@ description: "Read marketing campaigns: Returns the org's campaigns, most recent
 
 # Zoo · MARKETING · campaigns
 
-Read-only Zoo capability derived from the `marketing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `marketing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the campaign id from the path, as returned by create. |
 | `limit` | query | no | integer | Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured. |
-| `status` | query | no | string | Status keeps only campaigns in that lifecycle state (draft, scheduled, |
+| `status` | query | no | string | Status keeps only campaigns in that lifecycle state (draft, scheduled, active, paused, completed). Empty means every campaign. |
 
 ## Response
 

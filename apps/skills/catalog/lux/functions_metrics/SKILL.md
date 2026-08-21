@@ -6,7 +6,7 @@ description: "Read functions metrics: Is the org's serverless dashboard over a w
 
 # Lux · FUNCTIONS · metrics
 
-Read-only Lux capability derived from the `functions` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `functions` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `range` | query | no | string | Range is 1H, 6H, 24H (the default), 7D or 30D. Anything else falls back to |
+| `range` | query | no | string | Range is 1H, 6H, 24H (the default), 7D or 30D. Anything else falls back to 24H rather than failing. |
 
 ## Response
 

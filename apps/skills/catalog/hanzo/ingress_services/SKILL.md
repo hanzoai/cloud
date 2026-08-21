@@ -6,7 +6,7 @@ description: "Read ingress services: Returns every backend pool the caller's org
 
 # Hanzo · INGRESS · services
 
-Read-only Hanzo capability derived from the `ingress` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `ingress` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

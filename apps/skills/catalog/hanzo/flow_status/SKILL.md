@@ -6,7 +6,7 @@ description: "Read flow status: Status reports whether the flow service is reach
 
 # Hanzo · FLOW · status
 
-Read-only Hanzo capability derived from the `flow` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `flow` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

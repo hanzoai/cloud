@@ -6,7 +6,7 @@ description: "Read deploy session: Answers \"is this browser signed in, and if n
 
 # Hanzo · DEPLOY · session
 
-Read-only Hanzo capability derived from the `deploy` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `deploy` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

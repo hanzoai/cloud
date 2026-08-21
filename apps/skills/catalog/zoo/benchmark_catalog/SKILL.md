@@ -6,7 +6,7 @@ description: "Read benchmark catalog: Is the canonical public benchmarks this ar
 
 # Zoo · BENCHMARK · catalog
 
-Read-only Zoo capability derived from the `benchmark` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `benchmark` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

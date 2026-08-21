@@ -6,7 +6,7 @@ description: "Read functions triggers: Is what calls the caller org's functions 
 
 # Lux · FUNCTIONS · triggers
 
-Read-only Lux capability derived from the `functions` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `functions` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

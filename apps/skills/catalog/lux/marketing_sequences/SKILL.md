@@ -6,7 +6,7 @@ description: "Read marketing sequences: Returns the org's drip sequences, most r
 
 # Lux · MARKETING · sequences
 
-Read-only Lux capability derived from the `marketing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `marketing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

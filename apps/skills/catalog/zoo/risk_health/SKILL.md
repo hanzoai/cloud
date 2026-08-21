@@ -6,7 +6,7 @@ description: "Read risk health: Whether the risk model plane can actually work r
 
 # Zoo · RISK · health
 
-Read-only Zoo capability derived from the `risk` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `risk` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/risk/health` → JSON body.
+- `/v1/risk/health` → JSON object.
 
 ## Example
 

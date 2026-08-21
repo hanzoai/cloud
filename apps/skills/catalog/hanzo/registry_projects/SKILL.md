@@ -6,7 +6,7 @@ description: "Read registry projects: Projects lists the namespaces the caller c
 
 # Hanzo · REGISTRY · projects
 
-Read-only Hanzo capability derived from the `registry` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `registry` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

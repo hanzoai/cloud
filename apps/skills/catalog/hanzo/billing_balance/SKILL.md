@@ -6,7 +6,7 @@ description: "Read billing balance: Prepaid credit the caller's org can still sp
 
 # Hanzo · BILLING · balance
 
-Read-only Hanzo capability derived from the `billing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `billing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/balance` → JSON body.
+- `/v1/billing/balance` → JSON object.
 
 ## Example
 

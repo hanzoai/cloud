@@ -6,7 +6,7 @@ description: "Read authors authors: Returns the caller's author-program dashboar
 
 # Lux · AUTHORS · authors
 
-Read-only Lux capability derived from the `authors` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `authors` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

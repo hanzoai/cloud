@@ -6,7 +6,7 @@ description: "Read allowance allowance: Answers what the CALLER has left of thei
 
 # Hanzo · ALLOWANCE · allowance
 
-Read-only Hanzo capability derived from the `allowance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `allowance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

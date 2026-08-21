@@ -6,7 +6,7 @@ description: "Read commerce collection: List your org's collections, as a page, 
 
 # Lux · COMMERCE · collection
 
-Read-only Lux capability derived from the `commerce` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `commerce` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/commerce/collection/` → JSON body.
-- `/v1/commerce/collection/{collectionid}` → JSON body.
+- `/v1/commerce/collection/` → JSON object.
+- `/v1/commerce/collection/{collectionid}` → JSON object.
 
 ## Example
 

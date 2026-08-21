@@ -6,7 +6,7 @@ description: "Read taxonomy taxonomy: Read returns the product catalogue as this
 
 # Lux · TAXONOMY · taxonomy
 
-Read-only Lux capability derived from the `taxonomy` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `taxonomy` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `brand` | query | no | string | Brand returns only what that brand's console shows — the categories it |
+| `brand` | query | no | string | Brand returns only what that brand's console shows — the categories it admits, and within them the taxa scoped to it. Empty returns everything. |
 
 ## Response
 

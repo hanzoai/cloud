@@ -1,12 +1,12 @@
 ---
 name: git_keys
 version: "8.0.0"
-description: "Read git keys: Returns the SSH public keys registered to the caller's org — the keys that authenticate `git clone git@<host>:<org>/<repo>.git`.."
+description: "Read git keys: Returns the SSH public keys registered to the caller's org — the keys that authenticate `git clone git@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git`.."
 ---
 
 # Zoo · GIT · keys
 
-Read-only Zoo capability derived from the `git` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `git` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

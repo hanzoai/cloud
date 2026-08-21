@@ -6,7 +6,7 @@ description: "Read iam users: Returns a page of the people in your organization,
 
 # Hanzo · IAM · users
 
-Read-only Hanzo capability derived from the `iam` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `iam` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

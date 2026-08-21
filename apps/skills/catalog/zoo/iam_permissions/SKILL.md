@@ -6,7 +6,7 @@ description: "Read iam permissions: Returns the permissions in one organization,
 
 # Zoo · IAM · permissions
 
-Read-only Zoo capability derived from the `iam` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `iam` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read integrations gitlab: Lists the projects the org's GitLab conn
 
 # Lux · INTEGRATIONS · gitlab
 
-Read-only Lux capability derived from the `integrations` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `integrations` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

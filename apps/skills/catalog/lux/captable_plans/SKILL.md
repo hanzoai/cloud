@@ -6,7 +6,7 @@ description: "Read captable plans: Returns the caller org's equity plans, newest
 
 # Lux · CAPTABLE · plans
 
-Read-only Lux capability derived from the `captable` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `captable` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

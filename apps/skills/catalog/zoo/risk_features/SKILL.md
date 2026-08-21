@@ -6,7 +6,7 @@ description: "Read risk features: The feature catalogue: what the model reads, a
 
 # Zoo · RISK · features
 
-Read-only Zoo capability derived from the `risk` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `risk` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `days` | query | no | integer | Days is how far back to measure the organisation's own coverage, 1 to 400. |
+| `days` | query | no | integer | Days is how far back to measure the organisation's own coverage, 1 to 400. Zero takes thirty. |
 
 ## Response
 

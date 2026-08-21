@@ -6,7 +6,7 @@ description: "Read sbom sbom: Resolve everything inside a container image."
 
 # Zoo · SBOM · sbom
 
-Read-only Zoo capability derived from the `sbom` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `sbom` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/sbom/{wildcard1}` → JSON body.
+- `/v1/sbom/{wildcard1}` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read marketplace listings: Returns the listings the caller's own o
 
 # Zoo · MARKETPLACE · listings
 
-Read-only Zoo capability derived from the `marketplace` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `marketplace` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read gateway config: Read returns the EFFECTIVE edge policy the ca
 
 # Hanzo · GATEWAY · config
 
-Read-only Hanzo capability derived from the `gateway` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `gateway` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

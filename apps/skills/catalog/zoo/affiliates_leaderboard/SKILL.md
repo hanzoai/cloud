@@ -6,7 +6,7 @@ description: "Read affiliates leaderboard: Answers the top affiliates by lifetim
 
 # Zoo · AFFILIATES · leaderboard
 
-Read-only Zoo capability derived from the `affiliates` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `affiliates` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

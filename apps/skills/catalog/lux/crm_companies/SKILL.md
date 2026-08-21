@@ -6,7 +6,7 @@ description: "Read crm companies: Returns the caller org's companies, most recen
 
 # Lux · CRM · companies
 
-Read-only Lux capability derived from the `crm` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `crm` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

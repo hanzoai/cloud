@@ -6,7 +6,7 @@ description: "Read iam keys: Returns your organization's API keys, newest first 
 
 # Zoo · IAM · keys
 
-Read-only Zoo capability derived from the `iam` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `iam` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -27,7 +27,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Response
 
 - `/v1/iam/keys` → `iam.ListResponse` object with fields: `keys`.
-- `/v1/iam/keys/get` → `iam.Key` object with fields: `accessKey`, `accessSecret`, `application`, `createdAt`, `createdTime`, `deleted`, `displayName`, `expireTime`, `id`, `name`, `organization`, `owner`.
+- `/v1/iam/keys/get` → `iam.Key` object with fields: `accessKey`, `accessSecret`, `accessSecretDigest`, `application`, `createdAt`, `createdTime`, `deleted`, `displayName`, `expireTime`, `id`, `name`, `organization`.
 
 ## Example
 

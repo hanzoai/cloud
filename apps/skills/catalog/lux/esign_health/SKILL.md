@@ -6,7 +6,7 @@ description: "Read esign health: Whether the e-signature surface is mounted."
 
 # Lux · ESIGN · health
 
-Read-only Lux capability derived from the `esign` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `esign` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/esign/health` → JSON body.
+- `/v1/esign/health` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read cloudflare r2: Lists the R2 buckets on the org's Cloudflare a
 
 # Hanzo · CLOUDFLARE · r2
 
-Read-only Hanzo capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

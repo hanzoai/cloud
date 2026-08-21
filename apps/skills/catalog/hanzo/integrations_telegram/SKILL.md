@@ -6,7 +6,7 @@ description: "Read integrations telegram: Begin linking a Hanzo account from Tel
 
 # Hanzo · INTEGRATIONS · telegram
 
-Read-only Hanzo capability derived from the `integrations` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `integrations` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,9 +20,9 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/integrations/telegram/link` → JSON body.
-- `/v1/integrations/telegram/link/auth` → JSON body.
-- `/v1/integrations/telegram/link/callback` → JSON body.
+- `/v1/integrations/telegram/link` → JSON object.
+- `/v1/integrations/telegram/link/auth` → JSON object.
+- `/v1/integrations/telegram/link/callback` → JSON object.
 
 ## Example
 

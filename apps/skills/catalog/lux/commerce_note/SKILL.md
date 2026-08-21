@@ -6,7 +6,7 @@ description: "Read commerce note: List your org's notes, as a page, Fetch one no
 
 # Lux · COMMERCE · note
 
-Read-only Lux capability derived from the `commerce` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `commerce` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/commerce/note/` → JSON body.
-- `/v1/commerce/note/{noteid}` → JSON body.
+- `/v1/commerce/note/` → JSON object.
+- `/v1/commerce/note/{noteid}` → JSON object.
 
 ## Example
 

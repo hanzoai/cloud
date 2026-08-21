@@ -6,7 +6,7 @@ description: "Read captable investments: Returns the caller org's investments, n
 
 # Zoo · CAPTABLE · investments
 
-Read-only Zoo capability derived from the `captable` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `captable` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

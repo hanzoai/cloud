@@ -6,7 +6,7 @@ description: "Read registry tags: Tags lists one org-owned repository's tags, re
 
 # Zoo · REGISTRY · tags
 
-Read-only Zoo capability derived from the `registry` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `registry` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `image` | query | no | string | Image is the repository name inside the org's namespace, as returned by |
+| `image` | query | no | string | Image is the repository name inside the org's namespace, as returned by the images op. It rides the query string. |
 
 ## Response
 

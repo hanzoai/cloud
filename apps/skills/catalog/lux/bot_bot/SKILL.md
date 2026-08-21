@@ -6,7 +6,7 @@ description: "Read bot bot: Relay one of the bot runtime's own operational paths
 
 # Lux · BOT · bot
 
-Read-only Lux capability derived from the `bot` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `bot` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/bot/{wildcard1}` → JSON body.
+- `/v1/bot/{wildcard1}` → JSON object.
 
 ## Example
 

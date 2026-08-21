@@ -6,7 +6,7 @@ description: "Read base health: Reports that the base subsystem is serving.."
 
 # Hanzo · BASE · health
 
-Read-only Hanzo capability derived from the `base` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `base` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

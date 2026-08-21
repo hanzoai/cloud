@@ -6,7 +6,7 @@ description: "Read pricing free: Returns the models that cost nothing to call, f
 
 # Hanzo · PRICING · free
 
-Read-only Hanzo capability derived from the `pricing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `pricing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

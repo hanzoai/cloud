@@ -6,7 +6,7 @@ description: "Read risk state: Report your organisation's model: what it learned
 
 # Zoo · RISK · state
 
-Read-only Zoo capability derived from the `risk` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `risk` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

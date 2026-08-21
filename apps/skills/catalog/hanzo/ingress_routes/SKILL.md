@@ -6,7 +6,7 @@ description: "Read ingress routes: Returns every routing rule the caller's org h
 
 # Hanzo · INGRESS · routes
 
-Read-only Hanzo capability derived from the `ingress` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `ingress` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

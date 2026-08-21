@@ -6,7 +6,7 @@ description: "Read iam applications: Returns the applications in one organizatio
 
 # Hanzo · IAM · applications
 
-Read-only Hanzo capability derived from the `iam` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `iam` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

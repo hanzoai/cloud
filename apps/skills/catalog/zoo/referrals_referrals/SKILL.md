@@ -6,7 +6,7 @@ description: "Read referrals referrals: Returns the caller's referral code, shar
 
 # Zoo · REFERRALS · referrals
 
-Read-only Zoo capability derived from the `referrals` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `referrals` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read pricing datastore: Returns the Hanzo Datastore rate card: the
 
 # Hanzo · PRICING · datastore
 
-Read-only Hanzo capability derived from the `pricing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `pricing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

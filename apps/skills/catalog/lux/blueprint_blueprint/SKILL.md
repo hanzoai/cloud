@@ -6,7 +6,7 @@ description: "Read blueprint blueprint: Returns every deployable blueprint with 
 
 # Lux · BLUEPRINT · blueprint
 
-Read-only Lux capability derived from the `blueprint` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `blueprint` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

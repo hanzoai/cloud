@@ -6,7 +6,7 @@ description: "Read commerce return: List your org's returns, as a page, Fetch on
 
 # Zoo · COMMERCE · return
 
-Read-only Zoo capability derived from the `commerce` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `commerce` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/commerce/return/` → JSON body.
-- `/v1/commerce/return/{returnid}` → JSON body.
+- `/v1/commerce/return/` → JSON object.
+- `/v1/commerce/return/{returnid}` → JSON object.
 
 ## Example
 

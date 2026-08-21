@@ -6,7 +6,7 @@ description: "Read webhooks webhooks: Returns every webhook endpoint the caller'
 
 # Lux · WEBHOOKS · webhooks
 
-Read-only Lux capability derived from the `webhooks` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `webhooks` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

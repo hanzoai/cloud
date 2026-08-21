@@ -6,7 +6,7 @@ description: "Read mq info: Returns the broker's identity and the org's stream c
 
 # Zoo · MQ · info
 
-Read-only Zoo capability derived from the `mq` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `mq` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

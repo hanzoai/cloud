@@ -6,7 +6,7 @@ description: "Read experiments assign: Is the variant one subject is bucketed in
 
 # Hanzo · EXPERIMENTS · assign
 
-Read-only Hanzo capability derived from the `experiments` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `experiments` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,8 +21,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the experiment the URL names. |
-| `props` | query | no | string | Props is a JSON object of person properties for targeting. A value that is |
-| `subject` | query | yes | string | Subject is the unit to bucket — a user, org, session or audience key, |
+| `props` | query | no | string | Props is a JSON object of person properties for targeting. A value that is not valid JSON is dropped rather than refused, so a malformed one changes the bucketing without saying so. |
+| `subject` | query | yes | string | Subject is the unit to bucket — a user, org, session or audience key, matching the experiment's subjectKind. |
 
 ## Response
 

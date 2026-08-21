@@ -6,7 +6,7 @@ description: "Read dataroom analytics: Rolls up every share link pointing at one
 
 # Lux · DATAROOM · analytics
 
-Read-only Lux capability derived from the `dataroom` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `dataroom` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,8 +21,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `dataroomId` | path | yes | string | DataroomID is the room to report on. It is the path segment, resolved in |
-| `linkId` | path | yes | string | LinkID is the link to report on. It is the path segment, resolved in the |
+| `dataroomId` | path | yes | string | DataroomID is the room to report on. It is the path segment, resolved in the caller's own tenant store. |
+| `linkId` | path | yes | string | LinkID is the link to report on. It is the path segment, resolved in the caller's own tenant store. |
 
 ## Response
 

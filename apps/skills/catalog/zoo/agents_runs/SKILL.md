@@ -6,7 +6,7 @@ description: "Read agents runs: Returns the org's agent runs across EVERY agent,
 
 # Zoo · AGENTS · runs
 
-Read-only Zoo capability derived from the `agents` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `agents` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -22,8 +22,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `ref` | path | yes | string | Ref is the agent's public id or its org-unique name, from the path. |
-| `limit` | query | no | integer | Limit caps how many runs come back, newest first. Absent, zero or out of |
-| `status` | query | no | string | Status keeps only runs with this outcome ("ok" or "error"). Empty keeps |
+| `limit` | query | no | integer | Limit caps how many runs come back, newest first. Absent, zero or out of range (1..200) reads as 50. |
+| `status` | query | no | string | Status keeps only runs with this outcome ("ok" or "error"). Empty keeps both. It is the filter an operator reaches for first — "show me what broke" — and answering it here rather than by paging the whole history client-side is the difference between a usable feed and a download. |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read registry projects: Projects lists the namespaces the caller c
 
 # Lux · REGISTRY · projects
 
-Read-only Lux capability derived from the `registry` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `registry` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

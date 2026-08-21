@@ -6,7 +6,7 @@ description: "Read engine status: Whether the serving runtime is reachable, and 
 
 # Zoo · ENGINE · status
 
-Read-only Zoo capability derived from the `engine` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `engine` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

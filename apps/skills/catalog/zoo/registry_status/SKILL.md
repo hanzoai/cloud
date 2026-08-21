@@ -6,7 +6,7 @@ description: "Read registry status: Status reports whether the OCI and npm regis
 
 # Zoo · REGISTRY · status
 
-Read-only Zoo capability derived from the `registry` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `registry` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

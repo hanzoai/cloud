@@ -6,7 +6,7 @@ description: "Read content lifecycle: Returns the ONE marketing-content state ma
 
 # Lux · CONTENT · lifecycle
 
-Read-only Lux capability derived from the `content` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `content` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

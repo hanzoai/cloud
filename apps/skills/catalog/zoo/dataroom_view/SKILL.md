@@ -6,7 +6,7 @@ description: "Read dataroom view: What a share link's visitor sees before authen
 
 # Zoo · DATAROOM · view
 
-Read-only Zoo capability derived from the `dataroom` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `dataroom` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -26,8 +26,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/dataroom/view/{linkId}` → JSON body.
-- `/v1/dataroom/view/{linkId}/document/{documentId}/file` → JSON body.
+- `/v1/dataroom/view/{linkId}` → JSON object.
+- `/v1/dataroom/view/{linkId}/document/{documentId}/file` → JSON object.
 
 ## Example
 

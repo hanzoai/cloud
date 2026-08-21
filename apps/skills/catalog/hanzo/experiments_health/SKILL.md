@@ -6,7 +6,7 @@ description: "Read experiments health: Is whether the experiments subsystem is m
 
 # Hanzo · EXPERIMENTS · health
 
-Read-only Hanzo capability derived from the `experiments` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `experiments` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

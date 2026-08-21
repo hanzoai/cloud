@@ -6,7 +6,7 @@ description: "Read marketing promos: Returns every promo the deployment offers w
 
 # Lux · MARKETING · promos
 
-Read-only Lux capability derived from the `marketing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `marketing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -23,8 +23,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `code` | path | yes | string | Code is the promo code from the path. |
-| `plan` | query | no | string | Plan is the plan being priced: pro, max or team. Anything else (including |
-| `seats` | query | no | integer | Seats is the Team seat count; 0 means 1, and it is ignored for the |
+| `plan` | query | no | string | Plan is the plan being priced: pro, max or team. Anything else (including the free Developer plan) has no list price and so nothing to discount. |
+| `seats` | query | no | integer | Seats is the Team seat count; 0 means 1, and it is ignored for the single-seat plans. |
 
 ## Response
 

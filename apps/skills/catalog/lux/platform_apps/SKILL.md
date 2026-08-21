@@ -6,7 +6,7 @@ description: "Read platform apps: What this organization has declared, and what 
 
 # Lux · PLATFORM · apps
 
-Read-only Lux capability derived from the `platform` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `platform` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -26,9 +26,9 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/platform/apps` → JSON body.
-- `/v1/platform/apps/{app}` → JSON body.
-- `/v1/platform/apps/{app}/cd` → JSON body.
+- `/v1/platform/apps` → JSON object.
+- `/v1/platform/apps/{app}` → JSON object.
+- `/v1/platform/apps/{app}/cd` → JSON object.
 
 ## Example
 

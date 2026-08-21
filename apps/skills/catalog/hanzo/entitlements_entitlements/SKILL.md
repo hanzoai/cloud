@@ -6,7 +6,7 @@ description: "Read entitlements entitlements: Projection reports which console a
 
 # Hanzo · ENTITLEMENTS · entitlements
 
-Read-only Hanzo capability derived from the `entitlements` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `entitlements` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

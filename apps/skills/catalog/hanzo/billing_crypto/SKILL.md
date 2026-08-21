@@ -6,7 +6,7 @@ description: "Read billing crypto: Follow one crypto deposit to settlement, Whic
 
 # Hanzo · BILLING · crypto
 
-Read-only Hanzo capability derived from the `billing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `billing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/crypto/deposit/{id}` → JSON body.
-- `/v1/billing/crypto/options` → JSON body.
+- `/v1/billing/crypto/deposit/{id}` → JSON object.
+- `/v1/billing/crypto/options` → JSON object.
 
 ## Example
 

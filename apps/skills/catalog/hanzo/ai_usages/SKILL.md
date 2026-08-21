@@ -6,7 +6,7 @@ description: "Read ai usages: List usages, By User (usage), Cloud (usage)."
 
 # Hanzo · AI · usages
 
-Read-only Hanzo capability derived from the `ai` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `ai` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -23,10 +23,10 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/ai/usages` → JSON object.
-- `/v1/ai/usages/by-user` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
-- `/v1/ai/usages/cloud` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
-- `/v1/ai/usages/range` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
-- `/v1/ai/usages/user-names` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
+- `/v1/ai/usages/by-user` → JSON object.
+- `/v1/ai/usages/cloud` → JSON object.
+- `/v1/ai/usages/range` → JSON object.
+- `/v1/ai/usages/user-names` → JSON object.
 
 ## Example
 

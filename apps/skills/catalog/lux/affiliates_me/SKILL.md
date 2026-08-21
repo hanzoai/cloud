@@ -6,7 +6,7 @@ description: "Read affiliates me: Answers the richer self-view: the same lifetim
 
 # Lux · AFFILIATES · me
 
-Read-only Lux capability derived from the `affiliates` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `affiliates` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

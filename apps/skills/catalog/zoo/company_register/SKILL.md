@@ -6,7 +6,7 @@ description: "Read company register: Returns the platform's whole formation regi
 
 # Zoo · COMPANY · register
 
-Read-only Zoo capability derived from the `company` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `company` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

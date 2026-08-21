@@ -6,7 +6,7 @@ description: "Read webhooks webhooks: Returns every webhook endpoint the caller'
 
 # Hanzo · WEBHOOKS · webhooks
 
-Read-only Hanzo capability derived from the `webhooks` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `webhooks` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

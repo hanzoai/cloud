@@ -6,7 +6,7 @@ description: "Read traces health: How many spans this deployment holds for your 
 
 # Hanzo · TRACES · health
 
-Read-only Hanzo capability derived from the `traces` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `traces` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/traces/health` → JSON body.
+- `/v1/traces/health` → JSON object.
 
 ## Example
 

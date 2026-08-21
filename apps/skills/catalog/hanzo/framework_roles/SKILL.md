@@ -6,7 +6,7 @@ description: "Read framework roles: Returns every (user, role) assignment in the
 
 # Hanzo · FRAMEWORK · roles
 
-Read-only Hanzo capability derived from the `framework` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `framework` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
