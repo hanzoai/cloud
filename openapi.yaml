@@ -18662,6 +18662,26 @@ components:
             is a 404, never a silent no-op.
           type: integer
       type: object
+    graphAssertIn:
+      properties:
+        assertions:
+          items:
+            $ref: '#/components/schemas/graphFact'
+          type: array
+      type: object
+    graphAssertOut:
+      properties:
+        duplicate:
+          type: integer
+        reasons:
+          items:
+            type: string
+          type: array
+        recorded:
+          type: integer
+        refused:
+          type: integer
+      type: object
     graphEdge:
       properties:
         from:
@@ -18671,6 +18691,55 @@ components:
           type: string
         to:
           type: string
+      type: object
+    graphFact:
+      properties:
+        at:
+          type: string
+        confidence:
+          type: number
+        entity:
+          type: string
+        evidence:
+          type: string
+        names:
+          type: boolean
+        relation:
+          type: string
+        seen:
+          type: string
+        source:
+          type: string
+        value:
+          type: string
+      type: object
+    graphNeighborsIn:
+      properties:
+        as_of:
+          type: string
+        depth:
+          type: integer
+        direction:
+          type: string
+        relation:
+          type: string
+        seeds:
+          items:
+            type: string
+          type: array
+      type: object
+    graphNeighborsOut:
+      properties:
+        bound:
+          type: integer
+        depth:
+          type: integer
+        entities:
+          items:
+            type: string
+          type: array
+        truncated:
+          type: boolean
       type: object
     graphNode:
       properties:
@@ -18707,6 +18776,54 @@ components:
             link targets.
           items:
             $ref: '#/components/schemas/graphNode'
+          type: array
+      type: object
+    graphReadOut:
+      properties:
+        assertions:
+          items:
+            $ref: '#/components/schemas/wireFact'
+          type: array
+      type: object
+    graphResolveIn:
+      properties:
+        as_of:
+          type: string
+        entity:
+          type: string
+        relation:
+          type: string
+      type: object
+    graphResolveOut:
+      properties:
+        as_of:
+          type: string
+        conflicts:
+          items:
+            $ref: '#/components/schemas/wireFact'
+          type: array
+        contested:
+          type: boolean
+        entity:
+          type: string
+        known:
+          type: boolean
+        relation:
+          type: string
+        winner:
+          $ref: '#/components/schemas/wireFact'
+      type: object
+    graphVocabularyOut:
+      properties:
+        bound:
+          type: integer
+        relations:
+          items:
+            type: string
+          type: array
+        rule:
+          items:
+            type: string
           type: array
       type: object
     handleRequest:
@@ -46919,6 +47036,33 @@ components:
           items:
             $ref: '#/components/schemas/webResult'
           type: array
+      type: object
+    wireFact:
+      properties:
+        at:
+          type: string
+        by:
+          type: string
+        confidence:
+          type: number
+        entity:
+          type: string
+        evidence:
+          type: string
+        id:
+          type: string
+        knowable:
+          type: string
+        names:
+          type: boolean
+        relation:
+          type: string
+        seen:
+          type: string
+        source:
+          type: string
+        value:
+          type: string
       type: object
     workerList:
       properties:
@@ -76440,6 +76584,129 @@ paths:
       - visor
       x-app: visor
       x-public: true
+      x-tool: true
+  /v1/graph:
+    get:
+      operationId: graphRead
+      parameters:
+      - in: query
+        name: entity
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: relation
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: value
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: as_of
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphReadOut'
+          description: ok
+      summary: Read the assertions this organization has recorded
+      tags:
+      - graph
+      x-app: graph
+      x-stage: alpha
+      x-tool: true
+    post:
+      operationId: graphAssert
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/graphAssertIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphAssertOut'
+          description: ok
+      summary: Assert what is true of an entity
+      tags:
+      - graph
+      x-app: graph
+      x-stage: alpha
+      x-tool: true
+  /v1/graph/neighbors:
+    post:
+      operationId: graphNeighbors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/graphNeighborsIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphNeighborsOut'
+          description: ok
+      summary: Walk the edges from a seed set, bounded
+      tags:
+      - graph
+      x-app: graph
+      x-stage: alpha
+      x-tool: true
+  /v1/graph/resolve:
+    post:
+      operationId: graphResolve
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/graphResolveIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphResolveOut'
+          description: ok
+      summary: What is in force about an entity as of an instant, and what disagreed
+      tags:
+      - graph
+      x-app: graph
+      x-stage: alpha
+      x-tool: true
+  /v1/graph/vocabulary:
+    get:
+      operationId: graphVocabulary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphVocabularyOut'
+          description: ok
+      summary: The relations in use, and the rule that resolves a conflict
+      tags:
+      - graph
+      x-app: graph
+      x-stage: alpha
       x-tool: true
   /v1/guide:
     get:
@@ -117466,6 +117733,10 @@ tags:
 - description: 'Package git is Git hosting for your org: create repos, clone, push,
     and see what they cost.'
   name: git
+- description: 'Package graph is one organization''s entities and the relations between
+    them, held as assertions: somebody, at some moment, from some evidence, asserted
+    that this thing stands in that relation to that other thing.'
+  name: graph
 - description: Package guide is a step-by-step checklist that gets your business running
     on AI.
   name: guide
