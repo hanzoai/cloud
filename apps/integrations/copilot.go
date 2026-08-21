@@ -1,6 +1,6 @@
 package integrations
 
-// copilot.go registers the GitHub Copilot USER connector (/v1/connectors
+// copilot.go registers the GitHub Copilot USER connector (/v1/integrations/connectors
 // plane) under the ecosystem-canonical id "github-copilot" (distinct from the
 // org "github" provider). Device flow per RFC 8628 against github.com with the
 // full error-string protocol (authorization_pending / slow_down /

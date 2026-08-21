@@ -37,7 +37,7 @@ var newOAuthConnectors = []struct {
 
 // TestNewKeyConnectorsWellFormed asserts every new key connector satisfies Mount's
 // user-scope contract: Verify present, api_key custody + category set, and NO org-plane
-// fields — so boot cannot panic and /v1/connectors derives method "token".
+// fields — so boot cannot panic and /v1/integrations/connectors derives method "token".
 func TestNewKeyConnectorsWellFormed(t *testing.T) {
 	for _, id := range newKeyConnectors {
 		p, ok := registry[id]

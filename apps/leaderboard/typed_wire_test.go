@@ -28,7 +28,7 @@ func TestBackfillForceIsLiteralTrue(t *testing.T) {
 	super := withHeader(principalHeaders("admin", "root"), "X-User-IsAdmin", "true")
 
 	for _, force := range []string{"", "1", "t", "T", "TRUE", "yes", "on"} {
-		path := "/v1/usage/rollup/backfill"
+		path := "/v1/admin/leaderboard/rollup"
 		if force != "" {
 			path += "?force=" + force
 		}
@@ -40,7 +40,7 @@ func TestBackfillForceIsLiteralTrue(t *testing.T) {
 
 	// The one spelling that forces still does — so the loop above is the guard
 	// holding, not the route being inert.
-	if code, body := doJSON(t, app, "POST", "/v1/usage/rollup/backfill?force=true", super, nil); code != 200 {
+	if code, body := doJSON(t, app, "POST", "/v1/admin/leaderboard/rollup?force=true", super, nil); code != 200 {
 		t.Fatalf("force=true must force (want 200, got %d: %s)", code, body)
 	}
 }
@@ -54,7 +54,7 @@ func TestBackfillBeforeStillRejectsGarbage(t *testing.T) {
 	app := mountApp(t)
 	super := withHeader(principalHeaders("admin", "root"), "X-User-IsAdmin", "true")
 
-	if code, body := doJSON(t, app, "POST", "/v1/usage/rollup/backfill?before=lastweek", super, nil); code != 400 {
+	if code, body := doJSON(t, app, "POST", "/v1/admin/leaderboard/rollup?before=lastweek", super, nil); code != 400 {
 		t.Fatalf("unparseable before want 400, got %d (%s)", code, body)
 	}
 }

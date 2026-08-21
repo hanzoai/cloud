@@ -114,7 +114,7 @@ const (
 //	TRUNCATE TABLE hanzo.usage_rollup_daily;                            -- derived; rebuilt below
 //	ALTER TABLE hanzo.usage_rollup_daily DROP COLUMN IF EXISTS cost_cents;
 //	<restart, so EnsureUsageRollup recreates the view from rollupMVDDL>
-//	POST /v1/usage/rollup/backfill?before=<today, UTC midnight>         -- re-seed history
+//	POST /v1/admin/leaderboard/rollup?before=<today, UTC midnight>         -- re-seed history
 //
 // It stays a hand step because it stops capture and empties a table, and nothing
 // should decide that about itself on a boot. Rows written between the DROP and the

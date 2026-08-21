@@ -75,8 +75,8 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 		t.Fatalf("native search did not return the mocked result: %s", string(body))
 	}
 
-	// Firecrawl scrape (the /v1/scrape path the client builds) routes to the
-	// in-process crawl handler and answers in the firecrawl shape.
+	// The scrape door routes to the in-process crawl handler and answers in the
+	// firecrawl shape — the envelope is firecrawl's, the address is ours.
 	//
 	// The URL is deliberately one that cannot be fetched, and the assertion is on
 	// the ENVELOPE, not on success. What this test owns is that the route exists,
@@ -85,7 +85,7 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	// party's uptime. That scrape maps a failed fetch to success:false is asserted
 	// in TestScrapeReportsFetchFailure, and the fetch itself is covered in
 	// clients/crawl.
-	sreq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/scrape",
+	sreq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/scrape",
 		strings.NewReader(`{"url":"https://ex"}`))
 	sreq.Header.Set("Authorization", "Bearer k")
 	sreq.Header.Set("Content-Type", "application/json")
@@ -112,7 +112,7 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 func TestScrapeReportsFetchFailure(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
 
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/scrape",
+	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/scrape",
 		strings.NewReader(`{"url":"http://127.0.0.1:1/"}`))
 	req.Header.Set("Authorization", "Bearer svc-key")
 	rec := httptest.NewRecorder()
@@ -284,7 +284,7 @@ func TestSearchUnsetKeyFailsClosed(t *testing.T) {
 // Scrape fails closed with no configured key.
 func TestScrapeUnsetKeyFailsClosed(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "")
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/scrape",
+	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/scrape",
 		strings.NewReader(`{"url":"https://ex.com"}`))
 	req.Header.Set("Authorization", "Bearer anything")
 	rec := httptest.NewRecorder()
@@ -297,7 +297,7 @@ func TestScrapeUnsetKeyFailsClosed(t *testing.T) {
 // Scrape rejects a wrong Bearer key.
 func TestScrapeWrongKeyRejected(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "right")
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/scrape",
+	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/scrape",
 		strings.NewReader(`{"url":"https://ex.com"}`))
 	req.Header.Set("Authorization", "Bearer wrong")
 	rec := httptest.NewRecorder()

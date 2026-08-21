@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/connectors/:id", zip.Doc{
+	zip.Describe("DELETE /v1/integrations/connectors/:id", zip.Doc{
 		Description: "Forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint.",
 		Fields: map[string]string{
 			"connectorRef.id":            "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
@@ -28,48 +28,8 @@ func init() {
 		Example:  json.RawMessage(`{"repo":"widgets"}`),
 		Response: json.RawMessage(`{"repo":"widgets","disabled":true}`),
 	})
-	zip.Describe("GET /v1/connectors", zip.Doc{
-		Description: "Lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
-		Fields: map[string]string{
-			"connView.account":         "Account is the provider's label for the connected account.",
-			"connView.connectedAt":     "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
-			"connView.expiresAt":       "ExpiresAt is when the access token expires, RFC 3339 UTC; empty for a\nnon-expiring credential. Reading the token auto-rotates inside the window.",
-			"connView.externalId":      "ExternalID is the provider's own id for that account.",
-			"connView.id":              "ID is provider + \":\" + label — what every other connector route addresses.",
-			"connView.label":           "Label is the caller's name for this connection (\"default\", \"work\").",
-			"connView.provider":        "Provider is the user-scoped provider's registry id.",
-			"connView.scopes":          "Scopes are the permissions the credential carries. Never null; [] when none.",
-			"connectorsOut.connectors": "Connectors is the caller's own set. Never null; [] when they have none.",
-		},
-		Response: json.RawMessage(`{"connectors":[{"id":"openai:default","provider":"openai","label":"default","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"2026-07-01T11:00:00Z","connectedAt":"2026-07-01T10:00:00Z"}]}`),
-	})
-	zip.Describe("GET /v1/connectors/:id/token", zip.Doc{
-		Description: "Hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
-		Fields: map[string]string{
-			"connectorRef.id":             "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
-			"connectorTokenOut.expiresAt": "ExpiresAt is when this token expires, RFC 3339 UTC; empty if non-expiring.",
-			"connectorTokenOut.label":     "Label is the connector's label.",
-			"connectorTokenOut.provider":  "Provider is the connector's provider id.",
-			"connectorTokenOut.token":     "Token is the access token, rotated first if it was within the refresh window.",
-		},
-		Example:  json.RawMessage(`{"id":"openai:work"}`),
-		Response: json.RawMessage(`{"token":"<the access token>","provider":"openai","label":"work","expiresAt":"2026-07-01T11:00:00Z"}`),
-	})
-	zip.Describe("GET /v1/connectors/providers", zip.Doc{
-		Description: "Lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
-		Fields: map[string]string{
-			"connectorProviderView.category":    "Category groups the card.",
-			"connectorProviderView.description": "Description is the one-line pitch the console card shows.",
-			"connectorProviderView.id":          "ID is the provider's registry id and the :provider path segment.",
-			"connectorProviderView.methods":     "Methods are the intake paths this provider supports, derived from its\ncapabilities: \"device\", \"oauth\" (adopt an externally obtained bundle) and\n\"token\" (a customer-held credential). At least one, always.",
-			"connectorProviderView.name":        "Name is the provider's display name.",
-			"connectorProviderView.scopes":      "Scopes are the permissions a connection will ask for. Never null.",
-			"connectorProvidersOut.providers":   "Providers is every USER-scoped provider, sorted by id. Never null.",
-		},
-		Response: json.RawMessage(`{"providers":[{"id":"openai","name":"OpenAI","description":"Use your own OpenAI account.","category":"AI","scopes":["api"],"methods":["device","token"]}]}`),
-	})
 	zip.Describe("GET /v1/integrations", zip.Doc{
-		Description: "Returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/connectors\nsurface) are omitted; the two planes are disjoint.",
+		Description: "Returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/integrations/connectors\nsurface) are omitted; the two planes are disjoint.",
 		Fields: map[string]string{
 			"connectionView.account":     "Account is the human label of the connected third-party account (the Slack\nteam name, the GitHub org login). Provider-supplied and sanitized on ingest.",
 			"connectionView.connectedAt": "ConnectedAt is when the connection was last (re)established, RFC 3339 UTC.",
@@ -93,7 +53,7 @@ func init() {
 			"connectionView.connectedAt": "ConnectedAt is when the connection was last (re)established, RFC 3339 UTC.",
 			"connectionView.externalId":  "ExternalID is the provider's own id for the account (Slack team.id, GitHub\ninstallation_id) — the value inbound webhooks are mapped back to this org by.",
 			"connectionView.scopes":      "Scopes are the permissions the provider granted. Never null; [] when none.",
-			"providerRef.provider":       "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
+			"providerRef.provider":       "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)\nproviders, which this surface never resolves.",
 			"providerView.available":     "Available is whether THIS DEPLOYMENT has the provider's app credentials, so\nconnect can succeed. False renders the card without a working Connect button.",
 			"providerView.category":      "Category groups the card (\"Communication\", \"Developer\", \"Marketing\").",
 			"providerView.connected":     "Connected is whether this org has a live connection to the provider.",
@@ -104,6 +64,46 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"provider":"slack"}`),
 		Response: json.RawMessage(`{"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":false}`),
+	})
+	zip.Describe("GET /v1/integrations/connectors", zip.Doc{
+		Description: "Lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
+		Fields: map[string]string{
+			"connView.account":         "Account is the provider's label for the connected account.",
+			"connView.connectedAt":     "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
+			"connView.expiresAt":       "ExpiresAt is when the access token expires, RFC 3339 UTC; empty for a\nnon-expiring credential. Reading the token auto-rotates inside the window.",
+			"connView.externalId":      "ExternalID is the provider's own id for that account.",
+			"connView.id":              "ID is provider + \":\" + label — what every other connector route addresses.",
+			"connView.label":           "Label is the caller's name for this connection (\"default\", \"work\").",
+			"connView.provider":        "Provider is the user-scoped provider's registry id.",
+			"connView.scopes":          "Scopes are the permissions the credential carries. Never null; [] when none.",
+			"connectorsOut.connectors": "Connectors is the caller's own set. Never null; [] when they have none.",
+		},
+		Response: json.RawMessage(`{"connectors":[{"id":"openai:default","provider":"openai","label":"default","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"2026-07-01T11:00:00Z","connectedAt":"2026-07-01T10:00:00Z"}]}`),
+	})
+	zip.Describe("GET /v1/integrations/connectors/:id/token", zip.Doc{
+		Description: "Hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
+		Fields: map[string]string{
+			"connectorRef.id":             "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
+			"connectorTokenOut.expiresAt": "ExpiresAt is when this token expires, RFC 3339 UTC; empty if non-expiring.",
+			"connectorTokenOut.label":     "Label is the connector's label.",
+			"connectorTokenOut.provider":  "Provider is the connector's provider id.",
+			"connectorTokenOut.token":     "Token is the access token, rotated first if it was within the refresh window.",
+		},
+		Example:  json.RawMessage(`{"id":"openai:work"}`),
+		Response: json.RawMessage(`{"token":"<the access token>","provider":"openai","label":"work","expiresAt":"2026-07-01T11:00:00Z"}`),
+	})
+	zip.Describe("GET /v1/integrations/connectors/providers", zip.Doc{
+		Description: "Lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
+		Fields: map[string]string{
+			"connectorProviderView.category":    "Category groups the card.",
+			"connectorProviderView.description": "Description is the one-line pitch the console card shows.",
+			"connectorProviderView.id":          "ID is the provider's registry id and the :provider path segment.",
+			"connectorProviderView.methods":     "Methods are the intake paths this provider supports, derived from its\ncapabilities: \"device\", \"oauth\" (adopt an externally obtained bundle) and\n\"token\" (a customer-held credential). At least one, always.",
+			"connectorProviderView.name":        "Name is the provider's display name.",
+			"connectorProviderView.scopes":      "Scopes are the permissions a connection will ask for. Never null.",
+			"connectorProvidersOut.providers":   "Providers is every USER-scoped provider, sorted by id. Never null.",
+		},
+		Response: json.RawMessage(`{"providers":[{"id":"openai","name":"OpenAI","description":"Use your own OpenAI account.","category":"AI","scopes":["api"],"methods":["device","token"]}]}`),
 	})
 	zip.Describe("GET /v1/integrations/github/installations", zip.Doc{
 		Description: "Lists the GitHub accounts the caller may see the App\ninstalled on, each confirmed against the App's own list, plus where to add\nanother.\n\nThe confirmation is the point. A connection row holds an installation id, and\nan id whose installation was since removed on GitHub is a row that mints\nnothing — every list and import against it fails with a token error, which\nreads as \"our git integration is broken\" rather than \"that install is gone\".\nChecking the App's view turns that into a fact the caller can act on.\n\nORG-SCOPED for a tenant, deliberately. The App is installed across every\ncustomer, so the raw list is the customer list; a tenant sees only accounts its\nown org has bound. It discovers a NEW account by installing it (InstallURL),\nwhich is GitHub's own consent screen — not by reading ours.\n\nA SUPER ADMIN sees the App's whole install list, because that list is the\nplatform's own inventory rather than any one tenant's data, and platform sudo\nis the single cross-tenant scope this house has. Without it an App installed\nout-of-band — granted straight from GitHub, so no connect flow ever ran and no\nconnection row exists — is invisible to everyone: the console card reads \"not\nconnected\" and an operator asked \"which GitHub orgs do you see\" can only\nanswer for accounts already bound, which is precisely the accounts that were\nnever the question.",
@@ -194,7 +194,46 @@ func init() {
 			"SlackSendIn.update": "Update, when set, EDITS the message with that timestamp instead of posting a\nnew one. It is a field of the same op rather than a second op because\n\"post\" and \"edit\" are the same act — put this text at this address — and\nthe address is simply more specific in one case.\n\nIt exists for the coding run. Slack has no server-sent stream and a long\nrun reporting each phase as a new message would bury a channel under a\ndozen of them; editing ONE message in the thread is the progress indicator\nthe platform actually offers. APPENDED at the end: the wire is field\nORDER, so a field inserted anywhere else changes what every existing peer\nreads.",
 		},
 	})
-	zip.Describe("POST /v1/connectors/:id/refresh", zip.Doc{
+	zip.Describe("POST /v1/integrations/:provider/connect", zip.Doc{
+		Description: "Acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback).",
+		Fields: map[string]string{
+			"connectIn.accountId":     "AccountID is the provider account the credential should be scoped to, for the\nproviders whose Verify needs one (Cloudflare). Ignored by the OAuth path.",
+			"connectIn.provider":      "Provider is the connector's registry id, from the :provider path segment.",
+			"connectIn.token":         "Token is the customer's provider credential. Its PRESENCE — not its value —\nis what selects the apikey seal over the OAuth flow for a provider that\noffers both: {\"token\":\"…\"}, even empty, is an apikey attempt (→ verify, which\nanswers the \"token required\" 400 on an empty value), while a body with no\ntoken key (the console Connect button, `hanzo connector add` with no --token)\nstarts OAuth. Read on STDIN by the CLI, never argv; never logged or echoed.",
+			"connectOut.account":      "Account is the account label the provider reported for the credential.\napikey path only; a pointer because \"\" is a real answer the provider gave.",
+			"connectOut.authorizeUrl": "AuthorizeURL is the provider consent URL to send the user to. OAuth path only.",
+			"connectOut.connected":    "Connected is true on the apikey path once the credential verified and sealed.",
+			"connectOut.externalId":   "ExternalID is the provider's account id for the credential. apikey path only.",
+			"connectOut.provider":     "Provider is the connector's registry id. apikey path only.",
+			"connectOut.scopes":       "Scopes are the permissions the credential carries. apikey path only; never\nnull on that path ([] when the provider reported none).",
+		},
+		Example:  json.RawMessage(`{"provider":"cloudflare","token":"cf-scoped-api-token","accountId":"a1b2c3"}`),
+		Response: json.RawMessage(`{"connected":true,"provider":"cloudflare","account":"Acme","externalId":"a1b2c3","scopes":[]}`),
+	})
+	zip.Describe("POST /v1/integrations/:provider/disconnect", zip.Doc{
+		Description: "Revokes (best-effort) and forgets an org's connection: it deletes\nevery custodied KMS secret and the connection row. Idempotent — disconnecting a\nprovider that was never connected still returns {disconnected:true}. Symmetric\nwith connect: an AdminOnly connector needs the caller's own-org admin bit.",
+		Fields: map[string]string{
+			"disconnectOut.disconnected": "Disconnected is always true — the org's secrets and connection row are gone.",
+			"providerRef.provider":       "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)\nproviders, which this surface never resolves.",
+		},
+		Example:  json.RawMessage(`{"provider":"slack"}`),
+		Response: json.RawMessage(`{"disconnected":true}`),
+	})
+	zip.Describe("POST /v1/integrations/:provider/verify", zip.Doc{
+		Description: "Re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here).",
+		Fields: map[string]string{
+			"providerRef.provider": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)\nproviders, which this surface never resolves.",
+			"verifyOut.account":    "Account is the account label the provider reported. Present only when active.",
+			"verifyOut.active":     "Active is whether the stored credential verified live against the provider.",
+			"verifyOut.externalId": "ExternalID is the provider's account id. Present only when active.",
+			"verifyOut.provider":   "Provider is the connector's registry id.",
+			"verifyOut.reason":     "Reason is why the check failed. Present only when active is false.",
+			"verifyOut.scopes":     "Scopes are the permissions the credential carries. Present only when active.",
+		},
+		Example:  json.RawMessage(`{"provider":"cloudflare"}`),
+		Response: json.RawMessage(`{"provider":"cloudflare","active":true,"account":"Acme","externalId":"a1b2c3","scopes":["zone:read"]}`),
+	})
+	zip.Describe("POST /v1/integrations/connectors/:id/refresh", zip.Doc{
 		Description: "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
 		Fields: map[string]string{
 			"connView.account":     "Account is the provider's label for the connected account.",
@@ -212,7 +251,7 @@ func init() {
 		Example:  json.RawMessage(`{"id":"openai:work"}`),
 		Response: json.RawMessage(`{"refreshed":true,"connector":{"id":"openai:work","provider":"openai","label":"work","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"2026-07-01T12:00:00Z","connectedAt":"2026-07-01T10:00:00Z"}}`),
 	})
-	zip.Describe("POST /v1/connectors/:provider/credential", zip.Doc{
+	zip.Describe("POST /v1/integrations/connectors/:provider/credential", zip.Doc{
 		Description: "Is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order).",
 		Fields: map[string]string{
 			"connView.account":        "Account is the provider's label for the connected account.",
@@ -237,7 +276,7 @@ func init() {
 		Example:  json.RawMessage(`{"provider":"openai","label":"work","token":"sk-user-owned-key"}`),
 		Response: json.RawMessage(`{"connected":true,"connector":{"id":"openai:work","provider":"openai","label":"work","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"","connectedAt":"2026-07-01T10:00:00Z"}}`),
 	})
-	zip.Describe("POST /v1/connectors/:provider/device", zip.Doc{
+	zip.Describe("POST /v1/integrations/connectors/:provider/device", zip.Doc{
 		Description: "Begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned.",
 		Fields: map[string]string{
 			"deviceStartIn.label":      "Label names this connection so one user can hold several per provider\n(\"work\", \"personal\"). Empty means \"default\". 1-64 of [A-Za-z0-9._-].",
@@ -251,7 +290,7 @@ func init() {
 		Example:  json.RawMessage(`{"provider":"openai","label":"work"}`),
 		Response: json.RawMessage(`{"flow":"g_7f2c","userCode":"WDJB-MJHT","verifyUrl":"https://example.com/device","interval":5,"expiresAt":"2026-07-01T10:15:00Z"}`),
 	})
-	zip.Describe("POST /v1/connectors/:provider/device/:flow/poll", zip.Doc{
+	zip.Describe("POST /v1/integrations/connectors/:provider/device/:flow/poll", zip.Doc{
 		Description: "Advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval.",
 		Fields: map[string]string{
 			"connView.account":        "Account is the provider's label for the connected account.",
@@ -270,45 +309,6 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"provider":"openai","flow":"g_7f2c"}`),
 		Response: json.RawMessage(`{"status":"connected","connector":{"id":"openai:work","provider":"openai","label":"work","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"2026-07-01T11:00:00Z","connectedAt":"2026-07-01T10:05:00Z"}}`),
-	})
-	zip.Describe("POST /v1/integrations/:provider/connect", zip.Doc{
-		Description: "Acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback).",
-		Fields: map[string]string{
-			"connectIn.accountId":     "AccountID is the provider account the credential should be scoped to, for the\nproviders whose Verify needs one (Cloudflare). Ignored by the OAuth path.",
-			"connectIn.provider":      "Provider is the connector's registry id, from the :provider path segment.",
-			"connectIn.token":         "Token is the customer's provider credential. Its PRESENCE — not its value —\nis what selects the apikey seal over the OAuth flow for a provider that\noffers both: {\"token\":\"…\"}, even empty, is an apikey attempt (→ verify, which\nanswers the \"token required\" 400 on an empty value), while a body with no\ntoken key (the console Connect button, `hanzo connector add` with no --token)\nstarts OAuth. Read on STDIN by the CLI, never argv; never logged or echoed.",
-			"connectOut.account":      "Account is the account label the provider reported for the credential.\napikey path only; a pointer because \"\" is a real answer the provider gave.",
-			"connectOut.authorizeUrl": "AuthorizeURL is the provider consent URL to send the user to. OAuth path only.",
-			"connectOut.connected":    "Connected is true on the apikey path once the credential verified and sealed.",
-			"connectOut.externalId":   "ExternalID is the provider's account id for the credential. apikey path only.",
-			"connectOut.provider":     "Provider is the connector's registry id. apikey path only.",
-			"connectOut.scopes":       "Scopes are the permissions the credential carries. apikey path only; never\nnull on that path ([] when the provider reported none).",
-		},
-		Example:  json.RawMessage(`{"provider":"cloudflare","token":"cf-scoped-api-token","accountId":"a1b2c3"}`),
-		Response: json.RawMessage(`{"connected":true,"provider":"cloudflare","account":"Acme","externalId":"a1b2c3","scopes":[]}`),
-	})
-	zip.Describe("POST /v1/integrations/:provider/disconnect", zip.Doc{
-		Description: "Revokes (best-effort) and forgets an org's connection: it deletes\nevery custodied KMS secret and the connection row. Idempotent — disconnecting a\nprovider that was never connected still returns {disconnected:true}. Symmetric\nwith connect: an AdminOnly connector needs the caller's own-org admin bit.",
-		Fields: map[string]string{
-			"disconnectOut.disconnected": "Disconnected is always true — the org's secrets and connection row are gone.",
-			"providerRef.provider":       "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
-		},
-		Example:  json.RawMessage(`{"provider":"slack"}`),
-		Response: json.RawMessage(`{"disconnected":true}`),
-	})
-	zip.Describe("POST /v1/integrations/:provider/verify", zip.Doc{
-		Description: "Re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here).",
-		Fields: map[string]string{
-			"providerRef.provider": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
-			"verifyOut.account":    "Account is the account label the provider reported. Present only when active.",
-			"verifyOut.active":     "Active is whether the stored credential verified live against the provider.",
-			"verifyOut.externalId": "ExternalID is the provider's account id. Present only when active.",
-			"verifyOut.provider":   "Provider is the connector's registry id.",
-			"verifyOut.reason":     "Reason is why the check failed. Present only when active is false.",
-			"verifyOut.scopes":     "Scopes are the permissions the credential carries. Present only when active.",
-		},
-		Example:  json.RawMessage(`{"provider":"cloudflare"}`),
-		Response: json.RawMessage(`{"provider":"cloudflare","active":true,"account":"Acme","externalId":"a1b2c3","scopes":["zone:read"]}`),
 	})
 	zip.Describe("POST /v1/integrations/github/claim", zip.Doc{
 		Description: "Binds installations the App ALREADY holds to the org the caller is\nacting in — the reconciliation for a grant that happened outside our connect\nflow.\n\nAn installation IS the grant: GitHub recorded the consent when the App was\ninstalled, and our connection row is bookkeeping that never got written because\nnobody came through our callback. This writes that row from the App's own view,\nso 23 accounts granted straight from GitHub stop reading as nothing.\n\nThe org is taken from the VALIDATED PRINCIPAL and never from the body, because\nit is the one part GitHub cannot tell us. An installation carries an account\nlogin, a type and a repository selection — nothing that names a Hanzo org. So\nthe binding cannot be DERIVED, only asserted, and the only unforgeable assertion\navailable is the org the caller is already acting in. Inferring one from the\naccount name would be a guess the store cannot catch: its key is\n(org,provider,owner), so a wrong org is a valid row, and a valid row is a\nmirror pointed at the wrong tenant.\n\nSUPER ADMIN only, for that same reason. A tenant's proof that an account is\ntheirs is GitHub's own consent screen — the connect flow — and without it any\norg could claim any account the App holds. Platform sudo is already the scope\nthat reads the whole install list, so it is the scope that may bind from it;\ngiving a tenant this verb would hand it every other tenant's repositories.\n\nIdempotent: the row is keyed (org,provider,owner) and connected_at survives an\nupsert, so claiming twice rebinds the same account to the same org and reports\nit under `already`. Re-claiming also REFRESHES the installation id, so an\naccount reinstalled on GitHub — new id, same login — self-heals instead of\nminting tokens against a dead installation.\n\nClaiming an account another org holds ADDS this org's row and leaves theirs\nstanding, so no org loses an integration it is using.",

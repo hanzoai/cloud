@@ -3,7 +3,7 @@ package integrations
 // crm.go registers the CRM & customer-support connectors an agentic marketing
 // loop reads to know its customers. Customer-held API tokens, verified live via
 // keyVerify against each provider's identity/account read — the exact declarative
-// shape saas.go uses for HubSpot, on the per-user /v1/connectors plane. The
+// shape saas.go uses for HubSpot, on the per-user /v1/integrations/connectors plane. The
 // OAuth-only CRM (Salesforce) lives on the org plane in salesforce.go; these are
 // the token-auth providers that fit the one key mechanism.
 
