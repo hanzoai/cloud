@@ -253,10 +253,12 @@ func TestTheOwnInventoryIsNotWritable(t *testing.T) {
 func TestOnlyTwoRoutesAreOpen(t *testing.T) {
 	app := mountApp(t)
 
-	for _, p := range []string{"/v1/trust/health", "/v1/trust/published/" + home} {
-		if code, b := req(t, app, http.MethodGet, p, "", nil); code != http.StatusOK {
-			t.Fatalf("%s anonymous want 200, got %d — %s", p, code, b)
-		}
+	// The published door is the ONE open route this subsystem declares.
+	// /v1/trust/health is the COMPOSER's, registered for every app in serve.go —
+	// declaring a second one here does not shadow it, it refuses the whole
+	// program, which is why this package registers none.
+	if code, b := req(t, app, http.MethodGet, "/v1/trust/published/"+home, "", nil); code != http.StatusOK {
+		t.Fatalf("published anonymous want 200, got %d — %s", code, b)
 	}
 	for _, p := range []string{
 		"/v1/trust", "/v1/trust/controls", "/v1/trust/coverage", "/v1/trust/documents",
