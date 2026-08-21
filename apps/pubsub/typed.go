@@ -106,12 +106,25 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Post(g, "/publish", o.publish)
 	zip.Post(g, "/request", o.request)
 
-	zip.Post(g, "/kv/:bucket", o.createBucket, zip.WithStatus(http.StatusCreated))
-	zip.Delete(g, "/kv/:bucket", o.deleteBucket)
-	zip.Get(g, "/kv/:bucket/:key", o.get)
-	zip.Put(g, "/kv/:bucket/:key", o.put)
-	zip.Delete(g, "/kv/:bucket/:key", o.del)
-	zip.Get(g, "/kv/:bucket/:key/history", o.history)
+	// KEY-VALUE IS NOT MESSAGING, and it answers at its own address.
+	//
+	// It sat under /v1/pubsub because the engine behind both is NATS, which
+	// ships a KV store alongside its bus — an implementation's packaging
+	// deciding a product's shape, the same error jetstream made by naming an
+	// engine in an address. A bucket holds values and answers reads; nothing
+	// about it publishes, subscribes or waits for a reply.
+	//
+	// Same app, because one connection to one plane serves both and a second
+	// binary would dial the same server twice for no gain. Different address,
+	// because the address is what a caller reads.
+	kv := app.Group("/v1/kv")
+
+	zip.Post(kv, "/:bucket", o.createBucket, zip.WithStatus(http.StatusCreated))
+	zip.Delete(kv, "/:bucket", o.deleteBucket)
+	zip.Get(kv, "/:bucket/:key", o.get)
+	zip.Put(kv, "/:bucket/:key", o.put)
+	zip.Delete(kv, "/:bucket/:key", o.del)
+	zip.Get(kv, "/:bucket/:key/history", o.history)
 }
 
 // ----- the bus, from the door's side ----------------------------------------
