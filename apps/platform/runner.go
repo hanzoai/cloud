@@ -1,11 +1,11 @@
-// runner.go — POST /v1/runner: the native, privileged build endpoint.
+// runner.go — POST /v1/platform/runner: the native, privileged build endpoint.
 //
 // This is the no-GitHub-builders build trigger that `hanzo build` and the
 // git-push-to-deploy hook call. It replaces the old /v1/arcd surface: one native
 // build API on the runner fabric.
 //
 // It differs from the tenant path (/v1/platform/.../deploy, which FORCES a
-// per-tenant image ref): a /v1/runner build is PRIVILEGED — the caller supplies
+// per-tenant image ref): a /v1/platform/runner build is PRIVILEGED — the caller supplies
 // the output image — so it is gated two ways:
 //   - a shared build-callback token (constant-time), and
 //   - an image-ref allowlist restricted to the org registries we own,
@@ -408,7 +408,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	}, nil
 }
 
-// runnerArtifactBuild serves the ARTIFACT lane of POST /v1/runner: build what the
+// runnerArtifactBuild serves the ARTIFACT lane of POST /v1/platform/runner: build what the
 // repo's hanzo.yml `binaries:` declares and publish it, rather than push an image.
 // Auth is already settled by the caller; the bounds this lane adds are its own:
 // the repo URL (the same allowlisted-git-host validator the image lane uses), the

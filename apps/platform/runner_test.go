@@ -16,7 +16,7 @@ import (
 const testBuildTok = "s3cr3t-build-callback-token"
 
 // runnerApp mounts the platform routes over a ready fake cluster so a valid
-// /v1/runner request reaches launchDirectBuild and returns 202.
+// /v1/platform/runner request reaches launchDirectBuild and returns 202.
 func runnerApp(t *testing.T) *zip.App {
 	t.Helper()
 	store, err := openStore(t.TempDir())
@@ -30,7 +30,7 @@ func runnerApp(t *testing.T) *zip.App {
 	return app
 }
 
-// postRunner POSTs /v1/runner with an optional Bearer token.
+// postRunner POSTs /v1/platform/runner with an optional Bearer token.
 func postRunner(t *testing.T, app *zip.App, token string, body any) (int, []byte) {
 	t.Helper()
 	var r io.Reader
@@ -38,21 +38,21 @@ func postRunner(t *testing.T, app *zip.App, token string, body any) (int, []byte
 		b, _ := json.Marshal(body)
 		r = bytes.NewReader(b)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/v1/runner", r)
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform/runner", r)
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := app.Test(req)
 	if err != nil {
-		t.Fatalf("Test POST /v1/runner: %v", err)
+		t.Fatalf("Test POST /v1/platform/runner: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, b
 }
 
-// postRunnerAs POSTs /v1/runner as a VALIDATED IAM principal: it sets the
+// postRunnerAs POSTs /v1/platform/runner as a VALIDATED IAM principal: it sets the
 // identity headers SanitizeIdentity mints from a signature-verified JWT
 // (X-User-Id ⇒ principal.Validated, X-Org-Id ⇒ principal.Org, and optionally
 // X-User-IsOrgAdmin / X-User-IsAdmin for the role). No Authorization bearer — this
@@ -66,7 +66,7 @@ func postRunnerAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superA
 		b, _ := json.Marshal(body)
 		r = bytes.NewReader(b)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/v1/runner", r)
+	req := httptest.NewRequest(http.MethodPost, "/v1/platform/runner", r)
 	req.Header.Set("Content-Type", "application/json")
 	if user != "" {
 		req.Header.Set("X-User-Id", user)
@@ -82,7 +82,7 @@ func postRunnerAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superA
 	}
 	resp, err := app.Test(req)
 	if err != nil {
-		t.Fatalf("Test POST /v1/runner (IAM): %v", err)
+		t.Fatalf("Test POST /v1/platform/runner (IAM): %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)

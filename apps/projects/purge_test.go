@@ -5,7 +5,7 @@ package projects
 // org-scoped (403 no principal, 404 wrong org / unknown slug), stamps LastPurgeAt,
 // 200 even when the edge (CF) is unconfigured, and — critically — the S3 origin is
 // never written or deleted (only the edge is flushed). Driven over HTTP through the
-// REAL Mount + zip stack against the in-memory S3 double, exactly like the /v1/sites
+// REAL Mount + zip stack against the in-memory S3 double, exactly like the /v1/projects/sites
 // tests; CF is unconfigured in this harness (no CF_API_TOKEN/CF_ZONE_ID), so the
 // purge is a warn-only no-op that must still succeed.
 

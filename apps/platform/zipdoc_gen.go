@@ -22,7 +22,7 @@ func init() {
 			"domainRef.project": "Project is the project the application lives under, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/builds", zip.Doc{
+	zip.Describe("GET /v1/platform/builds", zip.Doc{
 		Description: "Returns real build records for your org.\n\nIt lists the org's BuildKit build records — the git build step behind a deploy —\neach with the repo it built, the short commit, its status, when it started and\nhow long it took. These are real records or an honest empty list; a build appears\nhere because one ran, never because a page needed a row. Builds are created only\nby /deploy and the push-to-deploy hook. Requires a validated principal; 403\nwithout one.",
 		Fields: map[string]string{
 			"buildBoard.builds":  "Builds are the org's real BuildKit build records, newest first.",
@@ -34,7 +34,7 @@ func init() {
 			"buildRow.status":    "Status is the build's real state: queued, building, succeeded or failed.",
 		},
 	})
-	zip.Describe("GET /v1/environments", zip.Doc{
+	zip.Describe("GET /v1/platform/environments", zip.Doc{
 		Description: "Returns your deploy targets, and what is running on each.\n\nIt returns the org's environments — the distinct deploy targets its applications\nname, `production` for anything that names none — each aggregating the apps that\ntarget it, a rolled-up status and when it last changed.\n\nAn environment is DERIVED, not stored: there is nothing to create or delete here,\nand an environment exists exactly as long as an app points at it. Requires a\nvalidated principal; 403 without one.",
 		Fields: map[string]string{
 			"environmentBoard.environments": "Environments are the org's deploy targets, in first-seen order.",
@@ -44,18 +44,6 @@ func init() {
 			"environmentRow.status":         "Status rolls up the real states of this environment's apps: degraded,\nactive, idle or empty.",
 			"environmentRow.type":           "Type buckets the name for display: production, staging, development or\ncustom.",
 			"environmentRow.updatedAt":      "UpdatedAt is when any of them last changed, RFC3339 UTC; empty when unset.",
-		},
-	})
-	zip.Describe("GET /v1/pipelines", zip.Doc{
-		Description: "Returns one build-and-deploy pipeline per app, with its latest run.\n\nIt returns one pipeline per application in the caller's org — its repo or image\nsource, its current status, and when its most recent deployment ran and how long\nit took. A pipeline is a PROJECTION of an app plus its newest deployment, not a\nseparate record: it comes into existence with the app and is triggered only\nthrough /deploy, never here. Requires a validated principal; 403 without one.",
-		Fields: map[string]string{
-			"pipelineBoard.pipelines": "Pipelines are one per application in the caller's org.",
-			"pipelineRow.duration":    "Duration is how long that run took; empty while it is still queued or\nbuilding.",
-			"pipelineRow.id":          "ID is the application id — one pipeline is one application.",
-			"pipelineRow.lastRun":     "LastRun is when the most recent deployment started, RFC3339 UTC.",
-			"pipelineRow.name":        "Name is the application's name.",
-			"pipelineRow.repo":        "Repo is the git repo or image the pipeline builds from.",
-			"pipelineRow.status":      "Status is the latest deployment's status, or the app's when it has none.",
 		},
 	})
 	zip.Describe("GET /v1/platform/fleet", zip.Doc{
@@ -105,6 +93,18 @@ func init() {
 			"readiness.k8s":     "K8s is whether a cluster client resolved at all. False means no kubeconfig.",
 			"readiness.service": "Service is always \"platform\" — which control plane answered.",
 			"readiness.status":  "Status is \"ok\" when this plane can deploy, \"degraded\" when it cannot.",
+		},
+	})
+	zip.Describe("GET /v1/platform/pipelines", zip.Doc{
+		Description: "Returns one build-and-deploy pipeline per app, with its latest run.\n\nIt returns one pipeline per application in the caller's org — its repo or image\nsource, its current status, and when its most recent deployment ran and how long\nit took. A pipeline is a PROJECTION of an app plus its newest deployment, not a\nseparate record: it comes into existence with the app and is triggered only\nthrough /deploy, never here. Requires a validated principal; 403 without one.",
+		Fields: map[string]string{
+			"pipelineBoard.pipelines": "Pipelines are one per application in the caller's org.",
+			"pipelineRow.duration":    "Duration is how long that run took; empty while it is still queued or\nbuilding.",
+			"pipelineRow.id":          "ID is the application id — one pipeline is one application.",
+			"pipelineRow.lastRun":     "LastRun is when the most recent deployment started, RFC3339 UTC.",
+			"pipelineRow.name":        "Name is the application's name.",
+			"pipelineRow.repo":        "Repo is the git repo or image the pipeline builds from.",
+			"pipelineRow.status":      "Status is the latest deployment's status, or the app's when it has none.",
 		},
 	})
 	zip.Describe("GET /v1/platform/projects", zip.Doc{
@@ -180,7 +180,7 @@ func init() {
 			"domainView.verified":  "Verified is whether ownership is settled — always true for a host the org\nstructurally owns.",
 		},
 	})
-	zip.Describe("GET /v1/releases", zip.Doc{
+	zip.Describe("GET /v1/platform/releases", zip.Doc{
 		Description: "Returns the versions that actually reached the cluster.\n\nIt lists the org's releases: the deployments that were genuinely applied to the\ncluster, with the app they belong to, their version, environment, status and when\nthey were released. A deployment that failed or is still building is NOT a\nrelease and is excluded — reaching the cluster is what makes one. Requires a\nvalidated principal; 403 without one.",
 		Fields: map[string]string{
 			"releaseBoard.releases":  "Releases are the deployments that genuinely reached the cluster.",
@@ -350,7 +350,7 @@ func init() {
 			"appView.storageGb":        "GiB; absent means stateless",
 		},
 	})
-	zip.Describe("POST /v1/run", zip.Doc{
+	zip.Describe("POST /v1/platform/run", zip.Doc{
 		Description: "Runs a container image and gives back a URL.\n\nThe one-call shortcut over project → app → deploy: give it a `name` and an\n`image` and it creates or updates an image-source application in your org's\nDEFAULT project, deploys it through the same operator Service-CR writer\neverything else uses, and answers its id, name, live URL, status and shape.\nRe-running the same name UPDATES it in place, so the call is idempotent by name.\n\nWhat it produces is a first-class application, not a special object: it is\nlistable, stoppable and redeployable through the /v1/platform routes like any\nother app.\n\n`minScale` is the replica floor. `maxScale` above it declares an autoscaling\nceiling; `maxScale: 0` means no autoscaler at all — a fixed run at the floor.\nBoth are clamped to the deployment's limits. `runtime` and `shape` are accepted\nfor the client contract and echoed back: the image is the runtime unit and sizing\nis the operator's default.\n\nIt is BILLING-GATED before it touches the cluster: a flat per-run fee is\nauthorized against the org's own prepaid balance first, so an org that cannot pay\nis refused without anything being created. An unreachable cluster is 503 — a run\nnever reports a URL it did not create. Secret env is sealed into KMS and fails\nclosed without it.\n\nRequires a validated principal; 403 without one. The org is resolved from that\nvalidated identity and is what both pays and owns the namespace — it is never\nread from the body.",
 		Fields: map[string]string{
 			"runReq.env":      "Env is the run's environment. Keys must match `^[A-Za-z_][A-Za-z0-9_]*$`;\na variable marked `secret: true` is sealed into KMS.",
@@ -369,7 +369,7 @@ func init() {
 			"runView.url":     "URL is the run's live HTTPS address.",
 		},
 	})
-	zip.Describe("POST /v1/runner", zip.Doc{
+	zip.Describe("POST /v1/platform/runner", zip.Doc{
 		Description: "Triggers a native build — an image, or the binaries a repo declares.\n\nThe fabric's own build trigger, and what `hanzo build` and git-push-to-deploy\ncall. It answers 202 with the build job id: a queued build, not a pushed\nartifact.\n\nTwo lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and\nthe output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane\ntakes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes\nto object storage instead; it must carry no `image`, because a build produces\nbinaries or an image, never both.\n\nPRIVILEGED, with exactly two credentials and never a third: the shared\nbuild-callback token compared in constant time — the machine path, which a user\nnever holds — or a validated IAM principal who is an ADMIN of their org, which is\nthe `hanzo build` user path and means one IAM login authorizes a build with no\nseparate build token. A plain member is refused.\n\nBoth paths are bounded the same way: the output must push to a registry the\nfabric owns, and on the IAM path the image's registry namespace must MATCH the\ncaller's own validated org — so an org admin can only publish into their own\nbrand and can never overwrite another's through the shared push credential. The\nsame confinement applies to the artifact lane's repo owner.\n\nThe output image is parsed and validated as a single well-formed OCI ref before\nany authorization decision reads it, so a crafted ref cannot smuggle a\nbuild-exporter attribute past the check.",
 		Fields: map[string]string{
 			"runnerBuildReq.arch":           "Arch is the target architecture for the artifact lane.",

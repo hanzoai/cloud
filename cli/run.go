@@ -5,8 +5,8 @@ package cli
 // A "run" is a workload value = {artifact, shape}, dispatched by kind onto the
 // one API host (api.hanzo.ai/v1) and the one binary (cloud):
 //
-//	hanzo run <image>              → POST /v1/run   container service (autoscaled)
-//	hanzo run fn <src>             → POST /v1/fn    source function   (scale-to-zero)
+//	hanzo run <image>              → POST /v1/platform/run  container service (autoscaled)
+//	hanzo run fn <src>             → POST /v1/fn           source function   (scale-to-zero)
 //
 // `run` launches YOUR artifact (container/source/site) on Hanzo compute. Invoking
 // a managed agent with a task is a peer verb, `hanzo agent` (see agent.go), not a
@@ -71,8 +71,8 @@ func cloudCall(ctx context.Context, env *Env, method, path string, body, out any
 	return nil
 }
 
-// RunSpec is the POST /v1/run (container) / /v1/fn (source) body. Shape selects
-// the execution model: "service" (autoscaled, long-lived), "function"
+// RunSpec is the POST /v1/platform/run (container) / /v1/fn (source) body. Shape
+// selects the execution model: "service" (autoscaled, long-lived), "function"
 // (per-request, scale-to-zero), or "task" (run-to-completion).
 type RunSpec struct {
 	Name    string            `json:"name,omitempty"`
@@ -117,7 +117,7 @@ func newRunContainerCmd(envOf func() *Env) *cobra.Command {
 	var envKV []string
 	c := &cobra.Command{
 		Use:   "container <image>",
-		Short: "Run a container as an autoscaled service (POST /v1/run)",
+		Short: "Run a container as an autoscaled service (POST /v1/platform/run)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			env := envOf()
@@ -125,7 +125,7 @@ func newRunContainerCmd(envOf func() *Env) *cobra.Command {
 			spec.Shape = cmp.Or(spec.Shape, "service")
 			spec.Env = parseEnvKV(envKV)
 			out := &RunResult{}
-			if err := cloudCall(cmd.Context(), env, http.MethodPost, "/v1/run", &spec, out); err != nil {
+			if err := cloudCall(cmd.Context(), env, http.MethodPost, "/v1/platform/run", &spec, out); err != nil {
 				return err
 			}
 			return env.emit(out, func(w io.Writer) {
