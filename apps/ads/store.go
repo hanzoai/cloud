@@ -124,18 +124,51 @@ func (s *Store) Close() error { return s.db.Close() }
 // (draft/active/paused/completed) — both validated at the write layer against
 // the fixed vocabularies in ads.go.
 type AdCampaign struct {
-	ID         string `json:"id"`
-	Org        string `json:"-"`
-	Name       string `json:"name"`
-	Platform   string `json:"platform"`
-	Account    string `json:"account,omitempty"`    // provider ad-account ref (Meta act_<id>)
-	ExternalID string `json:"externalId,omitempty"` // provider campaign id after a launch
-	Status     string `json:"status"`
-	Objective  string `json:"objective"`
-	Budget     int64  `json:"budget"`
-	Spend      int64  `json:"spend"`
-	CreatedAt  int64  `json:"createdAt"`
-	UpdatedAt  int64  `json:"updatedAt"`
+	// ID is the campaign's server-minted handle, "camp_" + 32 hex. A create body
+	// cannot choose it, and it is the id every other route addresses.
+	ID string `json:"id"`
+	// Org is the owning tenant, stamped from the validated principal. `json:"-"`
+	// keeps it off the wire entirely: a body could otherwise name a tenant.
+	Org string `json:"-"`
+	// Name is the campaign's display label, and the name Meta creates the campaign
+	// object under at launch. Required; trimmed and bounded to 1024 bytes.
+	Name string `json:"name"`
+	// Platform is the ad network: meta, google, tiktok or x, and nothing else — a
+	// write naming another is 400. Empty stores as meta. Only meta executes today;
+	// launching any of the other three is 501.
+	Platform string `json:"platform"`
+	// Account is the provider ad-account the campaign runs under, in Meta's
+	// act_<id> form. Empty until the org supplies one or a launch resolves it.
+	Account string `json:"account,omitempty"`
+	// ExternalID is the ad network's own campaign id, written by a successful
+	// launch and by nothing else — an update never touches it. Empty means this
+	// campaign has never reached its network.
+	ExternalID string `json:"externalId,omitempty"`
+	// Status is the lifecycle: draft, active, paused or completed, and nothing else
+	// — a write naming another is 400. Empty stores as draft; a successful launch
+	// sets active. It records what this deployment did, not what the ad network
+	// currently reports.
+	Status string `json:"status"`
+	// Objective is the campaign goal spelled as the provider names it
+	// ("conversions", "OUTCOME_TRAFFIC"), passed through to the network verbatim at
+	// launch — Meta defaults an empty one to OUTCOME_TRAFFIC. Free text, bounded to
+	// 1024 bytes; no vocabulary is enforced here.
+	Objective string `json:"objective"`
+	// Budget is the campaign's authorized spend in MINOR units (cents). Negative
+	// clamps to 0. It is the org's stored plan: a Meta launch creates the campaign
+	// object only, and the delivering budget lives on the ad set.
+	Budget int64 `json:"budget"`
+	// Spend is spend-to-date in MINOR units (cents), as last written through create
+	// or update. Negative clamps to 0. It is NOT read back from the network — that
+	// is a separate insights call — so 0 means nothing was recorded here, not that
+	// nothing was spent.
+	Spend int64 `json:"spend"`
+	// CreatedAt is when the campaign was first stored, in unix seconds. It never
+	// changes, including across a full-replace update.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when the row was last written, in unix seconds — set by create,
+	// update and launch. Listings are ordered by it, newest first.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 const campaignCols = `id,org,name,platform,account,external_id,status,objective,budget,spend,created_at,updated_at`

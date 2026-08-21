@@ -336,3 +336,39 @@ func TestDeleteAnswers204WithNoBody(t *testing.T) {
 func sortedKeys(m map[string]bool) string {
 	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the gates
+// above cannot see. Typing a route documents its ADDRESS and its SHAPE; the
+// shape's FIELDS come from a different place — a doc comment on each one, which
+// zipdoc lifts one at a time.
+//
+// It matters here because a campaign is mostly money and vocabulary. Budget and
+// Spend are int64 CENTS — read as dollars, a $500 budget reads as $5 — and Spend
+// is a stored number rather than a live read, so a 0 means nothing was recorded
+// here and not that nothing was spent. Platform and Status are CLOSED sets
+// (meta|google|tiktok|x, draft|active|paused|completed): a caller who guesses a
+// fifth value gets a 400 from a document that never listed the four. And
+// externalId is written only by a launch, which is what separates a campaign
+// that exists here from one that is live on an ad network.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "ads", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("ads publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/ads describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+}
