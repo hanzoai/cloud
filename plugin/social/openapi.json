@@ -24,28 +24,84 @@
     "/v1/social/accounts": {
       "get": {
         "operationId": "get_social_accounts",
-        "summary": "List the social accounts connected to your org",
-        "description": "Returns the org's connected accounts — each one's id, network, handle, status and timestamps. `provider` filters to one network; `limit` bounds the page, defaulting to 200 and capped at 1000.\n\nAn account's provider access token is NEVER included in any response on this surface. Only the publisher reads it.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Returns the org's connected accounts — each one's id, network, handle, status and timestamps, most-recently-updated first.",
+        "description": "Returns the org's connected accounts — each one's id, network,\nhandle, status and timestamps, most-recently-updated first.\n\nAn account's provider access token is NEVER included in any response on this\nsurface. Only the publisher reads it.",
         "tags": [
           "social"
         ],
-        "x-public": true
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "description": "Provider keeps only accounts on one network — x, facebook, instagram,\nlinkedin, tiktok, youtube or threads. Omit it for every network. It is\nlower-cased and trimmed before it is matched, and a value that names no\nnetwork simply matches nothing rather than being refused.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page, defaulting to 200 and capped at 1000. It is a string\nrather than an integer on purpose: the route parses it with a leading trim\nand falls back to the default on anything it cannot read, so `?limit=%2050`\nis a page of fifty today. An integer field would refuse the space and read\nan unparseable value as zero, which is a different page.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialAccounts"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "post": {
         "operationId": "post_social_accounts",
-        "summary": "Connect a social account to your org",
-        "description": "Records a social account for the org and answers 201 with the stored row, including the generated id later calls address it by.\n\n`provider` must be one of x, facebook, instagram, linkedin, tiktok, youtube or threads, defaulting to x when omitted. `status` is one of connected, disconnected or error, defaulting to connected. The handle is trimmed and bounded at 1024 characters.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Records a social account for the org and answers 201 with the stored row, including the generated id later calls address it by.",
+        "description": "Records a social account for the org and answers 201 with the\nstored row, including the generated id later calls address it by.",
         "tags": [
           "social"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/socialAccountBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialAccount"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/social/accounts/{id}": {
       "delete": {
         "operationId": "delete_social_accounts_by_id",
-        "summary": "Disconnect one account",
-        "description": "Removes one connected account from the org and answers 204 with no body; an id that is not there is 404.\n\nIt removes the account record only. Posts that already published through it keep their published state and their recorded external ids — this does not retract anything from the network.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Removes one connected account from the org and answers 204 with no body; an id that is not there is 404.",
+        "description": "Removes one connected account from the org and answers 204 with no\nbody; an id that is not there is 404.\n\nIt removes the account record only. Posts that already published through it keep\ntheir published state and their recorded external ids — this does not retract\nanything from the network.",
         "tags": [
           "social"
         ],
@@ -54,17 +110,24 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the account or post to act on, taken from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "get": {
         "operationId": "get_social_accounts_by_id",
-        "summary": "Read one connected account",
-        "description": "Returns one of the org's connected accounts by id — its network, handle, status and timestamps — or 404. The provider access token is not part of the response.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Returns one of the org's connected accounts by id — its network, handle, status and timestamps — or 404.",
+        "description": "Returns one of the org's connected accounts by id — its network,\nhandle, status and timestamps — or 404. The provider access token is not part of\nthe response.",
         "tags": [
           "social"
         ],
@@ -73,17 +136,31 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the account or post to act on, taken from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialAccount"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "put": {
         "operationId": "put_social_accounts_by_id",
-        "summary": "Replace one connected account",
-        "description": "Replaces the account's network, handle and status with what the body carries, and answers with the stored row.\n\nThis is a REPLACEMENT, not a merge, which is the rule most easily got wrong: a field the body omits is written as its default, so leaving out the handle blanks it and leaving out the status resets it to connected. Send the whole record. The same vocabularies as create apply, and an unknown network or status is refused rather than coerced.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Replaces the account's network, handle and status with what the body carries, and answers with the stored row.",
+        "description": "Replaces the account's network, handle and status with what the\nbody carries, and answers with the stored row.\n\nThis is a REPLACEMENT, not a merge, which is the rule most easily got wrong: a\nfield the body omits is written as its default, so leaving out the handle blanks\nit and leaving out the status resets it to connected. Send the whole record. The\nsame vocabularies as create apply, and an unknown network or status is refused\nrather than coerced.",
         "tags": [
           "social"
         ],
@@ -97,34 +174,113 @@
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/socialAccountWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialAccount"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/social/posts": {
       "get": {
         "operationId": "get_social_posts",
-        "summary": "List your org's posts",
-        "description": "Returns the org's posts — content, channel, status, scheduled time, media and timestamps. `status` filters to one of draft, scheduled, published or failed; `limit` bounds the page, defaulting to 200 and capped at 1000.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Returns the org's posts — content, channel, status, scheduled time, media and timestamps — most-recently-updated first.",
+        "description": "Returns the org's posts — content, channel, status, scheduled time,\nmedia and timestamps — most-recently-updated first.",
         "tags": [
           "social"
         ],
-        "x-public": true
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status keeps only posts in one state — draft, scheduled, published or\nfailed. Omit it for every state. The transient publishing claim is not a\nuser-visible state and matching it is not useful.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds the page, defaulting to 200 and capped at 1000. A string for\nthe same reason accountFilter.Limit is.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialPosts"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "post": {
         "operationId": "post_social_posts",
-        "summary": "Create a post, and publish it if it is already due",
-        "description": "Stores a post for the org and answers 201 with the stored row.\n\nA post created as scheduled for a time that has already passed is published IMMEDIATELY, and the row returned carries that outcome — this is the one behaviour a reader would otherwise miss. A future-scheduled post is left for the scheduler, and a draft is left alone. Publishing never fails the creation: the post is stored either way, and a publish that could not run leaves the row for the scheduler to retry.\n\n`content` is required and bounded at 8192 characters; `channel` is one of the seven supported networks, defaulting to x; `status` is one of draft, scheduled, published or failed, defaulting to draft; up to 10 media URLs are kept, each bounded at 1024 characters.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Stores a post for the org and answers 201 with the stored row.",
+        "description": "Stores a post for the org and answers 201 with the stored row.\n\nA post created as scheduled for a time that has already passed is published\nIMMEDIATELY, and the row returned carries that outcome — this is the one behaviour\na reader would otherwise miss. A future-scheduled post is left for the scheduler,\nand a draft is left alone. Publishing never fails the creation: the post is stored\neither way, and a publish that could not run leaves the row for the scheduler to\nretry.",
         "tags": [
           "social"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/socialPostBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialPost"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/social/posts/{id}": {
       "delete": {
         "operationId": "delete_social_posts_by_id",
-        "summary": "Delete one post",
-        "description": "Removes one post from the org and answers 204 with no body; an id that is not there is 404.\n\nIt deletes the record here only. A post that has already published is not retracted from the network by deleting it.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Removes one post from the org and answers 204 with no body; an id that is not there is 404.",
+        "description": "Removes one post from the org and answers 204 with no body; an id that\nis not there is 404.\n\nIt deletes the record here only. A post that has already published is not\nretracted from the network by deleting it.",
         "tags": [
           "social"
         ],
@@ -133,17 +289,24 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the account or post to act on, taken from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "get": {
         "operationId": "get_social_posts_by_id",
-        "summary": "Read one post",
-        "description": "Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external id it published under. 404 when there is no such post for this org.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external id it published under.",
+        "description": "Returns one of the org's posts by id, with its current status, scheduled\ntime, media and — once it has published — the account and external id it published\nunder. 404 when there is no such post for this org.",
         "tags": [
           "social"
         ],
@@ -152,17 +315,31 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the account or post to act on, taken from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialPost"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "put": {
         "operationId": "put_social_posts_by_id",
-        "summary": "Replace one post",
-        "description": "Replaces the post's content, channel, status, scheduled time and media with what the body carries, and answers with the stored row.\n\nA REPLACEMENT, not a merge: an omitted field is written as its default, so omitting media clears it and omitting the status resets the post to draft. `content` is required on every update. Unlike create, this never triggers a publish — moving a post's scheduled time into the past here leaves it for the scheduler; publish now is its own operation.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Replaces the post's content, channel, status, scheduled time and media with what the body carries, and answers with the stored row.",
+        "description": "Replaces the post's content, channel, status, scheduled time and media\nwith what the body carries, and answers with the stored row.\n\nA REPLACEMENT, not a merge: an omitted field is written as its default, so\nomitting media clears it and omitting the status resets the post to draft.\n`content` is required on every update. Unlike create, this never triggers a\npublish — moving a post's scheduled time into the past here leaves it for the\nscheduler; publish now is its own operation.",
         "tags": [
           "social"
         ],
@@ -176,14 +353,37 @@
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/socialPostWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialPost"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/social/posts/{id}/publish": {
       "post": {
         "operationId": "post_social_posts_by_id_publish",
-        "summary": "Publish one post now",
-        "description": "Publishes the post immediately to the connected accounts on its channel and answers with the updated row, carrying the account and external id it published under.\n\nIt is IDEMPOTENT: a post that has already published, or that another caller is publishing right now, comes back unchanged rather than being posted twice. That claim is taken before any network call, which is what makes a double submit safe.\n\nThe two failure shapes differ on purpose. Having no connected account for the channel is the caller's to fix, so it is recorded ON the post as failed with the reason and answers normally. A deployment that lacks the network's own credentials cannot publish for anyone, so that is a 503 naming exactly what is missing.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Publishes the post immediately to the connected accounts on its channel and answers with the updated row, carrying the account and external id it published under.",
+        "description": "Publishes the post immediately to the connected accounts on its channel\nand answers with the updated row, carrying the account and external id it\npublished under.\n\nIt is IDEMPOTENT: a post that has already published, or that another caller is\npublishing right now, comes back unchanged rather than being posted twice. That\nclaim is taken before any network call, which is what makes a double submit safe.\n\nThe two failure shapes differ on purpose. Having no connected account for the\nchannel is the caller's to fix, so it is recorded ON the post as failed with the\nreason and answers normally. A deployment that lacks the network's own credentials\ncannot publish for anyone, so that is a 503 naming exactly what is missing.",
         "tags": [
           "social"
         ],
@@ -192,38 +392,328 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the account or post to act on, taken from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialPost"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/social/providers": {
       "get": {
         "operationId": "get_social_providers",
-        "summary": "Which networks this deployment can actually publish to",
-        "description": "Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing.\n\nThis is a live read of the deployment's own configuration, not a static list of networks — it answers \"can I connect this today\", which is what a connect affordance and a pre-cutover checklist both need. It says nothing about whether the caller has connected an account; that is the accounts listing.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing.",
+        "description": "Reports each supported network's publish-readiness: whether this\ndeployment holds the OAuth application credentials for it and, when it does not,\nexactly which environment variables are missing.\n\nThis is a live read of the deployment's own configuration, not a static list of\nnetworks — it answers \"can I connect this today\", which is what a connect\naffordance and a pre-cutover checklist both need. It says nothing about whether\nthe caller has connected an account; that is the accounts listing.",
         "tags": [
           "social"
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialProviders"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/social/summary": {
       "get": {
         "operationId": "get_social_summary",
-        "summary": "Counts across your org's social presence",
-        "description": "Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected. It is the dashboard roll-up, computed over the org's own rows in one read.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
+        "summary": "Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected.",
+        "description": "Returns four counts for the caller's org: total posts, how many are\nscheduled, how many have published, and how many accounts are connected. It is\nthe dashboard roll-up, computed over the org's own rows in one read.",
         "tags": [
           "social"
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/socialSummary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     }
   },
   "components": {
+    "schemas": {
+      "socialAccount": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the account was connected, as a unix timestamp in seconds.",
+            "type": "integer"
+          },
+          "handle": {
+            "description": "Handle is the account's public name on the network, as the customer knows\nit. Trimmed and bounded at 1024 characters.\n\nExample: \"@acme\"",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the account's identifier, minted on connect and the id every later\ncall addresses it by.\n\nExample: \"acct_7f3c1a\"",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the network this account is on: x, facebook, instagram,\nlinkedin, tiktok, youtube or threads.\n\nExample: \"x\"",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the connection lifecycle: connected, disconnected or error. Only\na connected account is a publish target.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the account row last changed, as a unix timestamp in\nseconds. The listing is ordered by it, newest first.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "socialAccountBody": {
+        "properties": {
+          "handle": {
+            "description": "Handle is the account's public name on the network, as the customer knows it\n(`@acme`). Trimmed and bounded at 1024 characters.\n\nExample: \"@acme\"",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the network this account is on: x, facebook, instagram, linkedin,\ntiktok, youtube or threads. Omitted means x. Anything else is refused rather\nthan coerced, because a stored account on a network that does not exist can\nnever be published through.\n\nExample: \"x\"",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the connection lifecycle: connected, disconnected or error.\nOmitted means connected. Only a connected account is a publish target.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "socialAccountWrite": {
+        "properties": {
+          "handle": {
+            "description": "Handle is the account's public name on the network. Omitting it BLANKS the\nstored handle: this is a replacement, not a merge.\n\nExample: \"@acme\"",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the network this account is on: x, facebook, instagram, linkedin,\ntiktok, youtube or threads. Omitted means x.\n\nExample: \"x\"",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the connection lifecycle: connected, disconnected or error.\nOmitting it RESETS the account to connected.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "socialAccounts": {
+        "properties": {
+          "data": {
+            "description": "Data is the accounts, most-recently-updated first, bounded by the limit.",
+            "items": {
+              "$ref": "#/components/schemas/socialAccount"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "socialPost": {
+        "properties": {
+          "accountId": {
+            "description": "AccountID / ExternalID / Error are server-managed publish results, set only by\nthe publish path (never by a client update): the account a post was published\nthrough, the provider's returned external post id (for reconciliation), and the\nlast failure reason. Empty until a publish attempt lands.\nAccountID is the connected account the post went out through. Absent until\na publish succeeds.",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Channel is the network this post targets: x, facebook, instagram, linkedin,\ntiktok, youtube or threads. It is the channel whose CONNECTED accounts a\npublish fans out to.\n\nExample: \"x\"",
+            "type": "string"
+          },
+          "content": {
+            "description": "Content is the post's text, bounded at 8192 characters.\n\nExample: \"Shipping today.\"",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the post was created, as a unix timestamp in seconds.",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Error is why the last publish attempt failed, verbatim and bounded. Absent\nwhen no attempt has failed; cleared by a later success.",
+            "type": "string"
+          },
+          "externalId": {
+            "description": "ExternalID is the id the network returned for the published post, which is\nwhat reconciles this row against the post on the network. Absent until a\npublish succeeds.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the post's identifier, minted on create and the id every later call\naddresses it by.\n\nExample: \"post_91ab20\"",
+            "type": "string"
+          },
+          "media": {
+            "description": "Media is the post's attached media as a list of URLs (images today; the\ncomposer's URL field now, an S3 picker later, populate it). Stored as a JSON\narray in the media TEXT column and ALWAYS serialized as an array (never null),\nso a client can rely on `media` being present. Bounded at the write layer\n(normMedia in social.go): each URL clipped to maxField, the list to maxMedia.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scheduleAt": {
+            "description": "ScheduleAt is when the post is due, as a unix timestamp in SECONDS. 0 means\nunscheduled. It is meaningful only while the status is scheduled — a\nscheduled post whose time has arrived is published by the scheduler.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the post's lifecycle state: draft, scheduled, published or failed.\nA fifth, transient publishing state exists while a publish attempt holds the\nclaim; it is never settable from a request and a caller sees it only if it\nreads a post mid-attempt.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the post row last changed, as a unix timestamp in seconds.\nThe listing is ordered by it, newest first.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "socialPostBody": {
+        "properties": {
+          "channel": {
+            "description": "Channel is the network to publish to: x, facebook, instagram, linkedin,\ntiktok, youtube or threads. Omitted means x.\n\nExample: \"x\"",
+            "type": "string"
+          },
+          "content": {
+            "description": "Content is the post's text. Required — an empty body is a 400 — and bounded\nat 8192 characters, comfortably above every network's own limit.\n\nExample: \"Shipping today.\"",
+            "type": "string"
+          },
+          "media": {
+            "description": "Media is the post's attached media as URLs, at most 10, each bounded at 1024\ncharacters. Blank entries are dropped. Omitting it CLEARS any stored media.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scheduleAt": {
+            "description": "ScheduleAt is when to publish, as a unix timestamp in SECONDS. 0 means\nunscheduled. A negative value is clamped to 0. It only matters for a post\nwhose status is scheduled.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the post's lifecycle state: draft, scheduled, published or failed.\nOmitted means draft. The transient publishing claim is never settable here —\naccepting it from a request would let a caller wedge or replay the guard that\nstops two publishers double-posting the same row.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "socialPostWrite": {
+        "properties": {
+          "channel": {
+            "description": "Channel is the network to publish to: x, facebook, instagram, linkedin,\ntiktok, youtube or threads. Omitted means x.\n\nExample: \"x\"",
+            "type": "string"
+          },
+          "content": {
+            "description": "Content is the post's text. Required on every update, and bounded at 8192\ncharacters.\n\nExample: \"Shipping today.\"",
+            "type": "string"
+          },
+          "media": {
+            "description": "Media is the post's attached media as URLs, at most 10. Omitting it CLEARS\nany stored media: this is a replacement, not a merge.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scheduleAt": {
+            "description": "ScheduleAt is when to publish, as a unix timestamp in SECONDS. 0 means\nunscheduled. Moving it into the past here does NOT publish the post — that is\nthe scheduler's to notice, or the publish operation's.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the post's lifecycle state: draft, scheduled, published or failed.\nOmitting it RESETS the post to draft.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "socialPosts": {
+        "properties": {
+          "data": {
+            "description": "Data is the posts, most-recently-updated first, bounded by the limit.",
+            "items": {
+              "$ref": "#/components/schemas/socialPost"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "socialProvider": {
+        "properties": {
+          "credentialsConfigured": {
+            "description": "CredentialsConfigured is whether this deployment holds every OAuth\napplication credential the network needs. It is a statement about the\nDEPLOYMENT, not about the caller: a connected account also needs its own\naccess token before a post can go out.",
+            "type": "boolean"
+          },
+          "missingCredentials": {
+            "description": "MissingCredentials names the environment variables still unset for this\nnetwork, so the answer is an installation instruction rather than a refusal.\nAbsent when the credentials are complete. Only the NAMES appear here; a\ncredential value is never reported.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "provider": {
+            "description": "Provider is the network: x, facebook, instagram, linkedin, tiktok, youtube\nor threads.\n\nExample: \"x\"",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "socialProviders": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per supported network, in the product's fixed order: x,\nfacebook, instagram, linkedin, tiktok, youtube, threads.",
+            "items": {
+              "$ref": "#/components/schemas/socialProvider"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "socialSummary": {
+        "properties": {
+          "accounts": {
+            "description": "Accounts is how many accounts the org has connected, in any status.",
+            "type": "integer"
+          },
+          "posts": {
+            "description": "Posts is how many posts the org has, in any state.",
+            "type": "integer"
+          },
+          "published": {
+            "description": "Published is how many of them have published.",
+            "type": "integer"
+          },
+          "scheduled": {
+            "description": "Scheduled is how many of them are waiting for their scheduled time.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
     "securitySchemes": {
       "bearer": {
         "type": "http",
