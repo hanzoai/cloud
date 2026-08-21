@@ -573,7 +573,7 @@
       "campaignResults": {
         "properties": {
           "abTest": {
-            "description": "ABTest is the creative A/B analysis from the experiments primitive\n(experiments.Analyze, pull-model), present only when the campaign runs\nmore than one creative and an experiment is wired. Opaque JSON — campaign\nstays decoupled from the experiments analysis type."
+            "description": "ABTest is the creative A/B analysis from the experiments primitive\n(experiment.Analyze, pull-model), present only when the campaign runs\nmore than one creative and an experiment is wired. Opaque JSON — campaign\nstays decoupled from the experiments analysis type."
           },
           "available": {
             "description": "Available is false when the analytics warehouse is not connected or the query\nfailed: the funnel below is then zero because nothing could be read, not\nbecause nothing happened. Spend and Channels are still real — they come from\nthe connectors, not the warehouse.",
