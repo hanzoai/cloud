@@ -48,8 +48,7 @@ import (
 // OpenAPI template form ({id}, not :id) because that is the form both the router
 // and the app subsets speak.
 var calls = []struct{ by, path string }{
-	// billing.hanzo.ai — lib/commerce-client.ts, against commerce-api.hanzo.ai
-	// (the same fleet edge as api.hanzo.ai).
+	// billing.hanzo.ai — lib/commerce-client.ts, against api.hanzo.ai.
 	{"billing.hanzo.ai", "/v1/billing/methods"},
 	{"billing.hanzo.ai", "/v1/billing/methods/{id}"},
 	{"billing.hanzo.ai", "/v1/billing/alerts"},

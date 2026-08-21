@@ -431,10 +431,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// discounts, sales channels, stock locations, subscribers, webhooks.
 	//
 	// Commerce is a PLUGIN of this binary, so its merchant surface is reachable
-	// through this binary or it is not reachable at all. It was not: there is no
-	// commerce backend pod, commerce-api.hanzo.ai routes here, and this embed
-	// carried no resource bundle — so every admin data view 404'd in production
-	// while sign-in, catalog and billing answered 200. Honest, and total.
+	// through this binary or it is not reachable at all — there is no separate
+	// commerce backend to fall back to. Every admin data view is served by the
+	// resource bundle mounted here.
 	//
 	// It calls the resources LEAF rather than commerce's api.Route. Route also
 	// binds an index route, a permissive CORS policy and a wildcard OPTIONS onto
