@@ -64,9 +64,9 @@ source for the generated per-language SDKs.
   capability's operations; every /v1 answer carries RFC 8288 `Link:` headers
   (`self`, `describedby` → /v1/openapi.json, `index` → /v1). All of it is
   projected from the woven document and filtered by the SAME `x-public` audience
-  rule openapi.yaml is, so a beta capability is absent from the root and 404s one
-  segment down — one fact, not two. **They are MIDDLEWARE on the front door, not
-  routes**: ai's row is the bare `/v1` remainder and zip mounts a prefix as
+  rule openapi.yaml is, so a staged capability is absent from the root and 404s
+  one segment down — one fact, not two. **They are MIDDLEWARE on the front door,
+  not routes**: ai's row is the bare `/v1` remainder and zip mounts a prefix as
   `All(prefix)` too, so a host route at `/v1` is two definitions claiming one
   address and the composition is refused outright — same one segment down for
   every capability that claims its own root. `openapi.Routed` is the predicate
@@ -247,7 +247,7 @@ package at once (`cmd/cloud` alone links >6GB).
 
 ## One host: `cmd/cloud` links the router, `plugin/<app>` links each subsystem
 
-The app count is `len(manifest.Apps)` — 111 at this writing
+The app count is `len(manifest.Apps)` — 125 at this writing
 (`grep -c '^\s*{Name: ' manifest/apps.go`). Treat every absolute below as a
 measurement with provenance, not as a live count; re-measure before quoting one.
 
@@ -255,7 +255,7 @@ There is NO fused binary. The mega link that once dominated a release — one
 binary that imported `apps` and linked every subsystem graph into a ~3108-package
 monolith — is GONE (deleted at 22f4fc64 with `apps.Wire()`). `cmd/cloud` IS the
 light host now, and the ENTRYPOINT the image ships: it links `zip`, the generated
-`manifest`, and the light `webui` console embed and stops (**~399 packages**,
+`manifest`, and the light `webui` console embed and stops (**406 packages**,
 ~28 MB, sub-second link), mounts each app as a `zip.Plugin`, and starts a child
 on the FIRST REQUEST that reaches its prefix. An app nobody calls costs a route
 entry, not a process. The apps that own a listener or a background loop
@@ -1326,8 +1326,18 @@ one before it.
 
 A capability is `ga`, `beta` or `alpha`, declared ONCE — `manifest.App.Stage`,
 absent means ga (HIP-0139 §8). No env var, no flag, no per-app constant. The
-fleet's 123 rows are 79 ga, 44 beta, 0 alpha; `manifest/stage_test.go` holds the
-staged set as a golden, so a promotion is a diff rather than a number that moved.
+fleet's 125 rows are **123 ga, 0 beta and 2 alpha** — `admission` and `research`,
+and nothing else (`grep -c '^\s*{Name: ' manifest/apps.go`,
+`grep -n 'Stage: ' manifest/apps.go`; `manifest/stage_test.go` is the golden and
+its `staged` map holds exactly those two).
+
+The beta set is EMPTY, and getting there is the argument for holding the golden by
+NAME rather than as a count. 67d0b6e1d took all 43 beta rows to ga in one commit
+and left `graph` alpha; d82eec734 staged the R&D evidence plane and the
+launch-control gate, which are ours rather than a customer's; ce9c29b81 published
+`graph`. Each of those is a diff naming rows. Held as a count the same three
+commits read 44 → 1 → 3 → 2, which says nothing about which capability a customer
+can now reach.
 
 - **The weave stamps it.** `openapi.Part` carries the app's stage beside its
   name and `Weave` writes `x-stage` onto every operation that part contributed.
@@ -1340,11 +1350,23 @@ staged set as a golden, so a promotion is a diff rather than a number that moved
 - **The public contract is ga-only.** `audience` (openapi/public.go) gained the term,
   so the rule stays one rule in one place, and `stamp` runs a SECOND time at the
   end of `Weave` — over the finished composition, the first point at which every
-  term of the rule is known. Measured when the term landed: the internal document
-  unchanged at 1816 paths / 2473 operations, 465 of them now carrying `x-stage`;
-  the public one 1671 → 1335 paths, 2284 → 1850 operations.
-- **`openapi/floor.json` is unchanged and still guards the INTERNAL document.**
-  Nothing left that document; a beta capability is reached by flag, not hidden.
+  term of the rule is known. Measured on the committed pair: `private.yaml` is
+  1774 paths / 2404 operations, 9 of which carry `x-stage` and every one of those
+  reads `alpha`; `openapi.yaml` is 1645 / 2249 and carries the mark ZERO times
+  (`grep -c '^  /' <doc>` for paths, `grep -c '^      operationId:' <doc>` for
+  operations — both agree with a YAML parse, the six-space indent being what
+  separates an operation from the `Op` schema's own `operationId` property — and
+  `grep -c x-stage <doc>` for the mark). The stage is now the SMALLEST of the four
+  terms: of the 129 paths / 155 operations the public document drops, `/v1/admin`
+  is 83 paths, IAM's `compat`-tagged verb spellings 20, the `{wildcardN}` relay
+  doors 13, the non-`/v1` well-known addresses 6, and the two alpha rows 7 paths /
+  9 operations.
+- **`openapi/floor.json` guards the INTERNAL document and only it**, and it agrees
+  with that document to the operation: floor reads 1774 paths / 2404 operations,
+  which is `private.yaml` exactly, and its per-product rows carry `admission: 1`
+  and `research: 8` — the same 9 staged operations, floored where they actually
+  are. Nothing left that document; a staged capability is reached by flag, not
+  hidden.
 - **The agent door followed, and it had to be MOVED to.**
   `plugin/gen-fleet-catalog` filters `x-tool AND x-public` — but it read
   `x-public` off the SUBSETS, where the stage is not yet known, so 355 beta
@@ -1353,16 +1375,22 @@ staged set as a golden, so a promotion is a diff rather than a number that moved
   published contract; the roster and the prose still come from each app's own
   subset, because those are the app's own facts and the audience is the fleet's.
   42 subsystem tools and 355 operations left the catalog; no ga app moved.
-  `fleet/catalog_test.go` asks the same question of the same file.
+  `fleet/catalog_test.go` asks the same question of the same file. With no beta
+  row left, what the audience withholds from the door is the two alpha rows:
+  `fleet/catalog.json` names `admission` and `research` as keys carrying EMPTY
+  operation lists, and `group` builds no tool from a name with nothing under it
+  (`jq -r 'to_entries|map(select(.value|length==0)|.key)' fleet/catalog.json`).
 - **The 404 is `cloud.Stage` (stage.go), installed by `Listen`.** One middleware
-  per non-ga app, over `manifest.PrefixesFor(name)`, asking flags across the
-  internal plane (`plane.FlagsHold`, `apps/flags/hold_rpc.go`) whether the
-  caller's org holds the flag whose key IS the capability's name — one name, so
-  there is no product→flag table to get wrong. A ga row composes `nil`, so ga
-  costs nothing. Not 403, which is an existence oracle; the body is zip's
-  ordinary not-found, asserted byte-for-byte against an unrouted path. A flags
-  outage and a caller with no validated org both fail CLOSED.
-  `cmd/cloud` learns nothing and stays light (405 packages, bound 450).
+  per non-ga app — two of them today — over `manifest.PrefixesFor(name)`, asking
+  flags across the internal plane (`plane.FlagsHold`, `apps/flags/hold_rpc.go`)
+  whether the caller's org holds the flag whose key IS the capability's name — one
+  name, so there is no product→flag table to get wrong. A ga row composes `nil`,
+  so 123 of the 125 rows cost nothing. Not 403, which is an existence oracle; the
+  body is zip's ordinary not-found, asserted byte-for-byte against an unrouted
+  path. A flags outage and a caller with no validated org both fail CLOSED.
+  `cmd/cloud` learns nothing and stays light — 406 packages against a bound of 450
+  (`CGO_ENABLED=0 GOWORK=off go list -deps ./cmd/cloud | wc -l`, which is
+  hanzo.yml's `host-is-light` step).
 
 ### The fold: an address moves under the app that answers it
 
@@ -2051,11 +2079,13 @@ gates the whole surface as an EXACT set — live router == `app.Commands()` == t
 subsets published NOTHING before it.** esign was 0 of 13 and social 0 of 13 — 26
 operations carrying prose and not one SHAPE, so every generated SDK offered "upload
 a PDF for signature" and "publish this post" with nowhere to put the PDF or the
-post. Both are `beta`, which is why this was the cheap moment: the public contract and
-`fleet/catalog.json` exclude a beta capability (HIP-0139 §8, and
+post. Both were `beta` then, which is why this was the cheap moment: the public
+contract and `fleet/catalog.json` exclude a staged capability (HIP-0139 §8, and
 `plugin/gen-fleet-catalog`'s own header explains why it reads the audience from
 the public contract rather than from the subset), so nothing regenerated and no client
-moved — the ids and shapes were fixed BEFORE ga exposes them. Now: esign 23 schemas
+moved — the ids and shapes were fixed BEFORE ga exposed them, which it since has:
+both rows are ga, `openapi.yaml` publishes esign at 12 paths / 13 operations and
+social at 7 / 13, and the door carries 13 operations for each. Now: esign 23 schemas
 / 107 properties / 5 request bodies, social 11 / 43 / 4, both **0 bare properties**,
 both `untypedByDesign` EMPTY. world was already 5 of 6 and stays there.
 
@@ -3693,19 +3723,22 @@ semantic is identical — fail closed once armed, allow before.
   `{"op":"<operation>","input":{…}}`, whose `op` enum holds NAMES ONLY, plus
   `describe` — which returns one operation's own descriptor, so a model
   searches the enum and fetches the schema for the one it picked. The whole
-  corpus is **112 tools in 82,411 bytes** (`fleet.TestTheWholeFleetFitsInAModelsHead`,
-  which builds it from `plugin/*/openapi.json`) — 14× less per operation, for 1.2×
-  MORE operations than the baseline carried. `describe` is FIRST because it is
-  what makes every other tool usable, so truncation must never take it. The envelope
+  corpus is **111 tools in 81,540 bytes** (`fleet.TestTheWholeFleetFitsInAModelsHead`,
+  which builds it from `plugin/*/openapi.json` and prints the whole measurement:
+  1443 operations declared across 110 subsystems, 1316 offered, 127 withheld by
+  `refuse()`) — 62 B/op against the flat projection's 822, so 13× less per
+  operation, for 1.1× MORE operations than the baseline carried. `describe` is
+  FIRST because it is what makes every other tool usable, so truncation must never
+  take it. The envelope
   is a DECODING and not a second route: it yields the (name, message) a direct call
   carries, and `refuse()` in `gather` remains the only gate, so a refused name is in
   no enum, dispatchable through no envelope, and describable by nothing.
-  **Headroom: 16 subsystems.** 112 of the 128 a client keeps, and the six it
-  bought back came from `x-tool` rather than from any change here: an app whose
-  operations are all undispatchable now contributes NO tool, because `group`
-  builds only from names that survived, so fourteen apps left the surface and
-  none of them left an empty enum behind. The manifest is 121 apps and growing,
-  so the next sixteen subsystems put the door back over the cap; the
+  **Headroom: 17 subsystems.** 111 of the 128 a client keeps, and the headroom
+  comes from `x-tool` rather than from any change here: an app whose operations are
+  all undispatchable contributes NO tool, because `group` builds only from names
+  that survived, so the 15 apps publishing nothing leave no empty enum behind. The
+  manifest is 125 apps and the door publishes 110 of them, so the next seventeen
+  subsystems that DO publish put the door back over the cap; the
   move then is to group by product surface (`productStems`, 17 buckets), not to add
   a second projection.
   🔴 **THE DOOR ADVERTISES OPERATIONS THE CHILDREN CANNOT DISPATCH.** Measured
@@ -3763,16 +3796,23 @@ semantic is identical — fail closed once armed, allow before.
   **The catalog SHRANK on regeneration and that is the correction, not a loss:
   2499 → 1554 operations, 945 withdrawn, 14 apps left publishing nothing**
   (`authz catalogsync dns esign index kafka kms metrics rollingcap skills social
-  storage tasks zen`) — of which `index` and `kms` now publish 14 and 5, so the
-  list is 12 and the catalog is 1048 operations. Measured, and it agrees with what the live door was
-  answering `unknown tool` for. The withdrawal is far larger than the 157 counted
-  per-APP, which is the lesson: an app that types SOME routes stranded the rest,
+  storage tasks zen`) — of which `index` and `kms` then published 14 and 5, so the
+  list was 12 and the catalog 1048 operations. It has since grown back past the
+  size it shrank FROM: **1443 operations over 125 keys, 15 of them empty**
+  (`admin admission amqp authz catalogsync dns kafka metrics plugins research
+  rollingcap s3 skills tasks zen` — `jq 'length' fleet/catalog.json`,
+  `jq '[.[]|length]|add' fleet/catalog.json`,
+  `jq -r 'to_entries|map(select(.value|length==0)|.key)|join(" ")' fleet/catalog.json`),
+  because esign, index, kms and social type and publish now, and `storage` is the
+  row `s3` took the name back from. Measured, and it agrees with what the live
+  door was answering `unknown tool` for. The withdrawal is far larger than the
+  157 counted per-APP, which is the lesson: an app that types SOME routes stranded the rest,
   so only a per-OP measure could see it.
   Nothing downstream trips on it — `openapi/floor.json` ratchets the DOCUMENT and
   not the catalog — and the door got SMALLER rather than poorer: 112 tools in
-  82,411 bytes, six subsystems of headroom bought back, because `group` builds
-  only from surviving names so an all-undispatchable app contributes no tool and
-  leaves no empty enum.
+  82,411 bytes then, 111 in 81,540 now, because `group` builds only from surviving
+  names so an all-undispatchable app contributes no tool and leaves no empty
+  enum.
   Three gates moved with it, each having read a proxy that stopped being
   equivalent, and two of them were reporting SUCCESS on an empty set:
   `TestListingStartsNothing` SKIPPED when no app had an operation, and
