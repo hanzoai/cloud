@@ -490,6 +490,48 @@ var allowedRequestUses = map[string]string{
 		"per-account routed-usage breakdown, which is scoped to the PERSON. Cache-Control rides the " +
 		"DECLARED contract instead (zip.WithResponseHeader + each Out's ResponseHeaders), so no-store " +
 		"needs no request at all. Both fail closed off the HTTP path: no request, no payer.",
+	"apps/billing/peer.go": "serviceOrg — the one read on this surface whose caller is a SERVICE " +
+		"rather than a person: the metering edge, presenting a token and the gateway-pinned org with no " +
+		"user behind it, which principal.OrgFrom refuses because it composes validated-ness AND an org. " +
+		"It must be admitted, and the consumer's own failure mode is why: the edge reads any non-2xx as " +
+		"FAIL-OPEN, so refusing the caller this read exists for does not fail a request, it lifts every " +
+		"spend ceiling in the org and says nothing. It is the only place in this package that admits " +
+		"that principal, and it fails closed off the HTTP path: no request, no service caller.",
+	"apps/billing/posture.go": "mayMint / mintedTier / the rollup's plan filter — a caller may NAME a " +
+		"tier rather than earn one, through an X-Tier header or an explicit ?tier=, and BOTH are client " +
+		"input: the gateway neither mints X-Tier nor strips it. Naming a tier is a MINT — it decides " +
+		"which models may be invoked and how many agents may run — so the override is honoured only for " +
+		"platform authority or the trusted in-process service token, neither of which principal.OrgFrom " +
+		"carries. An unprivileged override is IGNORED rather than refused, the same way the grant path " +
+		"already treats the same class of client string, so the answer such a caller gets is simply the " +
+		"true one. mayMint additionally gates the money-mode write and the estate-wide recharge sweep. " +
+		"The TENANT is principal.OrgFrom throughout. All fail closed off the HTTP path: no request, no " +
+		"mint, no override.",
+	"apps/billing/subscriptions.go": "pathID / bodyStatedPeriodEnd — the id in the URL is the authority " +
+		"for WHICH subscription is acted on, read from the request rather than the input so a body id can " +
+		"never redirect a write; and whether the caller actually SAID when to cancel, which the input " +
+		"cannot carry because the default is true and a bool's zero value is false. Without that " +
+		"distinction a cancel with no body at all would end the subscription immediately and take the " +
+		"rest of an already-paid period with it. The TENANT is principal.OrgFrom. Both answer empty off " +
+		"the HTTP path, where the id has no other source.",
+	"apps/billing/rails.go": "the request HOST — the receiving bank details a wire top-up renders are " +
+		"the SERVING BRAND'S own, resolved from the host the customer is paying on (pay.hanzo.ai versus " +
+		"pay.lux.network), which is a fact about the request and about nothing else. It is not an In " +
+		"field for the reason no identity is: a caller that could name the brand could be shown another " +
+		"brand's account. The TENANT is principal.OrgFrom. Fails closed off the HTTP path.",
+	"apps/billing/alerts.go": "capAdmin — a spend cap is a FINANCIAL SAFETY control and both directions " +
+		"of getting it wrong are expensive: a member who can delete the org's cap has unbounded spend, " +
+		"and a member who can set a one-cent enforcing cap has an org-wide 402. So the WRITES require " +
+		"platform sudo, org-admin standing or the service token — bits the identity boundary mints and " +
+		"principal.OrgFrom does not carry — while the reads beside them stay member-open. It runs in the " +
+		"handler rather than on the route because a typed op is reached by four projections and the " +
+		"handler is the one point all four pass through. Fails closed off the HTTP path.",
+	"apps/billing/statement.go": "the paging window — limit and offset for the transaction listing, " +
+		"which are query values and belong to the request that asked for a page. They are read here " +
+		"rather than bound as In fields because the store DEFAULTS on an absent or unparseable value and " +
+		"an int field cannot tell ?limit=0 (a page of nothing) from ?limit=abc (unset). The TENANT and " +
+		"the SUBJECT are resolved through payer, never from the query. Answers the defaults off the HTTP " +
+		"path, where there is no page to ask for.",
 	"apps/affiliates/typed.go": "sudo / actor / requireBody — the affiliate program's ONE resolver of the request. " +
 		"Every /v1/admin route gates on platform sudo (X-User-IsAdmin), which principal.OrgFrom does not " +
 		"carry; an application and the user-level referral mirror are ATTRIBUTED to the validated user id " +

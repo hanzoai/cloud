@@ -193,6 +193,13 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	mountCredits(app, o)
 	mountAlerts(app, o)
 	mountRails(app, o)
+	// The four families this app took over when /v1/billing became one address:
+	// the saved cards, the posture and catalog, the customer's own plan, and the
+	// card doors that pay for it.
+	mountMethods(app, o)
+	mountPosture(app, o)
+	mountSubscriptions(app, o)
+	mountCards(app, o)
 }
 
 // The PROSE for the raw routes above. Each survivor is a raw *zip.Ctx handler

@@ -33,9 +33,15 @@ func mountStatement(app cloud.Router, o ops) {
 	zip.Get(zapp, "/v1/billing/transactions", o.transactions)
 }
 
-// accounts is the caller's billing accounts — one, because an org IS its billing
-// account here.
-type accounts []plane.Account
+// accountsView is the caller's billing accounts — one, because an org IS its
+// billing account here.
+//
+// The name carries a View suffix because the bare noun is already a published
+// schema on this app: usage_accounts.go answers /v1/billing/usage/accounts with
+// a per-provider usage breakdown it calls `accounts`. Two shapes under one
+// schema name is what openapi.Weave refuses, and the incumbent is the one that
+// is already published, so this is the one that moves.
+type accountsView []plane.BillingAccount
 
 // members is one billing account's roster.
 type members []plane.Holder
@@ -56,7 +62,7 @@ type payouts []plane.Payout
 // org field on the wire and none on the input.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) accounts(ctx context.Context, _ *noInput) (*accounts, error) {
+func (o ops) accounts(ctx context.Context, _ *noInput) (*accountsView, error) {
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err
@@ -67,9 +73,9 @@ func (o ops) accounts(ctx context.Context, _ *noInput) (*accounts, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows := accounts(out.Rows)
+	rows := accountsView(out.Rows)
 	if rows == nil {
-		rows = accounts{}
+		rows = accountsView{}
 	}
 	return &rows, nil
 }
@@ -122,7 +128,7 @@ func (o ops) payouts(ctx context.Context, _ *noInput) (*payouts, error) {
 		return nil, err
 	}
 	out, err := ask(ctx, org, "payouts", func(ctx context.Context) (*plane.Payouts, error) {
-		return commercepeer.BillingPayouts(ctx, &struct{}{})
+		return commercepeer.BillingPayouts(ctx)
 	})
 	if err != nil {
 		return nil, err

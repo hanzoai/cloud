@@ -30,6 +30,44 @@ const App = "commerce"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.BillingAccountMembers,
+	plane.BillingAccounts,
+	plane.BillingAlertAmend,
+	plane.BillingAlertDrop,
+	plane.BillingAlertRaise,
+	plane.BillingAlerts,
+	plane.BillingCapAuthorize,
+	plane.BillingCreditBalance,
+	plane.BillingCreditBreakdown,
+	plane.BillingCredits,
+	plane.BillingCryptoDeposit,
+	plane.BillingCryptoMint,
+	plane.BillingCryptoOptions,
+	plane.BillingInvoiceCollect,
+	plane.BillingInvoiceIssue,
+	plane.BillingInvoicePDF,
+	plane.BillingInvoiceRaise,
+	plane.BillingInvoiceRead,
+	plane.BillingInvoiceVoid,
+	plane.BillingInvoices,
+	plane.BillingMethodDetach,
+	plane.BillingMethodSave,
+	plane.BillingMethods,
+	plane.BillingMode,
+	plane.BillingPayouts,
+	plane.BillingPlans,
+	plane.BillingRecharge,
+	plane.BillingRollup,
+	plane.BillingSettings,
+	plane.BillingSubscribe,
+	plane.BillingSubscriptionCancel,
+	plane.BillingSubscriptionReactivate,
+	plane.BillingSubscriptions,
+	plane.BillingTier,
+	plane.BillingTopup,
+	plane.BillingTopupCard,
+	plane.BillingTransactions,
+	plane.BillingWire,
 	plane.FinanceAuthorize,
 	plane.FinanceBalance,
 	plane.FinanceCosts,
@@ -42,6 +80,272 @@ var Ops = []string{
 	plane.FinanceUsage,
 	plane.StoreCurrent,
 	plane.StoreListing,
+}
+
+// BillingAccountMembers the roster of one billing account.
+//
+// Calls plane.BillingAccountMembers on commerce over the peer plane.
+func BillingAccountMembers(ctx context.Context, in *plane.HoldersIn) (*plane.Holders, error) {
+	return plane.Ask[plane.HoldersIn, plane.Holders](ctx, App, plane.BillingAccountMembers, in)
+}
+
+// BillingAccounts the caller's billing accounts.
+//
+// Calls plane.BillingAccounts on commerce over the peer plane.
+func BillingAccounts(ctx context.Context, in *plane.CallerIn) (*plane.Accounts, error) {
+	return plane.Ask[plane.CallerIn, plane.Accounts](ctx, App, plane.BillingAccounts, in)
+}
+
+// BillingAlertAmend change one spend cap.
+//
+// Calls plane.BillingAlertAmend on commerce over the peer plane.
+func BillingAlertAmend(ctx context.Context, in *plane.AlertPatch) (*plane.Alert, error) {
+	return plane.Ask[plane.AlertPatch, plane.Alert](ctx, App, plane.BillingAlertAmend, in)
+}
+
+// BillingAlertDrop remove one spend cap.
+//
+// Calls plane.BillingAlertDrop on commerce over the peer plane.
+func BillingAlertDrop(ctx context.Context, in *plane.AlertRef) (*plane.Dropped, error) {
+	return plane.Ask[plane.AlertRef, plane.Dropped](ctx, App, plane.BillingAlertDrop, in)
+}
+
+// BillingAlertRaise open a spend cap.
+//
+// Calls plane.BillingAlertRaise on commerce over the peer plane.
+func BillingAlertRaise(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, error) {
+	return plane.Ask[plane.AlertSpec, plane.Alert](ctx, App, plane.BillingAlertRaise, in)
+}
+
+// BillingAlerts this org's spend caps.
+//
+// Calls plane.BillingAlerts on commerce over the peer plane.
+func BillingAlerts(ctx context.Context, in *plane.SubjectIn) (*plane.Alerts, error) {
+	return plane.Ask[plane.SubjectIn, plane.Alerts](ctx, App, plane.BillingAlerts, in)
+}
+
+// BillingCapAuthorize whether one proposed spend fits inside this org's caps.
+//
+// Calls plane.BillingCapAuthorize on commerce over the peer plane.
+func BillingCapAuthorize(ctx context.Context, in *plane.CapIn) (*plane.CapVerdict, error) {
+	return plane.Ask[plane.CapIn, plane.CapVerdict](ctx, App, plane.BillingCapAuthorize, in)
+}
+
+// BillingCreditBalance spendable credit, per currency.
+//
+// Calls plane.BillingCreditBalance on commerce over the peer plane.
+func BillingCreditBalance(ctx context.Context, in *plane.SubjectIn) (*plane.CreditBalance, error) {
+	return plane.Ask[plane.SubjectIn, plane.CreditBalance](ctx, App, plane.BillingCreditBalance, in)
+}
+
+// BillingCreditBreakdown spendable credit, split by grant tag.
+//
+// Calls plane.BillingCreditBreakdown on commerce over the peer plane.
+func BillingCreditBreakdown(ctx context.Context, in *plane.SubjectIn) (*plane.CreditBreakdown, error) {
+	return plane.Ask[plane.SubjectIn, plane.CreditBreakdown](ctx, App, plane.BillingCreditBreakdown, in)
+}
+
+// BillingCredits a subject's credit grants.
+//
+// Calls plane.BillingCredits on commerce over the peer plane.
+func BillingCredits(ctx context.Context, in *plane.SubjectIn) (*plane.CreditGrants, error) {
+	return plane.Ask[plane.SubjectIn, plane.CreditGrants](ctx, App, plane.BillingCredits, in)
+}
+
+// BillingCryptoDeposit read one deposit intent back.
+//
+// Calls plane.BillingCryptoDeposit on commerce over the peer plane.
+func BillingCryptoDeposit(ctx context.Context, in *plane.CryptoDepositIn) (*plane.CryptoDeposit, error) {
+	return plane.Ask[plane.CryptoDepositIn, plane.CryptoDeposit](ctx, App, plane.BillingCryptoDeposit, in)
+}
+
+// BillingCryptoMint issue a deposit address for one payer and asset.
+//
+// Calls plane.BillingCryptoMint on commerce over the peer plane.
+func BillingCryptoMint(ctx context.Context, in *plane.CryptoMintIn) (*plane.CryptoDeposit, error) {
+	return plane.Ask[plane.CryptoMintIn, plane.CryptoDeposit](ctx, App, plane.BillingCryptoMint, in)
+}
+
+// BillingCryptoOptions chains and tokens the crypto rail accepts.
+//
+// Calls plane.BillingCryptoOptions on commerce over the peer plane.
+func BillingCryptoOptions(ctx context.Context) (*plane.CryptoOptions, error) {
+	return plane.Ask[struct{}, plane.CryptoOptions](ctx, App, plane.BillingCryptoOptions, &struct{}{})
+}
+
+// BillingInvoiceCollect collect an issued invoice from credits, balance, then card.
+//
+// Calls plane.BillingInvoiceCollect on commerce over the peer plane.
+func BillingInvoiceCollect(ctx context.Context, in *plane.InvoiceRef) (*plane.Collected, error) {
+	return plane.Ask[plane.InvoiceRef, plane.Collected](ctx, App, plane.BillingInvoiceCollect, in)
+}
+
+// BillingInvoiceIssue issue a draft invoice, making it collectible.
+//
+// Calls plane.BillingInvoiceIssue on commerce over the peer plane.
+func BillingInvoiceIssue(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
+	return plane.Ask[plane.InvoiceRef, plane.Invoice](ctx, App, plane.BillingInvoiceIssue, in)
+}
+
+// BillingInvoicePDF render one invoice as a PDF.
+//
+// Calls plane.BillingInvoicePDF on commerce over the peer plane.
+func BillingInvoicePDF(ctx context.Context, in *plane.InvoiceRef) (*plane.Document, error) {
+	return plane.Ask[plane.InvoiceRef, plane.Document](ctx, App, plane.BillingInvoicePDF, in)
+}
+
+// BillingInvoiceRaise raise a draft invoice against a customer.
+//
+// Calls plane.BillingInvoiceRaise on commerce over the peer plane.
+func BillingInvoiceRaise(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice, error) {
+	return plane.Ask[plane.RaiseIn, plane.Invoice](ctx, App, plane.BillingInvoiceRaise, in)
+}
+
+// BillingInvoiceRead read one invoice.
+//
+// Calls plane.BillingInvoiceRead on commerce over the peer plane.
+func BillingInvoiceRead(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
+	return plane.Ask[plane.InvoiceRef, plane.Invoice](ctx, App, plane.BillingInvoiceRead, in)
+}
+
+// BillingInvoiceVoid void a draft or issued invoice.
+//
+// Calls plane.BillingInvoiceVoid on commerce over the peer plane.
+func BillingInvoiceVoid(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
+	return plane.Ask[plane.InvoiceRef, plane.Invoice](ctx, App, plane.BillingInvoiceVoid, in)
+}
+
+// BillingInvoices invoices for this subject.
+//
+// Calls plane.BillingInvoices on commerce over the peer plane.
+func BillingInvoices(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoices, error) {
+	return plane.Ask[plane.InvoicesIn, plane.Invoices](ctx, App, plane.BillingInvoices, in)
+}
+
+// BillingMethodDetach remove one saved payment method.
+//
+// Calls plane.BillingMethodDetach on commerce over the peer plane.
+func BillingMethodDetach(ctx context.Context, in *plane.MethodRef) (*plane.Detachment, error) {
+	return plane.Ask[plane.MethodRef, plane.Detachment](ctx, App, plane.BillingMethodDetach, in)
+}
+
+// BillingMethodSave save a payment method for a subject.
+//
+// Calls plane.BillingMethodSave on commerce over the peer plane.
+func BillingMethodSave(ctx context.Context, in *plane.MethodSaveIn) (*plane.Rendered, error) {
+	return plane.Ask[plane.MethodSaveIn, plane.Rendered](ctx, App, plane.BillingMethodSave, in)
+}
+
+// BillingMethods cards and accounts a subject has on file.
+//
+// Calls plane.BillingMethods on commerce over the peer plane.
+func BillingMethods(ctx context.Context, in *plane.MethodsIn) (*plane.Rendered, error) {
+	return plane.Ask[plane.MethodsIn, plane.Rendered](ctx, App, plane.BillingMethods, in)
+}
+
+// BillingMode move this org between test and live money.
+//
+// Calls plane.BillingMode on commerce over the peer plane.
+func BillingMode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
+	return plane.Ask[plane.ModeIn, plane.Mode](ctx, App, plane.BillingMode, in)
+}
+
+// BillingPayouts outbound payouts for this org.
+//
+// Calls plane.BillingPayouts on commerce over the peer plane.
+func BillingPayouts(ctx context.Context) (*plane.Payouts, error) {
+	return plane.Ask[struct{}, plane.Payouts](ctx, App, plane.BillingPayouts, &struct{}{})
+}
+
+// BillingPlans the public plan catalog.
+//
+// Calls plane.BillingPlans on commerce over the peer plane.
+func BillingPlans(ctx context.Context, in *plane.PlansIn) (*plane.Rendered, error) {
+	return plane.Ask[plane.PlansIn, plane.Rendered](ctx, App, plane.BillingPlans, in)
+}
+
+// BillingRecharge recharge every org that has fallen below its threshold.
+//
+// Calls plane.BillingRecharge on commerce over the peer plane.
+func BillingRecharge(ctx context.Context) (*plane.Recharge, error) {
+	return plane.Ask[struct{}, plane.Recharge](ctx, App, plane.BillingRecharge, &struct{}{})
+}
+
+// BillingRollup a subject's month against their plan, and the wallet beside it.
+//
+// Calls plane.BillingRollup on commerce over the peer plane.
+func BillingRollup(ctx context.Context, in *plane.RollupIn) (*plane.Rollup, error) {
+	return plane.Ask[plane.RollupIn, plane.Rollup](ctx, App, plane.BillingRollup, in)
+}
+
+// BillingSettings public processor configuration for this org.
+//
+// Calls plane.BillingSettings on commerce over the peer plane.
+func BillingSettings(ctx context.Context) (*plane.PaymentConfig, error) {
+	return plane.Ask[struct{}, plane.PaymentConfig](ctx, App, plane.BillingSettings, &struct{}{})
+}
+
+// BillingSubscribe buy a plan with a card.
+//
+// Calls plane.BillingSubscribe on commerce over the peer plane.
+func BillingSubscribe(ctx context.Context, in *plane.SaleIn) (*plane.Sold, error) {
+	return plane.Ask[plane.SaleIn, plane.Sold](ctx, App, plane.BillingSubscribe, in)
+}
+
+// BillingSubscriptionCancel end a subscription.
+//
+// Calls plane.BillingSubscriptionCancel on commerce over the peer plane.
+func BillingSubscriptionCancel(ctx context.Context, in *plane.SubscriptionRef) (*plane.Subscription, error) {
+	return plane.Ask[plane.SubscriptionRef, plane.Subscription](ctx, App, plane.BillingSubscriptionCancel, in)
+}
+
+// BillingSubscriptionReactivate put a canceled subscription back on its plan.
+//
+// Calls plane.BillingSubscriptionReactivate on commerce over the peer plane.
+func BillingSubscriptionReactivate(ctx context.Context, in *plane.SubscriptionRef) (*plane.Subscription, error) {
+	return plane.Ask[plane.SubscriptionRef, plane.Subscription](ctx, App, plane.BillingSubscriptionReactivate, in)
+}
+
+// BillingSubscriptions the plans a subject holds.
+//
+// Calls plane.BillingSubscriptions on commerce over the peer plane.
+func BillingSubscriptions(ctx context.Context, in *plane.SubsIn) (*plane.Subscriptions, error) {
+	return plane.Ask[plane.SubsIn, plane.Subscriptions](ctx, App, plane.BillingSubscriptions, in)
+}
+
+// BillingTier what a subject's plan allows and what they can spend.
+//
+// Calls plane.BillingTier on commerce over the peer plane.
+func BillingTier(ctx context.Context, in *plane.TierIn) (*plane.Tier, error) {
+	return plane.Ask[plane.TierIn, plane.Tier](ctx, App, plane.BillingTier, in)
+}
+
+// BillingTopup charge a saved card and credit the wallet.
+//
+// Calls plane.BillingTopup on commerce over the peer plane.
+func BillingTopup(ctx context.Context, in *plane.SavedCardIn) (*plane.Charged, error) {
+	return plane.Ask[plane.SavedCardIn, plane.Charged](ctx, App, plane.BillingTopup, in)
+}
+
+// BillingTopupCard charge a single-use card token and credit the wallet.
+//
+// Calls plane.BillingTopupCard on commerce over the peer plane.
+func BillingTopupCard(ctx context.Context, in *plane.CardIn) (*plane.Charged, error) {
+	return plane.Ask[plane.CardIn, plane.Charged](ctx, App, plane.BillingTopupCard, in)
+}
+
+// BillingTransactions one page of a subject's ledger.
+//
+// Calls plane.BillingTransactions on commerce over the peer plane.
+func BillingTransactions(ctx context.Context, in *plane.TransactionsIn) (*plane.Transactions, error) {
+	return plane.Ask[plane.TransactionsIn, plane.Transactions](ctx, App, plane.BillingTransactions, in)
+}
+
+// BillingWire receiving bank details for a wire top-up.
+//
+// Calls plane.BillingWire on commerce over the peer plane.
+func BillingWire(ctx context.Context, in *plane.WireIn) (*plane.WireInstructions, error) {
+	return plane.Ask[plane.WireIn, plane.WireInstructions](ctx, App, plane.BillingWire, in)
 }
 
 // FinanceAuthorize authorize one prepaid spend.

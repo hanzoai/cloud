@@ -411,14 +411,144 @@
  ],
  "billing": [
   {
+   "id": "cancelSubscription",
+   "doc": "Ends a subscription.\n\nIt cancels at the END OF THE PAID PERIOD by default, because a customer who\ncancels has already paid for the period they are in and taking it away is\ntaking money for nothing. `atPeriodEnd: false` ends it at once, which is the\ncaller asking for that.\n\nA subscription from another org is not found rather than refused, so an id\ncannot be probed for existence.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "collectInvoice",
+   "doc": "Collects an issued invoice: credit grants first, then prepaid balance, then the\ncard on file — the same waterfall the dunning workflow runs.\n\nA DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the\ninvoice still open, because a declined collection is a normal business outcome\nthat must remain retryable — and because sealing it as a failure would wedge\ndunning behind a replayed decline. Only a successful collection is sealed, so a\nretry of a paid invoice replays the receipt instead of charging again.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "getInvoice",
+   "doc": "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction — the store is namespaced to it — so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_accounts",
+   "doc": "Answers the caller's billing accounts: the org itself, its currency, when it\nwas opened, and the caller's own standing in it.\n\nThe standing is the caller's, resolved from the validated principal here and\nsent to the store rather than looked up there — the membership roster is IAM's\nand commerce keeps none, so a callee that answered \"what role is this\" would\nbe inventing it. An anonymous read gets the account with no role rather than\nan implied membership.\n\nScoped to the caller's own org, which is the whole tenancy story: there is no\norg field on the wire and none on the input.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_accounts_by_id_members",
+   "doc": "Answers one billing account's roster.\n\ncommerce stores no roster — that is IAM's — so the only member it can name is\nthe caller, and that is what comes back. What it does enforce is that the\naccount named in the path is the caller's own: a foreign id is 403, not an\nempty list, because \"no members\" and \"not your account\" are different answers.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_alerts",
+   "doc": "Lists this org's spend caps: the ceiling, its scope, whether it enforces, and\nhow much of it has been spent this period.\n\n`periodSpentCents`, `over` and `warn` are ABSENT rather than zero when the\nspend could not be read, because \"nothing spent\" and \"spend unknown\" are\ndifferent answers and a customer acting on the first when the second is true\nwould be reading a ceiling that is not there. The policy row is reported\neither way.\n\nThe period is the UTC calendar month and `resetsAt` is when the count starts\nagain, so a surface can say \"resets on\" without a second call.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_alerts_authorize",
+   "doc": "Answers whether one proposed spend fits inside this org's caps.\n\nIt is the per-request verdict the metering edge consumes before every priced\ncall, and its caller is a SERVICE rather than a person: a service token plus\nthe gateway-pinned org, with no user behind it. So this admits that principal\nwhere the CRUD beside it does not.\n\nEvery covering row is evaluated, most-restrictive-wins, and the tightest one\nis what `capCents`, `spentCents` and `reason` describe. Soft rows never deny;\nnor does a project-scoped enforcing row whose project axis the caller could\nnot establish — `pv=1` is how a caller states that it did, and an unproven\nclaim must not be able to refuse traffic.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_credit-balance",
+   "doc": "Answers what the caller can spend right now, one entry per currency.\n\nOnly ACTIVE grants count: a voided, exhausted or lapsed grant contributes\nnothing, which is why this number can be smaller than the grant list suggests\nand why the two reads exist separately. It is credit, not prepaid balance —\n/v1/billing/balance is the wallet, and the two are added by the gate, never by\na reader.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_credit-balance_breakdown",
+   "doc": "Answers that same spendable credit split by grant tag, with the earliest\nexpiry under each and the total across all of them.\n\nThe split is the point: it is how trial credit is told apart from bought\ncredit, which is what a surface asks before it decides whether to spend any.\nAn unregistered address answers 404 and a caller reads that as \"no credit\", so\nthis being served is the difference between a customer with a trial grant\nbeing offered their trial and being told they have none.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_credits",
+   "doc": "Lists the caller's credit grants — every one of them, spent and lapsed and\nvoided included.\n\nThat is deliberate and it is what makes the list useful: a grant list is a\nLEDGER, and one that hid its spent rows could not be reconciled against a\nburn-down. What is spendable right now is the sibling read, /v1/billing/\ncredit-balance, and the two are different questions.\n\nScoped to the caller's own wallet, resolved server-side.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_crypto_deposit_by_id",
+   "doc": "Reads one of the caller's own deposit intents back — pending, confirming, or\nsucceeded.\n\nAn intent belonging to another payer answers 404, exactly as an id that names\nnothing, so a guessed id cannot confirm that somebody else's deposit exists.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_crypto_options",
+   "doc": "Answers which chains and tokens the crypto rail accepts — what an asset picker\nrenders.\n\nIt is the intersection of two live facts rather than a configured list: an\nasset appears only if something is WATCHING it and the custody processor\nsupports it. An address nobody watches credits nobody, so offering one would\ntake a customer's money and lose it. A rail with nothing armed answers 503,\nnot an empty menu — \"no rail\" and \"no assets\" are different, and only one of\nthem means try again later.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_invoices",
+   "doc": "Lists the caller's invoices, newest first, with the count beside them.\n\nIt is scoped to the caller's own billing subject — the wallet this request\nbills from, resolved server-side — so a query cannot widen it to another\ncustomer of the same org. An org with no invoices is an empty list, not a\nrefusal.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
    "id": "get_billing_ledger",
    "doc": "Answers the org's own postings inside `range=`, each as a signed\nentry: a DEPOSIT CREDITS the wallet (positive, account `credits:\u003corg\u003e`) and\nevery other posting DEBITS it (negative, account `usage:\u003corg\u003e`), described by\nits notes or its tags. The sign is the posting's own meaning, read through ONE\nvocabulary shared with the ledger that wrote it — a reader with its own\nspelling for `deposit` rendered a customer's grant as a charge.\n\nThis is the closest projection of the truth. The org's double-entry postings\nare the source of record — balanced, only ever appended, one file per org —\nand this lane is that list, wider than either half of it: the deposits are the\ngrants /v1/billing/credits lists and the debits are the spend /v1/billing/usage\nrolls up. It answers 503 where this deployment runs no ledger, rather than\nreporting an empty wallet.\n\nA row whose timestamp will not parse is KEPT rather than dropped — a malformed\ndate must show up in a money list, not vanish from it. `balanceCents` is\nomitted: these are MOVEMENTS, and the standing balance is /v1/billing/balance.\n\nCents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the\ncaller's own org, where the org's ledger file is the tenant boundary; 401\nwithout a validated principal.",
+   "read": true
+  },
+  {
+   "id": "get_billing_payouts",
+   "doc": "Answers the org's outbound payouts, newest first — amount, destination,\nstatus, and the failure reason where one applies.\n\nA payout is ORG-scoped rather than subject-scoped, so there is nothing to pin\nbeyond the tenant the caller already is, and no query can widen it.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_settings",
+   "doc": "Answers the PUBLIC half of this org's processor configuration — the ids a\nbrowser needs to tokenize a card, and the environment it must tokenize\nagainst.\n\nIt carries no secret: an application id is published to every checkout page by\ndesign. What matters is that it names the SAME processor account the charge\nwill be made on, because a card vaulted against one account and charged\nagainst another is a card that saves and then cannot be used.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_subscriptions",
+   "doc": "Lists the plans the caller holds, with the count beside them.\n\nIt is scoped to the caller's own org, so a query cannot widen it to another\ncustomer's. An org on nothing is an empty list, not a refusal — being on no\nplan is an answer.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_tier",
+   "doc": "Answers which tier the caller is on, what it allows, and what is left to spend.\n\n`effectiveAvailable` is the ONLY figure to compare against zero. The others are\nits parts — prepaid money, granted credits and the daily term are three sources\nof one spend, not three balances to add up a second time.\n\nA tier that cannot be READ is an error, never Free. The router in front of the\nmodels maps any non-2xx to Free, so answering Free from a question nobody could\nanswer would pin every paying customer to the most restrictive row with nothing\nanywhere to find.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_transactions",
+   "doc": "Answers one page of the caller's own ledger, newest first: what moved, how\nmuch, when, and what it was tagged with.\n\n`count` is the size of the WHOLE history rather than of the page, which is how\na reader knows there is more to ask for, and `user` echoes the wallet the page\nwas read for — the same subject the spend gate debits, so a customer can see\nwhich account answered rather than guessing from their own token.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
    "read": true
   },
   {
    "id": "get_billing_usage_accounts",
    "doc": "Answers per-account totals for the linked provider accounts the\ngateway ROUTED this caller's traffic through — requests, prompt and completion\ntokens, recorded cost — plus their honest sum.\n\nThis is the one read in the billing namespace scoped to the PERSON, not the\norg. Rows are keyed on (validated org, validated user), so a caller sees the\naccounts THEY linked and never a colleague's, even inside one org — everything\nelse under /v1/billing is org-wide. Neither key is ever read from the request\nbody or the query.\n\nIt is a ROUTING counter, not the money ledger. `costCents` is 0 for an account\nbilled by its own subscription, where the plan pays the provider directly, so\nthese totals do not reconcile against what the org was charged.\n/v1/billing/usage is the charged ledger.\n\n401 without a validated principal. Where the linked-account plane is not\nresident the answer is an honest 501 — never an empty breakdown, which would\nread as no usage.",
    "read": true
+  },
+  {
+   "id": "get_billing_usage_rollup",
+   "doc": "Answers the caller's month: what their plan includes, what has been consumed\nagainst it, and the wallet beside it.\n\nThe two blocks are SEPARATE monies and are never added. One is usage a plan\ngranted; the other is prepaid credit bought with a card. Their sum is not a\nnumber anyone holds, and a reader that formed it would be inventing a balance.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_wire",
+   "doc": "Answers where to send a wire top-up: the receiving bank details, with the\ncaller's own payment reference.\n\nThe account is the SERVING BRAND'S — resolved from the host the customer is\npaying on, so paying on one brand never shows another's bank — and the\nreference carries the caller's billing key, which is how an arriving wire\nnames who it credits. Nothing mints here; a receipt is settled by an operator\nonce the bank confirms it.\n\nIt is all-or-nothing: no configured account is 503 rather than a partial form,\nbecause nobody can wire to three fields out of five.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "issueInvoice",
+   "doc": "Issues a draft invoice: moves it to OPEN, assigns its number, and makes it\ncollectible.\n\nOnly a draft can be issued. An invoice already open, paid or void is refused\nwith the state machine's own reason rather than being silently re-issued, which\nwould mint a second number for one debt.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "patch_billing_alerts_by_id",
+   "doc": "Changes one spend cap: raise or lower the ceiling, flip enforcement, retune\nthe rate limit.\n\nOnly the fields the body carries move. Every mutable field is optional, and an\nabsent one is PRESERVED rather than reset — so a change that flips enforcement\ncannot silently wipe the threshold it enforces.\n\nA cap belonging to another org is a 404, not a 403: a guessed id must not\nbecome an oracle for what anyone else holds.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "post_billing_alerts",
+   "doc": "Opens a spend cap on the caller's own org.\n\nAt least one limit must mean something: a threshold above zero (a spend cap)\nor a requests-per-minute above zero (a rate limit). A row that bounds neither\nis refused rather than stored, because a ceiling nothing measures against is a\nceiling a customer believes in and does not have.\n\nThe cap is keyed on the caller's own billing subject, resolved server-side —\nthe SAME key the verdict looks it up under, which is what makes enforcement\nbind rather than merely record.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "post_billing_crypto_deposit",
+   "doc": "Issues a deposit address the caller can send crypto to, on the asset they ask\nfor.\n\nThe address credits the CALLER'S own wallet and nobody else's: the payer is\nthe validated principal, never a body value. Asking again reuses the caller's\nopen intent rather than minting a second address, so a refresh cannot spray\nkey generations — and a payer who sent to the address they saw earlier is\nstill credited.\n\nNo balance moves here. The chain watcher credits on real confirmations, so\nwhat comes back is an address and a status, not a receipt.\n\nAn asset this rail cannot mint on is 400 — ask for another. A rail that is\nshut for that asset is 503 — nothing sent now can be credited.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "post_billing_mode",
+   "doc": "Moves this org between sandbox money and real money.\n\nIt decides whether a charge hits a real card, so it is the one posture change\nthat is not self-service: the platform bar, never an org owner, because an org\nthat could put itself in test mode could take priced work for free.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "raiseInvoice",
+   "doc": "Raises a DRAFT invoice against a customer in the caller's own org.\n\nThe invoice is not collectible yet: a draft exists so it can be read and\ncorrected, and issueInvoice is the separate act that turns it into a demand for\npayment. The subtotal and amount due are computed from the lines, so there is\nno total to send and none to get wrong.\n\nThe billing org is the caller's, taken from the validated principal, so an\ninvoice can only ever be raised on the caller's own books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "reactivateSubscription",
+   "doc": "Puts a canceled subscription back on its plan.\n\nWhat asks for this is usually a recovered payment method or a support tool\nrather than a browser, which is most of the argument for it having an address\nat all. The engine decides whether the move is legal; a row it will not\nreactivate comes back with its own reason.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "voidInvoice",
+   "doc": "Voids a draft or issued invoice — the cancel.\n\nA paid invoice cannot be voided: money has moved, and the correction for that\nis a refund, not an erasure. The state machine refuses it and that refusal is\nthe answer.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   }
  ],
  "blueprint": [
@@ -876,21 +1006,12 @@
  ],
  "commerce": [
   {
-   "id": "collectInvoice",
-   "doc": "Collects an issued invoice: credit grants first, then prepaid balance, then the\ncard on file — the same waterfall the dunning workflow runs.\n\nA DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the\ninvoice still open, because a declined collection is a normal business outcome\nthat must remain retryable — and because sealing it as a failure would wedge\ndunning behind a replayed decline. Only a successful collection is sealed, so a\nretry of a paid invoice replays the receipt instead of charging again.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
-  },
-  {
    "id": "discardCart",
    "doc": "Discards a cart the shopper abandoned, and answers it in its final state.\n\nA discarded cart is CLOSED, not deleted: the row stays, so abandoned-basket\nreporting and any follow-up that keys on it still have something to read. It\nstops being a cart anything will check out, which is the point — it is how a\nstorefront says \"this basket is over\" without destroying the evidence that it\nexisted.\n\nDiscarding is idempotent: a cart already discarded answers its stored state\nrather than failing, so a retry is safe.\n\nThe cart is resolved inside the caller's own org namespace, so another tenant's\nid answers 404.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
   {
    "id": "getCart",
    "doc": "Reads one cart: its lines, its status and what it comes to.\n\nThis is what a storefront calls to render the basket, and what a support agent\ncalls to see what a shopper is looking at. The totals are the cart's STORED\ntally — shipping and tax stay zero until checkout resolves a shipping option\nand a tax region, so a cart total before checkout is the merchandise total and\nis meant to be.\n\nThe org scopes the read by construction: the store is namespaced to it, so a\ncart id belonging to another tenant is simply not found rather than found and\nthen filtered, and answers 404 rather than 403 so the id space cannot be probed.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
-   "read": true
-  },
-  {
-   "id": "getInvoice",
-   "doc": "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction — the store is namespaced to it — so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
    "read": true
   },
   {
@@ -904,16 +1025,8 @@
    "read": true
   },
   {
-   "id": "issueInvoice",
-   "doc": "Issues a draft invoice: moves it to OPEN, assigns its number, and makes it\ncollectible.\n\nOnly a draft can be issued. An invoice already open, paid or void is refused\nwith the state machine's own reason rather than being silently re-issued, which\nwould mint a second number for one debt.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
-  },
-  {
    "id": "openCart",
    "doc": "Opens an empty cart for a shopper to fill, and answers it with its new id.\n\nThis is the first step of a sale: hold the id, add items to it with\nsetCartItem, then hand it to checkout. Every field of the request is optional —\nan empty body opens a perfectly good anonymous cart — and the fields exist only\nto pre-fill what is already known about the shopper.\n\nThe STORE defaults to the org's own default storefront, so a merchant selling\nthrough one storefront never has to name it. The CURRENCY defaults to usd; note\nthat checkout overrides it with the store's own currency when the sale is\nauthorized, so a currency set here is a hint rather than a commitment.\n\nThe cart is created in the CALLER'S OWN org namespace, taken from the validated\nprincipal and never from the body, so a cart can never be opened on another\ntenant's books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
-  },
-  {
-   "id": "raiseInvoice",
-   "doc": "Raises a DRAFT invoice against a customer in the caller's own org.\n\nThe invoice is not collectible yet: a draft exists so it can be read and\ncorrected, and issueInvoice is the separate act that turns it into a demand for\npayment. The subtotal and amount due are computed from the lines, so there is\nno total to send and none to get wrong.\n\nThe billing org is the caller's, taken from the validated principal, so an\ninvoice can only ever be raised on the caller's own books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
   {
    "id": "setCartItem",
@@ -922,10 +1035,6 @@
   {
    "id": "takePayment",
    "doc": "Takes a payment: charges a single-use card token and credits the caller's org\nbalance, exactly once.\n\nThis is the operation behind \"collect money from a customer\". It runs the SAME\ncore the console's card top-up runs (commerce billing.TakePayment), so the\nserver-side amount bounds, the idempotency guard and the ledger credit are\nshared rather than reimplemented — a second charge path would eventually\ndouble-charge somebody.\n\nThe ORG is the caller's, taken from the validated principal and never from the\ninput, so a payment can only ever credit the account of whoever made the call.\n\nA payment is RISK-SCREENED before the card is charged, so this can be refused\nwithout any money moving: 403 means the screen did not authorise it, and 503 means\nthe screen could not reach a decision — that one is worth retrying, and no charge\nwas attempted either way.\n\nSend an idempotencyKey. An agent retries by construction, and the key is what\nturns a retry into a replay of the first receipt instead of a second charge.\n\nThe answer states whether it settled in SANDBOX or live mode (`test`), and\ncarries the processor's own reference (`processorRef`) so the charge can be\nreconciled against the processor rather than taken on trust.\n\nA named builder, not a closure, so zipdoc can lift this prose into the registry.\n\nIt BUILDS the handler rather than being it, because the screen has to sit inside\nthe value every projection of this op dispatches to — see exposePayments. `charge`\nis the money move, `take` is the screened door onto it, and the only registrable\none is the second."
-  },
-  {
-   "id": "voidInvoice",
-   "doc": "Voids a draft or issued invoice — the cancel.\n\nA paid invoice cannot be voided: money has moved, and the correction for that\nis a refund, not an erasure. The state machine refuses it and that refusal is\nthe answer.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   }
  ],
  "company": [
