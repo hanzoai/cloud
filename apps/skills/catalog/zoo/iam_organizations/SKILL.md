@@ -1,7 +1,7 @@
 ---
 name: iam_organizations
 version: "8.0.0"
-description: "Read iam organizations: Returns the organizations you can see, newest first., Returns one organization: its display, its defaults and the sign-in rules everyone in it inherits., Returns the organizations you can act in, the ones you belong to first and the rest after, newest firs"
+description: "Read iam organizations: Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name., Returns one organization: its display, its defaults and the sign-in rules everyone"
 ---
 
 # Zoo · IAM · organizations
@@ -14,27 +14,24 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/iam/organizations` — Returns the organizations you can see, newest first.
-- `GET https://api.zoo.ngo/v1/iam/organizations/get` — Returns one organization: its display, its defaults and the sign-in rules everyone in it inherits.
-- `GET https://api.zoo.ngo/v1/iam/organizations/search` — Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name.
+- `GET https://api.zoo.ngo/v1/iam/organizations` — Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name.
+- `GET https://api.zoo.ngo/v1/iam/organizations/{owner}/{name}` — Returns one organization: its display, its defaults and the sign-in rules everyone in it inherits.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `X-Forwarded-For` | header | no | string |  |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `cursor` | query | no | string |  |
 | `limit` | query | no | integer |  |
-| `name` | query | no | string |  |
-| `offset` | query | no | integer |  |
-| `owner` | query | no | string |  |
 | `q` | query | no | string |  |
 
 ## Response
 
-- `/v1/iam/organizations` → `iam.ListOrganizationsOutput` object with fields: `count`, `organizations`.
-- `/v1/iam/organizations/get` → `iam.Organization` object with fields: `accountItems`, `accountMenu`, `avatar`, `balanceCredit`, `balanceCurrency`, `countryCodes`, `createdAt`, `createdTime`, `dcrPolicy`, `defaultApplication`, `defaultAvatar`, `defaultPassword`.
-- `/v1/iam/organizations/search` → `iam.SearchOrganizationsOutput` object with fields: `cursor`, `organizations`.
+- `/v1/iam/organizations` → `iam.ListOrganizationsOutput` object with fields: `cursor`, `organizations`.
+- `/v1/iam/organizations/{owner}/{name}` → `iam.Organization` object with fields: `accountItems`, `accountMenu`, `avatar`, `balanceCredit`, `balanceCurrency`, `countryCodes`, `createdAt`, `createdTime`, `dcrPolicy`, `defaultApplication`, `defaultAvatar`, `defaultPassword`.
 
 ## Example
 

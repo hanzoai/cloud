@@ -15,22 +15,23 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Endpoints
 
 - `GET https://api.lux.network/v1/iam/users` — Returns a page of the people in your organization, with the total so you can page through the rest.
-- `GET https://api.lux.network/v1/iam/users/get` — Returns one person in your organization, addressed by their username or by their email address.
+- `GET https://api.lux.network/v1/iam/users/{owner}/{name}` — Returns one person in your organization, addressed by their username or by their email address.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `email` | query | no | string |  |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
+| `email` | query | no | string | Email narrows the page to the accounts carrying one address. Looking a person up by their address is a QUERY over the collection, not an item read: an address is not the natural key, two rows in one org can carry one, and a caller that gets a page SEES both — where a single-item read would have to choose, and choosing is how somebody joins a team under a colleague's identity. |
 | `limit` | query | no | integer |  |
-| `name` | query | no | string |  |
 | `offset` | query | no | integer |  |
 | `owner` | query | yes | string |  |
 
 ## Response
 
 - `/v1/iam/users` → `iam.users.ListOutput` object with fields: `total`, `users`.
-- `/v1/iam/users/get` → `iam.User` object with fields: `accessKey`, `accessSecret`, `accessSecretHash`, `accessToken`, `address`, `addresses`, `adfs`, `affiliation`, `alipay`, `amazon`, `apple`, `applicationScopes`.
+- `/v1/iam/users/{owner}/{name}` → `iam.User` object with fields: `accessKey`, `accessSecret`, `accessSecretHash`, `accessToken`, `address`, `addresses`, `adfs`, `affiliation`, `alipay`, `amazon`, `apple`, `applicationScopes`.
 
 ## Example
 

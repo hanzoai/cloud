@@ -1,7 +1,7 @@
 ---
 name: iam_keys
 version: "8.0.0"
-description: "Read iam keys: Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Returns one API key: what it is called, what it may reach, and when it was issued., Resolve a PUBLISHABLE key to the organization that owns it."
+description: "Read iam keys: Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Resolve a PUBLISHABLE key to the organization that owns it, Resolve a SECRET key to the principal it authenticates."
 ---
 
 # Lux · IAM · keys
@@ -15,23 +15,24 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Endpoints
 
 - `GET https://api.lux.network/v1/iam/keys` — Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half.
-- `GET https://api.lux.network/v1/iam/keys/get` — Returns one API key: what it is called, what it may reach, and when it was issued.
 - `GET https://api.lux.network/v1/iam/keys/org` — Resolve a PUBLISHABLE key to the organization that owns it
 - `GET https://api.lux.network/v1/iam/keys/principal` — Resolve a SECRET key to the principal it authenticates
+- `GET https://api.lux.network/v1/iam/keys/{owner}/{name}` — Returns one API key: what it is called, what it may reach, and when it was issued.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | query | no | string |  |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/keys` → `iam.ListResponse` object with fields: `keys`.
-- `/v1/iam/keys/get` → `iam.Key` object with fields: `accessKey`, `accessSecret`, `accessSecretDigest`, `act`, `application`, `createdAt`, `createdTime`, `deleted`, `displayName`, `expireTime`, `id`, `name`.
 - `/v1/iam/keys/org` → JSON object.
 - `/v1/iam/keys/principal` → JSON object.
+- `/v1/iam/keys/{owner}/{name}` → `iam.Key` object with fields: `accessKey`, `accessSecret`, `accessSecretDigest`, `act`, `application`, `createdAt`, `createdTime`, `deleted`, `displayName`, `expireTime`, `id`, `name`.
 
 ## Example
 

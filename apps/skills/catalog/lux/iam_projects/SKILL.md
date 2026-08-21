@@ -1,7 +1,7 @@
 ---
 name: iam_projects
 version: "8.0.0"
-description: "Read iam projects: Returns your organization's projects, newest first — the scope people pick between when their work is separated by product or client rather than by team.."
+description: "Read iam projects: Returns your organization's projects, newest first — the scope people pick between when their work is separated by product or client rather than by team., Returns one project: what it is called and how it is set up.."
 ---
 
 # Lux · IAM · projects
@@ -15,16 +15,20 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Endpoints
 
 - `GET https://api.lux.network/v1/iam/projects` — Returns your organization's projects, newest first — the scope people pick between when their work is separated by product or client rather than by team.
+- `GET https://api.lux.network/v1/iam/projects/{owner}/{name}` — Returns one project: what it is called and how it is set up.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/projects` → `iam.projects.ListOutput` object with fields: `projects`, `total`.
+- `/v1/iam/projects/{owner}/{name}` → `iam.Project` object with fields: `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `id`, `isDefault`, `metadata`, `name`, `organization`, `owner`, `tags`.
 
 ## Example
 

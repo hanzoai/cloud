@@ -1,7 +1,7 @@
 ---
 name: iam_certs
 version: "8.0.0"
-description: "Read iam certs: Returns your organization's signing certificates, newest first — the keys the tokens your applications verify are signed with.."
+description: "Read iam certs: Returns your organization's signing certificates, newest first — the keys the tokens your applications verify are signed with., Returns one signing certificate — its algorithm, its validity window and its public half.."
 ---
 
 # Lux · IAM · certs
@@ -15,16 +15,20 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Endpoints
 
 - `GET https://api.lux.network/v1/iam/certs` — Returns your organization's signing certificates, newest first — the keys the tokens your applications verify are signed with.
+- `GET https://api.lux.network/v1/iam/certs/{owner}/{name}` — Returns one signing certificate — its algorithm, its validity window and its public half.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/certs` → `iam.certs.ListOutput` object with fields: `certs`, `total`.
+- `/v1/iam/certs/{owner}/{name}` → `iam.Cert` object with fields: `accessKey`, `accessSecret`, `account`, `bitSize`, `certificate`, `createdAt`, `createdTime`, `cryptoAlgorithm`, `deleted`, `displayName`, `domainExpireTime`, `expireInYears`.
 
 ## Example
 
