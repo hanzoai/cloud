@@ -39,11 +39,11 @@ import (
 // also where the next one gets caught.
 var billingWire = []any{
 	// invoices
-	plane.InvoicesIn{}, plane.Invoices{}, plane.InvoiceRow{}, plane.InvoiceLineItem{},
+	plane.InvoicesIn{}, plane.Invoices{}, plane.BillingInvoice{}, plane.InvoiceLineItem{},
 	plane.RaiseIn{}, plane.InvoiceRef{}, plane.Invoice{}, plane.InvoiceLine{},
 	plane.Collected{}, plane.Document{},
 	// statement
-	plane.CallerIn{}, plane.Accounts{}, plane.Account{},
+	plane.CallerIn{}, plane.Accounts{}, plane.BillingAccount{},
 	plane.HoldersIn{}, plane.Holders{}, plane.Holder{},
 	plane.Payouts{}, plane.Payout{},
 	plane.TransactionsIn{}, plane.Transactions{}, plane.Transaction{},
