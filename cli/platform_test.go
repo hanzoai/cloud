@@ -70,11 +70,11 @@ func TestPlatformApp(t *testing.T) {
 	}
 }
 
-// Clusters hits the LIVE /v1/clusters (org from identity, not the path).
+// Clusters hits the LIVE /v1/visor/clusters (org from identity, not the path).
 func TestPlatformClusters(t *testing.T) {
 	p, done := platformStub(t, "t", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/v1/clusters" {
-			t.Errorf("clusters = %s %s, want GET /v1/clusters", r.Method, r.URL.Path)
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/visor/clusters" {
+			t.Errorf("clusters = %s %s, want GET /v1/visor/clusters", r.Method, r.URL.Path)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"clusters": []Cluster{
 			{DoksClusterID: "c1", Name: "hanzo-acme", Region: "sfo3", Status: "running", Kind: "managed", NodeCount: 3},

@@ -38,7 +38,7 @@ type board struct {
 // the whole account's physical inventory and the controls that destroy parts of it.
 //
 // NOTE ON THE NOUN: this is INFRASTRUCTURE — droplets, volumes, DOKS clusters, load
-// balancers. The pre-existing /v1/fleet surface is compute workers and jobs. Different
+// balancers. The pre-existing /v1/visor/fleet surface is compute workers and jobs. Different
 // nouns, deliberately not merged.
 func Routes(z *zip.App, s *cloud.Service[core.State]) {
 	b := &board{s: s}
