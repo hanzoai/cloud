@@ -417,7 +417,7 @@ jobs:
 
       - name: go env for private modules
         env:
-          GIT_TOKEN: ${{ secrets.FORGE_TOKEN || github.token }}
+          GIT_TOKEN: ${{ github.token }}
           GH_PAT: ${{ secrets.GH_PAT }}
         # GOPRIVATE names exactly the namespace that is private. github.com/hanzoai/*
         # is: ai, account, commerce, orm, xorm, beego, csqlite and ~30 more are
@@ -594,7 +594,7 @@ jobs:
           # The claim is written to git.hanzo.ai, so it is the Hanzo Git credential
           # that has to be able to write it. GH_PAT is gone from this step: it
           # authenticated a register that no longer lives on github.
-          GIT_TOKEN: ${{ secrets.FORGE_TOKEN || github.token }}
+          GIT_TOKEN: ${{ github.token }}
           # The commit being released, named explicitly rather than read from
           # GITHUB_SHA: that variable is the runner's to set, this claim is the
           # workflow's to make, and a claim that silently reads an empty string
@@ -956,7 +956,7 @@ jobs:
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GIT_TOKEN: ${{ secrets.FORGE_TOKEN || github.token }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           img="${{ steps.ver.outputs.image }}:v${{ steps.ver.outputs.version }}"
@@ -1119,7 +1119,7 @@ jobs:
       - name: Record that these bytes booted
         if: steps.img.outputs.smoked == '0'
         env:
-          GIT_TOKEN: ${{ secrets.FORGE_TOKEN || github.token }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # A push IS the compare-and-swap: the server refuses to move a ref that
@@ -1143,7 +1143,7 @@ jobs:
       # still be answered before an unproven image becomes a pin.
       - name: These bytes have a smoke receipt
         env:
-          GIT_TOKEN: ${{ secrets.FORGE_TOKEN || github.token }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git ls-remote --exit-code "https://x:${GIT_TOKEN}@${remote#https://}" \
@@ -1159,7 +1159,7 @@ jobs:
       # shipped.
       - name: The claimed tag still names this commit
         env:
-          GIT_TOKEN: ${{ secrets.FORGE_TOKEN || github.token }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="v${{ steps.ver.outputs.version }}"
@@ -1511,7 +1511,7 @@ jobs:
       # stop a release. go.sum still decides whether the bytes were right.
       - name: go env for private modules
         env:
-          GIT_TOKEN: ${{ secrets.FORGE_TOKEN || github.token }}
+          GIT_TOKEN: ${{ github.token }}
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
@@ -1715,7 +1715,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Write release.json onto the tag
         env:
-          GIT_TOKEN: ${{ secrets.FORGE_TOKEN || github.token }}
+          GIT_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="v${{ needs.image.outputs.version }}"
@@ -1813,7 +1813,7 @@ jobs:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          GIT_TOKEN: ${{ secrets.FORGE_TOKEN || github.token }}
+          GIT_TOKEN: ${{ github.token }}
           # The audit reads the same two coordinates the release just used, rather
           # than its own copy of them: an audit that checks a different image
           # against a different register answers a question nobody asked.
