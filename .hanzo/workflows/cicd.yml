@@ -459,6 +459,11 @@ jobs:
           # which is every run here, because this deployment issues none.
           IAM_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           IAM_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          # Reached ONLY when the IAM identity has been asked and the forge served
+          # nothing by it — the bootstrap described in forge-rewrites.sh. Not a
+          # preference: IAM is asked first on every run, and when the release that
+          # stamps the forge's audience is live this stops being reached and comes out.
+          FALLBACK_TOKEN: ${{ secrets.FORGE_TOKEN }}
         # GOPRIVATE names exactly the namespace that is private. github.com/hanzoai/*
         # is: ai, account, commerce, orm, xorm, beego, csqlite and ~30 more are
         # private repos, so they must resolve direct+authenticated and skip a sumdb
@@ -1563,6 +1568,11 @@ jobs:
           # which is every run here, because this deployment issues none.
           IAM_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           IAM_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          # Reached ONLY when the IAM identity has been asked and the forge served
+          # nothing by it — the bootstrap described in forge-rewrites.sh. Not a
+          # preference: IAM is asked first on every run, and when the release that
+          # stamps the forge's audience is live this stops being reached and comes out.
+          FALLBACK_TOKEN: ${{ secrets.FORGE_TOKEN }}
         run: |
           set -euo pipefail
           # PER REPO, because `insteadOf` is a rewrite and not a chain: one prefix

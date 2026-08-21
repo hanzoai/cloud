@@ -115,7 +115,16 @@ if [ -n "${IAM_CLIENT_ID:-}" ] && [ -n "${IAM_CLIENT_SECRET:-}" ]; then
     | jq -r '.access_token // empty' 2>/dev/null || true)
   if [ -n "${IAM_TOKEN:-}" ]; then
     echo "::add-mask::${IAM_TOKEN}"
-    JOB_TOKEN=${GIT_TOKEN:-}   # kept, so a forge that will not spend the IAM token has something to fall back to
+    [ -n "${FALLBACK_TOKEN:-}" ] && echo "::add-mask::${FALLBACK_TOKEN}"
+    # Kept so a forge that will not spend the IAM token has something to fall back to.
+    # FALLBACK_TOKEN is that something while the IAM path is still being brought up:
+    # the audience the forge requires is stamped by a release that cannot be built until
+    # the modules resolve, and the modules cannot resolve until the audience is stamped.
+    # One credential that already works breaks the circle, and the retry below reaches
+    # for it only after the IAM identity has been asked and served nothing. When the
+    # release carrying the audience is running, that retry stops firing and this comes out.
+    JOB_TOKEN=${GIT_TOKEN:-}
+    [ -n "${FALLBACK_TOKEN:-}" ] && JOB_TOKEN=$FALLBACK_TOKEN
     GIT_TOKEN=$IAM_TOKEN
     echo "forge-rewrites: asking as the IAM identity, scoped to ${FORGE_AUDIENCE:-hanzo-git}"
   else
