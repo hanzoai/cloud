@@ -4,12 +4,14 @@
 //
 // # Where it sits
 //
-// Under /v1/code, beside the static index. code and lsp are two reads of ONE
-// repository, not two products: code is lexical, symbolic and semantic search —
-// fast, approximate, always available — and lsp is a real language server —
-// exact, typed, and able to follow a symbol out of the repository and into a
-// dependency. An agent searches with code and is certain with lsp. One home, so
-// there is one place to look for "what does this code mean".
+// At /v1/lsp, beside code rather than inside it. code and lsp are two reads of
+// ONE repository: code is lexical, symbolic and semantic search — fast,
+// approximate, always available — and lsp is a real language server — exact,
+// typed, and able to follow a symbol out of the repository and into a
+// dependency. An agent searches with code and is certain with lsp. Two reads of
+// one thing are two capabilities, and each answers at the address its own name
+// spells; they are cross-referenced siblings, which is the link a reader
+// actually follows.
 //
 // # What this package is
 //

@@ -143,6 +143,10 @@
    "doc": "Defines an agent in the caller's org: a model, a system prompt\n(instructions) and a set of tool names. The name must be unique in the org and\nmatch ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. An omitted model takes the\ndeployment's configured default; a named one is checked against the gateway's\nserved catalog, so a model this deployment never serves is refused here rather\nthan failing at run time. A long-running agent must carry a 5-field cron\nschedule (the scheduler would otherwise never fire it) and counts against a\nper-org cap on scheduled agents."
   },
   {
+   "id": "post_agents_coding",
+   "doc": "Runs a coding task on a repository: clones it into a sandbox, lets a model read\nand edit the code, run the tests, and push the work to a branch. Say the thing\nyou want done — \"fix the failing auth test in hanzoai/cloud\" — and the run\ninfers the repo, the branch and the plan. No prefix, no ceremony.\n\nIt answers 202 with the run's handle the moment the run is ADMITTED — not when\nit finishes. A coding run takes minutes; holding a request open for one would\ntie a connection to a model loop and give the caller nothing it cannot get\nbetter from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis door does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.\n\nIt is also how work CONTINUES. Pass an earlier run's session as `after` and\nthis one starts from where that one stopped, so \"now add tests for it\" builds\non the branch already pushed instead of a fresh clone. The follow-up still gets\nits own branch and its own session — one run, one branch, always reviewable on\nits own."
+  },
+  {
    "id": "post_agents_sessions",
    "doc": "Opens a live agent session in the caller's org — the row every\nsurface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its\nactivity off. A session with a parentSessionId becomes a subagent of that\nsession and inherits its root, so one flow is one tree; without one it is\nitself a root. Registering with a terminal status records a session that has\nalready finished."
   },
@@ -161,10 +165,6 @@
   {
    "id": "post_agents_targets_by_id_runs_by_runid_report",
    "doc": "Completes a claimed run: it delivers the terminal result to the\nrun's durable owner, which is what lets that workflow finish. Scoped to (org,\ntarget, run) and claim-key authenticated, so a machine can only ever report a\nrun it legitimately holds. Idempotent — a report for an unknown or\nalready-finished run answers delivered:false rather than failing, because the\nsession's terminal state was already set by the machine's own stream."
-  },
-  {
-   "id": "post_coding",
-   "doc": "Runs a coding task on a repository: clones it into a sandbox, lets a model read\nand edit the code, run the tests, and push the work to a branch. Say the thing\nyou want done — \"fix the failing auth test in hanzoai/cloud\" — and the run\ninfers the repo, the branch and the plan. No prefix, no ceremony.\n\nIt answers 202 with the run's handle the moment the run is ADMITTED — not when\nit finishes. A coding run takes minutes; holding a request open for one would\ntie a connection to a model loop and give the caller nothing it cannot get\nbetter from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis door does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.\n\nIt is also how work CONTINUES. Pass an earlier run's session as `after` and\nthis one starts from where that one stopped, so \"now add tests for it\" builds\non the branch already pushed instead of a fresh clone. The follow-up still gets\nits own branch and its own session — one run, one branch, always reviewable on\nits own."
   }
  ],
  "ai": [
@@ -843,7 +843,7 @@
  "exec": [
   {
    "id": "post_exec",
-   "doc": "Executes a program in a throwaway sandbox and answers with what it printed\nand what it left behind.\n\n`lang` names one of the thirteen the sandbox image carries — py, js, ts, bash, r,\nphp, go, rs, c, cpp, java, d, f90 — and `code` is the whole program, not a\nfragment: a compiled language is compiled and then run, an interpreted one is\ninterpreted, and `args` becomes the program's own argv either way. Nothing is\ninstalled for you; the image is the environment.\n\nA PROGRAM THAT FAILS IS A SUCCESSFUL CALL. A non-zero exit answers 200 with the\ndiagnostics on `stderr`, because \"the code threw\" and \"the interpreter is down\"\nare different facts a caller renders differently. Only the second is an error\nstatus.\n\nRuns are stateful through `session_id`. Omit it and the run gets a fresh sandbox\nwhose id comes back on the answer; pass that id again and the next run sees the\nsame filesystem, so a program can write a file one call and read it the next.\n`files` names bytes already uploaded to a session (POST /v1/upload), copied in\nbefore the program starts. `files` on the ANSWER is what the program created or\nchanged, by comparison against a marker taken at start — so it is the run's real\noutput, not a listing of the directory — and each is fetched from\nGET /v1/download/{session}/{name}.\n\nThe tenant is the caller's, never the body's, at every door. A typed op is also\nan MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no\nroute and therefore no middleware, so nothing there could have checked a\ncredential. tenantOf refuses a context carrying neither a validated principal nor\nexec's own admission marker, so those doors fail closed without a second gate to\nkeep in step."
+   "doc": "Executes a program in a throwaway sandbox and answers with what it printed\nand what it left behind.\n\n`lang` names one of the thirteen the sandbox image carries — py, js, ts, bash, r,\nphp, go, rs, c, cpp, java, d, f90 — and `code` is the whole program, not a\nfragment: a compiled language is compiled and then run, an interpreted one is\ninterpreted, and `args` becomes the program's own argv either way. Nothing is\ninstalled for you; the image is the environment.\n\nA PROGRAM THAT FAILS IS A SUCCESSFUL CALL. A non-zero exit answers 200 with the\ndiagnostics on `stderr`, because \"the code threw\" and \"the interpreter is down\"\nare different facts a caller renders differently. Only the second is an error\nstatus.\n\nRuns are stateful through `session_id`. Omit it and the run gets a fresh sandbox\nwhose id comes back on the answer; pass that id again and the next run sees the\nsame filesystem, so a program can write a file one call and read it the next.\n`files` names bytes already uploaded to a session (POST /v1/exec/upload), copied in\nbefore the program starts. `files` on the ANSWER is what the program created or\nchanged, by comparison against a marker taken at start — so it is the run's real\noutput, not a listing of the directory — and each is fetched from\nGET /v1/exec/download/{session}/{name}.\n\nThe tenant is the caller's, never the body's, at every door. A typed op is also\nan MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no\nroute and therefore no middleware, so nothing there could have checked a\ncredential. tenantOf refuses a context carrying neither a validated principal nor\nexec's own admission marker, so those doors fail closed without a second gate to\nkeep in step."
   }
  ],
  "experiments": [],
@@ -1832,23 +1832,23 @@
  "link": [],
  "lsp": [
   {
-   "id": "post_code_lsp_complete",
+   "id": "post_lsp_complete",
    "doc": "Offers the candidates a language server has at a position, typed and\nresolved through the repository's dependencies rather than guessed from text."
   },
   {
-   "id": "post_code_lsp_diagnostics",
+   "id": "post_lsp_diagnostics",
    "doc": "Reports every problem the language server finds in one file —\ncompile errors, type errors and lints, each with its span and its severity (1\nerror, 2 warning, 3 information, 4 hint). The position is ignored."
   },
   {
-   "id": "post_code_lsp_hover",
+   "id": "post_lsp_hover",
    "doc": "Renders the type and documentation of the symbol at a position, as the\nlanguage server itself renders it.\n\nPositions are the LSP's: line and character are 0-BASED and character counts\nUTF-16 code units, so an editor's 1-based line must have 1 subtracted before it\nis sent. The repository is named by slug and is always one in the caller's own\norg; rev pins a branch, tag or commit sha, and empty means the default branch."
   },
   {
-   "id": "post_code_lsp_locate",
+   "id": "post_lsp_locate",
    "doc": "Finds where a symbol lives: its definition, its references, its type or\nits implementations, chosen by relation (definition, reference, type,\nimplementation — empty means definition).\n\nIt resolves THROUGH dependencies. An answer whose external flag is set left the\nrepository, and its path is then the module coordinate it landed in — which is\nthe question a static index cannot answer and this service exists for."
   },
   {
-   "id": "post_code_lsp_symbols",
+   "id": "post_lsp_symbols",
    "doc": "Outlines one file: every declaration in it, with its kind and its span.\nThe position is ignored — the answer is the whole file."
   }
  ],
@@ -4631,41 +4631,16 @@
  ],
  "tools": [
   {
-   "id": "delete_mcp_servers_by_id",
+   "id": "delete_tools_mcp_servers_by_id",
    "doc": "Deregisters one of the caller org's external MCP servers, so its\ntools leave the registry. Scoped to the caller's org, so an id belonging to\nanother tenant is a 404 and not a delete. Answers 204 with no body; a server\nthis org does not have is 404."
   },
   {
-   "id": "delete_plugins_authored_by_id",
+   "id": "delete_tools_plugins_authored_by_id",
    "doc": "Removes one of the caller org's built plugins, so the\nruntime can no longer load it. Scoped to the caller's org, so an id belonging\nto another tenant answers 404 and is not deleted."
   },
   {
-   "id": "delete_skills_by_id",
+   "id": "delete_tools_skills_by_id",
    "doc": "Removes one of the caller org's authored skills. Scoped to the\ncaller's org, so an id belonging to another tenant is never reached. Removing\nwhat is not there is not an error — the caller's intent is \"gone\", and it is."
-  },
-  {
-   "id": "get_mcp_servers",
-   "doc": "Lists the external MCP servers the caller's org has registered.\nEach record carries the URL and the name of the header its credential is\ninjected into; the credential VALUE lives only in KMS and is never returned,\nso hasSecret is the whole of what this surface says about it.",
-   "read": true
-  },
-  {
-   "id": "get_plugins",
-   "doc": "Reports what this deployment actually mounted: every subsystem the\ncomposition root declared and whether it is switched on. A plugin here is\nMOUNTED CODE that extends the deployment's own surface — not a tool an agent\ncalls — so this is an inventory and not a tool source. It is read off the same\nboot snapshot every traced request resolves its subsystem label against, so it\ncannot drift from what is serving. Enabled-only by default, because a caller\nasking what this deployment can do wants what is running; ?all=true adds the\nconfigured-but-off ones.",
-   "read": true
-  },
-  {
-   "id": "get_plugins_authored",
-   "doc": "Lists the plugins the caller's org BUILT, newest first,\neach with the TypeScript as authored. That is a different set with a different\nlifecycle from GET /v1/plugins, which reports the subsystems this deployment\nmounted. The bundled CommonJS the runtime executes is never included, and\nneither is any credential — a plugin names the connectors provider it needs and\nreads the credential from ctx.auth at run time.",
-   "read": true
-  },
-  {
-   "id": "get_skills",
-   "doc": "Lists the skills the caller's org can reach — the brand's embedded\ncatalogue plus the org's own authored ones — with each one's activation flag.\nA skill is discovery and activation metadata attached to an agent, never called\ndirectly, so every entry here is non-dispatchable. It is GET /v1/tools narrowed\nto one source, not a second store: a name a caller sees here is the same entry,\nwith the same activation state, that discovery reports.",
-   "read": true
-  },
-  {
-   "id": "get_skills_authored",
-   "doc": "Lists the caller org's OWN skills with their SKILL.md\nbodies. GET /v1/skills is the registry view — the brand's catalogue plus this\norg's, with activation flags and no bodies; this is the EDITABLE set, so it\ncarries the content that view omits and nothing the org did not write.",
-   "read": true
   },
   {
    "id": "get_tools",
@@ -4679,7 +4654,7 @@
   },
   {
    "id": "get_tools_catalog",
-   "doc": "Lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP door. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.\n\nIt is PAGED — 50 by default, 200 at most. The public registry publishes tens of\nthousands of servers, so an unbounded answer is a twenty-megabyte response and a\nstorefront that renders in a minute. total is the whole match, not the page.",
+   "doc": "Lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/tools/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP door. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.\n\nIt is PAGED — 50 by default, 200 at most. The public registry publishes tens of\nthousands of servers, so an unbounded answer is a twenty-megabyte response and a\nstorefront that renders in a minute. total is the whole match, not the page.",
    "read": true
   },
   {
@@ -4688,16 +4663,33 @@
    "read": true
   },
   {
+   "id": "get_tools_mcp_servers",
+   "doc": "Lists the external MCP servers the caller's org has registered.\nEach record carries the URL and the name of the header its credential is\ninjected into; the credential VALUE lives only in KMS and is never returned,\nso hasSecret is the whole of what this surface says about it.",
+   "read": true
+  },
+  {
+   "id": "get_tools_plugins",
+   "doc": "Reports what this deployment actually mounted: every subsystem the\ncomposition root declared and whether it is switched on. A plugin here is\nMOUNTED CODE that extends the deployment's own surface — not a tool an agent\ncalls — so this is an inventory and not a tool source. It is read off the same\nboot snapshot every traced request resolves its subsystem label against, so it\ncannot drift from what is serving. Enabled-only by default, because a caller\nasking what this deployment can do wants what is running; ?all=true adds the\nconfigured-but-off ones.",
+   "read": true
+  },
+  {
+   "id": "get_tools_plugins_authored",
+   "doc": "Lists the plugins the caller's org BUILT, newest first,\neach with the TypeScript as authored. That is a different set with a different\nlifecycle from GET /v1/tools/plugins, which reports the subsystems this deployment\nmounted. The bundled CommonJS the runtime executes is never included, and\nneither is any credential — a plugin names the connectors provider it needs and\nreads the credential from ctx.auth at run time.",
+   "read": true
+  },
+  {
+   "id": "get_tools_skills",
+   "doc": "Lists the skills the caller's org can reach — the brand's embedded\ncatalogue plus the org's own authored ones — with each one's activation flag.\nA skill is discovery and activation metadata attached to an agent, never called\ndirectly, so every entry here is non-dispatchable. It is GET /v1/tools narrowed\nto one source, not a second store: a name a caller sees here is the same entry,\nwith the same activation state, that discovery reports.",
+   "read": true
+  },
+  {
+   "id": "get_tools_skills_authored",
+   "doc": "Lists the caller org's OWN skills with their SKILL.md\nbodies. GET /v1/tools/skills is the registry view — the brand's catalogue plus this\norg's, with activation flags and no bodies; this is the EDITABLE set, so it\ncarries the content that view omits and nothing the org did not write.",
+   "read": true
+  },
+  {
    "id": "patch_tools_catalog_by_id",
    "doc": "Sets what WE say about one catalog entry — hidden, featured,\nofficial, logo — and answers with the stored listing. SuperAdmin only; every\nother caller is refused.\n\nCuration is the half of a catalog row a sync cannot write, and this is the only\nthing that writes it. The upstream half is never editable here: a description\nthat disagreed with the publisher's would be a fork of their listing, and the\nnext sync would silently undo it."
-  },
-  {
-   "id": "post_mcp_servers",
-   "doc": "Gives the caller's org one more external MCP server, so its tools\njoin the org's tool plane and the fleet's MCP door. It is the ONE way an org\ngains a server, whether it typed the URL in or enabled a catalog listing: both\nwrite the SAME record, and `source` says which it was. A second registration\npath would be a second place for a server to exist, and then a second place to\nforget to check the credential.\n\nThe credential VALUE is sealed in KMS under a per-org ref; the row keeps only\nthe URL, the header name to inject it into, and a has-secret flag — so a secret\nwith no KMS configured is refused 503 rather than stored in the clear. The URL\nis SSRF-validated here and re-checked by the dialer at connect time, which is\nthe DNS-rebinding defense.\n\nEnabling a listing the org already enabled REVISES that server rather than\nadding a near-duplicate beside it, so a retried enable is the same one server.\nAnswers 201 with the stored record."
-  },
-  {
-   "id": "post_skills",
-   "doc": "Adds or revises one of the caller org's own skills, and answers 201\nwith the stored record. The id is derived from the name, so writing the same\nname again REVISES that skill rather than accumulating near-duplicates that\nwould then collide in the registry. An org's skills are private to it by\nconstruction — they live in a different store from the brand's embedded\ncatalogue and have no path into the public gallery — and a brand skill always\nwins a name collision against an org's."
   },
   {
    "id": "post_tools_call",
@@ -4706,6 +4698,14 @@
   {
    "id": "post_tools_catalog_sync",
    "doc": "Pulls the public MCP registry into our canonical copy and reports\nwhat changed. SuperAdmin only; every other caller is refused.\n\nIt is IDEMPOTENT: a listing is keyed by the publisher's own reverse-DNS name,\nso a second pass over an unchanged registry rewrites the same rows and reports\nadded=0, updated=0. It never deletes — a listing that vanishes upstream may be\none an org has already enabled, and dropping its description would not drop its\nserver. And it never touches CURATION: hidden, featured, an admin-set official\nand a logo survive every sync, because the write does not name those columns."
+  },
+  {
+   "id": "post_tools_mcp_servers",
+   "doc": "Gives the caller's org one more external MCP server, so its tools\njoin the org's tool plane and the fleet's MCP door. It is the ONE way an org\ngains a server, whether it typed the URL in or enabled a catalog listing: both\nwrite the SAME record, and `source` says which it was. A second registration\npath would be a second place for a server to exist, and then a second place to\nforget to check the credential.\n\nThe credential VALUE is sealed in KMS under a per-org ref; the row keeps only\nthe URL, the header name to inject it into, and a has-secret flag — so a secret\nwith no KMS configured is refused 503 rather than stored in the clear. The URL\nis SSRF-validated here and re-checked by the dialer at connect time, which is\nthe DNS-rebinding defense.\n\nEnabling a listing the org already enabled REVISES that server rather than\nadding a near-duplicate beside it, so a retried enable is the same one server.\nAnswers 201 with the stored record."
+  },
+  {
+   "id": "post_tools_skills",
+   "doc": "Adds or revises one of the caller org's own skills, and answers 201\nwith the stored record. The id is derived from the name, so writing the same\nname again REVISES that skill rather than accumulating near-duplicates that\nwould then collide in the registry. An org's skills are private to it by\nconstruction — they live in a different store from the brand's embedded\ncatalogue and have no path into the public gallery — and a brand skill always\nwins a name collision against an org's."
   },
   {
    "id": "put_tools_activation",

@@ -27,8 +27,6 @@
 /v1/catalog commerce
 /v1/chains web3
 /v1/clusters visor
-/v1/code lsp
-/v1/coding agents
 /v1/commands openapi
 /v1/compute visor
 /v1/connectors integrations
@@ -36,7 +34,6 @@
 /v1/dev-bridge ai
 /v1/docs ai
 /v1/documents ai
-/v1/download exec
 /v1/edge projects
 /v1/embed account
 /v1/enablement pricing
@@ -45,7 +42,6 @@
 /v1/event analytics
 /v1/event.js analytics
 /v1/feedback ai
-/v1/files exec
 /v1/finance billing
 /v1/finance treasury
 /v1/finetune ai
@@ -63,7 +59,6 @@
 /v1/links link
 /v1/logs metrics
 /v1/machines visor
-/v1/mcp tools
 /v1/memory ai
 /v1/mesh zt
 /v1/networks zt
@@ -76,7 +71,6 @@
 /v1/plans commerce
 /v1/plans plan
 /v1/platform projects
-/v1/plugins tools
 /v1/query ai
 /v1/query_multiple ai
 /v1/rag ai
@@ -94,14 +88,12 @@
 /v1/search product
 /v1/sentinel o11y
 /v1/sites projects
-/v1/skills tools
 /v1/store commerce
 /v1/summary o11y
 /v1/tags projects
 /v1/tokens web3
 /v1/traces metrics
 /v1/traffic ai
-/v1/upload exec
 /v1/usage leaderboard
 /v1/vector product
 /v1/wecom-bot ai

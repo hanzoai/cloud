@@ -2730,7 +2730,7 @@ type CodingStartIn struct {
 	// ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door
 	// that started it has somewhere for it to talk. Empty means nobody is
 	// listening and the run simply does not narrate — which is the app door's
-	// case, because /v1/coding hands back a session id and the session stream is
+	// case, because /v1/agents/coding hands back a session id and the session stream is
 	// a better progress feed than any message could be.
 	//
 	// It is an ADDRESS and not a token: the engine says "put this text there",
