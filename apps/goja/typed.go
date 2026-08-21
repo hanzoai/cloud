@@ -101,10 +101,53 @@ func (s Scalar) MarshalJSON() ([]byte, error) {
 // caller sent.
 type ScalarList []Scalar
 
+// Raw is a field whose value may be ANY JSON — an object, an array, a number —
+// carried to the bundle unchanged.
+//
+// Scalar would carry the same bytes, and for a while that looked like enough.
+// The difference is the SCHEMA: Scalar is a string KIND, so every projection
+// describes the field as `string`, and a caller told `string` for a field the
+// bundle stores with JSON.stringify sends `"{\"label\":\"x\"}"` — a quoted
+// string where an object goes. That is the ScalarList mistake in its other
+// direction: there the wrong type let a value be silently discarded, here it
+// would be silently double-encoded. This type marshals ITSELF, which is the
+// question zip's schemaOf asks first (openapi.go:657), so it publishes `{}` —
+// "any JSON", which is the only true thing to say about it.
+//
+// The zero value means ABSENT, the same rule Scalar keeps and for the same
+// reason: a partial update needs `{}` and `{"meta":null}` to stay different, and
+// a pointer cannot hold that distinction because encoding/json sets a pointer to
+// nil for an explicit null WITHOUT calling UnmarshalJSON.
+type Raw []byte
+
+// UnmarshalJSON keeps the caller's bytes, whatever shape they are. Like Scalar's,
+// it cannot fail: the value is the bundle's to judge.
+func (r *Raw) UnmarshalJSON(b []byte) error {
+	*r = append((*r)[:0], b...)
+	return nil
+}
+
+// MarshalJSON writes the carried value back exactly as it arrived. An absent
+// field marshals as `null`, which is what encoding/json writes for the zero value
+// of any empty JSON — so the type is total.
+func (r Raw) MarshalJSON() ([]byte, error) {
+	if len(r) == 0 {
+		return []byte("null"), nil
+	}
+	return r, nil
+}
+
+func (r Raw) field() (json.RawMessage, bool) {
+	if len(r) == 0 {
+		return nil, false // absent: this key was never on the wire
+	}
+	return json.RawMessage(r), true
+}
+
 // BodyField is one field of an assembled bundle body: a Scalar for a single
-// token, a ScalarList for a lenient array. The interface is CLOSED — its method
-// is unexported — so those two are the whole vocabulary, and Body needs no
-// default case for a kind that cannot exist.
+// token, a ScalarList for a lenient array, a Raw for a value of any shape. The
+// interface is CLOSED — its method is unexported — so those three are the whole
+// vocabulary, and Body needs no default case for a kind that cannot exist.
 type BodyField interface {
 	// field reports the field's verbatim JSON and whether it was on the wire at
 	// all. A field that was not contributes no key.
