@@ -11,13 +11,23 @@ import (
 	"github.com/hanzoai/cloud/apps/framework"
 )
 
-// catalog_test.go proves the REVERSE half of the storefront loop: a commerce product
-// slug maps to ONE ecom Asset render (EnsureCatalogAsset), idempotently and quietly, and
-// the Campaign→product integrity gate (enforceCatalogRefs) fails closed on a dangling
-// handle while skipping cleanly when commerce is unconfigured.
+// catalog_test.go covers the two live edges of the catalog join (design == slug):
+// the Campaign→product integrity gate (enforceCatalogRefs), which fails closed on a
+// dangling handle and skips cleanly when commerce is unconfigured, and the real S2S
+// product lookup behind it.
+//
+// It used to open with the REVERSE half of the storefront loop —
+// EnsureCatalogAsset, five tests of a mapping whose only caller was the catalogsync
+// app. That loop was open at BOTH ends in every deployment: commerce publishes
+// product.created only when PUBSUB_URL is set, which nothing sets, and the consumer
+// ran in its own process where content's singleton is nil, so the render it existed
+// to trigger refused every time. The mapping went with the app. The FORWARD edge
+// (storefront.go: a published Asset becomes the product image) is untouched — it
+// crosses to commerce over the transport rather than through a package global,
+// which is exactly why it works.
 
-// fakeGenerator is a Generator stub that returns a canned Asset field map (or an error),
-// so EnsureCatalogAsset can be exercised without a studio backend.
+// fakeGenerator is a Generator stub that returns a canned Asset field map (or an
+// error), so a render can be exercised without a studio backend.
 type fakeGenerator struct {
 	err   error
 	draft map[string]any
@@ -36,112 +46,6 @@ func (f fakeGenerator) Draft(_ context.Context, _ string, in GenerateInput) (map
 		"kind":   in.Kind,
 		"file":   "orgs/karma/output/" + in.Design + "/ecom.png",
 	}, nil
-}
-
-// ---- EnsureCatalogAsset: render-on-product-created, idempotent, quiet skips ----
-
-func TestEnsureCatalogAssetCreatesThenIdempotent(t *testing.T) {
-	app := mountWith(t, cloud.Deps{})
-	const org = "karma"
-	install(t, app, org)
-	mounted.State.gen = fakeGenerator{}
-
-	res, err := EnsureCatalogAsset(context.Background(), org, "valentina")
-	if err != nil {
-		t.Fatalf("first ensure: %v", err)
-	}
-	if !res.Created || res.Name == "" || res.Skipped != "" {
-		t.Fatalf("first call must create the ecom asset, got %+v", res)
-	}
-
-	// The asset is a real draft with the ecom kind, keyed by design == slug.
-	doc, err := framework.Get(context.Background(), org, DocTypeAsset, res.Name)
-	if err != nil {
-		t.Fatalf("read created asset: %v", err)
-	}
-	if doc.Data["design"] != "valentina" || doc.Data["kind"] != catalogAssetKind {
-		t.Fatalf("asset not keyed to product+kind: %+v", doc.Data)
-	}
-
-	// Second call is a no-op: a non-archived ecom asset already exists → skip "exists".
-	res2, err := EnsureCatalogAsset(context.Background(), org, "valentina")
-	if err != nil {
-		t.Fatalf("second ensure: %v", err)
-	}
-	if res2.Created || res2.Skipped != "exists" {
-		t.Fatalf("second call must be idempotent skip, got %+v", res2)
-	}
-	if res2.Name != res.Name {
-		t.Errorf("idempotent skip should name the existing asset: %q vs %q", res2.Name, res.Name)
-	}
-}
-
-// An archived asset does NOT suppress a fresh render — a retired shot is not "the asset".
-func TestEnsureCatalogAssetIgnoresArchived(t *testing.T) {
-	app := mountWith(t, cloud.Deps{})
-	const org = "karma"
-	install(t, app, org)
-	mounted.State.gen = fakeGenerator{}
-
-	first, err := EnsureCatalogAsset(context.Background(), org, "valentina")
-	if err != nil || !first.Created {
-		t.Fatalf("seed asset: %+v err=%v", first, err)
-	}
-	// Walk it to archived (draft → archived is a legal edge).
-	if _, err := Transition(context.Background(), org, DocTypeAsset, first.Name, StatusArchived, ""); err != nil {
-		t.Fatalf("archive: %v", err)
-	}
-	res, err := EnsureCatalogAsset(context.Background(), org, "valentina")
-	if err != nil {
-		t.Fatalf("ensure after archive: %v", err)
-	}
-	if !res.Created || res.Name == first.Name {
-		t.Fatalf("archived asset must not block a fresh render, got %+v", res)
-	}
-}
-
-// A studio that fail-closes (errNotConfigured from Generate) is a quiet SKIP, never an
-// error the driving consumer would retry forever.
-func TestEnsureCatalogAssetSkipsWhenStudioUnconfigured(t *testing.T) {
-	app := mountWith(t, cloud.Deps{})
-	const org = "karma"
-	install(t, app, org)
-	mounted.State.gen = fakeGenerator{err: errNotConfigured}
-
-	res, err := EnsureCatalogAsset(context.Background(), org, "valentina")
-	if err != nil {
-		t.Fatalf("errNotConfigured must be a quiet skip, got err: %v", err)
-	}
-	if res.Created || res.Skipped != "not_configured" {
-		t.Fatalf("expected not_configured skip, got %+v", res)
-	}
-}
-
-// A product event for a fresh org is a quiet skip, never an error loop. marketing is
-// always-on, so the Asset lane always resolves; the render pipeline (a configured
-// studio) is now the gate. A fresh org with no studio quietly skips as "not_configured"
-// (before marketing went always-on this skipped as "not_installed" — the lane is now
-// default-on, so the honest skip reason is the missing render pipeline).
-func TestEnsureCatalogAssetSkipsForFreshOrg(t *testing.T) {
-	_ = mountWith(t, cloud.Deps{})
-	res, err := EnsureCatalogAsset(context.Background(), "noinstall", "valentina")
-	if err != nil {
-		t.Fatalf("a fresh org must be a quiet skip, got: %v", err)
-	}
-	if res.Created || res.Skipped != "not_configured" {
-		t.Fatalf("expected a quiet not_configured skip for a fresh org, got %+v", res)
-	}
-}
-
-// Empty org/slug is a caller error (a real error the consumer logs), not a silent skip.
-func TestEnsureCatalogAssetRejectsEmptyInputs(t *testing.T) {
-	_ = mountWith(t, cloud.Deps{})
-	if _, err := EnsureCatalogAsset(context.Background(), "", "valentina"); err == nil {
-		t.Error("empty org must error")
-	}
-	if _, err := EnsureCatalogAsset(context.Background(), "karma", ""); err == nil {
-		t.Error("empty slug must error")
-	}
 }
 
 // ---- enforceCatalogRefs: Campaign.product integrity gate ----

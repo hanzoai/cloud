@@ -604,8 +604,8 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 		// itself a unix address, so zip derived <sock>.http.http from it too.
 		//
 		// A plugin that cannot bind exits before listening, and the ones that hold
-		// the bus go first: pubsub, then kafka and catalogsync fail closed behind
-		// it, then the host exits. So the derivation has one home, which is where
+		// the bus go first: pubsub, then kafka and amqp fail closed behind it,
+		// then the host exits. So the derivation has one home, which is where
 		// it always was.
 		return []string{sock}, ""
 	}
