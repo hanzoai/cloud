@@ -18,9 +18,6 @@
   "tags": [
     {
       "name": "auto"
-    },
-    {
-      "name": "automations"
     }
   ],
   "paths": {
@@ -38,6 +35,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Catalog"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/auto/connectors/{id}/run": {
+      "post": {
+        "operationId": "post_auto_connectors_by_id_run",
+        "summary": "Run executes one connector action in-process and answers the outcome.",
+        "description": "Run executes one connector action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the connector does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown connector is 404 and a\nmissing action 422.",
+        "tags": [
+          "auto"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the connector to run, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "notion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "action": "create_page",
+                "auth": "secret-token",
+                "id": "notion",
+                "props": {
+                  "title": "Hello"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/runIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runResp"
                 }
               }
             },
