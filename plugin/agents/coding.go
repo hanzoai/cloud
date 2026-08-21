@@ -2,12 +2,12 @@ package main
 
 // coding.go is where the coding engine gets its door. One typed op:
 //
-//	POST /v1/coding
+//	POST /v1/agents/coding
 //
 // Every surface arrives through it. An HTTP client posts to it; a model calls it
-// as `create_coding` because the fleet's door projects the same registration into
-// the MCP tool list. There is no second adapter to keep in step, so a run cannot
-// differ by how it was asked for.
+// as `create_agent_coding` because the fleet's door projects the same
+// registration into the MCP tool list. There is no second adapter to keep in
+// step, so a run cannot differ by how it was asked for.
 //
 // It used to have a sibling — a plane op the Slack bridge called when a message
 // began with `code:`. That existed because the brain could not reach the sandbox,
@@ -130,7 +130,7 @@ func shutdownAgents(ctx context.Context) error {
 // hand would stay green through exactly the mutation that matters, and this op's
 // reachability is now the only way a chat turn gets to a sandbox.
 func codingDoor(app *zip.App) {
-	zip.Post[plane.CodingStartIn, plane.CodingStarted](app, "/v1/coding", startCoding,
+	zip.Post[plane.CodingStartIn, plane.CodingStarted](app, "/v1/agents/coding", startCoding,
 		zip.WithStatus(http.StatusAccepted),
 		zip.WithSummary("Start one autonomous coding run against a repo in the caller's org"))
 }
