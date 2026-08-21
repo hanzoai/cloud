@@ -24,18 +24,37 @@ const healthProbeTimeout = 2 * time.Second
 
 // deployment is one live replica of a product's service from VM `up`.
 type deployment struct {
+	// Instance is the replica as the telemetry store labels it — the address the
+	// series was recorded against, which is what distinguishes two replicas of one
+	// service.
 	Instance string `json:"instance"`
-	Up       bool   `json:"up"`
+	// Up is that replica's last reported state. Every target emits on every cycle,
+	// so a replica missing from the list is one the prober is not reporting at all,
+	// which is a different fact from down.
+	Up bool `json:"up"`
 }
 
 // statusResult is the scoped status response.
 type statusResult struct {
-	Product     string       `json:"product"`
-	Up          bool         `json:"up"`
-	LatencyMs   int64        `json:"latencyMs"`
-	Source      string       `json:"source"`
+	// Product is the service this answer is about, echoed back.
+	Product string `json:"product"`
+	// Up is true when the health probe succeeded OR any replica reports up, so a
+	// service reachable by either route reads up. Read Source to know which.
+	Up bool `json:"up"`
+	// LatencyMs is the health probe's round trip in MILLISECONDS, time-boxed at two
+	// seconds. It is 0 when no probe answered, which is not a fast service.
+	LatencyMs int64 `json:"latencyMs"`
+	// Source is where the verdict came from: "probe" (we asked and it answered),
+	// "datastore" (the probe did not answer and the replica inventory decided it),
+	// "unreachable" (neither), or "unknown-service" for a well-formed product name
+	// nothing backs — which is answered without probing, since dialling an
+	// arbitrary host on a caller's say-so is the request forgery this refuses.
+	Source string `json:"source"`
+	// Deployments is the per-replica inventory behind the verdict. Empty means the
+	// telemetry store reported none, not that the service runs on none.
 	Deployments []deployment `json:"deployments"`
-	CheckedAt   string       `json:"checkedAt"`
+	// CheckedAt is when this answer was measured, RFC3339 UTC.
+	CheckedAt string `json:"checkedAt"`
 }
 
 // probeStatus builds the live status for an allowlisted service: it probes the

@@ -57,23 +57,35 @@ type usageBucket struct {
 
 // metricsResponse is the scoped RED-metrics + usage response for one product.
 type metricsResponse struct {
+	// Product is the service these numbers are about, echoed back.
 	Product string `json:"product"`
-	Range   struct {
+	// Range is the window actually used, after clamping — not what was asked for.
+	// A caller that wants to know what it got reads this rather than its own query.
+	Range struct {
 		SinceSec int `json:"sinceSec"`
 		StepSec  int `json:"stepSec"`
 	} `json:"range"`
+	// Series is the RED trend: request rate, error rate and two latency quantiles,
+	// bucketed at range.stepSec and oldest bucket first. Latencies are in
+	// MILLISECONDS.
 	Series struct {
 		Requests     []point `json:"requests"`
 		Errors       []point `json:"errors"`
 		LatencyP50Ms []point `json:"latencyP50Ms"`
 		LatencyP95Ms []point `json:"latencyP95Ms"`
 	} `json:"series"`
+	// Usage is the LLM side of the same window: how many calls, how many tokens and
+	// what they cost. It counts model traffic, not HTTP requests, so it does not
+	// reconcile with series.requests.
 	Usage struct {
 		Calls     int64         `json:"calls"`
 		Tokens    int64         `json:"tokens"`
 		CostCents int64         `json:"costCents"`
 		Series    []usageBucket `json:"series"`
 	} `json:"usage"`
+	// Summary totals the window in one object, so a tile does not have to sum the
+	// series to render. errorRate is a RATIO of the window's requests, not a
+	// percentage, and p95Ms is over the window rather than the worst bucket.
 	Summary struct {
 		Requests  int64   `json:"requests"`
 		Errors    int64   `json:"errors"`

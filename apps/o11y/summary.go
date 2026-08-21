@@ -83,7 +83,11 @@ var deploymentBrand string
 // StatusComponent is one piece of the platform an incident affects. Name is the
 // service the fleet prober knows it by.
 type StatusComponent struct {
-	ID   string `json:"id"`
+	// ID is the component's stable handle, which on this platform IS the service
+	// name — there is no separate component registry to allocate ids from.
+	ID string `json:"id"`
+	// Name is the service as the fleet prober knows it (the `service` label on
+	// hanzo_service_up), so a reader can match a component to what is being probed.
 	Name string `json:"name"`
 	// CurrentStatus is this component's own condition: "full_outage" for a
 	// service that did not answer its health probe at all.
@@ -94,17 +98,32 @@ type StatusComponent struct {
 // exists because a probe failed, and LastUpdateAt is when that measurement was
 // taken.
 type StatusIncident struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
+	// ID is derived from the service, so the same outage keeps one id across reads
+	// rather than being reported as a new incident every 15 seconds.
+	ID string `json:"id"`
+	// Name is the one-line headline, built from the service that stopped answering.
+	Name string `json:"name"`
+	// Status is always "investigating" — the member of the client's closed set that
+	// means detected, cause not yet established, which is exactly what an automated
+	// prober knows. Nothing here ever claims "identified": that would assert a
+	// diagnosis no measurement made.
 	Status string `json:"status"`
-	URL    string `json:"url"`
+	// URL points at the HUMAN status page, not back at this JSON. Every link in this
+	// document goes to the same place.
+	URL string `json:"url"`
 	// LastUpdateAt is when the failing measurement this incident reports was
 	// read, RFC3339 UTC.
-	LastUpdateAt      string `json:"last_update_at"`
+	LastUpdateAt string `json:"last_update_at"`
+	// LastUpdateMessage says what was observed, not what is being done about it —
+	// there is no operator writing updates here, only the probe that failed.
 	LastUpdateMessage string `json:"last_update_message"`
 	// CurrentWorstImpact is the incident's impact on the PLATFORM, which is not
 	// the same question as the component's own condition above.
-	CurrentWorstImpact string            `json:"current_worst_impact"`
+	CurrentWorstImpact string `json:"current_worst_impact"`
+	// AffectedComponents is what this incident covers. It is COUNTED rather than
+	// classified: some services down is a partial outage and every probed service
+	// down is a full one, because deciding that one service is critical and another
+	// is not would need a judgement nobody has measured.
 	AffectedComponents []StatusComponent `json:"affected_components"`
 }
 
@@ -114,26 +133,44 @@ type StatusIncident struct {
 // the published contract because a client reading the document has to know those
 // fields are arrays of objects.
 type StatusMaintenance struct {
-	ID                 string            `json:"id"`
-	Name               string            `json:"name"`
-	Status             string            `json:"status"`
-	URL                string            `json:"url"`
-	LastUpdateAt       string            `json:"last_update_at"`
-	LastUpdateMessage  string            `json:"last_update_message"`
+	// ID is the window's handle.
+	ID string `json:"id"`
+	// Name is its one-line headline.
+	Name string `json:"name"`
+	// Status is where the window is in its life, in the client's own vocabulary.
+	Status string `json:"status"`
+	// URL points at the human status page, as every link in this document does.
+	URL string `json:"url"`
+	// LastUpdateAt is when the window was last revised, RFC3339 UTC.
+	LastUpdateAt string `json:"last_update_at"`
+	// LastUpdateMessage is the text of that revision.
+	LastUpdateMessage string `json:"last_update_message"`
+	// AffectedComponents is what the window touches.
 	AffectedComponents []StatusComponent `json:"affected_components"`
-	StartsAt           string            `json:"starts_at,omitempty"`
-	EndsAt             string            `json:"ends_at,omitempty"`
+	// StartsAt is when work begins, RFC3339 UTC.
+	StartsAt string `json:"starts_at,omitempty"`
+	// EndsAt is when it is expected to finish, RFC3339 UTC.
+	EndsAt string `json:"ends_at,omitempty"`
 }
 
 // StatusSummary is the public platform status document.
 type StatusSummary struct {
+	// PageTitle is the brand's own status-page title, resolved per request from the
+	// Host — a lux caller must never be shown Hanzo's.
 	PageTitle string `json:"page_title"`
 	// PageURL is the HUMAN status page — an HTML page for people, distinct from
 	// this JSON endpoint. Every link in this document points there.
-	PageURL                string              `json:"page_url"`
-	OngoingIncidents       []StatusIncident    `json:"ongoing_incidents"`
+	PageURL string `json:"page_url"`
+	// OngoingIncidents is one entry per service that failed its health probe, sorted
+	// by name. Empty means every probed service answered — which is a measurement,
+	// not an absence of reports.
+	OngoingIncidents []StatusIncident `json:"ongoing_incidents"`
+	// InProgressMaintenances is always empty: this platform has no maintenance
+	// scheduling plane, so "nothing is running" is a true statement rather than a
+	// placeholder.
 	InProgressMaintenances []StatusMaintenance `json:"in_progress_maintenances"`
-	ScheduledMaintenances  []StatusMaintenance `json:"scheduled_maintenances"`
+	// ScheduledMaintenances is always empty, for the same reason.
+	ScheduledMaintenances []StatusMaintenance `json:"scheduled_maintenances"`
 	// CheckedAt is when the underlying availability read was taken, RFC3339 UTC.
 	// Not part of the status-page schema the panel parses (which ignores unknown
 	// fields); it is here because a status document with no timestamp cannot be
