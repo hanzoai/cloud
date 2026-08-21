@@ -40,7 +40,7 @@ func init() {
 			"totals.total":                     "Total is how many affiliate rows this page covered, at every status. It is the\npage, not the table: a limit that truncates truncates this too.",
 		},
 	})
-	zip.Describe("GET /v1/admin/referrals", zip.Doc{
+	zip.Describe("GET /v1/admin/affiliates/referrals", zip.Doc{
 		Description: "Answers the referral board: the top referrers by lifetime\ncommission, the funnel conversion rate (referred orgs that have actually\nproduced commission, over all referred orgs), and the accrual LIABILITY the\nplatform owes, broken out by upline level.\n\nRead the liability figure carefully — it is commission accrued and NOT yet\npaid, so it is money owed, not money spent, and the per-level split says how\nmuch of it comes from direct referrals versus the second and third levels.\n\nPLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single\nattribution spine the accrual itself walks, so the board and the ledger cannot\ndisagree. Amounts are integer cents.",
 		Fields: map[string]string{
 			"envelope.msg":                 "Msg is an operator-facing note. Empty on every success here — it exists\nbecause the console's admin unwrapper reads the shape cloud.OK writes.",

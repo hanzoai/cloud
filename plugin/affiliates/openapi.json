@@ -58,6 +58,29 @@
         "x-tool": true
       }
     },
+    "/v1/admin/affiliates/referrals": {
+      "get": {
+        "operationId": "get_admin_affiliates_referrals",
+        "summary": "Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level.",
+        "description": "Answers the referral board: the top referrers by lifetime\ncommission, the funnel conversion rate (referred orgs that have actually\nproduced commission, over all referred orgs), and the accrual LIABILITY the\nplatform owes, broken out by upline level.\n\nRead the liability figure carefully — it is commission accrued and NOT yet\npaid, so it is money owed, not money spent, and the per-level split says how\nmuch of it comes from direct referrals versus the second and third levels.\n\nPLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single\nattribution spine the accrual itself walks, so the board and the ledger cannot\ndisagree. Amounts are integer cents.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/referralsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
     "/v1/admin/affiliates/sweep": {
       "post": {
         "operationId": "post_admin_affiliates_sweep",
@@ -246,29 +269,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/affiliateOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/admin/referrals": {
-      "get": {
-        "operationId": "get_admin_referrals",
-        "summary": "Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level.",
-        "description": "Answers the referral board: the top referrers by lifetime\ncommission, the funnel conversion rate (referred orgs that have actually\nproduced commission, over all referred orgs), and the accrual LIABILITY the\nplatform owes, broken out by upline level.\n\nRead the liability figure carefully — it is commission accrued and NOT yet\npaid, so it is money owed, not money spent, and the per-level split says how\nmuch of it comes from direct referrals versus the second and third levels.\n\nPLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single\nattribution spine the accrual itself walks, so the board and the ledger cannot\ndisagree. Amounts are integer cents.",
-        "tags": [
-          "admin"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/referralsOut"
                 }
               }
             },
