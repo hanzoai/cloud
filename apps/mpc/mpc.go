@@ -57,6 +57,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/namespace"
 	"golang.org/x/crypto/argon2"
 )
@@ -368,7 +369,9 @@ func (c *Client) postJSON(u string, body []byte) error {
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("status %d: %s", resp.StatusCode, string(respBody))
+		// The body is the ring's, and this error is surfaced to a caller; a refusal
+		// can quote the credential it refused, so scrub at the producer.
+		return fmt.Errorf("status %d: %s", resp.StatusCode, cloud.ScrubText(string(respBody)))
 	}
 	return nil
 }
@@ -385,7 +388,9 @@ func (c *Client) deleteRequest(u string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("status %d: %s", resp.StatusCode, string(respBody))
+		// The body is the ring's, and this error is surfaced to a caller; a refusal
+		// can quote the credential it refused, so scrub at the producer.
+		return fmt.Errorf("status %d: %s", resp.StatusCode, cloud.ScrubText(string(respBody)))
 	}
 	return nil
 }

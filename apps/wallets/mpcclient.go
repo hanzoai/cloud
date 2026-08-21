@@ -37,6 +37,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
 const (
@@ -195,7 +197,9 @@ func (m *mpcClient) do(ctx context.Context, method, path string, reqBody, out an
 		respBody, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			lastErr = fmt.Errorf("mpc %s %s: status %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(respBody)))
+			// Relayed to the caller by custodyHTTPError; scrubbed at the producer for
+			// the reason safeClient states.
+			lastErr = fmt.Errorf("mpc %s %s: status %d: %s", method, path, resp.StatusCode, cloud.ScrubText(strings.TrimSpace(string(respBody))))
 			continue
 		}
 		if out == nil {
