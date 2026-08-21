@@ -86,7 +86,6 @@ func bundleAnswer(t *testing.T, route, tenant string, params map[string]string) 
 var sectionRoutes = map[string]string{
 	"/v1/plan":               "plans",
 	"/v1/plan/subscriptions": "subscriptions",
-	"/v1/plan/cloud":         "cloud",
 	"/v1/plan/blockchain":    "blockchain",
 	"/v1/plan/dns":           "dns",
 	"/v1/plan/gpu":           "gpu",
@@ -333,8 +332,8 @@ func planOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 // of quietly costing it its schema, its prose, its MCP tool and its SDK method.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	served, typed := planOps(t)
-	if len(served) != 15 {
-		t.Errorf("the surface serves %d operations, expected 15 — if that is a deliberate "+
+	if len(served) != 14 {
+		t.Errorf("the surface serves %d operations, expected 14 — if that is a deliberate "+
 			"addition, type it and update this count", len(served))
 	}
 	var untyped []string
@@ -358,8 +357,8 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // as a nameless tool rather than in production.
 func TestEveryTypedOpIsDescribed(t *testing.T) {
 	_, typed := planOps(t)
-	if len(typed) != 15 {
-		t.Fatalf("%d typed plan ops in the registry, want 15", len(typed))
+	if len(typed) != 14 {
+		t.Fatalf("%d typed plan ops in the registry, want 14", len(typed))
 	}
 	for key, desc := range typed {
 		if strings.TrimSpace(desc) == "" {
@@ -383,8 +382,8 @@ func TestEveryOpIsAnMCPToolWithADescription(t *testing.T) {
 		d, _ := tool["description"].(string)
 		byName[n] = d
 	}
-	if len(byName) != 15 {
-		t.Fatalf("%d MCP tools, want 15 — one per op", len(byName))
+	if len(byName) != 14 {
+		t.Fatalf("%d MCP tools, want 14 — one per op", len(byName))
 	}
 	for name, desc := range byName {
 		if strings.TrimSpace(desc) == "" {

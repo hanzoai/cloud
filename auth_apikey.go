@@ -32,7 +32,16 @@ type keyResolver interface {
 	resolve(ctx context.Context, key string) *idClaims
 }
 
-// iamKeys resolves an `sk-` key against IAM's get-user?accessKey endpoint,
+// The two key doors, named once each. Both are under `keys` and the address says
+// what comes BACK — an org from a publishable key, a principal from a secret one
+// — which is the only thing separating them. Spelling a path inline at its call
+// site is how two callers of one door come to disagree about where it is.
+const (
+	iamKeyOrg       = "/v1/iam/keys/org"
+	iamKeyPrincipal = "/v1/iam/keys/principal"
+)
+
+// iamKeys resolves an `sk-` key against IAM's keys/principal endpoint,
 // authenticating as the confidential `hanzo-console` client (the credential
 // clients/account already uses). The resolved user is exactly what a JWT for that
 // user carries, so SanitizeIdentity mints identical headers for a key and a session.
@@ -42,8 +51,8 @@ type iamKeys struct {
 	base  string
 	auth  string // client_secret_basic, or "" when unconfigured
 	http  *http.Client
-	cache cache[string, *idClaims]  // secret key -> principal (get-user?accessKey)
-	orgs  cache[string, string]     // publishable key -> org, and no principal (resolve-key)
+	cache cache[string, *idClaims]  // secret key -> principal (keys/principal)
+	orgs  cache[string, string]     // publishable key -> org, and no principal (keys/org-key)
 	why   cache[string, KeyRefusal] // secret key -> WHY it did not resolve, for diagnosis only
 }
 
@@ -99,13 +108,13 @@ const maxKeyOrgLen = 128
 // TWO doors in IAM, because a publishable key and a secret key are resolved by
 // different questions and the answers must not be interchangeable:
 //
-//   - a SECRET key (sk-) asks WHO, and get-user?accessKey answers with the
+//   - a SECRET key (sk-) asks WHO, and keys/principal answers with the
 //     principal. IAM refuses a pk- there BY DESIGN (store.UserByAccessKey), which
 //     is right and was also the bug: cloud sent every prefix down this one door, so
 //     a publishable key resolved to nothing and the ingest path it exists for could
 //     never attribute a beacon. A publishable key that resolves to nobody is a
 //     publishable key that does not work.
-//   - a PUBLISHABLE key (pk-) asks WHICH ORG, and resolve-key answers with the org
+//   - a PUBLISHABLE key (pk-) asks WHICH ORG, and keys/org answers with the org
 //     and nothing else — no user, no email, no admin bit. That is the property that
 //     makes it safe to ship in client JS, so it is a separate door with its own
 //     narrower capability (CapPublishableResolve), not a flag on the first.
@@ -179,11 +188,11 @@ func (k *iamKeys) resolveOrg(ctx context.Context, key string) string {
 	return org
 }
 
-// lookupOrg performs the authenticated resolve-key call — the ORG-ONLY dual of
-// get-user?accessKey. It reads `org` and deliberately nothing else: the envelope
+// lookupOrg performs the authenticated keys/org call — the ORG-ONLY dual of
+// keys/principal. It reads `org` and deliberately nothing else: the envelope
 // carries no principal, and this function would have nowhere to put one.
 func (k *iamKeys) lookupOrg(ctx context.Context, key string) string {
-	u := k.base + "/v1/iam/resolve-key?" + url.Values{"accessKey": {key}}.Encode()
+	u := k.base + iamKeyOrg + "?" + url.Values{"accessKey": {key}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return ""
@@ -212,7 +221,7 @@ func (k *iamKeys) lookupOrg(ctx context.Context, key string) string {
 }
 
 // KeyRefusal is the machine-readable reason IAM gives for not resolving a key —
-// `code` on the get-user?accessKey / resolve-key envelope (iam internal/store
+// `code` on the keys/principal / keys/org envelope (iam internal/store
 // apikey.go). Cloud does not interpret it; it carries it, so the surface that faces
 // a human can say "revoked, mint a new one" instead of IAM's generic "the entity
 // does not exist". "" means IAM gave no reason (an older IAM, or a store fault,
@@ -255,7 +264,7 @@ func KeyHint(key string) string {
 	return key[:shown] + "…"
 }
 
-// lookup performs the authenticated get-user?accessKey call and maps the user row
+// lookup performs the authenticated keys/principal call and maps the user row
 // to idClaims. Any failure (unreachable, denied, unknown key) yields nil. Name is
 // both the username IAM's owner/name lookups parse and the id fallback: a key has
 // no UUID subject, so userID() falls through to name — the gateway's historical
@@ -267,7 +276,7 @@ func KeyHint(key string) string {
 // rendering IAM's generic "the entity does not exist" to users whose key had simply
 // been revoked.
 func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
-	u := k.base + "/v1/iam/get-user?" + url.Values{"accessKey": {key}}.Encode()
+	u := k.base + iamKeyPrincipal + "?" + url.Values{"accessKey": {key}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil

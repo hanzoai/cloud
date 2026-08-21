@@ -32,9 +32,6 @@
       "name": "completions"
     },
     {
-      "name": "embed"
-    },
-    {
       "name": "embeddings"
     },
     {
@@ -4778,17 +4775,6 @@
         "description": "Implements the OpenAI-compatible chat completions API",
         "tags": [
           "completions"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/embed": {
-      "post": {
-        "operationId": "post_embed",
-        "summary": "Handles POST /v1/embed — the multipart upload hanzo.chat's uploadVectors() sends.",
-        "description": "Handles POST /v1/embed — the multipart upload hanzo.chat's\nuploadVectors() sends. It saves the upload to a temp file, then reuses\nobject.RagEmbedFile (same parse+chunk+index as the native surface).",
-        "tags": [
-          "embed"
         ],
         "x-public": true
       }

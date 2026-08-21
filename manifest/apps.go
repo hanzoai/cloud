@@ -203,7 +203,7 @@ var Apps = []App{
 	{Name: "knowledge", Prefixes: []string{"/v1/knowledge"}},
 	// graph is the assertion plane: entities, the relations between them, and
 	// who asserted each one when. It owns /v1/graph outright. alpha until it
-	// carries retention (HIP-1196).
+	// carries retention (HIP-1198).
 	{Name: "graph", Prefixes: []string{"/v1/graph"}, Stage: Alpha},
 	{Name: "help", Prefixes: []string{"/v1/help"}},
 	{Name: "content", Prefixes: []string{"/v1/content"}},
@@ -414,7 +414,7 @@ var Apps = []App{
 	// It was app.All("/v1/bot/*") in the other app, one specificity rule away from
 	// swallowing every sibling above; in one router that would have been a live
 	// hazard rather than a latent one.
-	{Name: "bot", Prefixes: []string{"/v1/bot"}},
+	{Name: "bot", Prefixes: []string{"/v1/bot", "/v1/node"}},
 	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}},
@@ -427,12 +427,12 @@ var Apps = []App{
 	{Name: "search", Prefixes: []string{"/v1/search"}},
 	{Name: "evals", Prefixes: []string{"/v1/evals"}},
 	{Name: "benchmark", Prefixes: []string{"/v1/benchmark"}},
-	{Name: "research", Prefixes: []string{"/v1/research"}},
+	{Name: "research", Prefixes: []string{"/v1/research"}, Stage: Alpha},
 	{Name: "experiments", Prefixes: []string{"/v1/experiments"}},
 	{Name: "books", Prefixes: []string{"/v1/books/accounts", "/v1/books/ask", "/v1/books/bank/exchange", "/v1/books/bank/import", "/v1/books/bank/token", "/v1/books/bank/sync", "/v1/books/bank/transactions", "/v1/books/bank/unreconciled", "/v1/books/export", "/v1/books/gl", "/v1/books/inbox", "/v1/books/metrics", "/v1/books/pnl", "/v1/books/questions", "/v1/books/rules", "/v1/books/scan", "/v1/books/sync", "/v1/books/transactions", "/v1/books/position", "/v1/books/trial", "/v1/books/vendors"}},
 	{Name: "treasury", Prefixes: []string{"/v1/admin/treasury", "/v1/treasury"}},
 	{Name: "admin", Prefixes: []string{"/v1/admin"}},
-	{Name: "admission", Prefixes: []string{"/v1/admission"}},
+	{Name: "admission", Prefixes: []string{"/v1/admission"}, Stage: Alpha},
 	// One prefix, because the studio is not here any more: it is its own image on
 	// its own host (ghcr.io/hanzoai/admin-tasks at tasks.hanzo.ai) and this row used to
 	// claim /tasks for the //go:embed copy. The studio still reads this surface

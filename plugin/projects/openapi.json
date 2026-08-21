@@ -988,6 +988,27 @@
         "x-public": true,
         "x-tool": true
       }
+    },
+    "/v1/projects/{slug}/shot": {
+      "get": {
+        "operationId": "get_projects_by_slug_shot",
+        "summary": "Get a PNG of the project's live site",
+        "description": "Returns a screenshot of what this project currently serves, as image/png. The capture is keyed by the deployment, so a redeploy invalidates it by construction rather than by anyone remembering to clear a cache. A project with nothing deployed answers 404 — that is a 404 about the PICTURE and not about the project, which is still right there in the list. Scoped to the caller's org: a validated principal is required, and a slug belonging to another org is not found rather than forbidden.",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
     }
   },
   "components": {
