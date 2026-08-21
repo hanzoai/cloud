@@ -5,17 +5,18 @@
 // (apps/index) and the vector index (apps/knowledge) — into one ranked result
 // set.
 //
-// IT IS NOT MOUNTED. There is no manifest row and no plugin/search binary, so
-// Mount below is never called and its POST /v1/search never reaches the wire —
-// /v1/search belongs to apps/provisioning (list/create a provisioned search
-// index), which is a different product that happens to share the word. The one
-// live caller is apps/team's fulltext RPC, which calls ForOrg in-process; and in
-// the team BINARY neither leg is mounted, so index.Ready() is false there and the
-// lexical leg reports `disabled` on every query. Until a door is decided, a caller
-// still has to know which of /v1/knowledge/search, /v1/index/indexes/:uid/search and
-// /v1/code/search holds the answer, and gets a different request shape and a
-// different score scale from each — which is the problem this package was written
-// to end.
+// IT IS MOUNTED. manifest/apps.go carries the row and plugin/search is built, so
+// POST /v1/search reaches the wire. This comment said the opposite for as long as
+// that was true and was never re-read when the row landed — the same rot the
+// money refusals had, and the reason a claim about the fleet belongs in a test
+// rather than a paragraph.
+//
+// WHAT IS STILL TRUE, and is the real problem: a caller has to know which of
+// /v1/search, /v1/index/indexes/:uid/search, /v1/knowledge/search and
+// /v1/code/search holds their answer, and gets a different request shape and a
+// different score scale from each. This package exists to end that and has not
+// yet: it fuses the lexical and vector legs, and the other two doors are still
+// open beside it.
 //
 // WHAT BELONGS HERE. A query whose honest answer has a SCORE. A query whose
 // honest answer has a TRUTH VALUE — the definition of a symbol, the callers of a

@@ -98,8 +98,8 @@
       },
       "post": {
         "operationId": "post_provisioning_datastore",
-        "summary": "Provision a Hanzo Datastore instance for your org",
-        "description": "Launches your org's OWN Hanzo Datastore instance and answers with its `datastore://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
+        "summary": "Launches your org's OWN Hanzo Datastore instance and answers with its `datastore://` connection string.",
+        "description": "Launches your org's OWN Hanzo Datastore instance and answers\nwith its `datastore://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
         "tags": [
           "provisioning"
         ],
@@ -110,21 +110,23 @@
                 "$ref": "#/components/schemas/provisionRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/provisionResult"
                 }
               }
-            }
+            },
+            "description": "created"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/provisioning/datastore/{name}": {
@@ -218,8 +220,8 @@
       },
       "post": {
         "operationId": "post_provisioning_docdb",
-        "summary": "Provision a document database for your org",
-        "description": "Launches your org's OWN document-database instance — it speaks the MongoDB wire protocol, so existing MongoDB drivers connect unchanged — and answers with its `mongodb://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
+        "summary": "CreateDocDB launches your org's OWN document-database instance and answers with its `mongodb://` connection string.",
+        "description": "CreateDocDB launches your org's OWN document-database instance and answers with\nits `mongodb://` connection string. It speaks the MongoDB wire protocol, so\nexisting MongoDB drivers connect unchanged.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
         "tags": [
           "provisioning"
         ],
@@ -230,21 +232,23 @@
                 "$ref": "#/components/schemas/provisionRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/provisionResult"
                 }
               }
-            }
+            },
+            "description": "created"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/provisioning/docdb/{name}": {
@@ -338,8 +342,8 @@
       },
       "post": {
         "operationId": "post_provisioning_kv",
-        "summary": "Provision a key-value store for your org",
-        "description": "Launches your org's OWN key-value instance and answers with its `kv://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
+        "summary": "CreateKV launches your org's OWN key-value instance and answers with its `kv://` connection string.",
+        "description": "CreateKV launches your org's OWN key-value instance and answers with its `kv://`\nconnection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
         "tags": [
           "provisioning"
         ],
@@ -350,21 +354,23 @@
                 "$ref": "#/components/schemas/provisionRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/provisionResult"
                 }
               }
-            }
+            },
+            "description": "created"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/provisioning/kv/{name}": {
@@ -458,8 +464,8 @@
       },
       "post": {
         "operationId": "post_provisioning_s3",
-        "summary": "Provision an object storage bucket for your org",
-        "description": "Creates an S3-compatible bucket inside the already-running shared object store and answers with the endpoint that reaches it.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
+        "summary": "Creates an S3-compatible bucket inside the already-running shared object store and answers with the endpoint that reaches it.",
+        "description": "Creates an S3-compatible bucket inside the already-running shared\nobject store and answers with the endpoint that reaches it.",
         "tags": [
           "provisioning"
         ],
@@ -470,21 +476,23 @@
                 "$ref": "#/components/schemas/provisionRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/provisionResult"
                 }
               }
-            }
+            },
+            "description": "created"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/provisioning/s3/{name}": {
@@ -578,8 +586,8 @@
       },
       "post": {
         "operationId": "post_provisioning_search",
-        "summary": "Provision a search index for your org",
-        "description": "Creates a search index inside the already-running shared search backend and answers with the endpoint that reaches it.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
+        "summary": "Creates a search index inside the already-running shared search backend and answers with the endpoint that reaches it.",
+        "description": "Creates a search index inside the already-running shared search\nbackend and answers with the endpoint that reaches it.",
         "tags": [
           "provisioning"
         ],
@@ -590,21 +598,23 @@
                 "$ref": "#/components/schemas/provisionRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/provisionResult"
                 }
               }
-            }
+            },
+            "description": "created"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/provisioning/search/{name}": {
@@ -698,8 +708,8 @@
       },
       "post": {
         "operationId": "post_provisioning_sql",
-        "summary": "Provision a PostgreSQL database for your org",
-        "description": "Launches your org's OWN PostgreSQL instance and answers with its `postgres://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
+        "summary": "CreateSQL launches your org's OWN PostgreSQL instance and answers with its `postgres://` connection string.",
+        "description": "CreateSQL launches your org's OWN PostgreSQL instance and answers with its\n`postgres://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster, where there is no orchestrator to launch one, this fails\nclosed with 503 rather than handing back a shared one.",
         "tags": [
           "provisioning"
         ],
@@ -710,21 +720,23 @@
                 "$ref": "#/components/schemas/provisionRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/provisionResult"
                 }
               }
-            }
+            },
+            "description": "created"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/provisioning/sql/{name}": {
@@ -818,8 +830,8 @@
       },
       "post": {
         "operationId": "post_provisioning_vector",
-        "summary": "Provision a vector collection for your org",
-        "description": "Creates a vector collection inside the already-running shared vector backend and answers with the endpoint that reaches it.\n\n`name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as \u003cKIND\u003e_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.\n\nTHE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.\n\nScoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.\n\nBilling is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.",
+        "summary": "Creates a vector collection inside the already-running shared vector backend and answers with the endpoint that reaches it.",
+        "description": "Creates a vector collection inside the already-running shared\nvector backend and answers with the endpoint that reaches it.",
         "tags": [
           "provisioning"
         ],
@@ -830,21 +842,23 @@
                 "$ref": "#/components/schemas/provisionRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/provisionResult"
                 }
               }
-            }
+            },
+            "description": "created"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/provisioning/vector/{name}": {
@@ -914,50 +928,62 @@
   "components": {
     "schemas": {
       "provisionRequest": {
-        "type": "object",
         "properties": {
           "instance": {
+            "description": "Instance binds a DEDICATED add-on to the app instance whose\n\u003cinstance\u003e-addons Secret receives the \u003cKIND\u003e_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the org-unique slug for the new resource, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.",
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "provisionResult": {
-        "type": "object",
         "properties": {
           "connectionString": {
+            "description": "ConnectionString is the ready-to-use DSN, credential included. RETURNED\nHERE ONCE: no read beside this one carries it, so a caller that does not\nkeep it must provision again.",
             "type": "string"
           },
           "database": {
+            "description": "Database is the logical database, collection, index or bucket this resource\nresolves to on its backend. It is derived from Name under an org-namespacing\nhash, so it is not Name and two orgs cannot land on one.",
             "type": "string"
           },
           "host": {
+            "description": "Host is the address that routes to this resource — a dedicated instance's\nown in-cluster Service, or the public gateway for a shared one. Never the\ninternal admin address of a shared backend.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the resource's server-minted handle, \"rs_\"-prefixed. The caller does\nnot choose it, and it is what every read and the delete address.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the product provisioned: sql, vector, datastore, kv, search, s3 or\ndocdb. It is the route that was called, not a body field.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the org-unique slug the caller asked for, lower-cased. Every\nphysical name on the backend derives from it.",
             "type": "string"
           },
           "password": {
+            "description": "Password is the minted credential, in plaintext, for the kinds that have\none. RETURNED HERE ONCE — where KMS is configured it is sealed there and\nonly a reference is persisted; where it is not, it is stored nowhere at all.\nIt is never held in plaintext on either side.",
             "type": "string"
           },
           "port": {
+            "description": "Port is the port a client connects to on Host.",
             "type": "integer"
           },
           "status": {
+            "description": "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator. A shared-backend create is \"ready\" here;\na dedicated one answers 201 still launching, and reaches ready only when a\nlater read reconciles it against the operator's live CR — never fabricated.",
             "type": "string"
           },
           "username": {
+            "description": "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "provisionedResource": {
         "properties": {
