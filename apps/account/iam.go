@@ -353,10 +353,15 @@ type iamOrg struct {
 // propagates so onboarding never mistakes "unreachable" for "available" and creates
 // a duplicate.
 func (c *iamClient) getOrganization(ctx context.Context, slug string) (*iamOrg, error) {
-	env, err := c.do(ctx, http.MethodGet, "/v1/iam/organizations/get", url.Values{"id": {adminOrg + "/" + slug}}, nil)
+	// SEPARATE owner and name. The read binds them off the query string by field
+	// name, so the `<owner>/<slug>` composite this used to send bound NOTHING and
+	// every lookup was refused for a missing owner — which the branch below then
+	// read as "the org does not exist", so every slug tested as available and
+	// onboarding was one create away from a duplicate.
+	env, err := c.do(ctx, http.MethodGet, "/v1/iam/organizations/get",
+		url.Values{"owner": {adminOrg}, "name": {slug}}, nil)
 	if err != nil {
-		// IAM returns status!=ok / empty data for a missing org; do() maps a not-ok
-		// envelope to an "iam:" error — that means the org does not exist. A transport
+		// A refusal ("iam:") is IAM answering that there is no such org. A transport
 		// failure ("iam unreachable"/"iam denied") is a real error and propagates.
 		if strings.HasPrefix(err.Error(), "iam:") {
 			return nil, nil
@@ -368,7 +373,7 @@ func (c *iamClient) getOrganization(ctx context.Context, slug string) (*iamOrg, 
 	}
 	var o iamOrg
 	if err := json.Unmarshal(env.Data, &o); err != nil {
-		return nil, fmt.Errorf("iam get-organization: decode: %w", err)
+		return nil, fmt.Errorf("iam organizations/get: decode: %w", err)
 	}
 	return &o, nil
 }
@@ -382,7 +387,7 @@ func (c *iamClient) createOrganization(ctx context.Context, o iamOrg) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.do(ctx, http.MethodPost, "/v1/iam/add-organization", nil, body)
+	_, err = c.do(ctx, http.MethodPost, "/v1/iam/organizations", nil, body)
 	return err
 }
 
@@ -439,8 +444,8 @@ func (c *iamClient) ensureAgentApplication(ctx context.Context, org string) erro
 	// ASK FIRST. Idempotence comes from reading, not from parsing an error
 	// string: this client surfaces failures as plain messages with no status, so
 	// matching "already exists" would be a guess about IAM's prose.
-	if got, gerr := c.do(ctx, http.MethodGet,
-		"/v1/iam/applications/get", url.Values{"id": {org + "/" + name}}, nil); gerr == nil && len(got.Data) > 2 {
+	if got, gerr := c.do(ctx, http.MethodGet, "/v1/iam/applications/get",
+		url.Values{"owner": {org}, "name": {name}}, nil); gerr == nil && len(got.Data) > 2 {
 		return nil // already provisioned; that is the desired state
 	}
 
@@ -486,17 +491,22 @@ func splitID(id string) (owner, name string) {
 // only handle is the UUID `sub`. One roster read, used only after the direct
 // lookup has already failed — never on the happy path.
 func (c *iamClient) nameOf(ctx context.Context, owner, id string) (string, error) {
-	env, err := c.do(ctx, http.MethodGet, "/v1/iam/get-users", url.Values{"owner": {owner}}, nil)
+	env, err := c.do(ctx, http.MethodGet, "/v1/iam/users", url.Values{"owner": {owner}}, nil)
 	if err != nil {
 		return "", err
 	}
-	var rows []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
+	// The roster arrives named for its entity — {"users":[…],"total":N} — rather
+	// than as a bare array, so the rows are read out from under that key.
+	var page struct {
+		Users []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"users"`
 	}
-	if err := json.Unmarshal(env.Data, &rows); err != nil {
+	if err := json.Unmarshal(env.Data, &page); err != nil {
 		return "", err
 	}
+	rows := page.Users
 	for _, r := range rows {
 		if r.ID == id {
 			return r.Name, nil
@@ -537,6 +547,23 @@ func (c *iamClient) getUser(ctx context.Context, owner, name string) (json.RawMe
 	return env.Data, nil
 }
 
+// putUser writes a whole user row back — the second half of every read-change-write
+// on this client (the avatar, the appearance preference, the move into a new org).
+//
+// The row travels NESTED under `user`, and which row is written comes from that
+// object's own owner and name: there is no id parameter to address it by, so the
+// row read is the row written and the two cannot name different people. It lives
+// here so the shape is stated ONCE — three callers spelling the same envelope is
+// three places for it to be spelled differently.
+func (c *iamClient) putUser(ctx context.Context, row map[string]any) error {
+	body, err := json.Marshal(map[string]any{"user": row})
+	if err != nil {
+		return err
+	}
+	_, err = c.do(ctx, http.MethodPost, "/v1/iam/users/update", nil, body)
+	return err
+}
+
 // setAvatar records the user's profile photo URL on their IAM row. IAM is the
 // system of record for `avatar` — the console, the session claims and every other
 // surface already read it from there — so this one write is what makes a new photo
@@ -560,38 +587,21 @@ func (c *iamClient) setAvatar(ctx context.Context, id, photo string) error {
 	// avatarType tells IAM the photo is ours rather than a federated provider's, so
 	// a later sign-in through GitHub does not silently overwrite what the user chose.
 	row["avatarType"] = "custom"
-	body, err := json.Marshal(row)
-	if err != nil {
-		return err
-	}
-	_, err = c.do(ctx, http.MethodPost, "/v1/iam/update-user", url.Values{"id": {id}}, body)
-	return err
+	return c.putUser(ctx, row)
 }
 
-// moveUserToOrg makes the zero-org user an admin of `slug`: it re-submits the user
-// row with owner=slug + isAdmin=true (update-user takes the whole row). The user's
-// password travels with the row (IAM verifies against user.PasswordType first), so
-// the move never locks them out. `id` is the caller's CURRENT `<owner>/<name>`.
-func (c *iamClient) moveUserToOrg(ctx context.Context, id, slug string) error {
-	owner, name := splitID(id)
-	rowRaw, err := c.getUser(ctx, owner, name)
-	if err != nil {
-		return err
-	}
-	var row map[string]any
-	if err := json.Unmarshal(rowRaw, &row); err != nil {
-		return fmt.Errorf("iam get-user: decode: %w", err)
-	}
-	row["owner"] = slug
-	row["isAdmin"] = true
-	body, err := json.Marshal(row)
-	if err != nil {
-		return err
-	}
-	// update-user is keyed by the ORIGINAL id (the row's current owner/name).
-	_, err = c.do(ctx, http.MethodPost, "/v1/iam/update-user", url.Values{"id": {id}}, body)
-	return err
-}
+// MOVING A FOUNDER INTO THEIR NEW ORG IS `provision`, AND ONLY provision.
+//
+// There used to be a second way here — read the row, set owner to the new slug,
+// write it back — and the user update cannot express it: it resolves WHICH row to
+// write from that row's own owner and name, so a body naming the new org is a
+// lookup of a user who does not exist there yet, and the write is refused. The
+// org would be created and its founder left outside it.
+//
+// So the pair is gone and the atomic op is the whole path. It was already the
+// preferred one; what is removed is the fallback that ran when no service token
+// was configured, and a deployment in that state now hears so at the first step
+// instead of after the org exists.
 
 // EXISTING ORGS DO NOT HAVE ONE. This runs where an org is CREATED, so every org
 // that already existed when it shipped — including hanzo's own — has no agent

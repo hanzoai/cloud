@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 
@@ -168,10 +167,5 @@ func (c *iamClient) setAppearance(ctx context.Context, id string, pref appearanc
 	}
 	props["appearance"] = string(blob)
 	row["properties"] = props
-	body, err := json.Marshal(row)
-	if err != nil {
-		return err
-	}
-	_, err = c.do(ctx, http.MethodPost, "/v1/iam/update-user", url.Values{"id": {id}}, body)
-	return err
+	return c.putUser(ctx, row)
 }
