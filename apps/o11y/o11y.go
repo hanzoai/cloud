@@ -64,10 +64,10 @@ import (
 )
 
 // The prose for the operations this package serves but does not OWN the shape of:
-// the three native service probes hanzoai/o11y registers, and the /v1/sentinel
-// wildcard this file registers itself. Neither has an operation to type — a probe
-// is a bare handler and a wildcard is a wildcard — so zipdoc has nothing to lift,
-// and without a Describe they publish an operationId and nothing else. Declared
+// the three native service probes hanzoai/o11y registers, and the DSN ingest
+// doors. None has an operation to type — a probe is a bare handler and an
+// envelope frame is a foreign wire — so zipdoc has nothing to lift, and without
+// a Describe they publish an operationId and nothing else. Declared
 // here because this file owns what a caller actually meets on the way through:
 // the gate, its exemptions, and the runtime the request is handed to. The probes'
 // prose cannot move into the module with the routes, because Describe lives in
@@ -133,21 +133,16 @@ func init() {
 		"Watch one running query's progress",
 		"Reports how far a submitted query has got — rows scanned, bytes read, elapsed — and "+
 			"HOLDS the connection until the next update rather than answering immediately.\n\n"+
+			"ONE ADDRESS, TWO PROTOCOLS. Send an Upgrade and this is a websocket carrying the "+
+			"same progress; send an ordinary GET and it is a long poll. The Upgrade is a "+
+			"property of the request, not of the address, so the read that used to answer at "+
+			"/ws/query_progress answers here.\n\n"+
 			"The long poll is the whole point, and the reason this cannot be a typed "+
 			"operation: an answer that arrived only when the query finished would report "+
-			"progress on nothing. The websocket form of the same read is /ws/query_progress.\n\n"+
+			"progress on nothing, and an upgraded connection has no JSON response to "+
+			"declare.\n\n"+
 			"A validated, org-scoped principal is required; a query id belonging to another "+
 			"tenant is simply not found.")
-	openapi.Describe("/ws/query_progress", http.MethodGet,
-		"Watch one running query's progress over a websocket",
-		"The same progress read as /v1/o11y/query_progress, delivered over a websocket: the "+
-			"Upgrade IS the contract, so there is no JSON response to declare and no typed "+
-			"operation to make of it.\n\n"+
-			"It sits outside /v1/o11y on purpose — the upgrade handshake is a transport "+
-			"concern, not a resource — and it was unreachable from the composed binary until "+
-			"the route table named it, because the old wildcard covered only the o11y "+
-			"prefix.\n\n"+
-			"A validated, org-scoped principal is required.")
 	openapi.Describe("/v1/o11y/export_raw_data", http.MethodPost,
 		"Export raw telemetry rows as a file",
 		"Runs a query and returns its rows as a downloadable CSV or JSONL attachment, "+
@@ -202,7 +197,7 @@ func init() {
 			"THE /api/ SEGMENT IS NOT OURS TO NAME. An SDK appends its own fixed "+
 			"/api/<project>/envelope/ suffix to whatever DSN it is given, so this address is "+
 			"the SDK's, received verbatim. We receive this shape; we do not publish it. The "+
-			"clean spelling of the same wire is /v1/sentinel/{project}/envelope/.\n\n"+
+			"clean spelling of the same wire is /v1/event/{project}/envelope/.\n\n"+
 			"AUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, and therefore exempt "+
 			"from the principal gate: the ingest verifier checks the key in constant time, "+
 			"fails closed, and derives the org from it. A keyless submission is a 401 from that "+
@@ -216,79 +211,6 @@ func init() {
 			"Same address ownership and same authentication as the envelope route — the "+
 			"/api/ segment is the SDK's, the DSN public key is the credential, the principal "+
 			"gate does not apply, and a keyless submission is a 401 from the ingest verifier.")
-	// --- /v1/sentinel/* — the Sentry product face over the SAME runtime ---
-	openapi.Describe("/v1/sentinel/*", http.MethodGet,
-		"Read the caller org's errors on the Sentry surface",
-		"Serves the Sentry-compatible read surface — projects, error issues and one issue's "+
-			"occurrences, a single event, error logs, error-correlated traces and one trace's "+
-			"waterfall, and the event-rate stats — so a Sentry client or the error console "+
-			"reads its errors at the paths it already speaks.\n\n"+
-			"It is the SAME runtime the observability surface serves, reached under a second "+
-			"path family, and there is NO rewrite: the runtime carries these routes literally. "+
-			"That is what makes this a product face rather than a translation layer. One "+
-			"runtime, two path families.\n\n"+
-			"A validated principal is required and the read is scoped to that principal's own "+
-			"org. Errors are a tenant's OWN data, so org membership is the whole admission test "+
-			"and there is deliberately no admin term on it — gating the product on platform "+
-			"sudo would make the only way to see your own errors a scope that shows you "+
-			"everyone's. Before the runtime is initialized, 503.")
-	openapi.Describe("/v1/sentinel/*", http.MethodPost,
-		"Send events to the Sentry surface, or write on it",
-		"Carries every write on the Sentry-compatible surface: the SDK's error ingest, and "+
-			"the authenticated writes the console makes — creating a project, rotating a "+
-			"project's DSN key, and running a discover query over the events plane.\n\n"+
-			"THE TWO ARE AUTHENTICATED DIFFERENTLY, and that is the rule to get right. An "+
-			"envelope or store submission presents a DSN public key, never a Hanzo session, so "+
-			"it is exempt from the principal gate and verified by the ingest key check instead "+
-			"— which derives the org from the DSN and fails closed. A keyless submission is a "+
-			"401 from that verifier, not a 403 from the gate, and telling those two apart is "+
-			"how you tell the hops apart. Every other write here needs a validated, org-scoped "+
-			"principal, and creating or rotating requires an editor rather than a viewer.\n\n"+
-			"The ingest exemption is matched by method plus prefix plus suffix, never a bare "+
-			"prefix, and the project segment must be a UUID — so no read is reachable through "+
-			"it. Before the runtime is initialized, 503.")
-	openapi.Describe("/v1/sentinel/*", http.MethodPut,
-		"Move an error issue through its lifecycle",
-		"The one replace on the Sentry surface: updating an error ISSUE — resolving it, "+
-			"ignoring it, or assigning it — and answering the updated issue.\n\n"+
-			"Nothing else here takes a replace. A project is created and deleted but never "+
-			"replaced, and the event and trace planes are append-only telemetry, so an issue's "+
-			"lifecycle is the only mutable state this face exposes.\n\n"+
-			"Requires a validated, org-scoped principal with edit rights; a viewer is refused. "+
-			"The write is confined to the org minted from that principal's claim, so an issue "+
-			"id belonging to another tenant is simply not found. Before the runtime is "+
-			"initialized, 503.")
-	openapi.Describe("/v1/sentinel/*", http.MethodPatch,
-		"Not served — the Sentry surface has no partial update",
-		"The Sentry face carries NO route for a partial update. The wildcard admits every "+
-			"method, so this operation exists as an address, but nothing behind it answers and "+
-			"a request lands on the runtime as an unrouted path.\n\n"+
-			"It is documented rather than silently omitted because the useful thing to say is "+
-			"where to go instead: an issue's lifecycle — resolve, ignore, assign — is a "+
-			"REPLACE on that issue, not a patch, and it is the only mutable state on this "+
-			"surface. A client that reaches for a partial update here is looking for that "+
-			"call.")
-	openapi.Describe("/v1/sentinel/*", http.MethodDelete,
-		"Delete a Sentry project",
-		"The one delete on the Sentry surface: removing a PROJECT, answering 204. Error "+
-			"issues, events and traces are not individually deletable — they are append-only "+
-			"telemetry, and their lifetime is retention's business, not an API call's.\n\n"+
-			"Requires a validated, org-scoped principal with edit rights; a viewer is refused. "+
-			"The delete is confined to the org minted from that principal's claim, so a project "+
-			"id belonging to another tenant is not found rather than removed. Deleting a "+
-			"project retires the DSN that fed it, so any SDK still pointed at that key stops "+
-			"being accepted. Before the runtime is initialized, 503.")
-	// The methods left over. This address is bound with All(), so it publishes every
-	// method this generator knows and the ones above are only the ones that DO
-	// something. DescribeRest covers the remainder from the generator's own set, so a
-	// method added there is covered the day it appears rather than published bare —
-	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
-	openapi.DescribeRest("/v1/sentinel/*",
-		"Not served by the Sentry face",
-		"Published because this address accepts every method, but the Sentry face routes "+
-			"nothing here: the request reaches the runtime as an unrouted path and no issue, "+
-			"event or trace is touched.")
-
 }
 
 // defaultUpstream is the in-cluster address of the o11y runtime Deployment's
@@ -454,7 +376,7 @@ func orgOf(r *http.Request) string { return strings.TrimSpace(r.Header.Get("X-Or
 // here for having no token; both sides read the same predicate now instead of
 // two lists that agreed only by inspection. The three answers are still how you
 // tell the hops apart if this regresses: a keyless POST to
-// /v1/sentinel/<uuid>/envelope/ answers 401 "invalid ingest key" (text/plain, from
+// /v1/event/<uuid>/envelope/ answers 401 "invalid ingest key" (text/plain, from
 // the ingest verifier) — NOT 404 (unrouted), and NOT the 403
 // {"status":"error","msg":"no validated principal"} the READ paths return.
 
@@ -515,33 +437,6 @@ func mountRuntime(deps cloud.Deps) error {
 	return nil
 }
 
-// mountSentinel registers the /v1/sentinel/* wildcard, forwarding every request to the
-// gated runtime handler (resolved PER-REQUEST, so it is in place by first request —
-// same discipline as the o11y wildcard). No path rewrite: the Sentinel routes are
-// literal /v1/sentinel/… in the runtime. The reads stay principal-gated.
-//
-// Sentinel is the FACE — issues, projects, stats, traces, the reads a signed-in
-// person makes. The one door a beacon lands on is /v1/event, and that is what a
-// minted DSN addresses.
-//
-// The runtime's ingest hatch is still spelled under this root, so the two
-// envelope/store operations below it remain reachable here as well. That is one
-// wire at two addresses and it is NOT finished: refusing them at THIS wildcard
-// does not close them, because the module registers them as concrete routes and
-// fiber resolves most-specific first — the wildcard is never consulted for a path
-// that matched. Closing it means moving the hatch off the face root in
-// hanzoai/o11y, which is a route move plus a tag plus a pin, not a guard here.
-func mountSentinel(a cloud.Router) {
-	a.All("/v1/sentinel/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := runtimeHandler
-		if h == nil {
-			http.Error(w, "o11y runtime not initialized", http.StatusServiceUnavailable)
-			return
-		}
-		h.ServeHTTP(w, r)
-	})))
-}
-
 // Mount composes the whole observability surface into its host as ONE app,
 // through [zip.Router.Use] — the same seam apps/iam composes identity through.
 //
@@ -599,16 +494,17 @@ func mountSentinel(a cloud.Router) {
 // the validated org parked at /v1/o11y is the one every typed op behind it reads.
 // door_test.go is the end-to-end proof, over the real mount.
 //
-// # The one thing a graft cannot carry
+// # Nothing is left on the host but the graft
 //
 // [zip.App.Declaration] drops HEAD and OPTIONS unconditionally — they are the
 // shadows fiber generates for a GET and for CORS, and a host does not route those
-// on their own. A door opened with All therefore cannot cross a graft intact:
-// OPTIONS is a METHOD the /v1/sentinel proxy genuinely answers, and it is published
-// as an operation. So that one door is registered on the HOST, at the same point
-// in the same order it always was, and it costs nothing here because a wildcard
-// proxy declares no typed op and contributes no schema. Everything with a shape
-// to name is in the child.
+// on their own, so a door opened with All cannot cross a graft intact. One door
+// needed that exception: the /v1/sentinel proxy, which answered OPTIONS as a real
+// method. It is gone — the runtime carries the error face at /v1/o11y/sentinel
+// now, twelve named paths with typed ops instead of a wildcard — so there is no
+// All left here and nothing to register on the host but the child itself.
+// Everything with a shape to name is in the child, which is where it always
+// belonged.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	a := zip.New(zip.Config{
 		AppName:      "o11y",
@@ -632,27 +528,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := mountRuntime(deps); err != nil {
 		return err
 	}
-	// Hanzo Sentry product face /v1/sentinel/* — the SIBLING of the /v1/o11y wildcard,
-	// delegating to the SAME gated runtime handler (which carries the clean /v1/sentinel
-	// routes; the DSN-ingest routes are gate-exempt via module.IngestWire). One
-	// runtime, two path families.
-	//
-	// Registering it here is necessary but NOT sufficient — the subtree has to be
-	// reachable at both hops above this one, and it silently was not at either:
-	// hanzoai/o11y had to carry the routes (the pinned v1.5.33 does —
-	// o11yapiserver/sentry.go registers them), and now that o11y runs out-of-process the HOST has
-	// to mount /v1/sentinel as a second prefix or the request 404s before it ever
-	// reaches this process — see cloud.PluginSpec in apps.Wire().
-	//
-	// On the HOST, because All opens OPTIONS and a graft cannot carry one; see
-	// [Mount]. Here in its order, so it still precedes the module's own
-	// /v1/sentinel ingest routes and still swallows them exactly as before.
-	mountSentinel(app)
 	// The Sentry wire on the ONE /v1/event door: POST /v1/event/{project}/envelope|store.
 	// The door's owner (analytics) carries the route — the project segment is
 	// variable, so no static prefix could route it here — and forwards through
-	// cloud.ObsErrorIngest to this handler, which rewrites onto the /v1/sentinel
-	// runtime routes BEFORE the principal gate sees the path, so the existing
+	// cloud.ObsErrorIngest to this handler, which rewrites onto the runtime's own
+	// ingest routes BEFORE the principal gate sees the path, so the existing
 	// ingest exemption stays the only exemption. No /api/ segment anywhere:
 	// /v1/ is the only prefix this platform speaks.
 	// Both obs claims on the ONE event door are published as PLANE OPS
@@ -722,10 +602,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // is registered here, BEFORE hanzoai/o11y's own table, so Fiber's in-order match
 // gives the specific routes precedence over the runtime relay.
 //
-// host is the router the graft lands on, and takes only what cannot cross one —
-// see [Mount]. It is registered in its own order here rather than before or
-// after the whole mount, because the /v1/sentinel wildcard has to precede the
-// module's own /v1/sentinel ingest routes exactly as it always did.
+// host is the router the graft lands on, and now takes nothing but the graft:
+// the one door that could not cross it — the /v1/sentinel wildcard — is gone,
+// folded into the module's own named routes under /v1/o11y/sentinel. See
+// [Mount].
 //
 // cloud.Bridge is NOT installed here, and no subsystem installs it. The typed ops
 // below do need it — a zip.Get[In, Out] handler receives a context and its decoded
