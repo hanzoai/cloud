@@ -20832,16 +20832,6 @@ components:
             $ref: '#/components/schemas/iam.Application'
           type: array
       type: object
-    iam.ApplicationRef:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
-      type: object
     iam.AuditLog:
       properties:
         action:
@@ -21125,13 +21115,6 @@ components:
       - name
       - application
       type: object
-    iam.DeleteOrganizationInput:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
     iam.DeleteOrganizationOutput:
       properties:
         affected:
@@ -21170,27 +21153,33 @@ components:
       type: object
     iam.Input:
       properties:
+        action:
+          type: string
+        clientIp:
+          type: string
         createdTime:
           type: string
-        description:
-          type: string
-        displayName:
-          type: string
-        isDefault:
+        isTriggered:
           type: boolean
-        metadata:
+        language:
+          type: string
+        method:
           type: string
         name:
+          type: string
+        object:
           type: string
         organization:
           type: string
         owner:
           type: string
-        tags:
-          items:
-            type: string
-          type: array
-        workspace:
+        requestUri:
+          type: string
+        response:
+          type: string
+        statusCode:
+          type: integer
+        user:
           type: string
       type: object
     iam.Invitation:
@@ -21342,8 +21331,8 @@ components:
       type: object
     iam.ListOrganizationsOutput:
       properties:
-        count:
-          type: integer
+        cursor:
+          type: string
         organizations:
           items:
             $ref: '#/components/schemas/iam.Organization'
@@ -21364,17 +21353,6 @@ components:
           items:
             $ref: '#/components/schemas/iam.Key'
           type: array
-      type: object
-    iam.ListSessionsIn:
-      properties:
-        application:
-          type: string
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
       type: object
     iam.ListSessionsOut:
       properties:
@@ -21838,13 +21816,6 @@ components:
         signupGroup:
           type: string
       type: object
-    iam.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
     iam.Role:
       properties:
         createdAt:
@@ -21917,15 +21888,6 @@ components:
             type: string
           type: array
       type: object
-    iam.SearchOrganizationsOutput:
-      properties:
-        cursor:
-          type: string
-        organizations:
-          items:
-            $ref: '#/components/schemas/iam.Organization'
-          type: array
-      type: object
     iam.Session:
       properties:
         application:
@@ -21958,19 +21920,6 @@ components:
         updatedAt:
           format: date-time
           type: string
-      type: object
-    iam.SessionRef:
-      properties:
-        application:
-          type: string
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
-      - application
       type: object
     iam.SetAvatarInput:
       properties:
@@ -22895,37 +22844,6 @@ components:
         org:
           type: string
       type: object
-    iam.auditlogs.Input:
-      properties:
-        action:
-          type: string
-        clientIp:
-          type: string
-        createdTime:
-          type: string
-        isTriggered:
-          type: boolean
-        language:
-          type: string
-        method:
-          type: string
-        name:
-          type: string
-        object:
-          type: string
-        organization:
-          type: string
-        owner:
-          type: string
-        requestUri:
-          type: string
-        response:
-          type: string
-        statusCode:
-          type: integer
-        user:
-          type: string
-      type: object
     iam.bulk:
       properties:
         maxOperations:
@@ -22948,13 +22866,6 @@ components:
           type: array
         total:
           type: integer
-      type: object
-    iam.certs.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
       type: object
     iam.config:
       properties:
@@ -23036,20 +22947,6 @@ components:
           type: array
         total:
           type: integer
-      type: object
-    iam.invitations.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
-    iam.keys.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
       type: object
     iam.listProvidersOut:
       properties:
@@ -23133,13 +23030,6 @@ components:
             $ref: '#/components/schemas/iam.Permission'
           type: array
       type: object
-    iam.permission.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
     iam.person:
       properties:
         displayName:
@@ -23164,6 +23054,31 @@ components:
         deleted:
           type: boolean
       type: object
+    iam.projects.Input:
+      properties:
+        createdTime:
+          type: string
+        description:
+          type: string
+        displayName:
+          type: string
+        isDefault:
+          type: boolean
+        metadata:
+          type: string
+        name:
+          type: string
+        organization:
+          type: string
+        owner:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+        workspace:
+          type: string
+      type: object
     iam.projects.ListOutput:
       properties:
         projects:
@@ -23172,23 +23087,6 @@ components:
           type: array
         total:
           type: integer
-      type: object
-    iam.projects.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
-    iam.providerKey:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
       type: object
     iam.providerResult:
       properties:
@@ -23322,13 +23220,6 @@ components:
         total:
           type: integer
       type: object
-    iam.roles.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
     iam.scheme:
       properties:
         description:
@@ -23344,16 +23235,6 @@ components:
       properties:
         supported:
           type: boolean
-      type: object
-    iam.tokenKey:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
       type: object
     iam.tokenMutation:
       properties:
@@ -23380,26 +23261,6 @@ components:
           items:
             $ref: '#/components/schemas/iam.User'
           type: array
-      type: object
-    iam.users.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
-      type: object
-    iam.webauthnCredentialKey:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
       type: object
     iam.webauthnCredentialMutationResult:
       properties:
@@ -23451,13 +23312,6 @@ components:
           items:
             $ref: '#/components/schemas/iam.Workspace'
           type: array
-      type: object
-    iam.workspaces.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
       type: object
     imageOrigin:
       properties:
@@ -76835,21 +76689,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/add-membership:
-    post:
-      description: |-
-        Lets a person or an application act in an organization. It is the grant
-        behind "add someone to the team", and it is safe to repeat — granting a
-        membership that already exists changes nothing. Granting membership IS the org's authority to give, so it takes the
-        same gate a write to that org's own registry row takes: a SuperAdmin, an admin
-        of the org itself, or an org-admin-capable confidential client. One rule, one
-        place (internal/authz).
-      operationId: post_iam_add-membership
-      summary: Lets a person or an application act in an organization.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/admin/applications/upsert:
     post:
       description: |-
@@ -77042,19 +76881,24 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/applications/delete:
-    post:
+  /v1/iam/applications/{owner}/{name}:
+    delete:
       description: |-
         Removes an application. Anyone mid-sign-in through it is
         turned away and its client credentials stop working, so retire the integration
         before deleting it.
-      operationId: post_iam_applications_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.ApplicationRef'
+      operationId: delete_iam_applications_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -77068,19 +76912,18 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/applications/get:
     get:
       description: |-
         Returns one application: its sign-in methods, its allowed
         redirect URIs and the client credentials your integration authenticates with.
-      operationId: get_iam_applications_get
+      operationId: get_iam_applications_by_owner_by_name
       parameters:
-      - in: query
+      - in: path
         name: owner
         required: true
         schema:
           type: string
-      - in: query
+      - in: path
         name: name
         required: true
         schema:
@@ -77099,8 +76942,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/applications/update:
-    post:
+    put:
       description: |-
         Changes an application's display, its sign-in methods and the redirect
         URIs it may return to — the call that makes login work from a new host. Which
@@ -77109,7 +76951,18 @@ paths:
 
         Exported so the legacy update-application alias reuses this exact path — one
         update, two spellings.
-      operationId: post_iam_applications_update
+      operationId: put_iam_applications_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -77235,7 +77088,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/iam.auditlogs.Input'
+              $ref: '#/components/schemas/iam.Input'
         required: true
       responses:
         "200":
@@ -77251,18 +77104,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/audit-logs/delete:
-    post:
+  /v1/iam/audit-logs/{owner}/{name}:
+    delete:
       description: |-
         Removes an audit entry. Retention policy is normally what should expire
         a trail; deleting by hand leaves a gap a reviewer will notice.
-      operationId: post_iam_audit-logs_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.Ref'
+      operationId: delete_iam_audit-logs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -77276,18 +77134,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/audit-logs/get:
-    post:
+    get:
       description: |-
         Returns one audit entry in full: the action, the person or key behind it,
         and the request it came in on.
-      operationId: post_iam_audit-logs_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.Ref'
+      operationId: get_iam_audit-logs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -77302,18 +77164,28 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/audit-logs/update:
-    post:
+    put:
       description: |-
         Corrects an audit entry. The trail is append-only in normal operation
         and nothing in the Hanzo Cloud rewrites it — this exists for an administrator
         to correct an entry their own systems recorded wrongly.
-      operationId: post_iam_audit-logs_update
+      operationId: put_iam_audit-logs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/iam.auditlogs.Input'
+              $ref: '#/components/schemas/iam.Input'
         required: true
       responses:
         "200":
@@ -77479,18 +77351,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/certs/delete:
-    post:
+  /v1/iam/certs/{owner}/{name}:
+    delete:
       description: |-
         Removes a signing certificate. Tokens signed with it can no longer be
         verified, so retire it only once nothing is still presenting them.
-      operationId: post_iam_certs_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.certs.Ref'
+      operationId: delete_iam_certs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -77504,18 +77381,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/certs/get:
-    post:
+    get:
       description: |-
         Returns one signing certificate — its algorithm, its validity window and
         its public half. The private key is masked.
-      operationId: post_iam_certs_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.certs.Ref'
+      operationId: get_iam_certs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -77530,8 +77411,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/certs/update:
-    post:
+    put:
       description: |-
         Changes a signing certificate's settings. What it is called does not
         change, and neither does when it was added.
@@ -77555,7 +77435,18 @@ paths:
         yet is carried without a line here — and leaves three things the request may
         not move: the bound Model (id, createdAt, key, snapshot), the natural key
         (owner/name address the row, they do not mutate it), and the creation stamp.
-      operationId: post_iam_certs_update
+      operationId: put_iam_certs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -77703,484 +77594,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/get-application:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-application
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-applications:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-applications
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-cert:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-cert
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-certs:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-certs
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-global-users:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-global-users
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-invitations:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-invitations
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-memberships:
-    get:
-      description: |-
-        Answers either question about who belongs where: which organizations one
-        person can act in, or who can act in one organization.
-
-        Both are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or
-        about a user whose home org is its own, and nothing else. The bound comes from
-        the verified credential via authz.Scope, so a request parameter can never
-        widen it — a membership row names who may act and spend in an org, so a
-        cross-tenant read is a customer roster leak.
-      operationId: get_iam_get-memberships
-      parameters:
-      - description: User is "<homeOrg>/<username>" — which organizations that identity
-          may act in.
-        in: query
-        name: user
-        required: false
-        schema:
-          type: string
-      - description: Org is an organization — who may act in it.
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Answer'
-          description: ok
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Answer'
-          description: bad request
-      summary: 'Answers either question about who belongs where: which organizations
-        one person can act in, or who can act in one organization.'
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/get-organization:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-organization
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-organization-projects:
-    get:
-      description: |-
-        Returns one organization's projects — what a scope switcher
-        lists so somebody can move between them.
-
-        You see your own organization and no other, whatever the request asks for.
-      operationId: get_iam_get-organization-projects
-      summary: Returns one organization's projects — what a scope switcher lists so
-        somebody can move between them.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-organization-workspaces:
-    get:
-      description: |-
-        Returns one organization's workspaces — what a scope
-        switcher lists so somebody can move between them.
-
-        You see your own organization and no other, whatever the request asks for.
-      operationId: get_iam_get-organization-workspaces
-      summary: Returns one organization's workspaces — what a scope switcher lists
-        so somebody can move between them.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-organizations:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-organizations
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-permission:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-permission
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-permissions:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-permissions
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-provider:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-provider
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-providers:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-providers
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-records:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-records
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-role:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-role
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-roles:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-roles
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-user:
-    get:
-      description: |-
-        Reads one person, two ways.
-
-        Name them and it is an ordinary read, with secrets stripped. Or hand it a
-        SECRET API key and it answers with the person that key belongs to — how a
-        service of yours turns a credential on an incoming request into an identity.
-
-        A publishable key resolves to nobody here, deliberately: it is safe to ship in
-        a browser precisely because it names an organization and never a person.
-
-        get-user is handler-authorized (authz.handlerAuthorizedExact) because the key
-        variant carries no owner/name for the Guard to authorize; so the owner/name
-        variant reinstates the SAME read authorization the Guard applies, through the ONE
-        policy function (authz.Can) — identical behavior, a cross-tenant or non-self read
-        still refused 403 — then reuses the generic getHandler verbatim for resolution and
-        redaction. No authz and no CRUD is reimplemented.
-      operationId: get_iam_get-user
-      summary: Reads one person, two ways.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-users:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-users
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/invitations:
     get:
       description: |-
@@ -78239,18 +77652,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/invitations/delete:
-    post:
+  /v1/iam/invitations/{owner}/{name}:
+    delete:
       description: |-
         Withdraws an invitation. It stops being redeemable at once; anyone who
         already joined through it keeps their account.
-      operationId: post_iam_invitations_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.invitations.Ref'
+      operationId: delete_iam_invitations_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78264,18 +77682,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/invitations/get:
-    post:
+    get:
       description: |-
         Returns one invitation: who it is for, what it grants on acceptance, and
         when it expires.
-      operationId: post_iam_invitations_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.invitations.Ref'
+      operationId: get_iam_invitations_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78290,12 +77712,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/invitations/update:
-    post:
+    put:
       description: |-
         Changes an invitation's terms — the role it grants, how many may redeem
         it, or when it expires. What it is called does not change.
-      operationId: post_iam_invitations_update
+      operationId: put_iam_invitations_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -78390,18 +77822,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/keys/delete:
-    post:
+  /v1/iam/keys/{owner}/{name}:
+    delete:
       description: |-
         Revokes an API key. Anything still presenting it stops being authorized at
         once, so roll the replacement out before you revoke.
-      operationId: post_iam_keys_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.keys.Ref'
+      operationId: delete_iam_keys_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78415,21 +77852,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/keys/get:
     get:
       description: |-
         Returns one API key: what it is called, what it may reach, and when it was
         issued.
-      operationId: get_iam_keys_get
+      operationId: get_iam_keys_by_owner_by_name
       parameters:
-      - in: query
+      - in: path
         name: owner
-        required: false
+        required: true
         schema:
           type: string
-      - in: query
+      - in: path
         name: name
-        required: false
+        required: true
         schema:
           type: string
       responses:
@@ -78446,24 +77882,43 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/keys/mint:
-    post:
+    put:
       description: |-
-        (re)generates the target user's key of the requested TYPE and
-        returns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`
-        (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
-        is safe to ship in client JS and resolves to an org, never a principal.
-
-        It writes the schema.Key row that the resolvers actually read. schema.User.AccessKey
-        is not a credential and nothing resolves it, so a key stamped there would
-        authenticate nobody.
-      operationId: post_iam_keys_mint
-      summary: (re)generates the target user's key of the requested TYPE and returns
-        it once, over the shared authorizeMinter + mintTarget seam.
+        Changes what a key is called or what it may reach. The credential
+        itself is not reissued — the key in your deployment keeps working.
+      operationId: put_iam_keys_by_owner_by_name
+      parameters:
+      - description: Owner is the tenant that holds the key; Name is unique within
+          Owner.
+        in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.Key'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Key'
+          description: ok
+      summary: Changes what a key is called or what it may reach.
       tags:
       - iam
       x-app: iam
       x-public: true
+      x-tool: true
   /v1/iam/keys/org:
     get:
       description: |-
@@ -78492,44 +77947,6 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/keys/revoke:
-    post:
-      description: |-
-        Clears the target user's key of the requested TYPE (immediate
-        revoke). Scoped by the same `?type` field mint takes, so revoking the browser key
-        leaves the server key working. A secret key's stored value is the sk- in its
-        schema.Key row.
-      operationId: post_iam_keys_revoke
-      summary: Clears the target user's key of the requested TYPE (immediate revoke).
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/keys/update:
-    post:
-      description: |-
-        Changes what a key is called or what it may reach. The credential
-        itself is not reissued — the key in your deployment keeps working.
-      operationId: post_iam_keys_update
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.Key'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Key'
-          description: ok
-      summary: Changes what a key is called or what it may reach.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
   /v1/iam/link:
     post:
       description: |-
@@ -78636,8 +78053,8 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/mfa/disable:
-    post:
+  /v1/iam/mfa:
+    delete:
       description: |-
         Turns a factor off, so sign-in stops asking for it. Naming no factor turns
         off ALL of them — the reset path. People may do this for themselves; doing it for
@@ -78647,7 +78064,7 @@ paths:
         The recovery codes go with the last factor: they are the way past a challenge, so
         keeping them alive for an account with nothing to challenge would leave a standing
         credential behind.
-      operationId: post_iam_mfa_disable
+      operationId: delete_iam_mfa
       summary: Turns a factor off, so sign-in stops asking for it.
       tags:
       - iam
@@ -79036,28 +78453,28 @@ paths:
   /v1/iam/organizations:
     get:
       description: |-
-        Returns the organizations you can see, newest first. Narrow it to one
-        parent account, and set a limit and offset to page through the rest.
+        Returns the organizations you can act in, the ones you belong to first
+        and the rest after, newest first, narrowed by an optional query against the
+        name or the display name.
 
-        READING THE REGISTRY IS AN OPERATOR ACT, and the handler now says so itself.
+        Platform operators see every organization; everyone else sees their own. Pass
+        the cursor from the previous page to continue; an empty cursor in the answer
+        means there is nothing more.
 
-        It never did: the scope lived only in the Guard, which refuses a non-operator
-        GET with 403 before the handler runs. That was true and sufficient for as long
-        as HTTP was the only way in. It stopped being sufficient when the same typed op
-        became reachable over the agent door, where a request arrives at the handler
-        with no middleware in front of it. A handler that reads no principal and treats
-        an absent Owner selector as no filter would answer such a caller with the whole
-        registry, so the scope has to be the handler's own, not the door's.
-
-        So the fact moves to where every door reaches it. The Guard keeps its own
-        refusal — two checks of one rule is not two rules, and the outer one still
-        spends nothing to refuse — but the rule no longer depends on which door was
-        used. A caller who wants the organizations they can ACT in asks Search, which
-        answers everyone from their own memberships.
+        THE SCOPE IS THE HANDLER'S OWN, so it holds at every door. The Guard refuses a
+        bearerless request before this runs, but the agent door carries a typed op to
+        its handler with no middleware in front of it — a handler that read no
+        principal would answer such a caller with the whole registry. Reading the
+        principal here is what makes the answer the same one over both.
       operationId: listOrganizations
       parameters:
+      - in: header
+        name: X-Forwarded-For
+        required: false
+        schema:
+          type: string
       - in: query
-        name: owner
+        name: q
         required: false
         schema:
           type: string
@@ -79067,10 +78484,10 @@ paths:
         schema:
           type: integer
       - in: query
-        name: offset
+        name: cursor
         required: false
         schema:
-          type: integer
+          type: string
       responses:
         "200":
           content:
@@ -79078,7 +78495,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.ListOrganizationsOutput'
           description: ok
-      summary: Returns the organizations you can see, newest first.
+      summary: Returns the organizations you can act in, the ones you belong to first
+        and the rest after, newest first, narrowed by an optional query against the
+        name or the display name.
       tags:
       - iam
       x-app: iam
@@ -79105,6 +78524,106 @@ paths:
           description: ok
       summary: Makes a new organization — the account your users, applications, roles,
         projects and workspaces are all named inside.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+  /v1/iam/organizations/{owner}/{name}:
+    delete:
+      description: |-
+        Removes an organization and everything named inside it. There is no
+        undo, and every session issued under it stops working.
+
+        The built-in admin organization cannot be deleted — losing it would leave the
+        account with no way back in.
+      operationId: deleteOrganization
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.DeleteOrganizationOutput'
+          description: ok
+      summary: Removes an organization and everything named inside it.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one organization: its display, its defaults and the sign-in rules
+        everyone in it inherits.
+      operationId: getOrganization
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Organization'
+          description: ok
+      summary: 'Returns one organization: its display, its defaults and the sign-in
+        rules everyone in it inherits.'
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Changes an organization's display, its defaults and the sign-in rules
+        everyone in it inherits. Which organization it is does not change, and neither
+        does when it was created.
+      operationId: updateOrganization
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.UpdateOrganizationInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Organization'
+          description: ok
+      summary: Changes an organization's display, its defaults and the sign-in rules
+        everyone in it inherits.
       tags:
       - iam
       x-app: iam
@@ -79143,139 +78662,6 @@ paths:
           description: ok
       summary: 'Changes how an organization appears across Hanzo: the square mark
         beside its name, as an uploaded image or as a single emoji.'
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/organizations/delete:
-    post:
-      description: |-
-        Removes an organization and everything named inside it. There is no
-        undo, and every session issued under it stops working.
-
-        The built-in admin organization cannot be deleted — losing it would leave the
-        account with no way back in.
-      operationId: deleteOrganization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.DeleteOrganizationInput'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.DeleteOrganizationOutput'
-          description: ok
-      summary: Removes an organization and everything named inside it.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/organizations/get:
-    get:
-      description: |-
-        Returns one organization: its display, its defaults and the sign-in rules
-        everyone in it inherits.
-      operationId: getOrganization
-      parameters:
-      - in: query
-        name: owner
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: name
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Organization'
-          description: ok
-      summary: 'Returns one organization: its display, its defaults and the sign-in
-        rules everyone in it inherits.'
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/organizations/search:
-    get:
-      description: |-
-        Returns the organizations you can act in, the ones you belong to first
-        and the rest after, newest first, narrowed by an optional query against the
-        name or the display name.
-
-        Platform operators see every organization; everyone else sees their own. Pass
-        the cursor from the previous page to continue; an empty cursor in the answer
-        means there is nothing more.
-      operationId: searchOrganizations
-      parameters:
-      - in: header
-        name: X-Forwarded-For
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: q
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      - in: query
-        name: cursor
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.SearchOrganizationsOutput'
-          description: ok
-      summary: Returns the organizations you can act in, the ones you belong to first
-        and the rest after, newest first, narrowed by an optional query against the
-        name or the display name.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/organizations/update:
-    post:
-      description: |-
-        Changes an organization's display, its defaults and the sign-in rules
-        everyone in it inherits. Which organization it is does not change, and neither
-        does when it was created.
-      operationId: updateOrganization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.UpdateOrganizationInput'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Organization'
-          description: ok
-      summary: Changes an organization's display, its defaults and the sign-in rules
-        everyone in it inherits.
       tags:
       - iam
       x-app: iam
@@ -79385,18 +78771,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/permissions/delete:
-    post:
+  /v1/iam/permissions/{owner}/{name}:
+    delete:
       description: |-
         Revokes a permission. Everyone who held access only through it loses
         that access immediately; grants they hold by another route are untouched.
-      operationId: post_iam_permissions_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.permission.Ref'
+      operationId: delete_iam_permissions_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79410,21 +78801,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/permissions/get:
     get:
       description: |-
         Returns one permission: who it grants to, what it allows, and the
         resources it covers.
-      operationId: get_iam_permissions_get
+      operationId: get_iam_permissions_by_owner_by_name
       parameters:
-      - in: query
+      - in: path
         name: owner
-        required: false
+        required: true
         schema:
           type: string
-      - in: query
+      - in: path
         name: name
-        required: false
+        required: true
         schema:
           type: string
       responses:
@@ -79441,13 +78831,24 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/permissions/update:
-    post:
+    put:
       description: |-
         Changes who a permission grants to, what it allows, or the resources it
         covers. Access changes as soon as the write lands. What the permission is
         called does not change, and neither does when it was created.
-      operationId: post_iam_permissions_update
+      operationId: put_iam_permissions_by_owner_by_name
+      parameters:
+      - description: Identity — the (owner, name) natural key.
+        in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -79521,7 +78922,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/iam.Input'
+              $ref: '#/components/schemas/iam.projects.Input'
         required: true
       responses:
         "200":
@@ -79537,19 +78938,24 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/projects/delete:
-    post:
+  /v1/iam/projects/{owner}/{name}:
+    delete:
       description: |-
         Removes a project. The people and roles in your organization are
         unchanged; what goes is the scope itself, so move anything addressed by it
         first.
-      operationId: post_iam_projects_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.projects.Ref'
+      operationId: delete_iam_projects_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79563,16 +78969,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/projects/get:
-    post:
+    get:
       description: 'Returns one project: what it is called and how it is set up.'
-      operationId: post_iam_projects_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.projects.Ref'
+      operationId: get_iam_projects_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79586,17 +78996,27 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/projects/update:
-    post:
+    put:
       description: |-
         Changes a project's settings. What it is called does not change, and
         neither does when it was created.
-      operationId: post_iam_projects_update
+      operationId: put_iam_projects_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/iam.Input'
+              $ref: '#/components/schemas/iam.projects.Input'
         required: true
       responses:
         "200":
@@ -79672,8 +79092,8 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/providers/delete:
-    post:
+  /v1/iam/providers/{owner}/{name}:
+    delete:
       description: |-
         Removes a provider. Sign-in through it stops for every
         application that used it, so give those applications another method first.
@@ -79681,12 +79101,17 @@ paths:
         A provider that is already gone answers "nothing changed" rather than an
         error, so the call is safe to repeat.
       operationId: deleteProvider
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.providerKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79700,18 +79125,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/providers/get:
-    post:
+    get:
       description: |-
         Returns one provider: what it connects to and how it is
         configured. Its credentials come back masked.
       operationId: getProvider
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.providerKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79725,8 +79154,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/providers/update:
-    post:
+    put:
       description: |-
         Changes a provider's settings or rotates the credentials it
         holds. The change takes effect on the next sign-in through it — sessions
@@ -79735,6 +79163,17 @@ paths:
         A provider that is not there answers "nothing changed" rather than an error, so
         the call is safe to repeat.
       operationId: updateProvider
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -79854,29 +79293,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/resolve-key:
-    get:
-      description: |-
-        Answers which organization a PUBLISHABLE key belongs to —
-        what a service of yours calls to attribute a request that arrived carrying a
-        key shipped in a browser.
-
-        It names an organization and never a person: no path through it can load or
-        return a user, so a key you put in client code cannot become a way to learn
-        who anyone is. A key that is expired, secret rather than publishable, or
-        simply unknown all answer with the same sentence, and with a `code` saying
-        which of those it was. Only a confidential service that already proved it may
-        resolve keys at all ever reads that code — there is no anonymous caller here
-        to probe for which keys exist — and telling it apart is what lets the holder
-        be told to re-mint an expired key instead of hunting a configuration error.
-      operationId: get_iam_resolve-key
-      summary: Answers which organization a PUBLISHABLE key belongs to — what a service
-        of yours calls to attribute a request that arrived carrying a key shipped
-        in a browser.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/revoke-user-keys:
     post:
       description: |-
@@ -79946,18 +79362,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/roles/delete:
-    post:
+  /v1/iam/roles/{owner}/{name}:
+    delete:
       description: |-
         Removes a role. Everyone in it loses the access it carried; their
         accounts, and any other role they hold, are untouched.
-      operationId: post_iam_roles_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.roles.Ref'
+      operationId: delete_iam_roles_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79971,16 +79392,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/roles/get:
-    post:
+    get:
       description: 'Returns one role: who is in it, and the roles it includes.'
-      operationId: post_iam_roles_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.roles.Ref'
+      operationId: get_iam_roles_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79994,13 +79419,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/roles/update:
-    post:
+    put:
       description: |-
         Changes who is in a role, or which roles it includes. Access changes for
         everyone in it as soon as the write lands. What the role is called does not
         change, and neither does when it was created.
-      operationId: post_iam_roles_update
+      operationId: put_iam_roles_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -80384,7 +79819,43 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/sessions/create:
+  /v1/iam/sessions:
+    get:
+      description: |-
+        Returns who is currently signed in to your organization, newest first, and
+        can be narrowed to one person or one application. It is what you read before
+        signing someone out.
+      operationId: listSessions
+      parameters:
+      - in: query
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: name
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: application
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.ListSessionsOut'
+          description: ok
+      summary: Returns who is currently signed in to your organization, newest first,
+        and can be narrowed to one person or one application.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
     post:
       description: |-
         Records a sign-in. Signing in again from another browser adds to the
@@ -80414,8 +79885,8 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/sessions/delete:
-    post:
+  /v1/iam/sessions/{owner}/{name}/{application}:
+    delete:
       description: |-
         Signs a person out of one application — the session ends and every
         browser carrying it stops being authenticated.
@@ -80423,12 +79894,22 @@ paths:
         A session that is already gone reports that nothing was deleted rather than an
         error, so the call is safe to repeat.
       operationId: deleteSession
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.SessionRef'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: application
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -80443,18 +79924,27 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/sessions/get:
-    post:
+    get:
       description: |-
         Returns one person's session in one application — when it began and which
         browsers or devices are still carrying it.
       operationId: getSession
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.SessionRef'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: application
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -80469,40 +79959,28 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/sessions/list:
-    post:
-      description: |-
-        Returns who is currently signed in to your organization, newest first, and
-        can be narrowed to one person or one application. It is what you read before
-        signing someone out.
-      operationId: listSessions
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.ListSessionsIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.ListSessionsOut'
-          description: ok
-      summary: Returns who is currently signed in to your organization, newest first,
-        and can be narrowed to one person or one application.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/sessions/update:
-    post:
+    put:
       description: |-
         Replaces the set of browsers a session covers — signing out the ones you
         leave off while the session itself stays live. A session that does not exist is
         reported as missing rather than created.
       operationId: updateSession
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: application
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -80627,8 +80105,8 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/tokens/delete:
-    post:
+  /v1/iam/tokens/{owner}/{name}:
+    delete:
       description: |-
         Revokes an access token. Whatever was using it stops being
         authorized at once.
@@ -80636,12 +80114,17 @@ paths:
         A token that is already gone answers "nothing changed" rather than an error, so
         the call is safe to repeat.
       operationId: deleteToken
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.tokenKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -80655,18 +80138,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/tokens/get:
-    post:
+    get:
       description: |-
         Returns one access token: who and what it was issued to, and when it
         expires.
       operationId: getToken
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.tokenKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -80676,6 +80163,43 @@ paths:
           description: ok
       summary: 'Returns one access token: who and what it was issued to, and when
         it expires.'
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Changes an access token's scope or expiry.
+
+        A token that is not there answers "nothing changed" rather than an error, so
+        the call is safe to repeat.
+      operationId: updateToken
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.Token'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.tokenMutation'
+          description: ok
+      summary: Changes an access token's scope or expiry.
       tags:
       - iam
       x-app: iam
@@ -80700,33 +80224,6 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/tokens/update:
-    post:
-      description: |-
-        Changes an access token's scope or expiry.
-
-        A token that is not there answers "nothing changed" rather than an error, so
-        the call is safe to repeat.
-      operationId: updateToken
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.Token'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.tokenMutation'
-          description: ok
-      summary: Changes an access token's scope or expiry.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
   /v1/iam/unlink:
     post:
       description: |-
@@ -80772,6 +80269,18 @@ paths:
       - in: query
         name: owner
         required: true
+        schema:
+          type: string
+      - description: |-
+          Email narrows the page to the accounts carrying one address. Looking a
+          person up by their address is a QUERY over the collection, not an item
+          read: an address is not the natural key, two rows in one org can carry
+          one, and a caller that gets a page SEES both — where a single-item read
+          would have to choose, and choosing is how somebody joins a team under a
+          colleague's identity.
+        in: query
+        name: email
+        required: false
         schema:
           type: string
       - in: query
@@ -80829,19 +80338,24 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/users/delete:
-    post:
+  /v1/iam/users/{owner}/{name}:
+    delete:
       description: |-
         Removes a person from your organization. Their sessions stop working
         immediately and the account is gone rather than suspended — to keep the record
         and only stop sign-in, update the user instead.
-      operationId: post_iam_users_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.users.Ref'
+      operationId: delete_iam_users_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -80855,7 +80369,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/users/get:
     get:
       description: |-
         Returns one person in your organization, addressed by their username or by
@@ -80866,16 +80379,16 @@ paths:
         picking one, and says so instead of reporting "no such user". Handing back an
         arbitrary one of two rows is how somebody gets added to a team under a
         colleague's identity.
-      operationId: get_iam_users_get
+      operationId: get_iam_users_by_owner_by_name
       parameters:
-      - in: query
+      - in: path
         name: owner
         required: true
         schema:
           type: string
-      - in: query
+      - in: path
         name: name
-        required: false
+        required: true
         schema:
           type: string
       - in: query
@@ -80897,8 +80410,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/users/update:
-    post:
+    put:
       description: |-
         Changes a person's profile, their roles, or the credentials they sign
         in with. Send a password to reset it; leave it out and their current one keeps
@@ -80907,7 +80419,18 @@ paths:
         Who they are does not change: their organization, username and the identifier
         their existing sessions are keyed on all survive the write, so an update never
         signs anyone out.
-      operationId: post_iam_users_update
+      operationId: put_iam_users_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -80928,6 +80451,58 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
+  /v1/iam/users/{owner}/{name}/keys:
+    delete:
+      description: |-
+        Clears the target user's key of the requested TYPE (immediate
+        revoke). Scoped by the same `?type` field mint takes, so revoking the browser key
+        leaves the server key working. A secret key's stored value is the sk- in its
+        schema.Key row.
+      operationId: delete_iam_users_by_owner_by_name_keys
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      summary: Clears the target user's key of the requested TYPE (immediate revoke).
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+    post:
+      description: |-
+        (re)generates the target user's key of the requested TYPE and
+        returns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`
+        (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
+        is safe to ship in client JS and resolves to an org, never a principal.
+
+        It writes the schema.Key row that the resolvers actually read. schema.User.AccessKey
+        is not a credential and nothing resolves it, so a key stamped there would
+        authenticate nobody.
+      operationId: post_iam_users_by_owner_by_name_keys
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      summary: (re)generates the target user's key of the requested TYPE and returns
+        it once, over the shared authorizeMinter + mintTarget seam.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
   /v1/iam/verification-codes:
     post:
       description: |-
@@ -81036,8 +80611,8 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/webauthn-credentials/delete:
-    post:
+  /v1/iam/webauthn-credentials/{owner}/{name}:
+    delete:
       description: |-
         Removes a passkey or security key — what you call when
         a device is lost. Make sure the person has another way to sign in first.
@@ -81045,12 +80620,17 @@ paths:
         A credential that is already gone answers "nothing changed" rather than an
         error, so the call is safe to repeat.
       operationId: deleteWebauthnCredential
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.webauthnCredentialKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -81065,18 +80645,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/webauthn-credentials/get:
-    post:
+    get:
       description: |-
         Returns one passkey or security key: whose it is, what
         device it lives on, and when it was registered.
       operationId: getWebauthnCredential
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.webauthnCredentialKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -81091,8 +80675,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/webauthn-credentials/update:
-    post:
+    put:
       description: |-
         Renames a registered passkey or security key, so a
         person can tell their devices apart.
@@ -81100,6 +80683,17 @@ paths:
         A credential that is not there answers "nothing changed" rather than an error,
         so the call is safe to repeat.
       operationId: updateWebauthnCredential
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -81247,18 +80841,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/workspaces/delete:
-    post:
+  /v1/iam/workspaces/{owner}/{name}:
+    delete:
       description: |-
         Removes a workspace. The people and roles in your organization are
         unchanged; what goes is the scope itself.
-      operationId: post_iam_workspaces_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.workspaces.Ref'
+      operationId: delete_iam_workspaces_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -81272,16 +80871,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/workspaces/get:
-    post:
+    get:
       description: 'Returns one workspace: what it is called and how it is set up.'
-      operationId: post_iam_workspaces_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.workspaces.Ref'
+      operationId: get_iam_workspaces_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -81295,12 +80898,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/workspaces/update:
-    post:
+    put:
       description: |-
         Changes a workspace's settings. What it is called does not change, and
         neither does when it was created.
-      operationId: post_iam_workspaces_update
+      operationId: put_iam_workspaces_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
