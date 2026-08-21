@@ -63,44 +63,91 @@ const subsystemAttr = "attributes['hanzo.subsystem']"
 
 // subsystemBoard is the whole per-subsystem board payload.
 type subsystemBoard struct {
-	Range   string              `json:"range"`
-	Start   string              `json:"start"`
-	End     string              `json:"end"`
-	Totals  subsystemTotals     `json:"totals"`
-	Rows    []subsystemRow      `json:"rows"`
+	// Range is the telemetry window the RED columns cover: 24h, 7d or 30d,
+	// normalized the same way the o11y board normalizes it. It does NOT bound the
+	// inventory — a subsystem appears whether or not it served anything.
+	Range string `json:"range"`
+	// Start is that window's lower bound, RFC 3339 UTC.
+	Start string `json:"start"`
+	// End is the moment of this read, RFC 3339 UTC.
+	End string `json:"end"`
+	// Totals is the KPI band above the table.
+	Totals subsystemTotals `json:"totals"`
+	// Rows is one row per subsystem MOUNTED IN THIS PROCESS, in the composition
+	// root's order. The row set comes from the mount index, not from the
+	// warehouse, so a subsystem that served nothing appears as a real zero instead
+	// of vanishing.
+	Rows []subsystemRow `json:"rows"`
+	// Sources is one row per input: mount-index (always ok — it IS this process),
+	// traces, and trace-errors. The last two go not-ok when the warehouse is
+	// absent, which is what says "telemetry unavailable" instead of implying every
+	// subsystem served nothing.
 	Sources []core.SourceStatus `json:"sources"`
 }
 
 // subsystemTotals is the KPI band above the table.
 type subsystemTotals struct {
-	Subsystems int64   `json:"subsystems"`
-	Enabled    int64   `json:"enabled"`
-	Disabled   int64   `json:"disabled"`
-	Reporting  int64   `json:"reporting"` // enabled AND served ≥1 traced request in the window
-	Requests   int64   `json:"requests"`
-	Errors     int64   `json:"errors"`
-	ErrorRate  float64 `json:"errorRate"` // percent (0..100)
+	// Subsystems is how many are mounted in this binary — the row count.
+	Subsystems int64 `json:"subsystems"`
+	// Enabled is how many of them are switched ON.
+	Enabled int64 `json:"enabled"`
+	// Disabled is the rest. With Enabled it sums to Subsystems.
+	Disabled  int64 `json:"disabled"`
+	Reporting int64 `json:"reporting"` // enabled AND served ≥1 traced request in the window
+	// Requests is the traced requests every subsystem served in the window,
+	// summed.
+	Requests int64 `json:"requests"`
+	// Errors is how many of them errored.
+	Errors    int64   `json:"errors"`
+	ErrorRate float64 `json:"errorRate"` // percent (0..100)
 }
 
 // subsystemRow is one subsystem: what it is, whether it is on, and how it behaved.
 // The last-error fields are FLAT rather than a nested object so the console can sort
 // and filter the table on them like any other column.
 type subsystemRow struct {
-	Name     string   `json:"name"`
+	// Name is the subsystem's name in the mount index, and the label the request
+	// span is stamped with. It is the join key between the inventory and the
+	// warehouse: a warehouse row naming something this binary does not mount is
+	// dropped rather than shown.
+	Name string `json:"name"`
+	// Prefixes is the route prefixes it answers on, e.g. /v1/admin. Always a list,
+	// never null — empty means it mounts no HTTP routes of its own.
 	Prefixes []string `json:"prefixes"`
-	Enabled  bool     `json:"enabled"`
+	// Enabled is whether it is switched ON in this process. Process-local and
+	// always truthful — it needs no warehouse — which is what answers "is that row
+	// empty because it is broken or because it is off".
+	Enabled bool `json:"enabled"`
 
-	Requests       int64   `json:"requests"`
+	// Requests is the traced requests it served in the window. Zero when the
+	// warehouse is unavailable, so read the board's sources before reading it as
+	// idle.
+	Requests int64 `json:"requests"`
+	// RequestsPerMin is Requests averaged over the WHOLE window, to 2dp — a flat
+	// mean, so a burst and a steady trickle of the same volume look alike here.
 	RequestsPerMin float64 `json:"requestsPerMin"`
-	Errors         int64   `json:"errors"`
-	ErrorRate      float64 `json:"errorRate"` // percent (0..100)
-	LatencyP50Ms   float64 `json:"latencyP50Ms"`
-	LatencyP95Ms   float64 `json:"latencyP95Ms"`
-	LatencyP99Ms   float64 `json:"latencyP99Ms"`
+	// Errors is how many of those requests errored.
+	Errors    int64   `json:"errors"`
+	ErrorRate float64 `json:"errorRate"` // percent (0..100)
+	// LatencyP50Ms is its median request duration in milliseconds.
+	LatencyP50Ms float64 `json:"latencyP50Ms"`
+	// LatencyP95Ms is its 95th percentile in milliseconds.
+	LatencyP95Ms float64 `json:"latencyP95Ms"`
+	// LatencyP99Ms is its 99th percentile in milliseconds.
+	LatencyP99Ms float64 `json:"latencyP99Ms"`
 
-	LastErrorAt      string `json:"lastErrorAt"`
-	LastErrorRoute   string `json:"lastErrorRoute"`
-	LastErrorStatus  string `json:"lastErrorStatus"`
+	// LastErrorAt is when this subsystem last errored in the window, RFC 3339 UTC.
+	// Empty when it did not — or when the last-error read failed, which the
+	// trace-errors source reports.
+	LastErrorAt string `json:"lastErrorAt"`
+	// LastErrorRoute is the route pattern that error was on, e.g. /v1/admin/orgs.
+	// Empty when the span carried none.
+	LastErrorRoute string `json:"lastErrorRoute"`
+	// LastErrorStatus is the HTTP status code it answered, as a STRING — it is a
+	// span attribute, and attribute values arrive as text.
+	LastErrorStatus string `json:"lastErrorStatus"`
+	// LastErrorMessage is the span's status message. Empty when the span recorded
+	// none, which is common: a span can be marked errored without a message.
 	LastErrorMessage string `json:"lastErrorMessage"`
 }
 
@@ -113,9 +160,14 @@ type SubsystemsIn struct {
 
 // SubsystemsOut is the GET /v1/admin/subsystems envelope.
 type SubsystemsOut struct {
-	Status string          `json:"status"`
-	Msg    string          `json:"msg"`
-	Data   *subsystemBoard `json:"data,omitempty"`
+	// Status is "ok" or "error", at HTTP 200 either way. An absent warehouse still
+	// answers "ok" with the full inventory — the telemetry gap is reported in
+	// data.sources.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error", empty otherwise.
+	Msg string `json:"msg"`
+	// Data is the board. Null only when the caller was refused.
+	Data *subsystemBoard `json:"data,omitempty"`
 }
 
 // subsystems answers GET /v1/admin/subsystems. ?range=24h|7d|30d bounds the telemetry
