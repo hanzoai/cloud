@@ -18,7 +18,6 @@
 /v1/errors analytics
 /v1/event analytics
 /v1/event.js analytics
-/v1/finance billing
 /v1/flags admission
 /v1/insights analytics
 /v1/logs metrics
