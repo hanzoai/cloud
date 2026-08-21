@@ -35,4 +35,6 @@ esac
 grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' \
      --include='*.go' clients cmd . 2>/dev/null \
   | grep -v '/\.' | xargs -n1 dirname | sed 's|^\./||' | sort -u | sed 's|^|./|' \
-  | xargs $GO run github.com/zap-proto/zip/cmd/zipdoc $arg
+  | xargs $GO run github.com/zap-proto/zip/cmd/zipdoc $arg || exit 1
+# `|| exit 1` because xargs answers 123 for "something I ran failed", and a gate whose
+# exit code names the dispatcher rather than the refusal tells a reader nothing.
