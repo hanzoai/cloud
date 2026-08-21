@@ -38,12 +38,20 @@ import (
 // direct one does not, so the rule is read off the data rather than configured.
 // Two specific claims, or two doors, are still a refusal.
 
-// Part is one app's contribution: its document, and the name a conflict is
-// reported against. The name is the app's, not the file's — a message naming
-// two paths a human then has to map back to apps is a worse message.
+// Part is one app's contribution: its document, the name a conflict is reported
+// against, and the stage that name is at. The name is the app's, not the file's —
+// a message naming two paths a human then has to map back to apps is a worse
+// message.
+//
+// Stage is the app's manifest row (manifest.App.Stage, HIP-0139 §8), carried here
+// rather than looked up because this package cannot import manifest — manifest's
+// own tests read this one, so the edge would close a cycle. It arrives from
+// whoever built the part, which is the same place the bytes arrive from: see
+// [Subsets]. Empty is ga, exactly as the row's zero value is.
 type Part struct {
-	App string
-	Doc *Document
+	App   string
+	Stage string
+	Doc   *Document
 }
 
 // Conflict is two apps disagreeing about one name. Typed rather than a bare
@@ -218,6 +226,12 @@ func Weave(parts []Part) (*Document, error) {
 				if legacy {
 					op.Tags = append(op.Tags, Compat)
 				}
+				// The stage is the SERVING app's, so it comes from the part and not
+				// from op.App: a relayed operation names the registry behind the door
+				// in x-app, and who is shown a capability is a fact about the app whose
+				// prefix the request reaches. Written unconditionally, because an app
+				// describing itself cannot know it and therefore never sets it.
+				op.Stage = p.Stage
 				if prev, dup := opOwner[at]; dup {
 					// A DOOR YIELDS TO A SPECIFIC ROUTE, because that is what the
 					// matcher does: a wildcard is registered after the paths that
@@ -285,6 +299,12 @@ func Weave(parts []Part) (*Document, error) {
 	if err := uniqueOperationIDs(out); err != nil {
 		return nil, err
 	}
+	// The audience, asked again now that the stage is known. Each part was stamped
+	// by its own [Spec] against everything an app can see about itself, and the
+	// stage is the one term of the rule an app cannot see — so the rule is asked
+	// once more here, over the composition, rather than a second rule being written
+	// that ANDs a stage onto a mark somebody else made. See [stamp].
+	stamp(out)
 	// The credential is IDENTITY, like the info and server blocks above: one API,
 	// one scheme, stated by this package rather than inherited from whichever part
 	// happened to carry it (openapi/security.go).

@@ -349,6 +349,21 @@ type Operation struct {
 	Security    *[]Requirement `json:"security,omitempty"`
 	App         string         `json:"x-app,omitempty"`
 	Public      bool           `json:"x-public,omitempty"`
+	// Stage is whether a customer is shown the capability that serves this
+	// operation: "beta", "alpha", or ABSENT for ga (HIP-0139 §8).
+	//
+	// Absent means ga for the same reason the manifest's empty row does: ga is the
+	// default and a third spelling of it would be a second way to say one thing.
+	// It is stamped by [Weave], from the serving app's manifest row, because the
+	// row is the one place the fact is declared and the weave is the first point
+	// at which a document knows whose app an operation came from — an app
+	// describing itself does not read the fleet's manifest and must not start
+	// guessing its own stage.
+	//
+	// An extension rather than a tag, exactly as [Operation.Public] and
+	// [Operation.Tool] are: the tag axis means the capability, and a generator
+	// ignores an `x-` it does not know.
+	Stage string `json:"x-stage,omitempty"`
 	// Tool says this operation is DISPATCHABLE, not merely described.
 	//
 	// zip builds its MCP tool list by walking the typed registry and nothing else

@@ -26,7 +26,12 @@ package openapi
 //   - it is not a relay door — a `{wildcardN}` address publishes whatever grows
 //     behind it and names nothing a client can call;
 //   - it is not tagged [Compat] — a legacy spelling is served so a pinned caller
-//     keeps working and is, by its own declaration, not the contract.
+//     keeps working and is, by its own declaration, not the contract;
+//   - its capability is `ga` (HIP-0139 §8) — a beta or alpha capability is
+//     reached by flag and by nobody else, so it is in no generated client, no
+//     tool list, no command group and no public page. It is still in the
+//     internal document, which is where an operator and a flagged-in customer
+//     read it.
 //
 // It used to be a whitelist: eighteen operations, each declared by hand in the
 // app that served it, everything else internal by default. That held the
@@ -81,16 +86,29 @@ func audience(path string, op *Operation) bool {
 	if strings.Contains(path, "{wildcard") {
 		return false
 	}
+	if op.Stage != "" {
+		return false
+	}
 	return !slices.Contains(op.Tags, Compat)
 }
 
 // stamp writes the audience on every operation.
 //
-// It runs ONCE, at the end of [Spec], and that is the only place it can run.
-// Earlier is too early: [Fold] replaces a structural operation wholesale with the
-// typed one, and [Project] replaces a door with the registry behind it, so a mark
-// written before either would be discarded by it. Later is too late: the subsets
-// are already on disk and the weave is a pure function of them.
+// It runs at the end of [Spec], and AGAIN at the end of [Weave]. That is not two
+// rules — it is one rule asked at the two points where the facts it reads are
+// complete, and the second reading subsumes the first.
+//
+// Within an app, earlier than the end of Spec is too early: [Fold] replaces a
+// structural operation wholesale with the typed one, and [Project] replaces a
+// door with the registry behind it, so a mark written before either would be
+// discarded by it.
+//
+// Across the fleet, the end of Spec is too EARLY for one term of the rule. A
+// subset is written by the app's own binary, which does not read the fleet's
+// manifest and so cannot know its own stage (HIP-0139 §8); the stage arrives with
+// [Part], and Weave is where it is stamped. So Weave asks the whole rule again on
+// the finished composition, where every term — address, product, door, compat and
+// stage — is finally in hand. It is still a pure function of the parts.
 func stamp(d *Document) {
 	for path, item := range d.Paths {
 		for _, op := range item {
