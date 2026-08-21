@@ -10,7 +10,6 @@
 /_ commerce
 /meet meet
 /tasks tasks
-/v1/auto automations
 /v1/billing commerce
 /v1/bot bots
 /v1/logs metrics

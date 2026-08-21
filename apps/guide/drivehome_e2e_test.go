@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/automations"
+	"github.com/hanzoai/cloud/apps/auto"
 	"github.com/hanzoai/cloud/apps/company"
 	"github.com/hanzoai/cloud/apps/content"
 	"github.com/hanzoai/cloud/apps/framework"
@@ -21,7 +21,7 @@ import (
 // walks a FRESH org through the whole agentic-company + Guide loop, asserting each of
 // the seven seams against the real, in-process subsystems with a validated test
 // principal. Nothing is stubbed at the seam boundary that production wires: the Guide's
-// "do it for me" runs content_generate through the real automations.InvokeTool onto the
+// "do it for me" runs content_generate through the real auto.InvokeTool onto the
 // real framework DocType store; the company machine runs its real transition guards; the
 // blueprint admin plane runs the real SuperAdmin predicate. The only fakes are the AI
 // completion (a deterministic draft) and the growth-observe seams, which are bound to
@@ -42,10 +42,10 @@ func mountAgenticStack(t *testing.T, ai cloud.AIClient) *zip.App {
 	if err := content.Mount(app, cloud.Deps{AI: ai, Domain: "api.test", Env: "testnet"}); err != nil {
 		t.Fatalf("content.Mount: %v", err)
 	}
-	if err := automations.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("automations.Mount: %v", err)
+	if err := auto.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("auto.Mount: %v", err)
 	}
-	// guide with the REAL invoke seam (automations.InvokeTool) — no fake tool plane.
+	// guide with the REAL invoke seam (auto.InvokeTool) — no fake tool plane.
 	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), AI: ai}); err != nil {
 		t.Fatalf("guide.Mount: %v", err)
 	}
@@ -62,7 +62,7 @@ func mountAgenticStack(t *testing.T, ai cloud.AIClient) *zip.App {
 	t.Cleanup(func() {
 		_ = company.Shutdown(context.Background())
 		_ = Shutdown()
-		_ = automations.Shutdown(context.Background())
+		_ = auto.Shutdown(context.Background())
 		_ = content.Shutdown()
 		_ = framework.Shutdown()
 	})
@@ -341,7 +341,7 @@ func TestDrive_Seam5_StrategiesStageFiltered(t *testing.T) {
 // ── Seam 6 — execute a step: the effect lands, detect reflects it ────────────
 
 // TestDrive_Seam6_ExecuteStepEffectLandsDetectReflects proves the executing seam. A Guide
-// content_generate step runs through the REAL automations.InvokeTool → content.Generate →
+// content_generate step runs through the REAL auto.InvokeTool → content.Generate →
 // framework store: a Campaign document actually lands for the org, the step auto-marks
 // done, AND the "acted" auto-detect signal INDEPENDENTLY reflects the landed effect (a
 // reset step re-detects done on the next read, driven only by the recorded action).
