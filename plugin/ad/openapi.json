@@ -1,0 +1,424 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package ads is your paid ad campaigns, launched and paused from one place.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "ad"
+    }
+  ],
+  "paths": {
+    "/v1/ad/campaigns": {
+      "get": {
+        "operationId": "get_ad_campaigns",
+        "summary": "Returns the caller org's ad campaigns, most recently updated first, optionally narrowed to one lifecycle status.",
+        "description": "Returns the caller org's ad campaigns, most recently updated\nfirst, optionally narrowed to one lifecycle status. The listing is bounded by\nthe org: another tenant's campaigns are not reachable from here at all.",
+        "tags": [
+          "ad"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status filters to one lifecycle state (draft, active, paused, completed).\nEmpty returns every campaign the org has.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "active"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many campaigns come back: default 200, maximum 1000. A\nvalue that is not a positive integer reads as the default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/campaignList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_ad_campaigns",
+        "summary": "Registers a new ad campaign for the caller's org and answers 201 with the stored row.",
+        "description": "Registers a new ad campaign for the caller's org and answers\n201 with the stored row. It only records the campaign — nothing is sent to the\nad network until POST /v1/ad/campaigns/{id}/launch runs it. The org is\nstamped by the server from the validated principal, so a body can never place\na campaign in another tenant.",
+        "tags": [
+          "ad"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": 50000,
+                "name": "Spring Launch",
+                "objective": "conversions",
+                "platform": "meta"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/campaignInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdCampaign"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/ad/campaigns/{id}": {
+      "delete": {
+        "operationId": "delete_ad_campaigns_by_id",
+        "summary": "Removes one of the caller org's campaigns and answers 204 with no body.",
+        "description": "Removes one of the caller org's campaigns and answers 204 with\nno body. It deletes the stored record only: a campaign already launched keeps\nrunning on the ad network, which must be stopped there. An id another org owns\nreads as not found.",
+        "tags": [
+          "ad"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "camp_2f9c1d"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_ad_campaigns_by_id",
+        "summary": "Returns one of the caller org's campaigns.",
+        "description": "Returns one of the caller org's campaigns. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
+        "tags": [
+          "ad"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "camp_2f9c1d"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdCampaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_ad_campaigns_by_id",
+        "summary": "Replaces the user-owned fields of one of the caller org's campaigns and answers the stored row.",
+        "description": "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",
+        "tags": [
+          "ad"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "camp_2f9c1d"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "budget": 75000,
+                "id": "camp_2f9c1d",
+                "name": "Spring Launch",
+                "platform": "meta",
+                "status": "paused"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateCampaignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdCampaign"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/ad/campaigns/{id}/launch": {
+      "post": {
+        "operationId": "post_ad_campaigns_by_id_launch",
+        "summary": "Run one of your stored campaigns on its ad network",
+        "description": "Creates the campaign on its platform under the CALLER ORG'S own connected ad account, records the provider campaign id, flips the stored campaign to active and answers the updated record. No ad-network token is held here: it is resolved from KMS through the org's connector at launch time, BEFORE any provider call, so an org that has not connected that platform gets 424 and no spend can ever start on a connection the org did not make. Meta is executed for real; a campaign on a platform whose provider is not wired yet answers 501 even when the connector is connected, and an edge failure at the platform is 502. The optional {account} body overrides the target ad account for this launch and is TOLERANT — a malformed or non-JSON body is ignored and the campaign launches on its stored account rather than being refused. A campaign id another org owns reads as not found.",
+        "tags": [
+          "ad"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/ad/summary": {
+      "get": {
+        "operationId": "get_ad_summary",
+        "summary": "Rolls the caller org's ad campaigns up into four numbers: how many campaigns exist, how many are active, and the summed budget and spend across all of them.",
+        "description": "Rolls the caller org's ad campaigns up into four numbers: how many\ncampaigns exist, how many are active, and the summed budget and spend across\nall of them. Budget and spend are MINOR units (cents), the same units the\ncampaign rows carry. It counts only this org's campaigns.",
+        "tags": [
+          "ad"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/adSummary"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdCampaign": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider ad-account the campaign runs under, in Meta's\nact_\u003cid\u003e form. Empty until the org supplies one or a launch resolves it.",
+            "type": "string"
+          },
+          "budget": {
+            "description": "Budget is the campaign's authorized spend in MINOR units (cents). Negative\nclamps to 0. It is the org's stored plan: a Meta launch creates the campaign\nobject only, and the delivering budget lives on the ad set.",
+            "type": "integer"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the campaign was first stored, in unix seconds. It never\nchanges, including across a full-replace update.",
+            "type": "integer"
+          },
+          "externalId": {
+            "description": "ExternalID is the ad network's own campaign id, written by a successful\nlaunch and by nothing else — an update never touches it. Empty means this\ncampaign has never reached its network.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the campaign's server-minted handle, \"camp_\" + 32 hex. A create body\ncannot choose it, and it is the id every other route addresses.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the campaign's display label, and the name Meta creates the campaign\nobject under at launch. Required; trimmed and bounded to 1024 bytes.",
+            "type": "string"
+          },
+          "objective": {
+            "description": "Objective is the campaign goal spelled as the provider names it\n(\"conversions\", \"OUTCOME_TRAFFIC\"), passed through to the network verbatim at\nlaunch — Meta defaults an empty one to OUTCOME_TRAFFIC. Free text, bounded to\n1024 bytes; no vocabulary is enforced here.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the ad network: meta, google, tiktok or x, and nothing else — a\nwrite naming another is 400. Empty stores as meta. Only meta executes today;\nlaunching any of the other three is 501.",
+            "type": "string"
+          },
+          "spend": {
+            "description": "Spend is spend-to-date in MINOR units (cents), as last written through create\nor update. Negative clamps to 0. It is NOT read back from the network — that\nis a separate insights call — so 0 means nothing was recorded here, not that\nnothing was spent.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle: draft, active, paused or completed, and nothing else\n— a write naming another is 400. Empty stores as draft; a successful launch\nsets active. It records what this deployment did, not what the ad network\ncurrently reports.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the row was last written, in unix seconds — set by create,\nupdate and launch. Listings are ordered by it, newest first.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "adSummary": {
+        "properties": {
+          "active": {
+            "description": "Active is how many of those campaigns are in the active state.",
+            "type": "integer"
+          },
+          "budget": {
+            "description": "Budget is the summed budget of every campaign in the org, in cents.",
+            "type": "integer"
+          },
+          "campaigns": {
+            "description": "Campaigns is how many campaigns the org has, in every state.",
+            "type": "integer"
+          },
+          "spend": {
+            "description": "Spend is the summed spend of every campaign in the org, in cents.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "campaignInput": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider ad-account this campaign runs on (Meta act_\u003cid\u003e). Optional.",
+            "type": "string"
+          },
+          "budget": {
+            "description": "Budget is the campaign budget in MINOR units (cents). Negative values clamp to 0.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the campaign's display label. Required; trimmed and bounded to 1024 bytes.",
+            "type": "string"
+          },
+          "objective": {
+            "description": "Objective is the campaign goal as the provider names it. Optional, bounded to 1024 bytes.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the ad network: meta, google, tiktok or x. Empty defaults to meta.",
+            "type": "string"
+          },
+          "spend": {
+            "description": "Spend is the amount spent so far in MINOR units (cents). Negative values clamp to 0.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle state: draft, active, paused or completed. Empty defaults to draft.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "campaignList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching campaigns, newest-updated first.",
+            "items": {
+              "$ref": "#/components/schemas/AdCampaign"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "updateCampaignIn": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider ad-account this campaign runs on (Meta act_\u003cid\u003e). Optional.",
+            "type": "string"
+          },
+          "budget": {
+            "description": "Budget is the campaign budget in MINOR units (cents). Negative values clamp to 0.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the campaign's display label. Required; trimmed and bounded to 1024 bytes.",
+            "type": "string"
+          },
+          "objective": {
+            "description": "Objective is the campaign goal as the provider names it. Optional, bounded to 1024 bytes.",
+            "type": "string"
+          },
+          "platform": {
+            "description": "Platform is the ad network: meta, google, tiktok or x. Empty defaults to meta.",
+            "type": "string"
+          },
+          "spend": {
+            "description": "Spend is the amount spent so far in MINOR units (cents). Negative values clamp to 0.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is the lifecycle state: draft, active, paused or completed. Empty defaults to draft.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

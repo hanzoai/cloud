@@ -114,11 +114,11 @@ func TestTicketNamesTheDoorItWasMintedAt(t *testing.T) {
 	m := seed(t, s, "acme", "m-doors")
 
 	for _, door := range []string{"terminal", "screen"} {
-		code, body := req(t, app, "POST", "/v1/sandboxes/"+m.ID+"/"+door+"/ticket", "acme", "")
+		code, body := req(t, app, "POST", "/v1/sandbox/"+m.ID+"/"+door+"/ticket", "acme", "")
 		if code != 201 {
 			t.Fatalf("%s ticket: %d %s", door, code, body)
 		}
-		want := "/v1/sandboxes/" + m.ID + "/" + door + "?ticket="
+		want := "/v1/sandbox/" + m.ID + "/" + door + "?ticket="
 		if !strings.Contains(string(body), want) {
 			t.Errorf("%s ticket url does not name its own door: %s", door, body)
 		}

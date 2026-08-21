@@ -1,0 +1,522 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package webhooks is how your app hears about events: register an endpoint, pick the events, get each one delivered and signed.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "webhook"
+    }
+  ],
+  "paths": {
+    "/v1/webhook": {
+      "get": {
+        "operationId": "get_webhook",
+        "summary": "Returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts.",
+        "description": "Returns every webhook endpoint the caller's org has registered,\nnewest first, each with its 7-day delivery and failure counts. Signing secrets\nare redacted here — a secret leaves the server only on create and on rotate.\nThe listing is physically org-scoped, so another tenant's endpoints are not\nreachable from this route at all.",
+        "tags": [
+          "webhook"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/endpointList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_webhook",
+        "summary": "Registers a new webhook subscription for the caller's org and answers 201 with the endpoint INCLUDING its freshly minted signing secret.",
+        "description": "Registers a new webhook subscription for the caller's org and\nanswers 201 with the endpoint INCLUDING its freshly minted signing secret.\nThis is one of only two responses that ever carry that secret (the other is\nrotate) — store it now, because no later read returns it. The org is stamped by\nthe server from the validated principal, so a body can never register an\nendpoint in another tenant.",
+        "tags": [
+          "webhook"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "description": "order pipeline",
+                "events": [
+                  "commerce.order.\u003e"
+                ],
+                "url": "https://acme.example/hooks/hanzo"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createEndpointIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/webhook/{id}": {
+      "delete": {
+        "operationId": "delete_webhook_by_id",
+        "summary": "Removes one of the caller org's webhook endpoints and answers 204 with no body.",
+        "description": "Removes one of the caller org's webhook endpoints and answers\n204 with no body. Delivery stops immediately and the endpoint's signing secret\nis gone with it; its recorded delivery history goes too. An id another org owns\nreads as not found.",
+        "tags": [
+          "webhook"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "wh_9f8c1d2e"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_webhook_by_id",
+        "summary": "Returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted.",
+        "description": "Returns one of the caller org's webhook endpoints with its 7-day\ndelivery and failure counts, signing secret redacted. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
+        "tags": [
+          "webhook"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "wh_9f8c1d2e"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_webhook_by_id",
+        "summary": "Replaces the editable fields of one of the caller org's endpoints — url, events, status and description — and answers the stored row with its secret redacted.",
+        "description": "Replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhook/{id}/secret.",
+        "tags": [
+          "webhook"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "wh_9f8c1d2e"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "events": [
+                  "commerce.order.paid"
+                ],
+                "id": "wh_9f8c1d2e",
+                "status": "disabled",
+                "url": "https://acme.example/hooks/v2"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateEndpointIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/webhook/{id}/deliveries": {
+      "get": {
+        "operationId": "get_webhook_by_id_deliveries",
+        "summary": "Returns one endpoint's per-attempt delivery log, newest first — the record of what was sent, what the subscriber answered, and how long it took.",
+        "description": "Returns one endpoint's per-attempt delivery log, newest first —\nthe record of what was sent, what the subscriber answered, and how long it\ntook. One event that retried three times appears as three rows sharing a\ndelivery id. It is org-scoped exactly like every other route here: the endpoint\nlookup only ever finds THIS org's endpoint, so another org's id is a 404 and\nnever a window onto its logs.",
+        "tags": [
+          "webhook"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "wh_9f8c1d2e"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many attempts come back: default 50, maximum 200. A value\nthat is not a positive integer reads as the default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows the log to one outcome: \"ok\", \"retrying\" or \"failed\".\nEmpty returns every attempt.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "failed"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deliveryList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/webhook/{id}/secret": {
+      "post": {
+        "operationId": "post_webhook_by_id_secret",
+        "summary": "Mints a NEW HMAC signing secret for the endpoint and answers the endpoint WITH it — the only other response besides create that ever carries a secret.",
+        "description": "Mints a NEW HMAC signing secret for the endpoint and answers the\nendpoint WITH it — the only other response besides create that ever carries a\nsecret. The old secret stops working the instant this returns: every subsequent\ndelivery signs with the new one, with no overlap window. Call it when the\nsubscriber is ready to swap the value on its side, not before.",
+        "tags": [
+          "webhook"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "wh_9f8c1d2e"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Endpoint"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/webhook/{id}/test": {
+      "post": {
+        "operationId": "post_webhook_by_id_test",
+        "summary": "Sends ONE signed test event to the endpoint right now and answers the outcome inline, so the console can show whether the subscriber is reachable without waiting for real traffic.",
+        "description": "Sends ONE signed test event to the endpoint right now and answers\nthe outcome inline, so the console can show whether the subscriber is reachable\nwithout waiting for real traffic. It takes the same attempt path the bus\ndispatcher takes — one attempt, 10s timeout, no retry ladder — and records the\nresult in the endpoint's delivery log. It works on a DISABLED endpoint too:\nvalidating one you have paused is the whole point.",
+        "tags": [
+          "webhook"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "wh_9f8c1d2e"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/testResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DeliveryRow": {
+        "properties": {
+          "attempt": {
+            "description": "Attempt is which try this row is, starting at 1. The ladder waits 1s, then 5s,\nthen 25s before the next one.",
+            "type": "integer"
+          },
+          "created": {
+            "description": "Created is when the attempt was made, RFC3339 in UTC.",
+            "type": "string"
+          },
+          "delivery": {
+            "description": "DeliveryID groups the attempts for ONE event to ONE endpoint. Rows sharing it\nare the same delivery being retried, not separate events.",
+            "type": "string"
+          },
+          "durationMs": {
+            "description": "DurationMs is how long this attempt took end to end, in MILLISECONDS.",
+            "type": "integer"
+          },
+          "endpoint": {
+            "description": "EndpointID is which subscriber this attempt was for.",
+            "type": "string"
+          },
+          "error": {
+            "description": "Error says what went wrong on a non-ok attempt. Empty on success.",
+            "type": "string"
+          },
+          "httpStatus": {
+            "description": "HTTPStatus is what the subscriber answered. ZERO means it never answered — a\nrefused connection, a DNS failure or a timeout — which is why a zero here is\nnot a 200.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"ok\" when the subscriber accepted it, \"retrying\" while a further\nattempt will follow, and \"failed\" when none will. Exactly one row of a delivery\nis terminal.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Subject is the event that was delivered (\"commerce.order.created\"). A manual\ntest send carries \"webhook.test\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Endpoint": {
+        "properties": {
+          "created": {
+            "description": "CreatedAt is when the endpoint was registered, RFC3339 in UTC — stored in that\nspelling because it sorts as a string.",
+            "type": "string"
+          },
+          "deliveries7d": {
+            "description": "Deliveries7d is how many deliveries SETTLED in the trailing 7 days — the\nattempts that ended ok or failed, so a delivery still retrying is in neither\ncounter yet. It is counted from the log at read time rather than stored, and\nit is filled only on a list or a get; a create answers 0 because there is no\nhistory, which is why it is never omitted.",
+            "type": "integer"
+          },
+          "description": {
+            "description": "Description is the operator's own label for the endpoint. Never sent anywhere.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Events are the subject patterns this endpoint subscribes to\n(\"commerce.order.\u003e\"). An EMPTY list means every event, not none.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failures7d": {
+            "description": "Failures7d is how many of those settled as failed — the subscriber never\naccepted it and no further attempt will be made. It is the numerator to\nDeliveries7d, over the same window.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the endpoint's handle, server-minted and stable for its life. It is what\nevery other route here addresses.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org is the tenant that owns the endpoint, taken from the validated principal\nrather than from any request field.",
+            "type": "string"
+          },
+          "secret": {
+            "description": "Secret is the HMAC-SHA256 signing key a subscriber recomputes the signature\nwith. It is returned exactly ONCE, on create: a later read of the endpoint\nomits it, so a lost secret is replaced rather than recovered.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"active\" or \"disabled\" — nothing else is accepted. A disabled\nendpoint keeps its subscription and receives no deliveries, except a manual\ntest send, which goes out anyway.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "UpdatedAt is when its url, events, status or description last changed.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is where the POST goes. Changing it is the one edit that redirects an\norg's events, which is why it is never bindable from a query string.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "createEndpointIn": {
+        "properties": {
+          "description": {
+            "description": "Description is a free-text label for the console. Optional, clipped to 1024 bytes.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Events are NATS subject patterns to subscribe to (e.g. \"commerce.order.\u003e\").\nAn empty or omitted list means EVERY event on the platform bus. Max 64\npatterns, each max 256 bytes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "Status is \"active\" or \"disabled\". Empty defaults to active. A disabled\nendpoint receives no bus deliveries, but can still be exercised with\nPOST /v1/webhook/{id}/test.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the https:// address each matching event is POSTed to. Required,\nmax 2048 bytes; http:// and every other scheme is refused, because a\nwebhook carries signed event data and must not travel in the clear.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "deliveryList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching attempts, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "endpointList": {
+        "properties": {
+          "data": {
+            "description": "Data is the org's endpoints, newest first, each with its signing secret\nREDACTED — the secret leaves the server only on create and on rotate.",
+            "items": {
+              "$ref": "#/components/schemas/Endpoint"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "testResult": {
+        "properties": {
+          "delivered": {
+            "description": "Delivered is whether the subscriber accepted the test POST. It is the whole\nanswer: the send is synchronous and is not retried.",
+            "type": "boolean"
+          },
+          "durationMs": {
+            "description": "DurationMs is how long the single attempt took, in MILLISECONDS.",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Error says what stopped it. Empty when delivered.",
+            "type": "string"
+          },
+          "httpStatus": {
+            "description": "HTTPStatus is what the subscriber answered, or 0 if it never answered.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "updateEndpointIn": {
+        "properties": {
+          "description": {
+            "description": "Description is a free-text label for the console. Optional, clipped to 1024 bytes.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Events are NATS subject patterns to subscribe to. An empty or omitted list\nmeans EVERY event. Max 64 patterns, each max 256 bytes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "Status is \"active\" or \"disabled\". Empty defaults to active.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the https:// address each matching event is POSTed to. Required,\nmax 2048 bytes; http:// and every other scheme is refused.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

@@ -48,7 +48,7 @@ var readings = []struct{ id, want, route string }{
 	// …nor when the row comes AFTER it: `listing` is what {key} indexes into.
 	{"put_commerce_store_by_storeid_listing_by_key", "set_commerce_store_listing", "PUT /v1/commerce/store/{storeid}/listing/{key}"},
 	{"post_commerce_store_by_storeid_listing_by_key", "create_commerce_store_listing", "POST /v1/commerce/store/{storeid}/listing/{key}"},
-	{"post_sandboxes_by_id_exec", "exec_sandbox", "POST /v1/sandboxes/{id}/exec — the action shape again"},
+	{"post_sandbox_by_id_exec", "exec_sandbox", "POST /v1/sandbox/{id}/exec — the action shape again"},
 
 	// The inference surface.
 	{"post_chat_completions", "create_chat_completion", "POST /v1/chat/completions"},
@@ -57,8 +57,8 @@ var readings = []struct{ id, want, route string }{
 	{"post_rerank", "create_rerank", "POST /v1/rerank — one singular segment is the thing, not a verb"},
 
 	// Spelling that a naive plural rule gets wrong in both directions.
-	{"get_sandboxes", "list_sandboxes", "GET /v1/sandboxes — plural stays plural for a list"},
-	{"get_sandboxes_by_id", "get_sandbox", "GET /v1/sandboxes/{id} — `xes` loses two letters"},
+	{"get_sandbox", "list_sandboxes", "GET /v1/sandbox — a singular address, and the list phrase is still plural"},
+	{"get_sandbox_by_id", "get_sandbox", "GET /v1/sandbox/{id} — the member reads as the bare noun"},
 	{"get_projects_sites", "list_project_sites", "GET /v1/projects/sites — the collection under its owner"},
 	{"post_projects_by_slug_releases", "create_project_release", "POST /v1/projects/{slug}/releases — `releases` loses only one"},
 

@@ -97,7 +97,7 @@ func TestBetaWithoutTheFlagIsNotThere(t *testing.T) {
 
 	code, body := fetch(t, app, "/v1/research/runs", member)
 	if code != http.StatusNotFound {
-		t.Fatalf("GET /v1/ads/campaigns = %d %s, want 404 — a beta capability answered an org that does not hold it", code, body)
+		t.Fatalf("GET /v1/ad/campaigns = %d %s, want 404 — a beta capability answered an org that does not hold it", code, body)
 	}
 
 	// Byte-identical to a miss, so the response is not itself the oracle 404 was
@@ -117,13 +117,13 @@ func TestTheFlagLetsTheOrgIn(t *testing.T) {
 	app := staged("research")
 
 	if code, body := fetch(t, app, "/v1/research/runs", member); code != http.StatusOK {
-		t.Fatalf("GET /v1/ads/campaigns = %d %s, want 200 — the org holds `research` and was refused anyway", code, body)
+		t.Fatalf("GET /v1/ad/campaigns = %d %s, want 200 — the org holds `research` and was refused anyway", code, body)
 	}
 	// Another org's flag is not this org's. The org is read off the validated
 	// principal and carried as the CALLER, so there is no argument to confuse.
 	other := map[string]string{"X-User-Id": "initech/ceo@initech.test", "X-Org-Id": "initech"}
 	if code, _ := fetch(t, app, "/v1/research/runs", other); code != http.StatusNotFound {
-		t.Errorf("GET /v1/ads/campaigns as initech = %d, want 404 — one org's flag admitted another", code)
+		t.Errorf("GET /v1/ad/campaigns as initech = %d, want 404 — one org's flag admitted another", code)
 	}
 }
 
@@ -135,7 +135,7 @@ func TestFlagsUnreachableRefuses(t *testing.T) {
 	app := staged("research")
 
 	if code, body := fetch(t, app, "/v1/research/runs", member); code != http.StatusNotFound {
-		t.Fatalf("GET /v1/ads/campaigns with no flags peer = %d %s, want 404", code, body)
+		t.Fatalf("GET /v1/ad/campaigns with no flags peer = %d %s, want 404", code, body)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestNoPrincipalIsNotThereEither(t *testing.T) {
 	// The org header alone, with nothing that validated it — the shape a forged
 	// client header arrives in.
 	if code, _ := fetch(t, app, "/v1/research/runs", map[string]string{"X-Org-Id": "acme"}); code != http.StatusNotFound {
-		t.Errorf("GET /v1/ads/campaigns unvalidated = %d, want 404", code)
+		t.Errorf("GET /v1/ad/campaigns unvalidated = %d, want 404", code)
 	}
 }
 

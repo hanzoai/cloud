@@ -18,7 +18,7 @@ import (
 
 // Kinds — the three orthogonal go-to-market channels. A campaign fans out to a
 // subset of these; each is also usable standalone at its own /v1 surface
-// (paid=/v1/ads, organic=/v1/social, email=/v1/marketing). Only paid has a
+// (paid=/v1/ad, organic=/v1/social, email=/v1/marketing). Only paid has a
 // registered executor; a channel with none records "unavailable" at launch.
 const (
 	KindPaid    = "paid"    // ad campaigns across Meta/Google/TikTok/… (the ad connectors)

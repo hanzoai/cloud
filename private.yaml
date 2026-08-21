@@ -18858,7 +18858,7 @@ components:
       properties:
         data:
           description: Data is every starter prompt, each importable as-is with POST
-            /v1/prompts.
+            /v1/prompt.
           items:
             $ref: '#/components/schemas/CatalogEntry'
           type: array
@@ -20374,7 +20374,7 @@ components:
           description: |-
             Status is "active" or "disabled". Empty defaults to active. A disabled
             endpoint receives no bus deliveries, but can still be exercised with
-            POST /v1/webhooks/{id}/test.
+            POST /v1/webhook/{id}/test.
           type: string
         url:
           description: |-
@@ -46079,7 +46079,7 @@ components:
         name:
           description: |-
             Name is the prompt's org-unique handle and the URL segment it is fetched by:
-            GET /v1/prompts/<name>.
+            GET /v1/prompt/<name>.
           type: string
         tags:
           description: |-
@@ -55332,6 +55332,218 @@ paths:
       x-app: account
       x-public: true
       x-tool: true
+  /v1/ad/campaigns:
+    get:
+      description: |-
+        Returns the caller org's ad campaigns, most recently updated
+        first, optionally narrowed to one lifecycle status. The listing is bounded by
+        the org: another tenant's campaigns are not reachable from here at all.
+      operationId: get_ad_campaigns
+      parameters:
+      - description: |-
+          Status filters to one lifecycle state (draft, active, paused, completed).
+          Empty returns every campaign the org has.
+        example: active
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps how many campaigns come back: default 200, maximum 1000. A
+          value that is not a positive integer reads as the default.
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignList'
+          description: ok
+      summary: Returns the caller org's ad campaigns, most recently updated first,
+        optionally narrowed to one lifecycle status.
+      tags:
+      - ad
+      x-app: ad
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Registers a new ad campaign for the caller's org and answers
+        201 with the stored row. It only records the campaign — nothing is sent to the
+        ad network until POST /v1/ad/campaigns/{id}/launch runs it. The org is
+        stamped by the server from the validated principal, so a body can never place
+        a campaign in another tenant.
+      operationId: post_ad_campaigns
+      requestBody:
+        content:
+          application/json:
+            example:
+              budget: 50000
+              name: Spring Launch
+              objective: conversions
+              platform: meta
+            schema:
+              $ref: '#/components/schemas/campaignInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+          description: created
+      summary: Registers a new ad campaign for the caller's org and answers 201 with
+        the stored row.
+      tags:
+      - ad
+      x-app: ad
+      x-public: true
+      x-tool: true
+  /v1/ad/campaigns/{id}:
+    delete:
+      description: |-
+        Removes one of the caller org's campaigns and answers 204 with
+        no body. It deletes the stored record only: a campaign already launched keeps
+        running on the ad network, which must be stopped there. An id another org owns
+        reads as not found.
+      operationId: delete_ad_campaigns_by_id
+      parameters:
+      - example: camp_2f9c1d
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Removes one of the caller org's campaigns and answers 204 with no body.
+      tags:
+      - ad
+      x-app: ad
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one of the caller org's campaigns. An id another org owns
+        reads as not found, so the response cannot confirm that it exists.
+      operationId: get_ad_campaigns_by_id
+      parameters:
+      - example: camp_2f9c1d
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+          description: ok
+      summary: Returns one of the caller org's campaigns.
+      tags:
+      - ad
+      x-app: ad
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Replaces the user-owned fields of one of the caller org's
+        campaigns and answers the stored row. It is a full replace, not a patch: every
+        field is written from the request, so an omitted one is cleared. externalId is
+        launch-owned and is never touched here, so editing a campaign cannot break its
+        link to a live provider execution.
+      operationId: put_ad_campaigns_by_id
+      parameters:
+      - example: camp_2f9c1d
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              budget: 75000
+              id: camp_2f9c1d
+              name: Spring Launch
+              platform: meta
+              status: paused
+            schema:
+              $ref: '#/components/schemas/updateCampaignIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+          description: ok
+      summary: Replaces the user-owned fields of one of the caller org's campaigns
+        and answers the stored row.
+      tags:
+      - ad
+      x-app: ad
+      x-public: true
+      x-tool: true
+  /v1/ad/campaigns/{id}/launch:
+    post:
+      description: 'Creates the campaign on its platform under the CALLER ORG''S own
+        connected ad account, records the provider campaign id, flips the stored campaign
+        to active and answers the updated record. No ad-network token is held here:
+        it is resolved from KMS through the org''s connector at launch time, BEFORE
+        any provider call, so an org that has not connected that platform gets 424
+        and no spend can ever start on a connection the org did not make. Meta is
+        executed for real; a campaign on a platform whose provider is not wired yet
+        answers 501 even when the connector is connected, and an edge failure at the
+        platform is 502. The optional {account} body overrides the target ad account
+        for this launch and is TOLERANT — a malformed or non-JSON body is ignored
+        and the campaign launches on its stored account rather than being refused.
+        A campaign id another org owns reads as not found.'
+      operationId: post_ad_campaigns_by_id_launch
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      summary: Run one of your stored campaigns on its ad network
+      tags:
+      - ad
+      x-app: ad
+      x-public: true
+  /v1/ad/summary:
+    get:
+      description: |-
+        Rolls the caller org's ad campaigns up into four numbers: how many
+        campaigns exist, how many are active, and the summed budget and spend across
+        all of them. Budget and spend are MINOR units (cents), the same units the
+        campaign rows carry. It counts only this org's campaigns.
+      operationId: get_ad_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adSummary'
+          description: ok
+      summary: 'Rolls the caller org''s ad campaigns up into four numbers: how many
+        campaigns exist, how many are active, and the summed budget and spend across
+        all of them.'
+      tags:
+      - ad
+      x-app: ad
+      x-public: true
+      x-tool: true
   /v1/admin/affiliate:
     get:
       description: |-
@@ -59092,218 +59304,6 @@ paths:
       - admission
       x-app: admission
       x-stage: alpha
-      x-tool: true
-  /v1/ads/campaigns:
-    get:
-      description: |-
-        Returns the caller org's ad campaigns, most recently updated
-        first, optionally narrowed to one lifecycle status. The listing is bounded by
-        the org: another tenant's campaigns are not reachable from here at all.
-      operationId: get_ads_campaigns
-      parameters:
-      - description: |-
-          Status filters to one lifecycle state (draft, active, paused, completed).
-          Empty returns every campaign the org has.
-        example: active
-        in: query
-        name: status
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Limit caps how many campaigns come back: default 200, maximum 1000. A
-          value that is not a positive integer reads as the default.
-        example: 50
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/campaignList'
-          description: ok
-      summary: Returns the caller org's ad campaigns, most recently updated first,
-        optionally narrowed to one lifecycle status.
-      tags:
-      - ads
-      x-app: ads
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Registers a new ad campaign for the caller's org and answers
-        201 with the stored row. It only records the campaign — nothing is sent to the
-        ad network until POST /v1/ads/campaigns/{id}/launch runs it. The org is
-        stamped by the server from the validated principal, so a body can never place
-        a campaign in another tenant.
-      operationId: post_ads_campaigns
-      requestBody:
-        content:
-          application/json:
-            example:
-              budget: 50000
-              name: Spring Launch
-              objective: conversions
-              platform: meta
-            schema:
-              $ref: '#/components/schemas/campaignInput'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdCampaign'
-          description: created
-      summary: Registers a new ad campaign for the caller's org and answers 201 with
-        the stored row.
-      tags:
-      - ads
-      x-app: ads
-      x-public: true
-      x-tool: true
-  /v1/ads/campaigns/{id}:
-    delete:
-      description: |-
-        Removes one of the caller org's campaigns and answers 204 with
-        no body. It deletes the stored record only: a campaign already launched keeps
-        running on the ad network, which must be stopped there. An id another org owns
-        reads as not found.
-      operationId: delete_ads_campaigns_by_id
-      parameters:
-      - example: camp_2f9c1d
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one of the caller org's campaigns and answers 204 with no body.
-      tags:
-      - ads
-      x-app: ads
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one of the caller org's campaigns. An id another org owns
-        reads as not found, so the response cannot confirm that it exists.
-      operationId: get_ads_campaigns_by_id
-      parameters:
-      - example: camp_2f9c1d
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdCampaign'
-          description: ok
-      summary: Returns one of the caller org's campaigns.
-      tags:
-      - ads
-      x-app: ads
-      x-public: true
-      x-tool: true
-    put:
-      description: |-
-        Replaces the user-owned fields of one of the caller org's
-        campaigns and answers the stored row. It is a full replace, not a patch: every
-        field is written from the request, so an omitted one is cleared. externalId is
-        launch-owned and is never touched here, so editing a campaign cannot break its
-        link to a live provider execution.
-      operationId: put_ads_campaigns_by_id
-      parameters:
-      - example: camp_2f9c1d
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              budget: 75000
-              id: camp_2f9c1d
-              name: Spring Launch
-              platform: meta
-              status: paused
-            schema:
-              $ref: '#/components/schemas/updateCampaignIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdCampaign'
-          description: ok
-      summary: Replaces the user-owned fields of one of the caller org's campaigns
-        and answers the stored row.
-      tags:
-      - ads
-      x-app: ads
-      x-public: true
-      x-tool: true
-  /v1/ads/campaigns/{id}/launch:
-    post:
-      description: 'Creates the campaign on its platform under the CALLER ORG''S own
-        connected ad account, records the provider campaign id, flips the stored campaign
-        to active and answers the updated record. No ad-network token is held here:
-        it is resolved from KMS through the org''s connector at launch time, BEFORE
-        any provider call, so an org that has not connected that platform gets 424
-        and no spend can ever start on a connection the org did not make. Meta is
-        executed for real; a campaign on a platform whose provider is not wired yet
-        answers 501 even when the connector is connected, and an edge failure at the
-        platform is 502. The optional {account} body overrides the target ad account
-        for this launch and is TOLERANT — a malformed or non-JSON body is ignored
-        and the campaign launches on its stored account rather than being refused.
-        A campaign id another org owns reads as not found.'
-      operationId: post_ads_campaigns_by_id_launch
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      summary: Run one of your stored campaigns on its ad network
-      tags:
-      - ads
-      x-app: ads
-      x-public: true
-  /v1/ads/summary:
-    get:
-      description: |-
-        Rolls the caller org's ad campaigns up into four numbers: how many
-        campaigns exist, how many are active, and the summed budget and spend across
-        all of them. Budget and spend are MINOR units (cents), the same units the
-        campaign rows carry. It counts only this org's campaigns.
-      operationId: get_ads_summary
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/adSummary'
-          description: ok
-      summary: 'Rolls the caller org''s ad campaigns up into four numbers: how many
-        campaigns exist, how many are active, and the summed budget and spend across
-        all of them.'
-      tags:
-      - ads
-      x-app: ads
-      x-public: true
       x-tool: true
   /v1/affiliate:
     get:
@@ -79736,14 +79736,14 @@ paths:
       x-app: deploy
       x-public: true
       x-tool: true
-  /v1/destinations:
+  /v1/destination:
     get:
       description: |-
         Reports every destination this deployment can forward to, each with the
         caller org's connection state: whether it is connected, whether it is enabled,
         whether a credential resolves right now, and the config fields the console
         renders for it.
-      operationId: get_destinations
+      operationId: get_destination
       responses:
         "200":
           content:
@@ -79756,16 +79756,16 @@ paths:
         enabled, whether a credential resolves right now, and the config fields the
         console renders for it.'
       tags:
-      - destinations
-      x-app: destinations
+      - destination
+      x-app: destination
       x-public: true
       x-tool: true
-  /v1/destinations/{platform}:
+  /v1/destination/{platform}:
     delete:
       description: |-
         Forgets a destination for the caller's org: every credential held in
         KMS, then the stored config. Idempotent, and it requires org admin.
-      operationId: delete_destinations_by_platform
+      operationId: delete_destination_by_platform
       parameters:
       - description: |-
           Platform is the destination to act on, from the path: ga4 | meta | tiktok |
@@ -79786,8 +79786,8 @@ paths:
       summary: 'Forgets a destination for the caller''s org: every credential held
         in KMS, then the stored config.'
       tags:
-      - destinations
-      x-app: destinations
+      - destination
+      x-app: destination
       x-public: true
       x-tool: true
     get:
@@ -79795,7 +79795,7 @@ paths:
         Reports one destination's card for the caller's org — its config fields,
         its connection state, and whether a credential resolves right now. A platform
         this deployment does not carry is not found.
-      operationId: get_destinations_by_platform
+      operationId: get_destination_by_platform
       parameters:
       - description: |-
           Platform is the destination to act on, from the path: ga4 | meta | tiktok |
@@ -79816,8 +79816,8 @@ paths:
       summary: Reports one destination's card for the caller's org — its config fields,
         its connection state, and whether a credential resolves right now.
       tags:
-      - destinations
-      x-app: destinations
+      - destination
+      x-app: destination
       x-public: true
       x-tool: true
     post:
@@ -79834,7 +79834,7 @@ paths:
         never appears in the response, in the store, or in a log line; only its NAME
         is ever published. Set enabled to false to keep the connection but stop the
         analytics fan-out to it.'
-      operationId: post_destinations_by_platform
+      operationId: post_destination_by_platform
       parameters:
       - in: path
         name: platform
@@ -79857,17 +79857,17 @@ paths:
       summary: Connect one conversion destination for your org, or update the one
         you have
       tags:
-      - destinations
-      x-app: destinations
+      - destination
+      x-app: destination
       x-public: true
-  /v1/destinations/{platform}/test:
+  /v1/destination/{platform}/test:
     post:
       description: |-
         Sends ONE synthetic pageview through the connected destination end to end
         and reports what the platform said. A send the platform refuses is reported as
         data — {"ok": false, "error": …} at 200 — so the console shows the platform's
         own words rather than an error about Hanzo. It requires org admin.
-      operationId: post_destinations_by_platform_test
+      operationId: post_destination_by_platform_test
       parameters:
       - description: |-
           Platform is the destination to act on, from the path: ga4 | meta | tiktok |
@@ -79888,8 +79888,8 @@ paths:
       summary: Sends ONE synthetic pageview through the connected destination end
         to end and reports what the platform said.
       tags:
-      - destinations
-      x-app: destinations
+      - destination
+      x-app: destination
       x-public: true
       x-tool: true
   /v1/dns/{wildcard1}:
@@ -115101,13 +115101,13 @@ paths:
       - projects
       x-app: projects
       x-public: true
-  /v1/prompts:
+  /v1/prompt:
     get:
       description: |-
         List returns the caller org's prompt library as one row per prompt: its name,
         type, every version number it has, its taxonomy and when it last changed. The
         template bodies are deliberately absent — fetch one prompt to read its text.
-      operationId: get_prompts
+      operationId: get_prompt
       responses:
         "200":
           content:
@@ -115119,8 +115119,8 @@ paths:
         its name, type, every version number it has, its taxonomy and when it last
         changed.'
       tags:
-      - prompts
-      x-app: prompts
+      - prompt
+      x-app: prompt
       x-public: true
       x-tool: true
     post:
@@ -115130,7 +115130,7 @@ paths:
         so the library keeps real, inspectable history and the response carries the whole
         version list. The name is also the URL segment the prompt is fetched by, which is
         why its shape is constrained and a handful of names are reserved.
-      operationId: post_prompts
+      operationId: post_prompt
       requestBody:
         content:
           application/json:
@@ -115151,17 +115151,17 @@ paths:
           description: created
       summary: Create records a prompt for the caller's org and answers 201 with it.
       tags:
-      - prompts
-      x-app: prompts
+      - prompt
+      x-app: prompt
       x-public: true
       x-tool: true
-  /v1/prompts/{name}:
+  /v1/prompt/{name}:
     delete:
       description: |-
         Delete removes one of the caller org's prompts and every version of it, answering
         204. It is scoped to the caller's org, so a name another tenant owns is the same
         404 an unknown name gives. There is no undo: the version history goes with it.
-      operationId: delete_prompts_by_name
+      operationId: delete_prompt_by_name
       parameters:
       - description: Name is the prompt to act on, from the path.
         example: greeting
@@ -115176,8 +115176,8 @@ paths:
       summary: Delete removes one of the caller org's prompts and every version of
         it, answering 204.
       tags:
-      - prompts
-      x-app: prompts
+      - prompt
+      x-app: prompt
       x-public: true
       x-tool: true
     get:
@@ -115186,7 +115186,7 @@ paths:
         metadata of every version it has had. The history carries version numbers, types
         and timestamps only — not each version's body — so a long history cannot inflate
         this response. A name the caller's org does not own is 404, whoever owns it.
-      operationId: get_prompts_by_name
+      operationId: get_prompt_by_name
       parameters:
       - description: Name is the prompt to act on, from the path.
         example: greeting
@@ -115205,20 +115205,20 @@ paths:
       summary: 'Get returns one of the caller org''s prompts: its CURRENT template
         text plus the metadata of every version it has had.'
       tags:
-      - prompts
-      x-app: prompts
+      - prompt
+      x-app: prompt
       x-public: true
       x-tool: true
-  /v1/prompts/catalog:
+  /v1/prompt/catalog:
     get:
       description: |-
         Catalog returns the read-only starter prompt library shipped with the binary —
         reference content every tenant sees the same, NOT the caller's own prompts and
         never mixed into them. An org's library stays honestly empty until someone
-        explicitly imports a starter, which is an ordinary POST /v1/prompts. Entries that
+        explicitly imports a starter, which is an ordinary POST /v1/prompt. Entries that
         would fail the create guards are dropped, so everything offered here can actually
         be imported.
-      operationId: get_prompts_catalog
+      operationId: get_prompt_catalog
       responses:
         "200":
           content:
@@ -115230,17 +115230,17 @@ paths:
         binary — reference content every tenant sees the same, NOT the caller's own
         prompts and never mixed into them.
       tags:
-      - prompts
-      x-app: prompts
+      - prompt
+      x-app: prompt
       x-public: true
       x-tool: true
-  /v1/prompts/metrics:
+  /v1/prompt/metrics:
     get:
       description: |-
         Metrics returns real per-prompt statistics for the caller's org: how many versions
         each prompt has, which one is current, and when it was created and last changed.
         Every number is counted from the store — nothing here is estimated or fabricated.
-      operationId: get_prompts_metrics
+      operationId: get_prompt_metrics
       responses:
         "200":
           content:
@@ -115252,8 +115252,8 @@ paths:
         how many versions each prompt has, which one is current, and when it was created
         and last changed.'
       tags:
-      - prompts
-      x-app: prompts
+      - prompt
+      x-app: prompt
       x-public: true
       x-tool: true
   /v1/provisioning/datastore:
@@ -117407,36 +117407,36 @@ paths:
       - s3
       x-app: s3
       x-public: true
-  /v1/sandboxes:
+  /v1/sandbox:
     get:
       description: |-
         Lists the caller org's sandboxes, newest first. `project` and `status` narrow it, and both are read from the QUERY STRING.
 
         It answers from the org's own store rather than from the cluster, so a sandbox whose pod has since died still appears, carrying the status it was last known to have. That is deliberate: a lease you are being charged for should not vanish from the list because the thing behind it fell over.
-      operationId: get_sandboxes
+      operationId: get_sandbox
       summary: The sandboxes this org holds
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
     post:
       description: |-
         Creates a sandbox and returns it. `class` is one of `exec`, `dev`, `desktop` or `android`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.
 
         This is the ONLY path that creates cluster objects. The isolation boundary is the pod's runtime class, one field, so what a sandbox is confined by is a deployment decision rather than anything this operation negotiates.
-      operationId: post_sandboxes
+      operationId: post_sandbox
       summary: Lease a sandbox
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/{id}:
+  /v1/sandbox/{id}:
     delete:
       description: |-
         Stops the sandbox's pod and drops the lease. The VOLUME survives by default, so a `dev` or `desktop` sandbox can be leased again over the same project and find its checkout where it left it.
 
         `purge=1` deletes the volume too. It is opt-in because it is the one part of this that cannot be undone.
-      operationId: delete_sandboxes_by_id
+      operationId: delete_sandbox_by_id
       parameters:
       - in: path
         name: id
@@ -117445,14 +117445,14 @@ paths:
           type: string
       summary: End a sandbox
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
     get:
       description: Returns one of the caller org's sandboxes. An id belonging to another
         org answers 404 and not 403 — a 403 would confirm the id exists, and whether
         a given sandbox exists is itself a cross-tenant fact.
-      operationId: get_sandboxes_by_id
+      operationId: get_sandbox_by_id
       parameters:
       - in: path
         name: id
@@ -117461,16 +117461,16 @@ paths:
           type: string
       summary: One sandbox
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/{id}/exec:
+  /v1/sandbox/{id}/exec:
     post:
       description: |-
         Runs a command inside the sandbox and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because "the tests failed" and "the sandbox is broken" are different facts.
 
         NOTHING RUNS IN cloud. The command is streamed to the Kubernetes exec subresource of the sandbox's pod, which runs under the gVisor runtime class. The sandbox is addressed by pod NAME through the apiserver, never by address.
-      operationId: post_sandboxes_by_id_exec
+      operationId: post_sandbox_by_id_exec
       parameters:
       - in: path
         name: id
@@ -117479,15 +117479,15 @@ paths:
           type: string
       summary: Run a command in a sandbox
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/{id}/fs:
+  /v1/sandbox/{id}/fs:
     get:
       description: Reads one file from the sandbox's project directory as text, or
         lists the entries when the path names a directory. Paths resolve under the
         project root and a path that climbs out is refused rather than rewritten.
-      operationId: get_sandboxes_by_id_fs
+      operationId: get_sandbox_by_id_fs
       parameters:
       - in: path
         name: id
@@ -117496,13 +117496,13 @@ paths:
           type: string
       summary: Read a file, or list a directory
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
     post:
       description: Writes the request body to one file in the sandbox's project directory,
         creating parent directories. Same confinement as the read above.
-      operationId: post_sandboxes_by_id_fs
+      operationId: post_sandbox_by_id_fs
       parameters:
       - in: path
         name: id
@@ -117511,10 +117511,10 @@ paths:
           type: string
       summary: Write a file
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/{id}/screen:
+  /v1/sandbox/{id}/screen:
     get:
       description: |-
         A complete, self-contained desktop — noVNC inline, no other origin — that opens its own socket and draws this sandbox's display. Embed it in an iframe and there is nothing else to build.
@@ -117522,7 +117522,7 @@ paths:
         `ticket` is the credential from the POST above, carried through to the socket. The page is NOT gated: it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything. `frame-ancestors` admits our own brands' hosts and nothing further.
 
         It is served for every class, not only for `desktop`. The class is a fact about the image, and a sandbox with no VNC server already fails exactly — the connection is refused and the page says so — where a check here would be a second opinion about what is running inside a pod, formed from a label rather than from the pod.
-      operationId: get_sandboxes_by_id_screen
+      operationId: get_sandbox_by_id_screen
       parameters:
       - in: path
         name: id
@@ -117531,10 +117531,10 @@ paths:
           type: string
       summary: The screen, as a page
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/{id}/screen/ticket:
+  /v1/sandbox/{id}/screen/ticket:
     post:
       description: |-
         Mints a SINGLE-USE ticket for this sandbox's DISPLAY and returns `{ticket, expiresIn, url}`, where url is the desktop PAGE with the ticket already on it. The same ticket as the terminal's, minted for a different door.
@@ -117542,7 +117542,7 @@ paths:
         A ticket says which org and which sandbox, and the terminal and the screen are two views of one machine: a caller who may type in a sandbox may look at it. What the door decides is the URL handed back, which is the only part that differs.
 
         Mint one per screen, and mint a fresh one to reconnect.
-      operationId: post_sandboxes_by_id_screen_ticket
+      operationId: post_sandbox_by_id_screen_ticket
       parameters:
       - in: path
         name: id
@@ -117551,10 +117551,10 @@ paths:
           type: string
       summary: Open a screen
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/{id}/screen/ws:
+  /v1/sandbox/{id}/screen/ws:
     get:
       description: |-
         Upgrades to a WebSocket carrying RFB — the VNC wire protocol — from the sandbox's display, for a host that brings its own client. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.
@@ -117564,7 +117564,7 @@ paths:
         THE PIXELS COME OUT THROUGH THE EXEC CHANNEL. The display binds 127.0.0.1 only and deliberately nothing else, so there is no address to dial — `socat` joins the stream to that loopback port over the same Kubernetes exec subresource every other call into a sandbox uses. One way in, one thing to authorize, nothing further exposed.
 
         The window size is ignored. A browser pane is not the X server's geometry, and the client scales what it is given rather than asking a server with no RandR to resize itself.
-      operationId: get_sandboxes_by_id_screen_ws
+      operationId: get_sandbox_by_id_screen_ws
       parameters:
       - in: path
         name: id
@@ -117573,10 +117573,10 @@ paths:
           type: string
       summary: The screen, as a socket
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/{id}/terminal:
+  /v1/sandbox/{id}/terminal:
     get:
       description: |-
         A complete, self-contained terminal — xterm inline, no other origin — that opens its own socket and runs a shell in this sandbox. Embed it in an iframe and there is nothing else to build.
@@ -117584,7 +117584,7 @@ paths:
         `ticket` is the credential from the POST above and `arg` names the session (see the socket below); both are simply carried through to the socket. The page is NOT gated — it is inert markup and does not redeem the ticket, because a ticket is spent once and a page that spent it would hold a credential that no longer opens anything.
 
         When the terminal is up it posts `{source:"hanzo-term", ready:true}` to its parent frame, so a host can tell a live terminal from a page that failed into something else. `frame-ancestors` admits our own brands' hosts and nothing further.
-      operationId: get_sandboxes_by_id_terminal
+      operationId: get_sandbox_by_id_terminal
       parameters:
       - in: path
         name: id
@@ -117593,10 +117593,10 @@ paths:
           type: string
       summary: The terminal, as a page
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/{id}/terminal/ticket:
+  /v1/sandbox/{id}/terminal/ticket:
     post:
       description: |-
         Mints a SINGLE-USE ticket for one interactive terminal in this sandbox and returns `{ticket, expiresIn, url}`, where url is the terminal PAGE with the ticket already on it.
@@ -117604,7 +117604,7 @@ paths:
         It exists because a browser carries no Authorization header into a WebSocket or an iframe, so a terminal cannot be authenticated the way every other route here is. The ticket is a credential MINTED for that one terminal: bound to this org and this sandbox, valid for thirty seconds, and gone the first time it is presented. A long-lived bearer in a query string would instead be written into every access log on the path.
 
         Mint one per terminal, and mint a fresh one to reconnect.
-      operationId: post_sandboxes_by_id_terminal_ticket
+      operationId: post_sandbox_by_id_terminal_ticket
       parameters:
       - in: path
         name: id
@@ -117613,10 +117613,10 @@ paths:
           type: string
       summary: Open a terminal
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/{id}/terminal/ws:
+  /v1/sandbox/{id}/terminal/ws:
     get:
       description: |-
         Upgrades to a WebSocket carrying a login shell on a pseudo-terminal inside the sandbox — for a host that brings its own emulator. Requires `ticket`; a missing, expired or already-spent one answers 401 without upgrading.
@@ -117626,7 +117626,7 @@ paths:
         `arg` names a SESSION: the shell runs under `tmux new -A -s <arg>`, which attaches to that session if it exists and creates it if it does not — so one sandbox holds as many terminals as a caller has names for. It is 1-64 characters of letters, digits, `-` or `_` and may not begin with `-`; anything else is 400. Without `arg` the shell is unnamed and unmultiplexed.
 
         The shell is `zsh -l`, falling back to `bash -l` and then to `sh -l`, and to the plain shell again when the image has no tmux. Every step is a preference and none is a requirement: whatever else the image carries — the hanzo CLI included — is a command to type, never a condition for getting a prompt.
-      operationId: get_sandboxes_by_id_terminal_ws
+      operationId: get_sandbox_by_id_terminal_ws
       parameters:
       - in: path
         name: id
@@ -117635,10 +117635,10 @@ paths:
           type: string
       summary: The terminal, as a socket
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
-  /v1/sandboxes/end:
+  /v1/sandbox/end:
     post:
       description: |-
         Ends the caller's sandbox lease: the pod goes, and the volume goes only
@@ -117655,11 +117655,11 @@ paths:
           description: no content
       summary: End a sandbox and release it
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
       x-tool: true
-  /v1/sandboxes/lease:
+  /v1/sandbox/lease:
     post:
       description: |-
         Leases the caller's sandbox, or returns the one it named if that
@@ -117684,11 +117684,11 @@ paths:
           description: ok
       summary: Lease a sandbox — a real computer — or resume one you hold
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
       x-tool: true
-  /v1/sandboxes/read:
+  /v1/sandbox/read:
     post:
       description: |-
         Reads one path in the caller's sandbox: a file's bytes, or a
@@ -117709,11 +117709,11 @@ paths:
           description: ok
       summary: Read a file from a sandbox you hold
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
       x-tool: true
-  /v1/sandboxes/run:
+  /v1/sandbox/run:
     post:
       description: |-
         Runs one command inside the caller's sandbox and answers its exit code,
@@ -117746,11 +117746,11 @@ paths:
           description: ok
       summary: Run a command in a sandbox you hold and read its output
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
       x-tool: true
-  /v1/sandboxes/stop:
+  /v1/sandbox/stop:
     post:
       description: |-
         Interrupts whatever the caller's sandbox is running and answers how
@@ -117772,11 +117772,11 @@ paths:
           description: ok
       summary: Stop what a sandbox is running, and keep the sandbox
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
       x-tool: true
-  /v1/sandboxes/write:
+  /v1/sandbox/write:
     post:
       description: |-
         Writes bytes to one path in the caller's sandbox, creating parents,
@@ -117797,8 +117797,8 @@ paths:
           description: ok
       summary: Write a file into a sandbox you hold
       tags:
-      - sandboxes
-      x-app: sandboxes
+      - sandbox
+      x-app: sandbox
       x-public: true
       x-tool: true
   /v1/sbom:
@@ -120251,14 +120251,14 @@ paths:
       x-app: tel
       x-public: true
       x-tool: true
-  /v1/templates:
+  /v1/template:
     get:
       description: |-
         Lists the public starter-kit catalog plus, for a validated caller, that
         org's own private kits. No request field can widen the scope: the org comes
         from the validated principal, so an anonymous or cross-org caller structurally
         sees the public catalog only.
-      operationId: get_templates
+      operationId: get_template
       responses:
         "200":
           content:
@@ -120269,8 +120269,8 @@ paths:
       summary: Lists the public starter-kit catalog plus, for a validated caller,
         that org's own private kits.
       tags:
-      - templates
-      x-app: templates
+      - template
+      x-app: template
       x-public: true
       x-tool: true
     post:
@@ -120279,7 +120279,7 @@ paths:
         the stored kit. The owner is stamped by the server, so a body "org" is never
         trusted; publishing over a public-catalog slug is 409, so a slug still names
         exactly one kit.
-      operationId: post_templates
+      operationId: post_template
       requestBody:
         content:
           application/json:
@@ -120300,16 +120300,16 @@ paths:
       summary: Creates a starter kit PRIVATE to the caller's org and answers 201 with
         the stored kit.
       tags:
-      - templates
-      x-app: templates
+      - template
+      x-app: template
       x-public: true
       x-tool: true
-  /v1/templates/{slug}:
+  /v1/template/{slug}:
     delete:
       description: |-
         Deletes the caller org's OWN starter kit. A slug they do not own is a
         404, never a delete: the DELETE binds org.
-      operationId: delete_templates_by_slug
+      operationId: delete_template_by_slug
       parameters:
       - description: Slug is the starter kit to act on, from the path.
         example: acme-portal
@@ -120323,15 +120323,15 @@ paths:
           description: no content
       summary: Deletes the caller org's OWN starter kit.
       tags:
-      - templates
-      x-app: templates
+      - template
+      x-app: template
       x-public: true
       x-tool: true
     get:
       description: |-
         Returns one starter kit: the caller org's own by that slug, else the public
         catalog's. A slug another org owns reads as not found.
-      operationId: get_templates_by_slug
+      operationId: get_template_by_slug
       parameters:
       - description: Slug is the starter kit to act on, from the path.
         example: folio
@@ -120350,8 +120350,8 @@ paths:
       summary: 'Returns one starter kit: the caller org''s own by that slug, else
         the public catalog''s.'
       tags:
-      - templates
-      x-app: templates
+      - template
+      x-app: template
       x-public: true
       x-tool: true
     put:
@@ -120359,7 +120359,7 @@ paths:
         Overwrites the caller org's OWN starter kit at the path slug, answering
         the stored kit. A slug they do not own is 404, never a create: the UPDATE binds
         org, so a PUT can never reach another org's kit.
-      operationId: put_templates_by_slug
+      operationId: put_template_by_slug
       parameters:
       - description: Slug is the kit to replace, from the path.
         example: acme-portal
@@ -120387,8 +120387,8 @@ paths:
       summary: Overwrites the caller org's OWN starter kit at the path slug, answering
         the stored kit.
       tags:
-      - templates
-      x-app: templates
+      - template
+      x-app: template
       x-public: true
       x-tool: true
   /v1/todo/board:
@@ -123374,14 +123374,14 @@ paths:
       x-app: visor
       x-public: true
       x-tool: true
-  /v1/wallets:
+  /v1/wallet:
     get:
       description: |-
         Returns the caller org's wallets, newest first, optionally NARROWED
         within the org by project, agent or account. The org is always the bound
         isolation boundary — the filters only ever narrow inside it, so a caller can
         never widen past its own org.
-      operationId: get_wallets
+      operationId: get_wallet
       parameters:
       - description: Project narrows to wallets scoped to one project. Must be a url-safe
           segment.
@@ -123415,8 +123415,8 @@ paths:
       summary: Returns the caller org's wallets, newest first, optionally NARROWED
         within the org by project, agent or account.
       tags:
-      - wallets
-      x-app: wallets
+      - wallet
+      x-app: wallet
       x-public: true
       x-tool: true
     post:
@@ -123430,7 +123430,7 @@ paths:
         fabricated. The wallet is scoped to the org, the caller's ambient project, and
         optionally an agent and the named account; those narrowings are what its key
         ref is derived from, so each must be a url-safe segment.
-      operationId: post_wallets
+      operationId: post_wallet
       requestBody:
         content:
           application/json:
@@ -123453,18 +123453,18 @@ paths:
       summary: Provisions a new signing identity under one of the caller org's accounts
         and answers the stored wallet including its on-chain address.
       tags:
-      - wallets
-      x-app: wallets
+      - wallet
+      x-app: wallet
       x-public: true
       x-tool: true
-  /v1/wallets/{id}:
+  /v1/wallet/{id}:
     get:
       description: |-
         Returns one of the caller org's wallets: its scope, custody kind,
         tier, chain and on-chain address. The custody handle to the signing material is
         never part of the answer. A wallet id another org owns reads as not found, so
         the response cannot confirm that it exists.
-      operationId: get_wallets_by_id
+      operationId: get_wallet_by_id
       parameters:
       - example: wal_4b1e77
         in: path
@@ -123482,11 +123482,11 @@ paths:
       summary: 'Returns one of the caller org''s wallets: its scope, custody kind,
         tier, chain and on-chain address.'
       tags:
-      - wallets
-      x-app: wallets
+      - wallet
+      x-app: wallet
       x-public: true
       x-tool: true
-  /v1/wallets/{id}/keys:
+  /v1/wallet/{id}/keys:
     post:
       description: |-
         Rolls one wallet's signing material through its own custody backend
@@ -123496,7 +123496,7 @@ paths:
         counterfactual and the owner shares are ring-managed, so rotation is a no-op
         and the address is unchanged. A backend that is not configured fails closed
         with 503 rather than leaving the wallet half-rotated.
-      operationId: post_wallets_by_id_keys
+      operationId: post_wallet_by_id_keys
       parameters:
       - example: wal_4b1e77
         in: path
@@ -123514,11 +123514,11 @@ paths:
       summary: Rolls one wallet's signing material through its own custody backend
         and answers the wallet with whatever address that produced.
       tags:
-      - wallets
-      x-app: wallets
+      - wallet
+      x-app: wallet
       x-public: true
       x-tool: true
-  /v1/wallets/{id}/sign:
+  /v1/wallet/{id}/sign:
     post:
       description: |-
         Produces a secp256k1 signature from one of the caller org's wallets over
@@ -123528,7 +123528,7 @@ paths:
         its backend: KMS custody opens the sealed key in-process, MPC custody produces
         a threshold signature on the ring. The answer carries the digest that was
         signed alongside the signature, so a caller can verify what it got.
-      operationId: post_wallets_by_id_sign
+      operationId: post_wallet_by_id_sign
       parameters:
       - example: wal_4b1e77
         in: path
@@ -123555,11 +123555,11 @@ paths:
       summary: Produces a secp256k1 signature from one of the caller org's wallets
         over a 32-byte digest, through whichever custody backend that wallet uses.
       tags:
-      - wallets
-      x-app: wallets
+      - wallet
+      x-app: wallet
       x-public: true
       x-tool: true
-  /v1/wallets/{id}/transactions:
+  /v1/wallet/{id}/transactions:
     post:
       description: |-
         Composes a Safe transaction on the MPC ring and answers its
@@ -123569,7 +123569,7 @@ paths:
         than the kind being switched on. The ring computes the Safe-tx hash bound to
         the Safe contract and the chain id, so the hash a caller gets back is the one
         the Safe will verify. This PROPOSES: it does not execute the transaction.
-      operationId: post_wallets_by_id_transactions
+      operationId: post_wallet_by_id_transactions
       parameters:
       - example: wal_4b1e77
         in: path
@@ -123600,16 +123600,16 @@ paths:
       summary: Composes a Safe transaction on the MPC ring and answers its EIP-712
         hash together with the owner approval the ring's threshold signature produced.
       tags:
-      - wallets
-      x-app: wallets
+      - wallet
+      x-app: wallet
       x-public: true
       x-tool: true
-  /v1/wallets/accounts:
+  /v1/wallet/accounts:
     get:
       description: |-
         Returns the caller org's wallet accounts, newest first. Accounts
         are physically org-scoped, so another tenant's are not reachable from here.
-      operationId: get_wallets_accounts
+      operationId: get_wallet_accounts
       responses:
         "200":
           content:
@@ -123619,8 +123619,8 @@ paths:
           description: ok
       summary: Returns the caller org's wallet accounts, newest first.
       tags:
-      - wallets
-      x-app: wallets
+      - wallet
+      x-app: wallet
       x-public: true
       x-tool: true
     post:
@@ -123629,7 +123629,7 @@ paths:
         a GROUPING of wallets, not a key or a balance: wallets are created under one
         and can be listed by it. The org is stamped by the server from the validated
         principal, so a request can never open an account in another tenant.
-      operationId: post_wallets_accounts
+      operationId: post_wallet_accounts
       requestBody:
         content:
           application/json:
@@ -123647,8 +123647,8 @@ paths:
           description: ok
       summary: Opens a named wallet account for the caller's org.
       tags:
-      - wallets
-      x-app: wallets
+      - wallet
+      x-app: wallet
       x-public: true
       x-tool: true
   /v1/web3/chains:
@@ -123770,7 +123770,7 @@ paths:
       x-app: web3
       x-public: true
       x-tool: true
-  /v1/webhooks:
+  /v1/webhook:
     get:
       description: |-
         Returns every webhook endpoint the caller's org has registered,
@@ -123778,7 +123778,7 @@ paths:
         are redacted here — a secret leaves the server only on create and on rotate.
         The listing is physically org-scoped, so another tenant's endpoints are not
         reachable from this route at all.
-      operationId: get_webhooks
+      operationId: get_webhook
       responses:
         "200":
           content:
@@ -123789,8 +123789,8 @@ paths:
       summary: Returns every webhook endpoint the caller's org has registered, newest
         first, each with its 7-day delivery and failure counts.
       tags:
-      - webhooks
-      x-app: webhooks
+      - webhook
+      x-app: webhook
       x-public: true
       x-tool: true
     post:
@@ -123801,7 +123801,7 @@ paths:
         rotate) — store it now, because no later read returns it. The org is stamped by
         the server from the validated principal, so a body can never register an
         endpoint in another tenant.
-      operationId: post_webhooks
+      operationId: post_webhook
       requestBody:
         content:
           application/json:
@@ -123823,18 +123823,18 @@ paths:
       summary: Registers a new webhook subscription for the caller's org and answers
         201 with the endpoint INCLUDING its freshly minted signing secret.
       tags:
-      - webhooks
-      x-app: webhooks
+      - webhook
+      x-app: webhook
       x-public: true
       x-tool: true
-  /v1/webhooks/{id}:
+  /v1/webhook/{id}:
     delete:
       description: |-
         Removes one of the caller org's webhook endpoints and answers
         204 with no body. Delivery stops immediately and the endpoint's signing secret
         is gone with it; its recorded delivery history goes too. An id another org owns
         reads as not found.
-      operationId: delete_webhooks_by_id
+      operationId: delete_webhook_by_id
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -123848,8 +123848,8 @@ paths:
       summary: Removes one of the caller org's webhook endpoints and answers 204 with
         no body.
       tags:
-      - webhooks
-      x-app: webhooks
+      - webhook
+      x-app: webhook
       x-public: true
       x-tool: true
     get:
@@ -123857,7 +123857,7 @@ paths:
         Returns one of the caller org's webhook endpoints with its 7-day
         delivery and failure counts, signing secret redacted. An id another org owns
         reads as not found, so the response cannot confirm that it exists.
-      operationId: get_webhooks_by_id
+      operationId: get_webhook_by_id
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -123875,8 +123875,8 @@ paths:
       summary: Returns one of the caller org's webhook endpoints with its 7-day delivery
         and failure counts, signing secret redacted.
       tags:
-      - webhooks
-      x-app: webhooks
+      - webhook
+      x-app: webhook
       x-public: true
       x-tool: true
     put:
@@ -123886,8 +123886,8 @@ paths:
         with its secret redacted. It is a full replace, not a patch: an omitted field
         is written as its empty value, and an omitted or empty events list resubscribes
         the endpoint to EVERY event. The signing secret and the creation time are
-        immutable here; rotate the secret with POST /v1/webhooks/{id}/secret.
-      operationId: put_webhooks_by_id
+        immutable here; rotate the secret with POST /v1/webhook/{id}/secret.
+      operationId: put_webhook_by_id
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -123918,11 +123918,11 @@ paths:
         url, events, status and description — and answers the stored row with its
         secret redacted.
       tags:
-      - webhooks
-      x-app: webhooks
+      - webhook
+      x-app: webhook
       x-public: true
       x-tool: true
-  /v1/webhooks/{id}/deliveries:
+  /v1/webhook/{id}/deliveries:
     get:
       description: |-
         Returns one endpoint's per-attempt delivery log, newest first —
@@ -123931,7 +123931,7 @@ paths:
         delivery id. It is org-scoped exactly like every other route here: the endpoint
         lookup only ever finds THIS org's endpoint, so another org's id is a 404 and
         never a window onto its logs.
-      operationId: get_webhooks_by_id_deliveries
+      operationId: get_webhook_by_id_deliveries
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -123967,11 +123967,11 @@ paths:
       summary: Returns one endpoint's per-attempt delivery log, newest first — the
         record of what was sent, what the subscriber answered, and how long it took.
       tags:
-      - webhooks
-      x-app: webhooks
+      - webhook
+      x-app: webhook
       x-public: true
       x-tool: true
-  /v1/webhooks/{id}/secret:
+  /v1/webhook/{id}/secret:
     post:
       description: |-
         Mints a NEW HMAC signing secret for the endpoint and answers the
@@ -123979,7 +123979,7 @@ paths:
         secret. The old secret stops working the instant this returns: every subsequent
         delivery signs with the new one, with no overlap window. Call it when the
         subscriber is ready to swap the value on its side, not before.
-      operationId: post_webhooks_by_id_secret
+      operationId: post_webhook_by_id_secret
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -123997,11 +123997,11 @@ paths:
       summary: Mints a NEW HMAC signing secret for the endpoint and answers the endpoint
         WITH it — the only other response besides create that ever carries a secret.
       tags:
-      - webhooks
-      x-app: webhooks
+      - webhook
+      x-app: webhook
       x-public: true
       x-tool: true
-  /v1/webhooks/{id}/test:
+  /v1/webhook/{id}/test:
     post:
       description: |-
         Sends ONE signed test event to the endpoint right now and answers
@@ -124010,7 +124010,7 @@ paths:
         dispatcher takes — one attempt, 10s timeout, no retry ladder — and records the
         result in the endpoint's delivery log. It works on a DISABLED endpoint too:
         validating one you have paused is the whole point.
-      operationId: post_webhooks_by_id_test
+      operationId: post_webhook_by_id_test
       parameters:
       - example: wh_9f8c1d2e
         in: path
@@ -124029,8 +124029,8 @@ paths:
         outcome inline, so the console can show whether the subscriber is reachable
         without waiting for real traffic.
       tags:
-      - webhooks
-      x-app: webhooks
+      - webhook
+      x-app: webhook
       x-public: true
       x-tool: true
   /v1/websearch:
@@ -124394,15 +124394,15 @@ tags:
 - description: 'Package account is your own account: API keys you mint and revoke,
     and org onboarding.'
   name: account
+- description: Package ads is your paid ad campaigns, launched and paused from one
+    place.
+  name: ad
 - description: 'Package admin is the operator''s view of the fleet: orgs, users, roles,
     spend and system health.'
   name: admin
 - description: Package admission is the launch-control GATE for Hanzo's hosted services
     — the COMPLETE waitlist feature, COMPOSING the ONE flag engine (apps/flags) one-way.
   name: admission
-- description: Package ads is your paid ad campaigns, launched and paused from one
-    place.
-  name: ads
 - description: Package affiliates is a partner program that pays commission on what
     your referrals spend.
   name: affiliate
@@ -124497,7 +124497,7 @@ tags:
   name: deploy
 - description: Package destinations is your events forwarded to the ad and analytics
     tools you use.
-  name: destinations
+  name: destination
 - description: 'Package dns is your DNS records: the zones and records behind every
     name you point at Hanzo.'
   name: dns
@@ -124653,7 +124653,7 @@ tags:
   name: projects
 - description: Package prompts is your prompt library, versioned, so nothing changes
     silently.
-  name: prompts
+  name: prompt
 - description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
     document, vector, search or object store, wired straight into your app.'
   name: provisioning
@@ -124682,7 +124682,7 @@ tags:
   name: s3
 - description: 'Package sandbox is the ONE compute primitive: a sandbox is a gVisor
     pod that runs somebody else''s code, and every lifetime is the same object.'
-  name: sandboxes
+  name: sandbox
 - description: 'Package sbom is what is inside a container image: every component,
     resolvable by digest or image ref.'
   name: sbom
@@ -124726,7 +124726,7 @@ tags:
   name: tel
 - description: Package templates is a gallery of starter kits you can deploy as they
     come.
-  name: templates
+  name: template
 - description: 'Package todo is Hanzo Todo: boards, the work items on them, and the
     filters that make a board.'
   name: todo
@@ -124750,14 +124750,14 @@ tags:
   name: visor
 - description: 'Package wallets is blockchain key custody: create wallets, rotate
     their keys, and sign with them.'
-  name: wallets
+  name: wallet
 - description: 'Package web3 is the chain-access surface: which chains this deployment
     can reach, a JSON-RPC door onto each, and the two token reads every wallet UI
     needs.'
   name: web3
 - description: 'Package webhooks is how your app hears about events: register an endpoint,
     pick the events, get each one delivered and signed.'
-  name: webhooks
+  name: webhook
 - description: Package websearch is a web search and a page fetch your agents can
     call.
   name: websearch

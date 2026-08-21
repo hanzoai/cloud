@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/hanzoai/cloud/apps/ads"
+	"github.com/hanzoai/cloud/apps/ad"
 	"github.com/hanzoai/cloud/apps/campaign"
 	"github.com/hanzoai/cloud/apps/experiment"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -25,17 +25,17 @@ func init() {
 	// primitive-typed channel seam.
 	campaign.RegisterChannel(campaign.NewChannel(campaign.KindPaid,
 		func(ctx context.Context, org string, p campaign.Plan) (campaign.Ref, error) {
-			r, err := ads.LaunchPaid(ctx, org, ads.PaidPlan{
+			r, err := ad.LaunchPaid(ctx, org, ad.PaidPlan{
 				Platform: p.Platform, Account: p.Account, Name: p.Name,
 				Objective: p.Objective, BudgetCents: p.BudgetCents, ScheduleAt: p.ScheduleAt,
 			})
 			return campaign.Ref{Platform: r.Platform, Account: r.Account, ExternalID: r.ExternalID, Status: r.Status, Detail: r.Detail}, err
 		},
 		func(ctx context.Context, org string, ref campaign.Ref) (int64, error) {
-			return ads.PaidSpend(ctx, org, ads.PaidRef{Platform: ref.Platform, Account: ref.Account, ExternalID: ref.ExternalID})
+			return ad.PaidSpend(ctx, org, ad.PaidRef{Platform: ref.Platform, Account: ref.Account, ExternalID: ref.ExternalID})
 		},
 		func(ctx context.Context, org string, ref campaign.Ref) error {
-			return ads.PausePaid(ctx, org, ads.PaidRef{Platform: ref.Platform, Account: ref.Account, ExternalID: ref.ExternalID})
+			return ad.PausePaid(ctx, org, ad.PaidRef{Platform: ref.Platform, Account: ref.Account, ExternalID: ref.ExternalID})
 		},
 	))
 
