@@ -5,6 +5,10 @@ package iam
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,6 +38,31 @@ func dataDirWithStore(t *testing.T) string {
 	return dir
 }
 
+// mountSigningKey projects one RS256 key per cert NAME into a directory and points
+// IAM_SIGNING_KEYS at it — the whole of what a deployment does to supply signing
+// material. The file name is the cert name, which is the JWKS `kid`, so what is
+// projected and what a verifier looks up are one string.
+//
+// It is the ONE way a test stands up a signable store: the private half is
+// memory-only (schema.Cert marks it json:"-"), so a row cannot carry one and
+// writing the column instead would test a shape that no longer exists.
+func mountSigningKey(t *testing.T, names ...string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, name := range names {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			t.Fatalf("generate signing key for %s: %v", name, err)
+		}
+		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+		if err := os.WriteFile(filepath.Join(dir, name), pemBytes, 0o600); err != nil {
+			t.Fatalf("project signing key for %s: %v", name, err)
+		}
+	}
+	t.Setenv("IAM_SIGNING_KEYS", dir)
+	return dir
+}
+
 func seedIdentity(t *testing.T, path, org, name string) {
 	t.Helper()
 	db, err := iamstore.Open("sqlite", path)
@@ -50,13 +79,21 @@ func seedIdentity(t *testing.T, path, org, name string) {
 	// all — nothing can be issued and nothing already issued can be checked — and
 	// Mount now refuses such a store rather than answering an empty keyset. A user
 	// alone was a store production never has.
+	//
+	// Owned by the RESERVED org, and with its key mounted, for the same reason. A
+	// signing cert is trusted only under a reserved owner — that is what stops a
+	// tenant shadowing a platform kid — and its private half comes from the
+	// deployment, never from the row. A tenant-owned cert with no key beside it is
+	// the other store production never has: it publishes a kid nothing can sign
+	// for, so Mount refuses it too.
 	cert := orm.New[model.Cert](db)
-	cert.Owner, cert.Name = org, "cert-"+org
+	cert.Owner, cert.Name = "admin", "cert-"+org
 	cert.Type, cert.CryptoAlgorithm, cert.BitSize = "x509", "RS256", 2048
-	cert.SetId(org + "/cert-" + org)
+	cert.SetId("admin/cert-" + org)
 	if err := cert.CreateCtx(context.Background()); err != nil {
 		t.Fatalf("seed signing cert for %s: %v", org, err)
 	}
+	mountSigningKey(t, "cert-"+org)
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
