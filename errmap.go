@@ -158,6 +158,23 @@ func ErrorHandler(c fiber.Ctx, err error) error {
 			"request_id", c.Get("X-Request-Id"),
 			"err", err)
 	}
-	c.Status(he.Status)
-	return c.JSON(he)
+	// A handler that CHOSE its sentence is not second-guessed about what it says —
+	// but a chosen sentence routinely quotes text this process did not write. The
+	// fleet's handlers wrap an upstream's refusal into their own message
+	// ("generate: %s", "custody: %v", "scan extraction failed: %s"), and a provider
+	// refusing a call quotes the credential it refused back at us. So the WORDS are
+	// the handler's and a credential-shaped token in them is nobody's.
+	//
+	// This is the one place every propagated error is rendered, which is why the
+	// scrub belongs here rather than at each of the several hundred sites that
+	// compose a sentence: a site added tomorrow is covered without anyone
+	// remembering. The log above is deliberately left WHOLE — an operator needs the
+	// wrapped chain, and it is not what leaves the process.
+	//
+	// Copied first: mapError's refusal arm may return a sentinel its owner still
+	// holds, and rewriting that would corrupt every later rendering of it.
+	out := *he
+	out.Msg = ScrubText(out.Msg)
+	c.Status(out.Status)
+	return c.JSON(&out)
 }
