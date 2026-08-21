@@ -3381,7 +3381,7 @@ semantic is identical — fail closed once armed, allow before.
   op earns a tool. So the door publishes the untyped remainder and the child
   rejects its own published name — `noCallerTools.Call` (app.go), whose comment
   states the invariant this breaks: "the fleet's door never routes one here".
-  The correlation is exact, not statistical: `apps/storage` registers 0 typed ops
+  The correlation is exact, not statistical: `apps/s3` registers 0 typed ops
   and all 8 of its ops are dead; `apps/projects` registers 46 and its ops answer.
   **10 apps register zero typed ops, stranding 157 advertised operations** — iam
   76, tasks 20, index 17, social 13, esign 9, storage 8, exec 5, dns 5, kms 2,
