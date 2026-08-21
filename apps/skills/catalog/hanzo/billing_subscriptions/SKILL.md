@@ -1,7 +1,7 @@
 ---
 name: billing_subscriptions
 version: "8.0.0"
-description: "Read billing subscriptions: List your org's subscriptions."
+description: "Read billing subscriptions: Lists the plans the caller holds, with the count beside them.."
 ---
 
 # Hanzo · BILLING · subscriptions
@@ -14,11 +14,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/billing/subscriptions` — List your org's subscriptions
+- `GET https://api.hanzo.ai/v1/billing/subscriptions` — Lists the plans the caller holds, with the count beside them.
 
 ## Response
 
-- `/v1/billing/subscriptions` → JSON object.
+- `/v1/billing/subscriptions` → `Subscriptions` object with fields: `count`, `subscriptions`.
 
 ## Example
 

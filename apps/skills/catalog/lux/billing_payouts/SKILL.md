@@ -1,7 +1,7 @@
 ---
 name: billing_payouts
 version: "8.0.0"
-description: "Read billing payouts: List your org's payouts, newest first."
+description: "Read billing payouts: Answers the org's outbound payouts, newest first — amount, destination, status, and the failure reason where one applies.."
 ---
 
 # Lux · BILLING · payouts
@@ -14,11 +14,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/billing/payouts` — List your org's payouts, newest first
+- `GET https://api.lux.network/v1/billing/payouts` — Answers the org's outbound payouts, newest first — amount, destination, status, and the failure reason where one applies.
 
 ## Response
 
-- `/v1/billing/payouts` → JSON object.
+- `/v1/billing/payouts` → JSON array of `Payout`.
 
 ## Example
 

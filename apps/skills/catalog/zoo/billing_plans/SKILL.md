@@ -1,7 +1,7 @@
 ---
 name: billing_plans
 version: "8.0.0"
-description: "Read billing plans: The public plan catalog, annotated with the active platform promotion."
+description: "Read billing plans: The plan catalog, priced with whatever offer is in force."
 ---
 
 # Zoo · BILLING · plans
@@ -14,7 +14,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/billing/plans` — The public plan catalog, annotated with the active platform promotion
+- `GET https://api.zoo.ngo/v1/billing/plans` — The plan catalog, priced with whatever offer is in force
 
 ## Response
 
