@@ -691,25 +691,18 @@ func financeTxns(s *cloud.Service[state], ctx context.Context, org, subject stri
 	if served {
 		return peer, nil
 	}
-	body, status, err := s.State.commerce.get(ctx, "/v1/billing/transactions", org, financeSubject(subject, url.Values{"limit": {"2000"}}))
-	if err != nil {
-		s.Log.Warn("commerce transactions read failed", "org", org, "err", err)
-		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
-	}
-	if status < 200 || status >= 300 {
-		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream status %d", status)
-	}
-	var wrap struct {
-		Transactions []commerceTxn `json:"transactions"`
-	}
-	if json.Unmarshal(body, &wrap) == nil && wrap.Transactions != nil {
-		return classify(wrap.Transactions), nil
-	}
-	var rows []commerceTxn
-	if err := json.Unmarshal(body, &rows); err != nil {
-		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream decode: %v", err)
-	}
-	return classify(rows), nil
+	// NOT served means ErrNoPeer, and ErrNoPeer means this deployment runs no
+	// commerce at all (peerTxns returns served=true for every other failure). The
+	// HTTP fallback that used to sit here could not answer that case: it dialled
+	// CLOUD_COMMERCE_HTTP_URL, which production points at commerce.hanzo.svc:8001,
+	// and that Service selects `app.kubernetes.io/name: cloud` on targetPort 8000 —
+	// this pod's own public edge. So the call left the process, came back through
+	// the front door, and re-entered the binary that had already said it has no
+	// ledger. That re-entry is what the transport's maxDepth counter exists to
+	// survive, and what killed the billing gate once.
+	//
+	// A ledger this fleet does not run is an outage, not an empty list.
+	return nil, zip.Errorf(http.StatusServiceUnavailable, "billing ledger is not available on this deployment")
 }
 
 // classify is the S2S boundary: commerce's own wire words become the ONE vocabulary
