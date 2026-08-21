@@ -531,10 +531,19 @@ func (o ops) startVerification(ctx context.Context, in *verificationReq) (*check
 	// provider-reported and, by the seam's contract, non-terminal on a fresh start —
 	// there is NO path here that yields a verified check. A provider error is a 502;
 	// it never degrades to verified.
+	// An inquiry is opened on the DEPLOYMENT's provider key and the vendor bills for
+	// it whether or not the person finishes. Authorized before it is opened. See
+	// meter.go.
+	ch, err := afford(o.s, ctx)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
 	sess, err := o.s.State.idv.Start(ctx, org, idv.Subject{Kind: sub.Kind, Name: sub.Name, Email: sub.Email, Ref: sub.Ref})
 	if err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "verification start failed")
 	}
+	charge(ch)
 	// A "start" is never a decision. Clamp any terminal status the provider returns
 	// here to pending at the product boundary — belt-and-suspenders over the idv
 	// seam's own downgrade, so "creating a verification can never yield a verified

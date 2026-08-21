@@ -275,7 +275,21 @@ func run(ctx context.Context, in *CodeRun) (*CodeResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Run(ctx, org, in)
+	// Running a program costs a sandbox, and this door is where THIS subsystem's
+	// callers pay for it. Both halves sit here rather than inside Run because Run
+	// is shared: apps/functions charges its own invoke fee around the same call,
+	// and a charge one layer down would bill that path twice. See meter.go.
+	ch, err := afford(ctx)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
+	out, err := Run(ctx, org, in)
+	if err != nil {
+		return nil, err
+	}
+	charge(ch)
+	return out, nil
 }
 
 // Run is the whole interpreter, and it is composition rather than implementation:
@@ -692,6 +706,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if b := strings.TrimSpace(deps.Brand); b != "" {
 		brandOrg = b
 	}
+	// The meter that pays for a run. Bound here because this subsystem's handlers
+	// are free functions with no service value to hang it off. See meter.go.
+	bindMeter(cloud.NewResourceMeter(deps, "exec"))
 	// The credential check, and the two facts it produces.
 	//
 	// cloud.RoutePath, not c.Path(): fiber routes case-insensitively and ignores a
