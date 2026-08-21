@@ -5,7 +5,7 @@ package commerce
 // THE CART, as typed ops — the shopper's basket, finally addressable.
 //
 // A cart is where a sale begins: items accumulate, totals are tallied, and the
-// checkout family (/v1/store/:storeid/authorize, /capture, /charge) turns one into
+// checkout family (/v1/commerce/store/:storeid/authorize, /capture, /charge) turns one into
 // an order. Every one of those checkout addresses has been served by this binary
 // for as long as it has existed. The cart they operate on could not be created,
 // read or amended through it — hanzoai/commerce implements the whole noun
@@ -171,8 +171,8 @@ type cartOps struct{}
 // exposeCart publishes the cart surface. Mount calls it.
 //
 // Registered on the APP with whole paths rather than on a group: the surface root
-// IS /v1/cart, and Group("/v1/cart") composed with an empty leaf yields
-// "/v1/cart/" — a different address from the one a storefront will POST to. One
+// IS /v1/commerce/cart, and Group("/v1/commerce/cart") composed with an empty leaf yields
+// "/v1/commerce/cart/" — a different address from the one a storefront will POST to. One
 // registrar for all four keeps every op's published path exactly the path the
 // router matches.
 //
@@ -182,20 +182,20 @@ type cartOps struct{}
 // mint, which is why it is on the payment door and not on this one.
 func exposeCart(app *zip.App) {
 	o := cartOps{}
-	zip.Post(app, "/v1/cart", o.open,
+	zip.Post(app, "/v1/commerce/cart", o.open,
 		zip.WithOperationID("openCart"),
 		zip.WithSummary("Open a cart for a shopper to fill"),
 		zip.WithTags("cart"),
 		zip.WithStatus(http.StatusCreated))
-	zip.Get(app, "/v1/cart/:id", o.read,
+	zip.Get(app, "/v1/commerce/cart/:id", o.read,
 		zip.WithOperationID("getCart"),
 		zip.WithSummary("Read one cart with its lines and totals"),
 		zip.WithTags("cart"))
-	zip.Post(app, "/v1/cart/:id/item", o.set,
+	zip.Post(app, "/v1/commerce/cart/:id/item", o.set,
 		zip.WithOperationID("setCartItem"),
 		zip.WithSummary("Set one item's quantity in a cart; zero removes it"),
 		zip.WithTags("cart"))
-	zip.Post(app, "/v1/cart/:id/discard", o.discard,
+	zip.Post(app, "/v1/commerce/cart/:id/discard", o.discard,
 		zip.WithOperationID("discardCart"),
 		zip.WithSummary("Discard a cart the shopper abandoned"),
 		zip.WithTags("cart"))
@@ -433,4 +433,4 @@ func cartLine(li lineitem.LineItem) CartItem {
 // cartPrefix is the subtree the cart ops own. It is declared in Prefixes
 // (mount.go) and, by hand, in manifest/apps.go — the light host must not import an
 // app package, so the two copies are kept equal deliberately.
-const cartPrefix = "/v1/cart"
+const cartPrefix = "/v1/commerce/cart"
