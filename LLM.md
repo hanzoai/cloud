@@ -62,7 +62,22 @@ source for the generated per-language SDKs.
 - `openapi/index.go` — the same document as HYPERMEDIA. `GET /v1` lists every
   capability with the address to follow; `GET /v1/<capability>` lists that
   capability's operations; every /v1 answer carries RFC 8288 `Link:` headers
-  (`self`, `describedby` → /v1/openapi.json, `index` → /v1). All of it is
+  (`self`, `describedby` → /v1/openapi.json, `index` → /v1), plus `Allow` (RFC
+  9110 §10.2.1) and `up`/`collection` (RFC 6573). **`OPTIONS` on any contract
+  address answers that same `Allow` at 204 with no body** — the RFC 9110 §9.3.7
+  question, asked the way HTTP has a method for asking it, so a client holding an
+  address learns what it can do there without a body and without fetching a
+  document. That completes the chain: the root names the capabilities, a
+  capability names its operations, an address names its own methods.
+  **A CORS PREFLIGHT IS A DIFFERENT QUESTION AND A DIFFERENT DOOR.** A preflight
+  is DEFINED by carrying `Access-Control-Request-Method` (Fetch), and
+  `middleware_edge.go` owns exactly those, so the split is on that header and
+  neither question is answered as if it were the other. It used to short-circuit
+  EVERY `OPTIONS`, which told every non-browser caller 204 with no `Allow` — the
+  one field the question is about. Worth knowing what that cost the TESTS rather
+  than production: three preflight tests sent `Origin` with no
+  `Access-Control-Request-Method`, modelling a request no browser emits. They
+  send it now, which is a more faithful model and not a loosened gate. All of it is
   projected from the woven document and filtered by the SAME `x-public` audience
   rule openapi.yaml is, so a staged capability is absent from the root and 404s
   one segment down — one fact, not two. **They are MIDDLEWARE on the front door,
