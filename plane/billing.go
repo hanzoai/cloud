@@ -159,11 +159,11 @@ type InvoicesIn struct {
 // count beside the rows because that is the wire commerce publishes and a reader
 // deriving it would be deriving a number the store already has.
 type Invoices struct {
-	Rows  []InvoiceRow `json:"invoices"`
-	Count int          `json:"count"`
+	Rows  []BillingInvoice `json:"invoices"`
+	Count int              `json:"count"`
 }
 
-// InvoiceRow is one row of that listing — commerce's own projection of an
+// BillingInvoice is one row of that listing — commerce's own projection of an
 // invoice, which carries the billing period, the tax and discount lines and the
 // attempt count that [Invoice] does not, because it answers a different question
 // ("what have I been billed") from the lifecycle's ("what is on this invoice").
@@ -175,7 +175,12 @@ type Invoices struct {
 // fields cannot be read by reflection — so a date sent that way arrives as the
 // zero instant with nothing reporting a loss. Text is the shape that survives,
 // and it renders byte-identically to what a time.Time marshals to.
-type InvoiceRow struct {
+//
+// The name carries its product for the reason [BillingAccount] does: the schema
+// namespace is FLAT across the fleet, and the bare row name is already
+// apps/admin's — an operator's invoice board line, a different shape answering a
+// different question. The published side keeps the name; this one qualifies.
+type BillingInvoice struct {
 	ID             string `json:"id"`
 	UserID         string `json:"userId"`
 	CustomerEmail  string `json:"customerEmail"`
@@ -268,10 +273,18 @@ type HoldersIn struct {
 	Role    string `json:"role,omitempty"`
 }
 
-// Account is one billing account. In commerce an org IS its billing account, so
-// the list has one row and both id fields hold the same value — which is the
-// honest rendering of that fact rather than a shape that implies more.
-type Account struct {
+// BillingAccount is one billing account. In commerce an org IS its billing
+// account, so the list has one row and both id fields hold the same value —
+// which is the honest rendering of that fact rather than a shape that implies
+// more.
+//
+// The name carries its product because the schema namespace is FLAT across the
+// whole fleet and the bare noun is already taken: apps/books publishes an
+// Account of its own — a chart-of-accounts line, a different thing entirely —
+// and one name with two shapes is what openapi.Weave refuses, since a generated
+// SDK would bind whichever it read last. The already-published side keeps the
+// name; this one, arriving later, qualifies.
+type BillingAccount struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	OrgID     string `json:"orgId"`
@@ -287,7 +300,7 @@ type Account struct {
 // plane as a root value, and the door unwraps it back to the array its wire has
 // always been.
 type Accounts struct {
-	Rows []Account `json:"rows"`
+	Rows []BillingAccount `json:"rows"`
 }
 
 // Holder is one person on a billing account. It is not [Member], which answers
@@ -706,6 +719,19 @@ type TierBalance struct {
 	EffectiveAvailable int64  `json:"effectiveAvailable"`
 }
 
+// TierIn asks for one subject's tier.
+//
+// Tier is the DOOR'S minted override and is empty in the ordinary case, where
+// the answer is derived from the subject's own subscriptions. It is a field here
+// rather than something this side reads because naming a tier is a MINT: the
+// header and the query string that carry one are request facts, and only a
+// caller entitled to mint may have one honoured — a decision the door makes,
+// holding the credential, and states as a value.
+type TierIn struct {
+	Subject string `json:"subject"`
+	Tier    string `json:"tier,omitempty"`
+}
+
 // Tier is a subject's tier: which one they are on, what it allows, what they can
 // spend, and how much of each plan window is left.
 type Tier struct {
@@ -811,6 +837,12 @@ const (
 // the door DECIDES on is typed, and only a document it forwards is bytes.
 type Rendered struct {
 	Body []byte `json:"body"`
+	// Created reports that the act made a NEW row rather than answering with one
+	// that already existed. It rides here because only the store can tell the two
+	// apart — saving a card already on file answers with the row that holds it —
+	// and the door has to know which happened to answer 201 or 200. Absent on a
+	// read, where nothing was created and the zero value is the truth.
+	Created bool `json:"created,omitempty"`
 }
 
 // MethodsIn lists one subject's saved payment methods, optionally of one kind.
@@ -867,4 +899,198 @@ type SubscriptionRef struct {
 	// defaults TRUE on the door, because a customer who cancels has already paid
 	// for the period they are in.
 	AtPeriodEnd bool `json:"atPeriodEnd,omitempty"`
+}
+
+// Subscriptions is the org's own plan rows, rendered the way the customer's
+// billing page has always read them.
+//
+// It is a SECOND view of the rows FinanceSubs already carries, and the two are
+// not a duplication: FinanceSubs answers "who is subscribed and what is it
+// worth" for an operator's revenue board, and this answers "what am I on" for
+// the holder. One store, one core, two audiences — and folding them would make
+// the customer's page inherit the board's fields or the board inherit the
+// customer's.
+type Subscriptions struct {
+	Rows []Subscription `json:"subscriptions"`
+	// Count is the row count beside the rows, which is the shape this address
+	// has always answered with.
+	Count int `json:"count"`
+}
+
+// SubscriptionPlan is the plan a subscription is on, as the subscription
+// reports it: enough to name and price it, and no more.
+type SubscriptionPlan struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Price    int64  `json:"price"`
+	Currency string `json:"currency"`
+	Interval string `json:"interval"`
+}
+
+// Subscription is one plan a subject holds.
+//
+// The four dates a subscription may not have are POINTERS because the key is
+// absent on a CONDITION — a trial was opened, a cancel happened, the row ended —
+// and not because the value is zero: omitempty omits no time, so a plain field
+// would report every subscription as trialing since year one.
+type Subscription struct {
+	ID       string `json:"id"`
+	UserID   string `json:"userId"`
+	PlanID   string `json:"planId"`
+	Status   string `json:"status"`
+	Quantity int    `json:"quantity"`
+
+	CurrentPeriodStart string `json:"currentPeriodStart"`
+	CurrentPeriodEnd   string `json:"currentPeriodEnd"`
+	CancelAtPeriodEnd  bool   `json:"cancelAtPeriodEnd"`
+
+	// MRRCents is what this subscription contributes per month — commerce's own
+	// figure, interval-normalized and multiplied by its seats, so no reader
+	// re-derives it from price and interval.
+	MRRCents             int64  `json:"mrrCents"`
+	ProviderType         string `json:"providerType"`
+	DefaultPaymentMethod string `json:"defaultPaymentMethod"`
+
+	Plan SubscriptionPlan `json:"plan"`
+
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+
+	TrialStart string `json:"trialStart,omitempty"`
+	TrialEnd   string `json:"trialEnd,omitempty"`
+	CanceledAt string `json:"canceledAt,omitempty"`
+	EndedAt    string `json:"endedAt,omitempty"`
+}
+
+// ---- the card doors: top up a wallet, or buy a plan --------------------------
+//
+// All three MOVE MONEY, so all three carry the same two properties. The SUBJECT
+// is resolved at the door from the caller's own credential and is a field here
+// only so the store is never asked to re-derive an identity nobody proved. And
+// none of them carries an AMOUNT the caller chose for a plan: a subscription is
+// priced from the catalog, so there is no field an underpayment could be written
+// in — it is a request that cannot be expressed rather than a check that can be
+// forgotten.
+
+const (
+	BillingSubscriptions = "billing_subscriptions"
+
+	// BillingTopupCard charges a single-use card token; BillingTopup charges a
+	// card the subject already saved. Two ops rather than one with a mode,
+	// because they take different things and fail in different places: one
+	// vaults nothing and one must find a saved row first.
+	BillingTopupCard = "billing_topup_card"
+	BillingTopup     = "billing_topup"
+
+	BillingSubscribe = "billing_subscribe"
+	BillingRecharge  = "billing_recharge"
+)
+
+// CardIn charges a single-use card token and credits the subject's wallet.
+//
+// SourceID is the processor's own single-use nonce, so it is spent by the charge
+// and is worthless to anyone who reads it afterwards. IdempotencyKey is the
+// caller's retry key; empty falls back to the store's windowed derivation over
+// the amount and subject, which is what a browser sending no header has always
+// relied on.
+type CardIn struct {
+	SourceID       string `json:"sourceId"`
+	AmountCents    int64  `json:"amountCents"`
+	Currency       string `json:"currency,omitempty"`
+	Subject        string `json:"subject"`
+	IdempotencyKey string `json:"idempotencyKey,omitempty"`
+}
+
+// SavedCardIn charges a card the subject already saved.
+//
+// The method must belong to the subject; one that does not is a MISS rather than
+// a refusal, so a guessed id cannot confirm that somebody else's card exists.
+type SavedCardIn struct {
+	MethodID       string `json:"methodId"`
+	AmountCents    int64  `json:"amountCents"`
+	Currency       string `json:"currency,omitempty"`
+	Subject        string `json:"subject"`
+	IdempotencyKey string `json:"idempotencyKey,omitempty"`
+	// Description rides on the charge to the processor, which is where the
+	// customer reads it. A top-up and an auto-recharge say different true things
+	// there, so it is a value rather than a sentence invented in the store.
+	Description string `json:"description,omitempty"`
+}
+
+// Charged is the receipt for a settled card charge.
+//
+// ProcessorRef is the only field that proves money moved at the GATEWAY rather
+// than merely in our ledger, which is why it is answered rather than only
+// logged. Test states which bucket was credited so no reader has to guess
+// whether a receipt is real.
+type Charged struct {
+	TransactionID string `json:"transactionId"`
+	BalanceCents  int64  `json:"balanceCents"`
+	Status        string `json:"status"`
+	ProcessorRef  string `json:"processorRef,omitempty"`
+	Test          bool   `json:"test"`
+}
+
+// SaleIn buys a plan with a card — either a fresh single-use token, which is
+// vaulted first, or a card the subject already saved.
+//
+// There is no amount. The price is the plan's catalog price at the named Level,
+// which is an INDEX into its published prices and never a number, so what the
+// card is charged is decided by the catalog on both sides of this wire.
+type SaleIn struct {
+	SourceID       string `json:"sourceId,omitempty"`
+	MethodID       string `json:"methodId,omitempty"`
+	PlanID         string `json:"planId"`
+	Subject        string `json:"subject"`
+	StoreID        string `json:"storeId,omitempty"`
+	Quantity       int    `json:"quantity,omitempty"`
+	Level          int    `json:"level,omitempty"`
+	Currency       string `json:"currency,omitempty"`
+	Email          string `json:"email,omitempty"`
+	IdempotencyKey string `json:"idempotencyKey,omitempty"`
+}
+
+// Sale is the receipt for a card subscription: what was opened, what it cost,
+// and which card renewals will charge.
+type Sale struct {
+	SubscriptionID  string `json:"subscriptionId"`
+	InvoiceID       string `json:"invoiceId"`
+	PlanID          string `json:"planId"`
+	Level           int    `json:"level"`
+	PaymentMethodID string `json:"paymentMethodId"`
+	AmountCents     int64  `json:"amountCents"`
+	Currency        string `json:"currency"`
+	Status          string `json:"status"`
+}
+
+// Sold is what a sale answered with, and it keeps the two shapes APART: a fresh
+// receipt, or the sealed body of an identical earlier sale replayed verbatim.
+//
+// Exactly one field is ever set, and the door owes a different status for each —
+// 201 for the first, 200 for the second. A retry that got 201 back would read as
+// a second subscription having been opened. Replayed is RAW so the retry gets
+// the bytes the first answer was rather than a second rendering of them.
+type Sold struct {
+	Sale     *Sale  `json:"sale,omitempty"`
+	Replayed []byte `json:"replayed,omitempty"`
+}
+
+// Recharged is one org's outcome in an auto-recharge sweep.
+type Recharged struct {
+	OrgName       string `json:"orgName"`
+	UserID        string `json:"userId"`
+	Charged       bool   `json:"charged"`
+	AmountCents   int64  `json:"amountCents,omitempty"`
+	BalanceCents  int64  `json:"balanceCents,omitempty"`
+	TransactionID string `json:"transactionId,omitempty"`
+	Error         string `json:"error,omitempty"`
+}
+
+// Recharge is one whole sweep. Orgs is the POPULATION considered, not the row
+// count — that difference is how a reader tells "nobody was below threshold"
+// from "the sweep never ran".
+type Recharge struct {
+	Orgs    int         `json:"orgs"`
+	Charged int         `json:"charged"`
+	Results []Recharged `json:"results"`
 }

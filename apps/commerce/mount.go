@@ -31,10 +31,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	accountclient "github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	financeclient "github.com/hanzoai/cloud/apps/finance"
-	"github.com/hanzoai/cloud/apps/principal"
 	commercemod "github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	catalogapi "github.com/hanzoai/commerce/api/catalog"
@@ -176,6 +174,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeGrants()
 	exposeAlerts()
 	exposeRails()
+	// The posture, the plan and the card doors: the four families the money door
+	// serves that this app used to answer at /v1/billing itself. They are ops
+	// here for the same reason the rest are — the store has one owner, and the
+	// address belongs to somebody else.
+	exposePosture()
+	exposePlan()
+	exposeSale()
 
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")
