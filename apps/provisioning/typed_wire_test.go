@@ -278,3 +278,99 @@ func TestTheCreatesStillDeclareTheirBodies(t *testing.T) {
 		}
 	}
 }
+
+// proseless is the CLOSED list of published properties that carry NO description
+// because the SEAM they arrived through cannot carry one — not because nobody
+// wrote it.
+//
+// REFLECTION SEAM. The seven creates stay untyped for the wire reason typed.go
+// states, and declare their shapes through openapi.Register (provisioning.go's
+// init) instead. Register keeps a reflect.Type (openapi/register.go:150) and
+// builds the schema from it; Go drops comments at compile time, so the only
+// prose it could publish is prose reflection can see, which is none. zipdoc
+// cannot fill the gap from the other side either: it walks zip's TYPED
+// registrations, and these two types are no typed op's In or Out, so nothing is
+// lifted under their names at all.
+//
+// Both types ARE documented at their declaration, field by field, and that prose
+// is what a reader of provisioning.go gets. Not worked around: hand-writing a
+// schema beside the struct replaces one true statement with two that can drift,
+// and typing the creates to reach zipdoc would change the wire — a 402 denial
+// would start rendering as zip's flat error body.
+//
+// Exact in BOTH directions: a bare property anywhere else goes red, and an entry
+// here that starts publishing prose goes red too, which is the day the seam
+// learns and this ledger must shrink rather than outlive the gap.
+var proseless = map[string]bool{
+	"provisionRequest.instance":        true,
+	"provisionRequest.name":            true,
+	"provisionResult.connectionString": true,
+	"provisionResult.database":         true,
+	"provisionResult.host":             true,
+	"provisionResult.id":               true,
+	"provisionResult.kind":             true,
+	"provisionResult.name":             true,
+	"provisionResult.password":         true,
+	"provisionResult.port":             true,
+	"provisionResult.status":           true,
+	"provisionResult.username":         true,
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the gates
+// above cannot see. Typing a route documents its ADDRESS and its SHAPE; the
+// shape's FIELDS come from a different place — a doc comment on each one, which
+// zipdoc lifts one at a time.
+//
+// It matters here because provisioning splits sharply into what a caller SETS
+// and what the server MINTS, and the shapes do not say which is which: a create
+// body is `name` and `instance` and nothing else, while `id`, `host`, `port`,
+// `database` and the credential all come back minted — `database` in particular
+// is NOT `name`, because a fixed-width org hash namespaces it so two tenants
+// cannot fold onto one backend resource. `status` is a two-word vocabulary where
+// "provisioning" means the 201 arrived before the instance did. And
+// `connectionString` and `password` are answered ONCE, on this response and
+// nowhere else, which a caller who plans to re-read them finds out too late.
+//
+// Presence is all a gate can check, and it is checked against the ledger above.
+// A description restating the field's name is worse than none, and only a reader
+// catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(surfaceApp(t), openapi.Info{Title: "provisioning", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("provisioning publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
+		}
+	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/provisioning describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
+	}
+}
