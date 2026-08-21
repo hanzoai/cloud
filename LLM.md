@@ -3136,6 +3136,20 @@ migration silently strips request shapes from every generated CLI and SDK.
   charges for — which is the failure its own comment already records for a
   previous dead name, `"agent"`. The pins only refuse; this one bills.
   Grep all three for the app's name in the SAME commit that removes it.
+- **The agent-skills catalogue is generated in ANOTHER REPO, so a regeneration
+  can delete hundreds of skills and look routine.** `apps/skills/catalog` is
+  `go:embed`ed and committed, and `make skills` runs `hanzoai/openapi`'s
+  `skills.py` — which reads THAT repo's per-service `openapi.yaml` files, not
+  cloud's. The output is therefore a function of a checkout this repo does not
+  pin: measured against a local one on a feature branch, **357 skills per brand
+  against the 542 committed**, i.e. 555 deletions across three brands arriving as
+  a one-command "regenerate".
+  `TestCatalogIntegrity` cannot see it — it quantifies over the INDEX, so when
+  the index and the files shrink together every surviving entry still checks out.
+  `TestTheCatalogMayNotQuietlyShrink` (`floorSkills`) is the ratchet that can,
+  on the `openapi/floor.json` pattern: a deliberate deletion lowers the number by
+  hand in the same commit. Before `make skills`, read
+  `git -C $OPENAPI_DIR status` and generate to a scratch `--out` first.
 
 ## Lifecycle defense: ONE scorer seam, ONE fail policy, a sensor at the edge
 
