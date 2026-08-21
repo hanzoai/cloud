@@ -46,7 +46,7 @@ package label
 //     there is none: disposal is this plane's own per-tenant sweep.
 //
 //     The partition key is the event month, matching every other table in the
-//     fleet (apps/usage, apps/samples, apps/link, apps/eval, apps/leaderboard all
+//     fleet (apps/usage, apps/samples, apps/links, apps/eval, apps/leaderboard all
 //     partition toYYYYMM). It was `org` for one release, justified as making
 //     disposal a DROP PARTITION — which purge() deliberately does not do, because
 //     a retention boundary disposes of a PREFIX of a tenant's history and not all

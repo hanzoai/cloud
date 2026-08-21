@@ -104,7 +104,7 @@ func (s *Store) countActiveMatch(ctx context.Context, org string, m SessionMatch
 // with {"sessionsStopped":0} having torn down nothing, while the sessions kept
 // running under the revoked account. A zero that means "I could not ask" is
 // indistinguishable from "there were none", and this is the seam where that
-// distinction is the security property. Callers take the plane leg (apps/link).
+// distinction is the security property. Callers take the plane leg (apps/links).
 func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) {
 	if m.empty() {
 		return 0, nil // fail-closed: a match with no actor stops nothing, and that is an answer

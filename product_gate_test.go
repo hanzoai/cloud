@@ -44,7 +44,7 @@ var mismatched = map[string]string{
 var unwired = []string{
 	"admin", "billing", "bots", "datastore", "dns",
 	"engine", "eval", "event", "functions", "gateway", "git", "idv", "ingress", "kms",
-	"marketing", "ml", "mpc", "network", "platform", "research", "skills",
+	"marketing", "ml", "mpc", "networks", "platform", "research", "skills",
 	"social", "team", "usage", "visor", "world",
 }
 
@@ -55,13 +55,13 @@ var unwired = []string{
 var unextracted = []string{
 	"admission", "ads", "affiliates", "agents", "allowance", "answer", "ask",
 	"auditlog", "authors", "auto", "benchmark", "blueprint", "books",
-	"campaign", "catalog", "catalogsync", "channels", "cloudflare", "cms",
+	"campaigns", "catalog", "catalogsync", "channels", "cloudflare", "cms",
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
-	"controlplane", "crawl", "crm", "cron", "dataset", "graph",
+	"controlplane", "crawl", "crm", "cron", "datasets", "graph",
 	"destinations", "domain", "entitlements", "erp", "esign", "exec",
 	"experiments", "explorer", "finance", "fleet", "flow", "goja", "guide",
 	"help", "index", "integrations", "k8s", "knowledge", "label",
-	"leaderboard", "legal", "link", "lsp", "marketplace", "meet", "membership",
+	"leaderboard", "legal", "links", "lsp", "marketplace", "meet", "membership",
 	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
 	"projects", "prompts", "provisioning", "reference",
 	"referrals", "registry", "risk", "rollingcap", "s3", "s3admin",

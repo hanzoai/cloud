@@ -24,7 +24,7 @@ import (
 //
 // It records usage and NOTHING else: keeping the link REGISTRY current (which
 // accounts are signed in, their latest snapshot) is clients/link's own concern,
-// refreshed by POST /v1/link. Recording a sample and registering a link are two
+// refreshed by POST /v1/links. Recording a sample and registering a link are two
 // orthogonal operations, each with exactly one home — a usage report no longer
 // writes a Link row, so there is one and only one way to set an account's snapshot.
 //
@@ -421,7 +421,7 @@ type reportResp struct {
 //
 // It is FAIL-SOFT on storage: a warehouse outage costs a poll of history
 // (stored:false), never a failed request. It records usage ONLY — the link registry
-// is refreshed separately via POST /v1/link, so there is one and only one way to
+// is refreshed separately via POST /v1/links, so there is one and only one way to
 // update an account row.
 func (o ops) record(ctx context.Context, in *reportReq) (*reportResp, error) {
 	org, user, ok := caller(ctx)

@@ -198,7 +198,7 @@ func tenantOf(ctx context.Context, s *cloud.Service[*state]) (scope, *store, err
 		return scope{}, nil, zip.ErrForbidden("no validated principal")
 	}
 	// ONE MINT, and it is [tenant.Of]. The key this plane writes is the same key
-	// apps/dataset writes and apps/risk reads, so a second spelling of it here
+	// apps/datasets writes and apps/risk reads, so a second spelling of it here
 	// would be two planes disagreeing about whose a row is — which is the defect
 	// with the sign flipped, and it is silent. The mint canonicalises the brand
 	// half and refuses one no registry vouches for; a local Qualify did neither,

@@ -106,7 +106,7 @@ func TestAddress_CoversEveryTermThatChangesAScore(t *testing.T) {
 
 // TestAddress_MassesAreNamedByTheirBitsAndNotTheirDigits: a decimal rendering is a
 // lossy function of a float64, so a name taken over text could call two different
-// masses one value. apps/dataset reached this first; this is the same reasoning
+// masses one value. apps/datasets reached this first; this is the same reasoning
 // applied to the same problem.
 //
 // Mutation proof: hash the masses with %v instead of Float64bits and this fails.

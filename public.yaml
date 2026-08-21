@@ -25259,7 +25259,7 @@ components:
         id:
           description: |-
             ID is the org-derived id of the overlay network — the key
-            GET /v1/network/{id} addresses.
+            GET /v1/networks/{id} addresses.
           type: string
         name:
           description: Name is the org the overlay belongs to.
@@ -57604,7 +57604,7 @@ paths:
       x-app: bots
       x-public: true
       x-tool: true
-  /v1/campaign:
+  /v1/campaigns:
     get:
       description: |-
         Returns the org's campaigns, newest first, optionally narrowed to
@@ -57613,7 +57613,7 @@ paths:
         A campaign is the top-level go-to-market object: a value that SPANS channels
         (paid, organic, email) and fans out to the executor for each. The listing is
         org-scoped server-side, so one org can never see another's campaigns.
-      operationId: get_campaign
+      operationId: get_campaigns
       parameters:
       - description: |-
           Status keeps only campaigns in that state: draft, live, paused or failed.
@@ -57643,8 +57643,8 @@ paths:
       summary: Returns the org's campaigns, newest first, optionally narrowed to one
         status.
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
       x-tool: true
     post:
@@ -57656,7 +57656,7 @@ paths:
         and de-duplicated by kind (one executor per kind), and every channel starts
         "pending" whatever the caller claims — a client can never assert a launched
         state.
-      operationId: post_campaign
+      operationId: post_campaigns
       requestBody:
         content:
           application/json:
@@ -57680,11 +57680,11 @@ paths:
           description: created
       summary: Creates a campaign as a DRAFT and returns it.
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
       x-tool: true
-  /v1/campaign/{id}:
+  /v1/campaigns/{id}:
     delete:
       description: |-
         Removes one campaign of the caller's org and answers 204 with no
@@ -57693,7 +57693,7 @@ paths:
         It deletes the RECORD, not the executions: a campaign whose channels are live
         on a provider should be paused first, or those executions keep running with
         nothing here to report them.
-      operationId: delete_campaign_by_id
+      operationId: delete_campaigns_by_id
       parameters:
       - description: ID is the campaign's server-minted handle, "cmp_"-prefixed.
         in: path
@@ -57706,8 +57706,8 @@ paths:
           description: no content
       summary: Removes one campaign of the caller's org and answers 204 with no body.
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
       x-tool: true
     get:
@@ -57715,7 +57715,7 @@ paths:
         Returns one campaign of the caller's org — its name, audience,
         creatives, channels with their per-channel launch state, schedule, budget and
         status. 404 when the org has no campaign with that id.
-      operationId: get_campaign_by_id
+      operationId: get_campaigns_by_id
       parameters:
       - description: ID is the campaign's server-minted handle, "cmp_"-prefixed.
         in: path
@@ -57733,8 +57733,8 @@ paths:
       summary: Returns one campaign of the caller's org — its name, audience, creatives,
         channels with their per-channel launch state, schedule, budget and status.
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
       x-tool: true
     put:
@@ -57746,7 +57746,7 @@ paths:
         launched its channels carry provider state (an external id, a live status), so
         they are added and removed explicitly through the channels sub-resource
         instead; a whole-object write would silently orphan a running execution.
-      operationId: put_campaign_by_id
+      operationId: put_campaigns_by_id
       parameters:
       - description: ID is the campaign to update, from the path.
         in: path
@@ -57773,11 +57773,11 @@ paths:
       summary: Rewrites a campaign's core fields — name, audience, creatives, schedule
         and budget — and returns the updated campaign.
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
       x-tool: true
-  /v1/campaign/{id}/channels:
+  /v1/campaigns/{id}/channels:
     post:
       description: |-
         Adds a channel to a campaign, or REPLACES the one it already
@@ -57787,7 +57787,7 @@ paths:
         executor: adding a second "paid" channel would mean two ad accounts running one
         campaign with no way to tell their results apart. The new channel starts
         "pending" — adding it does not launch it.
-      operationId: post_campaign_by_id_channels
+      operationId: post_campaigns_by_id_channels
       parameters:
       - description: ID is the campaign to add the channel to, from the path.
         example: cmp_1f…
@@ -57817,11 +57817,11 @@ paths:
       summary: Adds a channel to a campaign, or REPLACES the one it already has of
         that kind, and returns the updated campaign.
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
       x-tool: true
-  /v1/campaign/{id}/channels/{kind}:
+  /v1/campaigns/{id}/channels/{kind}:
     delete:
       description: |-
         Drops one channel from a campaign and returns the updated
@@ -57830,7 +57830,7 @@ paths:
         It removes the channel from the PLAN. A channel that is live at its provider
         should be paused first — dropping the row here leaves nothing to pause it with
         afterwards.
-      operationId: delete_campaign_by_id_channels_by_kind
+      operationId: delete_campaigns_by_id_channels_by_kind
       parameters:
       - description: ID is the campaign, from the path.
         in: path
@@ -57853,11 +57853,11 @@ paths:
           description: ok
       summary: Drops one channel from a campaign and returns the updated campaign.
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
       x-tool: true
-  /v1/campaign/{id}/launch:
+  /v1/campaigns/{id}/launch:
     post:
       description: |-
         Pushes the campaign live on each of its channels through that channel's executor and answers the whole campaign with the per-channel outcome written back onto it.
@@ -57865,7 +57865,7 @@ paths:
         The fan-out is BEST-EFFORT PER CHANNEL, and the honest reading of the result is the rule most callers get wrong: one channel failing never aborts the others, so each channel row carries its own `live`, `failed` or `unavailable` status and detail, and a paid launch can be live while an email launch failed. The campaign itself is `live` when AT LEAST ONE channel launched and `failed` only when none did — `live` is not a claim that every channel launched. Repeating the call is safe: a channel already live is skipped, never re-launched. A campaign carrying more than one creative has its variant assigned here by the experiment seam and tagged as `utm_content`.
 
         Org-scoped and fails closed: a valid bearer is required (403 without one), the campaign is read under the caller's OWN org so another tenant's id is a 404, and a campaign with no channels is a 400 — there is nothing to launch. Each executor resolves its own org's connector token from the org passed to it, so a launch can never spend through another tenant's connector.
-      operationId: post_campaign_by_id_launch
+      operationId: post_campaigns_by_id_launch
       parameters:
       - in: path
         name: id
@@ -57874,10 +57874,10 @@ paths:
           type: string
       summary: Launch a campaign across every channel it declares
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
-  /v1/campaign/{id}/metrics:
+  /v1/campaigns/{id}/metrics:
     get:
       description: |-
         Returns a campaign's results over a window: the analytics
@@ -57891,7 +57891,7 @@ paths:
         not emitting yet degrades to available:false with zeroes — honest-empty, never a
         500 and never a fabricated number. When the campaign runs more than one creative
         and an experiment is wired, abTest carries the A/B analysis.
-      operationId: get_campaign_by_id_metrics
+      operationId: get_campaigns_by_id_metrics
       parameters:
       - description: ID is the campaign to report on, from the path.
         example: cmp_1f…
@@ -57934,11 +57934,11 @@ paths:
         (impressions, clicks, conversions, revenue, visitors), the spend each channel''s
         connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS.'
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
       x-tool: true
-  /v1/campaign/{id}/pause:
+  /v1/campaigns/{id}/pause:
     post:
       description: |-
         Pauses each live channel on its provider and answers the whole campaign, moved to `paused`, with the per-channel outcome written back onto it.
@@ -57946,7 +57946,7 @@ paths:
         Only channels that are live and carry a provider reference are touched; a channel whose executor is no longer wired is marked `unavailable` and one whose pause errored is marked `failed`, with the reason on the row. The campaign still reports `paused` in both cases, and that is deliberate rather than sloppy: no live channel remains that this process will meter, and the rows say exactly which provider was not reached so it can be settled by hand.
 
         Org-scoped and fails closed: a valid bearer is required (403 without one) and the campaign is read under the caller's OWN org, so another tenant's id is a 404.
-      operationId: post_campaign_by_id_pause
+      operationId: post_campaigns_by_id_pause
       parameters:
       - in: path
         name: id
@@ -57955,10 +57955,10 @@ paths:
           type: string
       summary: Pause every live channel on a campaign at its provider
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
-  /v1/campaign/summary:
+  /v1/campaigns/summary:
     get:
       description: |-
         Returns the org's go-to-market roll-up: how many campaigns
@@ -57968,7 +57968,7 @@ paths:
         The channel list is the deployment's honest capability, not a wish: a kind
         missing from it is one a launch will record as "unavailable" rather than fail
         on.
-      operationId: get_campaign_summary
+      operationId: get_campaigns_summary
       responses:
         "200":
           content:
@@ -57980,8 +57980,8 @@ paths:
         how many are live, their total budget in cents, and which channel executors
         this deployment can actually reach.'
       tags:
-      - campaign
-      x-app: campaign
+      - campaigns
+      x-app: campaigns
       x-public: true
       x-tool: true
   /v1/captable/classes:
@@ -67426,7 +67426,7 @@ paths:
       - dataroom
       x-app: dataroom
       x-public: true
-  /v1/dataset:
+  /v1/datasets:
     get:
       description: |-
         Datasets lists this org's datasets, each with its newest version. An org that
@@ -67443,8 +67443,8 @@ paths:
           description: ok
       summary: List this org's datasets
       tags:
-      - dataset
-      x-app: dataset
+      - datasets
+      x-app: datasets
       x-public: true
       x-tool: true
     post:
@@ -67482,11 +67482,11 @@ paths:
           description: ok
       summary: Declare the next version of a dataset
       tags:
-      - dataset
-      x-app: dataset
+      - datasets
+      x-app: datasets
       x-public: true
       x-tool: true
-  /v1/dataset/{name}:
+  /v1/datasets/{name}:
     delete:
       description: |-
         Disposes of one dataset and every version of it: the rows are
@@ -67525,8 +67525,8 @@ paths:
           description: ok
       summary: Dispose of one dataset and every version of it
       tags:
-      - dataset
-      x-app: dataset
+      - datasets
+      x-app: datasets
       x-public: true
       x-tool: true
     get:
@@ -67555,11 +67555,11 @@ paths:
           description: ok
       summary: Describe every version of one dataset
       tags:
-      - dataset
-      x-app: dataset
+      - datasets
+      x-app: datasets
       x-public: true
       x-tool: true
-  /v1/dataset/{name}/export:
+  /v1/datasets/{name}/export:
     get:
       description: |-
         Reads a published version's rows back, one bounded page at a
@@ -67618,11 +67618,11 @@ paths:
           description: ok
       summary: Read a version's rows back, one page at a time
       tags:
-      - dataset
-      x-app: dataset
+      - datasets
+      x-app: datasets
       x-public: true
       x-tool: true
-  /v1/dataset/{name}/lineage:
+  /v1/datasets/{name}/lineage:
     get:
       description: |-
         Shows where a version's rows came from and whether that can
@@ -67668,11 +67668,11 @@ paths:
       summary: Show where a version's rows came from, and whether that can still be
         demonstrated
       tags:
-      - dataset
-      x-app: dataset
+      - datasets
+      x-app: datasets
       x-public: true
       x-tool: true
-  /v1/dataset/{name}/materialize:
+  /v1/datasets/{name}/materialize:
     post:
       description: |-
         Builds the declared version into immutable rows and answers
@@ -67708,8 +67708,8 @@ paths:
           description: accepted
       summary: Materialise the declared version into immutable rows
       tags:
-      - dataset
-      x-app: dataset
+      - datasets
+      x-app: datasets
       x-public: true
       x-tool: true
   /v1/deploy/applications:
@@ -83482,7 +83482,7 @@ paths:
       x-app: licensing
       x-public: true
       x-tool: true
-  /v1/link:
+  /v1/links:
     get:
       description: |-
         Lists your linked accounts and the devices they sit on.
@@ -83494,7 +83494,7 @@ paths:
         garbage-collect. Revoked links are INCLUDED rather than dropped, because a
         logged-out account keeps its usage history and audit trail. Scoped to the
         caller: a validated principal and a non-empty org, else 403.
-      operationId: get_link
+      operationId: get_links
       responses:
         "200":
           content:
@@ -83504,8 +83504,8 @@ paths:
           description: ok
       summary: Lists your linked accounts and the devices they sit on.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
     post:
@@ -83520,7 +83520,7 @@ paths:
         required (400 otherwise), as is a valid kind, and every field is
         length-bounded. Scoped to the caller: a validated principal and a non-empty
         org, else 403, so a caller writes only their OWN accounts within their own org.
-      operationId: post_link
+      operationId: post_links
       requestBody:
         content:
           application/json:
@@ -83536,11 +83536,11 @@ paths:
           description: created
       summary: Registers a signed-in AI provider account on a machine.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
-  /v1/link/{id}:
+  /v1/links/{id}:
     delete:
       description: |-
         Logs out one account and stops the sessions it was running.
@@ -83554,7 +83554,7 @@ paths:
         that device, provider and account, and a stop that fails does not fail the
         revoke: the revoked row is the durable truth. An id that does not exist, or
         belongs to another user or org, is the same 404.
-      operationId: delete_link_by_id
+      operationId: delete_links_by_id
       parameters:
       - description: |-
           ID is the link to act on, from the path. It is scoped to the caller, so
@@ -83573,8 +83573,8 @@ paths:
           description: ok
       summary: Logs out one account and stops the sessions it was running.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
     get:
@@ -83589,7 +83589,7 @@ paths:
         collection — route, usage, devices — register before this one and win
         first-match, so a link whose id collided with one of those words could not be
         addressed here.
-      operationId: get_link_by_id
+      operationId: get_links_by_id
       parameters:
       - description: |-
           ID is the link to act on, from the path. It is scoped to the caller, so
@@ -83608,11 +83608,11 @@ paths:
           description: ok
       summary: Reads one linked account.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
-  /v1/link/devices/{machine}:
+  /v1/links/devices/{machine}:
     get:
       description: |-
         Shows one machine: its accounts, usage and live sessions.
@@ -83625,7 +83625,7 @@ paths:
         which is also the answer when the machine belongs to someone else — the scope
         makes the two indistinguishable, deliberately. The session count reports 0
         where the agent plane is not mounted rather than failing the read.
-      operationId: get_link_devices_by_machine
+      operationId: get_links_devices_by_machine
       parameters:
       - description: |-
           Machine is the machine to act on, from the path. It is scoped to the
@@ -83644,11 +83644,11 @@ paths:
           description: ok
       summary: 'Shows one machine: its accounts, usage and live sessions.'
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
-  /v1/link/devices/{machine}/revoke:
+  /v1/links/devices/{machine}/revoke:
     post:
       description: |-
         Logs out every account on one machine and stops its sessions.
@@ -83662,7 +83662,7 @@ paths:
         co-tenant's work, and a stop that fails does not fail the revoke: the revoked
         row is the durable truth and the count then honestly reports fewer. A machine
         with nothing left to revoke is 404.
-      operationId: post_link_devices_by_machine_revoke
+      operationId: post_links_devices_by_machine_revoke
       parameters:
       - description: |-
           Machine is the machine to act on, from the path. It is scoped to the
@@ -83681,11 +83681,11 @@ paths:
           description: ok
       summary: Logs out every account on one machine and stops its sessions.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
-  /v1/link/route:
+  /v1/links/route:
     get:
       description: |-
         Gets the failover order across your linked accounts.
@@ -83702,7 +83702,7 @@ paths:
         total function of the links and costs nothing to ask for. Actually dialing,
         detecting a live 429 and advancing to the next candidate belongs to the
         caller. A link with no snapshot counts as full headroom.
-      operationId: get_link_route
+      operationId: get_links_route
       responses:
         "200":
           content:
@@ -83712,11 +83712,11 @@ paths:
           description: ok
       summary: Gets the failover order across your linked accounts.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
-  /v1/link/usage:
+  /v1/links/usage:
     get:
       description: |-
         Shows one provider account's own usage dashboard.
@@ -83729,7 +83729,7 @@ paths:
         or range is 400, never a quiet fallback to a different one. When no series is
         available the response is a 200 with available:false and empty lists — an
         honest "we have no data", which is a different claim from zero usage.
-      operationId: get_link_usage
+      operationId: get_links_usage
       parameters:
       - description: Provider is the provider whose meter to read. Required.
         in: query
@@ -83768,8 +83768,8 @@ paths:
           description: ok
       summary: Shows one provider account's own usage dashboard.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
     post:
@@ -83791,7 +83791,7 @@ paths:
         is a provider, window class or kind outside the closed vocabulary — an
         unrecognized window is refused rather than rewritten, because a silently
         reclassified sample would fill a dashboard with a class nobody reported.
-      operationId: post_link_usage
+      operationId: post_links_usage
       requestBody:
         content:
           application/json:
@@ -83807,11 +83807,11 @@ paths:
           description: accepted
       summary: Reports usage samples from the device collector.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
-  /v1/link/usage/accounts:
+  /v1/links/usage/accounts:
     get:
       description: |-
         Breaks down what the gateway routed through each of your accounts.
@@ -83823,7 +83823,7 @@ paths:
         snapshots, and not the org money ledger. The source and scope fields on the
         response say so on every payload. The same shape answers in the billing
         namespace, from one shaping function, so the two mounts cannot drift.
-      operationId: get_link_usage_accounts
+      operationId: get_links_usage_accounts
       responses:
         "200":
           content:
@@ -83833,11 +83833,11 @@ paths:
           description: ok
       summary: Breaks down what the gateway routed through each of your accounts.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
-  /v1/link/usage/summary:
+  /v1/links/usage/summary:
     get:
       description: |-
         Shows plan consumption and Hanzo spend side by side.
@@ -83854,7 +83854,7 @@ paths:
         the same period. range is one of 1h, 24h, 7d or 30d and defaults to 24h;
         anything else is 400 rather than a silent substitution. A ledger that cannot
         answer reports available:false instead of a zero that would read as "no usage".
-      operationId: get_link_usage_summary
+      operationId: get_links_usage_summary
       parameters:
       - description: |-
           Range is the period, one of 1h, 24h, 7d or 30d; empty means 24h, and an
@@ -83873,8 +83873,8 @@ paths:
           description: ok
       summary: Shows plan consumption and Hanzo spend side by side.
       tags:
-      - link
-      x-app: link
+      - links
+      x-app: links
       x-public: true
       x-tool: true
   /v1/lsp/complete:
@@ -86320,7 +86320,7 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/network:
+  /v1/networks:
     get:
       description: |-
         Returns the caller's org overlay network on the Zero Trust fabric.
@@ -86333,7 +86333,7 @@ paths:
         The read degrades rather than erroring: a deployment with no ZT credential, and a
         controller that cannot be reached, both answer 200 with an empty list so the
         console's Networks page renders a clean empty state instead of an error.
-      operationId: get_network
+      operationId: get_networks
       responses:
         "200":
           content:
@@ -86343,11 +86343,11 @@ paths:
           description: ok
       summary: Returns the caller's org overlay network on the Zero Trust fabric.
       tags:
-      - network
-      x-app: network
+      - networks
+      x-app: networks
       x-public: true
       x-tool: true
-  /v1/network/{id}:
+  /v1/networks/{id}:
     get:
       description: |-
         Returns one overlay network by id, scoped to the caller's org.
@@ -86357,7 +86357,7 @@ paths:
         a peek across the tenant boundary. An org whose network exists but has no
         edge-routers is 404 too, for the same reason the list is empty: there is no
         overlay until something is on it.
-      operationId: get_network_by_id
+      operationId: get_networks_by_id
       parameters:
       - description: |-
           ID is the network id from the path. The URL is the addressing authority, so
@@ -86376,11 +86376,11 @@ paths:
           description: ok
       summary: Returns one overlay network by id, scoped to the caller's org.
       tags:
-      - network
-      x-app: network
+      - networks
+      x-app: networks
       x-public: true
       x-tool: true
-  /v1/network/routers:
+  /v1/networks/routers:
     get:
       description: |-
         Returns the Zero Trust routers the caller's org owns.
@@ -86393,7 +86393,7 @@ paths:
 
         The read degrades rather than erroring: a deployment with no ZT credential, and a
         controller that cannot be reached, both answer 200 with an empty list.
-      operationId: get_network_routers
+      operationId: get_networks_routers
       responses:
         "200":
           content:
@@ -86403,11 +86403,11 @@ paths:
           description: ok
       summary: Returns the Zero Trust routers the caller's org owns.
       tags:
-      - network
-      x-app: network
+      - networks
+      x-app: networks
       x-public: true
       x-tool: true
-  /v1/network/services:
+  /v1/networks/services:
     get:
       description: |-
         Returns the Zero Trust edge services the caller's org owns.
@@ -86422,7 +86422,7 @@ paths:
         deployment answers 503 and an unreachable controller surfaces the upstream's
         status, so a mesh page never renders "no services" for a fabric it simply could
         not read.
-      operationId: get_network_services
+      operationId: get_networks_services
       responses:
         "200":
           content:
@@ -86432,8 +86432,8 @@ paths:
           description: ok
       summary: Returns the Zero Trust edge services the caller's org owns.
       tags:
-      - network
-      x-app: network
+      - networks
+      x-app: networks
       x-public: true
       x-tool: true
   /v1/nodes:
@@ -111381,7 +111381,7 @@ tags:
   name: bots
 - description: Package campaign is one go-to-market push across paid, organic and
     email at once.
-  name: campaign
+  name: campaigns
 - description: 'Package captable is your cap table: stakeholders, share classes, grants,
     SAFEs, rounds, and who owns what.'
   name: captable
@@ -111421,7 +111421,7 @@ tags:
 - description: 'Package dataset is the per-org dataset plane of /v1/risk: a dataset
     is a VERSIONED, IMMUTABLE snapshot of one tenant''s own event surface, and this
     is where it is declared, materialised, described, exported and disposed of.'
-  name: dataset
+  name: datasets
 - description: 'Package deploy is Hanzo CD: see what each app is running, sync it,
     and roll back a bad release.'
   name: deploy
@@ -111513,7 +111513,7 @@ tags:
     record of WHICH provider accounts (Claude Max, ChatGPT Plus, a Hanzo API key,
     a raw provider key) a developer has signed into, ON WHICH MACHINES, with each
     account''s latest usage snapshot.'
-  name: link
+  name: links
 - description: Package lsp is live semantic code intelligence — definitions, references,
     types, hover, outline and diagnostics — over a repository AND its resolved dependencies,
     with no toolchain on the caller's machine.
@@ -111538,7 +111538,7 @@ tags:
     Hanzo Zero Trust footprint — the overlay network, its routers and its services
     — served as clean, org-scoped REST off the unified cloud binary and fronting the
     Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
-  name: network
+  name: networks
 - description: Package notify is transactional email and SMS, sent through your org's
     own provider credential.
   name: notify

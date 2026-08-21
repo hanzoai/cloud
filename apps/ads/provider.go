@@ -5,8 +5,8 @@ package ads
 // ORG'S OWN connector token — resolved at call time from KMS through the
 // integrations.TokenFor custody seam, never held in this process, never in a
 // manifest. This closes the gap the ads store left open: a stored AdCampaign is now
-// LAUNCHABLE against the real provider, and it is what the /v1/campaign paid
-// channel fans out to (plugin/campaign/seams.go adapts LaunchPaid/PaidSpend/PausePaid
+// LAUNCHABLE against the real provider, and it is what the /v1/campaigns paid
+// channel fans out to (plugin/campaigns/seams.go adapts LaunchPaid/PaidSpend/PausePaid
 // onto campaign.Channel).
 //
 // FAIL-CLOSED CUSTODY. Every operation resolves the org's token FIRST; any reason
@@ -19,7 +19,7 @@ package ads
 // delivery (and therefore spend) does not begin until the ad-set/ad legs are wired
 // (the documented ads follow-up), so a launch cannot silently burn budget. Spend is
 // READ back from the provider's insights (PaidSpend) — the connector's reported
-// number the /v1/campaign metrics plane joins with the analytics funnel.
+// number the /v1/campaigns metrics plane joins with the analytics funnel.
 
 import (
 	"context"
@@ -84,7 +84,7 @@ var metaAdsBase = "https://graph.facebook.com/v21.0"
 var adHTTP = &http.Client{Timeout: launchTimeout}
 
 // PaidPlan is the standalone contract for launching one ad campaign — the campaign
-// paid channel adapts campaign.Plan onto it (plugin/campaign/seams.go). BudgetCents is
+// paid channel adapts campaign.Plan onto it (plugin/campaigns/seams.go). BudgetCents is
 // the org's own (connector-paid) budget; ScheduleAt an optional start time.
 type PaidPlan struct {
 	Platform    string
