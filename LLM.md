@@ -1553,34 +1553,33 @@ is mechanical; skip it and you will rediscover fourteen failure modes the hard w
    publishes a four-line first sentence whole). Still prefer a short one — the
    summary is what a tool list shows.
 7. **Never EMBED a struct in an In or an Out — spell the fields at the top
-   level.** zip's `structSchema` walks `t.NumField()` and skips every field
+   level. The MECHANISM is CLOSED at zip v1.31.0; the habit is not.**
+   `wireFields` (openapi.go:916) is now the one answer to "what fields does this
+   type carry on the wire": it WALKS an untagged embedded struct and promotes its
+   exported fields exactly as `encoding/json` does, and the schema, the CLI's flags,
+   `hasRequestBody` and `bindURL` all read it — so the whole class below is gone,
+   in both directions, including the UNEXPORTED one that published nothing to grep
+   for. Its own doc comment records what it cost: "the document declared no request
+   body at all when the outer fields were all path params, and bindURL would not
+   bind one from the URL. The wire took them the whole time." A TAGGED embedded
+   struct is still a named nested object, because that is encoding/json's rule too.
+   Verified at the pin by the esign pass, which embeds `goja.SizedIn` (whose only
+   field is unexported, so it correctly publishes nothing) and `esignTokenRef`
+   (whose two fields are `json:"-"`, so they bind from the URL and stay out of the
+   body). Spelling the fields out is still the better default — a reader of the Go
+   struct sees the wire — but it is no longer a correctness requirement, and the
+   instances below have been fixed rather than merely enumerated. History kept
+   because the LESSON survives the fix: the direction no test catches is the one
+   where the ROUTE works perfectly and only the document is wrong.
+   The old text follows, for the shape of what to look for.
+   zip's `structSchema` walked `t.NumField()` and skipped every field
    `IsExported()` is false for, which an embedded UNEXPORTED type is (its field
    name IS the type name). `encoding/json` still PROMOTES those fields, so the
-   wire carries them and the document does not — the one direction no test
-   catches, because the route works perfectly. Exporting the embedded type is not
-   the fix: zip then publishes it as a NESTED object property named after the
-   type, which the wire does not have either. Live in the committed golden today:
-   `patchTargetIn` (apps/agents/targets.go — the worked example) publishes `{id}`
-   ALONE, so `PATCH /v1/agents/targets/{id}` documents none of label, kind,
-   status, capacity, host, spec or metrics, in openapi.yaml, in any generated SDK,
-   or in the MCP tool's inputSchema; `botView` (apps/visor/bots.go) publishes
-   `{agent,binding}` and drops the 14 machine fields it embeds;
-   `clusterDetailView` (apps/visor/k8s.go) publishes `{nodes}` alone. Fix those
-   three by inlining their fields — or fix `structSchema` to flatten an embedded
-   struct the way the decoder does, which fixes the class. The class keeps
-   recurring past any enumeration: guide's `stepView` embedded `JourneyStep`
-   (an EXPORTED type), so every step object in `GET /v1/guide` and the
-   skip/reset ops documented a nested `{JourneyStep: {…}}` the flat wire never
-   carried — found and fixed by inlining, with a reflect test
-   (`TestStepViewCarriesJourneyStep`) pinning the spelled-out copy against the
-   embedded source so a later JourneyStep field cannot silently drop out of the
-   view. The EXPORTED direction is findable in what shipped — a property named
-   exactly after the schema it $refs is the tell — and the check below reads
-   the published subsets, so it cannot disagree with them. It finds two more
-   today, both in `plugin/admin`: `MetricsData -> SaaSMetrics` (whose own
-   comment says "the SaaS snapshot, flat") and `ServiceView -> ServiceRow`.
-   The UNEXPORTED direction publishes nothing to grep for — those three above
-   were found by reading — so only the zip-side flatten retires the class:
+   wire carried them and the document did not. Exporting the embedded type was not
+   the fix either: zip then published it as a NESTED object property named after
+   the type, which the wire does not have. The EXPORTED direction was findable in
+   what shipped — a property named exactly after the schema it $refs is the tell —
+   and this check reads the published subsets, so it cannot disagree with them:
 
        python3 - <<'EOF'
        import json,glob
@@ -1605,6 +1604,31 @@ NOT bend the route to fit the declaration, and do NOT invent a third mechanism �
 zip is getting multi-status `responses`, and these convert when it lands.
 
 ### The fourteen failure modes, all found the hard way
+
+**The conditional class — CLOSED at the pinned zip.** `registerTarget` answers 200
+on an idempotent re-link and 201 on first registration, and for a long time
+`WithStatus` could not express it (one declaration, one status), so those routes
+stayed **typed-but-shimmed** on `cloud.Created(ctx)`. It landed: at **v1.31.0**
+`WithStatus` is VARIADIC (`typed.go:154`) and an answer states which of the
+declared set it is by implementing `StatusCoder` (`typed.go:193`), where a status
+the op did not declare is a refusal rather than a surprise. The document publishes
+the declared set. Two consequences nobody has walked yet — the shimmed routes are
+now convertible, and `WithStatus` no longer panics on a non-2xx, so team's two 302
+redirects want re-reading against `statusOf` rather than against the old panic.
+The same release closed the class beside it: a response header a caller relies on
+is `WithResponseHeader` + `HeaderCoder` (`typed.go:230`), not a middleware write —
+which is what audit's `Cache-Control: no-store` had to reach for.
+
+**Re-read a refusal against the PIN, not against this file.** cloud pins zip
+**v1.31.0** and much of the prose below was written at v1.18.x. Three of the
+capabilities those refusals turn on now exist. What still does not, verified at
+v1.31.0 for the esign/world pass: no raw-byte or `octet-stream` REQUEST binding
+(so `openapi.Register` + `openapi.Binary` remains the answer for an upload), and
+no bytes or stream RESPONSE — the REST arm still ends in `c.JSON(out)`
+(`typed.go:567`) and `SendStreamWriter` lives on `*zip.Ctx` (`ctx.go:178`), which
+a typed op never receives.
+
+### The failure modes, all found the hard way
 
 1. **A gate comparing two DERIVED artifacts agrees with itself while both are
    wrong.** `openapi-composed` compared the subsets to the golden they weave
@@ -1693,6 +1717,34 @@ zip is getting multi-status `responses`, and these convert when it lands.
    Domain nouns can stay unqualified while they are unique — the weave is the gate
    when they stop being. Generic ones are the standing hazard: `agents` publishes
    `Spec`/`Metrics`/`GPU`, `plugins` publishes `Status`/`Result`/`Host`/`Time`.
+
+   **The check above cannot see the dangerous half, because a name that publishes
+   NOTHING is not in it.** A typed op's In whose fields are all path params
+   publishes no request body, so its Go type name never enters the namespace — and
+   the collision sleeps until someone adds one body field to that op, at which
+   point the weave refuses the whole package for a clash that reads as if it came
+   from the OTHER app. Live instance, found at the esign pass and fixed before it
+   could fire: `apps/company` publishes `esignCompleteIn` (`{signed: bool}`, for
+   `POST /v1/company/esign/complete`) and `apps/esign` had declared a Go type of
+   the same name and a wholly different shape. Compare DECLARED names against
+   PUBLISHED ones, not published against published:
+
+       python3 - <<'EOF'
+       import json,glob,os,re,collections
+       pub=collections.defaultdict(set)
+       for f in glob.glob('plugin/*/openapi.json'):
+           a=os.path.basename(os.path.dirname(f))
+           for n in (json.load(open(f)).get('components',{}) or {}).get('schemas',{}): pub[n].add(a)
+       for d in sorted(glob.glob('apps/*/')):
+           a=d.split('/')[1]; names=set()
+           for g in glob.glob(d+'*.go'):
+               if not g.endswith('_test.go'): names|=set(re.findall(r'^type (\w+) ',open(g).read(),re.M))
+           for n in sorted(names):
+               if pub.get(n,set())-{a}: print(a,n,'also published by',sorted(pub[n]-{a}))
+       EOF
+
+   It reports the benign case too — three apps declare an empty `noInput` and the
+   weave permits identical shapes — so read the SHAPES before renaming.
 6. **A route going typed RENAMES its operationId**, `_by_id` → `_id`
    (`delete_v1_ingress_routes_by_id` → `delete_v1_ingress_routes_id`): the untyped
    projection derives the id from the route pattern, a typed op from zip's
@@ -1881,6 +1933,48 @@ zip is getting multi-status `responses`, and these convert when it lands.
     bundle copies touches captable, dataroom, pricing and ml, which is a different
     commit.
 
+11. **Two `Group(prefix)` calls are two APPS, so middleware installed on the first
+    never reaches a leaf registered on the second.** This is failure mode #3's
+    sibling and it fails the same silent way — not "installed after its leaves"
+    but "installed on a different group". zip's `Group` returns a NEW App included
+    at that prefix (`compose.go:325`: "A group is not a third kind of thing. It is
+    an App with a prefix"), and `Use` is scoped to the App it was called on. The
+    doc says so deliberately: the environment is "a function of WHERE a thing is
+    written rather than WHEN", which DIVERGES from fiber, where one flat list and
+    registration order decide it. So the fiber intuition — install it early, it
+    covers everything at that prefix afterwards — is wrong here.
+    It has already cost the repo once: `apps/books` found "every route in this file
+    answered money WITHOUT `Cache-Control: no-store` while the ops in books.go
+    carried it" (scan.go:50-60), and fixed it by installing `noStore` on each
+    router. The esign pass hit it again for the same reason books did — cmd/zipdoc
+    can only resolve a prefix it can READ in the file, so a registrar that takes a
+    group as a PARAMETER fails generation, which pushes each file to build its own
+    group and each group to need its own middleware. There `goja.Envelope()` sat on
+    the group carrying `/health` while the twelve real ops were on a second one, so
+    every bundle refusal came back in zip's flat `{status,code,error}` instead of
+    the bundle's own `{"error":…}` — a route that worked perfectly and answered in
+    the wrong vocabulary. The fix is ONE group per subsystem, in the file that
+    declares the ops, with every `Use` on it; where a surface must register in two
+    stages (esign serves `/health` even when its document plane never opened), pass
+    the STATE and branch inside the one registrar rather than splitting the group.
+    Find the candidates, then read each one — several are deliberate, using
+    `.Group("/v1")` purely as an ADDRESS with `With()` carrying the chain onto the
+    leaf (apps/company, apps/validators, apps/sync), which installs nothing at the
+    shared prefix and is legal precisely because it does not:
+
+        python3 - <<'EOF'
+        import re,glob,collections
+        h=collections.defaultdict(lambda: collections.defaultdict(list))
+        for f in glob.glob('apps/**/*.go',recursive=True):
+            if f.endswith('_test.go'): continue
+            for i,l in enumerate(open(f,errors='ignore'),1):
+                m=re.search(r'\.Group\("([^"]+)"',l)
+                if m: h[f.split('/')[1]][m.group(1)].append(f+':'+str(i))
+        for a,pref in sorted(h.items()):
+            for p,at in sorted(pref.items()):
+                if len(at)>1: print(a,p,at)
+        EOF
+
 ### Partitioning the remaining work
 
 986 untyped routes across 101 packages, 76 typed. Take a whole `apps/<app>/`
@@ -1898,8 +1992,77 @@ gates the whole surface as an EXACT set — live router == `app.Commands()` == t
 18 — so a route added untyped goes red without anyone remembering to name it), ~~framework 19~~ (done: 17 typed, 2 refused — the document writes; see "apps/framework (17 of 19)" below), ~~account 19~~ (done, and the 19 was 18: **11 typed, 7 refused** — re-verified; the seven are two routes' worth of shape, GET|POST `/v1/billing/*` and the five-method `/v1/commerce/*`, and `apps/account/typed_wire_test.go` holds them as a CLOSED list so an eighth goes red. See "apps/account (11 of 18)" below) | 117 |
 | D | ~~pricing 18~~ (done: 30 typed, 2 refused — both admin overlay PATCHes: one addresses a slashed model id through a greedy wildcard fiber calls `*1` and the document calls `{wildcard1}`, so the bound field and the published parameter cannot agree; the other carries an RFC 7386 merge patch stored and echoed VERBATIM, which `json.RawMessage` publishes as an array of integers and `map[string]any` reorders. The 15 "verbatim byte proxy" refusals came OFF the list: apps/goja already re-marshals the bundle's answer through Go's encoding/json, so a typed op re-marshalling the same value is byte-identical — apps/pricing/sections_wire_test.go proves it route by route), ~~ml 18~~ (done, and the 18 was 17: **10 typed, 7 refused**, every refusal wire-bound and GATED rather than asserted — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in apps/ml/typed_wire_test.go, whose two ledgers must SUM to the served surface. The seven: the three creates (`POST /v1/ml/models`, `/v1/train/jobs`, `/v1/train/experiments`) answer 402/503 IN BAND through `cloud.DenyResource` with the fleet's nested `{"error":{"code","message"}}` contract, and a typed op can only refuse by RETURNING an error, which zip renders as the flat `{"status","code","error"}` HTTPError — a NEW refusal class, distinct from multi-status #78: a non-2xx with a DOMAIN body. Moving the gate to middleware does not rescue them either, because it would run before the body decode and turn today's 400-on-a-bad-name into a 402. `PATCH /v1/ml/models/{name}` relays an opaque RFC 7386 merge patch VERBATIM to the Kubernetes API (`map[string]any` turns `{"replicas":1000000}` into `1e+06` and patches a float over an int). `POST …/predict` returns the predictor's own status, bytes and Content-Type. The two `/health` probes answer 503 carrying the degraded REPORT as their body. One `view()` now returns the published `mlResource` for BOTH the typed reads and the untyped create/patch, so the shape cannot depend on which route served it; `TestView` asserts the marshalled BYTES, which is what proves the map→struct swap did not move the wire, and mlResource's field order is ALPHABETICAL for exactly that reason), ~~automations 18~~ (done: 14 typed, 4 refused), ~~index 17~~ (done: **14 typed, 3 refused**, and the refusal is a NEW class the table did not have a name for: the three document writes take a TOP-LEVEL JSON ARRAY as their body on a `:uid` route, and zip binds a path parameter by walking the input's STRUCT FIELDS (bindURL, v1.31.0 typed.go:317), so a slice In binds no uid while a struct In cannot decode the array. Either half alone is expressible — hasRequestBody (openapi.go:413) admits a list body in as many words — the PAIR is not, and the cure is one upstream capability. All three declare both body shapes through `openapi.Register` + `openapi.OneOf`, so the SDKs stopped offering a document upload with nowhere to put the documents. The dialect is what made this pass different: the surface answers Meilisearch's own bodies AND its own `{message, code, type, link}` errors, which a JS client branches on — `index_not_found` is how mongoMeili decides to create an index. So the models declare their fields in ALPHABETICAL json-tag order (encoding/json sorts a map's keys, so the typed answer is byte-identical to the map it replaced, pinned case by case) and a refusal is a `*fault` the op RETURNS with an `envelope()` middleware writing its bytes back — the shape apps/goja's BundleErr and cloud's own Denied already take, a third instance of one seam that is now worth naming once in package cloud. Paging keeps STRINGS for limit and offset: the handler defaults on absent-or-unparseable and honours an explicit 0, which an int field cannot tell apart. `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` + `TestEveryPublishedFieldIsDescribed`, two ledgers summing to 17), ~~dataroom 17~~ (done: **10 typed, 7 refused** — every JSON route on the admin surface is typed, which is the whole agent-callable surface: open a room, add and list documents, grant a party access, list rooms, plus the two analytics rollups. It is apps/captable's shape one subsystem over, so it took captable's answer AND its code: `Scalar`, `SizedIn`, `BundleErr` and `Envelope` moved to **apps/goja**, beside the bundle seam they serve, rather than becoming a second copy — captable now runs on the shared kit and its spec is unchanged but for operationIds. The kit gained one piece captable did not need, `ScalarList`: a bundle substitutes an EMPTY list for anything that is not an array, so publishing `allowList` as a `string` would let an agent send one, have the room discard it, and report SUCCESS having ignored the access control — a link meant for one investor admitting everyone. The 7 refusals are wire-bound: `/health` is native and answers before the bundle exists; `POST /documents` takes the file ITSELF as the body and the two `/file` routes answer with a byte stream off object storage, which no In/Out pair describes; and the three `/view/*` viewer routes carry NO principal — their tenant is resolved from the public link index, so `tenantOf` has nothing to read. Each is named at its registration, and the reads are pinned byte-identical to the bundle they relay), ~~compliance 17~~ (done: 16 typed, 1 refused — the HMAC webhook: the signature is computed over the RAW body bytes and verified before any parse, and an unknown reference answers a second 200 shape; the refusal is now GATED, not prose — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in typed_wire_test.go), affiliates 17 | 104 |
 | E | ~~tools 16~~ (done: **15 served, 14 typed, 1 refused**, wire-bound and GATED rather than asserted — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in apps/tools/typed_wire_test.go, whose two ledgers must SUM to the served surface and whose counts are pinned so the prose here cannot drift from the binary. Its 16 ops published NO summary and NO description at all before this — the whole subset was invisible to prose, MCP, the CLI and every typed SDK method. The one refusal: `POST /v1/plugins/build` answers 422 carrying the build DIAGNOSTICS (detail, source, generated) as a domain body, the ml refusal class — a typed op's only refusal is a returned error, which zip renders as the flat HTTPError with nowhere to put them. Three query filters stayed STRINGS rather than becoming bools, deliberately: these routes compare the raw value to the literal `"true"`, and zip's `setScalar` reads a bare `?activated` and `?activated=1` as true, so a bool In would return a different set of tools for the same URL — `TestActivatedFilterIsTheLiteralTrue` pins it. The pass also closed the response-side hole the op gate cannot see: Tool, Skill, MCPServer, AuthoredPlugin and Price are store rows, so all 29 of their published properties would have reached openapi.yaml, every SDK and every MCP inputSchema bare; `TestEveryPublishedFieldIsDescribed` gates them now — and it covers all 52 properties the subset publishes, not only the row types. Re-verified independently at a later pass, and the refusals were re-read against zip SOURCE rather than inherited: `op.invoke`'s unconditional `ErrBadRequest` on an unparseable body is typed.go:242 and the `cmp.Or(op.Status, 204)` a nil Out stamps is typed.go:305 — three citations in the refusal prose were off by one to three lines and are now exact, which matters because a file:line nobody can land on is how a refusal stops being re-checkable. That pass also closed the half of a refusal the op gate cannot see, the books/company answer one plane over: the untyped route rendered as an operationId and a tag and NO BODY AT ALL — indistinguishable from a route that takes no input and returns none — so every SDK generated off openapi.yaml offered a plugin build with nowhere to put the source. `openapi.Register` (apps/tools/tools.go init) now states the half that IS statable: buildRequest→buildOut, gated by `TestTheUntypedRouteStillDeclaresItsBody`. A map literal became a named struct to do it, with ALPHABETICAL fields because encoding/json writes a map in sorted key order — `TestBuildReceiptIsByteIdentical` asserts the marshalled BYTES, which is what proves naming a shape did not move it. The cost is honest and recorded: 17 of the subset's 69 published properties are now bare, because zipdoc lifts field prose off TYPED ops only and Register's reflection seam reads Go types, not comments — the same gap company recorded for deckOut. Described ops stay 14 of 15: Register buys the SHAPE, never the prose, and inventing a description for a route nobody typed would be worse than none. The SECOND refusal is now GONE rather than typed: `POST /v1/tools/mcp` was a hand-rolled JSON-RPC door, and the fleet serves ONE MCP door on the host — this plane reaches it through the typed `POST /v1/tools/call`, so the envelope, its declared shapes and its byte-identity gate all went with the route), eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
+
+| D | ~~pricing 18~~ (done: 30 typed, 2 refused — both admin overlay PATCHes: one addresses a slashed model id through a greedy wildcard fiber calls `*1` and the document calls `{wildcard1}`, so the bound field and the published parameter cannot agree; the other carries an RFC 7386 merge patch stored and echoed VERBATIM, which `json.RawMessage` publishes as an array of integers and `map[string]any` reorders. The 15 "verbatim byte proxy" refusals came OFF the list: apps/goja already re-marshals the bundle's answer through Go's encoding/json, so a typed op re-marshalling the same value is byte-identical — apps/pricing/sections_wire_test.go proves it route by route), ~~ml 18~~ (done, and the 18 was 17: **10 typed, 7 refused**, every refusal wire-bound and GATED rather than asserted — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in apps/ml/typed_wire_test.go, whose two ledgers must SUM to the served surface. The seven: the three creates (`POST /v1/ml/models`, `/v1/train/jobs`, `/v1/train/experiments`) answer 402/503 IN BAND through `cloud.DenyResource` with the fleet's nested `{"error":{"code","message"}}` contract, and a typed op can only refuse by RETURNING an error, which zip renders as the flat `{"status","code","error"}` HTTPError — a NEW refusal class, distinct from multi-status #78: a non-2xx with a DOMAIN body. Moving the gate to middleware does not rescue them either, because it would run before the body decode and turn today's 400-on-a-bad-name into a 402. `PATCH /v1/ml/models/{name}` relays an opaque RFC 7386 merge patch VERBATIM to the Kubernetes API (`map[string]any` turns `{"replicas":1000000}` into `1e+06` and patches a float over an int). `POST …/predict` returns the predictor's own status, bytes and Content-Type. The two `/health` probes answer 503 carrying the degraded REPORT as their body. One `view()` now returns the published `mlResource` for BOTH the typed reads and the untyped create/patch, so the shape cannot depend on which route served it; `TestView` asserts the marshalled BYTES, which is what proves the map→struct swap did not move the wire, and mlResource's field order is ALPHABETICAL for exactly that reason), ~~automations 18~~ (done: 14 typed, 4 refused), index 17, ~~dataroom 17~~ (done: **10 typed, 7 refused** — every JSON route on the admin surface is typed, which is the whole agent-callable surface: open a room, add and list documents, grant a party access, list rooms, plus the two analytics rollups. It is apps/captable's shape one subsystem over, so it took captable's answer AND its code: `Scalar`, `SizedIn`, `BundleErr` and `Envelope` moved to **apps/goja**, beside the bundle seam they serve, rather than becoming a second copy — captable now runs on the shared kit and its spec is unchanged but for operationIds. The kit gained one piece captable did not need, `ScalarList`: a bundle substitutes an EMPTY list for anything that is not an array, so publishing `allowList` as a `string` would let an agent send one, have the room discard it, and report SUCCESS having ignored the access control — a link meant for one investor admitting everyone. The 7 refusals are wire-bound: `/health` is native and answers before the bundle exists; `POST /documents` takes the file ITSELF as the body and the two `/file` routes answer with a byte stream off object storage, which no In/Out pair describes; and the three `/view/*` viewer routes carry NO principal — their tenant is resolved from the public link index, so `tenantOf` has nothing to read. Each is named at its registration, and the reads are pinned byte-identical to the bundle they relay), ~~compliance 17~~ (done: 16 typed, 1 refused — the HMAC webhook: the signature is computed over the RAW body bytes and verified before any parse, and an unknown reference answers a second 200 shape; the refusal is now GATED, not prose — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in typed_wire_test.go), affiliates 17 | 104 |
+| E | ~~tools 16~~ (done: **15 served, 14 typed, 1 refused**, wire-bound and GATED rather than asserted — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in apps/tools/typed_wire_test.go, whose two ledgers must SUM to the served surface and whose counts are pinned so the prose here cannot drift from the binary. Its 16 ops published NO summary and NO description at all before this — the whole subset was invisible to prose, MCP, the CLI and every typed SDK method. The one refusal: `POST /v1/plugins/build` answers 422 carrying the build DIAGNOSTICS (detail, source, generated) as a domain body, the ml refusal class — a typed op's only refusal is a returned error, which zip renders as the flat HTTPError with nowhere to put them. Three query filters stayed STRINGS rather than becoming bools, deliberately: these routes compare the raw value to the literal `"true"`, and zip's `setScalar` reads a bare `?activated` and `?activated=1` as true, so a bool In would return a different set of tools for the same URL — `TestActivatedFilterIsTheLiteralTrue` pins it. The pass also closed the response-side hole the op gate cannot see: Tool, Skill, MCPServer, AuthoredPlugin and Price are store rows, so all 29 of their published properties would have reached openapi.yaml, every SDK and every MCP inputSchema bare; `TestEveryPublishedFieldIsDescribed` gates them now — and it covers all 52 properties the subset publishes, not only the row types. Re-verified independently at a later pass, and the refusals were re-read against zip SOURCE rather than inherited: `op.invoke`'s unconditional `ErrBadRequest` on an unparseable body is typed.go:242 and the `cmp.Or(op.Status, 204)` a nil Out stamps is typed.go:305 — three citations in the refusal prose were off by one to three lines and are now exact, which matters because a file:line nobody can land on is how a refusal stops being re-checkable. That pass also closed the half of a refusal the op gate cannot see, the books/company answer one plane over: the untyped route rendered as an operationId and a tag and NO BODY AT ALL — indistinguishable from a route that takes no input and returns none — so every SDK generated off openapi.yaml offered a plugin build with nowhere to put the source. `openapi.Register` (apps/tools/tools.go init) now states the half that IS statable: buildRequest→buildOut, gated by `TestTheUntypedRouteStillDeclaresItsBody`. A map literal became a named struct to do it, with ALPHABETICAL fields because encoding/json writes a map in sorted key order — `TestBuildReceiptIsByteIdentical` asserts the marshalled BYTES, which is what proves naming a shape did not move it. The cost is honest and recorded: 17 of the subset's 69 published properties are now bare, because zipdoc lifts field prose off TYPED ops only and Register's reflection seam reads Go types, not comments — the same gap company recorded for deckOut. Described ops stay 14 of 15: Register buys the SHAPE, never the prose, and inventing a description for a route nobody typed would be worse than none. The SECOND refusal is now GONE rather than typed: `POST /v1/tools/mcp` was a hand-rolled JSON-RPC door, and the fleet serves ONE MCP door on the host — this plane reaches it through the typed `POST /v1/tools/call`, so the envelope, its declared shapes and its byte-identity gate all went with the route), eval 16, ~~social 13~~ (done: **13 typed, 0 refused**), ~~esign 13~~ (done: **13 typed, 0 refused**), link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | ~~plan~~ (done: **15 typed, 0 refused** — the whole `/v1/plans` surface, which published 15 addresses and NOTHING about any of them. It is apps/pricing's shape one subsystem over, so it took pricing's answer: apps/goja re-marshals the bundle's reply with Go's encoding/json before a handler sees it, so decoding and re-marshalling is byte-identical, and `apps/plan/wire_test.go` proves it against the live router for all 12 sections × 3 identity shapes plus BOTH parameterised routes over EVERY id the shipped catalog holds. Opaque catalog values are `json.RawMessage`, not `map[string]any`: zip ≥v1.18.9 asks whether a type marshals itself before asking what it is made of, so a RawMessage publishes `{}` — "any JSON", true — while `map[string]any` publishes `additionalProperties:{"type":"object"}`, which the first `"priceMonthly": 20` in the catalog refutes. Two deltas recorded and PINNED rather than glossed: Content-Type gains `; charset=utf-8` (what every zip error on the surface already sent), and a non-200 body gains zip's `status` field beside the bundle's own message — the same trade main already took for `GET /v1/pricing/model/{name}`, whose 404 is equally first-class. Latent defect found and fixed by typing: the subsystem is named `plan` and serves `/v1/plans`, so `MountPrefixes`'s `/v1/<Name>` default covered NOTHING it registers — measured, `SubsystemOf("/v1/plans")` was `""` and `PriceOf` `undeclared`, and any middleware the subsystem installed (including the typed-op Bridge) landed on `/v1/plan` and never ran. `plugin/plan/main.go` now passes `manifest.PrefixesFor("plan")`; 28 other apps' `/v1/<name>` is likewise absent from their declared prefixes — most legitimately, because they declare deeper subtrees that DO cover their routes, so re-measure per app rather than fixing the list), ~~analytics 13~~ (done: **6 typed, 7 refused**, both ledgers GATED in apps/analytics/typed_wire_test.go — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed`, whose two ledgers must SUM to the served surface, so a route added untyped here goes red and a stale reason goes red too. The six are the READ lenses: `/v1/analytics/{overview,timeseries,top}`, `/v1/errors`, `/v1/insights/{events,health}`. The seven refusals are one probe and the six ingest doors, and they are MEASURED rather than asserted. `GET /v1/analytics/health` answers 503 CARRYING the degraded report as its body — the ml `/health` class — and `TestHealthStillCarriesItsReportAt503` pins the pair a typed op would have to break. The six doors share ONE admission decision (`handle`, event.go) resolved entirely from facts that never reach a typed op: the presented credential (Authorization / `x-hanzo-ingest-key` / `?ingest_key=`), the client IP and socket peer the anonymous rate caps key on, DNT/Sec-GPC, and the RAW body length that is the projected lane's 64 KiB→413 bound (`public.go maxPublicBytes`, invisible to a typed op and far below the fleet's global zip BodyLimit). Four of the six add a SECOND, independent blocker: the canonical wire is POLYMORPHIC (`decodeIngest` takes a bare Event object, a bare Event ARRAY, and the `{batch:[…]}`/`{events:[…]}` envelope on one path) and the team SPA's is a bare ARRAY unconditionally — bodies zip's `op.invoke` would 400 where they answer 200 today. `TestArrayBodiedDoorsStillAnswer200` is that measurement, so when zip can declare a polymorphic body the conversion is a test away rather than a re-derivation. Two latent defects surfaced and were fixed: plugin/analytics/main.go declared NO `Prefixes`, so the standalone binary's scope owned only the `/v1/<name>` default and five of the app's six prefixes were outside anything it could gate or that `cloud.Declare` could attribute — the pricing defect exactly, one app over; and `apps/analytics` had no `cloud.Bridge` of its own, relying entirely on Serve's app-wide install, which the package's own test harness does not run. A THIRD is fleet-wide and only named here: `SeriesPoint` was about to be a one-name/two-shape collision with apps/admin's `{t,value}` launch-board point, which `openapi.Weave` refuses — analytics yielded to `UsagePoint`, since its schema was not yet published. `TestEveryPublishedFieldIsDescribed` gates the response side: all 19 TYPED schemas carry per-field prose, so `errorRate` says it is a ratio and `pct` says it is a share of the WINDOW rather than of the rows returned. **Re-verified at a later pass against a MOVED surface, and every refusal held** — by then main had folded `/v1/event/collect` away and added the two Sentry doors `POST /v1/event/{project}/{envelope,store}`, so the ledger reads 6 typed / 8 refused. The reasons were re-derived from zip v1.18.11's own `typed.go` rather than inherited as prose, and each gained a blocker the first pass had not written down: ORDER. `op.invoke` decodes the body BEFORE the handler is entered, while admission refuses 401 (no resolvable key), then the projected lane refuses 429 (rate), then 413 (64 KiB), with the raw bytes still in hand and nothing parsed — so a typed op would answer 400 to a beacon that is answered 413 or 429 today. Error precedence is wire. What that pass DID change is the other half of the cost: all eight published an operationId and NOTHING else, so every generated SDK offered `post_v1_event` — the door every Hanzo product beacons to — as a call with nowhere to put the event. They declare their bodies now through `openapi.Register`, driven off the `doors` table itself so a door cannot be routed with one wire and documented with another, and the gate quantifies over `untypedByDesign` rather than over doors (`TestEveryUntypedRouteDeclaresItsBodies`) so a refusal added tomorrow owes its bodies by construction. The canonical four use the new `openapi.OneOf`, because their wire is genuinely three shapes; the two Sentry doors use `openapi.Binary` for a request that is an opaque envelope stream and declare NO response, named in `relayed` — they copy back whatever `cloud.ObsErrorIngest` installed, and publishing a shape there would be inventing one. The subset went 0→7 requestBody and 6→12 responses, 19→30 schemas, and the described count did NOT move: 6, exactly the typed ops, because prose, an MCP tool and a CLI command are the three things only zip's registry supplies. Reported as unchanged rather than counted as progress. The health probe's `map[string]any` became `healthReport` in the same move — a map's shape cannot be declared without hand-writing a schema beside it, which is the drift `Register` exists to prevent — and `TestHealthReportKeepsTheMapItReplaced` pins both bodies field-for-field. The one difference is serialization ORDER (Go struct order, not encoding/json's sorted map keys), which the JSON data model does not carry; no field name, value, presence rule or status moved. The cost is a `proseless` ledger of eleven components publishing 63 bare properties, and it may only SHRINK — it caught its own first staleness during this rebase, when main's removal of the Team door left `teamEvent` named and unpublished), the ~70 remaining packages, 1–11 routes each | ~358 |
 | — | ~~iam 25~~ (done, then RE-done and the second answer is the real one: the first pass typed **0 of 25 and refused all 25**, correctly, because the seam erased the child's registry. `zip.Graft` (v1.18.16) composes the App instead of adapting a handler, so iam now publishes **155 paths / 182 ops / 94 with schema / 94 MCP tools / 94 CLI commands / 0 wildcards** — see "apps/iam — what the graft recovered" above. Nothing in iam was typed to get there; the 94 were always typed, in its own repo, and the adapter was throwing them away) | 94 |
+
+**The capability pass (esign, social, world): 26 typed, 0 refused, and both new
+subsets published NOTHING before it.** esign was 0 of 13 and social 0 of 13 — 26
+operations carrying prose and not one SHAPE, so every generated SDK offered "upload
+a PDF for signature" and "publish this post" with nowhere to put the PDF or the
+post. Both are `beta`, which is why this was the cheap moment: `public.yaml` and
+`fleet/catalog.json` exclude a beta capability (HIP-0139 §8, and
+`plugin/gen-fleet-catalog`'s own header explains why it reads the audience from
+public.yaml rather than from the subset), so nothing regenerated and no client
+moved — the ids and shapes were fixed BEFORE ga exposes them. Now: esign 23 schemas
+/ 107 properties / 5 request bodies, social 11 / 43 / 4, both **0 bare properties**,
+both `untypedByDesign` EMPTY. world was already 5 of 6 and stays there.
+
+- **HIP-1125 §3 is titled "Why nothing here is typed" and is wrong.** Its premise —
+  every route is built by a handler FACTORY closing over a bundle route name, and a
+  closure has no doc comment to lift — is a fact about the FACTORY, not about the
+  routes. `apps/dataroom` had already retired the same claim; esign is that answer
+  one subsystem over, on the shared `apps/goja` kit, and all thirteen ops including
+  the four unauthenticated signing-token routes are typed. HIP-1153's twin claim
+  ("nothing about these shapes prevents typing… this capability's known debt") held
+  for the RESPONSE half and understated the work: the request half did not exist to
+  move, because the store rows carry server-minted `id`/`createdAt`/`updatedAt` and
+  publishing a row as a request body documents three arguments no caller may send.
+  Both HIPs now describe code that is gone and want a correction.
+- **The kit gained one piece, for the reason ScalarList was added.** `goja.Raw` is a
+  field whose value may be ANY JSON, carried verbatim. `Scalar` carries the same
+  bytes and is a string KIND, so it would describe esign's `fieldMeta` — an OBJECT
+  the bundle stores with JSON.stringify — as `string`, and a caller who believed
+  that would send a quoted, double-encoded string. It marshals itself, which is the
+  question `schemaOf` asks first (openapi.go:657), so it publishes `{}`: any JSON,
+  the only true thing to say. Pinned by `TestFieldMetaStaysTheCallersJSON`, which
+  asserts the published schema names no type.
+- **A relay's tolerance is TWO rules, not one, and esign's differ from dataroom's.**
+  esign's untyped relay decoded into `any`: bytes that are not JSON were its own
+  400, and every other shape — an array, a bare number — reached the bundle as an
+  object with no keys. `goja.SizedIn.Fill` is tolerant of BOTH, which is right for
+  the relays it was written for and wrong here, so the parse half is restated in
+  each input's `UnmarshalJSON`. Getting it backwards is not cosmetic: `POST
+  …/sign/{token}/complete` reads no field at all, so a decoder that refused a
+  non-object body would turn today's completed signature into a 400.
+- **A number's Go type is decided by WHO chose it.** A timestamp is minted by the
+  host (`__now()`) and always integral, so `int64`. A page, a signing order and a
+  field's geometry are whatever the bundle's `num()` made of what the caller sent,
+  and it does not round — so `float64`, because `integer` would publish a constraint
+  the route does not enforce AND fail to decode the answer to the fractional page it
+  accepts today. `TestGeometryKeepsTheCallersNumber` sends `page: 1.5` and a
+  1,000,000 coordinate and asserts the bytes.
+- **A dead cap, found by typing and deliberately not changed.** esign's `maxBody` is
+  32 MiB; the deployment's own ceiling is 16 MiB (`internal/edge.BodyLimit`,
+  `GATEWAY_BODY_LIMIT`), which zip hands fasthttp as `MaxRequestBodySize`
+  (transport.go:594). fasthttp refuses a larger body before any handler runs, so the
+  esign cap can never fire and the largest PDF this API accepts is what 16 MiB of
+  base64 holds — roughly 12 MiB, not the 32 the constant advertises. The SizedIn
+  machinery is kept and kept faithful (a typing pass may not move the wire) and
+  `TestTheBodyCapIsTheEdgesRatherThanEsigns` goes red the day someone lowers the
+  constant under the edge, which is the day the 413-before-400 order matters again.
+- **world owed two things and neither was the field gate**, which already existed
+  and already passed — measured recursively, 35 of 35 properties described, with no
+  property reachable only by recursion. What it owed was a refusal RE-READ at the
+  pin (the reason cited only `stream.go:151`; it now cites `typed.go:567` and
+  `ctx.go:178` and says why v1.31.0's new StatusCoder/HeaderCoder do not open the
+  door), and a pin on its SILENCE: stream's prose says its frames carry "the same
+  {items:[…]} body GET /v1/world/news answers", which is an invitation to declare
+  `newsResponse` as its 200 — false, because the response is a frame sequence, and
+  an SDK built on it would decode the first frame and hang.
+  `TestTheStreamDeclaresNoResponse` is the apps/ask precedent applied.
 
 **The five-plugin pass (ask, audit, catalog, crawl, x402): 3 typed, 2 refused —
 and all five published NOTHING before it.** Five one-operation subsets, every one

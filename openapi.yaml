@@ -17443,6 +17443,298 @@ components:
             for a provider whose webhook is not wired. Omit it to take the provider's answer.
           type: boolean
       type: object
+    esignCompletion:
+      properties:
+        documentStatus:
+          description: |-
+            DocumentStatus is COMPLETED when this was the last signature and the document
+            sealed here, PENDING while others have still to sign.
+          type: string
+        recipientId:
+          description: RecipientID is the recipient who finished.
+          type: string
+        sealed:
+          description: |-
+            Sealed is whether the document sealed on this call — the field values
+            rendered onto the PDF and a real x509 PKCS#7 signature applied.
+          type: boolean
+      type: object
+    esignDocument:
+      properties:
+        completedAt:
+          description: |-
+            CompletedAt is when the document sealed, in unix milliseconds; null until it
+            does.
+          type: integer
+        createdAt:
+          description: CreatedAt is when the document was uploaded, in unix milliseconds.
+          type: integer
+        externalId:
+          description: |-
+            ExternalID is the caller's own identifier for this document, echoed back as
+            it was given; null when none was.
+          type: string
+        fields:
+          description: |-
+            Fields is every field on the document, ordered by page and then by when it
+            was placed.
+          items:
+            $ref: '#/components/schemas/esignField'
+          type: array
+        id:
+          description: ID is the document id.
+          type: string
+        message:
+          description: |-
+            Message is the covering message stored with the document; null when none was
+            given. Nothing in this surface sends it.
+          type: string
+        recipients:
+          description: |-
+            Recipients is everyone on the document, ordered by signing order and then by
+            when they were added — which is also the order a SEQUENTIAL document enforces.
+          items:
+            $ref: '#/components/schemas/esignRecipient'
+          type: array
+        signingOrder:
+          description: SigningOrder is PARALLEL or SEQUENTIAL, fixed when the document
+            was created.
+          type: string
+        source:
+          description: |-
+            Source is how the document came to exist. It is DOCUMENT for everything this
+            surface creates.
+          type: string
+        status:
+          description: |-
+            Status is DRAFT while recipients and fields may still be added, PENDING once
+            it has gone out, then COMPLETED when every signer has finished or REJECTED if
+            any one of them declined.
+          type: string
+        subject:
+          description: |-
+            Subject is the covering subject line stored with the document; null when none
+            was given.
+          type: string
+        title:
+          description: Title is the document's name, and the stem of the download
+            filename.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the document last changed, in unix milliseconds.
+          type: integer
+      type: object
+    esignDocuments:
+      properties:
+        documents:
+          description: |-
+            Documents is the caller org's documents, newest first, capped at 200. There
+            is no paging, so read it as the recent window rather than a complete export.
+          items:
+            $ref: '#/components/schemas/esignDocument'
+          type: array
+      type: object
+    esignEvent:
+      properties:
+        createdAt:
+          description: CreatedAt is when it happened, in unix milliseconds.
+          type: integer
+        data:
+          description: |-
+            Data is the event's own detail, whose shape depends on the type — the field
+            and recipient a signature was inserted for, the reason a document was
+            rejected. Null when the event carried none.
+        email:
+          description: |-
+            Email is the email of whoever caused it, null for an event with no actor —
+            the sender's own calls are recorded without one.
+          type: string
+        id:
+          description: ID is the entry id.
+          type: string
+        name:
+          description: Name is the name of whoever caused it, null when it was not
+            recorded.
+          type: string
+        type:
+          description: |-
+            Type is what happened: DOCUMENT_CREATED, RECIPIENT_CREATED, FIELD_CREATED,
+            DOCUMENT_SENT, DOCUMENT_OPENED, DOCUMENT_FIELD_INSERTED,
+            DOCUMENT_RECIPIENT_COMPLETED, DOCUMENT_RECIPIENT_REJECTED or
+            DOCUMENT_COMPLETED.
+          type: string
+      type: object
+    esignField:
+      properties:
+        customText:
+          description: |-
+            CustomText is the value a non-signature field was filled with, empty until it
+            is. A signature's value is not here: it is stored separately and rendered
+            onto the page at sealing.
+          type: string
+        fieldMeta:
+          description: |-
+            FieldMeta is the caller's own metadata for this field, stored verbatim at
+            placement and never interpreted. Null when none was supplied.
+        height:
+          description: Height is the field's height, -1 when the renderer is to choose
+            one.
+          type: number
+        id:
+          description: ID is the field id.
+          type: string
+        inserted:
+          description: Inserted is whether this field has been filled in.
+          type: boolean
+        page:
+          description: Page is the 1-based page the field sits on.
+          type: number
+        positionX:
+          description: PositionX is the field's horizontal position on that page.
+          type: number
+        positionY:
+          description: PositionY is the field's vertical position on that page.
+          type: number
+        recipientId:
+          description: |-
+            RecipientID is who must fill this field. It is absent on a signer's own view
+            of a document, where every field returned is already theirs.
+          type: string
+        type:
+          description: |-
+            Type is what the field collects — SIGNATURE, DATE, NAME, EMAIL, TEXT and the
+            rest.
+          type: string
+        width:
+          description: Width is the field's width, -1 when the renderer is to choose
+            one.
+          type: number
+      type: object
+    esignFieldIn:
+      properties:
+        fieldMeta:
+          description: |-
+            FieldMeta is your own metadata for this field — a label, a placeholder, a
+            required flag — stored verbatim and handed back on every read of the
+            document. Any JSON, and esign never interprets it.
+        height:
+          description: |-
+            Height is the field's height, defaulting to -1, which means the renderer
+            chooses one when the document is sealed.
+        page:
+          description: Page is the 1-based page the field sits on, defaulting to 1.
+        positionX:
+          description: PositionX is the field's horizontal position on that page,
+            defaulting to 0.
+        positionY:
+          description: PositionY is the field's vertical position on that page, defaulting
+            to 0.
+        recipientId:
+          description: |-
+            RecipientID is who must fill this field. Required, and it must belong to this
+            document — a recipient from elsewhere is refused rather than silently
+            accepted.
+        type:
+          description: |-
+            Type is what the field collects: SIGNATURE, FREE_SIGNATURE, INITIALS, NAME,
+            EMAIL, DATE, TEXT, NUMBER, RADIO, CHECKBOX or DROPDOWN. Required, and
+            anything else is refused.
+        width:
+          description: |-
+            Width is the field's width, defaulting to -1, which means the renderer
+            chooses one when the document is sealed.
+      type: object
+    esignHealth:
+      properties:
+        service:
+          description: |-
+            Service names the subsystem that answered, so a probe reading several looks
+            the same on each.
+          type: string
+        status:
+          description: |-
+            Status is ok whenever the subsystem is mounted. It is never anything else:
+            this route is registered before the document host is built, so it is
+            reachability and not a promise that documents can be stored.
+          type: string
+      type: object
+    esignInsertion:
+      properties:
+        fieldId:
+          description: FieldID is the field that was filled.
+          type: string
+        inserted:
+          description: |-
+            Inserted is true — the field now holds a value. Filling every field still
+            leaves the document pending until the completion call.
+          type: boolean
+      type: object
+    esignInvite:
+      properties:
+        email:
+          description: Email is the address the invitation is for, lower-cased.
+          type: string
+        id:
+          description: ID is the new recipient's id, which is what a field is placed
+            against.
+          type: string
+        name:
+          description: Name is the recipient's display name, empty when none was given.
+          type: string
+        role:
+          description: |-
+            Role is the role they were recorded with — SIGNER unless another was asked
+            for.
+          type: string
+        token:
+          description: |-
+            Token is the crypto-random signing capability for this recipient. It is the
+            entire credential their door accepts, so treat it as a secret and hand it
+            only to them: the signing link is built from it.
+          type: string
+      type: object
+    esignLink:
+      properties:
+        email:
+          description: Email is the address this link is meant for.
+          type: string
+        recipientId:
+          description: RecipientID is the recipient the link identifies.
+          type: string
+        role:
+          description: |-
+            Role is their role — only a SIGNER or an APPROVER gets a link, because only
+            they are asked to act.
+          type: string
+        signingPath:
+          description: |-
+            SigningPath is the tail of the address to send them, relative to wherever the
+            signing page is served.
+          type: string
+        token:
+          description: |-
+            Token is the crypto-random signing capability. It is the entire credential,
+            so treat it as a secret and give each one only to the recipient it names.
+          type: string
+      type: object
+    esignLinks:
+      properties:
+        id:
+          description: ID is the document that went out.
+          type: string
+        recipients:
+          description: |-
+            Recipients is one link per signing recipient. Nothing is emailed by this
+            call; delivering the links is the caller's.
+          items:
+            $ref: '#/components/schemas/esignLink'
+          type: array
+        status:
+          description: |-
+            Status is PENDING — the state a sent document is in until every signer has
+            finished.
+          type: string
+      type: object
     esignOut:
       properties:
         esignRef:
@@ -17455,6 +17747,241 @@ components:
         provider:
           description: Provider is the wired e-signature provider's name.
           type: string
+      type: object
+    esignPDF:
+      properties:
+        filename:
+          description: |-
+            Filename is the name to save it under, built from the title and marked
+            _signed once it is sealed.
+          type: string
+        id:
+          description: ID is the document.
+          type: string
+        pdfBase64:
+          description: |-
+            PdfBase64 is the PDF itself, base64-encoded. There is one field either way,
+            so Sealed is what tells you which artifact you are holding.
+          type: string
+        sealed:
+          description: |-
+            Sealed is whether this is the SEALED artifact — the field values rendered
+            onto the page and a real x509 PKCS#7 signature applied — rather than the
+            original upload.
+          type: boolean
+        status:
+          description: Status is the document's state at the moment it was read.
+          type: string
+      type: object
+    esignPlacement:
+      properties:
+        id:
+          description: ID is the new field's id.
+          type: string
+        page:
+          description: Page is the page it was placed on.
+          type: number
+        recipientId:
+          description: RecipientID is who must fill it.
+          type: string
+        type:
+          description: Type is what it collects.
+          type: string
+      type: object
+    esignRecipient:
+      properties:
+        email:
+          description: Email is where this recipient's signing link is meant to go,
+            lower-cased.
+          type: string
+        id:
+          description: ID is the recipient id, which is what a field is placed against.
+          type: string
+        name:
+          description: Name is the recipient's display name, empty when none was given.
+          type: string
+        readStatus:
+          description: ReadStatus is NOT_OPENED until they first open their link,
+            then OPENED.
+          type: string
+        rejectionReason:
+          description: RejectionReason is why they declined, null unless they did.
+          type: string
+        role:
+          description: |-
+            Role is SIGNER, CC, VIEWER, APPROVER or ASSISTANT. A document waits only for
+            its SIGNERs and APPROVERs before it can seal.
+          type: string
+        sendStatus:
+          description: |-
+            SendStatus is NOT_SENT until the document goes out, then SENT. A CC recipient
+            is SENT from the moment they are added.
+          type: string
+        signedAt:
+          description: |-
+            SignedAt is when they finished or declined, in unix milliseconds; null while
+            neither has happened.
+          type: integer
+        signingOrder:
+          description: |-
+            SigningOrder is their position in a SEQUENTIAL document, null when they were
+            added without one. A PARALLEL document ignores it.
+          type: number
+        signingStatus:
+          description: |-
+            SigningStatus is NOT_SIGNED, SIGNED or REJECTED. A CC recipient is SIGNED
+            from the moment they are added, because they are never asked.
+          type: string
+      type: object
+    esignRecipientIn:
+      properties:
+        email:
+          description: |-
+            Email is where the signing link is meant to go, lower-cased on the way in.
+            Required.
+        name:
+          description: |-
+            Name is the recipient's display name, also the fallback a NAME field is
+            filled with when they leave it blank. Optional.
+        role:
+          description: |-
+            Role is SIGNER (the default), CC, VIEWER, APPROVER or ASSISTANT; anything
+            else reads as SIGNER. A CC recipient is recorded as already complete, because
+            they are never asked to sign. SIGNER and APPROVER are the roles a document
+            waits for before it can seal.
+        signingOrder:
+          description: |-
+            SigningOrder is this recipient's position when the document is SEQUENTIAL —
+            lower signs first, and ties fall back to the order they were added. Ignored
+            by a PARALLEL document. Optional.
+      type: object
+    esignRejectIn:
+      properties:
+        reason:
+          description: |-
+            Reason is why the signer is declining. Optional, stored, and written onto the
+            audit trail with the rejection — it is what the sender sees.
+      type: object
+    esignRejection:
+      properties:
+        recipientId:
+          description: RecipientID is the recipient who declined.
+          type: string
+        status:
+          description: |-
+            Status is REJECTED — one declining signer ends the document for everyone, and
+            there is no route back.
+          type: string
+      type: object
+    esignSession:
+      properties:
+        document:
+          $ref: '#/components/schemas/esignState'
+          description: Document is what is being signed.
+        fields:
+          description: |-
+            Fields is only the fields this recipient must fill — never another party's,
+            so the layout a signer sees cannot reveal what anyone else was asked for.
+          items:
+            $ref: '#/components/schemas/esignField'
+          type: array
+        pdfBase64:
+          description: |-
+            PdfBase64 is the PDF to display, base64-encoded. Null when the document's
+            stored bytes are missing.
+          type: string
+        recipient:
+          $ref: '#/components/schemas/esignSigner'
+          description: Recipient is who the token says you are.
+      type: object
+    esignSigner:
+      properties:
+        email:
+          description: Email is the address the link was issued to.
+          type: string
+        id:
+          description: ID is the recipient id.
+          type: string
+        name:
+          description: Name is the display name recorded for them, empty when none
+            was given.
+          type: string
+        role:
+          description: Role is the role they were added with.
+          type: string
+        signingStatus:
+          description: SigningStatus is NOT_SIGNED until they finish or decline.
+          type: string
+      type: object
+    esignState:
+      properties:
+        id:
+          description: ID is the document id.
+          type: string
+        status:
+          description: Status is PENDING while it is out for signature.
+          type: string
+        title:
+          description: Title is the document's name.
+          type: string
+      type: object
+    esignTrail:
+      properties:
+        documentId:
+          description: DocumentID is the document the trail belongs to.
+          type: string
+        entries:
+          description: |-
+            Entries is every recorded event in order, oldest first. It is append-only:
+            nothing in this surface edits or removes an entry.
+          items:
+            $ref: '#/components/schemas/esignEvent'
+          type: array
+      type: object
+    esignUploadIn:
+      properties:
+        externalId:
+          description: |-
+            ExternalID is your own identifier for this document, stored and echoed back
+            so a document here can be matched to a record in your system. Optional.
+        message:
+          description: |-
+            Message is the covering message carried with the document. Optional, and like
+            the subject it is stored rather than sent.
+        pdfBase64:
+          description: |-
+            PdfBase64 is the document itself, base64-encoded; a `data:` URL prefix is
+            accepted and stripped. Required. The bytes go to object storage rather than
+            into the tenant database, and this ORIGINAL is kept under its own key so it
+            survives sealing untouched.
+        signingOrder:
+          description: |-
+            SigningOrder chooses PARALLEL — the default, where everyone may sign at once
+            — or SEQUENTIAL, where each signer waits for the ones ahead of them. Anything
+            else reads as PARALLEL, and the choice is fixed for the document's life.
+        subject:
+          description: |-
+            Subject is the covering subject line carried with the document. Optional, and
+            nothing in this surface emails it — delivering the signing links is the
+            caller's.
+        title:
+          description: |-
+            Title is the document's name, shown to every recipient and used to build the
+            download filename. Required — a request without one is refused and nothing is
+            stored.
+      type: object
+    esignValueIn:
+      properties:
+        isBase64:
+          description: |-
+            IsBase64 marks Value as drawn signature image bytes rather than a typed
+            signature. Only a signature field reads it, and a `data:` URL prefix is
+            stripped.
+        value:
+          description: |-
+            Value is what goes in the field. A signature takes the drawn image bytes or a
+            typed name; a DATE, NAME or EMAIL field falls back to today, the recipient's
+            name or their email when this is omitted; every other type requires it.
       type: object
     evaluateIn:
       properties:
@@ -45120,6 +45647,309 @@ components:
           description: Wallet is the lowercase Ethereum address that proved ownership
             of the NFT.
           type: string
+      type: object
+    socialAccount:
+      properties:
+        createdAt:
+          description: CreatedAt is when the account was connected, as a unix timestamp
+            in seconds.
+          type: integer
+        handle:
+          description: |-
+            Handle is the account's public name on the network, as the customer knows
+            it. Trimmed and bounded at 1024 characters.
+
+            Example: "@acme"
+          type: string
+        id:
+          description: |-
+            ID is the account's identifier, minted on connect and the id every later
+            call addresses it by.
+
+            Example: "acct_7f3c1a"
+          type: string
+        provider:
+          description: |-
+            Provider is the network this account is on: x, facebook, instagram,
+            linkedin, tiktok, youtube or threads.
+
+            Example: "x"
+          type: string
+        status:
+          description: |-
+            Status is the connection lifecycle: connected, disconnected or error. Only
+            a connected account is a publish target.
+          type: string
+        updatedAt:
+          description: |-
+            UpdatedAt is when the account row last changed, as a unix timestamp in
+            seconds. The listing is ordered by it, newest first.
+          type: integer
+      type: object
+    socialAccountBody:
+      properties:
+        handle:
+          description: |-
+            Handle is the account's public name on the network, as the customer knows it
+            (`@acme`). Trimmed and bounded at 1024 characters.
+
+            Example: "@acme"
+          type: string
+        provider:
+          description: |-
+            Provider is the network this account is on: x, facebook, instagram, linkedin,
+            tiktok, youtube or threads. Omitted means x. Anything else is refused rather
+            than coerced, because a stored account on a network that does not exist can
+            never be published through.
+
+            Example: "x"
+          type: string
+        status:
+          description: |-
+            Status is the connection lifecycle: connected, disconnected or error.
+            Omitted means connected. Only a connected account is a publish target.
+          type: string
+      type: object
+    socialAccountWrite:
+      properties:
+        handle:
+          description: |-
+            Handle is the account's public name on the network. Omitting it BLANKS the
+            stored handle: this is a replacement, not a merge.
+
+            Example: "@acme"
+          type: string
+        provider:
+          description: |-
+            Provider is the network this account is on: x, facebook, instagram, linkedin,
+            tiktok, youtube or threads. Omitted means x.
+
+            Example: "x"
+          type: string
+        status:
+          description: |-
+            Status is the connection lifecycle: connected, disconnected or error.
+            Omitting it RESETS the account to connected.
+          type: string
+      type: object
+    socialAccounts:
+      properties:
+        data:
+          description: Data is the accounts, most-recently-updated first, bounded
+            by the limit.
+          items:
+            $ref: '#/components/schemas/socialAccount'
+          type: array
+      type: object
+    socialPost:
+      properties:
+        accountId:
+          description: |-
+            AccountID / ExternalID / Error are server-managed publish results, set only by
+            the publish path (never by a client update): the account a post was published
+            through, the provider's returned external post id (for reconciliation), and the
+            last failure reason. Empty until a publish attempt lands.
+            AccountID is the connected account the post went out through. Absent until
+            a publish succeeds.
+          type: string
+        channel:
+          description: |-
+            Channel is the network this post targets: x, facebook, instagram, linkedin,
+            tiktok, youtube or threads. It is the channel whose CONNECTED accounts a
+            publish fans out to.
+
+            Example: "x"
+          type: string
+        content:
+          description: |-
+            Content is the post's text, bounded at 8192 characters.
+
+            Example: "Shipping today."
+          type: string
+        createdAt:
+          description: CreatedAt is when the post was created, as a unix timestamp
+            in seconds.
+          type: integer
+        error:
+          description: |-
+            Error is why the last publish attempt failed, verbatim and bounded. Absent
+            when no attempt has failed; cleared by a later success.
+          type: string
+        externalId:
+          description: |-
+            ExternalID is the id the network returned for the published post, which is
+            what reconciles this row against the post on the network. Absent until a
+            publish succeeds.
+          type: string
+        id:
+          description: |-
+            ID is the post's identifier, minted on create and the id every later call
+            addresses it by.
+
+            Example: "post_91ab20"
+          type: string
+        media:
+          description: |-
+            Media is the post's attached media as a list of URLs (images today; the
+            composer's URL field now, an S3 picker later, populate it). Stored as a JSON
+            array in the media TEXT column and ALWAYS serialized as an array (never null),
+            so a client can rely on `media` being present. Bounded at the write layer
+            (normMedia in social.go): each URL clipped to maxField, the list to maxMedia.
+          items:
+            type: string
+          type: array
+        scheduleAt:
+          description: |-
+            ScheduleAt is when the post is due, as a unix timestamp in SECONDS. 0 means
+            unscheduled. It is meaningful only while the status is scheduled — a
+            scheduled post whose time has arrived is published by the scheduler.
+          type: integer
+        status:
+          description: |-
+            Status is the post's lifecycle state: draft, scheduled, published or failed.
+            A fifth, transient publishing state exists while a publish attempt holds the
+            claim; it is never settable from a request and a caller sees it only if it
+            reads a post mid-attempt.
+          type: string
+        updatedAt:
+          description: |-
+            UpdatedAt is when the post row last changed, as a unix timestamp in seconds.
+            The listing is ordered by it, newest first.
+          type: integer
+      type: object
+    socialPostBody:
+      properties:
+        channel:
+          description: |-
+            Channel is the network to publish to: x, facebook, instagram, linkedin,
+            tiktok, youtube or threads. Omitted means x.
+
+            Example: "x"
+          type: string
+        content:
+          description: |-
+            Content is the post's text. Required — an empty body is a 400 — and bounded
+            at 8192 characters, comfortably above every network's own limit.
+
+            Example: "Shipping today."
+          type: string
+        media:
+          description: |-
+            Media is the post's attached media as URLs, at most 10, each bounded at 1024
+            characters. Blank entries are dropped. Omitting it CLEARS any stored media.
+          items:
+            type: string
+          type: array
+        scheduleAt:
+          description: |-
+            ScheduleAt is when to publish, as a unix timestamp in SECONDS. 0 means
+            unscheduled. A negative value is clamped to 0. It only matters for a post
+            whose status is scheduled.
+          type: integer
+        status:
+          description: |-
+            Status is the post's lifecycle state: draft, scheduled, published or failed.
+            Omitted means draft. The transient publishing claim is never settable here —
+            accepting it from a request would let a caller wedge or replay the guard that
+            stops two publishers double-posting the same row.
+          type: string
+      type: object
+    socialPostWrite:
+      properties:
+        channel:
+          description: |-
+            Channel is the network to publish to: x, facebook, instagram, linkedin,
+            tiktok, youtube or threads. Omitted means x.
+
+            Example: "x"
+          type: string
+        content:
+          description: |-
+            Content is the post's text. Required on every update, and bounded at 8192
+            characters.
+
+            Example: "Shipping today."
+          type: string
+        media:
+          description: |-
+            Media is the post's attached media as URLs, at most 10. Omitting it CLEARS
+            any stored media: this is a replacement, not a merge.
+          items:
+            type: string
+          type: array
+        scheduleAt:
+          description: |-
+            ScheduleAt is when to publish, as a unix timestamp in SECONDS. 0 means
+            unscheduled. Moving it into the past here does NOT publish the post — that is
+            the scheduler's to notice, or the publish operation's.
+          type: integer
+        status:
+          description: |-
+            Status is the post's lifecycle state: draft, scheduled, published or failed.
+            Omitting it RESETS the post to draft.
+          type: string
+      type: object
+    socialPosts:
+      properties:
+        data:
+          description: Data is the posts, most-recently-updated first, bounded by
+            the limit.
+          items:
+            $ref: '#/components/schemas/socialPost'
+          type: array
+      type: object
+    socialProvider:
+      properties:
+        credentialsConfigured:
+          description: |-
+            CredentialsConfigured is whether this deployment holds every OAuth
+            application credential the network needs. It is a statement about the
+            DEPLOYMENT, not about the caller: a connected account also needs its own
+            access token before a post can go out.
+          type: boolean
+        missingCredentials:
+          description: |-
+            MissingCredentials names the environment variables still unset for this
+            network, so the answer is an installation instruction rather than a refusal.
+            Absent when the credentials are complete. Only the NAMES appear here; a
+            credential value is never reported.
+          items:
+            type: string
+          type: array
+        provider:
+          description: |-
+            Provider is the network: x, facebook, instagram, linkedin, tiktok, youtube
+            or threads.
+
+            Example: "x"
+          type: string
+      type: object
+    socialProviders:
+      properties:
+        data:
+          description: |-
+            Data is one row per supported network, in the product's fixed order: x,
+            facebook, instagram, linkedin, tiktok, youtube, threads.
+          items:
+            $ref: '#/components/schemas/socialProvider'
+          type: array
+      type: object
+    socialSummary:
+      properties:
+        accounts:
+          description: Accounts is how many accounts the org has connected, in any
+            status.
+          type: integer
+        posts:
+          description: Posts is how many posts the org has, in any state.
+          type: integer
+        published:
+          description: Published is how many of them have published.
+          type: integer
+        scheduled:
+          description: Scheduled is how many of them are waiting for their scheduled
+            time.
+          type: integer
       type: object
     sourceFailure:
       properties:
@@ -73064,92 +73894,186 @@ paths:
       x-tool: true
   /v1/esign/documents:
     get:
-      description: Lists the caller org's documents with their status, recipients
-        and timestamps, newest first, capped at 200 — there is no paging, so treat
-        it as the recent window rather than a complete export. Requires a validated
-        principal (403 without one) and reads the caller's own tenant store, so no
-        other org's documents can appear in it.
+      description: |-
+        Returns your org's documents, newest first.
+
+        Each carries its status, recipients and field layout. The listing is capped at
+        200 and there is no paging, so treat it as the recent window rather than a
+        complete export. It reads the caller's own tenant store, so no other org's
+        documents can appear in it.
       operationId: get_esign_documents
-      summary: Your org's documents, newest first
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignDocuments'
+          description: ok
+      summary: Returns your org's documents, newest first.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
     post:
       description: |-
-        Creates a document from a base64 PDF and answers 201 with it in `DRAFT` — the state where recipients and fields may still be added, and the only state they may. `title` and `pdfBase64` are required; `signingOrder` chooses `PARALLEL` (the default, everyone may sign at once) or `SEQUENTIAL`, and that choice is fixed for the document's life.
+        Uploads a PDF and opens a draft ready for recipients and fields.
 
-        The bytes go to object storage, not into the tenant database, and the ORIGINAL is kept under its own key so it survives sealing untouched — a completed document can always be compared against what was uploaded. Creation is recorded on the audit trail.
+        It answers 201 with the document in DRAFT — the state where recipients and
+        fields may still be added, and the only state they may. The bytes go to object
+        storage rather than into the tenant database, and the original is kept under its
+        own key so it survives sealing untouched: a completed document can always be
+        compared against what was uploaded. Creation is recorded on the audit trail.
 
-        This is the sender's door: a validated principal is required (403 without one) and the document lands in that principal's OWN org. Isolation is physical rather than a filter — each tenant has its own store — so another org's document id is simply not there. Bodies over 32 MiB are refused with 413.
+        This is the sender's door: a validated principal is required, and the document
+        lands in that principal's OWN org. Isolation is physical rather than a filter —
+        each tenant has its own store — so another org's document id is simply not
+        there. A body over 32 MiB is refused with 413.
       operationId: post_esign_documents
-      summary: Upload a PDF and open a draft ready for recipients and fields
+      requestBody:
+        content:
+          application/json:
+            example:
+              pdfBase64: JVBERi0xLjQK…
+              signingOrder: SEQUENTIAL
+              title: Mutual NDA
+            schema:
+              $ref: '#/components/schemas/esignUploadIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignDocument'
+          description: created
+      summary: Uploads a PDF and opens a draft ready for recipients and fields.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/documents/{id}:
     get:
-      description: Answers the document, its recipients with each one's read and signing
-        status, and every field with its type, page and position — the view a sender's
-        UI renders, and where the field ids come from. Requires a validated principal
-        (403 without one) and resolves the id in the caller's OWN tenant store, so
-        another org's document id is a 404 rather than a refusal that would confirm
-        it exists.
+      description: |-
+        Returns one document with its recipients and field layout.
+
+        It answers the document, its recipients with each one's read and signing status,
+        and every field with its type, page and position — the view a sender's UI
+        renders, and where the field ids come from. The id is resolved in the caller's
+        OWN tenant store, so another org's document id is a 404 rather than a refusal
+        that would confirm it exists.
       operationId: get_esign_documents_by_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the document to act on. It is the path segment: the URL is the
+          addressing authority, and the org it is resolved in comes from the caller's
+          principal, so an id belonging to another tenant is simply not found.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: One document with its recipients and field layout
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignDocument'
+          description: ok
+      summary: Returns one document with its recipients and field layout.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/documents/{id}/audit:
     get:
       description: |-
-        Answers every recorded event for the document in order — created, recipient added, field created, sent, opened, each field inserted, each recipient completed or rejected, and completion — with the actor and timestamp on each. This is the evidence record behind a signature, so it is append-only and nothing in the surface edits it.
+        Returns the document's full audit trail, oldest first.
 
-        Requires a validated principal (403 without one) and resolves the id in the caller's OWN tenant store, so another org's document id is a 404.
+        It answers every recorded event for the document in order — created, recipient
+        added, field created, sent, opened, each field inserted, each recipient
+        completed or rejected, and completion — with the actor and timestamp on each.
+        This is the evidence record behind a signature, so it is append-only and nothing
+        in the surface edits it.
+
+        The id is resolved in the caller's OWN tenant store, so another org's document
+        id is a 404.
       operationId: get_esign_documents_by_id_audit
       parameters:
-      - in: path
+      - description: |-
+          ID is the document to act on. It is the path segment: the URL is the
+          addressing authority, and the org it is resolved in comes from the caller's
+          principal, so an id belonging to another tenant is simply not found.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: The document's full audit trail, oldest first
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignTrail'
+          description: ok
+      summary: Returns the document's full audit trail, oldest first.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/documents/{id}/download:
     get:
       description: |-
-        Answers the document's current PDF as base64 with a `sealed` flag and a filename. Before completion that is the original upload; once every signer has finished it is the SEALED artifact — the field values rendered onto the page and a real x509 PKCS#7 digital signature applied — and `sealed` is true. There is one `pdfBase64` field either way, so `sealed` is what tells you which you are holding.
+        Returns the document — the sealed PDF once it is complete.
 
-        Requires a validated principal (403 without one) and resolves the id in the caller's OWN tenant store, so another org's document id is a 404.
+        It answers the document's current PDF as base64 with a sealed flag and a
+        filename. Before completion that is the original upload; once every signer has
+        finished it is the SEALED artifact, with the field values rendered onto the page
+        and a real x509 PKCS#7 digital signature applied. There is one pdfBase64 field
+        either way, so sealed is what tells you which you are holding.
+
+        The id is resolved in the caller's OWN tenant store, so another org's document
+        id is a 404.
       operationId: get_esign_documents_by_id_download
       parameters:
-      - in: path
+      - description: |-
+          ID is the document to act on. It is the path segment: the URL is the
+          addressing authority, and the org it is resolved in comes from the caller's
+          principal, so an id belonging to another tenant is simply not found.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Download the document — the sealed PDF once it is complete
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignPDF'
+          description: ok
+      summary: Returns the document — the sealed PDF once it is complete.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/documents/{id}/fields:
     post:
       description: |-
-        Adds a field — a signature, date, name, email or text box — at a page and position for ONE named recipient, and answers 201 with its id. `recipientId` and a valid `type` are required, and the recipient must belong to this document (400 otherwise); page defaults to 1 and position defaults to the origin.
+        Places a field on the page for one recipient to fill.
 
-        Fields are what make a recipient signable: a document cannot be sent while any signing recipient has none. Only while DRAFT — adding a field to a sent document is a 409. Requires a validated principal (403 without one), acts only on the caller's own tenant, and an unknown document is a 404. The addition is recorded on the audit trail.
+        It adds a signature, date, name, email or text box at a page and position for
+        ONE named recipient, and answers 201 with its id. The recipient must belong to
+        this document; one from elsewhere is refused.
+
+        Fields are what make a recipient signable: a document cannot be sent while any
+        signing recipient has none. Only while DRAFT — adding a field to a sent document
+        is a 409 — and an unknown document is a 404. The addition is recorded on the
+        audit trail.
       operationId: post_esign_documents_by_id_fields
       parameters:
       - in: path
@@ -73157,17 +74081,44 @@ paths:
         required: true
         schema:
           type: string
-      summary: Place a field on the page for one recipient to fill
+      requestBody:
+        content:
+          application/json:
+            example:
+              page: 1
+              positionX: 72
+              positionY: 640
+              recipientId: rec_2f…
+              type: SIGNATURE
+            schema:
+              $ref: '#/components/schemas/esignFieldIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignPlacement'
+          description: created
+      summary: Places a field on the page for one recipient to fill.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/documents/{id}/recipients:
     post:
       description: |-
-        Adds a recipient and answers 201 with their id and their signing TOKEN — the crypto-random capability that is the only credential the signer's door accepts, so this response is where the signing link is built from. `email` is required; `role` defaults to `SIGNER`, and a `CC` recipient is recorded as already complete because they are never asked to sign. `signingOrder` sets this recipient's position for a sequential document.
+        Adds someone to a draft and mints their signing token.
 
-        Only while DRAFT: adding a recipient to a document already sent is a 409, because the field layout and the turn order were fixed when it went out. Requires a validated principal (403 without one), acts only on the caller's own tenant, and an unknown document is a 404. The addition is recorded on the audit trail.
+        It answers 201 with the recipient's id and their signing TOKEN — the
+        crypto-random capability that is the only credential the signer's door accepts —
+        so this response is where the signing link is built from. A CC recipient is
+        recorded as already complete, because they are never asked to sign.
+
+        Only while DRAFT: adding a recipient to a document already sent is a 409,
+        because the field layout and the turn order were fixed when it went out. An
+        unknown document is a 404. The addition is recorded on the audit trail.
       operationId: post_esign_documents_by_id_recipients
       parameters:
       - in: path
@@ -73175,48 +74126,105 @@ paths:
         required: true
         schema:
           type: string
-      summary: Add someone to a draft and mint their signing token
+      requestBody:
+        content:
+          application/json:
+            example:
+              email: counterparty@example.com
+              name: Dana Lee
+              role: SIGNER
+            schema:
+              $ref: '#/components/schemas/esignRecipientIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignInvite'
+          description: created
+      summary: Adds someone to a draft and mints their signing token.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/documents/{id}/send:
     post:
       description: |-
-        Moves the document from `DRAFT` to `PENDING` and answers the signing tokens — one per signing recipient, with the path to hand them — which is how the links reach the people who must sign. Nothing is emailed by this call; delivering the links is the caller's.
+        Sends the document out and answers each signer's link.
 
-        It refuses to send an unsignable document: no recipients at all is a 400, and so is any signing recipient with no fields to fill, named in the error. Re-sending an already-pending document is allowed and re-issues the same links rather than restarting anything; a completed document is a 409. Requires a validated principal (403 without one) and acts only on the caller's own tenant; an unknown document is a 404. The send is recorded on the audit trail.
+        It moves the document from DRAFT to PENDING and answers the signing tokens — one
+        per signing recipient, with the path to hand them — which is how the links reach
+        the people who must sign. Nothing is emailed by this call; delivering the links
+        is the caller's.
+
+        It refuses to send an unsignable document: no recipients at all is a 400, and so
+        is any signing recipient with no fields to fill, named in the error. Re-sending
+        an already-pending document is allowed and re-issues the same links rather than
+        restarting anything; a completed document is a 409, and an unknown one a 404.
+        The send is recorded on the audit trail.
       operationId: post_esign_documents_by_id_send
       parameters:
-      - in: path
+      - description: ID is the document to send. The URL is the addressing authority.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Send the document out and get each signer's link
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignLinks'
+          description: ok
+      summary: Sends the document out and answers each signer's link.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/health:
     get:
-      description: 'Answers ok whenever the subsystem is mounted. It is unauthenticated
-        and takes no tenant, and it is deliberately shallow: it is registered before
-        the document host is built, so it still answers on a deployment that came
-        up WITHOUT object storage and therefore serves nothing else. Read it as reachability,
-        never as a promise that documents can be stored.'
+      description: |-
+        Reports whether the e-signature surface is mounted.
+
+        It answers ok whenever the subsystem is mounted, takes no tenant and needs no
+        principal. It is deliberately shallow: it is registered before the document host
+        is built, so it still answers on a deployment that came up WITHOUT object
+        storage and therefore serves nothing else. Read it as reachability, never as a
+        promise that documents can be stored.
       operationId: get_esign_health
-      summary: Whether the e-signature surface is mounted
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignHealth'
+          description: ok
+      summary: Reports whether the e-signature surface is mounted.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/o/{org}/sign/{token}:
     get:
       description: |-
-        Answers the document, the recipient it identifies, the fields THAT recipient must fill, and the PDF to display. The first open also marks the recipient as having opened it and records that on the audit trail, so this read has a side effect by design.
+        Opens a document you were asked to sign, using your signing link.
 
-        This is the signer's door and it takes NO account: the signing token is the entire credential, and it names the recipient, so a signer sees only their own fields and never the other recipients' tokens. The token resolves to its owning tenant FIRST, before any per-tenant store is opened, and the `:org` segment is only checked against that answer. An unknown or wrong-org token is one and the same 404, never a hint that some other document exists.
+        It answers the document, the recipient the link identifies, the fields THAT
+        recipient must fill, and the PDF to display. The first open also marks the
+        recipient as having opened it and records that on the audit trail, so this read
+        has a side effect by design.
+
+        This door takes NO account: the signing token is the entire credential, and it
+        names the recipient, so a signer sees only their own fields and never the other
+        recipients' tokens. The token resolves to its owning tenant FIRST, before any
+        per-tenant store is opened, and the org segment is only checked against that
+        answer. An unknown or wrong-org token is one and the same 404, never a hint that
+        some other document exists.
       operationId: get_esign_o_by_org_sign_by_token
       parameters:
       - in: path
@@ -73229,17 +74237,39 @@ paths:
         required: true
         schema:
           type: string
-      summary: Open a document you were asked to sign, using your signing link
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignSession'
+          description: ok
+      summary: Opens a document you were asked to sign, using your signing link.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/o/{org}/sign/{token}/complete:
     post:
       description: |-
-        Marks this recipient as done and answers whether the DOCUMENT sealed with it. When every signing recipient has completed, sealing happens right here in the same call: the collected values are rendered onto the PDF, a real x509 PKCS#7 signature is applied, the sealed bytes are stored beside the untouched original, and the document moves to `COMPLETED`. Until then the answer is the recipient's own completion with the document still pending.
+        Finishes your signing — and seals the document if you were the
+        last.
 
-        It refuses to complete a half-filled signature: a recipient with any unfilled field is a 400 naming how many remain. A document not out for signature is a 409, as is a recipient who has already completed, and under SEQUENTIAL order a signer out of turn is a 403. The token is the whole credential — no account, and a token that does not resolve under `:org` is a 404. Sealing and completion are one transaction, so a failure anywhere leaves the document exactly as it was.
+        It marks this recipient as done and answers whether the DOCUMENT sealed with it.
+        When every signing recipient has completed, sealing happens right here in the
+        same call: the collected values are rendered onto the PDF, a real x509 PKCS#7
+        signature is applied, the sealed bytes are stored beside the untouched original,
+        and the document moves to COMPLETED. Until then the answer is the recipient's
+        own completion with the document still pending.
+
+        It refuses to complete a half-filled signature: a recipient with any unfilled
+        field is a 400 naming how many remain. A document not out for signature is a
+        409, as is a recipient who has already completed, and under SEQUENTIAL order a
+        signer out of turn is a 403. The token is the whole credential — no account, and
+        a token that does not resolve under the org segment is a 404. Sealing and
+        completion are one transaction, so a failure anywhere leaves the document
+        exactly as it was.
       operationId: post_esign_o_by_org_sign_by_token_complete
       parameters:
       - in: path
@@ -73252,17 +74282,37 @@ paths:
         required: true
         schema:
           type: string
-      summary: Finish signing — and seal the document if you were the last
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignCompletion'
+          description: ok
+      summary: Finishes your signing — and seals the document if you were the last.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/o/{org}/sign/{token}/fields/{fieldId}:
     post:
       description: |-
-        Records a value for one field and marks it inserted. A signature field takes `value` with `isBase64` true for drawn image bytes, or false for a typed signature; a date, name or email field falls back to today, the recipient's name or their email when `value` is omitted; any other type requires one.
+        Fills in one of your fields.
 
-        Nothing is sealed here — filling every field still leaves the document pending until the completion call. The token is the whole credential and it bounds what can be written: a field belonging to another recipient is refused with 401 even under a valid token, an unknown field is a 404, and a field already filled is a 409. A document not out for signature is a 409, as is a recipient who has already completed or rejected. Under SEQUENTIAL order a signer whose turn has not come is refused 403 until every earlier signer has signed. Each insertion is recorded on the audit trail.
+        It records a value for one field and marks it inserted. A signature field takes
+        a value with isBase64 true for drawn image bytes, or false for a typed
+        signature; a date, name or email field falls back to today, the recipient's name
+        or their email when the value is omitted; any other type requires one.
+
+        Nothing is sealed here — filling every field still leaves the document pending
+        until the completion call. The token is the whole credential and it bounds what
+        can be written: a field belonging to another recipient is refused with 401 even
+        under a valid token, an unknown field is a 404, and a field already filled is a
+        409. A document not out for signature is a 409, as is a recipient who has
+        already completed or rejected. Under SEQUENTIAL order a signer whose turn has
+        not come is refused 403 until every earlier signer has signed. Each insertion is
+        recorded on the audit trail.
       operationId: post_esign_o_by_org_sign_by_token_fields_by_fieldid
       parameters:
       - in: path
@@ -73280,17 +74330,42 @@ paths:
         required: true
         schema:
           type: string
-      summary: Fill in one of your fields
+      requestBody:
+        content:
+          application/json:
+            example:
+              isBase64: false
+              value: Dana Lee
+            schema:
+              $ref: '#/components/schemas/esignValueIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignInsertion'
+          description: ok
+      summary: Fills in one of your fields.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/esign/o/{org}/sign/{token}/reject:
     post:
       description: |-
-        Records this recipient's refusal and moves the WHOLE DOCUMENT to `REJECTED` — one declining signer ends it for everyone, and there is no route back: the document cannot then be signed or completed. An optional `reason` is stored and written onto the audit trail with the rejection, which is what the sender sees.
+        Declines to sign, with an optional reason.
 
-        A document not out for signature is a 409, and so is a recipient who has already signed or already rejected — a refusal cannot be taken back or repeated. The token is the whole credential; one that does not resolve under `:org` is a 404.
+        It records this recipient's refusal and moves the WHOLE DOCUMENT to REJECTED —
+        one declining signer ends it for everyone, and there is no route back: the
+        document cannot then be signed or completed. An optional reason is stored and
+        written onto the audit trail with the rejection, which is what the sender sees.
+
+        A document not out for signature is a 409, and so is a recipient who has already
+        signed or already rejected — a refusal cannot be taken back or repeated. The
+        token is the whole credential; one that does not resolve under the org segment
+        is a 404.
       operationId: post_esign_o_by_org_sign_by_token_reject
       parameters:
       - in: path
@@ -73303,11 +74378,27 @@ paths:
         required: true
         schema:
           type: string
-      summary: Decline to sign, with an optional reason
+      requestBody:
+        content:
+          application/json:
+            example:
+              reason: Terms changed since we agreed them.
+            schema:
+              $ref: '#/components/schemas/esignRejectIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignRejection'
+          description: ok
+      summary: Declines to sign, with an optional reason.
       tags:
       - esign
       x-app: esign
       x-stage: beta
+      x-tool: true
   /v1/evals/datasets:
     get:
       description: |-
@@ -110482,74 +111573,137 @@ paths:
   /v1/social/accounts:
     get:
       description: |-
-        Returns the org's connected accounts — each one's id, network, handle, status and timestamps. `provider` filters to one network; `limit` bounds the page, defaulting to 200 and capped at 1000.
+        Returns the org's connected accounts — each one's id, network,
+        handle, status and timestamps, most-recently-updated first.
 
-        An account's provider access token is NEVER included in any response on this surface. Only the publisher reads it.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        An account's provider access token is NEVER included in any response on this
+        surface. Only the publisher reads it.
       operationId: get_social_accounts
-      summary: List the social accounts connected to your org
+      parameters:
+      - description: |-
+          Provider keeps only accounts on one network — x, facebook, instagram,
+          linkedin, tiktok, youtube or threads. Omit it for every network. It is
+          lower-cased and trimmed before it is matched, and a value that names no
+          network simply matches nothing rather than being refused.
+        in: query
+        name: provider
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit bounds the page, defaulting to 200 and capped at 1000. It is a string
+          rather than an integer on purpose: the route parses it with a leading trim
+          and falls back to the default on anything it cannot read, so `?limit=%2050`
+          is a page of fifty today. An integer field would refuse the space and read
+          an unparseable value as zero, which is a different page.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialAccounts'
+          description: ok
+      summary: Returns the org's connected accounts — each one's id, network, handle,
+        status and timestamps, most-recently-updated first.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
     post:
       description: |-
-        Records a social account for the org and answers 201 with the stored row, including the generated id later calls address it by.
-
-        `provider` must be one of x, facebook, instagram, linkedin, tiktok, youtube or threads, defaulting to x when omitted. `status` is one of connected, disconnected or error, defaulting to connected. The handle is trimmed and bounded at 1024 characters.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        Records a social account for the org and answers 201 with the
+        stored row, including the generated id later calls address it by.
       operationId: post_social_accounts
-      summary: Connect a social account to your org
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/socialAccountBody'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialAccount'
+          description: created
+      summary: Records a social account for the org and answers 201 with the stored
+        row, including the generated id later calls address it by.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
   /v1/social/accounts/{id}:
     delete:
       description: |-
-        Removes one connected account from the org and answers 204 with no body; an id that is not there is 404.
+        Removes one connected account from the org and answers 204 with no
+        body; an id that is not there is 404.
 
-        It removes the account record only. Posts that already published through it keep their published state and their recorded external ids — this does not retract anything from the network.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        It removes the account record only. Posts that already published through it keep
+        their published state and their recorded external ids — this does not retract
+        anything from the network.
       operationId: delete_social_accounts_by_id
       parameters:
-      - in: path
+      - description: ID is the account or post to act on, taken from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Disconnect one account
+      responses:
+        "204":
+          description: no content
+      summary: Removes one connected account from the org and answers 204 with no
+        body; an id that is not there is 404.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
     get:
       description: |-
-        Returns one of the org's connected accounts by id — its network, handle, status and timestamps — or 404. The provider access token is not part of the response.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        Returns one of the org's connected accounts by id — its network,
+        handle, status and timestamps — or 404. The provider access token is not part of
+        the response.
       operationId: get_social_accounts_by_id
       parameters:
-      - in: path
+      - description: ID is the account or post to act on, taken from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Read one connected account
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialAccount'
+          description: ok
+      summary: Returns one of the org's connected accounts by id — its network, handle,
+        status and timestamps — or 404.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
     put:
       description: |-
-        Replaces the account's network, handle and status with what the body carries, and answers with the stored row.
+        Replaces the account's network, handle and status with what the
+        body carries, and answers with the stored row.
 
-        This is a REPLACEMENT, not a merge, which is the rule most easily got wrong: a field the body omits is written as its default, so leaving out the handle blanks it and leaving out the status resets it to connected. Send the whole record. The same vocabularies as create apply, and an unknown network or status is refused rather than coerced.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        This is a REPLACEMENT, not a merge, which is the rule most easily got wrong: a
+        field the body omits is written as its default, so leaving out the handle blanks
+        it and leaving out the status resets it to connected. Send the whole record. The
+        same vocabularies as create apply, and an unknown network or status is refused
+        rather than coerced.
       operationId: put_social_accounts_by_id
       parameters:
       - in: path
@@ -110557,82 +111711,158 @@ paths:
         required: true
         schema:
           type: string
-      summary: Replace one connected account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/socialAccountWrite'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialAccount'
+          description: ok
+      summary: Replaces the account's network, handle and status with what the body
+        carries, and answers with the stored row.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
   /v1/social/posts:
     get:
       description: |-
-        Returns the org's posts — content, channel, status, scheduled time, media and timestamps. `status` filters to one of draft, scheduled, published or failed; `limit` bounds the page, defaulting to 200 and capped at 1000.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        Returns the org's posts — content, channel, status, scheduled time,
+        media and timestamps — most-recently-updated first.
       operationId: get_social_posts
-      summary: List your org's posts
+      parameters:
+      - description: |-
+          Status keeps only posts in one state — draft, scheduled, published or
+          failed. Omit it for every state. The transient publishing claim is not a
+          user-visible state and matching it is not useful.
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit bounds the page, defaulting to 200 and capped at 1000. A string for
+          the same reason accountFilter.Limit is.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialPosts'
+          description: ok
+      summary: Returns the org's posts — content, channel, status, scheduled time,
+        media and timestamps — most-recently-updated first.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
     post:
       description: |-
         Stores a post for the org and answers 201 with the stored row.
 
-        A post created as scheduled for a time that has already passed is published IMMEDIATELY, and the row returned carries that outcome — this is the one behaviour a reader would otherwise miss. A future-scheduled post is left for the scheduler, and a draft is left alone. Publishing never fails the creation: the post is stored either way, and a publish that could not run leaves the row for the scheduler to retry.
-
-        `content` is required and bounded at 8192 characters; `channel` is one of the seven supported networks, defaulting to x; `status` is one of draft, scheduled, published or failed, defaulting to draft; up to 10 media URLs are kept, each bounded at 1024 characters.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        A post created as scheduled for a time that has already passed is published
+        IMMEDIATELY, and the row returned carries that outcome — this is the one behaviour
+        a reader would otherwise miss. A future-scheduled post is left for the scheduler,
+        and a draft is left alone. Publishing never fails the creation: the post is stored
+        either way, and a publish that could not run leaves the row for the scheduler to
+        retry.
       operationId: post_social_posts
-      summary: Create a post, and publish it if it is already due
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/socialPostBody'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialPost'
+          description: created
+      summary: Stores a post for the org and answers 201 with the stored row.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
   /v1/social/posts/{id}:
     delete:
       description: |-
-        Removes one post from the org and answers 204 with no body; an id that is not there is 404.
+        Removes one post from the org and answers 204 with no body; an id that
+        is not there is 404.
 
-        It deletes the record here only. A post that has already published is not retracted from the network by deleting it.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        It deletes the record here only. A post that has already published is not
+        retracted from the network by deleting it.
       operationId: delete_social_posts_by_id
       parameters:
-      - in: path
+      - description: ID is the account or post to act on, taken from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Delete one post
+      responses:
+        "204":
+          description: no content
+      summary: Removes one post from the org and answers 204 with no body; an id that
+        is not there is 404.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
     get:
       description: |-
-        Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external id it published under. 404 when there is no such post for this org.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        Returns one of the org's posts by id, with its current status, scheduled
+        time, media and — once it has published — the account and external id it published
+        under. 404 when there is no such post for this org.
       operationId: get_social_posts_by_id
       parameters:
-      - in: path
+      - description: ID is the account or post to act on, taken from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Read one post
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialPost'
+          description: ok
+      summary: Returns one of the org's posts by id, with its current status, scheduled
+        time, media and — once it has published — the account and external id it published
+        under.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
     put:
       description: |-
-        Replaces the post's content, channel, status, scheduled time and media with what the body carries, and answers with the stored row.
+        Replaces the post's content, channel, status, scheduled time and media
+        with what the body carries, and answers with the stored row.
 
-        A REPLACEMENT, not a merge: an omitted field is written as its default, so omitting media clears it and omitting the status resets the post to draft. `content` is required on every update. Unlike create, this never triggers a publish — moving a post's scheduled time into the past here leaves it for the scheduler; publish now is its own operation.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        A REPLACEMENT, not a merge: an omitted field is written as its default, so
+        omitting media clears it and omitting the status resets the post to draft.
+        `content` is required on every update. Unlike create, this never triggers a
+        publish — moving a post's scheduled time into the past here leaves it for the
+        scheduler; publish now is its own operation.
       operationId: put_social_posts_by_id
       parameters:
       - in: path
@@ -110640,59 +111870,112 @@ paths:
         required: true
         schema:
           type: string
-      summary: Replace one post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/socialPostWrite'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialPost'
+          description: ok
+      summary: Replaces the post's content, channel, status, scheduled time and media
+        with what the body carries, and answers with the stored row.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
   /v1/social/posts/{id}/publish:
     post:
       description: |-
-        Publishes the post immediately to the connected accounts on its channel and answers with the updated row, carrying the account and external id it published under.
+        Publishes the post immediately to the connected accounts on its channel
+        and answers with the updated row, carrying the account and external id it
+        published under.
 
-        It is IDEMPOTENT: a post that has already published, or that another caller is publishing right now, comes back unchanged rather than being posted twice. That claim is taken before any network call, which is what makes a double submit safe.
+        It is IDEMPOTENT: a post that has already published, or that another caller is
+        publishing right now, comes back unchanged rather than being posted twice. That
+        claim is taken before any network call, which is what makes a double submit safe.
 
-        The two failure shapes differ on purpose. Having no connected account for the channel is the caller's to fix, so it is recorded ON the post as failed with the reason and answers normally. A deployment that lacks the network's own credentials cannot publish for anyone, so that is a 503 naming exactly what is missing.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        The two failure shapes differ on purpose. Having no connected account for the
+        channel is the caller's to fix, so it is recorded ON the post as failed with the
+        reason and answers normally. A deployment that lacks the network's own credentials
+        cannot publish for anyone, so that is a 503 naming exactly what is missing.
       operationId: post_social_posts_by_id_publish
       parameters:
-      - in: path
+      - description: ID is the account or post to act on, taken from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Publish one post now
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialPost'
+          description: ok
+      summary: Publishes the post immediately to the connected accounts on its channel
+        and answers with the updated row, carrying the account and external id it
+        published under.
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
   /v1/social/providers:
     get:
       description: |-
-        Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing.
+        Reports each supported network's publish-readiness: whether this
+        deployment holds the OAuth application credentials for it and, when it does not,
+        exactly which environment variables are missing.
 
-        This is a live read of the deployment's own configuration, not a static list of networks — it answers "can I connect this today", which is what a connect affordance and a pre-cutover checklist both need. It says nothing about whether the caller has connected an account; that is the accounts listing.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        This is a live read of the deployment's own configuration, not a static list of
+        networks — it answers "can I connect this today", which is what a connect
+        affordance and a pre-cutover checklist both need. It says nothing about whether
+        the caller has connected an account; that is the accounts listing.
       operationId: get_social_providers
-      summary: Which networks this deployment can actually publish to
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialProviders'
+          description: ok
+      summary: 'Reports each supported network''s publish-readiness: whether this
+        deployment holds the OAuth application credentials for it and, when it does
+        not, exactly which environment variables are missing.'
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
   /v1/social/summary:
     get:
       description: |-
-        Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected. It is the dashboard roll-up, computed over the org's own rows in one read.
-
-        A validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.
+        Returns four counts for the caller's org: total posts, how many are
+        scheduled, how many have published, and how many accounts are connected. It is
+        the dashboard roll-up, computed over the org's own rows in one read.
       operationId: get_social_summary
-      summary: Counts across your org's social presence
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/socialSummary'
+          description: ok
+      summary: 'Returns four counts for the caller''s org: total posts, how many are
+        scheduled, how many have published, and how many accounts are connected.'
       tags:
       - social
       x-app: social
       x-stage: beta
+      x-tool: true
   /v1/sync:
     get:
       description: |-
