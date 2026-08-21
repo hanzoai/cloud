@@ -865,6 +865,32 @@ func serveCommerce(t *testing.T, by func(org string) (int64, int64, error)) {
 			}}, nil
 		}, zip.WithOperationID(plane.FinanceSubs))
 
+	// The vendor COGS god-view, on the same stand-in: DO compute $3,000 + OpenAI
+	// $500 = $3,500, the multi-vendor figure the boards fold. Two lines, because a
+	// single line cannot show that the fold sums them rather than reporting the
+	// first — which is the bug a one-vendor fixture would hide.
+	zip.Post[plane.CostsIn, plane.Costs](cloud.Plane(), "/finance/costs",
+		func(ctx context.Context, in *plane.CostsIn) (*plane.Costs, error) {
+			if cloud.Who(ctx).Org == "" {
+				return nil, zip.ErrForbidden("costs: no org on the call")
+			}
+			period := ""
+			if in != nil {
+				period = in.Period
+			}
+			return &plane.Costs{
+				Period:   period,
+				Currency: "usd",
+				Vendors: []plane.VendorCost{
+					{Vendor: "digitalocean", Service: "compute", AmountCents: 300_000,
+						Period: period, Source: "actual", Currency: "usd"},
+					{Vendor: "openai", Service: "llm-inference", AmountCents: 50_000,
+						Period: period, Source: "actual", Currency: "usd"},
+				},
+				TotalCents: 350_000,
+			}, nil
+		}, zip.WithOperationID(plane.FinanceCosts))
+
 	// Bind the canonical socket for the name, so a read that asks for "commerce"
 	// reaches this process's plane. Without it the router answers ErrNoPeer, which
 	// the boards read — correctly — as "this deployment runs no commerce".

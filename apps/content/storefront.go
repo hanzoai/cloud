@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +13,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/plane"
+	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 )
 
 // storefront.go is the CATALOG seam: when a product Asset goes live (lifecycle →
@@ -155,15 +159,23 @@ func newStorefront() Storefront {
 // fail-closed (errNotConfigured); an auth rejection is also not_configured (this
 // deployment's token is not admin on the store); any other non-2xx is errUpstream.
 func (s commerceStorefront) Publish(ctx context.Context, org string, req StorefrontRequest) (StorefrontResult, error) {
-	token := s.token()
-	if s.base == "" || token == "" {
-		return StorefrontResult{}, errNotConfigured
-	}
-
-	storeID, err := s.currentStore(ctx, org, token)
+	// Commerce is a PLUGIN in this binary, so both halves are asked by name over
+	// the internal plane. They used to be HTTP calls to commerce's own door,
+	// which production resolves to this pod's own public edge — the request left
+	// the process and came back through the front door.
+	store, err := commercepeer.StoreCurrent(cloud.For(ctx, org), &plane.StoreIn{})
 	if err != nil {
-		return StorefrontResult{}, err
+		if errors.Is(err, cloud.ErrNoPeer) {
+			// This deployment runs no commerce, which is the honest
+			// not-configured this surface has always reported.
+			return StorefrontResult{}, errNotConfigured
+		}
+		return StorefrontResult{}, fmt.Errorf("%w: store/current: %v", errUpstream, err)
 	}
+	if store == nil || store.ID == "" {
+		return StorefrontResult{}, fmt.Errorf("%w: commerce resolved no store", errUpstream)
+	}
+	storeID := store.ID
 
 	// The listing is a DISPLAY OVERRIDE keyed by slug; PUT decodes onto the existing
 	// listing (pointer fields), so setting headerImage preserves curated name/price/
@@ -177,16 +189,13 @@ func (s commerceStorefront) Publish(ctx context.Context, org string, req Storefr
 			"alt":  req.Caption,
 		},
 	})
-	path := "/v1/commerce/store/" + url.PathEscape(storeID) + "/listing/" + url.PathEscape(req.Design)
-	status, _, err := s.do(ctx, http.MethodPut, path, org, token, body)
-	if err != nil {
-		return StorefrontResult{}, err
-	}
-	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		return StorefrontResult{}, errNotConfigured
-	}
-	if status < 200 || status >= 300 {
-		return StorefrontResult{}, fmt.Errorf("%w: listing upsert %d", errUpstream, status)
+	if _, err := commercepeer.StoreListing(cloud.For(ctx, org), &plane.ListingIn{
+		StoreID: storeID, Key: req.Design, Patch: body,
+	}); err != nil {
+		if errors.Is(err, cloud.ErrNoPeer) {
+			return StorefrontResult{}, errNotConfigured
+		}
+		return StorefrontResult{}, fmt.Errorf("%w: listing upsert: %v", errUpstream, err)
 	}
 	return StorefrontResult{Status: "published", Slug: req.Design, Store: storeID, ImageURL: req.ImageURL}, nil
 }

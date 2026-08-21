@@ -207,11 +207,14 @@ func TestFinance_HonestUnconfiguredDO(t *testing.T) {
 	}
 }
 
-// TestFinance_RevenueSourceDown_NoFabrication proves the anti-fabrication property
-// (RED MED-1): when the revenue source (IAM listOrgs) is unreadable but commerce
+// TestFinance_RevenueSourceDown_NoFabrication proves the anti-fabrication
+// property: when the revenue source (IAM listOrgs) is unreadable but commerce
 // COGS is fine, revenue reports configured:false (never a fake zero), so the board
 // cannot render a fabricated negative margin / "burning" alarm. COGS flows on.
 func TestFinance_RevenueSourceDown_NoFabrication(t *testing.T) {
+	// COGS comes from the plane now, so it needs the peer to be independent of
+	// the revenue source — which is the whole property under test.
+	serveCommerce(t, func(string) (int64, int64, error) { return 0, 0, nil })
 	commerce := newFakeCommerceFinance()
 	defer commerce.Close()
 

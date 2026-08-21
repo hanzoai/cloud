@@ -96,6 +96,9 @@ const (
 	FinanceAuthorize = "finance_authorize" // the prepaid gate
 	FinanceBalance   = "finance_balance"
 	FinanceRecord    = "finance_record" // the meter
+	FinanceCosts     = "finance_costs"  // our vendor COGS, the fleet god-view
+	StoreCurrent     = "store_current"  // the org's own storefront
+	StoreListing     = "store_listing"  // upsert one product listing
 	FinanceSubs      = "finance_subs"   // the org's subscriptions
 	FinanceTxns      = "finance_txns"
 	FinanceUsage     = "finance_usage"
@@ -751,6 +754,68 @@ type Txn struct {
 	Memo      string `json:"memo,omitempty"`
 	Amount    Money  `json:"amount"`
 	CreatedAt int64  `json:"createdAt"`
+}
+
+// VendorCost is one line of what WE pay a vendor in a period.
+//
+// Source says whether the figure is the vendor's own invoice or our meter's
+// estimate, and Note carries the honest reason when it is the latter. Both
+// travel: a total that cannot say which half is measured is a number nobody can
+// act on.
+type VendorCost struct {
+	Vendor      string `json:"vendor"`
+	Service     string `json:"service"`
+	AmountCents int64  `json:"amountCents"`
+	Period      string `json:"period"`
+	Source      string `json:"source"`
+	Note        string `json:"note,omitempty"`
+	Currency    string `json:"currency"`
+}
+
+// CostsIn names the billing period, YYYY-MM. Empty means the current one, which
+// is what the door fronting this has always defaulted to. Test selects the
+// sandbox books, which are physically separate from real money, so the selector
+// travels rather than being inferred at the far end.
+type CostsIn struct {
+	Period string `json:"period,omitempty"`
+	Test   bool   `json:"test,omitempty"`
+}
+
+// Costs is the vendor breakdown for a period, and its total.
+type Costs struct {
+	Period     string       `json:"period"`
+	Vendors    []VendorCost `json:"vendors"`
+	TotalCents int64        `json:"totalCents"`
+	Currency   string       `json:"currency"`
+}
+
+// StoreIn asks for the caller org's own store. It has no fields: the org rides
+// the caller, and an org has one store, so there is nothing else to name.
+type StoreIn struct{}
+
+// Store identifies an org's storefront.
+type Store struct {
+	ID       string `json:"id"`
+	Name     string `json:"name,omitempty"`
+	Currency string `json:"currency,omitempty"`
+}
+
+// ListingIn upserts one product listing, keyed by the product slug.
+//
+// Patch is decoded ONTO the existing listing rather than replacing it, so a
+// caller setting a header image preserves the curated name, price and copy it
+// says nothing about. It is raw JSON because the shape belongs to the listing
+// model, and re-declaring it here would be a second copy of it.
+type ListingIn struct {
+	StoreID string          `json:"storeId"`
+	Key     string          `json:"key"`
+	Patch   json.RawMessage `json:"patch"`
+}
+
+// Listed reports whether the listing already existed — the difference between a
+// 200 and a 201 on the door that fronts this.
+type Listed struct {
+	Existed bool `json:"existed"`
 }
 
 // Sub is one subscription: which plan, what state, and the period it is in.
