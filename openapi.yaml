@@ -3272,13 +3272,21 @@ components:
           description: |-
             Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this
             org, else the integrations connection named by the platform's Fallback, else
-            no credential needed at all (a public-ingest sink like Umami). False on a
+            no credential needed at all (a public-ingest sink like Analytics). False on a
             connected destination whose secret has gone missing — Connected && !Live is
             exactly the "reconnect me" state.
           type: boolean
         name:
           description: the platform's display name ("Google Analytics 4")
           type: string
+        pixel:
+          description: |-
+            Pixel is whether the hosted tag can inject a browser pixel for this platform,
+            so a console offers a per-SITE pixel input for exactly these. False means the
+            platform receives conversions server-side only, and an input would promise an
+            injection that never happens. Derived from the tag's own map (event.BrowserTags),
+            never restated — a second list is how a console offers a pixel nothing fires.
+          type: boolean
         platform:
           description: the platform slug, and the path segment every route addresses
             it by
@@ -78809,7 +78817,7 @@ paths:
       parameters:
       - description: |-
           Platform is the destination to act on, from the path: ga4 | meta | tiktok |
-          linkedin | x | reddit | posthog | umami.
+          linkedin | x | reddit | insights | analytics.
         example: ga4
         in: path
         name: platform
@@ -78839,7 +78847,7 @@ paths:
       parameters:
       - description: |-
           Platform is the destination to act on, from the path: ga4 | meta | tiktok |
-          linkedin | x | reddit | posthog | umami.
+          linkedin | x | reddit | insights | analytics.
         example: ga4
         in: path
         name: platform
@@ -78911,7 +78919,7 @@ paths:
       parameters:
       - description: |-
           Platform is the destination to act on, from the path: ga4 | meta | tiktok |
-          linkedin | x | reddit | posthog | umami.
+          linkedin | x | reddit | insights | analytics.
         example: ga4
         in: path
         name: platform
@@ -113952,13 +113960,14 @@ paths:
       x-tool: true
   /v1/projects/tags:
     get:
-      description: 'Returns the client-side pixels the SITE has connected (GA/Meta/TikTok/X)
-        with their NON-SECRET ids, so the hosted tag injects them first-party and
-        stamps each browser event with the same event_id the server-side Conversions
-        API uses — deduping the two. Resolved per site: by the publishable key on
-        ?key= when it names a project, else by the request host, so hanzo.ai and hanzo.chat
-        carry different tags under one org. WITHOUT a resolvable site it answers an
-        empty set at 200 — a page never breaks on its tag config.'
+      description: 'Returns the client-side pixels the SITE has connected (GA4, Google
+        Ads, LinkedIn, Meta, Pinterest, Reddit, TikTok, X) with their NON-SECRET ids,
+        so the hosted tag injects them first-party and stamps each browser event with
+        the same event_id the server-side Conversions API uses — deduping the two.
+        Resolved per site: by the publishable key on ?key= when it names a project,
+        else by the request host, so hanzo.ai and hanzo.chat carry different tags
+        under one org. WITHOUT a resolvable site it answers an empty set at 200 —
+        a page never breaks on its tag config.'
       operationId: get_projects_tags
       responses:
         2XX:
