@@ -269,7 +269,7 @@ var Apps = []App{
 	{Name: "campaign", Prefixes: []string{"/v1/campaign"}, Stage: Beta},
 	{Name: "validators", Prefixes: []string{"/v1/validators"}, Stage: Beta},
 	{Name: "social", Prefixes: []string{"/v1/social"}, Stage: Beta},
-	// The INGESTION door is load-bearing, not decorative: apps/analytics/event.go's
+	// The INGESTION door is load-bearing, not decorative: apps/event/event.go's
 	// `doors` table serves /v1/event, and every beacon the products emit lands on it.
 	// Listing only the read endpoints (as this row did) sent every write to commerce's
 	// bare "/v1" catch-all, which does not serve them — 405, silently, for every event
@@ -277,30 +277,32 @@ var Apps = []App{
 	// became the router when the mega-build died, so a missing prefix is now an outage.
 	//
 	// "/v1/event" is the ONE canonical ingest door — the product, team, PostHog and
-	// Sentry-envelope wires ALL arrive on it, dispatched by SHAPE. The PostHog wire's
-	// own path is gone: insights.hanzo.ai's /e, /batch and /capture rewrite onto
-	// /v1/event, so no caller moved. "/v1/insights/e" is gone from this row with it.
-	// A prefix here is a claim that this app ANSWERS the path, and analytics does not
-	// — the door is retired (retiredDoors, apps/analytics/doors_test.go), which that
-	// package defines as absent from EVERY surface. Listing it bought a stale beacon
-	// nothing it can use: the path 404s either way, and the row's only other effect
-	// was to keep the retirement invisible in the one table that states what the
-	// fleet serves. The other four prefixes are READ ONLY: bare "/v1/analytics" now
-	// carries only the four lenses (overview, timeseries, top, health) — the ingest
-	// aliases under it are retired — and /v1/errors, /v1/insights/events and
-	// /v1/insights/health are GET lenses. /v1/todo is NOT here and never was:
-	// the todo product owns that name (its row is above, and it wins the prefix).
+	// Sentry-envelope wires ALL arrive on it, dispatched by SHAPE — and it is the
+	// address this app is now NAMED for. It answered to analytics and served six
+	// stems; the ingest door is the one every client hard-codes (@hanzo/event's
+	// EVENT_PATH, the hosted tag, HIP-0132's one telemetry ingest), so HIP-0139 §7.3
+	// gives the app that word and §3.1 folds the rest under it, byte-identically for
+	// the door itself:
 	//
-	// "/v1/event.js" is its OWN prefix and cannot be folded into "/v1/event": a
-	// prefix owns segments, and ".js" is part of this one's single segment rather
-	// than a child of it, so the ingest door's claim stops short of the tag. It is
-	// the hosted tag — the script every instrumented surface loads before it can
-	// emit a single beacon — and unclaimed it fell to ai's bare "/v1", which answers
-	// a 404 that reads to a browser as a broken script tag rather than as a routing
-	// mistake. That was invisible for as long as plugin/analytics/openapi.json went
-	// unregenerated: the path was in the router and not in the artifact this table
-	// is checked against, so the check had nothing to disagree with.
-	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/replay", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
+	//	/v1/analytics/{overview,timeseries,top,health} -> /v1/event/…
+	//	/v1/errors                                     -> /v1/event/errors
+	//	/v1/insights/{events,health}                   -> /v1/event/insights/…
+	//	/v1/replay                                     -> /v1/event/replay
+	//	/v1/event.js                                   -> /v1/event/tag.js
+	//
+	// The tag move is the one that costs: ".js" is part of a single segment rather
+	// than a child of it, so "/v1/event.js" could never be a child of the ingest
+	// door's prefix and had to be its own row — and unclaimed it fell to ai's bare
+	// "/v1", a 404 that reads to a browser as a broken script tag. As a real child
+	// it needs no row, and the price is every page that embedded the old src and is
+	// never re-embedded. No alias: §7 has no fourth way.
+	//
+	// The PostHog wire's own path stays gone: insights.hanzo.ai's /e, /batch and
+	// /capture rewrite onto /v1/event, so no caller moved, and "/v1/insights/e" is
+	// not claimed here — a prefix is a claim that this app ANSWERS the path, and the
+	// door is retired (retiredDoors, apps/event/doors_test.go). /v1/todo is NOT here
+	// and never was: the todo product owns that name.
+	{Name: "event", Prefixes: []string{"/v1/event"}},
 	{Name: "git", Prefixes: []string{"/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/visor"}},

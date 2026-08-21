@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/research"
@@ -52,12 +52,12 @@ type MetricSource interface {
 	Outcomes(ctx context.Context, org, exposureEvent, metricEvent string, start, end time.Time) ([]MetricOutcome, error)
 }
 
-// analyticsSource composes clients/analytics.Outcomes — the events plane read,
+// analyticsSource composes clients/event.Outcomes — the events plane read,
 // tenant-isolated by the eventsWhere invariant.
 type analyticsSource struct{}
 
 func (analyticsSource) Outcomes(ctx context.Context, org, exposureEvent, metricEvent string, start, end time.Time) ([]MetricOutcome, error) {
-	rows, err := analytics.Outcomes(ctx, org, exposureEvent, metricEvent, start, end)
+	rows, err := event.Outcomes(ctx, org, exposureEvent, metricEvent, start, end)
 	if err != nil {
 		return nil, err
 	}

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/shorten"
@@ -117,7 +117,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// Install the fan-out sink onto the canonical event plane, unless disabled.
 	if fanoutEnabled() {
-		removeSink = analytics.AddSink(func(org string, evs []analytics.SinkEvent) { consume(s, org, evs) })
+		removeSink = event.AddSink(func(org string, evs []event.SinkEvent) { consume(s, org, evs) })
 		b.Log.Info("destinations fan-out sink installed", "platforms", len(s.State.dests))
 	} else {
 		b.Log.Info("destinations fan-out disabled", "flag", publicFanoutEnv)
