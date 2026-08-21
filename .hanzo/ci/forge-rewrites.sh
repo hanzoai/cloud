@@ -55,6 +55,7 @@ if [ -n "${IAM_CLIENT_ID:-}" ] && [ -n "${IAM_CLIENT_SECRET:-}" ]; then
     | jq -r '.access_token // empty' 2>/dev/null || true)
   if [ -n "${IAM_TOKEN:-}" ]; then
     echo "::add-mask::${IAM_TOKEN}"
+    JOB_TOKEN=${GIT_TOKEN:-}   # kept, so a forge that will not spend the IAM token has something to fall back to
     GIT_TOKEN=$IAM_TOKEN
     echo "forge-rewrites: asking as the IAM identity, scoped to ${FORGE_AUDIENCE:-hanzo-git}"
   else
@@ -67,19 +68,79 @@ fi
 mods=$(sed -nE 's|^[[:space:]]+github\.com/hanzoai/([A-Za-z0-9._-]+) .*|\1|p' go.mod | sort -u)
 [ -n "$mods" ] || { echo "forge-rewrites: go.mod names no github.com/hanzoai module"; exit 0; }
 
+# A GIT CONFIG OF THIS JOB'S OWN. `git config --global` with none set writes the runner's
+# ~/.gitconfig, and these runners are long-lived and shared: a credential written there is
+# readable by the next job, from any repository, for as long as the pod lives. Nothing
+# here belongs to the machine, so nothing here is written to it.
+if [ -z "${GIT_CONFIG_GLOBAL:-}" ]; then
+  GIT_CONFIG_GLOBAL=$(mktemp)
+  export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM=1
+  # Later steps run the go build that spends these rewrites, so they need to be told
+  # where the config went.
+  if [ -n "${GITHUB_ENV:-}" ]; then
+    { echo "GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL"; echo "GIT_CONFIG_NOSYSTEM=1"; } >> "$GITHUB_ENV"
+  fi
+fi
+
+# THE CREDENTIAL TRAVELS IN A FILE, NOT IN A URL AND NOT IN ARGV.
+#
+# It used to be spliced into the rewritten URL, which put it in three bad places at once:
+# every `git config` invocation carried it in argv, where /proc/<pid>/cmdline shows it to
+# anything else on the runner; it was written verbatim into the config; and because the
+# token was part of the SECTION NAME, each run added a new section rather than replacing
+# the last, so the entries accumulated and git's longest-match could serve a later fetch
+# with an expired one.
+#
+# A helper keyed on the host has none of those properties: one entry, no secret in the
+# rewrite, and the file is readable only by this job.
+# The forge, named once. Defaulted to the real one; a test points it at a stand-in so the
+# probe-and-rewrite half can be exercised without the network.
+FORGE_URL=${FORGE_URL:-https://git.hanzo.ai}
+FORGE_HOST=${FORGE_URL#*://}
+
+cred=$(mktemp)
+chmod 600 "$cred"
+printf '%s://x:%s@%s\n' "${FORGE_URL%%:*}" "$GIT_TOKEN" "$FORGE_HOST" > "$cred"
+git config --global credential.helper "store --file=$cred"
+
 on=""; off=""
 for m in $mods; do
-  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
-    -u "x:${GIT_TOKEN}" \
-    "https://git.hanzo.ai/v1/repos/hanzoai/${m}" 2>/dev/null || echo 000)
+  # --config - keeps the credential out of argv; curl reads it from stdin.
+  code=$(printf 'user = "x:%s"\n' "$GIT_TOKEN" \
+    | curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --config - \
+      "${FORGE_URL}/v1/repos/hanzoai/${m}" 2>/dev/null || echo 000)
   if [ "$code" = "200" ]; then
-    git config --global "url.https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/${m}.insteadOf" \
+    git config --global "url.${FORGE_URL}/hanzoai/${m}.insteadOf" \
       "https://github.com/hanzoai/${m}"
     on="$on $m"
   else
     off="$off ${m}(${code})"
   fi
 done
+
+# A TOKEN THE FORGE WILL NOT SPEND IS NOT A TOKEN. The mint succeeding says IAM answered,
+# not that the forge accepts what it answered with — a token minted for another audience,
+# or an identity with no account here, reads exactly like a fleet of private repositories.
+# If the IAM identity served nothing and a per-job token was displaced to try it, put the
+# per-job token back and ask again rather than reporting a lane that fetches nothing.
+if [ -z "$on" ] && [ -n "${JOB_TOKEN:-}" ] && [ "$GIT_TOKEN" != "$JOB_TOKEN" ]; then
+  echo "forge-rewrites: the IAM identity served nothing — asking again as the per-job token"
+  GIT_TOKEN=$JOB_TOKEN
+  printf '%s://x:%s@%s\n' "${FORGE_URL%%:*}" "$GIT_TOKEN" "$FORGE_HOST" > "$cred"
+  off=""
+  for m in $mods; do
+    code=$(printf 'user = "x:%s"\n' "$GIT_TOKEN" \
+      | curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --config - \
+        "${FORGE_URL}/v1/repos/hanzoai/${m}" 2>/dev/null || echo 000)
+    if [ "$code" = "200" ]; then
+      git config --global "url.${FORGE_URL}/hanzoai/${m}.insteadOf" \
+        "https://github.com/hanzoai/${m}"
+      on="$on $m"
+    else
+      off="$off ${m}(${code})"
+    fi
+  done
+fi
 
 echo "forge-rewrites: forge serves ->$on"
 [ -z "$off" ] || echo "forge-rewrites: left on GitHub ->$off"
