@@ -184,12 +184,12 @@ func TestMachinesListTenantScopedAndShape(t *testing.T) {
 	app := mountApp(t, f)
 
 	// No validated principal → 403, and the request never reaches Visor.
-	if code, _ := do(t, app, http.MethodGet, "/v1/machines", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/visor/machines", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org list want 403, got %d", code)
 	}
 
 	// acme sees its machine, mapped to the console shape.
-	code, body := do(t, app, http.MethodGet, "/v1/machines", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/visor/machines", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d (%s)", code, body)
 	}
@@ -213,7 +213,7 @@ func TestMachinesListTenantScopedAndShape(t *testing.T) {
 
 	// Cross-tenant isolation: "other" gets an honest empty list, and Visor was
 	// scoped to owner=other (never acme's data).
-	code, body = do(t, app, http.MethodGet, "/v1/machines", "other", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/visor/machines", "other", nil)
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Machines) != 0 {
 		t.Fatalf("other must see zero machines, got %d %+v", code, listed.Machines)
@@ -257,7 +257,7 @@ func TestMachinesMergeLiveDOAndRegistry(t *testing.T) {
 	}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/machines", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/visor/machines", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d (%s)", code, body)
 	}
@@ -327,7 +327,7 @@ func TestMachinesMergeDOKSNodes(t *testing.T) {
 	}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/machines", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/visor/machines", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d (%s)", code, body)
 	}
@@ -392,7 +392,7 @@ func TestMachinesDropDOKSNodesOnSkew(t *testing.T) {
 	}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/machines", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/visor/machines", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("a degraded source must not fail the whole list: got %d (%s)", code, body)
 	}
@@ -423,7 +423,7 @@ func TestGPUsDerivedFromMachines(t *testing.T) {
 	}}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/gpus", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/visor/gpus", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("gpus want 200, got %d (%s)", code, body)
 	}
@@ -444,10 +444,10 @@ func TestGPUsDerivedFromMachines(t *testing.T) {
 	}
 
 	// Alerts is an honest empty (Visor has no alert inventory), still tenant-gated.
-	if code, _ := do(t, app, http.MethodGet, "/v1/gpus/alerts", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/visor/gpus/alerts", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org alerts want 403, got %d", code)
 	}
-	code, body = do(t, app, http.MethodGet, "/v1/gpus/alerts", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/visor/gpus/alerts", "acme", nil)
 	if code != http.StatusOK || !bytes.Contains(body, []byte(`"alerts":[]`)) {
 		t.Fatalf("alerts want 200 [], got %d %s", code, body)
 	}
@@ -462,7 +462,7 @@ func TestClustersFromNodePools(t *testing.T) {
 	}}
 	app := mountApp(t, f)
 
-	code, body := do(t, app, http.MethodGet, "/v1/clusters", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/visor/clusters", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("clusters want 200, got %d (%s)", code, body)
 	}
@@ -486,14 +486,14 @@ func TestLaunchQuoteAndRealAndDelete(t *testing.T) {
 	app := mountApp(t, f)
 
 	// dryRun returns the quote verbatim (no machine created).
-	code, body := do(t, app, http.MethodPost, "/v1/machines", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/visor/machines", "acme",
 		map[string]any{"size": "gpu-l40sx1-48gb", "region": "sfo3", "name": "q", "dryRun": true})
 	if code != http.StatusOK || !bytes.Contains(body, []byte(`"priceHourly"`)) {
 		t.Fatalf("dryRun want 200 quote, got %d %s", code, body)
 	}
 
 	// A real launch returns the launched machine as a clean view.
-	code, body = do(t, app, http.MethodPost, "/v1/machines", "acme",
+	code, body = do(t, app, http.MethodPost, "/v1/visor/machines", "acme",
 		map[string]any{"size": "gpu-l40sx1-48gb", "region": "sfo3", "name": "gpu-1"})
 	if code != http.StatusCreated {
 		t.Fatalf("launch want 201, got %d %s", code, body)
@@ -505,15 +505,15 @@ func TestLaunchQuoteAndRealAndDelete(t *testing.T) {
 	}
 
 	// size is required.
-	if code, _ := do(t, app, http.MethodPost, "/v1/machines", "acme", map[string]any{"region": "sfo3"}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/visor/machines", "acme", map[string]any{"region": "sfo3"}); code != http.StatusBadRequest {
 		t.Fatalf("launch without size want 400, got %d", code)
 	}
 
 	// delete is tenant-gated and returns 204.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/machines/gpu-1", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/visor/machines/gpu-1", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org delete want 403, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodDelete, "/v1/machines/gpu-1", "acme", nil); code != http.StatusNoContent {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/visor/machines/gpu-1", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete want 204, got %d", code)
 	}
 }

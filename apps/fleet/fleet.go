@@ -8,7 +8,7 @@
 //
 // It is the ONE per-org registry of that attached compute (BYO k8s clusters /
 // BYO GPU / bare metal), the single source of truth consumed by BOTH the fleet
-// surface (apps/visor, which serves /v1/clusters — managed clusters from Visor
+// surface (apps/visor, which serves /v1/visor/clusters — managed clusters from Visor
 // MERGED with these BYO ones) AND ML serving (apps/ml, whose dynForOrg federates a
 // workload onto the org's registered cluster). One registry, two consumers — never a
 // second cluster surface.
