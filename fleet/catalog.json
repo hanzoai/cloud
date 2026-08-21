@@ -1358,6 +1358,20 @@
    "read": true
   },
   {
+   "id": "get_dataroom_trust",
+   "doc": "Answers the caller org's OWN trust centre: its settings, every item it\nholds in both tiers, the requests waiting on it, and the grants it has made.\n\nThe org is the caller's, taken from the validated bearer and from nothing else,\nso this op cannot be pointed at another tenant — there is no field for one. An\norg that has never opened a centre reads back an empty one rather than an error,\nbecause having no trust centre is an ordinary state and this is the read that\ntells you so.",
+   "read": true
+  },
+  {
+   "id": "get_dataroom_trust_center_by_slug",
+   "doc": "Answers an org's public trust centre: its name, the text a party must\naccept to ask for a document, and every item it publishes.\n\nAn item is either available NOW — the things the org states itself, its policies,\nits filled questionnaires, its subprocessor list, its knowledge base — or\navailable ON REQUEST, which is everything an independent auditor put their name\nto. Both are listed by name and kind, so a reader can see WHAT exists before\nasking for it; only the second withholds the content.\n\nNo principal is involved and none is accepted: the org is resolved from the\naddress, which answers only for a centre its owner has published. An address\nnobody publishes at is not found, the same answer an unpublished one gets.",
+   "read": true
+  },
+  {
+   "id": "patch_dataroom_trust_artifacts_by_id",
+   "doc": "Amend changes an item on the caller org's trust centre — replace its file with a\nnewer edition, move it between public and gated, rewrite what it says, or retire\nit — and answers with the item as it now stands.\n\nRetiring is the withdrawal: the item leaves the public centre immediately and can\nno longer be granted, while grants already made over it stand, because a release\nthat happened is part of the record and un-happening it in the record would be a\nlie. Restoring is the same call with retired false.\n\nMoving an item an independent auditor signed to the public tier is refused, and\nrefused by the database rather than only here. Only an admin of the org may call\nit, and the item is resolved in that org's own store, so another org's id is not\nfound."
+  },
+  {
    "id": "post_dataroom_datarooms",
    "doc": "Opens a new data room for the caller org and answers with it,\nincluding the short public id it is addressed by.\n\n`name` is required; without it the call is refused and the tenant store is\nuntouched, because a dispatch answering 4xx rolls its transaction back. A new\nroom holds no documents and is reachable by NOBODY until a share link is\ncreated over it — opening a room and granting access are two separate acts, so\na room cannot leak by existing."
   },
@@ -1368,6 +1382,26 @@
   {
    "id": "post_dataroom_links",
    "doc": "Grants access: it mints a public share link over one data\nroom (`dataroomId`) or one document (`documentId`) — one of the two is\nrequired — and answers with the link, whose `id` is the token a visitor opens\nit with.\n\nThis is how a party is let in. The controls are declared HERE and enforced on\nthe viewer surface: `password` is hashed with bcrypt before storage and is\nnever readable back, `emailProtected` (on by default) makes a visitor state an\naddress, `allowList`/`denyList` narrow which addresses pass, `allowDownload`\n(off by default) governs downloads, and `expiresAt` closes the link. The target\nroom or document must exist in the caller's own store or it is not found.\n\nCreating a link also writes dataroom's ONE cross-tenant row: the link id to\nowning org mapping an anonymous visitor is routed through. That write is part\nof the operation — if it fails the call is 500 — so a link that no visitor\ncould open is never handed back as usable.\n\nThe address a visitor later states is recorded UNVERIFIED, so a link gated only\nby email is openable by anyone the link reaches. Use a password for a link that\nmust not travel."
+  },
+  {
+   "id": "post_dataroom_trust_artifacts",
+   "doc": "Publish puts an item on the caller org's trust centre and answers with it.\n\nThe item is GATED unless it says otherwise, so a kind nobody has thought of yet\narrives private and someone has to release it deliberately — that default is what\nkeeps an auditor's report from becoming readable because a field went unset. An\nitem whose attester is \"auditor\" cannot be public at all: the database refuses the\npair, so no path through this API can publish one.\n\nA file is optional and is uploaded FIRST, through POST /v1/dataroom/documents,\nthen named here — the data room is the one place bytes enter, so a trust centre\ndocument is an ordinary data-room document and inherits its storage, its grants\nand its page-by-page access record. A gated item that has a file is added to the\norg's release room, which is what lets a party be granted the whole gated tier in\none link.\n\nOnly an admin of the org may call it."
+  },
+  {
+   "id": "post_dataroom_trust_center_by_slug_requests",
+   "doc": "Records a request to read what an independent auditor signed, and\nanswers with its id.\n\nThe org that owns the centre decides. Nothing is released here and no link is\nminted: this writes the ask down, which is the whole promise the form makes.\nThe write is the answer — a request that could not be stored is an error, never\na receipt, so a form can never appear to have been sent and be gone.\n\n`email` is required and is the ONLY address the eventual grant will admit, so an\naddress the asker cannot read is an ask that cannot be answered. Where the centre\nstates an NDA, `accept` must be true and the text in force is recorded verbatim\nagainst the request.\n\nAsking twice for the same thing from the same address is the SAME ask: the second\nanswers with the first's id rather than opening a second row, which is also what\nkeeps an anonymous door from filling a tenant's store."
+  },
+  {
+   "id": "post_dataroom_trust_requests_by_id_grant",
+   "doc": "Grant answers a request by opening access: it mints a share link over what was\nasked for, addressed to the address that asked and closing at expiry, records the\ndecision, and mails the asker.\n\nThe link is NEVER a public URL. It carries the asker's address on its allow list,\nso forwarding it to somebody else does not open it, and it expires. What the\nparty then does with it — which document, which page, for how long — is recorded\nby the data room's own view tracking, which is where the access record for this\nrelease lives; there is no second log.\n\nA request that was already answered is refused rather than answered twice, so a\nsecond click cannot mint a second link. Only an admin of the org may call it, and\nthe request is resolved in that org's own store, so another org's request id is\nnot found — which is also what stops one org deciding another's queue.\n\nMail is best effort and the grant does not depend on it: a deployment that sends\nno mail still records the grant and says so in `delivery`, so the approver knows\nto pass the address on themselves."
+  },
+  {
+   "id": "post_dataroom_trust_requests_by_id_refuse",
+   "doc": "Refuse answers a request by declining it, recording who declined and why.\n\nNothing is released and no link is minted. The refusal STAYS on the record beside\nthe ask — a request that was turned down is part of the access record exactly as\none that was granted is, and deleting it would leave a queue that only ever shows\nthe decisions somebody liked.\n\nA request that was already answered is refused rather than answered twice. Only an\nadmin of the org may call it, and the request is resolved in that org's own store,\nso another org's request id is not found."
+  },
+  {
+   "id": "put_dataroom_trust",
+   "doc": "SetCenter opens, publishes or withdraws the caller org's trust centre and answers\nwith the centre as it now stands.\n\nPublishing requires a name and an address, and the address must be free: another\norg already answering there is a conflict, never a takeover. Withdrawing closes\nthe public door only — items, grants and the access record are untouched, so an\norg can go quiet and come back without losing anything.\n\nOnly an admin of the org may call it. The org is the caller's own, so there is no\nfield naming one and no way to point this at another tenant."
   }
  ],
  "dataset": [
@@ -2280,25 +2314,69 @@
    "doc": "Removes a passkey or security key — what you call when\na device is lost. Make sure the person has another way to sign in first.\n\nA credential that is already gone answers \"nothing changed\" rather than an\nerror, so the call is safe to repeat."
   },
   {
+   "id": "delete_iam_applications_by_owner_by_name",
+   "doc": "Removes an application. Anyone mid-sign-in through it is\nturned away and its client credentials stop working, so retire the integration\nbefore deleting it."
+  },
+  {
+   "id": "delete_iam_audit-logs_by_owner_by_name",
+   "doc": "Removes an audit entry. Retention policy is normally what should expire\na trail; deleting by hand leaves a gap a reviewer will notice."
+  },
+  {
+   "id": "delete_iam_certs_by_owner_by_name",
+   "doc": "Removes a signing certificate. Tokens signed with it can no longer be\nverified, so retire it only once nothing is still presenting them."
+  },
+  {
+   "id": "delete_iam_invitations_by_owner_by_name",
+   "doc": "Withdraws an invitation. It stops being redeemable at once; anyone who\nalready joined through it keeps their account."
+  },
+  {
+   "id": "delete_iam_keys_by_owner_by_name",
+   "doc": "Revokes an API key. Anything still presenting it stops being authorized at\nonce, so roll the replacement out before you revoke."
+  },
+  {
+   "id": "delete_iam_permissions_by_owner_by_name",
+   "doc": "Revokes a permission. Everyone who held access only through it loses\nthat access immediately; grants they hold by another route are untouched."
+  },
+  {
+   "id": "delete_iam_projects_by_owner_by_name",
+   "doc": "Removes a project. The people and roles in your organization are\nunchanged; what goes is the scope itself, so move anything addressed by it\nfirst."
+  },
+  {
+   "id": "delete_iam_roles_by_owner_by_name",
+   "doc": "Removes a role. Everyone in it loses the access it carried; their\naccounts, and any other role they hold, are untouched."
+  },
+  {
+   "id": "delete_iam_users_by_owner_by_name",
+   "doc": "Removes a person from your organization. Their sessions stop working\nimmediately and the account is gone rather than suspended — to keep the record\nand only stop sign-in, update the user instead."
+  },
+  {
+   "id": "delete_iam_workspaces_by_owner_by_name",
+   "doc": "Removes a workspace. The people and roles in your organization are\nunchanged; what goes is the scope itself."
+  },
+  {
    "id": "getOrganization",
    "doc": "Returns one organization: its display, its defaults and the sign-in rules\neveryone in it inherits.",
    "read": true
   },
   {
    "id": "getProvider",
-   "doc": "Returns one provider: what it connects to and how it is\nconfigured. Its credentials come back masked."
+   "doc": "Returns one provider: what it connects to and how it is\nconfigured. Its credentials come back masked.",
+   "read": true
   },
   {
    "id": "getSession",
-   "doc": "Returns one person's session in one application — when it began and which\nbrowsers or devices are still carrying it."
+   "doc": "Returns one person's session in one application — when it began and which\nbrowsers or devices are still carrying it.",
+   "read": true
   },
   {
    "id": "getToken",
-   "doc": "Returns one access token: who and what it was issued to, and when it\nexpires."
+   "doc": "Returns one access token: who and what it was issued to, and when it\nexpires.",
+   "read": true
   },
   {
    "id": "getWebauthnCredential",
-   "doc": "Returns one passkey or security key: whose it is, what\ndevice it lives on, and when it was registered."
+   "doc": "Returns one passkey or security key: whose it is, what\ndevice it lives on, and when it was registered.",
+   "read": true
   },
   {
    "id": "get_iam_applications",
@@ -2306,13 +2384,18 @@
    "read": true
   },
   {
-   "id": "get_iam_applications_get",
+   "id": "get_iam_applications_by_owner_by_name",
    "doc": "Returns one application: its sign-in methods, its allowed\nredirect URIs and the client credentials your integration authenticates with.",
    "read": true
   },
   {
    "id": "get_iam_audit-logs",
    "doc": "Returns your organization's audit trail, newest first — who did\nwhat, when, and from where. It is the record you reach for during a security\nreview or an incident.\n\nYou see your own organization's audit trail and no one else's; which organization that\nis comes from your credentials, not from the request.",
+   "read": true
+  },
+  {
+   "id": "get_iam_audit-logs_by_owner_by_name",
+   "doc": "Returns one audit entry in full: the action, the person or key behind it,\nand the request it came in on.",
    "read": true
   },
   {
@@ -2331,13 +2414,13 @@
    "read": true
   },
   {
-   "id": "get_iam_get-app-login",
-   "doc": "Returns everything a login screen needs to draw itself for one\napplication: its branding, and each sign-in method it offers with the provider\ndetails that method needs.\n\nThe client secret is masked. Read before anyone has signed in, so it carries\nonly what is safe for a browser to see.",
+   "id": "get_iam_certs_by_owner_by_name",
+   "doc": "Returns one signing certificate — its algorithm, its validity window and\nits public half. The private key is masked.",
    "read": true
   },
   {
-   "id": "get_iam_get-memberships",
-   "doc": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via authz.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
+   "id": "get_iam_get-app-login",
+   "doc": "Returns everything a login screen needs to draw itself for one\napplication: its branding, and each sign-in method it offers with the provider\ndetails that method needs.\n\nThe client secret is masked. Read before anyone has signed in, so it carries\nonly what is safe for a browser to see.",
    "read": true
   },
   {
@@ -2346,12 +2429,17 @@
    "read": true
   },
   {
+   "id": "get_iam_invitations_by_owner_by_name",
+   "doc": "Returns one invitation: who it is for, what it grants on acceptance, and\nwhen it expires.",
+   "read": true
+  },
+  {
    "id": "get_iam_keys",
    "doc": "Returns your organization's API keys, newest first — what each is called,\nwhat it may reach, and its publishable half. Secret halves are never listed.",
    "read": true
   },
   {
-   "id": "get_iam_keys_get",
+   "id": "get_iam_keys_by_owner_by_name",
    "doc": "Returns one API key: what it is called, what it may reach, and when it was\nissued.",
    "read": true
   },
@@ -2366,7 +2454,7 @@
    "read": true
   },
   {
-   "id": "get_iam_permissions_get",
+   "id": "get_iam_permissions_by_owner_by_name",
    "doc": "Returns one permission: who it grants to, what it allows, and the\nresources it covers.",
    "read": true
   },
@@ -2376,8 +2464,18 @@
    "read": true
   },
   {
+   "id": "get_iam_projects_by_owner_by_name",
+   "doc": "Returns one project: what it is called and how it is set up.",
+   "read": true
+  },
+  {
    "id": "get_iam_roles",
    "doc": "Returns your organization's roles, newest first — each a named group of\npeople that permissions are granted to.\n\nYou see your own organization's roles and no one else's; which organization\nthat is comes from your credentials, not from the request.",
+   "read": true
+  },
+  {
+   "id": "get_iam_roles_by_owner_by_name",
+   "doc": "Returns one role: who is in it, and the roles it includes.",
    "read": true
   },
   {
@@ -2416,7 +2514,7 @@
    "read": true
   },
   {
-   "id": "get_iam_users_get",
+   "id": "get_iam_users_by_owner_by_name",
    "doc": "Returns one person in your organization, addressed by their username or by\ntheir email address. Passwords, API secrets and MFA material are stripped from\nthe response.\n\nAn address that names two accounts names none: the read refuses rather than\npicking one, and says so instead of reporting \"no such user\". Handing back an\narbitrary one of two rows is how somebody gets added to a team under a\ncolleague's identity.",
    "read": true
   },
@@ -2426,8 +2524,13 @@
    "read": true
   },
   {
+   "id": "get_iam_workspaces_by_owner_by_name",
+   "doc": "Returns one workspace: what it is called and how it is set up.",
+   "read": true
+  },
+  {
    "id": "listOrganizations",
-   "doc": "Returns the organizations you can see, newest first. Narrow it to one\nparent account, and set a limit and offset to page through the rest.\n\nREADING THE REGISTRY IS AN OPERATOR ACT, and the handler now says so itself.\n\nIt never did: the scope lived only in the Guard, which refuses a non-operator\nGET with 403 before the handler runs. That was true and sufficient for as long\nas HTTP was the only way in. It stopped being sufficient when the same typed op\nbecame reachable over the agent door, where a request arrives at the handler\nwith no middleware in front of it. A handler that reads no principal and treats\nan absent Owner selector as no filter would answer such a caller with the whole\nregistry, so the scope has to be the handler's own, not the door's.\n\nSo the fact moves to where every door reaches it. The Guard keeps its own\nrefusal — two checks of one rule is not two rules, and the outer one still\nspends nothing to refuse — but the rule no longer depends on which door was\nused. A caller who wants the organizations they can ACT in asks Search, which\nanswers everyone from their own memberships.",
+   "doc": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.\n\nTHE SCOPE IS THE HANDLER'S OWN, so it holds at every door. The Guard refuses a\nbearerless request before this runs, but the agent door carries a typed op to\nits handler with no middleware in front of it — a handler that read no\nprincipal would answer such a caller with the whole registry. Reading the\nprincipal here is what makes the answer the same one over both.",
    "read": true
   },
   {
@@ -2437,7 +2540,8 @@
   },
   {
    "id": "listSessions",
-   "doc": "Returns who is currently signed in to your organization, newest first, and\ncan be narrowed to one person or one application. It is what you read before\nsigning someone out."
+   "doc": "Returns who is currently signed in to your organization, newest first, and\ncan be narrowed to one person or one application. It is what you read before\nsigning someone out.",
+   "read": true
   },
   {
    "id": "listTokens",
@@ -2454,14 +2558,6 @@
    "doc": "Registers an application in your organization — one product or site\nyour people sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs. A name already used in the organization is refused\nrather than overwritten.\n\nExported so the legacy add-application alias reuses this exact path — one\ncreate, two spellings."
   },
   {
-   "id": "post_iam_applications_delete",
-   "doc": "Removes an application. Anyone mid-sign-in through it is\nturned away and its client credentials stop working, so retire the integration\nbefore deleting it."
-  },
-  {
-   "id": "post_iam_applications_update",
-   "doc": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings."
-  },
-  {
    "id": "post_iam_assume",
    "doc": "Steps a platform operator into an organization: it returns their\nown access token re-scoped to that tenant, so they see what the tenant sees.\n\nThe token still names the operator — stepping in is not becoming somebody\nelse — and records the organization it was scoped to, so everything done with\nit is attributed to the person who did it. Only a platform operator may, and\nthe attempt is recorded whether or not it succeeds."
   },
@@ -2470,88 +2566,24 @@
    "doc": "Records an audit entry, so activity from your own systems lands in the\nsame trail as everything the Hanzo Cloud records for you."
   },
   {
-   "id": "post_iam_audit-logs_delete",
-   "doc": "Removes an audit entry. Retention policy is normally what should expire\na trail; deleting by hand leaves a gap a reviewer will notice."
-  },
-  {
-   "id": "post_iam_audit-logs_get",
-   "doc": "Returns one audit entry in full: the action, the person or key behind it,\nand the request it came in on."
-  },
-  {
-   "id": "post_iam_audit-logs_update",
-   "doc": "Corrects an audit entry. The trail is append-only in normal operation\nand nothing in the Hanzo Cloud rewrites it — this exists for an administrator\nto correct an entry their own systems recorded wrongly."
-  },
-  {
    "id": "post_iam_certs",
    "doc": "Adds a signing certificate your applications can verify tokens against\n— the call you make to stage the next one before a rotation. A name already\nused in your organization is refused.\n\nIt registers the certificate's IDENTITY: its name (which is the JWKS `kid`),\nits algorithm, its expiry. Key material does not travel this way and cannot:\nthe private key is not part of the Cert's JSON, so it is neither served here\nnor accepted here. It is supplied to the process by the deployment, under the\nname registered here (internal/keyring). Staging a rotation is therefore two\nhalves — this call names the key, and the deployment provides it."
-  },
-  {
-   "id": "post_iam_certs_delete",
-   "doc": "Removes a signing certificate. Tokens signed with it can no longer be\nverified, so retire it only once nothing is still presenting them."
-  },
-  {
-   "id": "post_iam_certs_get",
-   "doc": "Returns one signing certificate — its algorithm, its validity window and\nits public half. The private key is masked."
-  },
-  {
-   "id": "post_iam_certs_update",
-   "doc": "Changes a signing certificate's settings. What it is called does not\nchange, and neither does when it was added.\n\nA PUT here is a METADATA edit — display name, expiry, provider. It overlays\nonly the fields the request actually SET onto the loaded row: a field the JSON\nomits (or leaves at its zero value) keeps what the row holds, rather than\nblanking it. That is load-bearing, not a nicety. A read serves the public\nCertificate (Mask hides only PrivateKey and AccessSecret), so a client that\nreads a cert, changes one field, and writes it back sends the masked halves\nempty and every other field it did not touch at its zero value — and the old\nfull-struct overlay wrote all of those blanks back. Blanking CryptoAlgorithm\nalone drops the cert from the JWKS (oidc.Publishes turns false), so every\ntoken under its `kid` stops verifying; blanking Provider/Account/ExpireTime\nbreaks ACME renewal and expiry — all from a request that only meant to rename\nit. Absent-or-zero means \"unchanged\", so the deployment (key) and a rotation\n(cert) remain the only way key or published material changes; the metadata API\ncannot clear it.\n\nThe overlay is generic — it copies every set field, so a field nobody has added\nyet is carried without a line here — and leaves three things the request may\nnot move: the bound Model (id, createdAt, key, snapshot), the natural key\n(owner/name address the row, they do not mutate it), and the creation stamp."
   },
   {
    "id": "post_iam_invitations",
    "doc": "Issues an invitation to join your organization — the code or link a new\nmember redeems, with the role they arrive holding and the date it stops\nworking. A name already used in the organization is refused."
   },
   {
-   "id": "post_iam_invitations_delete",
-   "doc": "Withdraws an invitation. It stops being redeemable at once; anyone who\nalready joined through it keeps their account."
-  },
-  {
-   "id": "post_iam_invitations_get",
-   "doc": "Returns one invitation: who it is for, what it grants on acceptance, and\nwhen it expires."
-  },
-  {
-   "id": "post_iam_invitations_update",
-   "doc": "Changes an invitation's terms — the role it grants, how many may redeem\nit, or when it expires. What it is called does not change."
-  },
-  {
    "id": "post_iam_keys",
    "doc": "Issues an API key. A standard key comes back as a publishable half you\nmay ship in client code and a secret half you must not — the secret is shown\nonce, at creation, and cannot be retrieved afterwards. A publish-scoped key is\nissued with the publishable half only, so there is no secret to leak.\n\nA name already used in your organization is refused rather than reissued, so\ncreating twice never silently invalidates a key that is in production."
-  },
-  {
-   "id": "post_iam_keys_delete",
-   "doc": "Revokes an API key. Anything still presenting it stops being authorized at\nonce, so roll the replacement out before you revoke."
-  },
-  {
-   "id": "post_iam_keys_update",
-   "doc": "Changes what a key is called or what it may reach. The credential\nitself is not reissued — the key in your deployment keeps working."
   },
   {
    "id": "post_iam_permissions",
    "doc": "Grants a permission — the call that gives a person or a role the ability to\ndo something. Adding refuses to overwrite a grant that already exists, so\nwidening an existing one is an update, never an accident."
   },
   {
-   "id": "post_iam_permissions_delete",
-   "doc": "Revokes a permission. Everyone who held access only through it loses\nthat access immediately; grants they hold by another route are untouched."
-  },
-  {
-   "id": "post_iam_permissions_update",
-   "doc": "Changes who a permission grants to, what it allows, or the resources it\ncovers. Access changes as soon as the write lands. What the permission is\ncalled does not change, and neither does when it was created."
-  },
-  {
    "id": "post_iam_projects",
    "doc": "Makes a project inside your organization — the scope people pick\nbetween when their work is separated by product or client rather than by team.\nA name already used in the organization is refused."
-  },
-  {
-   "id": "post_iam_projects_delete",
-   "doc": "Removes a project. The people and roles in your organization are\nunchanged; what goes is the scope itself, so move anything addressed by it\nfirst."
-  },
-  {
-   "id": "post_iam_projects_get",
-   "doc": "Returns one project: what it is called and how it is set up."
-  },
-  {
-   "id": "post_iam_projects_update",
-   "doc": "Changes a project's settings. What it is called does not change, and\nneither does when it was created."
   },
   {
    "id": "post_iam_release",
@@ -2562,57 +2594,60 @@
    "doc": "Makes a role — a named group of people that permissions are granted to.\nGranting to a role rather than to each person is what keeps access correct as\nyour team changes: add someone to the role and they inherit everything it can\ndo. A name already used in your organization is refused."
   },
   {
-   "id": "post_iam_roles_delete",
-   "doc": "Removes a role. Everyone in it loses the access it carried; their\naccounts, and any other role they hold, are untouched."
-  },
-  {
-   "id": "post_iam_roles_get",
-   "doc": "Returns one role: who is in it, and the roles it includes."
-  },
-  {
-   "id": "post_iam_roles_update",
-   "doc": "Changes who is in a role, or which roles it includes. Access changes for\neveryone in it as soon as the write lands. What the role is called does not\nchange, and neither does when it was created."
-  },
-  {
    "id": "post_iam_users",
    "doc": "Adds a person to your organization. Send a password and it becomes the\none they sign in with; it is hashed before it is stored and never comes back\nin any response.\n\nThe username is checked against the same rule every account in the Hanzo Cloud\nis held to, whichever way it was created — this call, password signup, a social\nsign-in, or SCIM — so a name accepted here works everywhere.\n\nA name already taken in your organization is refused rather than overwritten."
-  },
-  {
-   "id": "post_iam_users_delete",
-   "doc": "Removes a person from your organization. Their sessions stop working\nimmediately and the account is gone rather than suspended — to keep the record\nand only stop sign-in, update the user instead."
-  },
-  {
-   "id": "post_iam_users_update",
-   "doc": "Changes a person's profile, their roles, or the credentials they sign\nin with. Send a password to reset it; leave it out and their current one keeps\nworking.\n\nWho they are does not change: their organization, username and the identifier\ntheir existing sessions are keyed on all survive the write, so an update never\nsigns anyone out."
   },
   {
    "id": "post_iam_workspaces",
    "doc": "Makes a workspace inside your organization — the scope a team works in,\nalongside projects rather than instead of them. A name already used in the\norganization is refused."
   },
   {
-   "id": "post_iam_workspaces_delete",
-   "doc": "Removes a workspace. The people and roles in your organization are\nunchanged; what goes is the scope itself."
-  },
-  {
-   "id": "post_iam_workspaces_get",
-   "doc": "Returns one workspace: what it is called and how it is set up."
-  },
-  {
-   "id": "post_iam_workspaces_update",
-   "doc": "Changes a workspace's settings. What it is called does not change, and\nneither does when it was created."
-  },
-  {
    "id": "put_iam_account",
    "doc": "Saves the calling person's own profile — the name they are\nshown by, their picture, a line about themselves and a link.\n\nOnly their own: the request names nobody, so it cannot reach another account.\nSend only what you are changing; a field you leave out keeps the value it had,\nand a field you send empty is cleared.\n\nA picture is an https link or an inline image up to 96 KiB, the same value an\norganization's mark is (schema.AvatarRef) — one rule for how a subject appears,\nwhether the subject is a person or an organization."
+  },
+  {
+   "id": "put_iam_applications_by_owner_by_name",
+   "doc": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings."
+  },
+  {
+   "id": "put_iam_audit-logs_by_owner_by_name",
+   "doc": "Corrects an audit entry. The trail is append-only in normal operation\nand nothing in the Hanzo Cloud rewrites it — this exists for an administrator\nto correct an entry their own systems recorded wrongly."
+  },
+  {
+   "id": "put_iam_certs_by_owner_by_name",
+   "doc": "Changes a signing certificate's settings. What it is called does not\nchange, and neither does when it was added.\n\nA PUT here is a METADATA edit — display name, expiry, provider. It overlays\nonly the fields the request actually SET onto the loaded row: a field the JSON\nomits (or leaves at its zero value) keeps what the row holds, rather than\nblanking it. That is load-bearing, not a nicety. A read serves the public\nCertificate (Mask hides only PrivateKey and AccessSecret), so a client that\nreads a cert, changes one field, and writes it back sends the masked halves\nempty and every other field it did not touch at its zero value — and the old\nfull-struct overlay wrote all of those blanks back. Blanking CryptoAlgorithm\nalone drops the cert from the JWKS (oidc.Publishes turns false), so every\ntoken under its `kid` stops verifying; blanking Provider/Account/ExpireTime\nbreaks ACME renewal and expiry — all from a request that only meant to rename\nit. Absent-or-zero means \"unchanged\", so the deployment (key) and a rotation\n(cert) remain the only way key or published material changes; the metadata API\ncannot clear it.\n\nThe overlay is generic — it copies every set field, so a field nobody has added\nyet is carried without a line here — and leaves three things the request may\nnot move: the bound Model (id, createdAt, key, snapshot), the natural key\n(owner/name address the row, they do not mutate it), and the creation stamp."
+  },
+  {
+   "id": "put_iam_invitations_by_owner_by_name",
+   "doc": "Changes an invitation's terms — the role it grants, how many may redeem\nit, or when it expires. What it is called does not change."
+  },
+  {
+   "id": "put_iam_keys_by_owner_by_name",
+   "doc": "Changes what a key is called or what it may reach. The credential\nitself is not reissued — the key in your deployment keeps working."
   },
   {
    "id": "put_iam_password",
    "doc": "Replaces the calling person's password. Only their own —\nthere is no shape of this request that writes somebody else's.\n\nProve who you are with the password you are replacing, or — when you cannot\nsign in at all — with a code sent to the address the account already holds.\nExactly one of the two: a request carrying both proves nothing more than\neither, and answering it would mean deciding which one mattered.\n\nA reset also clears the account lockout, in the SAME transaction as the\ndigest. Replacing a credential retires the run of guesses against the old one,\nand without this a person who reset a forgotten password was still refused for\nup to fifteen more minutes — with the brand-new password they had just chosen."
   },
   {
-   "id": "searchOrganizations",
-   "doc": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.",
-   "read": true
+   "id": "put_iam_permissions_by_owner_by_name",
+   "doc": "Changes who a permission grants to, what it allows, or the resources it\ncovers. Access changes as soon as the write lands. What the permission is\ncalled does not change, and neither does when it was created."
+  },
+  {
+   "id": "put_iam_projects_by_owner_by_name",
+   "doc": "Changes a project's settings. What it is called does not change, and\nneither does when it was created."
+  },
+  {
+   "id": "put_iam_roles_by_owner_by_name",
+   "doc": "Changes who is in a role, or which roles it includes. Access changes for\neveryone in it as soon as the write lands. What the role is called does not\nchange, and neither does when it was created."
+  },
+  {
+   "id": "put_iam_users_by_owner_by_name",
+   "doc": "Changes a person's profile, their roles, or the credentials they sign\nin with. Send a password to reset it; leave it out and their current one keeps\nworking.\n\nWho they are does not change: their organization, username and the identifier\ntheir existing sessions are keyed on all survive the write, so an update never\nsigns anyone out."
+  },
+  {
+   "id": "put_iam_workspaces_by_owner_by_name",
+   "doc": "Changes a workspace's settings. What it is called does not change, and\nneither does when it was created."
   },
   {
    "id": "setOrganizationAvatar",
@@ -6496,6 +6531,91 @@
    "id": "get_treasury_accounts",
    "doc": "Returns the ledger accounts the caller may see, with their\nbalances. It is tenant-isolated SERVER-SIDE: an ordinary caller sees ONLY\naccounts under its own \"org:\u003ctenant\u003e:\" prefix, never house accounts and never\nanother tenant's. A SuperAdmin may widen with ?scope=house (the reserve,\nrevenue and payout house accounts) or ?org=\u003ctenant\u003e — the only way to cross the\ntenant boundary, and only for platform sudo. The answer is honestly empty until\na tenant has ledger postings.",
    "read": true
+  }
+ ],
+ "trust": [
+  {
+   "id": "delete_trust_by_kind_by_id",
+   "doc": "Removes one record from a section of your organization's trust centre. A\nrecord that is not there is a 404, never a silent success. A control that\nbelongs to the deployment's own inventory is removed by a commit, not by a\nrequest."
+  },
+  {
+   "id": "get_trust",
+   "doc": "Reads YOUR organization's whole trust centre, including the addresses of your\nown gated documents. Same shape as the published door; the difference is that\nthis one is resolved from your validated bearer and shows you your own\nartifacts.",
+   "read": true
+  },
+  {
+   "id": "get_trust_controls",
+   "doc": "Lists every control your organization publishes, with the counts.\n\nA control names what it asserts, the mechanism behind it, the repository and\nfile where that mechanism is enforced, how it is verified, and the framework\nclauses it maps to. Status is automated, partial or absent — and an absent one\nstill names the clause it would satisfy, which is a roadmap, while never\nmoving a coverage number.",
+   "read": true
+  },
+  {
+   "id": "get_trust_controls_by_id",
+   "doc": "Reads one control by id.",
+   "read": true
+  },
+  {
+   "id": "get_trust_coverage",
+   "doc": "Reads coverage: per framework, how many clauses have an automated control\nbehind them, how many are partial, and how many have none — each carrying the\nunit it is counted in, because \"12 of 20\" is not a fact until you know what\nthe 20 are.\n\nNothing here is a verdict. There is no boolean, and a control that only a\nperson has read counts one rung weaker than it claims to be, because only a\ncheck that can FAIL is evidence.",
+   "read": true
+  },
+  {
+   "id": "get_trust_coverage_by_framework",
+   "doc": "Reads one framework clause by clause: every clause the standard publishes,\nwhat covers it, and which controls stand behind it — so a coverage number can\nbe checked line by line rather than taken on trust.",
+   "read": true
+  },
+  {
+   "id": "get_trust_documents",
+   "doc": "Lists your organization's documents. Because this is your own centre, a gated\nartifact carries its address here; through the published door it does not.",
+   "read": true
+  },
+  {
+   "id": "get_trust_evidence",
+   "doc": "Reads the audit rows that stand behind one control, over a window.\n\nThe inventory decides what evidences what: a control names the audit actions\nthat are its trail, and this resolves the control id to those actions and\nreads them. So evidence cannot drift from the inventory, and it is scoped to\nyour own organization — the query carries no organization field for a caller\nto fill in.\n\nA control that nothing in the trail evidences says so plainly rather than\nanswering an empty page, because an empty page reads like a clean quarter. A\ndeployment with no audit store answers 501 and says the trail was not read,\nfor the same reason.",
+   "read": true
+  },
+  {
+   "id": "get_trust_faq",
+   "doc": "Lists your knowledge base — the questions a reviewer asks, answered once.",
+   "read": true
+  },
+  {
+   "id": "get_trust_frameworks",
+   "doc": "Lists the frameworks coverage is computed against, and how many clauses each\npublishes. That count is the denominator of every coverage number, which is\nwhat keeps an uncovered clause visible instead of dropping out of the\nfraction.",
+   "read": true
+  },
+  {
+   "id": "get_trust_policies",
+   "doc": "Lists your organization's published policies.",
+   "read": true
+  },
+  {
+   "id": "get_trust_profile",
+   "doc": "Reads your organization's trust-centre profile — the name, tagline and\nsummary a visitor sees, whether the centre is published, and where to send\nsomebody who wants a gated document.",
+   "read": true
+  },
+  {
+   "id": "get_trust_published_by_org",
+   "doc": "Reads a published trust centre — the whole thing in one answer: the\norganization's profile, its control inventory, coverage computed against each\nframework's whole published clause list, its documents, subprocessors,\npolicies, knowledge base, updates and risk profile.\n\nThis is the PUBLIC door and needs no credential, because a published trust\ncentre is a public document. It answers only for an organization that has\npublished one — an organization that has not is not found rather than empty,\nsince an empty centre and a centre nobody meant to show read the same and are\nnot the same thing.\n\nA gated document appears here with its title, its type and its date and NO\naddress: the listing says the artifact exists and that reading it takes a\ngrant. Nothing an independent auditor signed is ever released through this\ndoor.",
+   "read": true
+  },
+  {
+   "id": "get_trust_risk",
+   "doc": "Reads your risk profile — the label and value pairs describing what your\norganization handles and how.",
+   "read": true
+  },
+  {
+   "id": "get_trust_subprocessors",
+   "doc": "Lists the third parties your organization sends data to, each naming what it\nis for.",
+   "read": true
+  },
+  {
+   "id": "get_trust_updates",
+   "doc": "Lists your trust-centre updates, newest as you ordered them.",
+   "read": true
+  },
+  {
+   "id": "put_trust_by_kind_by_id",
+   "doc": "Writes one record into a section of YOUR organization's trust centre —\nprofile, control, document, subprocessor, policy, faq, update or risk.\n\nA control written here is held to exactly the rule a control committed to the\ndeployment's own inventory is held to, by the same validator: its prose may\nnot claim a certificate and may not name a framework (a framework belongs in\nthe mappings, where it arrives attached to a number), anything short of\nautomated must say what is missing, and a mapping to a clause no framework\ndeclares is refused rather than scored as nothing.\n\nA document defaults to GATED. An artifact an independent auditor signed — a\nSOC 2 report, an ISO certificate, a penetration test, an auditor letter —\ncannot be made public at all; it is released through a grant. A\nself-assessment can, because the organization is the one attesting it.\n\nThe deployment's OWN control inventory is governed in git and is not writable\nhere: naming one of its ids is a conflict, not an overwrite."
   }
  ],
  "usage": [
