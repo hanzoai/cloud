@@ -123,7 +123,7 @@ var Apps = []App{
 	// and the host never delivered to it. credit-balance is its own entry and not
 	// covered by credits: they are sibling prefixes, not parent and child.
 	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/commerce", "/v1/billing/accounts", "/v1/billing/alerts", "/v1/billing/credit-balance", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/invoices", "/v1/billing/methods", "/v1/billing/mode", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/portal/methods", "/v1/billing/recharge", "/v1/billing/settings", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/topup", "/v1/billing/transactions", "/v1/billing/usage/rollup", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/collection", "/v1/commerce/currencies", "/v1/commerce/disclosure", "/v1/commerce/discount", "/v1/commerce/movie", "/v1/commerce/note", "/v1/commerce/product", "/v1/commerce/return", "/v1/commerce/saleschannel", "/v1/commerce/stocklocation", "/v1/commerce/submission", "/v1/commerce/subscriber", "/v1/commerce/tokentransaction", "/v1/commerce/transfer", "/v1/commerce/variant", "/v1/commerce/wallet", "/v1/commerce/watchlist", "/v1/commerce/webhook"}},
-	{Name: "licensing", Prefixes: []string{"/v1/licensing"}, Stage: Beta},
+	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plan"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/pricing", "/v1/pricing"}},
 	// s3 is the S3 DATA plane (buckets, objects, health). It shared this root
@@ -183,15 +183,15 @@ var Apps = []App{
 	// (hz.MountAt), and the round answers at a sub-path because POST /v1/agents is
 	// already the typed create. One name, one root (HIP-1210).
 	{Name: "agents", Prefixes: []string{"/v1/agents"}},
-	{Name: "link", Prefixes: []string{"/v1/link"}, Stage: Beta},
-	{Name: "wallets", Prefixes: []string{"/v1/wallets"}, Stage: Beta},
-	{Name: "x402", Prefixes: []string{"/v1/x402"}, Stage: Beta},
+	{Name: "link", Prefixes: []string{"/v1/link"}},
+	{Name: "wallets", Prefixes: []string{"/v1/wallets"}},
+	{Name: "x402", Prefixes: []string{"/v1/x402"}},
 	{Name: "deploy", Prefixes: []string{"/v1/deploy/account/can-i", "/v1/deploy/applications", "/v1/deploy/callback", "/v1/deploy/clusters", "/v1/deploy/gitops", "/v1/deploy/health", "/v1/deploy/login", "/v1/deploy/logout", "/v1/deploy/projects", "/v1/deploy/reconcile", "/v1/deploy/session/userinfo", "/v1/deploy/settings", "/v1/deploy/stream/applications", "/v1/deploy/version"}},
 	{Name: "functions", Prefixes: []string{"/v1/functions"}},
 	{Name: "todo", Prefixes: []string{"/v1/todo"}},
 	{Name: "templates", Prefixes: []string{"/v1/templates"}},
 	{Name: "blueprint", Prefixes: []string{"/v1/blueprint"}},
-	{Name: "framework", Prefixes: []string{"/v1/framework"}, Stage: Beta},
+	{Name: "framework", Prefixes: []string{"/v1/framework"}},
 
 	{Name: "knowledge", Prefixes: []string{"/v1/knowledge"}},
 	// graph is the assertion plane: entities, the relations between them, and
@@ -199,10 +199,10 @@ var Apps = []App{
 	// carries retention (HIP-1196).
 	{Name: "graph", Prefixes: []string{"/v1/graph"}, Stage: Alpha},
 	{Name: "help", Prefixes: []string{"/v1/help"}},
-	{Name: "content", Prefixes: []string{"/v1/content"}, Stage: Beta},
+	{Name: "content", Prefixes: []string{"/v1/content"}},
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
 	{Name: "webhooks", Prefixes: []string{"/v1/webhooks"}},
-	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models"}, Stage: Beta},
+	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models"}},
 	// risk owns /v1/risk OUTRIGHT — the per-organisation model plane that decides
 	// AND learns. It shares no prefix with the row above: `ml` is model SERVING
 	// (InferenceServices, predict) and it is live with customers on it, so the two
@@ -232,17 +232,17 @@ var Apps = []App{
 	// is a compliance record with a retention clock of its own. A separate row also
 	// means a separate per-tenant file, so no second process ever opens the
 	// decision plane's single-writer store.
-	{Name: "label", Prefixes: []string{"/v1/label"}, Stage: Beta},
+	{Name: "label", Prefixes: []string{"/v1/label"}},
 	// reference is the LOOKUP DATA a decision consults and cannot derive:
 	// disposable-email domains, datacentre and Tor ranges, issuer prefixes, and how
 	// current the designation lists the screening engine holds are. It owns two
 	// stores — the tenant's overrides file and the Hanzo-maintained baseline tables
 	// nothing else writes — so it is its own capability, and it answers at its own
 	// name for the reason the label row above states.
-	{Name: "reference", Prefixes: []string{"/v1/reference"}, Stage: Beta},
+	{Name: "reference", Prefixes: []string{"/v1/reference"}},
 	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
 	// always-ok liveness route would otherwise shadow.
-	{Name: "risk", Prefixes: []string{"/v1/risk"}, Stage: Beta},
+	{Name: "risk", Prefixes: []string{"/v1/risk"}},
 	// dataset is the RECORD of what a model was fitted on: a versioned, immutable
 	// snapshot of one tenant's own event surface. It owns hanzo.risk_dataset and
 	// hanzo.risk_row outright — those table names are store facts and stayed put
@@ -257,19 +257,19 @@ var Apps = []App{
 	// store. One package holding two tenancy models is the shape a privilege bug
 	// grows in, so they are two rows claiming two disjoint roots, and zip refuses
 	// two owners for one prefix at compose time.
-	{Name: "dataset", Prefixes: []string{"/v1/dataset"}, Stage: Beta},
+	{Name: "dataset", Prefixes: []string{"/v1/dataset"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	// It sat inside usage's prefix and answered under usage's name. The two are
 	// two capabilities — leaderboard keeps the opt-in store, usage keeps none —
 	// so it took its own name rather than folding into that one. The backfill is
 	// the SuperAdmin view of this capability and lives where those live.
 	{Name: "leaderboard", Prefixes: []string{"/v1/admin/leaderboard", "/v1/leaderboard"}},
-	{Name: "crm", Prefixes: []string{"/v1/crm"}, Stage: Beta},
-	{Name: "marketing", Prefixes: []string{"/v1/marketing"}, Stage: Beta},
-	{Name: "ads", Prefixes: []string{"/v1/ads"}, Stage: Beta},
-	{Name: "campaign", Prefixes: []string{"/v1/campaign"}, Stage: Beta},
-	{Name: "validators", Prefixes: []string{"/v1/validators"}, Stage: Beta},
-	{Name: "social", Prefixes: []string{"/v1/social"}, Stage: Beta},
+	{Name: "crm", Prefixes: []string{"/v1/crm"}},
+	{Name: "marketing", Prefixes: []string{"/v1/marketing"}},
+	{Name: "ads", Prefixes: []string{"/v1/ads"}},
+	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
+	{Name: "validators", Prefixes: []string{"/v1/validators"}},
+	{Name: "social", Prefixes: []string{"/v1/social"}},
 	// The INGESTION door is load-bearing, not decorative: apps/event/event.go's
 	// `doors` table serves /v1/event, and every beacon the products emit lands on it.
 	// Listing only the read endpoints (as this row did) sent every write to commerce's
@@ -307,7 +307,7 @@ var Apps = []App{
 	{Name: "git", Prefixes: []string{"/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/visor"}},
-	{Name: "captable", Prefixes: []string{"/v1/captable"}, Stage: Beta},
+	{Name: "captable", Prefixes: []string{"/v1/captable"}},
 	{Name: "code", Prefixes: []string{"/v1/code"}},
 	// lsp answers at its OWN root. code and lsp are two reads of one repository
 	// — code is the static index, lsp the live language server that resolves
@@ -335,10 +335,10 @@ var Apps = []App{
 	// is one of its nodes. ONE prefix now, and the /v1/<name> convention covers it,
 	// so plugin/network states no Prefixes at all.
 	{Name: "network", Prefixes: []string{"/v1/network"}},
-	{Name: "share", Prefixes: []string{"/v1/share"}, Stage: Beta},
-	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}, Stage: Beta},
-	{Name: "explorer", Prefixes: []string{"/v1/explorer"}, Stage: Beta},
-	{Name: "security", Prefixes: []string{"/v1/security"}, Stage: Beta},
+	{Name: "share", Prefixes: []string{"/v1/share"}},
+	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}},
+	{Name: "explorer", Prefixes: []string{"/v1/explorer"}},
+	{Name: "security", Prefixes: []string{"/v1/security"}},
 	{Name: "integrations", Prefixes: []string{"/v1/integrations"}},
 	// The browser tag config is served by the projects app, which holds both the
 	// handler and the project store it reads (apps/projects/tagdoor.go); it is under
@@ -346,7 +346,7 @@ var Apps = []App{
 	// exactly once — two apps claiming one panics the host build.
 	{Name: "destinations", Prefixes: []string{"/v1/destinations"}},
 	{Name: "cloudflare", Prefixes: []string{"/v1/cloudflare"}},
-	{Name: "sbom", Prefixes: []string{"/v1/sbom"}, Stage: Beta},
+	{Name: "sbom", Prefixes: []string{"/v1/sbom"}},
 	// The collaborator lanes — the Y.js WebSocket and the markup snapshot RPC — are
 	// branches of /v1/team now. They answered at a bare /collaborator, app-level
 	// because the Team front derives both from COLLABORATOR_URL rather than from the
@@ -361,7 +361,7 @@ var Apps = []App{
 	// there are three routes under it and the client reads two of them; naming
 	// each leaf was a list that had to be edited every time a route was added,
 	// and an unnamed leaf falls to whichever row holds the bare remainder.
-	{Name: "meet", Prefixes: []string{"/meet", "/v1/meet"}, Stage: Beta},
+	{Name: "meet", Prefixes: []string{"/meet", "/v1/meet"}},
 	{Name: "settings", Prefixes: []string{"/v1/settings"}},
 	{Name: "prefs", Prefixes: []string{"/v1/prefs"}},
 	{Name: "notify", Prefixes: []string{"/v1/notify"}},
@@ -380,19 +380,19 @@ var Apps = []App{
 	// Beside the two surfaces that read the web, because it measures the same web
 	// one layer up: websearch asks what a query returns, crawl reads one page, and
 	// seo asks what a phrase is worth and where a domain places for it.
-	{Name: "seo", Prefixes: []string{"/v1/seo"}, Stage: Beta},
+	{Name: "seo", Prefixes: []string{"/v1/seo"}},
 	{Name: "index", Prefixes: []string{"/v1/index"}},
 	{Name: "catalog", Prefixes: []string{"/v1/catalog"}},
 	// The product TAXONOMY — categories, tags and display order — beside catalog
 	// rather than inside it, and beside commerce rather than inside it. catalog is
 	// the deployed-sites corpus and commerce's `product` is a priced SKU; this is
 	// navigation copy, most of which is not purchasable and has no price.
-	{Name: "taxonomy", Prefixes: []string{"/v1/taxonomy"}, Stage: Beta},
-	{Name: "world", Prefixes: []string{"/v1/world"}, Stage: Beta},
+	{Name: "taxonomy", Prefixes: []string{"/v1/taxonomy"}},
+	{Name: "world", Prefixes: []string{"/v1/world"}},
 	// web3 is named for the domain and serves none of it under /v1/web3, so the
 	// /v1/<name> default would cover nothing it registers — the apps/plan defect.
 	// The three prefixes are its whole surface (chains, rpc, tokens).
-	{Name: "web3", Prefixes: []string{"/v1/web3"}, Stage: Beta},
+	{Name: "web3", Prefixes: []string{"/v1/web3"}},
 	// ONE ROW, because bot and bots were one capability wearing two names.
 	// HIP-0139 §2.4 refuses a pair differing only in number and keeps the singular,
 	// and §1 puts one capability in bijection with one package and one plugin — so
@@ -407,11 +407,11 @@ var Apps = []App{
 	// It was app.All("/v1/bot/*") in the other app, one specificity rule away from
 	// swallowing every sibling above; in one router that would have been a live
 	// hazard rather than a latent one.
-	{Name: "bot", Prefixes: []string{"/v1/bot"}, Stage: Beta},
-	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}, Stage: Beta},
+	{Name: "bot", Prefixes: []string{"/v1/bot"}},
+	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
-	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}, Stage: Beta},
-	{Name: "esign", Prefixes: []string{"/v1/esign"}, Stage: Beta},
+	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}},
+	{Name: "esign", Prefixes: []string{"/v1/esign"}},
 	// search is the QUERY surface — hybrid keyword+semantic over the org's own
 	// corpora at POST /v1/search — and, since product dissolved into the two
 	// capabilities that owned its roots, the Meilisearch inventory at
@@ -419,10 +419,10 @@ var Apps = []App{
 	// lives at /v1/provisioning/search.
 	{Name: "search", Prefixes: []string{"/v1/search"}},
 	{Name: "evals", Prefixes: []string{"/v1/evals"}},
-	{Name: "benchmark", Prefixes: []string{"/v1/benchmark"}, Stage: Beta},
-	{Name: "research", Prefixes: []string{"/v1/research"}, Stage: Beta},
-	{Name: "experiments", Prefixes: []string{"/v1/experiments"}, Stage: Beta},
-	{Name: "books", Prefixes: []string{"/v1/books/accounts", "/v1/books/ask", "/v1/books/bank/exchange", "/v1/books/bank/import", "/v1/books/bank/token", "/v1/books/bank/sync", "/v1/books/bank/transactions", "/v1/books/bank/unreconciled", "/v1/books/export", "/v1/books/gl", "/v1/books/inbox", "/v1/books/metrics", "/v1/books/pnl", "/v1/books/questions", "/v1/books/rules", "/v1/books/scan", "/v1/books/sync", "/v1/books/transactions", "/v1/books/position", "/v1/books/trial", "/v1/books/vendors"}, Stage: Beta},
+	{Name: "benchmark", Prefixes: []string{"/v1/benchmark"}},
+	{Name: "research", Prefixes: []string{"/v1/research"}},
+	{Name: "experiments", Prefixes: []string{"/v1/experiments"}},
+	{Name: "books", Prefixes: []string{"/v1/books/accounts", "/v1/books/ask", "/v1/books/bank/exchange", "/v1/books/bank/import", "/v1/books/bank/token", "/v1/books/bank/sync", "/v1/books/bank/transactions", "/v1/books/bank/unreconciled", "/v1/books/export", "/v1/books/gl", "/v1/books/inbox", "/v1/books/metrics", "/v1/books/pnl", "/v1/books/questions", "/v1/books/rules", "/v1/books/scan", "/v1/books/sync", "/v1/books/transactions", "/v1/books/position", "/v1/books/trial", "/v1/books/vendors"}},
 	{Name: "treasury", Prefixes: []string{"/v1/admin/treasury", "/v1/treasury"}},
 	{Name: "admin", Prefixes: []string{"/v1/admin"}},
 	{Name: "admission", Prefixes: []string{"/v1/admission"}},
@@ -452,14 +452,14 @@ var Apps = []App{
 	// splitting off an app that would share a store. The last fold vacates the
 	// /v1/mcp root entirely: that address is the host's agent door.
 	{Name: "tools", Prefixes: []string{"/v1/tools"}},
-	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}, Stage: Beta},
-	{Name: "referrals", Prefixes: []string{"/v1/admin/referrals/bonuses", "/v1/admin/referrals/sweep", "/v1/referrals"}, Stage: Beta},
-	{Name: "guide", Prefixes: []string{"/v1/guide"}, Stage: Beta},
-	{Name: "company", Prefixes: []string{"/v1/company"}, Stage: Beta},
-	{Name: "compliance", Prefixes: []string{"/v1/compliance"}, Stage: Beta},
-	{Name: "legal", Prefixes: []string{"/v1/legal"}, Stage: Beta},
+	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}},
+	{Name: "referrals", Prefixes: []string{"/v1/admin/referrals/bonuses", "/v1/admin/referrals/sweep", "/v1/referrals"}},
+	{Name: "guide", Prefixes: []string{"/v1/guide"}},
+	{Name: "company", Prefixes: []string{"/v1/company"}},
+	{Name: "compliance", Prefixes: []string{"/v1/compliance"}},
+	{Name: "legal", Prefixes: []string{"/v1/legal"}},
 	{Name: "ask", Prefixes: []string{"/v1/ask"}},
-	{Name: "translate", Prefixes: []string{"/v1/translate"}, Stage: Beta},
+	{Name: "translate", Prefixes: []string{"/v1/translate"}},
 	// ai owns the /v1 REMAINDER: the OpenAI-compatible surface
 	// (/v1/chat/completions, /v1/models, /v1/embeddings, /v1/responses,
 	// /v1/audio/*, /v1/messages, …) is served by ai's own /v1/* catch-all
