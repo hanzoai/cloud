@@ -29,9 +29,9 @@ func TestEventFamilyCarriesIngestOnly(t *testing.T) {
 		{http.MethodPost, "/v1/event", false},
 		// The FACE is not a door. Its reads carry a session, not a DSN key, so
 		// no spelling of them is admitted here.
-		{http.MethodPost, "/v1/sentinel/42/envelope/", false},
-		{http.MethodPost, "/v1/sentinel/discover", false},
-		{http.MethodGet, "/v1/sentinel/issues", false},
+		{http.MethodPost, "/v1/o11y/sentinel/42/envelope/", false},
+		{http.MethodPost, "/v1/o11y/sentinel/discover", false},
+		{http.MethodGet, "/v1/o11y/sentinel/issues", false},
 	}
 	for _, c := range cases {
 		if got := module.IngestWire(c.method, c.path); got != c.admit {

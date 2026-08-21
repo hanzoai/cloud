@@ -21,9 +21,6 @@
     },
     {
       "name": "o11y"
-    },
-    {
-      "name": "sentinel"
     }
   ],
   "paths": {
@@ -87,7 +84,7 @@
       "post": {
         "operationId": "post_o11y_api_by_project_id_envelope",
         "summary": "Receive a Sentry envelope on the SDK's own DSN path",
-        "description": "Accepts an application/x-sentry-envelope frame from a Sentry SDK — the batched wire format carrying events, sessions and attachments — and ingests it against the project named in the path.\n\nTHE /api/ SEGMENT IS NOT OURS TO NAME. An SDK appends its own fixed /api/\u003cproject\u003e/envelope/ suffix to whatever DSN it is given, so this address is the SDK's, received verbatim. We receive this shape; we do not publish it. The clean spelling of the same wire is /v1/sentinel/{project}/envelope/.\n\nAUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, and therefore exempt from the principal gate: the ingest verifier checks the key in constant time, fails closed, and derives the org from it. A keyless submission is a 401 from that verifier — not a 403 from the gate, and not a 404 — which is how you tell the hops apart. The exemption is matched by method plus prefix plus suffix, never a bare prefix, so no read is reachable through it.",
+        "description": "Accepts an application/x-sentry-envelope frame from a Sentry SDK — the batched wire format carrying events, sessions and attachments — and ingests it against the project named in the path.\n\nTHE /api/ SEGMENT IS NOT OURS TO NAME. An SDK appends its own fixed /api/\u003cproject\u003e/envelope/ suffix to whatever DSN it is given, so this address is the SDK's, received verbatim. We receive this shape; we do not publish it. The clean spelling of the same wire is /v1/event/{project}/envelope/.\n\nAUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, and therefore exempt from the principal gate: the ingest verifier checks the key in constant time, fails closed, and derives the org from it. A keyless submission is a 401 from that verifier — not a 403 from the gate, and not a 404 — which is how you tell the hops apart. The exemption is matched by method plus prefix plus suffix, never a bare prefix, so no read is reachable through it.",
         "tags": [
           "o11y"
         ],
@@ -9362,7 +9359,7 @@
       "get": {
         "operationId": "get_o11y_query_progress",
         "summary": "Watch one running query's progress",
-        "description": "Reports how far a submitted query has got — rows scanned, bytes read, elapsed — and HOLDS the connection until the next update rather than answering immediately.\n\nThe long poll is the whole point, and the reason this cannot be a typed operation: an answer that arrived only when the query finished would report progress on nothing. The websocket form of the same read is /ws/query_progress.\n\nA validated, org-scoped principal is required; a query id belonging to another tenant is simply not found.",
+        "description": "Reports how far a submitted query has got — rows scanned, bytes read, elapsed — and HOLDS the connection until the next update rather than answering immediately.\n\nONE ADDRESS, TWO PROTOCOLS. Send an Upgrade and this is a websocket carrying the same progress; send an ordinary GET and it is a long poll. The Upgrade is a property of the request, not of the address, so the read that used to answer at /ws/query_progress answers here.\n\nThe long poll is the whole point, and the reason this cannot be a typed operation: an answer that arrived only when the query finished would report progress on nothing, and an upgraded connection has no JSON response to declare.\n\nA validated, org-scoped principal is required; a query id belonging to another tenant is simply not found.",
         "tags": [
           "o11y"
         ],
@@ -11151,6 +11148,695 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/o11y.O11yRuleStateContributorsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/discover": {
+      "post": {
+        "operationId": "post_o11y_sentinel_discover",
+        "summary": "Aggregates a project's captured errors into a table — the caller names the filters, the groupings and the aggregations, and gets back the columns and rows they asked for.",
+        "description": "Aggregates a project's captured errors into a table — the caller\nnames the filters, the groupings and the aggregations, and gets back the\ncolumns and rows they asked for.\n\nThe project is mandatory and is checked against the caller's own org before it\nscopes anything, so a project id belonging to someone else reads as absent\nrather than as data.",
+        "tags": [
+          "o11y"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/o11y.O11yDiscoverIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11yDiscoverOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/events/{id}": {
+      "get": {
+        "operationId": "get_o11y_sentinel_events_by_id",
+        "summary": "Returns one captured error event of a project, by its id.",
+        "description": "Returns one captured error event of a project, by its id.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the event id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "description": "Project is the project the event belongs to, by its id. Required.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11ySentryEventOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/issues": {
+      "get": {
+        "operationId": "get_o11y_sentinel_issues",
+        "summary": "Lists the caller's org's grouped error issues, optionally narrowed to one project and one time window, and filtered by status, level, environment, service, a free-text query and a sort.",
+        "description": "Lists the caller's org's grouped error issues, optionally\nnarrowed to one project and one time window, and filtered by status, level,\nenvironment, service, a free-text query and a sort.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status narrows to one lifecycle state: unresolved, resolved or ignored.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "description": "Level narrows to one severity, e.g. error, warning, info.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "description": "Environment narrows to one deployment environment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "serviceName",
+            "in": "query",
+            "required": false,
+            "description": "ServiceName narrows to one reporting service.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Query narrows to issues whose text contains it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Sort orders the page, e.g. lastSeen, firstSeen, count.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "Offset is how many issues to skip. Zero starts at the first.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many issues come back. Zero means the default.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows the org's issues to one project, by its id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "Period is the window to read, relative to now — 1h, 24h, 7d, 14d, 30d.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11yErrorIssuesOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/issues/{id}": {
+      "get": {
+        "operationId": "get_o11y_sentinel_issues_by_id",
+        "summary": "Returns one grouped issue of the caller's org with its latest occurrence sample.",
+        "description": "Returns one grouped issue of the caller's org with its latest\noccurrence sample.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the issue id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11yErrorGettableIssueOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_o11y_sentinel_issues_by_id",
+        "summary": "Changes an issue's lifecycle — resolve, ignore, reopen or assign — and returns the updated issue.",
+        "description": "Changes an issue's lifecycle — resolve, ignore, reopen or\nassign — and returns the updated issue. Fields left unset are left unchanged.\n\nCallers need the editor role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the issue id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/o11y.O11ySentryUpdateIssueIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11yErrorIssueOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/issues/{id}/events": {
+      "get": {
+        "operationId": "get_o11y_sentinel_issues_by_id_events",
+        "summary": "Lists one issue's captured occurrences, scoped to a project — a project is an isolation unit, so the caller declares which project's occurrences to read.",
+        "description": "Lists one issue's captured occurrences, scoped to a project\n— a project is an isolation unit, so the caller declares which project's\noccurrences to read.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the issue id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "description": "Project is the project whose occurrences to read, by its id. Required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many occurrences come back. Zero means the default.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11ySentryIssueEventsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/logs": {
+      "get": {
+        "operationId": "get_o11y_sentinel_logs",
+        "summary": "Lists a project's captured error events, newest first, optionally narrowed to those whose message or exception text contains a search string.",
+        "description": "Lists a project's captured error events, newest first, optionally\nnarrowed to those whose message or exception text contains a search string.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "description": "Project is the project to read, as its id. Required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Query narrows the page to events whose text contains it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "Period is the window to read, relative to now — 1h, 24h, 7d, 14d, 30d.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many events come back.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11yLogsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/projects": {
+      "get": {
+        "operationId": "get_o11y_sentinel_projects",
+        "summary": "Lists the caller's org's Sentry projects, each with its freshly-derived DSN.",
+        "description": "Lists the caller's org's Sentry projects, each with its\nfreshly-derived DSN.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11ySentryProjectsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_o11y_sentinel_projects",
+        "summary": "Creates a Sentry project under the caller's org and returns it, DSN included.",
+        "description": "Creates a Sentry project under the caller's org and\nreturns it, DSN included. Only the name, and optionally a slug and platform,\nare the caller's to set; the org, id and key are server-assigned.\n\nCallers need the editor role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/o11y.O11ySentryPostableProject"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11ySentryProjectOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/projects/{id}": {
+      "delete": {
+        "operationId": "delete_o11y_sentinel_projects_by_id",
+        "summary": "Deletes one Sentry project of the caller's org.",
+        "description": "Deletes one Sentry project of the caller's org. Its DSN\nstops resolving immediately, so ingest for that id fails closed exactly as an\nunknown project does; retained events are not touched. Answers 204.\n\nCallers need the editor role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the project id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_o11y_sentinel_projects_by_id",
+        "summary": "Returns one Sentry project of the caller's org, DSN included.",
+        "description": "Returns one Sentry project of the caller's org, DSN included.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the project id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11ySentryProjectOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/projects/{id}/keys/rotate": {
+      "post": {
+        "operationId": "post_o11y_sentinel_projects_by_id_keys_rotate",
+        "summary": "Rotates a project's DSN key — bumping its rotation watermark so keys below it stop verifying — and returns the project with its new DSN.",
+        "description": "Rotates a project's DSN key — bumping its rotation\nwatermark so keys below it stop verifying — and returns the project with its\nnew DSN.\n\nCallers need the editor role; the runtime's own gate enforces it.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the project id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11ySentryProjectOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/stats": {
+      "get": {
+        "operationId": "get_o11y_sentinel_stats",
+        "summary": "Returns a project's event-rate timeseries: one bucket per interval over the requested period, counting the events in it.",
+        "description": "Returns a project's event-rate timeseries: one bucket per interval over\nthe requested period, counting the events in it.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "description": "Project is the project to read, as its id. Required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "field",
+            "in": "query",
+            "required": false,
+            "description": "Field is the dimension to count over. Empty counts all events.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "Period is the window to read, relative to now — 1h, 24h, 7d, 14d, 30d.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11yStatsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/traces": {
+      "get": {
+        "operationId": "get_o11y_sentinel_traces",
+        "summary": "Lists the traces a project's captured errors reference, each with how many errors landed on it, when they started and stopped, and the latest message seen — the entry point for \"which requests are failing\".",
+        "description": "Lists the traces a project's captured errors reference, each with how\nmany errors landed on it, when they started and stopped, and the latest\nmessage seen — the entry point for \"which requests are failing\".",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "description": "Project is the project to read, as its id. Required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "Period is the window to read, relative to now — 1h, 24h, 7d, 14d, 30d.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many traces come back.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11yTracesOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/o11y/sentinel/traces/{id}": {
+      "get": {
+        "operationId": "get_o11y_sentinel_traces_by_id",
+        "summary": "Returns one trace's captured errors for a project — every error event that carried the trace id, in the order the events plane holds them.",
+        "description": "Returns one trace's captured errors for a project — every error event\nthat carried the trace id, in the order the events plane holds them.",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the trace id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "description": "Project is the project the trace's errors belong to. Required.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.O11yTraceOut"
                 }
               }
             },
@@ -14769,794 +15455,6 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/sentinel/discover": {
-      "post": {
-        "operationId": "post_sentinel_discover",
-        "summary": "Aggregates a project's captured errors into a table — the caller names the filters, the groupings and the aggregations, and gets back the columns and rows they asked for.",
-        "description": "Aggregates a project's captured errors into a table — the caller\nnames the filters, the groupings and the aggregations, and gets back the\ncolumns and rows they asked for.\n\nThe project is mandatory and is checked against the caller's own org before it\nscopes anything, so a project id belonging to someone else reads as absent\nrather than as data.",
-        "tags": [
-          "sentinel"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/o11y.O11yDiscoverIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11yDiscoverOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/events/{id}": {
-      "get": {
-        "operationId": "get_sentinel_events_by_id",
-        "summary": "Returns one captured error event of a project, by its id.",
-        "description": "Returns one captured error event of a project, by its id.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the event id.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "project",
-            "in": "query",
-            "required": true,
-            "description": "Project is the project the event belongs to, by its id. Required.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11ySentryEventOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/issues": {
-      "get": {
-        "operationId": "get_sentinel_issues",
-        "summary": "Lists the caller's org's grouped error issues, optionally narrowed to one project and one time window, and filtered by status, level, environment, service, a free-text query and a sort.",
-        "description": "Lists the caller's org's grouped error issues, optionally\nnarrowed to one project and one time window, and filtered by status, level,\nenvironment, service, a free-text query and a sort.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "description": "Status narrows to one lifecycle state: unresolved, resolved or ignored.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "level",
-            "in": "query",
-            "required": false,
-            "description": "Level narrows to one severity, e.g. error, warning, info.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "environment",
-            "in": "query",
-            "required": false,
-            "description": "Environment narrows to one deployment environment.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "serviceName",
-            "in": "query",
-            "required": false,
-            "description": "ServiceName narrows to one reporting service.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "query",
-            "in": "query",
-            "required": false,
-            "description": "Query narrows to issues whose text contains it.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "description": "Sort orders the page, e.g. lastSeen, firstSeen, count.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "description": "Offset is how many issues to skip. Zero starts at the first.",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Limit caps how many issues come back. Zero means the default.",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "project",
-            "in": "query",
-            "required": false,
-            "description": "Project narrows the org's issues to one project, by its id.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "period",
-            "in": "query",
-            "required": false,
-            "description": "Period is the window to read, relative to now — 1h, 24h, 7d, 14d, 30d.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11yErrorIssuesOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/issues/{id}": {
-      "get": {
-        "operationId": "get_sentinel_issues_by_id",
-        "summary": "Returns one grouped issue of the caller's org with its latest occurrence sample.",
-        "description": "Returns one grouped issue of the caller's org with its latest\noccurrence sample.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the issue id.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11yErrorGettableIssueOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      },
-      "put": {
-        "operationId": "put_sentinel_issues_by_id",
-        "summary": "Changes an issue's lifecycle — resolve, ignore, reopen or assign — and returns the updated issue.",
-        "description": "Changes an issue's lifecycle — resolve, ignore, reopen or\nassign — and returns the updated issue. Fields left unset are left unchanged.\n\nCallers need the editor role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the issue id.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/o11y.O11ySentryUpdateIssueIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11yErrorIssueOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/issues/{id}/events": {
-      "get": {
-        "operationId": "get_sentinel_issues_by_id_events",
-        "summary": "Lists one issue's captured occurrences, scoped to a project — a project is an isolation unit, so the caller declares which project's occurrences to read.",
-        "description": "Lists one issue's captured occurrences, scoped to a project\n— a project is an isolation unit, so the caller declares which project's\noccurrences to read.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the issue id.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "project",
-            "in": "query",
-            "required": true,
-            "description": "Project is the project whose occurrences to read, by its id. Required.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Limit caps how many occurrences come back. Zero means the default.",
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11ySentryIssueEventsOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/logs": {
-      "get": {
-        "operationId": "get_sentinel_logs",
-        "summary": "Lists a project's captured error events, newest first, optionally narrowed to those whose message or exception text contains a search string.",
-        "description": "Lists a project's captured error events, newest first, optionally\nnarrowed to those whose message or exception text contains a search string.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "project",
-            "in": "query",
-            "required": true,
-            "description": "Project is the project to read, as its id. Required.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "query",
-            "in": "query",
-            "required": false,
-            "description": "Query narrows the page to events whose text contains it.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "period",
-            "in": "query",
-            "required": false,
-            "description": "Period is the window to read, relative to now — 1h, 24h, 7d, 14d, 30d.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Limit caps how many events come back.",
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11yLogsOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/projects": {
-      "get": {
-        "operationId": "get_sentinel_projects",
-        "summary": "Lists the caller's org's Sentry projects, each with its freshly-derived DSN.",
-        "description": "Lists the caller's org's Sentry projects, each with its\nfreshly-derived DSN.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11ySentryProjectsOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      },
-      "post": {
-        "operationId": "post_sentinel_projects",
-        "summary": "Creates a Sentry project under the caller's org and returns it, DSN included.",
-        "description": "Creates a Sentry project under the caller's org and\nreturns it, DSN included. Only the name, and optionally a slug and platform,\nare the caller's to set; the org, id and key are server-assigned.\n\nCallers need the editor role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/o11y.O11ySentryPostableProject"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11ySentryProjectOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/projects/{id}": {
-      "delete": {
-        "operationId": "delete_sentinel_projects_by_id",
-        "summary": "Deletes one Sentry project of the caller's org.",
-        "description": "Deletes one Sentry project of the caller's org. Its DSN\nstops resolving immediately, so ingest for that id fails closed exactly as an\nunknown project does; retained events are not touched. Answers 204.\n\nCallers need the editor role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the project id.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "no content"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      },
-      "get": {
-        "operationId": "get_sentinel_projects_by_id",
-        "summary": "Returns one Sentry project of the caller's org, DSN included.",
-        "description": "Returns one Sentry project of the caller's org, DSN included.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the project id.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11ySentryProjectOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/projects/{id}/keys/rotate": {
-      "post": {
-        "operationId": "post_sentinel_projects_by_id_keys_rotate",
-        "summary": "Rotates a project's DSN key — bumping its rotation watermark so keys below it stop verifying — and returns the project with its new DSN.",
-        "description": "Rotates a project's DSN key — bumping its rotation\nwatermark so keys below it stop verifying — and returns the project with its\nnew DSN.\n\nCallers need the editor role; the runtime's own gate enforces it.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the project id.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11ySentryProjectOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/stats": {
-      "get": {
-        "operationId": "get_sentinel_stats",
-        "summary": "Returns a project's event-rate timeseries: one bucket per interval over the requested period, counting the events in it.",
-        "description": "Returns a project's event-rate timeseries: one bucket per interval over\nthe requested period, counting the events in it.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "project",
-            "in": "query",
-            "required": true,
-            "description": "Project is the project to read, as its id. Required.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "field",
-            "in": "query",
-            "required": false,
-            "description": "Field is the dimension to count over. Empty counts all events.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "period",
-            "in": "query",
-            "required": false,
-            "description": "Period is the window to read, relative to now — 1h, 24h, 7d, 14d, 30d.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11yStatsOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/traces": {
-      "get": {
-        "operationId": "get_sentinel_traces",
-        "summary": "Lists the traces a project's captured errors reference, each with how many errors landed on it, when they started and stopped, and the latest message seen — the entry point for \"which requests are failing\".",
-        "description": "Lists the traces a project's captured errors reference, each with how\nmany errors landed on it, when they started and stopped, and the latest\nmessage seen — the entry point for \"which requests are failing\".",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "project",
-            "in": "query",
-            "required": true,
-            "description": "Project is the project to read, as its id. Required.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "period",
-            "in": "query",
-            "required": false,
-            "description": "Period is the window to read, relative to now — 1h, 24h, 7d, 14d, 30d.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "description": "Limit caps how many traces come back.",
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11yTracesOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/traces/{id}": {
-      "get": {
-        "operationId": "get_sentinel_traces_by_id",
-        "summary": "Returns one trace's captured errors for a project — every error event that carried the trace id, in the order the events plane holds them.",
-        "description": "Returns one trace's captured errors for a project — every error event\nthat carried the trace id, in the order the events plane holds them.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "ID is the trace id.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "project",
-            "in": "query",
-            "required": true,
-            "description": "Project is the project the trace's errors belong to. Required.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/o11y.O11yTraceOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/sentinel/{wildcard1}": {
-      "delete": {
-        "operationId": "delete_sentinel_by_wildcard1",
-        "summary": "Delete a Sentry project",
-        "description": "The one delete on the Sentry surface: removing a PROJECT, answering 204. Error issues, events and traces are not individually deletable — they are append-only telemetry, and their lifetime is retention's business, not an API call's.\n\nRequires a validated, org-scoped principal with edit rights; a viewer is refused. The delete is confined to the org minted from that principal's claim, so a project id belonging to another tenant is not found rather than removed. Deleting a project retires the DSN that fed it, so any SDK still pointed at that key stops being accepted. Before the runtime is initialized, 503.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "get": {
-        "operationId": "get_sentinel_by_wildcard1",
-        "summary": "Read the caller org's errors on the Sentry surface",
-        "description": "Serves the Sentry-compatible read surface — projects, error issues and one issue's occurrences, a single event, error logs, error-correlated traces and one trace's waterfall, and the event-rate stats — so a Sentry client or the error console reads its errors at the paths it already speaks.\n\nIt is the SAME runtime the observability surface serves, reached under a second path family, and there is NO rewrite: the runtime carries these routes literally. That is what makes this a product face rather than a translation layer. One runtime, two path families.\n\nA validated principal is required and the read is scoped to that principal's own org. Errors are a tenant's OWN data, so org membership is the whole admission test and there is deliberately no admin term on it — gating the product on platform sudo would make the only way to see your own errors a scope that shows you everyone's. Before the runtime is initialized, 503.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "patch": {
-        "operationId": "patch_sentinel_by_wildcard1",
-        "summary": "Not served — the Sentry surface has no partial update",
-        "description": "The Sentry face carries NO route for a partial update. The wildcard admits every method, so this operation exists as an address, but nothing behind it answers and a request lands on the runtime as an unrouted path.\n\nIt is documented rather than silently omitted because the useful thing to say is where to go instead: an issue's lifecycle — resolve, ignore, assign — is a REPLACE on that issue, not a patch, and it is the only mutable state on this surface. A client that reaches for a partial update here is looking for that call.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "post": {
-        "operationId": "post_sentinel_by_wildcard1",
-        "summary": "Send events to the Sentry surface, or write on it",
-        "description": "Carries every write on the Sentry-compatible surface: the SDK's error ingest, and the authenticated writes the console makes — creating a project, rotating a project's DSN key, and running a discover query over the events plane.\n\nTHE TWO ARE AUTHENTICATED DIFFERENTLY, and that is the rule to get right. An envelope or store submission presents a DSN public key, never a Hanzo session, so it is exempt from the principal gate and verified by the ingest key check instead — which derives the org from the DSN and fails closed. A keyless submission is a 401 from that verifier, not a 403 from the gate, and telling those two apart is how you tell the hops apart. Every other write here needs a validated, org-scoped principal, and creating or rotating requires an editor rather than a viewer.\n\nThe ingest exemption is matched by method plus prefix plus suffix, never a bare prefix, and the project segment must be a UUID — so no read is reachable through it. Before the runtime is initialized, 503.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "put": {
-        "operationId": "put_sentinel_by_wildcard1",
-        "summary": "Move an error issue through its lifecycle",
-        "description": "The one replace on the Sentry surface: updating an error ISSUE — resolving it, ignoring it, or assigning it — and answering the updated issue.\n\nNothing else here takes a replace. A project is created and deleted but never replaced, and the event and trace planes are append-only telemetry, so an issue's lifecycle is the only mutable state this face exposes.\n\nRequires a validated, org-scoped principal with edit rights; a viewer is refused. The write is confined to the org minted from that principal's claim, so an issue id belonging to another tenant is simply not found. Before the runtime is initialized, 503.",
-        "tags": [
-          "sentinel"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
-    "/ws/query_progress": {
-      "get": {
-        "operationId": "get_ws_query_progress",
-        "summary": "Watch one running query's progress over a websocket",
-        "description": "The same progress read as /v1/o11y/query_progress, delivered over a websocket: the Upgrade IS the contract, so there is no JSON response to declare and no typed operation to make of it.\n\nIt sits outside /v1/o11y on purpose — the upgrade handshake is a transport concern, not a resource — and it was unreachable from the composed binary until the route table named it, because the old wildcard covered only the o11y prefix.\n\nA validated, org-scoped principal is required."
       }
     }
   },

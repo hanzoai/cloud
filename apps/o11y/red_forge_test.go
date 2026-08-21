@@ -204,13 +204,13 @@ func TestGateExemptsSentryIngestButGatesReads(t *testing.T) {
 	// These MUST stay gated (403) with no principal — the exemption must not leak.
 	type gc struct{ method, path string }
 	for _, c := range []gc{
-		{http.MethodGet, "/v1/sentinel/issues"},                                         // Issues LIST (read)
-		{http.MethodGet, "/v1/sentinel/projects"},                                       // Projects LIST (read)
-		{http.MethodPost, "/v1/sentinel/projects"},                                      // Project CREATE (write, not ingest)
-		{http.MethodPost, "/v1/sentinel/discover"},                                      // Discover (read query, not ingest suffix)
-		{http.MethodGet, "/v1/sentinel/logs"},                                           // Logs (read)
-		{http.MethodGet, "/v1/sentinel/traces"},                                         // Traces (read)
-		{http.MethodGet, "/v1/sentinel/stats"},                                          // Stats (read)
+		{http.MethodGet, "/v1/o11y/sentinel/issues"},                                         // Issues LIST (read)
+		{http.MethodGet, "/v1/o11y/sentinel/projects"},                                       // Projects LIST (read)
+		{http.MethodPost, "/v1/o11y/sentinel/projects"},                                      // Project CREATE (write, not ingest)
+		{http.MethodPost, "/v1/o11y/sentinel/discover"},                                      // Discover (read query, not ingest suffix)
+		{http.MethodGet, "/v1/o11y/sentinel/logs"},                                           // Logs (read)
+		{http.MethodGet, "/v1/o11y/sentinel/traces"},                                         // Traces (read)
+		{http.MethodGet, "/v1/o11y/sentinel/stats"},                                          // Stats (read)
 		{http.MethodGet, "/v1/event/00000000-0000-0000-0000-000000000000/envelope/"}, // ingest is POST-only
 	} {
 		reached.Store(false)

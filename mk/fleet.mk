@@ -54,7 +54,7 @@ DIST := $(ROOT)/dist
 PLATFORMS ?= linux/amd64 linux/arm64
 
 # Three apps in the manifest have a plugin/<app> here and no source directory: they
-# are external modules (hanzoai/authz, hanzoai/licensing, hanzoai/metrics) wired
+# are external modules (hanzoai/authz, hanzoai/licensing, hanzoai/o11y/metrics) wired
 # into apps.Wire() by import. There is nothing for a per-app Makefile to sit
 # beside, so they are named here and run through the SAME mk/plugin.mk recipe by
 # name instead of by location. When those repos publish their own documents this
