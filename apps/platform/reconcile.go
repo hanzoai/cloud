@@ -64,13 +64,13 @@ func runBuildReconciler(s *cloud.Service[state], ctx context.Context) {
 
 // reconcileDirectBuilds records the outcome of builds that have no deployment.
 //
-// A build made through POST /v1/runner is not attached to a Deployment, and
+// A build made through POST /v1/platform/runner is not attached to a Deployment, and
 // reconcileBuild returns early for anything whose Source is not "git" — so
 // nothing advanced these rows and every one of them stayed "queued" for the life
 // of the row, whether its Job had pushed an image, failed, or never been
 // scheduled at all.
 //
-// The cost was not cosmetic. GET /v1/builds could not answer the only question it
+// The cost was not cosmetic. GET /v1/platform/builds could not answer the only question it
 // is asked, because a build that SUCCEEDED and a build that could not be
 // scheduled read identically. Six builds sat unschedulable for five days looking
 // exactly like six in flight, which is why nobody saw it. This closes that: the

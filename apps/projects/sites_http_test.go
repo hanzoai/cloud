@@ -1,6 +1,6 @@
 package projects
 
-// End-to-end tests for the /v1/sites surface, driven over HTTP through the REAL
+// End-to-end tests for the /v1/projects/sites surface, driven over HTTP through the REAL
 // Mount + zip stack against an in-memory S3 double (fakeS3) and an in-memory
 // commerce double (billServer). They prove the security + billing contract of the
 // deploy_site capability: org 403, hosting 402/503 fail-closed BEFORE any work,
@@ -116,7 +116,7 @@ func okManifest() string {
 	})
 }
 
-// TestSites_NoPrincipal_403: POST /v1/sites with no validated principal (no
+// TestSites_NoPrincipal_403: POST /v1/projects/sites with no validated principal (no
 // X-User-Id) is refused 403 — the tenant boundary precedes generation, S3, and
 // billing. Nothing is generated, uploaded, or debited.
 func TestSites_NoPrincipal_403(t *testing.T) {
@@ -125,7 +125,7 @@ func TestSites_NoPrincipal_403(t *testing.T) {
 	ai := &fakeAI{content: okManifest()}
 	app := mountSites(t, ai, bs.start(t))
 
-	code, _ := doSite(t, app, http.MethodPost, "/v1/sites", "", map[string]any{"brief": "hi"})
+	code, _ := doSite(t, app, http.MethodPost, "/v1/projects/sites", "", map[string]any{"brief": "hi"})
 	if code != http.StatusForbidden {
 		t.Fatalf("no-principal want 403, got %d", code)
 	}
@@ -148,7 +148,7 @@ func TestSites_UnfundedGate_402(t *testing.T) {
 	ai := &fakeAI{content: okManifest()}
 	app := mountSites(t, ai, bs.start(t))
 
-	code, body := doSite(t, app, http.MethodPost, "/v1/sites", "acme", map[string]any{"brief": "a shop"})
+	code, body := doSite(t, app, http.MethodPost, "/v1/projects/sites", "acme", map[string]any{"brief": "a shop"})
 	if code != http.StatusPaymentRequired {
 		t.Fatalf("unfunded want 402, got %d (%s)", code, body)
 	}
@@ -170,7 +170,7 @@ func TestSites_FailClosedCommerce_503(t *testing.T) {
 	ai := &fakeAI{content: okManifest()}
 	app := mountSites(t, ai, "http://127.0.0.1:1") // dead commerce
 
-	code, body := doSite(t, app, http.MethodPost, "/v1/sites", "acme", map[string]any{"brief": "x"})
+	code, body := doSite(t, app, http.MethodPost, "/v1/projects/sites", "acme", map[string]any{"brief": "x"})
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("unreachable commerce want 503, got %d (%s)", code, body)
 	}
@@ -186,7 +186,7 @@ func TestSites_AINotConfigured_503(t *testing.T) {
 	bs := &billServer{available: 100000}
 	app := mountSites(t, nil, bs.start(t)) // nil AI
 
-	code, _ := doSite(t, app, http.MethodPost, "/v1/sites", "acme", map[string]any{"brief": "x"})
+	code, _ := doSite(t, app, http.MethodPost, "/v1/projects/sites", "acme", map[string]any{"brief": "x"})
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("nil AI want 503, got %d", code)
 	}
@@ -204,7 +204,7 @@ func TestBuildSite_MetersOnce(t *testing.T) {
 	ai := &fakeAI{content: okManifest()}
 	app := mountSites(t, ai, bs.start(t))
 
-	code, body := doSite(t, app, http.MethodPost, "/v1/sites", "acme",
+	code, body := doSite(t, app, http.MethodPost, "/v1/projects/sites", "acme",
 		map[string]any{"brief": "a landing page", "slug": "shop"})
 	if code != http.StatusOK {
 		t.Fatalf("funded build want 200, got %d (%s)", code, body)
@@ -268,7 +268,7 @@ func TestFailedDeploy_NotBilled(t *testing.T) {
 	ai := &fakeAI{content: okManifest()}
 	app := mountSites(t, ai, bs.start(t))
 
-	code, body := doSite(t, app, http.MethodPost, "/v1/sites", "acme", map[string]any{"brief": "x", "slug": "brokensite"})
+	code, body := doSite(t, app, http.MethodPost, "/v1/projects/sites", "acme", map[string]any{"brief": "x", "slug": "brokensite"})
 	if code != http.StatusBadGateway {
 		t.Fatalf("failed upload want 502, got %d (%s)", code, body)
 	}
@@ -320,14 +320,14 @@ func TestIdempotentRedeploy(t *testing.T) {
 	}
 }
 
-// TestDeploySiteFiles_JSONPath: POST /v1/sites/deploy with a raw file manifest
+// TestDeploySiteFiles_JSONPath: POST /v1/projects/sites/deploy with a raw file manifest
 // deploys and returns the pretty URL, and injects the viewport guarantee.
 func TestDeploySiteFiles_JSONPath(t *testing.T) {
 	f := startFakeS3(t)
 	bs := &billServer{available: 100000}
 	app := mountSites(t, &fakeAI{}, bs.start(t))
 
-	code, body := doSite(t, app, http.MethodPost, "/v1/sites/deploy", "acme", map[string]any{
+	code, body := doSite(t, app, http.MethodPost, "/v1/projects/sites/deploy", "acme", map[string]any{
 		"slug": "raw",
 		"name": "Raw Site",
 		"files": []map[string]string{
@@ -365,7 +365,7 @@ func TestListSites(t *testing.T) {
 	deployVia(t, app, "acme", "one")
 	deployVia(t, app, "other", "two") // different tenant
 
-	code, body := doSite(t, app, http.MethodGet, "/v1/sites", "acme", nil)
+	code, body := doSite(t, app, http.MethodGet, "/v1/projects/sites", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d", code)
 	}
@@ -385,7 +385,7 @@ func TestListSites(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed draft: %v", err)
 	}
-	_, body2 := doSite(t, app, http.MethodGet, "/v1/sites", "acme", nil)
+	_, body2 := doSite(t, app, http.MethodGet, "/v1/projects/sites", "acme", nil)
 	var sites2 []projectsSite
 	mustJSON(t, body2, &sites2)
 	if len(sites2) != 1 {
@@ -406,7 +406,7 @@ func (o *capturingObserver) OnDeploy(_ context.Context, org, slug, url, deployme
 	o.mu.Unlock()
 }
 
-// TestDeployObserver: the session-event seam fires exactly once per /v1/sites
+// TestDeployObserver: the session-event seam fires exactly once per /v1/projects/sites
 // deploy with the canonical org/slug/url/deploymentId, and clearing it (nil) makes
 // notifyDeploy a safe no-op.
 func TestDeployObserver(t *testing.T) {
@@ -443,7 +443,7 @@ func TestDeployObserver(t *testing.T) {
 // deployVia deploys a generated site for org+slug and returns the live URL.
 func deployVia(t *testing.T, app *zip.App, org, slug string) string {
 	t.Helper()
-	code, body := doSite(t, app, http.MethodPost, "/v1/sites", org, map[string]any{"brief": "b", "slug": slug})
+	code, body := doSite(t, app, http.MethodPost, "/v1/projects/sites", org, map[string]any{"brief": "b", "slug": slug})
 	if code != http.StatusOK {
 		t.Fatalf("deploy %s/%s want 200, got %d (%s)", org, slug, code, body)
 	}
@@ -464,7 +464,7 @@ func bytesContains(hay, needle string) bool { return bytes.Contains([]byte(hay),
 // TestSites_GetSite: one site, by slug.
 //
 // Every sub-resource under a site already answered — deployments, releases,
-// publish — and the site itself did not, so `GET /v1/sites/<slug>` returned 404
+// publish — and the site itself did not, so `GET /v1/projects/sites/<slug>` returned 404
 // for a LIVE site exactly as for one that never existed. A client could not tell
 // "not yet" from "not a route", and the one call a CI lane makes to watch for
 // its own publish could only ever say no.
@@ -476,19 +476,19 @@ func TestSites_GetSite(t *testing.T) {
 	_ = f
 
 	// A slug nobody has published is honestly absent.
-	code, _ := doSite(t, app, http.MethodGet, "/v1/sites/nothing-here", "acme", nil)
+	code, _ := doSite(t, app, http.MethodGet, "/v1/projects/sites/nothing-here", "acme", nil)
 	if code != http.StatusNotFound {
 		t.Fatalf("absent site want 404, got %d", code)
 	}
 
 	// Build one, then read it back at its own address.
-	code, body := doSite(t, app, http.MethodPost, "/v1/sites", "acme",
+	code, body := doSite(t, app, http.MethodPost, "/v1/projects/sites", "acme",
 		map[string]any{"brief": "hi", "slug": "shop"})
 	if code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("build want 2xx, got %d: %s", code, body)
 	}
 
-	code, body = doSite(t, app, http.MethodGet, "/v1/sites/shop", "acme", nil)
+	code, body = doSite(t, app, http.MethodGet, "/v1/projects/sites/shop", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("live site want 200, got %d: %s", code, body)
 	}
@@ -510,13 +510,13 @@ func TestSites_GetSite(t *testing.T) {
 
 	// The org comes from the validated principal, never the path: another
 	// tenant's identically-named site is a 404, not someone else's row.
-	code, _ = doSite(t, app, http.MethodGet, "/v1/sites/shop", "evil", nil)
+	code, _ = doSite(t, app, http.MethodGet, "/v1/projects/sites/shop", "evil", nil)
 	if code != http.StatusNotFound {
 		t.Fatalf("cross-tenant read want 404, got %d", code)
 	}
 
 	// No principal at all is refused before any lookup.
-	code, _ = doSite(t, app, http.MethodGet, "/v1/sites/shop", "", nil)
+	code, _ = doSite(t, app, http.MethodGet, "/v1/projects/sites/shop", "", nil)
 	if code != http.StatusForbidden {
 		t.Fatalf("no-principal want 403, got %d", code)
 	}

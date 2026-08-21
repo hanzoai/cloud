@@ -12,8 +12,10 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// tagdoor.go — GET /v1/tags, the PUBLIC per-site browser-tag config the hosted tag
-// (track.js / /v1/event.js) fetches to know which client-side pixels to inject.
+// tagdoor.go — GET /v1/projects/tags, the PUBLIC per-site browser-tag config the
+// hosted tag (track.js / /v1/event.js) fetches to know which client-side pixels to
+// inject. Under /v1/projects because the door follows the store it reads, which is
+// this app's (HIP-0139 §3.1).
 //
 // It lives HERE, in the projects app, because a project IS a site and carries its own
 // Project.Tags — and this is the process that OWNS the project store. (It first lived in
@@ -47,8 +49,8 @@ type tagConfig struct {
 }
 
 func init() {
-	openapi.Register("/v1/tags", http.MethodGet, nil, tagConfig{})
-	openapi.Describe("/v1/tags", http.MethodGet,
+	openapi.Register("/v1/projects/tags", http.MethodGet, nil, tagConfig{})
+	openapi.Describe("/v1/projects/tags", http.MethodGet,
 		"The site's browser tag set for the hosted tag — which pixels to inject, by publishable key",
 		"Returns the client-side pixels the SITE has connected (GA/Meta/TikTok/X) with their "+
 			"NON-SECRET ids, so the hosted tag injects them first-party and stamps each browser event "+
@@ -58,10 +60,10 @@ func init() {
 			"site it answers an empty set at 200 — a page never breaks on its tag config.")
 }
 
-// mountTagDoor registers GET /v1/tags as a public, raw net/http handler (like analytics'
-// /v1/event.js) that reads THIS process's project store directly.
+// mountTagDoor registers GET /v1/projects/tags as a public, raw net/http handler
+// (like analytics' /v1/event.js) that reads THIS process's project store directly.
 func mountTagDoor(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/tags", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	app.Get("/v1/projects/tags", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveTags(s, w, r)
 	})))
 }
