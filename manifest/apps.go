@@ -140,24 +140,23 @@ var Apps = []App{
 	// a caller may burn their OWN money; allowance bounds how much of OUR compute a
 	// caller with no money may take. Sibling questions, one row each.
 	{Name: "allowance", Prefixes: []string{"/v1/allowance"}},
-	// /v1/platform/apps is the DELIVERY surface — declarations in universe git
-	// reconciled by cd.hanzo.ai — and /v1/platform/cd is what that plane did with
-	// them. Both are deeper than nothing this row already holds, and neither
-	// collides with projects' /v1/platform/sites below: the router resolves nested
-	// static prefixes by specificity, so the three /v1/platform families reach the
-	// two apps that serve them regardless of order. /v1/platform/ci is named here
-	// though it answers 501 — an address the fleet publishes and routes nowhere is
-	// the defect this table exists to prevent, and a 501 that names what is missing
-	// is a better answer than commerce's bare-"/v1" 404.
+	// ONE PREFIX, because every route this app serves is now under it (HIP-0139
+	// §3.1). It used to name six families of /v1/platform beside seven flat roots —
+	// /v1/builds, /v1/environments, /v1/pipelines, /v1/releases, /v1/run, /v1/runner
+	// and /v1/git-webhook — and the six were spelled out only because projects held
+	// /v1/platform/sites and the two rows had to be separated by specificity.
+	// projects no longer claims anything under here, so the subtree has one owner
+	// and the row says so once. /v1/platform/ci answers 501 and is covered by this
+	// prefix like any other leaf: an address the fleet publishes and routes nowhere
+	// is the defect this table exists to prevent, and a 501 that names what is
+	// missing is a better answer than commerce's bare-"/v1" 404.
 	//
-	// /v1/git-webhook is where the FORGE delivers a push (apps/platform hook.go).
+	// /v1/platform/hook is where the FORGE delivers a push (apps/platform hook.go).
 	// It is platform's because the deploy trigger is: the door that used to take
 	// these deliveries was in git's process, where that trigger is nil, so it
-	// answered every push 204 and built nothing. It is a sibling of git's row and
-	// not a child — a prefix claims a path and its subtree, so "/v1/git" holds
-	// /v1/git and /v1/git/*, and /v1/git-webhook is neither.
-	{Name: "platform", Prefixes: []string{"/v1/builds", "/v1/environments", "/v1/git-webhook", "/v1/pipelines", "/v1/platform/apps", "/v1/platform/cd", "/v1/platform/ci", "/v1/platform/fleet", "/v1/platform/health", "/v1/platform/projects", "/v1/releases", "/v1/run", "/v1/runner"}},
-	{Name: "projects", Prefixes: []string{"/v1/edge", "/v1/platform/sites", "/v1/projects", "/v1/sites", "/v1/tags"}},
+	// answered every push 204 and built nothing.
+	{Name: "platform", Prefixes: []string{"/v1/platform"}},
+	{Name: "projects", Prefixes: []string{"/v1/projects"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
 	{Name: "prompts", Prefixes: []string{"/v1/prompts"}},
@@ -337,9 +336,10 @@ var Apps = []App{
 	{Name: "explorer", Prefixes: []string{"/v1/indexers", "/v1/oracles"}, Stage: Beta},
 	{Name: "security", Prefixes: []string{"/v1/security"}, Stage: Beta},
 	{Name: "integrations", Prefixes: []string{"/v1/connectors", "/v1/integrations"}},
-	// /v1/tags is owned by the projects app, which holds both the handler and the
-	// project store it reads (see the projects entry above and apps/projects/tagdoor.go).
-	// It must be claimed exactly once — two apps claiming it panics the host build.
+	// The browser tag config is served by the projects app, which holds both the
+	// handler and the project store it reads (apps/projects/tagdoor.go); it is under
+	// that app's prefix, so this row does not name it. A prefix must be claimed
+	// exactly once — two apps claiming one panics the host build.
 	{Name: "destinations", Prefixes: []string{"/v1/destinations"}},
 	{Name: "cloudflare", Prefixes: []string{"/v1/cloudflare"}},
 	{Name: "sbom", Prefixes: []string{"/v1/sbom"}, Stage: Beta},

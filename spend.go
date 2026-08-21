@@ -262,7 +262,8 @@ var inference = map[string]bool{
 //     routes it at /v1/{datastore,docdb,kv,s3,search,sql,vector} instead, so
 //     vector, sql, kv, docdb, search and datastore creates — the EXACT set the
 //     non-LLM billing gap was opened for — were not billable paths at all.
-//   - projects answers /v1/sites and /v1/platform/sites, not only /v1/projects.
+//   - projects answered /v1/sites and /v1/platform/sites beside /v1/projects; it
+//     owns one prefix now, and the list is that prefix.
 //   - venue answers /v1/cloud. It was absent entirely.
 //   - tools answers /v1/skills, /v1/plugins and /v1/mcp/servers beside /v1/tools.
 //

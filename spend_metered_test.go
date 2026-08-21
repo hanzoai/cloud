@@ -21,7 +21,7 @@ import (
 //
 //	provisioning  routed at /v1/{datastore,docdb,kv,search,sql,vector} — the list
 //	              said "/v1/provisioning/", a path nothing answers.
-//	projects      answers /v1/sites; only /v1/projects was listed.
+//	projects      answered /v1/sites; only /v1/projects was listed.
 //	venue         answers /v1/cloud; absent entirely.
 //	tools         answers /v1/skills, /v1/plugins, /v1/mcp/servers beside /v1/tools.
 //	ask auto automations content flow platform todo translate — missing outright.

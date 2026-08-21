@@ -1,7 +1,7 @@
-// artifact.go — the ARTIFACT lane of POST /v1/runner: build a project and
+// artifact.go — the ARTIFACT lane of POST /v1/platform/runner: build a project and
 // publish what it produced, when what it produced is not a container image.
 //
-// /v1/runner could build exactly one shape — a Dockerfile → an image pushed to a
+// /v1/platform/runner could build exactly one shape — a Dockerfile → an image pushed to a
 // registry (runner.go → launchDirectBuild). Everything else a repo can produce —
 // a Go binary, a Rust binary, an npm tarball, a wheel — had no in-cluster build
 // path at all, so the platform's answer to "build my project" was "write a
