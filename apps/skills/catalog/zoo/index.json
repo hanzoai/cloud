@@ -4,7 +4,6 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
-  "scope": "master",
   "skill_count": 676,
   "skills": [
     {
