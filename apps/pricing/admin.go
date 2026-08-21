@@ -2,10 +2,10 @@ package pricing
 
 // Admin surface for the catalog enablement overlay (SuperAdmin only).
 //
-//	GET   /v1/admin/catalog                     full catalog + every entry's state
-//	PATCH /v1/admin/catalog/models/*            upsert one model overlay (id may
+//	GET   /v1/admin/pricing/catalog                     full catalog + every entry's state
+//	PATCH /v1/admin/pricing/catalog/models/*            upsert one model overlay (id may
 //	                                            contain '/', e.g. anthropic/x)
-//	PATCH /v1/admin/catalog/providers/:name     upsert one provider overlay
+//	PATCH /v1/admin/pricing/catalog/providers/:name     upsert one provider overlay
 //
 // Gating mirrors the rest of cloud: c.IsAdmin() is the gateway-minted
 // X-User-IsAdmin claim, set only on the JWT-validated path (HIP-0026) for
@@ -117,7 +117,7 @@ func (o ops) adminCatalog(ctx context.Context, _ *pricingNoInput) (*adminCatalog
 // key is the fiber pattern the router carries (`…/models/*`), not the template
 // the document renders it as.
 func init() {
-	openapi.Describe("/v1/admin/catalog/models/*", http.MethodPatch,
+	openapi.Describe("/v1/admin/pricing/catalog/models/*", http.MethodPatch,
 		"Turn one model off, into beta for named orgs, or generally available",
 		"Sets one model's availability overlay — and the price overrides applied on top of the "+
 			"catalog — then answers the new effective overlay, so a console needs no second read. "+
@@ -192,7 +192,7 @@ func adminPatchProvider(ctx context.Context, in *providerPatchIn) (*Overlay, err
 // overlay so the admin UI can reflect it without a re-fetch.
 //
 // It is the *zip.Ctx door onto [applyPatch], kept for the ONE route that cannot
-// be a typed op: PATCH /v1/admin/catalog/models/* routes through a greedy
+// be a typed op: PATCH /v1/admin/pricing/catalog/models/* routes through a greedy
 // wildcard (see ops.go). The typed providers op calls applyPatch directly, so
 // both doors run the same code and cannot drift.
 func adminPatch(c *zip.Ctx, kind, id string) error {
