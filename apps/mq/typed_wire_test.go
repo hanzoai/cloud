@@ -22,24 +22,24 @@ import (
 )
 
 // served is the closed list of operations this surface answers — the authored
-// spec's streams/consumers/health core, addressed exactly as the document
+// spec's streams/consumer/health core, addressed exactly as the document
 // spells them.
 var served = map[string]bool{
-	"GET /v1/mq/streams":                                 true,
-	"POST /v1/mq/streams":                                true,
-	"GET /v1/mq/streams/{name}":                          true,
-	"PUT /v1/mq/streams/{name}":                          true,
-	"DELETE /v1/mq/streams/{name}":                       true,
-	"POST /v1/mq/streams/{name}/purge":                   true,
-	"GET /v1/mq/streams/{name}/messages":                 true,
-	"DELETE /v1/mq/streams/{name}/messages/{seq}":        true,
-	"GET /v1/mq/streams/{stream}/consumers":              true,
-	"POST /v1/mq/streams/{stream}/consumers":             true,
-	"GET /v1/mq/streams/{stream}/consumers/{name}":       true,
-	"DELETE /v1/mq/streams/{stream}/consumers/{name}":    true,
-	"POST /v1/mq/streams/{stream}/consumers/{name}/next": true,
-	"GET /v1/mq/health":                                  true,
-	"GET /v1/mq/info":                                    true,
+	"GET /v1/mq/stream":                                true,
+	"POST /v1/mq/stream":                               true,
+	"GET /v1/mq/stream/{name}":                         true,
+	"PUT /v1/mq/stream/{name}":                         true,
+	"DELETE /v1/mq/stream/{name}":                      true,
+	"POST /v1/mq/stream/{name}/purge":                  true,
+	"GET /v1/mq/stream/{name}/message":                 true,
+	"DELETE /v1/mq/stream/{name}/message/{seq}":        true,
+	"GET /v1/mq/stream/{stream}/consumer":              true,
+	"POST /v1/mq/stream/{stream}/consumer":             true,
+	"GET /v1/mq/stream/{stream}/consumer/{name}":       true,
+	"DELETE /v1/mq/stream/{stream}/consumer/{name}":    true,
+	"POST /v1/mq/stream/{stream}/consumer/{name}/next": true,
+	"GET /v1/mq/health":                                true,
+	"GET /v1/mq/info":                                  true,
 }
 
 // The four reasons, each a fact about THIS deployment that a route would

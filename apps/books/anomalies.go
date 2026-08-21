@@ -44,16 +44,31 @@ const (
 // Question is one clarifying question about an unusual transaction: the sharp text, the
 // formatted amount that makes it concrete, and the source/account/time that anchor it.
 type Question struct {
-	ID       string `json:"id"`     // the source transaction id it concerns
-	Kind     string `json:"kind"`   // outlier|reversal|roundoff|uncosted|overdrawn
-	Text     string `json:"text"`   // the specific question to ask the founder
-	Amount   string `json:"amount"` // formatted figure ($…)
-	Account  string `json:"account,omitempty"`
+	// ID is the source transaction the question is about, so answering it leads
+	// straight back to the entry that raised it.
+	ID string `json:"id"`
+	// Kind is what looked wrong: outlier (a charge far above the usual), reversal (a
+	// posting undone), roundoff (a balancing plug big enough to be worth explaining),
+	// uncosted (revenue booked with no cost matched to it), or overdrawn (a wallet
+	// spent past its balance).
+	Kind string `json:"kind"`
+	// Text is the question itself, written for a founder to answer directly.
+	Text string `json:"text"`
+	// Amount is the figure that makes the question concrete, already FORMATTED for
+	// display with its currency symbol — a string, not cents, and not for arithmetic.
+	Amount string `json:"amount"`
+	// Account is the chart number the questioned entry posted to, where one applies.
+	Account string `json:"account,omitempty"`
+	// PostedAt anchors the question in time — when the entry it concerns posted.
 	PostedAt string `json:"postedAt,omitempty"`
 }
 
 // QuestionsResponse is the GET /v1/books/questions payload.
 type QuestionsResponse struct {
+	// Questions are what the books want explained, SHARPEST FIRST — largest amounts
+	// ahead of smaller ones, and capped, so this is the top of the list rather than
+	// everything. Empty means the ledger looks clean; the detector is deterministic
+	// over what was posted and invents nothing.
 	Questions []Question `json:"questions"`
 }
 

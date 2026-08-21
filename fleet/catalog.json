@@ -3170,15 +3170,15 @@
  ],
  "mq": [
   {
-   "id": "delete_mq_streams_by_name",
+   "id": "delete_mq_stream_by_name",
    "doc": "Removes a stream with all its messages and consumers. Irreversible."
   },
   {
-   "id": "delete_mq_streams_by_name_messages_by_seq",
+   "id": "delete_mq_stream_by_name_message_by_seq",
    "doc": "Erases one message by sequence; the sequence gap remains."
   },
   {
-   "id": "delete_mq_streams_by_stream_consumers_by_name",
+   "id": "delete_mq_stream_by_stream_consumer_by_name",
    "doc": "Removes a consumer and its delivery state; unacknowledged messages\nstay in the stream."
   },
   {
@@ -3192,48 +3192,48 @@
    "read": true
   },
   {
-   "id": "get_mq_streams",
+   "id": "get_mq_stream",
    "doc": "Returns the org's streams, name-ordered, with their live state.",
    "read": true
   },
   {
-   "id": "get_mq_streams_by_name",
+   "id": "get_mq_stream_by_name",
    "doc": "Returns one stream's configuration and live state.",
    "read": true
   },
   {
-   "id": "get_mq_streams_by_name_messages",
+   "id": "get_mq_stream_by_name_message",
    "doc": "Reads stored messages without a consumer: by sequence, by newest on a\nsubject, or walking a subject forward from a sequence.",
    "read": true
   },
   {
-   "id": "get_mq_streams_by_stream_consumers",
+   "id": "get_mq_stream_by_stream_consumer",
    "doc": "Returns a stream's consumers, name-ordered, with delivery state.",
    "read": true
   },
   {
-   "id": "get_mq_streams_by_stream_consumers_by_name",
+   "id": "get_mq_stream_by_stream_consumer_by_name",
    "doc": "Returns one consumer's configuration and delivery state.",
    "read": true
   },
   {
-   "id": "post_mq_streams",
+   "id": "post_mq_stream",
    "doc": "Creates a durable stream in the org's namespace and returns it."
   },
   {
-   "id": "post_mq_streams_by_name_purge",
+   "id": "post_mq_stream_by_name_purge",
    "doc": "Removes messages from a stream, leaving its consumers in place."
   },
   {
-   "id": "post_mq_streams_by_stream_consumers",
+   "id": "post_mq_stream_by_stream_consumer",
    "doc": "Creates a durable pull consumer on a stream and returns it."
   },
   {
-   "id": "post_mq_streams_by_stream_consumers_by_name_next",
+   "id": "post_mq_stream_by_stream_consumer_by_name_next",
    "doc": "Pulls the consumer's next batch. Delivered messages are acknowledged on\ndelivery — the broker will not redeliver what this call returns; an empty\nwait answers 408."
   },
   {
-   "id": "put_mq_streams_by_name",
+   "id": "put_mq_stream_by_name",
    "doc": "Reconfigures an existing stream; the path names the stream, and the\nimmutable fields (storage, retention) must restate what they are."
   }
  ],

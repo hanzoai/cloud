@@ -109,8 +109,6 @@ var allowedTokenPrimitives = map[string]string{
 		"unforgeable opt-out link, constant-time checked; opens no surface but the suppression it names.",
 	"apps/share/client.go": "deterministic per-org zrok credential derivation — HMAC as a KDF so " +
 		"provisioning is stateless and collision-free; nothing is signed or verified.",
-	"apps/venue/aws_sigv4.go": "AWS SigV4 request signing — the S3 wire protocol is an HMAC chain; " +
-		"authenticates us TO the store.",
 	"apps/webhooks/dispatch.go": "outbound delivery signatures — signs what WE deliver " +
 		"(Stripe-style t=,v1= over timestamp+body) so subscribers can verify us.",
 }

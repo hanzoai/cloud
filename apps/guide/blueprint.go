@@ -26,11 +26,19 @@ import (
 // Section is one ordered phase of the journey. Steps group under a section by id; a
 // DISABLED section drops all of its steps from the journey (the precedence rule).
 type Section struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Detail  string `json:"detail,omitempty"`
-	Order   int    `json:"order,omitempty"`
-	Enabled *bool  `json:"enabled,omitempty"`
+	// ID is the slug a step's `section` names to file itself under this phase.
+	ID string `json:"id"`
+	// Title is the phase heading a person reads above its steps.
+	Title string `json:"title"`
+	// Detail is what this phase of the journey is for, in prose.
+	Detail string `json:"detail,omitempty"`
+	// Order places the phase in the journey, ascending. Ties fall back to
+	// authoring order, and an omitted order sorts as 0 — ahead of everything.
+	Order int `json:"order,omitempty"`
+	// Enabled is the admin lever. Absent reads as ON, so only an explicit false
+	// turns a phase off — and it takes every step filed under it out of the
+	// journey, not just the heading.
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // Strategy is one tactic in the recommendation corpus (strategies.go filters it by
@@ -41,26 +49,49 @@ type Section struct {
 // `era` is `modern` (an AI-era tactic) or `heritage` (a classical one); `source` is its
 // provenance; `blog` is its long-form explainer. See the Zen of Hanzo corpus README.
 type Strategy struct {
-	ID        string   `json:"id"`
-	Principle string   `json:"principle,omitempty"` // the spine slug this tactic files under
-	Category  string   `json:"category"`
-	Workload  string   `json:"workload,omitempty"`
-	Action    string   `json:"action"`
-	Tags      []string `json:"tags,omitempty"`
-	Source    string   `json:"source,omitempty"` // provenance / attribution
-	Era       string   `json:"era,omitempty"`    // modern | heritage
-	Blog      *Blog    `json:"blog,omitempty"`   // long-form explainer (nil for un-blogged tactics)
-	Enabled   *bool    `json:"enabled,omitempty"`
+	// ID is the tactic's stable slug, unique across the corpus.
+	ID string `json:"id"`
+	// Principle is the spine slug this tactic files under (a Principle.Slug).
+	Principle string `json:"principle,omitempty"`
+	// Category is the growth discipline the tactic belongs to — the axis
+	// `?category=` narrows the corpus on, and one of the facets a caller browses by.
+	Category string `json:"category"`
+	// Workload is how much effort running the tactic costs, so a corpus can be
+	// narrowed to what an org has the hands for right now.
+	Workload string `json:"workload,omitempty"`
+	// Action is the tactic itself: the thing to go and do, stated imperatively.
+	Action string `json:"action"`
+	// Tags are PRECONDITIONS, not labels — every one must be satisfied by the org's
+	// observed profile before the tactic surfaces, so an untagged tactic is
+	// universally applicable. Two vocabularies: `stage:<research|formed|launched|
+	// activated|scaling>` reads the org's growth stage, `has:<capability>` reads an
+	// observed signal.
+	Tags []string `json:"tags,omitempty"`
+	// Source is where the tactic came from — the attribution a reader is owed.
+	Source string `json:"source,omitempty"`
+	// Era separates an AI-era tactic (`modern`) from a classical one (`heritage`).
+	Era string `json:"era,omitempty"`
+	// Blog is the tactic's long-form explainer; absent for tactics that have none.
+	Blog *Blog `json:"blog,omitempty"`
+	// Enabled is the admin lever. Absent reads as ON; an explicit false drops the
+	// tactic from every org-facing corpus read while leaving it in the document.
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // Blog is a tactic's long-form home: why it works (the principle in prose), how to run
 // it, and a worked caseStudy. slug/title name the post. All fields are optional so a
 // tactic without a blog omits it entirely (Strategy.Blog is nil).
 type Blog struct {
-	Slug      string `json:"slug,omitempty"`
-	Title     string `json:"title,omitempty"`
-	Why       string `json:"why,omitempty"`
-	How       string `json:"how,omitempty"`
+	// Slug is the post's address — the last path segment it is published at.
+	Slug string `json:"slug,omitempty"`
+	// Title is the post's headline.
+	Title string `json:"title,omitempty"`
+	// Why is the mechanism: the reason the tactic works, stated as a principle
+	// rather than as instructions.
+	Why string `json:"why,omitempty"`
+	// How is the run book: the steps to execute the tactic.
+	How string `json:"how,omitempty"`
+	// CaseStudy is one worked instance — somebody who ran it, and what happened.
 	CaseStudy string `json:"caseStudy,omitempty"`
 }
 
@@ -83,10 +114,17 @@ type Principle struct {
 // Page is a reusable prompt/snippet a step references. `body` may carry
 // {placeholder} tokens for client-specific bits ({client_name}, {domain}, {product}).
 type Page struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Body    string `json:"body"`
-	Enabled *bool  `json:"enabled,omitempty"`
+	// ID is the slug a step references to pull this template in.
+	ID string `json:"id"`
+	// Title names the template in the authoring plane and in a picker.
+	Title string `json:"title"`
+	// Body is the reusable prompt or snippet itself. It may carry {placeholder}
+	// tokens for the client-specific bits — {client_name}, {domain}, {product} —
+	// which are substituted where the template is used, not here.
+	Body string `json:"body"`
+	// Enabled is the admin lever. Absent reads as ON; an explicit false withdraws
+	// the template from org-facing reads.
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // Blueprint is the full authored playbook. `brand` is the white-label key (""==the
@@ -94,15 +132,32 @@ type Page struct {
 // blueprint is skipped by resolution, falling through to the next tier). The four
 // arrays are the content. The engine runs on Curriculum() — the enabled projection.
 type Blueprint struct {
-	Version    string        `json:"version"`
-	Brand      string        `json:"brand,omitempty"`
-	Title      string        `json:"title,omitempty"`
-	Enabled    *bool         `json:"enabled,omitempty"`
-	Principles []Principle   `json:"principles,omitempty"` // the 64-principle spine (Zen of Hanzo archetypes)
-	Sections   []Section     `json:"sections,omitempty"`
-	Steps      []JourneyStep `json:"steps"`
-	Strategies []Strategy    `json:"strategies,omitempty"`
-	Templates  []Page        `json:"templates,omitempty"`
+	// Version is the playbook's own name for this edition of its content, chosen by
+	// whoever authored it. It travels onto every journey projected from it. The
+	// store's numeric revision is a separate value and lives beside it.
+	Version string `json:"version"`
+	// Brand is the white-label key this playbook serves. Empty is the shared
+	// default every unbranded deployment falls back to.
+	Brand string `json:"brand,omitempty"`
+	// Title is the playbook's name as a person reads it.
+	Title string `json:"title,omitempty"`
+	// Enabled is the whole-playbook lever. Absent reads as ON; an explicit false
+	// makes resolution skip this playbook entirely and fall through to the next
+	// tier, rather than serving an empty journey.
+	Enabled *bool `json:"enabled,omitempty"`
+	// Principles are the fixed 64-archetype spine a tactic files under. It is
+	// authored data an operator organises the corpus by; nothing in the checklist
+	// engine reads it.
+	Principles []Principle `json:"principles,omitempty"`
+	// Sections are the journey's ordered phases.
+	Sections []Section `json:"sections,omitempty"`
+	// Steps are every checklist item, disabled ones included — this is the authored
+	// document, not the projection an org runs.
+	Steps []JourneyStep `json:"steps"`
+	// Strategies are the tactics corpus the recommendation reads narrow.
+	Strategies []Strategy `json:"strategies,omitempty"`
+	// Templates are the reusable prompts and snippets steps reference by id.
+	Templates []Page `json:"templates,omitempty"`
 }
 
 // Bounds on the corpus/collections so an org-custom or admin-authored blueprint can't
