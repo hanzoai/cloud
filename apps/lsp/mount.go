@@ -10,9 +10,10 @@ package lsp
 // A NOTE ON MOUNT ORDER. manifest/apps.go is the hand-authored fleet list whose
 // SLICE POSITION is the order (build.go: "There is NO Order field"). lsp's row
 // sits immediately after code's, and manifest/order_test.go freezes that
-// sequence, so a reorder stays a decision. Routing does not depend on it:
-// /v1/code/lsp is a deeper static prefix than both /v1/code and ai's bare /v1,
-// and nested static prefixes resolve by SPECIFICITY.
+// sequence, so a reorder stays a decision. Routing does not depend on it at all
+// now: /v1/lsp nests inside no sibling's prefix, and it is a deeper static
+// prefix than ai's bare /v1, which resolves by SPECIFICITY. Adjacency to code in
+// the list is documentation — the two are siblings, not parent and child.
 //
 // There is no Shutdown. The subprocesses and the checkouts this app used to own
 // are the daemon's now; what is left here is an http.Client, which the process
@@ -34,7 +35,7 @@ type state struct {
 	daemon *daemon
 }
 
-// Mount wires /v1/code/lsp onto app per HIP-0106.
+// Mount wires /v1/lsp onto app per HIP-0106.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("lsp.Mount: nil app")
@@ -56,7 +57,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the /v1/code/lsp surface: one typed op per question.
+// routes registers the /v1/lsp surface: one typed op per question.
 //
 // Typed rather than raw so the OpenAPI operation, the MCP tool, the CLI command
 // and every generated SDK method are all projected from these five entries — a
@@ -68,7 +69,7 @@ func routes(app cloud.Router, s *state) error {
 	// cloud.Bridge is not installed here: the composer installs it once at the
 	// root, after the identity check that mints the validated org and before any
 	// subsystem registers a route — an order only the whole program can assert.
-	g := app.Group("/v1/code/lsp")
+	g := app.Group("/v1/lsp")
 	zip.Post(g, "/hover", s.hover)
 	zip.Post(g, "/locate", s.locate)
 	zip.Post(g, "/symbols", s.symbols)

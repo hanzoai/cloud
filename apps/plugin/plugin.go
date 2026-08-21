@@ -17,7 +17,7 @@
 // that lane mounted nothing in production while publishing an untyped
 // GET /v1/plugins that reported the empty set. That lane is gone from here.
 //
-// GET /v1/plugins still exists, in apps/tools, and it answers the SAME question
+// GET /v1/tools/plugins still exists, in apps/tools, and it answers the SAME question
 // from a different source: cloud.Subsystems(), the snapshot taken at boot. It
 // therefore cannot see the effect of the enable/disable/reload below, which is
 // why this surface — live, per host, keyed on the running artifact's digest — is

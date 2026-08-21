@@ -177,7 +177,7 @@ func (f *fleet) post(t *testing.T, op, org string, body any) (int, []byte) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/v1/code/lsp/"+op, bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/v1/lsp/"+op, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {
 		// A VALIDATED principal, as SanitizeIdentity mints one from a verified

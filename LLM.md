@@ -1254,6 +1254,54 @@ staged set as a golden, so a promotion is a diff rather than a number that moved
   outage and a caller with no validated org both fail CLOSED.
   `cmd/cloud` learns nothing and stays light (405 packages, bound 450).
 
+### The fold: an address moves under the app that answers it
+
+`openapi/misfiled.txt` is the ratchet (HIP-0139 §3, §5.1) and a line closes one
+of three ways — fold, split, rename — with the STORE deciding which. Four
+capabilities folded here, 100 lines → 92:
+
+| was | now | why not a split |
+|---|---|---|
+| `/v1/coding` | `/v1/agents/coding` | the engine needs agents' session store, durable engine and mailbox; a coding run IS an agent run |
+| `/v1/upload` `/v1/download` `/v1/files` | `/v1/exec/*` | exec holds no store — a session IS a sandbox, and a session's files are the session's |
+| `/v1/skills` `/v1/plugins` `/v1/mcp/servers` | `/v1/tools/*` | each is the SAME registry narrowed; moving one to its own app would put two apps on one store |
+| `/v1/code/lsp` | `/v1/lsp` | lsp owns no store either, so nothing is shared with code; §2.5 makes `lsp` a word, so it folds under its OWN name and the two stay cross-referenced siblings |
+
+Two facts a fold has to carry beyond the router:
+
+- **`rank` reads the PATH, so a moved op takes a new bucket.** `fleet/surface.go`
+  `productStems` is a list of PRODUCTS, and an op whose first segment matches none
+  of them falls to the tail — where `subsystemTool` skips its prose and a
+  truncating client drops it first. The coding run once sat there for want of a
+  stem; moving it under `agents` retired the `coding` stem, and moving lsp OUT of
+  `/v1/code` — where it had been ranking on code's stem — needed one of its own.
+- **A base-relative client pays a base, not a wire.** The LibreChat code
+  interpreter composes `/upload`, `/download/{sid}/{id}` and `/files/{sid}` off a
+  configured base URL, so the exec fold is one config change deployed in lockstep:
+  point `LIBRECHAT_CODE_BASEURL` at `.../v1/exec`. Nothing below the base moves.
+
+- **`make -C apps/<app> describe` does NOT regenerate `plugin/<app>/zipdoc_gen.go`.**
+  `mk/plugin.mk`'s `generate` runs zipdoc over `$(APPDIR)/...`, which is
+  `apps/<app>` and nothing else — so an op declared at the COMPOSITION ROOT
+  (`plugin/agents/coding.go` is the one) keeps prose filed under its old path and
+  publishes none under the new one, silently, because `openapi.Complete` accepts a
+  summary alone. Only the Dockerfile's repo-wide `go generate -run zipdoc ./...`
+  catches it. Moving such an op means
+  `GOOS= GOARCH= go generate -run zipdoc ./plugin/<app>/...` and THEN `describe`.
+  The tell is a tool the door lists with an empty description.
+- **The tool NAME moves with the address.** `create_coding` is
+  `create_agent_coding` now: the door renames a derived operation id to the verb
+  phrase the path already contains (`fleet/verbs.go`), so a fold renames the tool a
+  model calls as surely as it renames the URL. `plugin/agents/coding_test.go` pins
+  that string, which is the only gate that can see it — a router test cannot.
+
+`/v1/agent` is the one line of the four that did NOT close, and it is upstream's:
+`hanzoai/agent`'s `Mount` registers those four routes at that literal path, its
+handlers are unexported and it takes the concrete `*zip.App`, so cloud has no
+prefix to hand it. The target address is not free either — `POST /v1/agents` is
+already the typed create — so the fold needs a release that gives hz.Mount a
+prefix AND gives the round an address the collection root is not.
+
 ### What the projections MEASURE, asked of the running deployment
 
 Every number below was taken by making the request, not by reading the code. Two
@@ -2300,10 +2348,11 @@ surface went **40 published operations → 5**, of which `POST /v1/exec` is now 
 TYPED op (`CodeRun` → `CodeResult`): the schema, the MCP tool, the CLI command
 and the SDK method that a proxy could never carry. Four stay untyped and the
 reasons are DIFFERENT ones, all about the callers' wire rather than about
-ownership: `/v1/upload` is multipart (`zip` decodes every non-empty typed body
-with `jsonenc.Unmarshal`, typed.go:242), `/v1/download/{sid}/{id}` answers BYTES
-(a typed op always `c.JSON`s, typed.go:311), `/v1/files/{sid}` answers a BARE
-JSON ARRAY the client runs `.find()` over, and `/v1/exec/programmatic` answers
+ownership: `/v1/exec/upload` is multipart (`zip` decodes every non-empty typed
+body with `jsonenc.Unmarshal`, typed.go:242), `/v1/exec/download/{sid}/{id}`
+answers BYTES (a typed op always `c.JSON`s, typed.go:311), `/v1/exec/files/{sid}`
+answers a BARE JSON ARRAY the client runs `.find()` over, and
+`/v1/exec/programmatic` answers
 501 because it is a different protocol — a run suspended on each tool call and
 resumed from a continuation token (`@hanzochat/agents` ProgrammaticToolCalling),
 which is a program and not an endpoint.
@@ -2343,7 +2392,8 @@ are pinned by `apps/exec/auth_test.go`, and both fail on the code that had them:
    `SanitizeIdentity` deliberately **restores the client's own header**
    (middleware_identity.go:455, and it is right to: that is the Phase-1 data
    path). So `X-Org-Id: victim-corp` made `storeFor` open the victim's SQLite
-   file — the run executed in their store and `/v1/files` + `/v1/download` read
+   file — the run executed in their store and `/v1/exec/files` +
+   `/v1/exec/download` read
    their artifacts straight back out. Every other app resolves through
    `principal.OrgFrom`, which yields an org ONLY from a validated principal
    (`principal.OrgOf`: an empty user claim means the org that rode along is
@@ -2418,7 +2468,7 @@ second skipped every attached file AND skipped the "not available" note, so a
 user's CSV was invisible with no error. `CodeFile.Session()` reads both. And
 artifacts were COLLECTED recursively (`find`) but LISTED top-level (`ls -1A`), so
 a nested artifact was reported in the reply and then missing from
-`/v1/files/{sid}` — the client's `name.startsWith(...)` found nothing and read it
+`/v1/exec/files/{sid}` — the client's `name.startsWith(...)` found nothing and read it
 as expired. One `find` answers both now.
 
 **Collisions, and the resolution.** Source does not collide; two artifacts do —

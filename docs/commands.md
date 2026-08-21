@@ -307,7 +307,7 @@ becomes the committed output of `/v1/commands`, with the parity test.
 - **Untyped routes are not commands.** A route registered outside zip's typed-op
   registry publishes an operationId and no body, and cannot become a command
   because there is nothing to derive args from. `apps/tools/tools.go:29` states
-  this for `/v1/plugins/build` and keeps it out on purpose. Those routes are
+  this for `/v1/tools/plugins/build` and keeps it out on purpose. Those routes are
   absent from the bar, honestly, rather than present and broken.
 - **A command's result has no declared shape for rendering.** The bar gets JSON
   back and shows it. Rendering a deploy differently from a list is per-surface
