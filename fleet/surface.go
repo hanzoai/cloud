@@ -345,9 +345,9 @@ var productStems = []string{
 	"rerank",      //
 	"models",      // what can it call
 	"agent",       // the agent loop: conversations, presets
-	"agents",      // …sessions, runs, targets
-	"coding",      // the agent's hands: a real task in a sandbox, on a branch
+	"agents",      // …sessions, runs, targets, and the run in a sandbox
 	"code",        // code intelligence: ask, context, index, search
+	"lsp",         // …and the live language server beside it
 	"search",      //
 	"git",         // source control
 	"deploy",      // ship it
