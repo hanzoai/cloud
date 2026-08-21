@@ -358,3 +358,139 @@ func TestLegalHealthNeedsNoPrincipal(t *testing.T) {
 		t.Errorf("templates = %v, want %d", out["templates"], len(Builtins()))
 	}
 }
+
+// proseless is the CLOSED list of published properties that carry NO description
+// because the SEAM they arrived through cannot carry one. Both causes below are
+// zipdoc/schema-builder limitations with a line number, not fields nobody wrote:
+// the prose is in the Go source in every case, and the two ends key it on
+// different names.
+//
+// It is exact in BOTH directions. A bare property anywhere else goes red, and an
+// entry here that starts publishing prose goes red too — that is the day the
+// generator learns, and this ledger shrinks then rather than outliving the gap.
+var proseless = map[string]bool{
+	// EMBEDDED STRUCT. documentView embeds documentSummary (typed.go) so a single
+	// read is the listing's shape PLUS a body, rather than two shapes that can
+	// drift. encoding/json promotes the embedded fields onto the outer object and
+	// zip's schema builder follows (openapi.go wireFields), so they publish as
+	// documentView's OWN properties and are looked up under `documentView.<name>`
+	// (structSchema). zipdoc files a field's prose under the type whose declaration
+	// IS the struct literal, so the same ten comments are filed under
+	// `documentSummary.<name>`. Both halves are right; the keys do not meet. The
+	// prose is not missing from the document — documentSummary is published too and
+	// carries all ten. Unrolling the embedding into a second copy of the ten fields
+	// would close this by replacing one true statement with two that can drift.
+	"documentView.category":        true,
+	"documentView.createdAt":       true,
+	"documentView.esignProvider":   true,
+	"documentView.id":              true,
+	"documentView.signedAt":        true,
+	"documentView.status":          true,
+	"documentView.templateId":      true,
+	"documentView.templateVersion": true,
+	"documentView.title":           true,
+	"documentView.updatedAt":       true,
+
+	// DEFINED TYPE. The fleet's schema namespace is flat, and three of legal's
+	// domain types share a name with an already-published one, so typed.go declares
+	// `type legalTemplate Template`, `type legalFiling Filing` and
+	// `type legalSigner Signer` — same fields, same json tags, byte-identical wire,
+	// a name that says which plane it belongs to.
+	//
+	// zipdoc reaches a struct's comments through its TypeSpec and returns unless
+	// that spec is an *ast.StructType (internal/zipdoc/extract.go structFields); a
+	// defined type's spec is an *ast.Ident, so nothing is recorded under
+	// `legalTemplate.*`. Its field walk then descends into each field's TYPE, which
+	// is why Field.key and Field.label do publish — but it never visits Template,
+	// Filing or Signer as named types, so nothing is recorded under those names
+	// either. The schema builder asks for `legalTemplate.title`, which no run of
+	// zipdoc can ever produce. Same class as apps/billing's `accounts`
+	// (`type accounts link.AccountsUsage`).
+	//
+	// The fields carry their doc comments on Template and Filing (model.go) and
+	// Signer (providers.go), so the source is right and this closes the day zipdoc
+	// follows a defined type to its underlying declaration. Restating the struct
+	// literal under the new name would close it today by putting the same eight
+	// fields in two places.
+	"legalTemplate.body":          true,
+	"legalTemplate.category":      true,
+	"legalTemplate.counselReview": true,
+	"legalTemplate.fields":        true,
+	"legalTemplate.id":            true,
+	"legalTemplate.origin":        true,
+	"legalTemplate.title":         true,
+	"legalTemplate.version":       true,
+
+	"legalFiling.createdAt":    true,
+	"legalFiling.documentIds":  true,
+	"legalFiling.id":           true,
+	"legalFiling.jurisdiction": true,
+	"legalFiling.note":         true,
+	"legalFiling.org":          true,
+	"legalFiling.provider":     true,
+	"legalFiling.status":       true,
+	"legalFiling.updatedAt":    true,
+
+	"legalSigner.email": true,
+	"legalSigner.name":  true,
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the gates above
+// cannot see. Typing a route documents its ADDRESS and its SHAPE; the shape's FIELDS
+// come from a different place — a doc comment on each one, which zipdoc lifts one at
+// a time — so a fully typed surface can still publish a wholly unreadable document.
+//
+// It matters here because almost every scalar on this surface is a closed vocabulary
+// or a rule, not a label. `status` is draft | out_for_signature | signed | voided and
+// deliberately has no "legally valid" member, because validity is counsel's call and
+// not the platform's; a filing's `status` is manual | submitted | filed | rejected,
+// where manual means NOTHING was filed and the org must go to its registered agent.
+// `origin` (builtin | org) and `version` (a built-in is 1, an org's first override is
+// 2) are together the only way to tell whose text a document was rendered from, which
+// is why every document records templateVersion. And a merge field's `key` is what
+// the body substitutes while its `label` is only a prompt for a person — send the
+// label and the generation fails closed rather than rendering a blank into a contract.
+//
+// Presence is all a gate can check. A description restating the field's name is worse
+// than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	app, _ := mount(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "legal", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("legal publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
+		}
+	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/legal describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
+	}
+}

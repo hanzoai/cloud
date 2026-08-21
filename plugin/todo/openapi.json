@@ -628,33 +628,43 @@
       "issueHit": {
         "properties": {
           "assignee": {
+            "description": "Assignee is who holds the work. EMPTY MEANS UNHELD, which is what makes the\nissue claimable: claiming one already held by someone else is refused with\n409 rather than quietly taken.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is what the row IS: issue, pr or epic.",
             "type": "string"
           },
           "number": {
+            "description": "Number is the issue's number on that board, from 1 and monotonic there.\nUnique per board, never across the org — so it addresses an issue only\ntogether with Project.",
             "type": "integer"
           },
           "priority": {
+            "description": "Priority is urgent, high, medium, low or none. Never empty — an unset\npriority is the value \"none\".",
             "type": "string"
           },
           "project": {
+            "description": "Project is the board key the issue is on. It and Number are the issue's\naddress in every other route on this surface, which is why a hit carries it.",
             "type": "string"
           },
           "repo": {
+            "description": "Repo is the git repository the issue is bound to, empty when it is not\nrepo-bound.",
             "type": "string"
           },
           "source": {
+            "description": "Source is which surface opened it: team, git, crm, helpdesk, cms or agent.\n\"git\" is how the mirrored forge and GitHub rows are spelled.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the board column: backlog, todo, in_progress, done or canceled.\nClaiming moves backlog and todo to in_progress and leaves the other three\nwhere they are.",
             "type": "string"
           },
           "title": {
+            "description": "Title is the issue's one-line summary — what the q filter matched, along with\nthe description.",
             "type": "string"
           },
           "url": {
+            "description": "URL is the row's external anchor — its extRef — which is a link only when the\nfeeder sent one. A mirrored GitHub issue carries \"github:owner/repo#123\" and\nan agent's PR row carries the pushed branch. Empty for a row opened here.",
             "type": "string"
           }
         },
@@ -663,9 +673,11 @@
       "issueHits": {
         "properties": {
           "count": {
+            "description": "Count is how many rows Issues carries — the size of THIS answer after the\ncap, not how many issues matched. A count equal to the limit means there are\nprobably more; there is no total and no cursor.",
             "type": "integer"
           },
           "issues": {
+            "description": "Issues are the matching rows grouped by status and oldest-first within a\ngroup, capped by the search's limit (50 by default, 200 at most). The cap is\napplied to that order, so a broad search returns the head of it rather than a\nsample.",
             "items": {
               "$ref": "#/components/schemas/issueHit"
             },
@@ -677,67 +689,78 @@
       "issueView": {
         "properties": {
           "assignee": {
+            "description": "Assignee is who holds the work — an IAM username, or the login of the FIRST\nassignee when a forge issue has several. Absent when nobody holds it, which\nis exactly the state a claim needs.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the item was opened, in unix seconds. 0 when the source\ngave no parseable timestamp.",
             "type": "integer"
           },
           "description": {
+            "description": "Description is the body, markdown as its author wrote it. Absent when empty.",
             "type": "string"
           },
           "dueAt": {
-            "description": "unix seconds; absent = no due date",
+            "description": "DueAt is when the work is due, in unix seconds; absent means no due date. A\nforge row takes it from its MILESTONE's due date, since a forge issue has no\ndeadline of its own. Never before StartAt, and never past 2200-01-01.",
             "type": "integer"
           },
           "extRef": {
-            "description": "external anchor",
+            "description": "ExtRef anchors the item to something outside the todo — a mirrored issue\n(\"github:owner/repo#123\"), a pushed PR branch, or a record on another plane.\nIt is the idempotency key the mirror upsert matches on. Absent when the item\nhas no external origin.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the work item's opaque handle, and it is NOT how you address it —\nProjectKey plus Number is. Its shape says which source answered: a forge\nissue's is the forge's own numeric id in decimal, an index row's a minted\n\"issue_\" id.",
             "type": "string"
           },
           "identifier": {
-            "description": "KEY-\u003cnumber\u003e, the human handle",
+            "description": "Identifier is the human handle, \"\u003ckey\u003e#\u003cnumber\u003e\" — the board and the number\non it, joined. ONE spelling whichever source answered, because a list where\nforge rows read cli#1 and index rows read OPS-3 is two products in one list.",
             "type": "string"
           },
           "kind": {
-            "description": "issue | pr | epic",
+            "description": "Kind is what the item IS: issue, pr or epic. Set once at create and never\nchanged, so a row does not migrate between surfaces. Deliberately not \"task\"\n— that word is the async plane (contract.go).",
             "type": "string"
           },
           "labels": {
+            "description": "Labels are the item's remaining tags, with the status and priority labels\nlifted OUT — a column that stayed here would render twice, once as the card's\ncolumn and once as a chip on the card. Always present; empty is [].",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "number": {
+            "description": "Number is the item's number ON ITS BOARD, from 1 and monotonic there — the\nforge's own issue number for a forge row, allocated inside the create\ntransaction for an index row so it cannot race. Unique per board, never\nacross the org.",
             "type": "integer"
           },
           "priority": {
+            "description": "Priority is urgent, high, medium, low or none. Also a label on a forge row.\nNever empty: \"none\" when nothing names one, so callers compare a value rather\nthan test for absence.",
             "type": "string"
           },
           "projectKey": {
+            "description": "ProjectKey is the board this item is on: the repository name for a forge\nissue, the index board's key otherwise. With Number it is the item's address\nin every other route.",
             "type": "string"
           },
           "repo": {
-            "description": "git repo binding",
+            "description": "Repo is the git repository the item is bound to, so a repository's Issues and\nPRs tabs are filters over this one table. Absent when the item is not\nrepo-bound.",
             "type": "string"
           },
           "source": {
-            "description": "team | git | crm | helpdesk | cms | agent",
+            "description": "Source is which surface OPENED it: team, git, crm, helpdesk, cms or agent.\nAlso set once. It is the ORIGIN, not the subject — source=helpdesk is an\nengineering issue opened from a support escalation, not a support ticket.",
             "type": "string"
           },
           "startAt": {
-            "description": "unix seconds; absent = unscheduled",
+            "description": "StartAt is when the work starts, in unix seconds; absent means unscheduled.\nA forge row takes it from when the issue was opened, but only once the issue\nhas a due date — an interval needs both ends.",
             "type": "integer"
           },
           "status": {
+            "description": "Status is the board column: backlog, todo, in_progress, done or canceled, and\nnothing else. On a forge row it is read off a LABEL, so relabelling in the\nforge web UI moves the card here and vice versa — and a CLOSED forge issue\nreads done whatever its labels say. Never empty: \"backlog\" when nothing names\na column.",
             "type": "string"
           },
           "title": {
+            "description": "Title is the item's one-line summary.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is when it last changed, in unix seconds.",
             "type": "integer"
           }
         },
@@ -771,24 +794,31 @@
       "todoProject": {
         "properties": {
           "createdAt": {
+            "description": "CreatedAt is when the board was created, in unix seconds. 0 on a forge board\nfor the same reason Description is absent.",
             "type": "integer"
           },
           "description": {
+            "description": "Description is whatever an index board was created with. Absent on a forge\nboard: this projection takes the repository's name and nothing else about the\nrepository.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the board's opaque handle, and it is NOT how you address it — Key is.\nIts shape says which source answered: a forge board's is the repository's\nfull name (\"hanzoai/cloud\"), an index board's a minted \"prj_\" id.",
             "type": "string"
           },
           "key": {
+            "description": "Key addresses the board everywhere else — /v1/todo/projects/\u003ckey\u003e/issues —\nand prefixes every issue identifier on it. An index board's key is 2-8\nuppercase alphanumerics starting with a letter (\"ENG\", \"OPS2\") and is matched\ncase-insensitively; a forge board's is the repository name as the forge\nspells it.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the board's display name. For a forge board it is the repository\nname, so it equals Key; an index board carries its own.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the IAM org the board belongs to, taken from the validated principal\nand never from the request. Every board a caller can see is in it.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is when the board record last changed, in unix seconds — the BOARD,\nnot the work on it, so filing an issue does not move it. 0 on a forge board.",
             "type": "integer"
           }
         },
