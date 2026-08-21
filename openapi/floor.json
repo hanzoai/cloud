@@ -1,6 +1,6 @@
 {
-  "paths": 1778,
-  "operations": 2408,
+  "paths": 1794,
+  "operations": 2425,
   "products": {
     "account": 10,
     "ad": 7,
@@ -115,6 +115,7 @@
     "tools": 19,
     "translate": 3,
     "treasury": 8,
+    "trust": 17,
     "usage": 5,
     "validator": 4,
     "visor": 34,
