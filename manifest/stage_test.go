@@ -30,18 +30,7 @@ func TestStageVocabulary(t *testing.T) {
 // spelled as names: a count that stays 44 while two rows swap stages is a green
 // test over a changed product. The list is the fact; its length is a consequence.
 var staged = map[string]string{
-	"ads": Beta, "affiliates": Beta, "authors": Beta, "benchmark": Beta,
-	"bot": Beta, "books": Beta, "campaign": Beta,
-	"captable": Beta, "company": Beta, "compliance": Beta, "content": Beta,
-	"crm": Beta, "dataroom": Beta, "dataset": Beta, "esign": Beta,
-	"graph":       Alpha,
-	"experiments": Beta, "explorer": Beta, "framework": Beta, "guide": Beta,
-	"label": Beta, "legal": Beta, "licensing": Beta, "link": Beta,
-	"marketing": Beta, "marketplace": Beta, "meet": Beta, "ml": Beta,
-	"reference": Beta, "referrals": Beta, "research": Beta, "risk": Beta,
-	"sbom": Beta, "security": Beta, "seo": Beta, "share": Beta,
-	"social": Beta, "taxonomy": Beta, "translate": Beta, "validators": Beta,
-	"wallets": Beta, "web3": Beta, "world": Beta, "x402": Beta,
+	"graph": Alpha,
 }
 
 func TestStagedRowsAreTheOnesDeclared(t *testing.T) {
@@ -72,8 +61,8 @@ func TestStagedRowsAreTheOnesDeclared(t *testing.T) {
 // StageOf reads the row, and a name that was never routed here is ga — the same
 // answer the zero value gives, so a caller needs no second branch for it.
 func TestStageOfReadsTheRow(t *testing.T) {
-	if got := StageOf("ads"); got != Beta {
-		t.Errorf("StageOf(ads) = %q, want %q", got, Beta)
+	if got := StageOf("graph"); got != Alpha {
+		t.Errorf("StageOf(graph) = %q, want %q", got, Alpha)
 	}
 	if got := StageOf("iam"); got != "" {
 		t.Errorf("StageOf(iam) = %q, want ga", got)
