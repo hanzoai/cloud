@@ -293,7 +293,7 @@ test:
   - name: host-is-light
     # The light host's ONE property is that it links no subsystem: it knows where
     # each app lives and what path it answers, never what the app does. That is
-    # what keeps it at ~395 packages while the fleet's subsystem graphs total
+    # what keeps it at ~408 packages while the fleet's subsystem graphs total
     # thousands, and it is a property of the IMPORT GRAPH, so it is checked with
     # the import graph rather than with a size threshold nobody can interpret. One
     # stray import of a apps/* package drags a subsystem's whole graph back in,
