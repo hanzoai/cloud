@@ -24,8 +24,8 @@ import (
 )
 
 type plane struct {
-	url      string
-	amqpAddr string
+	url       string
+	amqpAddr  string
 	kafkaSeed string
 }
 
