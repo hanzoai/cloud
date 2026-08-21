@@ -5,7 +5,7 @@
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 675,
+  "skill_count": 676,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Zoo surface..",
@@ -1371,6 +1371,13 @@
       "path": "commerce_product/SKILL.md",
       "service": "commerce",
       "sha256": "b944e820d534141f36613702f9440f664aaa516879b6ecda5321a62ea8a4368e"
+    },
+    {
+      "description": "Read commerce rates: Every rate in the authority, or one product's.",
+      "name": "commerce_rates",
+      "path": "commerce_rates/SKILL.md",
+      "service": "commerce",
+      "sha256": "489ee67b3354cf676a33e2b963ec73cb289d45e30e43ca817d0cd541e5553f2b"
     },
     {
       "description": "Read commerce return: List your org's returns, as a page, Fetch one return.",
