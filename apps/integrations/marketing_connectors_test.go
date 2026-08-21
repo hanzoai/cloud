@@ -40,7 +40,7 @@ var marketingKeyProviders = []string{"warpcast", "whatsapp"}
 // Authorize/Exchange + a matching callback RedirectPath + Scope=""; apikey providers
 // declare Kind=apikey + Verify + Configured/Creds and no OAuth callback surface. Each
 // is AdminOnly (linking a client's marketing account is an org-admin action) and on
-// the ORG plane (invisible to the per-user /v1/connectors surface).
+// the ORG plane (invisible to the per-user /v1/integrations/connectors surface).
 func TestMarketingConnectorsRegisteredCoherent(t *testing.T) {
 	for _, want := range marketingOAuthProviders {
 		p, ok := registry[want.id]

@@ -234,7 +234,7 @@ func MetricGatherer() prometheus.Gatherer { return metricRegistry }
 // READER queried was VictoriaMetrics, VM was filled by scraping, and a push into
 // a store nothing reads is not a second transport but a missing one. That
 // premise is retired with VM. Every metric reader in this codebase now queries
-// the datastore — /v1/summary, status.go's up-inventory and
+// the datastore — /v1/o11y/summary, status.go's up-inventory and
 // /v1/o11y/availability all go through apps/o11y/metricsgauge.go — so metrics
 // travel the same in-process road as traces and logs, to the same place, and the
 // measurements are once again where the readers look.
@@ -245,7 +245,7 @@ func installMeter(log luxlog.Logger, res *resource.Resource) (*sdkmetric.MeterPr
 		// (hanzo_service_up, hanzo_http_requests_total,
 		// hanzo_service_probe_duration_seconds). Translating would append suffixes
 		// a second time and yield ..._seconds_seconds, so the series the prober
-		// writes would not be the series /v1/summary reads.
+		// writes would not be the series /v1/o11y/summary reads.
 		otelprom.WithTranslationStrategy(otlptranslator.NoTranslation),
 		// The instrumentation scope is a fact about which library emitted a point,
 		// not about the thing measured; as labels it multiplies every series
@@ -311,7 +311,7 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	// span-destination check below. They used to be, which made the fleet
 	// availability gauge's liveness depend on an unrelated tracing setting: turn
 	// off O11Y_TRACES_ZAP_INPROCESS and hanzo_service_up silently stops existing,
-	// with /v1/summary answering 503 for a reason nothing in tracing explains.
+	// with /v1/o11y/summary answering 503 for a reason nothing in tracing explains.
 	// Two signals, two destinations, two decisions.
 	mp, stopMeter := installMeter(log, res)
 

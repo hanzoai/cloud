@@ -114,11 +114,10 @@ func uiExplore(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(500, "explore: %v", err)
 	}
-	base := uiBase(s, c)
 	// Whether the viewer is signed in decides the header CTA (Sign in vs their org).
 	viewerOrg, signedIn := org(c)
-	return render(c, base, 200, "Explore", exploreTmpl, exploreData{
-		Base: base, Query: query, Repos: rows,
+	return render(c, uiBase, 200, "Explore", exploreTmpl, exploreData{
+		Base: uiBase, Query: query, Repos: rows,
 		SignedIn: signedIn, ViewerOrg: viewerOrg,
 	})
 }

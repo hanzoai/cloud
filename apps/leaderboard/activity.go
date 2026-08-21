@@ -1,4 +1,4 @@
-// GET /v1/usage/activity — the per-day contribution series (GitHub-style heatmap +
+// GET /v1/leaderboard/activity — the per-day contribution series (GitHub-style heatmap +
 // timeline) for ONE authorized subject.
 //
 //	subject=user    the caller's OWN activity (default); another user only for an org

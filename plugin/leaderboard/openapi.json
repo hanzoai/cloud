@@ -17,82 +17,56 @@
   ],
   "tags": [
     {
-      "name": "usage"
+      "name": "admin"
+    },
+    {
+      "name": "leaderboard"
     }
   ],
   "paths": {
-    "/v1/usage/activity": {
-      "get": {
-        "operationId": "get_usage_activity",
-        "summary": "Activity returns the per-day usage series for ONE authorized subject — the points a contribution heatmap and a timeline are drawn from, gap-filled so every day in the range is present.",
-        "description": "Activity returns the per-day usage series for ONE authorized subject — the points a\ncontribution heatmap and a timeline are drawn from, gap-filled so every day in the\nrange is present. Authorization is resolved server-side from the validated\nprincipal, so a caller can never widen the subject past what they are entitled to:\na non-admin reads only themselves and their own org. subject=project answers empty\nwith a note, because the usage ledger records no project column yet. When the\nwarehouse is not connected the series answers empty with available=false rather\nthan fabricated days.",
+    "/v1/admin/leaderboard/rollup": {
+      "post": {
+        "operationId": "post_admin_leaderboard_rollup",
+        "summary": "Backfill seeds the derived usage rollup from ledger history — the rows written before the incremental view existed, which that view can never capture.",
+        "description": "Backfill seeds the derived usage rollup from ledger history — the rows written\nbefore the incremental view existed, which that view can never capture. SuperAdmin\nonly. Because the rollup accumulates, a second unguarded run would double every\nday it re-reads, so it refuses with 409 when the rollup already holds rows unless\nforce=true is passed; forcing WILL double-count.",
         "tags": [
-          "usage"
+          "admin"
         ],
-        "parameters": [
-          {
-            "name": "subject",
-            "in": "query",
-            "required": false,
-            "description": "Subject is what the series is about: \"user\" (default), \"org\" or \"project\".",
-            "schema": {
-              "type": "string"
-            },
-            "example": "user"
-          },
-          {
-            "name": "id",
-            "in": "query",
-            "required": false,
-            "description": "ID names the subject within what the caller is entitled to see. Omitted (or\n\"me\") it is the caller themselves, or their own org. Another user requires org\nadmin and must belong to the caller's org; another org requires a SuperAdmin.",
-            "schema": {
-              "type": "string"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "before": "2026-01-01T00:00:00Z"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/backfillQuery"
+              }
             }
           },
-          {
-            "name": "from",
-            "in": "query",
-            "required": false,
-            "description": "From is the first day of the range, \"2006-01-02\". Defaults to 90 days back.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "2026-01-01"
-          },
-          {
-            "name": "to",
-            "in": "query",
-            "required": false,
-            "description": "To is the last day of the range, \"2006-01-02\". Defaults to today; the span is\nclamped to 366 days.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "2026-03-31"
-          }
-        ],
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ActivityView"
+                  "$ref": "#/components/schemas/backfillResult"
                 }
               }
             },
             "description": "ok"
           }
         },
-        "x-public": true,
         "x-tool": true
       }
     },
-    "/v1/usage/leaderboard": {
+    "/v1/leaderboard": {
       "get": {
-        "operationId": "get_usage_leaderboard",
+        "operationId": "get_leaderboard",
         "summary": "Leaderboard ranks AI usage over a window, either the users of the caller's own org or organizations against each other, and always reports the caller's own standing even when it falls outside the returned page.",
         "description": "Leaderboard ranks AI usage over a window, either the users of the caller's own org\nor organizations against each other, and always reports the caller's own standing\neven when it falls outside the returned page. Identities are private by default: a\ncaller sees themselves, plus the peers or orgs that opted into public listing, and\nonly an admin sees their own org's members named. Cross-org spend is restricted to\nplatform admins. When the warehouse is not connected the board answers empty with\navailable=false rather than a fabricated rank.",
         "tags": [
-          "usage"
+          "leaderboard"
         ],
         "parameters": [
           {
@@ -152,13 +126,78 @@
         "x-tool": true
       }
     },
-    "/v1/usage/leaderboard/optin": {
+    "/v1/leaderboard/activity": {
       "get": {
-        "operationId": "get_usage_leaderboard_optin",
+        "operationId": "get_leaderboard_activity",
+        "summary": "Activity returns the per-day usage series for ONE authorized subject — the points a contribution heatmap and a timeline are drawn from, gap-filled so every day in the range is present.",
+        "description": "Activity returns the per-day usage series for ONE authorized subject — the points a\ncontribution heatmap and a timeline are drawn from, gap-filled so every day in the\nrange is present. Authorization is resolved server-side from the validated\nprincipal, so a caller can never widen the subject past what they are entitled to:\na non-admin reads only themselves and their own org. subject=project answers empty\nwith a note, because the usage ledger records no project column yet. When the\nwarehouse is not connected the series answers empty with available=false rather\nthan fabricated days.",
+        "tags": [
+          "leaderboard"
+        ],
+        "parameters": [
+          {
+            "name": "subject",
+            "in": "query",
+            "required": false,
+            "description": "Subject is what the series is about: \"user\" (default), \"org\" or \"project\".",
+            "schema": {
+              "type": "string"
+            },
+            "example": "user"
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "description": "ID names the subject within what the caller is entitled to see. Omitted (or\n\"me\") it is the caller themselves, or their own org. Another user requires org\nadmin and must belong to the caller's org; another org requires a SuperAdmin.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the first day of the range, \"2006-01-02\". Defaults to 90 days back.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-01-01"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the last day of the range, \"2006-01-02\". Defaults to today; the span is\nclamped to 366 days.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-03-31"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/leaderboard/optin": {
+      "get": {
+        "operationId": "get_leaderboard_optin",
         "summary": "Returns the caller's own public-listing preference and their org's, each with whether the caller may change it.",
         "description": "Returns the caller's own public-listing preference and their org's,\neach with whether the caller may change it. Public listing is opt-in and private\nby default, so a fresh caller reads listed=false for both.",
         "tags": [
-          "usage"
+          "leaderboard"
         ],
         "responses": {
           "200": {
@@ -176,11 +215,11 @@
         "x-tool": true
       },
       "put": {
-        "operationId": "put_usage_leaderboard_optin",
+        "operationId": "put_leaderboard_optin",
         "summary": "Sets the CALLER's own public-listing preference on the leaderboard.",
         "description": "Sets the CALLER's own public-listing preference on the leaderboard.\nSelf only: the row written is keyed by the caller's validated ledger identity, so\nthis can never edit another member's visibility whatever the request says. A\ncaller opting in with no handle is given their username, so a listed row never\nrenders as \"Anonymous\" to its own owner.",
         "tags": [
-          "usage"
+          "leaderboard"
         ],
         "requestBody": {
           "content": {
@@ -212,13 +251,13 @@
         "x-tool": true
       }
     },
-    "/v1/usage/leaderboard/optin/org": {
+    "/v1/leaderboard/optin/org": {
       "put": {
-        "operationId": "put_usage_leaderboard_optin_org",
+        "operationId": "put_leaderboard_optin_org",
         "summary": "Sets the ORG's listing on the cross-org global board.",
         "description": "Sets the ORG's listing on the cross-org global board. Only an admin of\nthe caller's own org — an org admin or a platform SuperAdmin — may change it, and\nthe org written is the caller's validated tenant, never a value from the request.\nListing consents to publishing the org's usage VOLUME; cross-org spend stays\nrestricted to platform admins regardless.",
         "tags": [
-          "usage"
+          "leaderboard"
         ],
         "requestBody": {
           "content": {
@@ -240,43 +279,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/orgOptinView"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/usage/rollup/backfill": {
-      "post": {
-        "operationId": "post_usage_rollup_backfill",
-        "summary": "Backfill seeds the derived usage rollup from ledger history — the rows written before the incremental view existed, which that view can never capture.",
-        "description": "Backfill seeds the derived usage rollup from ledger history — the rows written\nbefore the incremental view existed, which that view can never capture. SuperAdmin\nonly. Because the rollup accumulates, a second unguarded run would double every\nday it re-reads, so it refuses with 409 when the rollup already holds rows unless\nforce=true is passed; forcing WILL double-count.",
-        "tags": [
-          "usage"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "before": "2026-01-01T00:00:00Z"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/backfillQuery"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/backfillResult"
                 }
               }
             },

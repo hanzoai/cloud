@@ -1639,7 +1639,7 @@
  ],
  "integrations": [
   {
-   "id": "delete_connectors_by_id",
+   "id": "delete_integrations_connectors_by_id",
    "doc": "Forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint."
   },
   {
@@ -1647,28 +1647,28 @@
    "doc": "Deletes the repo's Pages site. 404 when there is none, so a\ncaller can tell \"turned it off\" from \"there was nothing on\"."
   },
   {
-   "id": "get_connectors",
-   "doc": "Lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
-   "read": true
-  },
-  {
-   "id": "get_connectors_by_id_token",
-   "doc": "Hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
-   "read": true
-  },
-  {
-   "id": "get_connectors_providers",
-   "doc": "Lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
-   "read": true
-  },
-  {
    "id": "get_integrations",
-   "doc": "Returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/connectors\nsurface) are omitted; the two planes are disjoint.",
+   "doc": "Returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/integrations/connectors\nsurface) are omitted; the two planes are disjoint.",
    "read": true
   },
   {
    "id": "get_integrations_by_provider",
    "doc": "Returns ONE provider with this org's connection status — the same view list\ncarries, for a single id. An unknown id is 404, and so is a user-plane provider:\nthe org surface never resolves one.",
+   "read": true
+  },
+  {
+   "id": "get_integrations_connectors",
+   "doc": "Lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
+   "read": true
+  },
+  {
+   "id": "get_integrations_connectors_by_id_token",
+   "doc": "Hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
+   "read": true
+  },
+  {
+   "id": "get_integrations_connectors_providers",
+   "doc": "Lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
    "read": true
   },
   {
@@ -1692,22 +1692,6 @@
    "read": true
   },
   {
-   "id": "post_connectors_by_id_refresh",
-   "doc": "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it."
-  },
-  {
-   "id": "post_connectors_by_provider_credential",
-   "doc": "Is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order)."
-  },
-  {
-   "id": "post_connectors_by_provider_device",
-   "doc": "Begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned."
-  },
-  {
-   "id": "post_connectors_by_provider_device_by_flow_poll",
-   "doc": "Advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval."
-  },
-  {
    "id": "post_integrations_by_provider_connect",
    "doc": "Acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback)."
   },
@@ -1718,6 +1702,22 @@
   {
    "id": "post_integrations_by_provider_verify",
    "doc": "Re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here)."
+  },
+  {
+   "id": "post_integrations_connectors_by_id_refresh",
+   "doc": "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it."
+  },
+  {
+   "id": "post_integrations_connectors_by_provider_credential",
+   "doc": "Is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order)."
+  },
+  {
+   "id": "post_integrations_connectors_by_provider_device",
+   "doc": "Begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned."
+  },
+  {
+   "id": "post_integrations_connectors_by_provider_device_by_flow_poll",
+   "doc": "Advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval."
   },
   {
    "id": "post_integrations_github_claim",
@@ -1800,30 +1800,26 @@
  "label": [],
  "leaderboard": [
   {
-   "id": "get_usage_activity",
-   "doc": "Activity returns the per-day usage series for ONE authorized subject — the points a\ncontribution heatmap and a timeline are drawn from, gap-filled so every day in the\nrange is present. Authorization is resolved server-side from the validated\nprincipal, so a caller can never widen the subject past what they are entitled to:\na non-admin reads only themselves and their own org. subject=project answers empty\nwith a note, because the usage ledger records no project column yet. When the\nwarehouse is not connected the series answers empty with available=false rather\nthan fabricated days.",
-   "read": true
-  },
-  {
-   "id": "get_usage_leaderboard",
+   "id": "get_leaderboard",
    "doc": "Leaderboard ranks AI usage over a window, either the users of the caller's own org\nor organizations against each other, and always reports the caller's own standing\neven when it falls outside the returned page. Identities are private by default: a\ncaller sees themselves, plus the peers or orgs that opted into public listing, and\nonly an admin sees their own org's members named. Cross-org spend is restricted to\nplatform admins. When the warehouse is not connected the board answers empty with\navailable=false rather than a fabricated rank.",
    "read": true
   },
   {
-   "id": "get_usage_leaderboard_optin",
+   "id": "get_leaderboard_activity",
+   "doc": "Activity returns the per-day usage series for ONE authorized subject — the points a\ncontribution heatmap and a timeline are drawn from, gap-filled so every day in the\nrange is present. Authorization is resolved server-side from the validated\nprincipal, so a caller can never widen the subject past what they are entitled to:\na non-admin reads only themselves and their own org. subject=project answers empty\nwith a note, because the usage ledger records no project column yet. When the\nwarehouse is not connected the series answers empty with available=false rather\nthan fabricated days.",
+   "read": true
+  },
+  {
+   "id": "get_leaderboard_optin",
    "doc": "Returns the caller's own public-listing preference and their org's,\neach with whether the caller may change it. Public listing is opt-in and private\nby default, so a fresh caller reads listed=false for both.",
    "read": true
   },
   {
-   "id": "post_usage_rollup_backfill",
-   "doc": "Backfill seeds the derived usage rollup from ledger history — the rows written\nbefore the incremental view existed, which that view can never capture. SuperAdmin\nonly. Because the rollup accumulates, a second unguarded run would double every\nday it re-reads, so it refuses with 409 when the rollup already holds rows unless\nforce=true is passed; forcing WILL double-count."
-  },
-  {
-   "id": "put_usage_leaderboard_optin",
+   "id": "put_leaderboard_optin",
    "doc": "Sets the CALLER's own public-listing preference on the leaderboard.\nSelf only: the row written is keyed by the caller's validated ledger identity, so\nthis can never edit another member's visibility whatever the request says. A\ncaller opting in with no handle is given their username, so a listed row never\nrenders as \"Anonymous\" to its own owner."
   },
   {
-   "id": "put_usage_leaderboard_optin_org",
+   "id": "put_leaderboard_optin_org",
    "doc": "Sets the ORG's listing on the cross-org global board. Only an admin of\nthe caller's own org — an org admin or a platform SuperAdmin — may change it, and\nthe org written is the caller's validated tenant, never a value from the request.\nListing consents to publishing the org's usage VOLUME; cross-org spend stays\nrestricted to platform admins regardless."
   }
  ],
@@ -3220,6 +3216,11 @@
    "read": true
   },
   {
+   "id": "get_o11y_summary",
+   "doc": "Reports whether the platform is up. It returns the public status\ndocument: the incidents currently open against Hanzo's own services, derived\nfrom the fleet health probes, plus the address of the human status page. No\nauthentication is required and no tenant data is involved — the answer is the\nsame for every caller.\n\nA service that fails its health probe becomes one incident naming that service.\nWhen the availability source itself cannot be read the endpoint answers 503\nrather than an empty incident list, because \"we cannot tell\" and \"everything is\nfine\" are different answers and only one of them is true.",
+   "read": true
+  },
+  {
    "id": "get_o11y_traces",
    "doc": "Lists the caller org's recent traces — one row per trace with\nits span count and wall-clock duration, most recently active first. This is\nthe trace SEARCH: it is where a trace id comes from, and the spans behind any\nrow are then read from GET /v1/o11y/traces/{traceId}. Every row belongs to the\ncaller's own org — the tenant is the validated principal, never an input, and\nthere is no administrator widening, because a trace list is a tenant's records\nrather than a rollup over them. An unreachable telemetry store answers 503\nrather than an empty page, because \"no traces\" and \"cannot see the traces\" are\ndifferent facts and only one of them is about the caller's system.",
    "read": true
@@ -3282,11 +3283,6 @@
   {
    "id": "get_sentinel_traces_by_id",
    "doc": "Returns one trace's captured errors for a project — every error event\nthat carried the trace id, in the order the events plane holds them.",
-   "read": true
-  },
-  {
-   "id": "get_summary",
-   "doc": "Reports whether the platform is up. It returns the public status\ndocument: the incidents currently open against Hanzo's own services, derived\nfrom the fleet health probes, plus the address of the human status page. No\nauthentication is required and no tenant data is involved — the answer is the\nsame for every caller.\n\nA service that fails its health probe becomes one incident naming that service.\nWhen the availability source itself cannot be read the endpoint answers 503\nrather than an empty incident list, because \"we cannot tell\" and \"everything is\nfine\" are different answers and only one of them is true.",
    "read": true
   },
   {

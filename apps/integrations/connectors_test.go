@@ -1,13 +1,13 @@
 package integrations
 
-// connectors_test.go proves the per-USER connector plane (/v1/connectors)
+// connectors_test.go proves the per-USER connector plane (/v1/integrations/connectors)
 // against the REAL store + REAL KMS (newKMS), with a scriptable in-package
 // `fake` provider so the engine paths (device flow, throttle, single-flight
 // refresh, cap, custody) are exercised with ZERO network:
 //   - identity: every route requires a validated principal (exactly 403);
 //     email-form and UUID-form users both pass verbatim;
 //   - plane split: user-scoped providers are invisible/404 on /v1/integrations
-//     and org providers 404 on /v1/connectors;
+//     and org providers 404 on /v1/integrations/connectors;
 //   - device flow: pending → connected, server-side poll throttle, per-grant
 //     single-flight, terminal outcomes burn the grant;
 //   - refresh: skew-gated, single-flight with adopt-after-lock, deterministic
@@ -90,14 +90,14 @@ func reset(t *testing.T) {
 
 // ── request/route helpers ──────────────────────────────────────────────────────
 
-func devStartPath(provider string) string { return "/v1/connectors/" + provider + "/device" }
+func devStartPath(provider string) string { return "/v1/integrations/connectors/" + provider + "/device" }
 func devPollPath(provider, flow string) string {
-	return "/v1/connectors/" + provider + "/device/" + flow + "/poll"
+	return "/v1/integrations/connectors/" + provider + "/device/" + flow + "/poll"
 }
-func credPath(provider string) string { return "/v1/connectors/" + provider + "/credential" }
-func tokenPath(id string) string      { return "/v1/connectors/" + id + "/token" }
-func refreshPath(id string) string    { return "/v1/connectors/" + id + "/refresh" }
-func connPath(id string) string       { return "/v1/connectors/" + id }
+func credPath(provider string) string { return "/v1/integrations/connectors/" + provider + "/credential" }
+func tokenPath(id string) string      { return "/v1/integrations/connectors/" + id + "/token" }
+func refreshPath(id string) string    { return "/v1/integrations/connectors/" + id + "/refresh" }
+func connPath(id string) string       { return "/v1/integrations/connectors/" + id }
 
 // as issues a request with an EXPLICIT user identity (req() derives u-<org>).
 // Empty org/user sends no identity headers — the 403 leg.
@@ -172,7 +172,7 @@ func decode[T any](t *testing.T, res httpResult) T {
 	return v
 }
 
-// Wire shapes (the published /v1/connectors contract).
+// Wire shapes (the published /v1/integrations/connectors contract).
 type startResp struct {
 	Flow      string `json:"flow"`
 	UserCode  string `json:"userCode"`
@@ -228,8 +228,8 @@ func TestConnectorsRequireIdentity(t *testing.T) {
 	// Missing identity is EXACTLY 403 on every route: principal.Org fails at
 	// Validated before validUser (or any body/param validation) can run.
 	routes := []struct{ method, path string }{
-		{http.MethodGet, "/v1/connectors"},
-		{http.MethodGet, "/v1/connectors/providers"},
+		{http.MethodGet, "/v1/integrations/connectors"},
+		{http.MethodGet, "/v1/integrations/connectors/providers"},
 		{http.MethodGet, tokenPath("fake:default")},
 		{http.MethodPost, devStartPath("fake")},
 		{http.MethodPost, devPollPath("fake", "deadbeef")},
@@ -261,8 +261,8 @@ func TestConnectorsRequireIdentity(t *testing.T) {
 		method, path string
 		body         any
 	}{
-		{http.MethodGet, "/v1/connectors", nil},
-		{http.MethodGet, "/v1/connectors/providers", nil},
+		{http.MethodGet, "/v1/integrations/connectors", nil},
+		{http.MethodGet, "/v1/integrations/connectors/providers", nil},
 		{http.MethodPost, credPath("fake"), map[string]any{"token": "tok"}},
 		{http.MethodGet, tokenPath("fake:default"), nil},
 		{http.MethodPost, refreshPath("fake:default"), nil},
@@ -308,11 +308,11 @@ func TestConnectorPlanesDisjoint(t *testing.T) {
 	}
 	// And an org provider is a 404 on the user plane.
 	if res := as(t, app, http.MethodPost, credPath("cloudflare"), "acme", userUUID, map[string]any{"token": "x"}); res.Code != http.StatusNotFound {
-		t.Fatalf("org provider on /v1/connectors want 404, got %d (%s)", res.Code, res.Body)
+		t.Fatalf("org provider on /v1/integrations/connectors want 404, got %d (%s)", res.Code, res.Body)
 	}
 
 	// The user provider cards carry capability-derived methods.
-	pv := decode[cpListResp](t, asOK(t, app, http.MethodGet, "/v1/connectors/providers", "acme", userUUID, nil))
+	pv := decode[cpListResp](t, asOK(t, app, http.MethodGet, "/v1/integrations/connectors/providers", "acme", userUUID, nil))
 	got := map[string][]string{}
 	for _, p := range pv.Providers {
 		got[p.ID] = p.Methods
@@ -337,7 +337,7 @@ func TestConnectorPlanesDisjoint(t *testing.T) {
 	for id := range got {
 		p, ok := registry[id]
 		if !ok || p.Scope != userScope {
-			t.Fatalf("non-user-scoped provider %q surfaced on /v1/connectors/providers", id)
+			t.Fatalf("non-user-scoped provider %q surfaced on /v1/integrations/connectors/providers", id)
 		}
 	}
 }
@@ -538,7 +538,7 @@ func TestCredentialLabelAndID(t *testing.T) {
 		t.Fatalf("labeled connect want fake:work, got %+v", cr)
 	}
 	asOK(t, app, http.MethodPost, credPath("fake"), "acme", userEmail, map[string]any{"token": "tok"})
-	list := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/connectors", "acme", userEmail, nil))
+	list := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/integrations/connectors", "acme", userEmail, nil))
 	ids := make([]string, 0, len(list.Connectors))
 	for _, c := range list.Connectors {
 		ids = append(ids, c.ID)
@@ -610,7 +610,7 @@ func TestCredentialVerifyFailStoresNothing(t *testing.T) {
 		if _, err := userHas(t, kc, "acme", userEmail, "fake", "default", accessSecret); err == nil {
 			t.Fatal("verify-before-store violated: a rejected credential was sealed")
 		}
-		list := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/connectors", "acme", userEmail, nil))
+		list := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/integrations/connectors", "acme", userEmail, nil))
 		if len(list.Connectors) != 0 {
 			t.Fatalf("verify-before-store violated: a rejected credential created a row: %+v", list.Connectors)
 		}

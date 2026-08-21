@@ -81,20 +81,16 @@ type commitsData struct {
 }
 
 // render writes a page: the named body template wrapped in the shared chrome.
-// base is the request's UI base path ("" on the git host, "/git" elsewhere); the
-// chrome's home link resolves to base or "/" so it points at the right root on
-// either host.
+// base is where these pages live (uiBase), which is also the chrome's home link.
+// It used to be "" on the dedicated git host, where the pages answered at the
+// root, and the home link had to fall back to "/" for that one case.
 func render(c *zip.Ctx, base string, status int, title string, body *template.Template, data any) error {
 	var inner bytes.Buffer
 	if err := body.Execute(&inner, data); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "render: %v", err)
 	}
-	home := base
-	if home == "" {
-		home = "/"
-	}
 	var page bytes.Buffer
-	if err := chromeTmpl.Execute(&page, chromeData{Title: title, Home: home, Body: template.HTML(inner.String())}); err != nil {
+	if err := chromeTmpl.Execute(&page, chromeData{Title: title, Home: base, Body: template.HTML(inner.String())}); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "render: %v", err)
 	}
 	c.SetHeader("Content-Type", "text/html; charset=utf-8")

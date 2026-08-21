@@ -5225,36 +5225,6 @@ components:
           description: AuthorizeURL is the provider consent (or bot deep-link) URL.
           type: string
       type: object
-    backfillQuery:
-      properties:
-        before:
-          description: |-
-            Before bounds the seed to ledger rows written before this RFC3339 instant.
-            Defaults to now, and is snapped down to UTC midnight — the rollup's grain, so
-            the seeded days and the guarded days are the same set. Pass the day the
-            incremental view started capturing, so seed and view never share a day.
-          type: string
-        force:
-          description: |-
-            Force must be exactly "true" to seed a rollup that already holds rows. It is
-            spelled as a string, not a flag, because the guard has always compared this
-            value literally — "1" and "yes" do NOT force.
-          type: string
-      type: object
-    backfillResult:
-      properties:
-        forced:
-          description: Forced is true when the caller overrode the already-populated
-            guard.
-          type: boolean
-        seededBefore:
-          description: SeededBefore is the RFC3339 upper bound the seed actually used.
-          type: string
-        status:
-          description: Status is "ok" — a seed that did not run answered an error
-            instead.
-          type: string
-      type: object
     baseHealth:
       properties:
         service:
@@ -42016,335 +41986,6 @@ paths:
       - visor
       x-app: visor
       x-public: true
-  /v1/connectors:
-    get:
-      description: |-
-        Lists the caller's OWN connectors across every provider — the set
-        `hanzo connector ls` prints. Rows are keyed (org,user), so this can never
-        surface another user's connector, and no secret is in the view.
-      operationId: get_connectors
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                connectors:
-                - account: me@acme.com
-                  connectedAt: "2026-07-01T10:00:00Z"
-                  expiresAt: "2026-07-01T11:00:00Z"
-                  externalId: u-42
-                  id: openai:default
-                  label: default
-                  provider: openai
-                  scopes:
-                  - api
-              schema:
-                $ref: '#/components/schemas/connectorsOut'
-          description: ok
-      summary: Lists the caller's OWN connectors across every provider — the set `hanzo
-        connector ls` prints.
-      tags:
-      - integrations
-      x-app: integrations
-      x-public: true
-      x-tool: true
-  /v1/connectors/{id}:
-    delete:
-      description: |-
-        Forgets a connector: every custodied secret, then the row.
-        Idempotent — dropping a never-connected id still answers {disconnected:true}
-        (disconnect() parity). No provider Revoke: none of the user-plane providers
-        exposes a revoke endpoint.
-      operationId: delete_connectors_by_id
-      parameters:
-      - description: |-
-          ID is the connector id, provider + ":" + label ("openai:default") — the
-          auth-profile-id shape. Another user's id is simply no row, so 404.
-        example: openai:work
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                disconnected: true
-              schema:
-                $ref: '#/components/schemas/disconnectOut'
-          description: ok
-      summary: 'Forgets a connector: every custodied secret, then the row.'
-      tags:
-      - integrations
-      x-app: integrations
-      x-public: true
-      x-tool: true
-  /v1/connectors/{id}/refresh:
-    post:
-      description: |-
-        Forces a token rotation for a connected connector, ahead of the
-        automatic rotation a token read would do inside the expiry window. Only
-        providers that declare a Refresh support it.
-      operationId: post_connectors_by_id_refresh
-      parameters:
-      - description: |-
-          ID is the connector id, provider + ":" + label ("openai:default") — the
-          auth-profile-id shape. Another user's id is simply no row, so 404.
-        example: openai:work
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                connector:
-                  account: me@acme.com
-                  connectedAt: "2026-07-01T10:00:00Z"
-                  expiresAt: "2026-07-01T12:00:00Z"
-                  externalId: u-42
-                  id: openai:work
-                  label: work
-                  provider: openai
-                  scopes:
-                  - api
-                refreshed: true
-              schema:
-                $ref: '#/components/schemas/refreshOut'
-          description: ok
-      summary: Forces a token rotation for a connected connector, ahead of the automatic
-        rotation a token read would do inside the expiry window.
-      tags:
-      - integrations
-      x-app: integrations
-      x-public: true
-      x-tool: true
-  /v1/connectors/{id}/token:
-    get:
-      description: |-
-        Hands the custodied access token to its owner — the ONE place
-        custody exits. The (org,user)-keyed row IS the same-user gate: another user's
-        id is simply "no row" → 404. fresh() auto-rotates within the refreshSkew
-        window; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh
-        tokens are NEVER returned — custody keeps the sink. The token is never logged.
-      operationId: get_connectors_by_id_token
-      parameters:
-      - description: |-
-          ID is the connector id, provider + ":" + label ("openai:default") — the
-          auth-profile-id shape. Another user's id is simply no row, so 404.
-        example: openai:work
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                expiresAt: "2026-07-01T11:00:00Z"
-                label: work
-                provider: openai
-                token: <the access token>
-              schema:
-                $ref: '#/components/schemas/connectorTokenOut'
-          description: ok
-      summary: Hands the custodied access token to its owner — the ONE place custody
-        exits.
-      tags:
-      - integrations
-      x-app: integrations
-      x-public: true
-      x-tool: true
-  /v1/connectors/{provider}/credential:
-    post:
-      description: |-
-        Is the direct intake path: a customer-held token/setup-token
-        (Verify) or an externally obtained OAuth bundle from the CLI's local PKCE
-        (Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING
-        is persisted (connectByCredential's fail-closed order).
-      operationId: post_connectors_by_provider_credential
-      parameters:
-      - description: Provider is the user-scoped provider's registry id, from the
-          path.
-        example: openai
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              label: work
-              provider: openai
-              token: sk-user-owned-key
-            schema:
-              $ref: '#/components/schemas/credentialIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                connected: true
-                connector:
-                  account: me@acme.com
-                  connectedAt: "2026-07-01T10:00:00Z"
-                  expiresAt: ""
-                  externalId: u-42
-                  id: openai:work
-                  label: work
-                  provider: openai
-                  scopes:
-                  - api
-              schema:
-                $ref: '#/components/schemas/credentialOut'
-          description: ok
-      summary: 'Is the direct intake path: a customer-held token/setup-token (Verify)
-        or an externally obtained OAuth bundle from the CLI''s local PKCE (Adopt).'
-      tags:
-      - integrations
-      x-app: integrations
-      x-public: true
-      x-tool: true
-  /v1/connectors/{provider}/device:
-    post:
-      description: |-
-        Begins a device sign-in and returns the code to show the user plus
-        how to poll for completion. KMS readiness is checked NOW rather than dead-ending
-        the user at poll-done (connect() parity), and the per-provider connector cap is
-        checked before the provider is called. The provider's device code is persisted
-        only in the encrypted grants table and is NEVER returned.
-      operationId: post_connectors_by_provider_device
-      parameters:
-      - description: Provider is the user-scoped provider's registry id, from the
-          path.
-        example: openai
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              label: work
-              provider: openai
-            schema:
-              $ref: '#/components/schemas/deviceStartIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                expiresAt: "2026-07-01T10:15:00Z"
-                flow: g_7f2c
-                interval: 5
-                userCode: WDJB-MJHT
-                verifyUrl: https://example.com/device
-              schema:
-                $ref: '#/components/schemas/deviceStartOut'
-          description: ok
-      summary: Begins a device sign-in and returns the code to show the user plus
-        how to poll for completion.
-      tags:
-      - integrations
-      x-app: integrations
-      x-public: true
-      x-tool: true
-  /v1/connectors/{provider}/device/{flow}/poll:
-    post:
-      description: |-
-        Advances a device sign-in. Terminal outcomes are DATA, not errors
-        (verifyConn {active:false} discipline) — the status set is closed:
-        pending|connected|denied|expired. pollSlow collapses to "pending" on the
-        wire; the raised cadence rides interval.
-      operationId: post_connectors_by_provider_device_by_flow_poll
-      parameters:
-      - description: Provider is the user-scoped provider's registry id, from the
-          path.
-        example: openai
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      - description: |-
-          Flow is the id deviceStartOut returned. Expired or another user's flow is
-          indistinguishable from an unknown one: 404.
-        example: g_7f2c
-        in: path
-        name: flow
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                connector:
-                  account: me@acme.com
-                  connectedAt: "2026-07-01T10:05:00Z"
-                  expiresAt: "2026-07-01T11:00:00Z"
-                  externalId: u-42
-                  id: openai:work
-                  label: work
-                  provider: openai
-                  scopes:
-                  - api
-                status: connected
-              schema:
-                $ref: '#/components/schemas/devicePollOut'
-          description: ok
-      summary: Advances a device sign-in.
-      tags:
-      - integrations
-      x-app: integrations
-      x-public: true
-      x-tool: true
-  /v1/connectors/providers:
-    get:
-      description: |-
-        Lists the user-scoped provider cards — the catalog of what a
-        user can connect, and how. Methods derive from capabilities (Device/Adopt/Verify
-        — Mount asserts at least one), never from a parallel kind enum.
-      operationId: get_connectors_providers
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                providers:
-                - category: AI
-                  description: Use your own OpenAI account.
-                  id: openai
-                  methods:
-                  - device
-                  - token
-                  name: OpenAI
-                  scopes:
-                  - api
-              schema:
-                $ref: '#/components/schemas/connectorProvidersOut'
-          description: ok
-      summary: Lists the user-scoped provider cards — the catalog of what a user can
-        connect, and how.
-      tags:
-      - integrations
-      x-app: integrations
-      x-public: true
-      x-tool: true
   /v1/crawl:
     post:
       description: |-
@@ -46274,6 +45915,23 @@ paths:
       x-app: gateway
       x-public: true
       x-tool: true
+  /v1/git:
+    get:
+      description: The repository list for the signed-in caller's org — each repo
+        with its description, default branch, size and last update. SIGNED OUT it
+        renders the public explore page instead of refusing, because most Hanzo repos
+        are open source and the open face is the default one; signed in, the caller's
+        own org shows its private repositories alongside its public ones. This is
+        a server-rendered browser page, not JSON — the console repo-browser reads
+        the same repository through the JSON ops under /v1/git/repos. Repository names,
+        paths and file contents all render through auto-escaping templates rather
+        than being concatenated into HTML.
+      operationId: get_git
+      summary: Browse your org's repositories
+      tags:
+      - git
+      x-app: git
+      x-public: true
   /v1/git-webhook:
     post:
       description: |-
@@ -46400,6 +46058,66 @@ paths:
       - git
       x-app: git
       x-public: true
+  /v1/git/{org}/{repo}:
+    get:
+      description: 'A repository at a glance: its branches, the tree at the tip, its
+        most recent commits, its README rendered, and the HTTPS and SSH clone URLs.
+        `?ref=` selects a branch, tag or commit; the default branch is used when it
+        is omitted. A repository with no commits yet renders its clone instructions
+        rather than an error, which is what a caller who has just created one needs
+        to see. A public repository is readable by anyone; a private one only by its
+        own org. A repository that does not exist and one belonging to another org
+        answer the SAME 404, so the page is never an existence oracle. This is a server-rendered
+        browser page, not JSON — the console repo-browser reads the same repository
+        through the JSON ops under /v1/git/repos. Repository names, paths and file
+        contents all render through auto-escaping templates rather than being concatenated
+        into HTML.'
+      operationId: get_git_by_org_by_repo
+      parameters:
+      - in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: repo
+        required: true
+        schema:
+          type: string
+      summary: Open a repository's home page
+      tags:
+      - git
+      x-app: git
+      x-public: true
+  /v1/git/{org}/{repo}/commits:
+    get:
+      description: The hundred most recent commits on one ref, each with its author,
+        message and date. `?ref=` selects the branch, tag or commit, defaulting to
+        the repository's default branch; an unknown one is 404. A public repository
+        is readable by anyone; a private one only by its own org. A repository that
+        does not exist and one belonging to another org answer the SAME 404, so the
+        page is never an existence oracle. This is a server-rendered browser page,
+        not JSON — the console repo-browser reads the same repository through the
+        JSON ops under /v1/git/repos. Repository names, paths and file contents all
+        render through auto-escaping templates rather than being concatenated into
+        HTML.
+      operationId: get_git_by_org_by_repo_commits
+      parameters:
+      - in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: repo
+        required: true
+        schema:
+          type: string
+      summary: Read a repository's commit log
+      tags:
+      - git
+      x-app: git
+      x-public: true
   /v1/git/{org}/{repo}/git-receive-pack:
     post:
       description: |-
@@ -46479,6 +46197,24 @@ paths:
         schema:
           type: string
       summary: Advertise a repository's refs to a git client
+      tags:
+      - git
+      x-app: git
+      x-public: true
+  /v1/git/explore:
+    get:
+      description: 'The open, unauthenticated face of the git host: every PUBLIC repository
+        in the fleet, org-qualified, so a project can be found and cloned with no
+        account at all — signing in is for private repos and for writes. Repositories
+        live in per-org stores with no global index, so this unions each org''s public
+        rows and is bounded to a fixed number of stores per request, keeping discovery
+        quick however many orgs exist. A fleet with no orgs yet is an empty page,
+        not an error. This is a server-rendered browser page, not JSON — the console
+        repo-browser reads the same repository through the JSON ops under /v1/git/repos.
+        Repository names, paths and file contents all render through auto-escaping
+        templates rather than being concatenated into HTML.'
+      operationId: get_git_explore
+      summary: Discover public repositories across every org
       tags:
       - git
       x-app: git
@@ -54073,7 +53809,7 @@ paths:
         Returns every registered integration provider together with THIS org's
         connection status for it — the catalog the console's Integrations page renders.
         Org-authed: a caller with no validated principal is 403, because the status is
-        per-org and there is no org-less answer. User-plane providers (the /v1/connectors
+        per-org and there is no org-less answer. User-plane providers (the /v1/integrations/connectors
         surface) are omitted; the two planes are disjoint.
       operationId: get_integrations
       responses:
@@ -54114,7 +53850,7 @@ paths:
       parameters:
       - description: |-
           Provider is the registry id of the connector — "slack", "github",
-          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/connectors)
+          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)
           providers, which this surface never resolves.
         example: slack
         in: path
@@ -54228,7 +53964,7 @@ paths:
       parameters:
       - description: |-
           Provider is the registry id of the connector — "slack", "github",
-          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/connectors)
+          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)
           providers, which this surface never resolves.
         example: slack
         in: path
@@ -54265,7 +54001,7 @@ paths:
       parameters:
       - description: |-
           Provider is the registry id of the connector — "slack", "github",
-          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/connectors)
+          "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)
           providers, which this surface never resolves.
         example: cloudflare
         in: path
@@ -54289,6 +54025,335 @@ paths:
           description: ok
       summary: Re-checks a CONNECTED apikey connector's stored credential against
         the provider, live (`hanzo connector verify`).
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+      x-tool: true
+  /v1/integrations/connectors:
+    get:
+      description: |-
+        Lists the caller's OWN connectors across every provider — the set
+        `hanzo connector ls` prints. Rows are keyed (org,user), so this can never
+        surface another user's connector, and no secret is in the view.
+      operationId: get_integrations_connectors
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                connectors:
+                - account: me@acme.com
+                  connectedAt: "2026-07-01T10:00:00Z"
+                  expiresAt: "2026-07-01T11:00:00Z"
+                  externalId: u-42
+                  id: openai:default
+                  label: default
+                  provider: openai
+                  scopes:
+                  - api
+              schema:
+                $ref: '#/components/schemas/connectorsOut'
+          description: ok
+      summary: Lists the caller's OWN connectors across every provider — the set `hanzo
+        connector ls` prints.
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+      x-tool: true
+  /v1/integrations/connectors/{id}:
+    delete:
+      description: |-
+        Forgets a connector: every custodied secret, then the row.
+        Idempotent — dropping a never-connected id still answers {disconnected:true}
+        (disconnect() parity). No provider Revoke: none of the user-plane providers
+        exposes a revoke endpoint.
+      operationId: delete_integrations_connectors_by_id
+      parameters:
+      - description: |-
+          ID is the connector id, provider + ":" + label ("openai:default") — the
+          auth-profile-id shape. Another user's id is simply no row, so 404.
+        example: openai:work
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                disconnected: true
+              schema:
+                $ref: '#/components/schemas/disconnectOut'
+          description: ok
+      summary: 'Forgets a connector: every custodied secret, then the row.'
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+      x-tool: true
+  /v1/integrations/connectors/{id}/refresh:
+    post:
+      description: |-
+        Forces a token rotation for a connected connector, ahead of the
+        automatic rotation a token read would do inside the expiry window. Only
+        providers that declare a Refresh support it.
+      operationId: post_integrations_connectors_by_id_refresh
+      parameters:
+      - description: |-
+          ID is the connector id, provider + ":" + label ("openai:default") — the
+          auth-profile-id shape. Another user's id is simply no row, so 404.
+        example: openai:work
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                connector:
+                  account: me@acme.com
+                  connectedAt: "2026-07-01T10:00:00Z"
+                  expiresAt: "2026-07-01T12:00:00Z"
+                  externalId: u-42
+                  id: openai:work
+                  label: work
+                  provider: openai
+                  scopes:
+                  - api
+                refreshed: true
+              schema:
+                $ref: '#/components/schemas/refreshOut'
+          description: ok
+      summary: Forces a token rotation for a connected connector, ahead of the automatic
+        rotation a token read would do inside the expiry window.
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+      x-tool: true
+  /v1/integrations/connectors/{id}/token:
+    get:
+      description: |-
+        Hands the custodied access token to its owner — the ONE place
+        custody exits. The (org,user)-keyed row IS the same-user gate: another user's
+        id is simply "no row" → 404. fresh() auto-rotates within the refreshSkew
+        window; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh
+        tokens are NEVER returned — custody keeps the sink. The token is never logged.
+      operationId: get_integrations_connectors_by_id_token
+      parameters:
+      - description: |-
+          ID is the connector id, provider + ":" + label ("openai:default") — the
+          auth-profile-id shape. Another user's id is simply no row, so 404.
+        example: openai:work
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                expiresAt: "2026-07-01T11:00:00Z"
+                label: work
+                provider: openai
+                token: <the access token>
+              schema:
+                $ref: '#/components/schemas/connectorTokenOut'
+          description: ok
+      summary: Hands the custodied access token to its owner — the ONE place custody
+        exits.
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+      x-tool: true
+  /v1/integrations/connectors/{provider}/credential:
+    post:
+      description: |-
+        Is the direct intake path: a customer-held token/setup-token
+        (Verify) or an externally obtained OAuth bundle from the CLI's local PKCE
+        (Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING
+        is persisted (connectByCredential's fail-closed order).
+      operationId: post_integrations_connectors_by_provider_credential
+      parameters:
+      - description: Provider is the user-scoped provider's registry id, from the
+          path.
+        example: openai
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              label: work
+              provider: openai
+              token: sk-user-owned-key
+            schema:
+              $ref: '#/components/schemas/credentialIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                connected: true
+                connector:
+                  account: me@acme.com
+                  connectedAt: "2026-07-01T10:00:00Z"
+                  expiresAt: ""
+                  externalId: u-42
+                  id: openai:work
+                  label: work
+                  provider: openai
+                  scopes:
+                  - api
+              schema:
+                $ref: '#/components/schemas/credentialOut'
+          description: ok
+      summary: 'Is the direct intake path: a customer-held token/setup-token (Verify)
+        or an externally obtained OAuth bundle from the CLI''s local PKCE (Adopt).'
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+      x-tool: true
+  /v1/integrations/connectors/{provider}/device:
+    post:
+      description: |-
+        Begins a device sign-in and returns the code to show the user plus
+        how to poll for completion. KMS readiness is checked NOW rather than dead-ending
+        the user at poll-done (connect() parity), and the per-provider connector cap is
+        checked before the provider is called. The provider's device code is persisted
+        only in the encrypted grants table and is NEVER returned.
+      operationId: post_integrations_connectors_by_provider_device
+      parameters:
+      - description: Provider is the user-scoped provider's registry id, from the
+          path.
+        example: openai
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              label: work
+              provider: openai
+            schema:
+              $ref: '#/components/schemas/deviceStartIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                expiresAt: "2026-07-01T10:15:00Z"
+                flow: g_7f2c
+                interval: 5
+                userCode: WDJB-MJHT
+                verifyUrl: https://example.com/device
+              schema:
+                $ref: '#/components/schemas/deviceStartOut'
+          description: ok
+      summary: Begins a device sign-in and returns the code to show the user plus
+        how to poll for completion.
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+      x-tool: true
+  /v1/integrations/connectors/{provider}/device/{flow}/poll:
+    post:
+      description: |-
+        Advances a device sign-in. Terminal outcomes are DATA, not errors
+        (verifyConn {active:false} discipline) — the status set is closed:
+        pending|connected|denied|expired. pollSlow collapses to "pending" on the
+        wire; the raised cadence rides interval.
+      operationId: post_integrations_connectors_by_provider_device_by_flow_poll
+      parameters:
+      - description: Provider is the user-scoped provider's registry id, from the
+          path.
+        example: openai
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      - description: |-
+          Flow is the id deviceStartOut returned. Expired or another user's flow is
+          indistinguishable from an unknown one: 404.
+        example: g_7f2c
+        in: path
+        name: flow
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                connector:
+                  account: me@acme.com
+                  connectedAt: "2026-07-01T10:05:00Z"
+                  expiresAt: "2026-07-01T11:00:00Z"
+                  externalId: u-42
+                  id: openai:work
+                  label: work
+                  provider: openai
+                  scopes:
+                  - api
+                status: connected
+              schema:
+                $ref: '#/components/schemas/devicePollOut'
+          description: ok
+      summary: Advances a device sign-in.
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+      x-tool: true
+  /v1/integrations/connectors/providers:
+    get:
+      description: |-
+        Lists the user-scoped provider cards — the catalog of what a
+        user can connect, and how. Methods derive from capabilities (Device/Adopt/Verify
+        — Mount asserts at least one), never from a parallel kind enum.
+      operationId: get_integrations_connectors_providers
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                providers:
+                - category: AI
+                  description: Use your own OpenAI account.
+                  id: openai
+                  methods:
+                  - device
+                  - token
+                  name: OpenAI
+                  scopes:
+                  - api
+              schema:
+                $ref: '#/components/schemas/connectorProvidersOut'
+          description: ok
+      summary: Lists the user-scoped provider cards — the catalog of what a user can
+        connect, and how.
       tags:
       - integrations
       x-app: integrations
@@ -55771,6 +55836,210 @@ paths:
       - kms
       x-app: kms
       x-public: true
+  /v1/leaderboard:
+    get:
+      description: |-
+        Leaderboard ranks AI usage over a window, either the users of the caller's own org
+        or organizations against each other, and always reports the caller's own standing
+        even when it falls outside the returned page. Identities are private by default: a
+        caller sees themselves, plus the peers or orgs that opted into public listing, and
+        only an admin sees their own org's members named. Cross-org spend is restricted to
+        platform admins. When the warehouse is not connected the board answers empty with
+        available=false rather than a fabricated rank.
+      operationId: get_leaderboard
+      parameters:
+      - description: |-
+          Scope picks the board: "personal" (default) ranks the caller among their own
+          org's users, "org" is that same org board named for an admin, "global" ranks
+          organizations against each other.
+        example: personal
+        in: query
+        name: scope
+        required: false
+        schema:
+          type: string
+      - description: 'Metric is the value ranked: tokens (default), requests, or cost.'
+        example: tokens
+        in: query
+        name: metric
+        required: false
+        schema:
+          type: string
+      - description: 'Period is the window ranked: day, week, month (default) or all.'
+        example: week
+        in: query
+        name: period
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps the rows returned, clamped to 100. Defaults to 10, which is also
+          what a non-positive or unparseable value takes.
+        example: 10
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardView'
+          description: ok
+      summary: Leaderboard ranks AI usage over a window, either the users of the caller's
+        own org or organizations against each other, and always reports the caller's
+        own standing even when it falls outside the returned page.
+      tags:
+      - leaderboard
+      x-app: leaderboard
+      x-public: true
+      x-tool: true
+  /v1/leaderboard/activity:
+    get:
+      description: |-
+        Activity returns the per-day usage series for ONE authorized subject — the points a
+        contribution heatmap and a timeline are drawn from, gap-filled so every day in the
+        range is present. Authorization is resolved server-side from the validated
+        principal, so a caller can never widen the subject past what they are entitled to:
+        a non-admin reads only themselves and their own org. subject=project answers empty
+        with a note, because the usage ledger records no project column yet. When the
+        warehouse is not connected the series answers empty with available=false rather
+        than fabricated days.
+      operationId: get_leaderboard_activity
+      parameters:
+      - description: 'Subject is what the series is about: "user" (default), "org"
+          or "project".'
+        example: user
+        in: query
+        name: subject
+        required: false
+        schema:
+          type: string
+      - description: |-
+          ID names the subject within what the caller is entitled to see. Omitted (or
+          "me") it is the caller themselves, or their own org. Another user requires org
+          admin and must belong to the caller's org; another org requires a SuperAdmin.
+        in: query
+        name: id
+        required: false
+        schema:
+          type: string
+      - description: From is the first day of the range, "2006-01-02". Defaults to
+          90 days back.
+        example: "2026-01-01"
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      - description: |-
+          To is the last day of the range, "2006-01-02". Defaults to today; the span is
+          clamped to 366 days.
+        example: "2026-03-31"
+        in: query
+        name: to
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityView'
+          description: ok
+      summary: Activity returns the per-day usage series for ONE authorized subject
+        — the points a contribution heatmap and a timeline are drawn from, gap-filled
+        so every day in the range is present.
+      tags:
+      - leaderboard
+      x-app: leaderboard
+      x-public: true
+      x-tool: true
+  /v1/leaderboard/optin:
+    get:
+      description: |-
+        Returns the caller's own public-listing preference and their org's,
+        each with whether the caller may change it. Public listing is opt-in and private
+        by default, so a fresh caller reads listed=false for both.
+      operationId: get_leaderboard_optin
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/optinView'
+          description: ok
+      summary: Returns the caller's own public-listing preference and their org's,
+        each with whether the caller may change it.
+      tags:
+      - leaderboard
+      x-app: leaderboard
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Sets the CALLER's own public-listing preference on the leaderboard.
+        Self only: the row written is keyed by the caller's validated ledger identity, so
+        this can never edit another member's visibility whatever the request says. A
+        caller opting in with no handle is given their username, so a listed row never
+        renders as "Anonymous" to its own owner.
+      operationId: put_leaderboard_optin
+      requestBody:
+        content:
+          application/json:
+            example:
+              handle: ada
+              listed: true
+            schema:
+              $ref: '#/components/schemas/userOptinReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/userOptinView'
+          description: ok
+      summary: Sets the CALLER's own public-listing preference on the leaderboard.
+      tags:
+      - leaderboard
+      x-app: leaderboard
+      x-public: true
+      x-tool: true
+  /v1/leaderboard/optin/org:
+    put:
+      description: |-
+        Sets the ORG's listing on the cross-org global board. Only an admin of
+        the caller's own org — an org admin or a platform SuperAdmin — may change it, and
+        the org written is the caller's validated tenant, never a value from the request.
+        Listing consents to publishing the org's usage VOLUME; cross-org spend stays
+        restricted to platform admins regardless.
+      operationId: put_leaderboard_optin_org
+      requestBody:
+        content:
+          application/json:
+            example:
+              display: Acme
+              listed: true
+            schema:
+              $ref: '#/components/schemas/orgOptinReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/orgOptinView'
+          description: ok
+      summary: Sets the ORG's listing on the cross-org global board.
+      tags:
+      - leaderboard
+      x-app: leaderboard
+      x-public: true
+      x-tool: true
   /v1/logs/health:
     get:
       description: |-
@@ -67141,6 +67410,33 @@ paths:
       x-app: o11y
       x-public: true
       x-tool: true
+  /v1/o11y/summary:
+    get:
+      description: |-
+        Reports whether the platform is up. It returns the public status
+        document: the incidents currently open against Hanzo's own services, derived
+        from the fleet health probes, plus the address of the human status page. No
+        authentication is required and no tenant data is involved — the answer is the
+        same for every caller.
+
+        A service that fails its health probe becomes one incident naming that service.
+        When the availability source itself cannot be read the endpoint answers 503
+        rather than an empty incident list, because "we cannot tell" and "everything is
+        fine" are different answers and only one of them is true.
+      operationId: get_o11y_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.StatusSummary'
+          description: ok
+      summary: Reports whether the platform is up.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
   /v1/o11y/testChannel:
     post:
       description: |-
@@ -75389,24 +75685,6 @@ paths:
       x-app: sandboxes
       x-public: true
       x-tool: true
-  /v1/scrape:
-    post:
-      description: |-
-        Takes {url} and answers {success, data:{markdown, metadata}} — the exact contract a firecrawl client decodes. The fetch, extraction and optional browser render run in-process; there is no crawler pod to be down.
-
-        The shared service key is required as an Authorization Bearer, compared in constant time: unset on the deployment is 503, missing or wrong is 401. Unlike search, a validated principal does NOT substitute for it — this is the service-to-service door.
-
-        A page is archived under the caller's own org and project, taken from the verified principal when there is one, so a scrape lands in the same corpus /v1/crawl fills and a URL already read under that scope is answered from the archive without touching the network. A service caller carrying no principal shares the unscoped prefix.
-
-        The URL is caller-supplied and fetched from INSIDE the cluster, which makes this a request-forgery primitive by construction: in-namespace service DNS and a cloud metadata endpoint that hands credentials to anyone who asks are both a resolution away. Only http and https are accepted, and every address actually dialled must be public unicast — loopback, link-local, private and multicast are refused. The check lives in the DIALER rather than on the hostname, because resolving a name to validate it and then letting the transport resolve it again is a gap DNS rebinding walks straight through; redirects re-enter the same dialer, so a public URL that bounces to the metadata address is refused at the hop that matters.
-
-        The one thing to get right: FAILURE IS 200. A missing or unparseable url, a body over the 1 MiB read cap, and a fetch that could not be completed all answer HTTP 200 with success:false and a reason — a firecrawl client reads data.success, not the status line. Only the two auth refusals use a status code, so a caller that branches on HTTP status alone will read every failed scrape as a success.
-      operationId: post_scrape
-      summary: Fetch one page and get its extracted markdown, in the firecrawl envelope.
-      tags:
-      - websearch
-      x-app: websearch
-      x-public: true
   /v1/search:
     post:
       description: |-
@@ -77950,33 +78228,6 @@ paths:
       - commerce
       x-app: commerce
       x-public: true
-  /v1/summary:
-    get:
-      description: |-
-        Reports whether the platform is up. It returns the public status
-        document: the incidents currently open against Hanzo's own services, derived
-        from the fleet health probes, plus the address of the human status page. No
-        authentication is required and no tenant data is involved — the answer is the
-        same for every caller.
-
-        A service that fails its health probe becomes one incident naming that service.
-        When the availability source itself cannot be read the endpoint answers 503
-        rather than an empty incident list, because "we cannot tell" and "everything is
-        fine" are different answers and only one of them is true.
-      operationId: get_summary
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.StatusSummary'
-          description: ok
-      summary: Reports whether the platform is up.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
   /v1/sync:
     get:
       description: |-
@@ -80024,68 +80275,6 @@ paths:
       x-app: usage
       x-public: true
       x-tool: true
-  /v1/usage/activity:
-    get:
-      description: |-
-        Activity returns the per-day usage series for ONE authorized subject — the points a
-        contribution heatmap and a timeline are drawn from, gap-filled so every day in the
-        range is present. Authorization is resolved server-side from the validated
-        principal, so a caller can never widen the subject past what they are entitled to:
-        a non-admin reads only themselves and their own org. subject=project answers empty
-        with a note, because the usage ledger records no project column yet. When the
-        warehouse is not connected the series answers empty with available=false rather
-        than fabricated days.
-      operationId: get_usage_activity
-      parameters:
-      - description: 'Subject is what the series is about: "user" (default), "org"
-          or "project".'
-        example: user
-        in: query
-        name: subject
-        required: false
-        schema:
-          type: string
-      - description: |-
-          ID names the subject within what the caller is entitled to see. Omitted (or
-          "me") it is the caller themselves, or their own org. Another user requires org
-          admin and must belong to the caller's org; another org requires a SuperAdmin.
-        in: query
-        name: id
-        required: false
-        schema:
-          type: string
-      - description: From is the first day of the range, "2006-01-02". Defaults to
-          90 days back.
-        example: "2026-01-01"
-        in: query
-        name: from
-        required: false
-        schema:
-          type: string
-      - description: |-
-          To is the last day of the range, "2006-01-02". Defaults to today; the span is
-          clamped to 366 days.
-        example: "2026-03-31"
-        in: query
-        name: to
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ActivityView'
-          description: ok
-      summary: Activity returns the per-day usage series for ONE authorized subject
-        — the points a contribution heatmap and a timeline are drawn from, gap-filled
-        so every day in the range is present.
-      tags:
-      - leaderboard
-      x-app: leaderboard
-      x-public: true
-      x-tool: true
   /v1/usage/analytics:
     get:
       description: |-
@@ -80184,179 +80373,6 @@ paths:
       tags:
       - usage
       x-app: usage
-      x-public: true
-      x-tool: true
-  /v1/usage/leaderboard:
-    get:
-      description: |-
-        Leaderboard ranks AI usage over a window, either the users of the caller's own org
-        or organizations against each other, and always reports the caller's own standing
-        even when it falls outside the returned page. Identities are private by default: a
-        caller sees themselves, plus the peers or orgs that opted into public listing, and
-        only an admin sees their own org's members named. Cross-org spend is restricted to
-        platform admins. When the warehouse is not connected the board answers empty with
-        available=false rather than a fabricated rank.
-      operationId: get_usage_leaderboard
-      parameters:
-      - description: |-
-          Scope picks the board: "personal" (default) ranks the caller among their own
-          org's users, "org" is that same org board named for an admin, "global" ranks
-          organizations against each other.
-        example: personal
-        in: query
-        name: scope
-        required: false
-        schema:
-          type: string
-      - description: 'Metric is the value ranked: tokens (default), requests, or cost.'
-        example: tokens
-        in: query
-        name: metric
-        required: false
-        schema:
-          type: string
-      - description: 'Period is the window ranked: day, week, month (default) or all.'
-        example: week
-        in: query
-        name: period
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Limit caps the rows returned, clamped to 100. Defaults to 10, which is also
-          what a non-positive or unparseable value takes.
-        example: 10
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LeaderboardView'
-          description: ok
-      summary: Leaderboard ranks AI usage over a window, either the users of the caller's
-        own org or organizations against each other, and always reports the caller's
-        own standing even when it falls outside the returned page.
-      tags:
-      - leaderboard
-      x-app: leaderboard
-      x-public: true
-      x-tool: true
-  /v1/usage/leaderboard/optin:
-    get:
-      description: |-
-        Returns the caller's own public-listing preference and their org's,
-        each with whether the caller may change it. Public listing is opt-in and private
-        by default, so a fresh caller reads listed=false for both.
-      operationId: get_usage_leaderboard_optin
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/optinView'
-          description: ok
-      summary: Returns the caller's own public-listing preference and their org's,
-        each with whether the caller may change it.
-      tags:
-      - leaderboard
-      x-app: leaderboard
-      x-public: true
-      x-tool: true
-    put:
-      description: |-
-        Sets the CALLER's own public-listing preference on the leaderboard.
-        Self only: the row written is keyed by the caller's validated ledger identity, so
-        this can never edit another member's visibility whatever the request says. A
-        caller opting in with no handle is given their username, so a listed row never
-        renders as "Anonymous" to its own owner.
-      operationId: put_usage_leaderboard_optin
-      requestBody:
-        content:
-          application/json:
-            example:
-              handle: ada
-              listed: true
-            schema:
-              $ref: '#/components/schemas/userOptinReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/userOptinView'
-          description: ok
-      summary: Sets the CALLER's own public-listing preference on the leaderboard.
-      tags:
-      - leaderboard
-      x-app: leaderboard
-      x-public: true
-      x-tool: true
-  /v1/usage/leaderboard/optin/org:
-    put:
-      description: |-
-        Sets the ORG's listing on the cross-org global board. Only an admin of
-        the caller's own org — an org admin or a platform SuperAdmin — may change it, and
-        the org written is the caller's validated tenant, never a value from the request.
-        Listing consents to publishing the org's usage VOLUME; cross-org spend stays
-        restricted to platform admins regardless.
-      operationId: put_usage_leaderboard_optin_org
-      requestBody:
-        content:
-          application/json:
-            example:
-              display: Acme
-              listed: true
-            schema:
-              $ref: '#/components/schemas/orgOptinReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/orgOptinView'
-          description: ok
-      summary: Sets the ORG's listing on the cross-org global board.
-      tags:
-      - leaderboard
-      x-app: leaderboard
-      x-public: true
-      x-tool: true
-  /v1/usage/rollup/backfill:
-    post:
-      description: |-
-        Backfill seeds the derived usage rollup from ledger history — the rows written
-        before the incremental view existed, which that view can never capture. SuperAdmin
-        only. Because the rollup accumulates, a second unguarded run would double every
-        day it re-reads, so it refuses with 409 when the rollup already holds rows unless
-        force=true is passed; forcing WILL double-count.
-      operationId: post_usage_rollup_backfill
-      requestBody:
-        content:
-          application/json:
-            example:
-              before: "2026-01-01T00:00:00Z"
-            schema:
-              $ref: '#/components/schemas/backfillQuery'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/backfillResult'
-          description: ok
-      summary: Backfill seeds the derived usage rollup from ledger history — the rows
-        written before the incremental view existed, which that view can never capture.
-      tags:
-      - leaderboard
-      x-app: leaderboard
       x-public: true
       x-tool: true
   /v1/usage/samples:
@@ -80921,6 +80937,24 @@ paths:
       x-app: websearch
       x-public: true
       x-tool: true
+  /v1/websearch/scrape:
+    post:
+      description: |-
+        Takes {url} and answers {success, data:{markdown, metadata}} — the exact contract a firecrawl client decodes. The fetch, extraction and optional browser render run in-process; there is no crawler pod to be down.
+
+        The shared service key is required as an Authorization Bearer, compared in constant time: unset on the deployment is 503, missing or wrong is 401. Unlike search, a validated principal does NOT substitute for it — this is the service-to-service door.
+
+        A page is archived under the caller's own org and project, taken from the verified principal when there is one, so a scrape lands in the same corpus /v1/crawl fills and a URL already read under that scope is answered from the archive without touching the network. A service caller carrying no principal shares the unscoped prefix.
+
+        The URL is caller-supplied and fetched from INSIDE the cluster, which makes this a request-forgery primitive by construction: in-namespace service DNS and a cloud metadata endpoint that hands credentials to anyone who asks are both a resolution away. Only http and https are accepted, and every address actually dialled must be public unicast — loopback, link-local, private and multicast are refused. The check lives in the DIALER rather than on the hostname, because resolving a name to validate it and then letting the transport resolve it again is a gap DNS rebinding walks straight through; redirects re-enter the same dialer, so a public URL that bounces to the metadata address is refused at the hop that matters.
+
+        The one thing to get right: FAILURE IS 200. A missing or unparseable url, a body over the 1 MiB read cap, and a fetch that could not be completed all answer HTTP 200 with success:false and a reason — a firecrawl client reads data.success, not the status line. Only the two auth refusals use a status code, so a caller that branches on HTTP status alone will read every failed scrape as a success.
+      operationId: post_websearch_scrape
+      summary: Fetch one page and get its extracted markdown, in the firecrawl envelope.
+      tags:
+      - websearch
+      x-app: websearch
+      x-public: true
   /v1/websearch/search:
     delete:
       description: |-

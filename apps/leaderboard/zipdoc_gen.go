@@ -9,36 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/usage/activity", zip.Doc{
-		Description: "Activity returns the per-day usage series for ONE authorized subject — the points a\ncontribution heatmap and a timeline are drawn from, gap-filled so every day in the\nrange is present. Authorization is resolved server-side from the validated\nprincipal, so a caller can never widen the subject past what they are entitled to:\na non-admin reads only themselves and their own org. subject=project answers empty\nwith a note, because the usage ledger records no project column yet. When the\nwarehouse is not connected the series answers empty with available=false rather\nthan fabricated days.",
-		Fields: map[string]string{
-			"ActivityPoint.costCents":    "CostCents is the day's spend in whole US cents. A series is only ever returned\nfor a subject the caller is authorized to see, so this is never withheld: 0 means\nno spend that day.",
-			"ActivityPoint.day":          "Day is the UTC calendar day this point covers, \"2006-01-02\".",
-			"ActivityPoint.requests":     "Requests is the subject's request count on this day. 0 is a real, quiet day: the\nseries is gap-filled, so every day in the range is present whether or not\nanything happened.",
-			"ActivityPoint.tokens":       "Tokens is prompt+completion tokens on this day — normally the heatmap's\nintensity, scaled against ActivityTotals.MaxTokens.",
-			"ActivityTotals.activeDays":  "ActiveDays counts the days with any usage at all — the streak/consistency number.\nCompare it against len(days) for the share of days the subject showed up.",
-			"ActivityTotals.costCents":   "CostCents is the window's spend in whole US cents, the sum of Days[].CostCents.",
-			"ActivityTotals.maxRequests": "MaxRequests is the same ceiling for a request-based heatmap — the busiest single\nday's request count, 0 for an idle window.",
-			"ActivityTotals.maxTokens":   "MaxTokens is the busiest single day's token count: the ceiling to normalize a\ntoken heatmap against, so the darkest cell is that day. 0 for an idle window,\nwhich a client must not divide by.",
-			"ActivityTotals.requests":    "Requests is the sum of Days[].Requests over the whole window.",
-			"ActivityTotals.tokens":      "Tokens is the sum of Days[].Tokens over the whole window.",
-			"ActivityView.available":     "Available is false when nothing could be read: the warehouse is not connected,\nthe rollup is not ready, or the subject is one the ledger cannot attribute (see\nNote). Days is then empty because there is no answer, not because there was no\nactivity.",
-			"ActivityView.days":          "Days is the gap-filled series, one point per calendar day from From up to (not\nincluding) To, in ascending order, zero-valued days included. Always a list,\nnever null.",
-			"ActivityView.from":          "From is the first day in Days, \"2006-01-02\" inclusive.",
-			"ActivityView.id":            "ID is the subject the server actually read, after resolving \"me\"/empty to the\ncaller and bounding it to what they may see — a ledger \"owner/name\" for a user,\nan org id for an org. Echoed so a client can confirm whose series it holds.",
-			"ActivityView.note":          "Note explains an empty-but-not-broken answer in plain words — today only\nsubject=project, which the usage ledger records no column for. Present only when\nthere is something to say; show it instead of an empty chart.",
-			"ActivityView.source":        "Source names the table the series was aggregated from (the derived daily rollup,\nhanzo.usage_rollup_daily).",
-			"ActivityView.subject":       "Subject echoes what the series is about: user|org|project.",
-			"ActivityView.to":            "To is the EXCLUSIVE upper bound, \"2006-01-02\" — the day AFTER the last point in\nDays. A request for to=2026-03-31 answers to=2026-04-01 with 2026-03-31 last.",
-			"ActivityView.totals":        "Totals are the window's sums plus the busiest-day ceilings a heatmap scales\nagainst. Derived from Days — nothing here is read separately.",
-			"activityQuery.from":         "From is the first day of the range, \"2006-01-02\". Defaults to 90 days back.",
-			"activityQuery.id":           "ID names the subject within what the caller is entitled to see. Omitted (or\n\"me\") it is the caller themselves, or their own org. Another user requires org\nadmin and must belong to the caller's org; another org requires a SuperAdmin.",
-			"activityQuery.subject":      "Subject is what the series is about: \"user\" (default), \"org\" or \"project\".",
-			"activityQuery.to":           "To is the last day of the range, \"2006-01-02\". Defaults to today; the span is\nclamped to 366 days.",
-		},
-		Example: json.RawMessage(`{"subject":"user","from":"2026-01-01","to":"2026-03-31"}`),
-	})
-	zip.Describe("GET /v1/usage/leaderboard", zip.Doc{
+	zip.Describe("GET /v1/leaderboard", zip.Doc{
 		Description: "Leaderboard ranks AI usage over a window, either the users of the caller's own org\nor organizations against each other, and always reports the caller's own standing\neven when it falls outside the returned page. Identities are private by default: a\ncaller sees themselves, plus the peers or orgs that opted into public listing, and\nonly an admin sees their own org's members named. Cross-org spend is restricted to\nplatform admins. When the warehouse is not connected the board answers empty with\navailable=false rather than a fabricated rank.",
 		Fields: map[string]string{
 			"LeaderboardRow.anonymous":  "Anonymous is true when this subject's identity was withheld and Handle is the\n\"Anonymous\" placeholder: the metric is real, the name is not. Render it as an\nunnamed row, never as someone actually called Anonymous.",
@@ -76,7 +47,36 @@ func init() {
 		},
 		Example: json.RawMessage(`{"scope":"personal","metric":"tokens","period":"week","limit":10}`),
 	})
-	zip.Describe("GET /v1/usage/leaderboard/optin", zip.Doc{
+	zip.Describe("GET /v1/leaderboard/activity", zip.Doc{
+		Description: "Activity returns the per-day usage series for ONE authorized subject — the points a\ncontribution heatmap and a timeline are drawn from, gap-filled so every day in the\nrange is present. Authorization is resolved server-side from the validated\nprincipal, so a caller can never widen the subject past what they are entitled to:\na non-admin reads only themselves and their own org. subject=project answers empty\nwith a note, because the usage ledger records no project column yet. When the\nwarehouse is not connected the series answers empty with available=false rather\nthan fabricated days.",
+		Fields: map[string]string{
+			"ActivityPoint.costCents":    "CostCents is the day's spend in whole US cents. A series is only ever returned\nfor a subject the caller is authorized to see, so this is never withheld: 0 means\nno spend that day.",
+			"ActivityPoint.day":          "Day is the UTC calendar day this point covers, \"2006-01-02\".",
+			"ActivityPoint.requests":     "Requests is the subject's request count on this day. 0 is a real, quiet day: the\nseries is gap-filled, so every day in the range is present whether or not\nanything happened.",
+			"ActivityPoint.tokens":       "Tokens is prompt+completion tokens on this day — normally the heatmap's\nintensity, scaled against ActivityTotals.MaxTokens.",
+			"ActivityTotals.activeDays":  "ActiveDays counts the days with any usage at all — the streak/consistency number.\nCompare it against len(days) for the share of days the subject showed up.",
+			"ActivityTotals.costCents":   "CostCents is the window's spend in whole US cents, the sum of Days[].CostCents.",
+			"ActivityTotals.maxRequests": "MaxRequests is the same ceiling for a request-based heatmap — the busiest single\nday's request count, 0 for an idle window.",
+			"ActivityTotals.maxTokens":   "MaxTokens is the busiest single day's token count: the ceiling to normalize a\ntoken heatmap against, so the darkest cell is that day. 0 for an idle window,\nwhich a client must not divide by.",
+			"ActivityTotals.requests":    "Requests is the sum of Days[].Requests over the whole window.",
+			"ActivityTotals.tokens":      "Tokens is the sum of Days[].Tokens over the whole window.",
+			"ActivityView.available":     "Available is false when nothing could be read: the warehouse is not connected,\nthe rollup is not ready, or the subject is one the ledger cannot attribute (see\nNote). Days is then empty because there is no answer, not because there was no\nactivity.",
+			"ActivityView.days":          "Days is the gap-filled series, one point per calendar day from From up to (not\nincluding) To, in ascending order, zero-valued days included. Always a list,\nnever null.",
+			"ActivityView.from":          "From is the first day in Days, \"2006-01-02\" inclusive.",
+			"ActivityView.id":            "ID is the subject the server actually read, after resolving \"me\"/empty to the\ncaller and bounding it to what they may see — a ledger \"owner/name\" for a user,\nan org id for an org. Echoed so a client can confirm whose series it holds.",
+			"ActivityView.note":          "Note explains an empty-but-not-broken answer in plain words — today only\nsubject=project, which the usage ledger records no column for. Present only when\nthere is something to say; show it instead of an empty chart.",
+			"ActivityView.source":        "Source names the table the series was aggregated from (the derived daily rollup,\nhanzo.usage_rollup_daily).",
+			"ActivityView.subject":       "Subject echoes what the series is about: user|org|project.",
+			"ActivityView.to":            "To is the EXCLUSIVE upper bound, \"2006-01-02\" — the day AFTER the last point in\nDays. A request for to=2026-03-31 answers to=2026-04-01 with 2026-03-31 last.",
+			"ActivityView.totals":        "Totals are the window's sums plus the busiest-day ceilings a heatmap scales\nagainst. Derived from Days — nothing here is read separately.",
+			"activityQuery.from":         "From is the first day of the range, \"2006-01-02\". Defaults to 90 days back.",
+			"activityQuery.id":           "ID names the subject within what the caller is entitled to see. Omitted (or\n\"me\") it is the caller themselves, or their own org. Another user requires org\nadmin and must belong to the caller's org; another org requires a SuperAdmin.",
+			"activityQuery.subject":      "Subject is what the series is about: \"user\" (default), \"org\" or \"project\".",
+			"activityQuery.to":           "To is the last day of the range, \"2006-01-02\". Defaults to today; the span is\nclamped to 366 days.",
+		},
+		Example: json.RawMessage(`{"subject":"user","from":"2026-01-01","to":"2026-03-31"}`),
+	})
+	zip.Describe("GET /v1/leaderboard/optin", zip.Doc{
 		Description: "Returns the caller's own public-listing preference and their org's,\neach with whether the caller may change it. Public listing is opt-in and private\nby default, so a fresh caller reads listed=false for both.",
 		Fields: map[string]string{
 			"optinView.org":          "Org is the caller's org's listing preference on the cross-org board, and whether\nthis caller is allowed to change it. It is read for every caller — a member sees\nwhere their org stands even though only an admin may edit it.",
@@ -89,7 +89,7 @@ func init() {
 			"userOptinView.listed":   "Listed is true when the caller's board row is published under Handle to other\nviewers. False — the default for anyone who never opted in — anonymizes the row;\nthe metric still counts, only the name is withheld.",
 		},
 	})
-	zip.Describe("POST /v1/usage/rollup/backfill", zip.Doc{
+	zip.Describe("POST /v1/admin/leaderboard/rollup", zip.Doc{
 		Description: "Backfill seeds the derived usage rollup from ledger history — the rows written\nbefore the incremental view existed, which that view can never capture. SuperAdmin\nonly. Because the rollup accumulates, a second unguarded run would double every\nday it re-reads, so it refuses with 409 when the rollup already holds rows unless\nforce=true is passed; forcing WILL double-count.",
 		Fields: map[string]string{
 			"backfillQuery.before":        "Before bounds the seed to ledger rows written before this RFC3339 instant.\nDefaults to now, and is snapped down to UTC midnight — the rollup's grain, so\nthe seeded days and the guarded days are the same set. Pass the day the\nincremental view started capturing, so seed and view never share a day.",
@@ -100,7 +100,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"before":"2026-01-01T00:00:00Z"}`),
 	})
-	zip.Describe("PUT /v1/usage/leaderboard/optin", zip.Doc{
+	zip.Describe("PUT /v1/leaderboard/optin", zip.Doc{
 		Description: "Sets the CALLER's own public-listing preference on the leaderboard.\nSelf only: the row written is keyed by the caller's validated ledger identity, so\nthis can never edit another member's visibility whatever the request says. A\ncaller opting in with no handle is given their username, so a listed row never\nrenders as \"Anonymous\" to its own owner.",
 		Fields: map[string]string{
 			"userOptinReq.handle":  "Handle is the display name shown on a listed row: 1-40 characters of letters,\ndigits, space, dot, underscore, apostrophe or hyphen. Left empty on a listing\nopt-in it defaults to the caller's username.",
@@ -111,7 +111,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"listed":true,"handle":"ada"}`),
 	})
-	zip.Describe("PUT /v1/usage/leaderboard/optin/org", zip.Doc{
+	zip.Describe("PUT /v1/leaderboard/optin/org", zip.Doc{
 		Description: "Sets the ORG's listing on the cross-org global board. Only an admin of\nthe caller's own org — an org admin or a platform SuperAdmin — may change it, and\nthe org written is the caller's validated tenant, never a value from the request.\nListing consents to publishing the org's usage VOLUME; cross-org spend stays\nrestricted to platform admins regardless.",
 		Fields: map[string]string{
 			"orgOptinReq.display":    "Display is the name shown for the org on that board: 1-40 characters of\nletters, digits, space, dot, underscore, apostrophe or hyphen. Left empty on a\nlisting opt-in it defaults to the org id.",
