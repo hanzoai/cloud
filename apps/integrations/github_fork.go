@@ -31,9 +31,15 @@ type githubForkReq struct {
 
 // githubForkOut is the fork GitHub created, or the one that already existed.
 type githubForkOut struct {
-	FullName      string `json:"full_name"`
-	HTMLURL       string `json:"html_url"`
-	CloneURL      string `json:"clone_url"`
+	// FullName is the fork's "owner/repo". The owner is the account it landed in
+	// — the request's org, or the installation's own account when none was named.
+	FullName string `json:"full_name"`
+	// HTMLURL is the fork's page on github.com.
+	HTMLURL string `json:"html_url"`
+	// CloneURL is the fork's https git remote. GitHub populates a new fork in the
+	// background, so a clone issued the moment this answers can still find it empty.
+	CloneURL string `json:"clone_url"`
+	// DefaultBranch is the branch the fork checks out, inherited from upstream.
 	DefaultBranch string `json:"default_branch"`
 	// Existing reports that the fork was already there. GitHub answers 202 either
 	// way, so without this a caller cannot tell "made you one" from "you had one".
@@ -113,20 +119,41 @@ type githubSearchReq struct {
 	Limit int `json:"limit"`
 }
 
+// githubSearchHit is one row of GitHub's public repository index, passed through.
 type githubSearchHit struct {
-	FullName      string `json:"full_name"`
-	Description   string `json:"description"`
-	HTMLURL       string `json:"html_url"`
-	CloneURL      string `json:"clone_url"`
+	// FullName is the repository's "owner/repo" on GitHub. Finding it here does
+	// NOT make it forkable: githubFork takes a repo the org's installation was
+	// granted, and a hit from the public index usually is not one.
+	FullName string `json:"full_name"`
+	// Description is the blurb the repository's owner wrote. Empty when it has none.
+	Description string `json:"description"`
+	// HTMLURL is the repository's page on github.com.
+	HTMLURL string `json:"html_url"`
+	// CloneURL is the repository's https git remote.
+	CloneURL string `json:"clone_url"`
+	// DefaultBranch is the branch a clone checks out.
 	DefaultBranch string `json:"default_branch"`
-	Stars         int    `json:"stars"`
-	Language      string `json:"language"`
-	Private       bool   `json:"private"`
+	// Stars is GitHub's stargazers_count as the SEARCH INDEX held it when the
+	// query ran — a snapshot, not a live count off the repository.
+	Stars int `json:"stars"`
+	// Language is the primary language GitHub detected from the file mix ("Go",
+	// "TypeScript"). Empty when GitHub attributes none.
+	Language string `json:"language"`
+	// Private is GitHub's visibility flag, passed through. This op reads the
+	// public index — the org's token only charges the rate limit to the
+	// installation — so it is false for everything a search can reach.
+	Private bool `json:"private"`
 }
 
+// githubSearchOut is one page of search hits.
 type githubSearchOut struct {
+	// Repos are the matching repositories in GitHub's own relevance order, capped
+	// at limit. Always an array, never null.
 	Repos []githubSearchHit `json:"repos"`
-	Count int               `json:"count"`
+	// Count is how many hits Repos carries. It is that array's length, NOT
+	// GitHub's total_count, so it never exceeds limit and says nothing about how
+	// many more repositories matched.
+	Count int `json:"count"`
 }
 
 const (
