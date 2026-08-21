@@ -8,8 +8,16 @@
 // `insights-kafka` Deployment. No ZooKeeper: the adaptor is stateless over
 // JetStream (Lux consensus only).
 //
-// It mounts NO HTTP routes of its own; cloud's generic per-subsystem liveness
-// route answers /v1/kafka/health and the K8s Service TCP-probes :9092.
+// It mounts NO HTTP routes of its own, so cloud's generic per-subsystem
+// liveness route answers /v1/kafka/health with an unconditional ok. That route
+// does NOT prove the broker is up; readiness is structural. This app is Eager
+// and Mount fails CLOSED (below), so a broker that cannot bind :9092 or reach
+// the bus at boot takes the process down and the pod never goes Ready. A broker
+// that dies AFTER boot is reported through cloud.Degraded (the binary's
+// /v1/health `degraded` field, which the release smoke refuses an image on).
+// The :9092 listener is an in-pod socket — the K8s Service exposes only the
+// HTTP/metrics/ZAP ports, so reaching it beyond the pod is a Service (and
+// NetworkPolicy) decision this app does not make.
 //
 // It ALWAYS serves, like the PubSub plane it rides (a staged cutover that is
 // over). Mount fails CLOSED: a connect/bind error within the startup window
@@ -88,10 +96,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	broker = b
-	// Watch for a later exit (e.g. an accept error) and log it. A clean Shutdown
-	// makes Serve return nil, which is silent.
+	// Watch for a later exit. A clean Shutdown makes Serve return nil, which is
+	// silent; an UNEXPECTED exit is a broker that died after a healthy boot, which
+	// nothing above K8s would notice (the container probes are on :8080/:9090 and
+	// the generic /v1/kafka/health answers ok regardless). Record a degradation so
+	// it surfaces on the binary's /v1/health `degraded` field and the release smoke.
 	go func() {
 		if err := <-errc; err != nil {
+			cloud.Degraded("kafka", err)
 			log.Error("kafka broker serve exited", "err", err)
 		}
 	}()
