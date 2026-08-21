@@ -23,15 +23,15 @@ import (
 // leaving this list is a projection regression; one joining it is the migration
 // working, and the list is the place to say so.
 var typedOps = []string{
-	"DELETE /v1/connectors/:id",
+	"DELETE /v1/integrations/connectors/:id",
 	"DELETE /v1/integrations/github/repos/:repo/pages",
-	"GET /v1/connectors",
-	"GET /v1/connectors/:id/token",
-	"GET /v1/connectors/providers",
-	"POST /v1/connectors/:id/refresh",
-	"POST /v1/connectors/:provider/credential",
-	"POST /v1/connectors/:provider/device",
-	"POST /v1/connectors/:provider/device/:flow/poll",
+	"GET /v1/integrations/connectors",
+	"GET /v1/integrations/connectors/:id/token",
+	"GET /v1/integrations/connectors/providers",
+	"POST /v1/integrations/connectors/:id/refresh",
+	"POST /v1/integrations/connectors/:provider/credential",
+	"POST /v1/integrations/connectors/:provider/device",
+	"POST /v1/integrations/connectors/:provider/device/:flow/poll",
 	"GET /v1/integrations",
 	"GET /v1/integrations/:provider",
 	"GET /v1/integrations/github/installations",

@@ -10,10 +10,10 @@ channel     a CONNECTED INSTANCE you talk through — your Slack workspace, your
 Adapter versus opened instance. One connector opens many channels; a channel
 without its connector is a row nobody can use.
 
-This is why `/v1/connectors` and `/v1/channels` are two surfaces rather than one:
+This is why `/v1/integrations/connectors` and `/v1/channels` are two surfaces rather than one:
 
 ```
-/v1/connectors   what CAN I connect?     the adapter registry — code, ~69 providers
+/v1/integrations/connectors   what CAN I connect?     the adapter registry — code, ~69 providers
 /v1/channels     what HAVE I connected?  data, owned by an org or by a person
 ```
 
@@ -104,7 +104,7 @@ to preserve.
    twice today.
 4. The console is the only caller of the old paths.
 5. Every OAuth redirect URI moves from `/v1/integrations/<p>/callback` to
-   `/v1/connectors/<p>/callback`, so each provider's app registration needs
+   `/v1/integrations/connectors/<p>/callback`, so each provider's app registration needs
    updating — Slack, GitHub, Cloudflare — before it ships.
 
 ## The tests that make it true
