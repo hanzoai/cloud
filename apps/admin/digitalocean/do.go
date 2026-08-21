@@ -412,9 +412,19 @@ func (c *Client) LoadBalancers(ctx context.Context) ([]LoadBalancer, error) {
 }
 
 // Snapshot is a created block-storage snapshot.
+//
+// The fields carry no json tags, so they reach the wire under their Go names — ID,
+// Name, SizeGiB. That is the shape already published; renaming them is a wire change.
 type Snapshot struct {
-	ID      string
-	Name    string
+	// ID is DigitalOcean's snapshot id. It is what a restore takes, so it is the handle
+	// the undo actually hangs on — a delete that snapshotted first returns it.
+	ID string
+	// Name is the snapshot's name, as given or as minted `<volume>-predelete-<unix>` when
+	// the caller left it blank. It is how the snapshot is found in the DO console.
+	Name string
+	// SizeGiB is the snapshot's size, from DO's size_gigabytes: the PROVISIONED size of
+	// the volume it was taken from, not the bytes the snapshot occupies. DO bills
+	// snapshots on used space, which this does not report.
 	SizeGiB int
 }
 

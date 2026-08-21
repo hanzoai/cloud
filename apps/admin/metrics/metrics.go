@@ -44,93 +44,203 @@ const (
 
 // SaaSMetrics is the whole-business SaaS-operations aggregate.
 type SaaSMetrics struct {
-	AsOf      string         `json:"asOf"`
-	Currency  string         `json:"currency"`
-	Window    string         `json:"window"`
-	Revenue   SaaSRevenue    `json:"revenue"`
-	Subs      SaaSSubs       `json:"subscriptions"`
-	Usage     SaaSUsage      `json:"usage"`
+	// AsOf is when the read ran, RFC3339 in UTC. The run-rate panels are as-of this
+	// instant; the movement panels cover Window ending here.
+	AsOf string `json:"asOf"`
+	// Currency is the ISO code every *Cents field on this board is denominated in. It is
+	// "usd" always — the fleet bills one currency, and the field exists so a consumer
+	// never has to assume it.
+	Currency string `json:"currency"`
+	// Window is the movement window: "24h", "7d" or "30d", clamped to that set. It bounds
+	// new/churned MRR, the recent feed and every usage figure. It does NOT bound the
+	// run-rate panels, which are as-of AsOf whatever the window says.
+	Window string `json:"window"`
+	// Revenue is the recurring-revenue headline: run-rate MRR/ARR plus the window's
+	// movement.
+	Revenue SaaSRevenue `json:"revenue"`
+	// Subs is the subscription-operations panel: the per-plan mix and what moved.
+	Subs SaaSSubs `json:"subscriptions"`
+	// Usage is metered pay-as-you-go spend over the window. It is separate money from
+	// MRR and is never folded into it.
+	Usage SaaSUsage `json:"usage"`
+	// Customers is the top orgs by MRR, then by windowed usage, capped by the request's
+	// limit. A union of subscribers and metered spenders, so a pay-as-you-go org with no
+	// subscription still appears. Never null.
 	Customers []SaaSCustomer `json:"customers"`
-	Orgs      int            `json:"orgs"`
-	Gaps      []string       `json:"gaps"`
+	// Orgs is how many distinct organizations have EVER produced a billing event —
+	// subscription, invoice or usage. Not windowed, and not a count of paying customers.
+	Orgs int `json:"orgs"`
+	// Gaps names the signals this snapshot has not observed, one sentence each, so a
+	// console can badge a partial board instead of presenting a zero as a fact. Empty
+	// means every panel had data. Never null.
+	Gaps []string `json:"gaps"`
 }
 
 // SaaSRevenue is the recurring-revenue headline (run-rate MRR/ARR + windowed movement).
 type SaaSRevenue struct {
-	MRRCents            money.Cents    `json:"mrrCents"`
-	ARRCents            money.Cents    `json:"arrCents"`
-	ActiveSubscriptions int            `json:"activeSubscriptions"`
-	PayingCustomers     int            `json:"payingCustomers"`
-	Trials              int            `json:"trials"`
-	NewMRRCents         money.Cents    `json:"newMrrCents"`
-	ChurnedMRRCents     money.Cents    `json:"churnedMrrCents"`
-	NetNewMRRCents      money.Cents    `json:"netNewMrrCents"`
-	ByCategory          []SaaSCategory `json:"byCategory"`
+	// MRRCents is run-rate monthly recurring revenue, in USD cents, summed over the
+	// subscriptions whose LATEST lifecycle event left them `active`. Trialing, past_due
+	// and unpaid subscriptions contribute nothing — the predicate is exactly commerce's
+	// CountsTowardMRR, spelled in SQL because this board reads the warehouse rather than
+	// calling the Go function.
+	MRRCents money.Cents `json:"mrrCents"`
+	// ARRCents is MRRCents times twelve. A run-rate restatement of today's MRR, not a
+	// forecast: nothing in it anticipates growth, churn or an annual discount.
+	ARRCents money.Cents `json:"arrCents"`
+	// ActiveSubscriptions counts every non-canceled subscription — trialing and past_due
+	// included. It is deliberately a wider set than the one MRRCents sums, so this can be
+	// non-zero while MRR is zero.
+	ActiveSubscriptions int `json:"activeSubscriptions"`
+	// PayingCustomers counts distinct ORGS with at least one active subscription carrying
+	// MRR above zero. Orgs, not subscriptions: an org on three plans counts once.
+	PayingCustomers int `json:"payingCustomers"`
+	// Trials counts subscriptions currently in a trial. Revenue that has not started, so
+	// it is reported beside MRR and never inside it.
+	Trials int `json:"trials"`
+	// NewMRRCents is the MRR carried by subscriptions CREATED inside the window. Gross,
+	// and positive.
+	NewMRRCents money.Cents `json:"newMrrCents"`
+	// ChurnedMRRCents is the MRR carried by subscriptions CANCELED inside the window,
+	// reported as a POSITIVE magnitude — the sign convention lives in NetNewMRRCents,
+	// which subtracts it, not here.
+	ChurnedMRRCents money.Cents `json:"churnedMrrCents"`
+	// NetNewMRRCents is NewMRRCents minus ChurnedMRRCents. Negative means the fleet lost
+	// more recurring revenue than it won over the window. It counts only creations and
+	// cancellations — an upgrade or downgrade in place moves MRRCents without appearing
+	// here.
+	NetNewMRRCents money.Cents `json:"netNewMrrCents"`
+	// ByCategory is the plan mix: run-rate MRR per plan category, largest first. It sums
+	// to MRRCents. Never null.
+	ByCategory []SaaSCategory `json:"byCategory"`
 }
 
 // SaaSCategory is one plan-category bucket of run-rate MRR (the plan mix).
 type SaaSCategory struct {
-	Category      string      `json:"category"`
-	MRRCents      money.Cents `json:"mrrCents"`
-	Subscriptions int         `json:"subscriptions"`
+	// Category is the plan's category as the subscription event declared it. Empty is a
+	// real bucket — subscriptions whose plan carries no category land there.
+	Category string `json:"category"`
+	// MRRCents is this category's run-rate MRR, active subscriptions only.
+	MRRCents money.Cents `json:"mrrCents"`
+	// Subscriptions counts every non-canceled subscription in the category, trialing
+	// included. So a category of nothing but trials shows subscriptions above zero and
+	// mrrCents at zero, which is the honest reading.
+	Subscriptions int `json:"subscriptions"`
 }
 
 // SaaSSubs is the subscription-operations panel (per-plan mix, trials, new/canceled,
 // recent movements).
 type SaaSSubs struct {
-	ByPlan       []SaaSPlan  `json:"byPlan"`
-	TrialsActive int         `json:"trialsActive"`
-	New          int         `json:"new"`
-	Canceled     int         `json:"canceled"`
-	Recent       []SaaSEvent `json:"recent"`
+	// ByPlan is every plan the fleet has a live subscription on, richest first by MRR.
+	// Never null.
+	ByPlan []SaaSPlan `json:"byPlan"`
+	// TrialsActive is how many subscriptions are trialing right now. The same number as
+	// revenue.trials, restated on the panel an operator works trials from.
+	TrialsActive int `json:"trialsActive"`
+	// New is how many subscriptions were created inside the window.
+	New int `json:"new"`
+	// Canceled is how many were canceled inside the window. Not a rate: divide by New, or
+	// by activeSubscriptions, only if you mean to.
+	Canceled int `json:"canceled"`
+	// Recent is the movement feed, newest first, capped at twenty and bounded by the same
+	// window. It is a sample of what New and Canceled counted, not the whole of it.
+	// Never null.
+	Recent []SaaSEvent `json:"recent"`
 }
 
 // SaaSPlan is one plan's active/trialing counts, seats, and MRR contribution.
 type SaaSPlan struct {
-	Plan     string      `json:"plan"`
-	Name     string      `json:"name"`
-	Category string      `json:"category"`
-	Active   int         `json:"active"`
-	Trialing int         `json:"trialing"`
-	Seats    int         `json:"seats"`
+	// Plan is the plan's stable id — the key subscriptions are grouped by.
+	Plan string `json:"plan"`
+	// Name is the plan's human label, as the warehouse last saw it. A plan renamed
+	// mid-life shows one of its names, not both.
+	Name string `json:"name"`
+	// Category is the plan's category, the same bucket revenue.byCategory sums into.
+	Category string `json:"category"`
+	// Active counts this plan's subscriptions in the `active` state — the ones MRRCents
+	// is summed over.
+	Active int `json:"active"`
+	// Trialing counts this plan's subscriptions still in a trial. Not yet revenue.
+	Trialing int `json:"trialing"`
+	// Seats is licensed seats across ALL of this plan's non-canceled subscriptions,
+	// trialing included — a wider set than Active, so seats can be non-zero on a plan
+	// carrying no MRR at all.
+	Seats int `json:"seats"`
+	// MRRCents is this plan's contribution to run-rate MRR, active subscriptions only.
 	MRRCents money.Cents `json:"mrrCents"`
 }
 
 // SaaSEvent is one recent subscription movement ("created" or "canceled").
 type SaaSEvent struct {
-	At            string      `json:"at"`
-	Org           string      `json:"org"`
-	Type          string      `json:"type"`
-	Plan          string      `json:"plan"`
-	Category      string      `json:"category"`
+	// At is when the movement happened, RFC3339. The feed is ordered by it, newest first.
+	At string `json:"at"`
+	// Org is the organization whose subscription moved.
+	Org string `json:"org"`
+	// Type is `created` or `canceled` — the warehouse's event name normalised to the two
+	// movements this feed carries.
+	Type string `json:"type"`
+	// Plan is the plan's human label at the moment of the movement.
+	Plan string `json:"plan"`
+	// Category is the plan's category at the moment of the movement — the same bucket
+	// revenue.byCategory sums into.
+	Category string `json:"category"`
+	// MRRDeltaCents is SIGNED: positive for a creation, negative for a cancellation. It
+	// is the run-rate this one movement added or took away, so summing the feed over the
+	// window gives revenue.netNewMrrCents.
 	MRRDeltaCents money.Cents `json:"mrrDeltaCents"`
 }
 
 // SaaSUsage is the metered / pay-as-you-go revenue headline for the window.
 type SaaSUsage struct {
-	Instrumented     bool        `json:"instrumented"`
+	// Instrumented reports that at least one metered debit was observed in the window.
+	// False means NOT MEASURED — the two fields below are then meaningless rather than
+	// zero, and gaps says so. It is the difference between "nobody used the API" and
+	// "nothing is emitting usage events yet".
+	Instrumented bool `json:"instrumented"`
+	// WindowUsageCents is metered API spend over the window, in USD cents. Consumption
+	// revenue, entirely separate from MRR — adding the two double-counts nothing but
+	// invents a figure the business does not have.
 	WindowUsageCents money.Cents `json:"windowUsageCents"`
-	Requests         int64       `json:"requests"`
+	// Requests is how many billed API calls the window recorded — one per debit event.
+	Requests int64 `json:"requests"`
 }
 
 // SaaSCustomer is one top customer by MRR + windowed usage.
 type SaaSCustomer struct {
-	Org        string      `json:"org"`
-	Plan       string      `json:"plan"`
-	Category   string      `json:"category"`
-	Status     string      `json:"status"`
-	MRRCents   money.Cents `json:"mrrCents"`
+	// Org is the organization id, which is the row's identity.
+	Org string `json:"org"`
+	// Plan is the label of the org's LARGEST subscription by MRR, so an org on several
+	// plans is named by the one it pays most for. An org with usage but no subscription
+	// at all reads "pay-as-you-go".
+	Plan string `json:"plan"`
+	// Category is that plan's category. Empty for a pay-as-you-go org.
+	Category string `json:"category"`
+	// Status is that subscription's state — `active`, `trialing`, `past_due`. A
+	// pay-as-you-go org reads "active", since it is spending.
+	Status string `json:"status"`
+	// MRRCents is the org's run-rate MRR, summed over its active subscriptions. Zero for
+	// a pay-as-you-go org, which is a true zero and not a gap.
+	MRRCents money.Cents `json:"mrrCents"`
+	// UsageCents is the org's metered spend over the window. It is the tiebreaker in the
+	// ranking, and the only revenue a pay-as-you-go org has.
 	UsageCents money.Cents `json:"usageCents"`
-	Seats      int         `json:"seats"`
-	Since      string      `json:"since,omitempty"`
+	// Seats is licensed seats across all the org's non-canceled subscriptions.
+	Seats int `json:"seats"`
+	// Since is when the org's OLDEST live subscription began, RFC3339 — how long it has
+	// been a customer. Omitted for an org that has never subscribed.
+	Since string `json:"since,omitempty"`
 }
 
 // MetricsData is the GET /v1/admin/metrics payload: the SaaS snapshot, flat, plus the
 // admin read time and the upstream freshness strip every god-view carries.
 type MetricsData struct {
 	SaaSMetrics
-	GeneratedAt string              `json:"generatedAt"`
-	Sources     []core.SourceStatus `json:"sources"`
+	// GeneratedAt is when the admin plane served this read, RFC3339. Same instant as
+	// asOf: this board computes on demand and caches nothing, so the two cannot diverge.
+	GeneratedAt string `json:"generatedAt"`
+	// Sources is the upstream freshness strip. Exactly one row, "billing-warehouse", and
+	// its ok=false is what distinguishes a fleet with no revenue from a deployment where
+	// the warehouse is not connected — both otherwise answer zeros.
+	Sources []core.SourceStatus `json:"sources"`
 }
 
 // Metrics answers GET /v1/admin/metrics by aggregating commerce.events directly
@@ -212,9 +322,13 @@ type MetricsIn struct {
 
 // MetricsOut is the GET /v1/admin/metrics envelope.
 type MetricsOut struct {
-	Status string       `json:"status"`
-	Msg    string       `json:"msg"`
-	Data   *MetricsData `json:"data"`
+	// Status is "ok" or "error". A warehouse that is not connected still answers ok, with
+	// real zeros and a not-ok source row — an honest empty board rather than a failure.
+	Status string `json:"status"`
+	// Msg is the failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the board. Never null on an ok answer.
+	Data *MetricsData `json:"data"`
 }
 
 // ── active-subscription state subquery (latest-event-wins, non-canceled) ─────
