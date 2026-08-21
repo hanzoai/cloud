@@ -164,7 +164,7 @@ func main() {
 //
 // An app with NEITHER an apps/ import nor an apps/<name> directory is external:
 // its code lives in its own module (hanzoai/authz, hanzoai/licensing,
-// hanzoai/metrics), wired into the fleet but built and described over there. It
+// hanzoai/o11y/metrics), wired into the fleet but built and described over there. It
 // returns "" and the caller writes no Makefile — there is no directory of ours
 // for one to sit in.
 //

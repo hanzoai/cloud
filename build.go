@@ -18,7 +18,7 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/ha"
-	"github.com/hanzoai/metrics"
+	metrics "github.com/hanzoai/o11y/metrics"
 	sqlitedrv "github.com/hanzoai/sqlite"
 	s3 "github.com/hanzos3/go"
 	luxlog "github.com/luxfi/log"
@@ -1134,9 +1134,17 @@ func CtxShutdown(f func() error) ShutdownFunc {
 	return func(context.Context) error { return f() }
 }
 
-// MountMetrics adapts hanzoai/metrics into a MountFunc. metrics declares its OWN
-// narrow Deps (Logger, DataDir, Brand, Org) and does not import hanzoai/cloud, so
-// Typed cannot bridge it; this builds that Deps from cloud's and calls metrics.Mount.
+// MountMetrics adapts hanzoai/o11y/metrics into a MountFunc. metrics declares its
+// OWN narrow Deps (Logger, DataDir, Brand, Org) and does not import hanzoai/cloud,
+// so Typed cannot bridge it; this builds that Deps from cloud's and calls
+// metrics.Mount.
+//
+// The package used to be github.com/hanzoai/metrics, which is retired: its NOTICE
+// named hanzoai/o11y its successor while this line still imported the archive, so
+// eleven live routes and their store sat in a read-only repository. The code moved
+// to the successor (o11y v1.5.67) and the import followed it. The capability did
+// not move — metrics is still its own row, its own document and its own binary;
+// what changed is which module ships the door.
 //
 // Org is the load-bearing one, and it points the other way: metrics used to
 // decide its own tenant by reading X-Org-Id, which is a header a caller sends,
@@ -1148,15 +1156,16 @@ func CtxShutdown(f func() error) ShutdownFunc {
 // It lives here rather than in package apps for exactly CtxShutdown's reason: an
 // apps-local identifier in a Wire entry is unreachable from the generated
 // plugin/<app>/main.go, so metrics fell back to the stub that links every subsystem.
-// The move is affordable only because it is nearly free — cloud's core already
-// carries 398 of metrics' 399 dependencies, so every binary grows by the one
-// package hanzoai/metrics itself. It is the ONLY one of the four mount adapters
-// that is: commerce would add 527 packages to the core, and zen (via
-// hanzoai/ai/controllers) and ai import hanzoai/cloud — a cycle, not a weight.
+// The move is affordable because it is nearly free — the package imports only
+// zap-proto/zip and luxfi, which cloud's core already carries, so every binary
+// grows by the door itself and not by the o11y runtime beside it in that module.
+// It is the ONLY one of the four mount adapters that is: commerce would add 527
+// packages to the core, and zen (via hanzoai/ai/controllers) and ai import
+// hanzoai/cloud — a cycle, not a weight.
 //
 // It is a MountFunc — the doc above always CLAIMED it was one and the signature
 // said otherwise, which is the whole reason a per-entry-point escape hatch is a
-// bad idea. metrics installs no middleware anywhere (hanzoai/metrics calls Use
+// bad idea. metrics installs no middleware anywhere (the package calls Use
 // nowhere), so it mounts SCOPED like everyone else; it only ever needed the
 // concrete app to register routes, and cloud.ZipApp is the named hole for that.
 func MountMetrics(app Router, deps Deps) error {
@@ -1181,10 +1190,10 @@ func MountMetrics(app Router, deps Deps) error {
 // route table. Two subsystems can do neither, and both for the same reason — the
 // module that owns the route cannot reach this registry:
 //
-//   - hanzoai/metrics registers /v1/{metrics,logs,traces}/* itself and imports
-//     ONLY zap-proto/zip + luxfi, deliberately (mount.go's own argument: it
-//     depends on the three things it uses). Importing hanzoai/cloud to describe
-//     itself would give that up to buy prose.
+//   - hanzoai/o11y/metrics registers /v1/metrics/* itself and imports ONLY
+//     zap-proto/zip + luxfi, deliberately (mount.go's own argument: it depends on
+//     the three things it uses). Importing hanzoai/cloud to describe itself would
+//     give that up to buy prose.
 //
 // hanzoai/licensing is no longer such a case: since v0.1.10 it types its own ops,
 // and a typed op carries its prose in the handler's doc comment, which zipdoc lifts.
@@ -1256,7 +1265,7 @@ func describeMetrics() {
 			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
 			"brand and then `default`, so a query can only ever read the org the edge asserted.")
 
-	openapi.Describe("/v1/logs/health", http.MethodGet,
+	openapi.Describe("/v1/metrics/logs/health", http.MethodGet,
 		"How many log records this deployment holds for your org",
 		"Reports the native log store's live state for the calling tenant: the subsystem version "+
 			"and `records`, the count actually held right now rather than a constant. Not a "+
@@ -1265,7 +1274,7 @@ func describeMetrics() {
 			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
 			"brand and then `default`.")
 
-	openapi.Describe("/v1/logs/write", http.MethodPost,
+	openapi.Describe("/v1/metrics/logs/write", http.MethodPost,
 		"Append structured log records for your org",
 		"Takes `{records:[{t, level, body, labels}]}`, appends each one, and answers `{written}`. "+
 			"Bodies are stored verbatim; `labels` are the indexed dimensions a query filters on, so "+
@@ -1278,7 +1287,7 @@ func describeMetrics() {
 			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
 			"brand and then `default`; each org's records live in its own WAL-durable store.")
 
-	openapi.Describe("/v1/logs/query", http.MethodGet,
+	openapi.Describe("/v1/metrics/logs/query", http.MethodGet,
 		"Search your org's logs by label, time and substring",
 		"Answers `{count, records}`, newest first. `match` is the same `k=v,k2=v2` superset label "+
 			"matcher the metrics query uses; `contains` is a case-insensitive substring test "+
@@ -1290,7 +1299,7 @@ func describeMetrics() {
 			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
 			"brand and then `default`, so a search can only reach the org the edge asserted.")
 
-	openapi.Describe("/v1/traces/health", http.MethodGet,
+	openapi.Describe("/v1/metrics/traces/health", http.MethodGet,
 		"How many spans this deployment holds for your org",
 		"Reports the native trace store's live state for the calling tenant: the subsystem version "+
 			"and `spans`, the count actually held right now. Not a dependency probe — the store is "+
@@ -1298,7 +1307,7 @@ func describeMetrics() {
 			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
 			"brand and then `default`.")
 
-	openapi.Describe("/v1/traces/write", http.MethodPost,
+	openapi.Describe("/v1/metrics/traces/write", http.MethodPost,
 		"Append spans for your org",
 		"Takes `{spans:[{traceId, spanId, parentId, name, startNs, endNs, attrs}]}`, appends each, "+
 			"and answers `{written}` — the number of spans sent. Every span is indexed by its trace "+
@@ -1312,7 +1321,7 @@ func describeMetrics() {
 			"The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment "+
 			"brand and then `default`. A body that does not decode is 400.")
 
-	openapi.Describe("/v1/traces/trace", http.MethodGet,
+	openapi.Describe("/v1/metrics/traces/trace", http.MethodGet,
 		"Every span of one trace — the waterfall",
 		"Answers `{spans}`: every span the org holds for the trace id in `id`, in the order they "+
 			"were appended, which is what a waterfall view renders. Unlike the other reads there is "+
@@ -1323,14 +1332,14 @@ func describeMetrics() {
 			"deployment brand and then `default`, and a trace id belonging to another org is simply "+
 			"not in this org's store.")
 
-	openapi.Describe("/v1/traces/query", http.MethodGet,
+	openapi.Describe("/v1/metrics/traces/query", http.MethodGet,
 		"Recent spans for your org over a time range",
 		"Answers `{count, spans}`, newest first, filtered on each span's START time. `start` and "+
 			"`end` are nanosecond bounds where 0 — which is what an absent, empty or unparseable "+
 			"value becomes — means UNBOUNDED, so a malformed bound widens the listing instead of "+
 			"failing it. `limit` defaults to 100 when absent or non-positive.\n\n"+
 			"It lists SPANS, not traces: several spans of one trace each count separately and each "+
-			"take a slot against `limit`. Assembling one trace is /v1/traces/trace. The tenant is "+
+			"take a slot against `limit`. Assembling one trace is /v1/metrics/traces/trace. The tenant is "+
 			"the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then "+
 			"`default`.")
 }
