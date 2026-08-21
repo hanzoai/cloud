@@ -131,6 +131,23 @@ mods=$(sed -nE 's|^[[:space:]]+github\.com/hanzoai/([A-Za-z0-9._-]+) .*|\1|p' go
 # The forge token is known now, so the store gets its line beside GitHub's.
 write_store "$GIT_TOKEN"
 
+# EVERY MODULE IS ROUTED EXPLICITLY, and that is not tidiness.
+#
+# `insteadOf` is a plain PREFIX match and git dials the LONGEST rule that matches. So a
+# rewrite for `pubsub` also matches https://github.com/hanzoai/pubsub-go, and a module the
+# forge does NOT serve was sent to the forge anyway, where it 404s -- one name swallowing
+# a longer one that merely starts the same way. Measured: describe stopped at
+# `could not import github.com/hanzoai/pubsub-go/jetstream (invalid package name: "")`,
+# which names a compile failure and not the address that caused it.
+#
+# A module's OWN address is always the longest match for itself, so naming it is what
+# makes it un-swallowable. The ones the forge serves are pointed at the forge; the ones it
+# does not are pointed at github.com unchanged, which reads as a no-op and is the whole
+# point -- it out-matches any shorter sibling.
+route() {
+  git config --global "url.$2.insteadOf" "https://github.com/hanzoai/$1"
+}
+
 on=""; off=""
 for m in $mods; do
   # --config - keeps the credential out of argv; curl reads it from stdin.
@@ -138,10 +155,10 @@ for m in $mods; do
     | curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --config - \
       "${FORGE_URL}/v1/repos/hanzoai/${m}" 2>/dev/null || echo 000)
   if [ "$code" = "200" ]; then
-    git config --global "url.${FORGE_URL}/hanzoai/${m}.insteadOf" \
-      "https://github.com/hanzoai/${m}"
+    route "$m" "${FORGE_URL}/hanzoai/${m}"
     on="$on $m"
   else
+    route "$m" "https://github.com/hanzoai/${m}"
     off="$off ${m}(${code})"
   fi
 done
@@ -161,10 +178,10 @@ if [ -z "$on" ] && [ -n "${JOB_TOKEN:-}" ] && [ "$GIT_TOKEN" != "$JOB_TOKEN" ]; 
       | curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --config - \
         "${FORGE_URL}/v1/repos/hanzoai/${m}" 2>/dev/null || echo 000)
     if [ "$code" = "200" ]; then
-      git config --global "url.${FORGE_URL}/hanzoai/${m}.insteadOf" \
-        "https://github.com/hanzoai/${m}"
+      route "$m" "${FORGE_URL}/hanzoai/${m}"
       on="$on $m"
     else
+      route "$m" "https://github.com/hanzoai/${m}"
       off="$off ${m}(${code})"
     fi
   done
