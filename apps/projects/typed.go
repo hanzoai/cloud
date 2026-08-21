@@ -142,6 +142,9 @@ func requireBody(c *zip.Ctx) error { return c.Bind(&struct{}{}) }
 // an idempotent re-star and a first star are indistinguishable to a caller —
 // which is the truth about what happened.
 type projectsStar struct {
+	// Starred is whether THIS caller has starred the project after the toggle —
+	// their own bookmark, not a property the project carries, so two people see
+	// two answers for one project.
 	Starred bool `json:"starred"`
 }
 
