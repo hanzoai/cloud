@@ -346,7 +346,7 @@ func (p fleetPrincipal) mayObserve() bool { return cloud.Admin.Admits(p.Authorit
 // scopeNamespaces is the TENANT boundary — the one confinement rule, applied to the
 // scanned set. A SuperAdmin sees every scanned namespace (the whole fleet). A
 // non-super caller sees ONLY the namespaces its own validated org owns
-// (nsOrg(ns) == org), bounded to its own tenant exactly as /v1/runner bounds a build
+// (nsOrg(ns) == org), bounded to its own tenant exactly as /v1/platform/runner bounds a build
 // to the caller's org. The org comes from the validated principal — never a client
 // header, never a request or payload field — so it cannot be widened by a forged
 // X-Org-Id or by anything a peer puts on the wire. A caller whose org owns no
