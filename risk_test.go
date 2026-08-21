@@ -265,9 +265,9 @@ func TestPrivileged(t *testing.T) {
 		want         bool
 		why          string
 	}{
-		{"POST", "/v1/iam/mint-user-keys", true, "minting a credential is a grant"},
-		{"POST", "/v1/iam/issue-user-token", true, "issuing a token is a grant"},
-		{"POST", "/v1/iam/revoke-user-keys", true, "revocation changes who can act"},
+		{"POST", "/v1/iam/keys/mint", true, "minting a credential is a grant"},
+		{"POST", "/v1/iam/tokens/issue", true, "issuing a token is a grant"},
+		{"POST", "/v1/iam/keys/revoke", true, "revocation changes who can act"},
 		{"POST", "/v1/iam/signup", true, "creating an account is a grant"},
 		{"POST", "/v1/iam/onboard", true, "minting a tenant is a grant"},
 		{"GET", "/v1/kms/orgs/acme/secrets/db", true, "reading a secret with a stolen key IS the attack"},

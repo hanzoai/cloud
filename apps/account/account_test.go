@@ -152,7 +152,7 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		ok(w, map[string]any{"keys": rows})
 	})
 
-	mux.HandleFunc("/v1/iam/mint-user-keys", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/iam/keys/mint", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
 		id, typ := r.URL.Query().Get("id"), fakeKeyType(r)
 		f.mu.Lock()
@@ -176,7 +176,7 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		ok(w, map[string]any{"accessKey": key})
 	})
 
-	mux.HandleFunc("/v1/iam/revoke-user-keys", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/iam/keys/revoke", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
 		id, typ := r.URL.Query().Get("id"), fakeKeyType(r)
 		f.mu.Lock()

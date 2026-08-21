@@ -508,9 +508,9 @@ func riskActionKnown(a string) bool {
 // reviewed in one place instead of inferred from handlers.
 var (
 	grantPaths = []string{
-		"/v1/iam/issue-user-token",
-		"/v1/iam/mint-user-keys",
-		"/v1/iam/revoke-user-keys",
+		"/v1/iam/tokens/issue",
+		"/v1/iam/keys/mint",
+		"/v1/iam/keys/revoke",
 		"/v1/iam/admin/provision",
 		"/v1/iam/signup",
 		"/v1/iam/onboard",
