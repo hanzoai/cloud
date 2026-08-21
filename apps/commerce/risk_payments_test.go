@@ -57,7 +57,20 @@ import (
 // because the structural check below reads it: a door added to the binary and not to
 // this list is the bug this whole file is about, so the list is also the place the
 // next one gets caught.
-var creditDoors = []string{"/v1/billing/topup/token", "/v1/commerce/payments"}
+//
+// THREE OF THE FOUR ARE PLANE ADDRESSES, and that is the fold rather than a
+// weakening. /v1/billing is billing's address now, so the browser's top-up, the
+// saved-card top-up and the card subscription are reached BY NAME from the money
+// door and answer here — which is the point at which they touch the card. A
+// screen on the door and not on the op would be a bound on one entrance with the
+// op still callable beside it, which is the exact state this file was written
+// about.
+var creditDoors = []string{
+	"/billing/topup/card",
+	"/billing/topup",
+	"/billing/subscribe",
+	"/v1/commerce/payments",
+}
 
 // screenIsAValue anchors the structural check below to the REAL screen. The check
 // works over identifiers, so a rename of the type or of its resolver would silently
@@ -143,7 +156,7 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 				if !ok {
 					return true
 				}
-				sel, ok := call.Fun.(*ast.SelectorExpr)
+				sel, ok := verbOf(call)
 				if !ok {
 					return true
 				}
@@ -397,6 +410,29 @@ func doorOf(call *ast.CallExpr, sel *ast.SelectorExpr, groups map[string]router)
 		}
 	}
 	return ""
+}
+
+// verbOf reaches a registration's verb through the generic spelling as well as
+// the plain one.
+//
+// zip.Post[In, Out](router, …) parses as an IndexListExpr wrapping the selector
+// — an IndexExpr when only one type is written — and reading only the plain
+// SelectorExpr made this check BLIND to exactly the form the typed surface is
+// registered in. A guard that cannot see the registrations it audits is worse
+// than none, because it reads as green; that is the same failure the regexp
+// version of the sibling guard shipped with, one spelling over.
+func verbOf(call *ast.CallExpr) (*ast.SelectorExpr, bool) {
+	switch fn := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		return fn, true
+	case *ast.IndexExpr:
+		sel, ok := fn.X.(*ast.SelectorExpr)
+		return sel, ok
+	case *ast.IndexListExpr:
+		sel, ok := fn.X.(*ast.SelectorExpr)
+		return sel, ok
+	}
+	return nil, false
 }
 
 // router is a registration target as this check can read it: where it sits. Whether

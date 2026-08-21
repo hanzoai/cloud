@@ -34,10 +34,14 @@ import (
 //     LLM inference. One root claims the family; the routing test below drives
 //     the real paths rather than trusting this list to enumerate them.
 func TestCommercePrefixesPinned(t *testing.T) {
+	// ONE root, and only one. The two /v1/billing stems that used to sit beside it
+	// went with the fold: /v1/billing is billing's address, and the processor
+	// callback answers under this app's own root as /v1/commerce/webhooks. A stem
+	// re-added here would win a billing address by specificity and answer it
+	// without the door's subject resolution — TestCommerceRegistersNoBillingRoute
+	// is the assertion that catches it at the route rather than at this list.
 	want := map[string]bool{
-		"/v1/billing/recharge": false,
-		"/v1/billing/webhooks": false,
-		"/v1/commerce":         false,
+		"/v1/commerce": false,
 	}
 	for _, p := range Prefixes {
 		if _, ok := want[p]; ok {
