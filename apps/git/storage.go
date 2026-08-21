@@ -10,7 +10,7 @@ import (
 	"github.com/go-git/go-billy/v5/osfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/cache"
+	objcache "github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/storage/filesystem"
 )
 
@@ -86,7 +86,7 @@ func (s *storage) storer(org, project, name string) (*filesystem.Storage, error)
 	if err != nil {
 		return nil, fmt.Errorf("chroot repo: %w", err)
 	}
-	return filesystem.NewStorage(dot, cache.NewObjectLRUDefault()), nil
+	return filesystem.NewStorage(dot, objcache.NewObjectLRUDefault()), nil
 }
 
 // initBare creates an empty bare repository at the repo's storage path with

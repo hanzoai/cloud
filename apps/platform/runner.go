@@ -105,14 +105,15 @@ type runnerBuildResp struct {
 }
 
 // ownedRegistryHosts are the registry hosts the fabric operates. An image on any
-// other host is NEVER allowed on the privileged build path. registry.hanzo.ai is
-// the self-hosted fleet registry (the native CI/CD home); ghcr stays during the
+// other host is NEVER allowed on the privileged build path. oci.hanzo.ai is the
+// self-hosted fleet registry (the native CI/CD home); ghcr stays during the
 // migration as the public mirror.
-// oci.hanzo.ai and registry.hanzo.ai are ONE store behind one Traefik router,
-// not two registries: naming the canonical host here grants no reach the
-// deprecated alias did not already have, and omitting it refused the very name
-// the fleet is told to write.
-var ownedRegistryHosts = []string{"oci.hanzo.ai", "registry.hanzo.ai", "ghcr.io"}
+//
+// A host reaches this list by resolving to infrastructure we run, and by nothing
+// else. It is a TRUST decision, not a spelling one: a name that resolves away
+// from us is a name an attacker can be handed, so it is refused here even when
+// the string still looks like ours.
+var ownedRegistryHosts = []string{"oci.hanzo.ai", "ghcr.io"}
 
 // orgRegistryNamespaces maps an IAM org (the validated `owner` claim) to the
 // registry namespace(s) that org OWNS. Only the three brands that own a registry
@@ -147,7 +148,7 @@ var ownedNamespaces = func() map[string]bool {
 }()
 
 // imageRegistryNamespace returns the owned-registry namespace an image pushes to
-// (ghcr.io/luxfi/x → "luxfi", registry.hanzo.ai/hanzoai/y → "hanzoai") and
+// (ghcr.io/luxfi/x → "luxfi", oci.hanzo.ai/hanzoai/y → "hanzoai") and
 // ok=false when the image is not on an owned host, has no namespace/repo split, or
 // carries an empty repo. The parse is strict: <owned-host>/<namespace>/<repo…>.
 // It assumes the image has already passed validateImageRef (a single clean OCI

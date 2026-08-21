@@ -62,7 +62,22 @@ source for the generated per-language SDKs.
 - `openapi/index.go` — the same document as HYPERMEDIA. `GET /v1` lists every
   capability with the address to follow; `GET /v1/<capability>` lists that
   capability's operations; every /v1 answer carries RFC 8288 `Link:` headers
-  (`self`, `describedby` → /v1/openapi.json, `index` → /v1). All of it is
+  (`self`, `describedby` → /v1/openapi.json, `index` → /v1), plus `Allow` (RFC
+  9110 §10.2.1) and `up`/`collection` (RFC 6573). **`OPTIONS` on any contract
+  address answers that same `Allow` at 204 with no body** — the RFC 9110 §9.3.7
+  question, asked the way HTTP has a method for asking it, so a client holding an
+  address learns what it can do there without a body and without fetching a
+  document. That completes the chain: the root names the capabilities, a
+  capability names its operations, an address names its own methods.
+  **A CORS PREFLIGHT IS A DIFFERENT QUESTION AND A DIFFERENT DOOR.** A preflight
+  is DEFINED by carrying `Access-Control-Request-Method` (Fetch), and
+  `middleware_edge.go` owns exactly those, so the split is on that header and
+  neither question is answered as if it were the other. It used to short-circuit
+  EVERY `OPTIONS`, which told every non-browser caller 204 with no `Allow` — the
+  one field the question is about. Worth knowing what that cost the TESTS rather
+  than production: three preflight tests sent `Origin` with no
+  `Access-Control-Request-Method`, modelling a request no browser emits. They
+  send it now, which is a more faithful model and not a loosened gate. All of it is
   projected from the woven document and filtered by the SAME `x-public` audience
   rule openapi.yaml is, so a staged capability is absent from the root and 404s
   one segment down — one fact, not two. **They are MIDDLEWARE on the front door,
@@ -340,15 +355,23 @@ modes stay: a developer builds the single lean plugin they are editing and the
 host prefers it (1.3s), a release ships the unified binary and the host falls
 through to it.
 
-**Eager vs lazy is a property of the WORK, not of the app.** `apps.go`'s `eager`
-map (apps/apps.go:631) names the four subsystems that must start WITH the host —
-`o11y` (its OTLP collector must accept spans before anything has one to send),
-`pubsub` (NATS :4222), `kafka` (:9092), and `catalogsync` (a pure bus consumer
-that registers no route at all, so lazily it would wait forever for a request
-that never arrives). Everything absent from that map is lazy, and that is what
-makes a 100+-service binary cheap: an app nobody calls costs a route entry and a
-struct, not a process. The generator stamps `Eager` onto every manifest row from
-this one map.
+**Eager vs lazy is a property of the WORK, not of the app.** `manifest.App.Eager`
+names the four subsystems that must start WITH the host, and every one of them
+owns a LISTENER: `pubsub` (NATS :4222), `kafka` (:9092), `amqp` (:5672) and
+`o11y` (its OTLP collector must accept spans before anything has one to send).
+Everything else is lazy, which is what makes a 100+-service binary cheap: an app
+nobody calls costs a route entry and a struct, not a process.
+
+A fifth used to sit there for a DIFFERENT reason and it is worth knowing why it
+is gone. `catalogsync` was Eager because it registered no route at all, so lazily
+it would wait forever for a request that never came — Eager as a way to start
+something the router could not reach. That is the shape a row cannot carry: in
+this fleet a row means "the host routes a prefix to a process", and a process is
+the one place that consumer could not do its work, since it called
+`content.EnsureCatalogAsset`, which refuses whenever content's own singleton is
+nil, and it is nil in every process but content's. It ran for months and rendered
+nothing. Eager now means exactly one thing — a listener binds at boot — and the
+rows that mean it all say so the same way.
 
 ### The release index: `CLOUD_PLUGINS` → `binaries.json` → verified fetch
 
@@ -724,9 +747,8 @@ package under `apps/<name>` that obeys these seams — nothing more.
   `apps/wire_test.go` freezes the sequence (name, `OwnsHealth`, has-`Shutdown`,
   global), so a reorder/drop/add fails there. **That test is a FROZEN GOLDEN, not
   an invariant: when `Wire()` legitimately changes, the fix is to update `frozen`
-  in the same diff.** `meet` was added RED and then frozen; `rollingcap` says so
-  in its row ("golden drifted — refrozen"). Each row carries the deleted
-  order-int as provenance, and a deliberate flag change is annotated in place
+  in the same diff.** `meet` was added RED and then frozen. Each row carries the
+  deleted order-int as provenance, and a deliberate flag change is annotated in place
   rather than silently edited — o11y's `hasShutdown` flipped true→false when it
   became a plugin, and the row explains that the host no longer owns any o11y
   resource to close.
@@ -867,6 +889,63 @@ pull the address out of the app:
 
 `openapi/misfiled.txt`: 100 pairs → 86. `/v1/plans commerce` stays — commerce's
 `/v1/plans/{entries,seed}` belong to the money wave, not this one.
+
+## A row is a process, so two things that could not be processes stopped being rows
+
+`product` opened no store. `rollingcap` and `catalogsync` opened no store AND
+answered no path: each claimed a `/v1/<name>` with nothing ever registered behind
+it, so the fleet published two capability names no customer could call. GA
+capabilities: **123 → 121**, and the published document does not move by one byte,
+which is the cleanest evidence they were never capabilities — the weave passes
+unregenerated, `openapi/floor.json` names neither, and `openapi.yaml`,
+`public.yaml` and `private.yaml` are byte-identical across the change.
+
+They held rows for a reason that reads as reasonable and is not: **a row is how
+the host starts a process**, and both wanted to be started. But in this fleet a
+row means the host routes a prefix to a CHILD PROCESS (`cmd/cloud` `mount` →
+`zip.Load`), and a process is precisely where neither could do its work:
+
+- **rollingcap** installed the AI-spend ceiling by writing `cloud.SetRollingCapReader`
+  — a package global in the root `cloud` package — and the only reader is the `ai`
+  module's gate, in **ai's** child. A global written in one child is invisible in
+  every other, so the ceiling has never applied to a completion. It never even ran:
+  the row was lazy on a prefix nothing requests, so its Mount was never called
+  either. Two independent reasons for the same nothing.
+- **catalogsync** consumed `commerce.product.created` off the bus and called
+  `content.EnsureCatalogAsset`, which refuses when content's own singleton is nil —
+  and it is nil in every process but content's. `paid_egress_test.go` had recorded
+  exactly that ("content.mounted is nil in this process, so it dead-ends before the
+  render") in a ledger of reaches that are HARMLESS, where a reach that is the app's
+  whole purpose reads as fine. The producer was unwired too: commerce publishes that
+  event only when `PUBSUB_URL` is set, which nothing in this repo or its deploy sets.
+  A loop open at both ends.
+
+So the fix is not a sixth fact on the row saying "start this, it is not a
+capability". That concept would have had **zero** live instances the moment these
+two were dealt with honestly, and it would bless the very arrangement that cannot
+work. Instead:
+
+- **the ceiling moved to `apps/ai/cap.go`**, beside the gate that reads it, where
+  its two inputs already reach: `cloud.TierReader()` is the co-resident commerce
+  lookup ai already installs, and the trailing-window sum is commerce's own
+  `plane.FinanceSpend` — the op whose doc already named this ceiling as its twin,
+  so a program that qualifies an org on its spend and the gate that stops it read
+  one number. `cloud.SetRollingCapReader`/`RollingCapReader` are DELETED: a door
+  across a process boundary is not a seam, and four snapshots remain where there
+  were five.
+- **the catalog loop was deleted**, `content.EnsureCatalogAsset` with it, because a
+  loop whose producer was never wired and whose consumer could never render is not
+  a feature awaiting a fix. The FORWARD edge is untouched and is live — a published
+  Asset becomes the product image (`apps/content/storefront.go`) — and it works for
+  the reason the reverse one did not: it crosses to commerce over the transport,
+  not through a package global. If the reverse edge is ever wanted, it belongs
+  INSIDE `apps/content`, which already imports commerce's transport, so the import
+  edge catalogsync existed to prevent is one that already exists.
+
+The lesson generalises past these two: **`Eager` is not a way to start something
+the router cannot reach.** It means a listener binds at boot, and the four rows
+that set it all own one. Something that must run inside another app's process is
+not an app; it is code in that app.
 
 ## The route table has three projections, and the router is the source
 
@@ -3849,10 +3928,10 @@ semantic is identical — fail closed once armed, allow before.
   (`authz catalogsync dns esign index kafka kms metrics rollingcap skills social
   storage tasks zen`) — of which `index` and `kms` then published 14 and 5, so the
   list was 12 and the catalog 1048 operations. It has since grown back past the
-  size it shrank TO — 1443 is above that 1048 and below both 1554 and the
-  original 2499: **1443 operations over 125 keys, 15 of them empty**
-  (`admin admission amqp authz catalogsync dns kafka metrics plugins research
-  rollingcap s3 skills tasks zen` — `jq 'length' fleet/catalog.json`,
+  size it shrank TO — 1445 is above that 1048 and below both 1554 and the
+  original 2499: **1445 operations over 123 keys, 13 of them empty**
+  (`admin admission amqp authz dns kafka metrics plugins research s3 skills tasks
+  zen` — `jq 'length' fleet/catalog.json`,
   `jq '[.[]|length]|add' fleet/catalog.json`,
   `jq -r 'to_entries|map(select(.value|length==0)|.key)|join(" ")' fleet/catalog.json`),
   because esign, index, kms and social type and publish now, and `storage` is the

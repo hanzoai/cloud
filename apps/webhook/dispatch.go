@@ -128,8 +128,9 @@ const commerceOrgKey = "organization_id"
 
 // ensureCommerceStream is the COMMERCE plane's constructor. It is written out here
 // because hanzoai/commerce/events exports the stream's NAME and SUBJECTS but ships no
-// constructor — and it is byte-identical to the one apps/catalogsync uses, which is what
-// keeps two consumers from racing to create two different COMMERCE streams.
+// constructor. It is the ONLY one now: apps/catalogsync held a byte-identical copy, so
+// this note was about keeping two consumers from racing to create two different COMMERCE
+// streams, and that consumer is gone.
 func ensureCommerceStream(ctx context.Context, cl *infra.PubSubClient) error {
 	return cl.EnsureStream(ctx, &infra.StreamConfig{Name: events.StreamName, Subjects: events.StreamSubjects})
 }

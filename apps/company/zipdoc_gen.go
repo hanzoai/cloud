@@ -235,6 +235,29 @@ func init() {
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
 		},
 	})
+	zip.Describe("POST /v1/company/ein", zip.Doc{
+		Description: "Opens the EIN application and answers what it owes.\n\nThe answer states whether it can be filed ONLINE, because that is the fact\ndeciding whether the customer waits a sitting or several weeks — and it names\neach form with what that form is for, so nobody has to already know what an\nSS-4 is to understand why they are signing one.",
+		Fields: map[string]string{
+			"EIN.expedited":       "Expedited reports that prioritised handling was asked for.",
+			"EIN.forms":           "Forms are the forms this application owes, with what each is for.",
+			"EIN.naics":           "NAICS is the six-digit code for what the business does. The SS-4 asks it\nand the IRS will not process an application without one.",
+			"EIN.number":          "Number is the issued EIN, absent until the IRS issues it.",
+			"EIN.online":          "Online reports that this application can be filed with the IRS online and\nissued in a sitting, rather than signed and posted. It is the single fact\nthat decides how long a customer waits, so it is answered rather than\nimplied by the absence of forms.",
+			"EIN.responsible":     "Responsible is the person the IRS holds answerable.",
+			"EIN.status":          "Status is how far it has got.",
+			"Form.code":           "Code is the IRS designation, e.g. \"SS-4\".",
+			"Form.name":           "Name is the form's own title, so a reader need not already know the code.",
+			"Form.signed":         "Signed reports whether we hold the signature.",
+			"Form.why":            "Why states what this form is for in this application — the same form is\nowed for different reasons on different paths.",
+			"Responsible.country": "Country is where they reside, ISO 3166-1 alpha-2.",
+			"Responsible.email":   "Email reaches them for signature.",
+			"Responsible.name":    "Name is their full legal name as the IRS will hold it.",
+			"Responsible.usTaxId": "USTaxID reports that they hold an SSN or ITIN. It is a BOOLEAN on purpose:\nthe number itself is never needed here and a field that could hold it is a\nfield that will eventually be logged.",
+			"einIn.expedited":     "Expedited asks for prioritised handling. Only meaningful when the\nresponsible party cannot file online.",
+			"einIn.naics":         "NAICS is the six-digit code for what the business does.",
+			"einIn.responsible":   "Responsible is the person the IRS holds answerable for the entity.",
+		},
+	})
 	zip.Describe("POST /v1/company/esign", zip.Doc{
 		Description: "Sends the generated formation documents for signature by every\nfounder and records the provider's reference on the formation. Available only\nat the esign stage.",
 		Fields: map[string]string{
@@ -764,6 +787,30 @@ func init() {
 			"Genesis.txHash":                "TxHash is the L1 transaction hash of the anchoring commit. Empty until anchored.",
 			"formationView.formation":       "Formation is the org's one incorporation record.",
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
+		},
+	})
+	zip.Describe("POST /v1/company/tariff", zip.Doc{
+		Description: "Itemises what a formation costs before anyone commits to it.\n\nIt answers what is due now and what recurs, as separate figures, and marks the\nstate's filing fee as money we collect and remit rather than keep. A caller can\ntherefore show a payer the whole bill — which is the point of quoting at all,\nand was impossible while the fee was one number in an error string.\n\nA jurisdiction whose filing fee this deployment has not been told REFUSES,\nnaming the setting that fixes it. Quoting our half as though it were the total\nis the one answer that would be worse than no answer.",
+		Fields: map[string]string{
+			"Charge.amountCents":     "AmountCents is what this line costs.",
+			"Charge.asOf":            "AsOf is when a pass-through amount was last checked against its source.",
+			"Charge.code":            "Code names the line so a caller can branch on it without reading prose.",
+			"Charge.label":           "Label is what the payer sees on the invoice.",
+			"Charge.passThrough":     "PassThrough marks money we collect and remit rather than keep — the state's\nfee is not our revenue, and a quote that hides that is a quote that reads\nas a bigger margin than it is.",
+			"Charge.recurring":       "Recurring marks a line that repeats. An agent of record is billed every\nyear for as long as the entity stands, and a payer agreeing to a one-time\ntotal is not agreeing to that.",
+			"Charge.source":          "Source names who publishes this amount, for a line we merely pass through.\nEmpty for a price of ours, which needs no external authority.",
+			"Charge.stale":           "Stale reports that AsOf is older than the review window — the figure may\nhave moved and nobody has looked. It does not block; it tells.",
+			"Tariff.currency":        "Currency is the ISO code every amount on this quote is denominated in.",
+			"Tariff.dueNowCents":     "DueNowCents is what is charged to begin: every non-recurring line.",
+			"Tariff.jurisdiction":    "Jurisdiction is the state of formation the filing fee belongs to.",
+			"Tariff.lines":           "Lines are the charges, in the order a reader should see them.",
+			"Tariff.recurring":       "Recurring is how often RecurringCents repeats — \"yearly\" for an agent of\nrecord. Empty when nothing on this quote recurs.",
+			"Tariff.recurringCents":  "RecurringCents is what repeats, and Recurring says how often.",
+			"Tariff.structure":       "Structure is the entity this prices: c-corp, llc or dao-llc.",
+			"tariffIn.agentOfRecord": "AgentOfRecord puts us on file as the entity's agent, yearly.",
+			"tariffIn.expeditedEin":  "ExpeditedEIN prioritises the EIN.",
+			"tariffIn.jurisdiction":  "Jurisdiction is the state of formation.",
+			"tariffIn.structure":     "Structure is the entity being formed: c-corp, llc or dao-llc.",
 		},
 	})
 	zip.Describe("PUT /v1/company/structure", zip.Doc{

@@ -198,7 +198,12 @@ func TestForgeRewrites_WithoutACredentialNothingChanges(t *testing.T) {
 // runRewritesWithModule runs the script against a tree whose go.mod names one hanzoai
 // module, so the probe-and-rewrite half executes, and returns the job-local git config it
 // wrote along with the output.
-func runRewritesWithModule(t *testing.T, env map[string]string) (out string, gitconfig string, credFiles []string) {
+func runRewritesWithModule(t *testing.T, env map[string]string) (string, string, []string) {
+	return runRewritesWithGoMod(t,
+		"module example.com/x\n\ngo 1.25\n\nrequire (\n\tgithub.com/hanzoai/vfs v0.6.6\n)\n", env)
+}
+
+func runRewritesWithGoMod(t *testing.T, gomod string, env map[string]string) (out string, gitconfig string, credFiles []string) {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".hanzo", "ci"), 0o755); err != nil {
@@ -212,7 +217,6 @@ func runRewritesWithModule(t *testing.T, env map[string]string) (out string, git
 	if err := os.WriteFile(script, src, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	gomod := "module example.com/x\n\ngo 1.25\n\nrequire (\n\tgithub.com/hanzoai/vfs v0.6.6\n)\n"
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte(gomod), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +327,7 @@ func TestForgeRewrites_AnIdentityThatServesNothingFallsBack(t *testing.T) {
 	if !strings.Contains(out, "asking as the IAM identity") {
 		t.Fatalf("expected it to try the IAM identity first:\n%s", out)
 	}
-	if !strings.Contains(out, "served nothing — asking again as the per-job token") {
+	if !strings.Contains(out, "asking again for what the IAM identity could not reach") {
 		t.Errorf("an identity that served nothing did not fall back:\n%s", out)
 	}
 }
@@ -397,7 +401,7 @@ func TestForgeRewrites_GitHubSurvivesTheRetry(t *testing.T) {
 		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
 		"GIT_TOKEN": "per-job-token", "FORGE_URL": forge.URL, "GH_PAT": pat,
 	})
-	if !strings.Contains(out, "asking again as the per-job token") {
+	if !strings.Contains(out, "asking again for what the IAM identity could not reach") {
 		t.Fatalf("the retry did not run, so there is nothing to judge:\n%s", out)
 	}
 	if store := credStore(t, cfg); !strings.Contains(store, "@github.com") {
@@ -479,5 +483,92 @@ func TestForgeRewrites_AShorterNameDoesNotSwallowALongerOne(t *testing.T) {
 	tr := trace("https://github.com/hanzoai/pubsub-go")
 	if strings.Contains(tr, forge.URL+"/hanzoai/pubsub-go") {
 		t.Errorf("pubsub-go was routed to the forge by the rewrite written for pubsub:\n%s", tr)
+	}
+}
+
+// THE BOOTSTRAP IS A LAST RESORT, NOT A PREFERENCE. The audience the forge requires is
+// stamped by a release that cannot be built until the modules resolve, and the modules
+// cannot resolve until it is stamped. One credential that already works breaks that
+// circle — but only after the IAM identity has been asked and the forge served nothing
+// by it, so the moment the release is live this stops being reached.
+func TestForgeRewrites_TheFallbackIsReachedOnlyAfterIAMServesNothing(t *testing.T) {
+	srv, _, form := iamStub(t, "iam-token-the-forge-refuses")
+
+	out, _, _ := runRewritesWithModule(t, map[string]string{
+		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
+		"GIT_TOKEN": "", "FALLBACK_TOKEN": "forge-token",
+	})
+	// IAM is still asked, and asked FOR the forge.
+	if got := (*form)["resource"]; len(got) != 1 || got[0] != "hanzo-git" {
+		t.Errorf("resource = %v, want [hanzo-git] — IAM must still be asked first", got)
+	}
+	if !strings.Contains(out, "asking as the IAM identity") {
+		t.Fatalf("the IAM identity was not tried first:\n%s", out)
+	}
+	// Only then does it reach for the credential that works today.
+	if !strings.Contains(out, "asking again for what the IAM identity could not reach") {
+		t.Errorf("the fallback was never reached even though the forge served nothing:\n%s", out)
+	}
+}
+
+// An IAM identity the forge DOES spend must never reach the fallback — that is what makes
+// this removable rather than permanent.
+func TestForgeRewrites_AServedIAMIdentityNeverReachesTheFallback(t *testing.T) {
+	srv, _, _ := iamStub(t, "iam-token-that-works")
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200) // the forge spends the IAM token
+	}))
+	defer forge.Close()
+
+	out, _, _ := runRewritesWithModule(t, map[string]string{
+		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
+		"GIT_TOKEN": "", "FALLBACK_TOKEN": "forge-token", "FORGE_URL": forge.URL,
+	})
+	if !strings.Contains(out, "forge serves -> vfs") {
+		t.Fatalf("the IAM identity did not serve the module:\n%s", out)
+	}
+	if strings.Contains(out, "asking again for what the IAM identity could not reach") {
+		t.Errorf("reached the fallback despite the IAM identity being spent:\n%s", out)
+	}
+}
+
+// PARTIAL REFUSAL IS THE CASE THAT HAPPENS. The IAM identity serves what its account can
+// see, and a repository it cannot see denies exactly as one that does not exist. On the
+// run that found this, twenty-two modules were served and twenty-six refused — so a retry
+// conditioned on NOTHING having been served never fired, and those twenty-six stayed on
+// GitHub with no credential to fetch them.
+func TestForgeRewrites_TheRefusedAreAskedAgainEvenWhenOthersWereServed(t *testing.T) {
+	srv, _, _ := iamStub(t, "iam-token")
+
+	// A forge that serves `vfs` to anyone but `zen` only to the fallback credential.
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, pass, _ := r.BasicAuth()
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/vfs"):
+			w.WriteHeader(200)
+		case strings.HasSuffix(r.URL.Path, "/zen") && pass == "forge-token":
+			w.WriteHeader(200)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer forge.Close()
+
+	gomod := "module example.com/x\n\ngo 1.25\n\nrequire (\n\tgithub.com/hanzoai/vfs v0.6.6\n\tgithub.com/hanzoai/zen v1.4.11\n)\n"
+	out, _, _ := runRewritesWithGoMod(t, gomod, map[string]string{
+		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
+		"GIT_TOKEN": "", "FALLBACK_TOKEN": "forge-token", "FORGE_URL": forge.URL,
+	})
+	if !strings.Contains(out, "asking again for what the IAM identity could not reach") {
+		t.Fatalf("a partial refusal did not trigger the retry:\n%s", out)
+	}
+	// Both end up served by the forge: vfs by the identity, zen by the retry.
+	for _, m := range []string{"vfs", "zen"} {
+		if !strings.Contains(out, m) {
+			t.Errorf("%s is not accounted for:\n%s", m, out)
+		}
+	}
+	if strings.Contains(out, "left on GitHub -> zen") {
+		t.Errorf("zen stayed on GitHub although the fallback can serve it:\n%s", out)
 	}
 }

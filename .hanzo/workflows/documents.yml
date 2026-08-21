@@ -251,10 +251,47 @@ jobs:
           # good case, not a failure.
           { git config --local --name-only --get-regexp '^http\..*extraheader$' || true; } 2>/dev/null \
             | while read -r k; do git config --local --unset-all "$k" || true; done
-          GIT_CONFIG_COUNT=1 \
-          GIT_CONFIG_KEY_0=http.extraheader \
-          GIT_CONFIG_VALUE_0="Authorization: token ${GIT_TOKEN}" \
-            git push "$REMOTE" HEAD:main
+          push_documents() {
+            GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0=http.extraheader \
+            GIT_CONFIG_VALUE_0="Authorization: token ${GIT_TOKEN}" \
+              git push "$REMOTE" HEAD:main
+          }
+
+          # A LOST SWAP IS RE-DERIVED, NOT FORCED. Fast-forward only is right: documents
+          # generated from a tree that is no longer the branch describe nothing anyone can
+          # check. But REFUSING outright means the lane cannot land at all on a branch that
+          # moves every few minutes, which is an ordinary busy day here -- and then the
+          # drift gate goes on refusing every release for documents that nothing is able to
+          # regenerate. Measured: the sweep completed, wrote 15 files, and was rejected at
+          # the push, three runs running.
+          #
+          # So a rejection takes the NEW main and generates against THAT. Documents are a
+          # pure function of the tree, so re-deriving is exactly right where replaying a
+          # commit would not be. The caches are warm in this container by the second pass,
+          # so it costs minutes rather than the first pass's tens of them. Bounded, because
+          # a branch moving faster than the sweep can read it is a fact to report rather
+          # than a loop to spin in. Never a merge, and never a force.
+          attempt=1
+          until push_documents; do
+            if [ "$attempt" -ge 3 ]; then
+              echo "::error::main moved under the sweep on ${attempt} consecutive attempts — the documents regenerate but never land. Dispatch this lane again when main is quieter."
+              exit 1
+            fi
+            attempt=$(( attempt + 1 ))
+            echo ">> main moved under the sweep — regenerating against it (attempt ${attempt} of 3)"
+            git fetch "$REMOTE" main
+            git reset --hard FETCH_HEAD
+            make -f mk/fleet.mk documents
+            set -f; git add -- $DOCUMENTS; set +f
+            if git diff --cached --quiet; then
+              echo "every document already matches the source it is generated from — nothing to commit"
+              exit 0
+            fi
+            git -c user.name=hanzo-dev -c user.email=dev@hanzo.ai commit \
+              -m 'regenerate the fleet documents from source' \
+              -m 'Written by the Documents lane on hanzo-build-linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
+          done
           echo "pushed $(git rev-parse --short HEAD) to main"
 
           # A push made with a token fires no workflow on this forge, so without

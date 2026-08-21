@@ -30,31 +30,29 @@ type UsageEvent struct {
 }
 
 type (
-	TierReaderFunc       func(ctx context.Context, subject, namespace string) (string, error)
-	BalanceReaderFunc    func(ctx context.Context, subject, namespace, currency string) (int64, error)
-	UsageRecorderFunc    func(ctx context.Context, u UsageEvent) error
-	IngestDialerFunc     func(org string) (tasksclient.Client, error)
-	RollingCapReaderFunc func(ctx context.Context, subject, namespace string) (bool, error)
+	TierReaderFunc    func(ctx context.Context, subject, namespace string) (string, error)
+	BalanceReaderFunc func(ctx context.Context, subject, namespace, currency string) (int64, error)
+	UsageRecorderFunc func(ctx context.Context, u UsageEvent) error
+	IngestDialerFunc  func(org string) (tasksclient.Client, error)
 )
 
 var (
-	tierReader       TierReaderFunc
-	balanceReader    BalanceReaderFunc
-	usageRecorder    UsageRecorderFunc
-	ingestDialer     IngestDialerFunc
-	rollingCapReader RollingCapReaderFunc
+	tierReader    TierReaderFunc
+	balanceReader BalanceReaderFunc
+	usageRecorder UsageRecorderFunc
+	ingestDialer  IngestDialerFunc
 )
 
 // nil means that subsystem isn't co-resident; apps/ leaves it uninstalled.
-func TierReader() TierReaderFunc             { return tierReader }
-func BalanceReader() BalanceReaderFunc       { return balanceReader }
-func UsageRecorder() UsageRecorderFunc       { return usageRecorder }
-func IngestDialer() IngestDialerFunc         { return ingestDialer }
-func RollingCapReader() RollingCapReaderFunc { return rollingCapReader }
-
-// SetRollingCapReader is the one EXPORTED setter here, and the deviation is
-// forced: the four above are written directly by build.go/durable.go, which are
-// inside this package, but the rolling cap is produced by clients/rollingcap —
-// it imports clients/flags, which imports this package, so it can only ever live
-// above that edge and needs a door. nil clears it (no cap installed).
-func SetRollingCapReader(f RollingCapReaderFunc) { rollingCapReader = f }
+//
+// There were FIVE of these, and the fifth was a door rather than a snapshot: an
+// exported SetRollingCapReader, written from outside this package so a separate
+// rollingcap app could install the AI-spend cap. A door across this edge cannot
+// work, because the edge these globals sit on is a PROCESS. Every app is its own
+// child, so a value written into this variable in one child is invisible in
+// every other — and the only reader was the `ai` module's gate, in ai's child.
+// The cap composes where that gate runs (apps/ai/cap.go) and needs no door.
+func TierReader() TierReaderFunc       { return tierReader }
+func BalanceReader() BalanceReaderFunc { return balanceReader }
+func UsageRecorder() UsageRecorderFunc { return usageRecorder }
+func IngestDialer() IngestDialerFunc   { return ingestDialer }

@@ -1,6 +1,6 @@
 {
-  "paths": 1775,
-  "operations": 2405,
+  "paths": 1778,
+  "operations": 2408,
   "products": {
     "account": 10,
     "ad": 7,
@@ -28,7 +28,7 @@
     "cloudflare": 33,
     "code": 7,
     "commerce": 183,
-    "company": 22,
+    "company": 24,
     "compliance": 17,
     "content": 6,
     "crawl": 1,
@@ -104,6 +104,7 @@
     "share": 2,
     "skills": 2,
     "social": 13,
+    "standing": 1,
     "sync": 6,
     "tasks": 10,
     "taxonomy": 5,

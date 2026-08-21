@@ -76,7 +76,7 @@ func init() {
 //	POST   /v1/company/kyc                 start founder KYC (idv seam)
 //	POST   /v1/company/kyc/refresh         reconcile founder KYC with the wired provider
 //	POST   /v1/company/kyc/decision        reviewer decision on a founder {email,status}
-//	POST   /v1/company/payment             charge the $999 formation fee
+//	POST   /v1/company/payment             charge the formation fee
 //	POST   /v1/company/documents           generate formation docs → data room + file
 //	POST   /v1/company/esign               request signatures on the docs
 //	POST   /v1/company/esign/complete      record signing complete
@@ -201,6 +201,8 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 
 	// The platform's own book — SuperAdmin operations, cross-tenant, read-only.
 	// Registered before the tenant edges so the static paths are unambiguous.
+	zip.Post(g, "/tariff", o.tariff)
+	zip.Post(g, "/ein", o.ein)
 	zip.Get(g, "/register", o.registerList)
 	zip.Get(g, "/register/summary", o.registerSummary)
 	zip.Get(g, "/review", o.registerReview)
@@ -650,7 +652,7 @@ func (o ops) kycDecision(ctx context.Context, in *decisionIn) (*formationView, e
 	return view(f), nil
 }
 
-// ---- payment (the $999 gate) ----
+// ---- payment (the fee gate; the amount is quoted, see fees.go) ----
 
 // pay charges the caller's own org the one-time Hanzo Company formation fee.
 //
@@ -684,7 +686,20 @@ func (o ops) pay(ctx context.Context, _ *noInput) (*formationView, error) {
 	if f.Paid {
 		return view(f), nil // idempotent — already paid
 	}
-	ref, err := o.s.State.prov.charge.Charge(ctx, org, feeCents(), "Hanzo Company formation fee")
+	// CHARGE WHAT THE TARIFF QUOTED, not our line of it. The tariff itemises the
+	// service fee AND the state's filing fee, and this used to charge only the
+	// first — so a customer quoted the total paid our half and we absorbed the
+	// state's on every formation. The quote and the charge have to be the same
+	// arithmetic or one of them is a lie.
+	//
+	// DueNowCents is the one-time total by construction: a recurring line (an
+	// agent of record) is summed separately and is a subscription, not a charge
+	// taken here.
+	quoted, err := TariffFor(f.Structure, f.Jurisdiction, Options{})
+	if err != nil {
+		return nil, err
+	}
+	ref, err := o.s.State.prov.charge.Charge(ctx, org, quoted.DueNowCents, "Hanzo Company formation")
 	if err != nil {
 		// Map the metering error to the canonical 402/503 billing contract.
 		return nil, cloud.Denied(err)

@@ -314,7 +314,7 @@ func TestRoutesLiveUnderTheirOwnNoun(t *testing.T) {
 		"GET /v1/node/connect":     false,
 		"GET /v1/node":             false,
 		"POST /v1/node/:id/invoke": false,
-		"POST " + PeerInvokePath:    false,
+		"POST " + PeerInvokePath:   false,
 	}
 	for _, r := range app.Fiber().GetRoutes() {
 		if strings.Contains(r.Path, "/api/") {
