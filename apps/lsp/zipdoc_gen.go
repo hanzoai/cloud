@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("POST /v1/code/lsp/complete", zip.Doc{
+	zip.Describe("POST /v1/lsp/complete", zip.Doc{
 		Description: "Offers the candidates a language server has at a position, typed and\nresolved through the repository's dependencies rather than guessed from text.",
 		Fields: map[string]string{
 			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
@@ -22,7 +22,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/lsp.go","line":120,"character":18}`),
 	})
-	zip.Describe("POST /v1/code/lsp/diagnostics", zip.Doc{
+	zip.Describe("POST /v1/lsp/diagnostics", zip.Doc{
 		Description: "Reports every problem the language server finds in one file —\ncompile errors, type errors and lints, each with its span and its severity (1\nerror, 2 warning, 3 information, 4 hint). The position is ignored.",
 		Fields: map[string]string{
 			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
@@ -35,7 +35,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/lsp.go"}`),
 	})
-	zip.Describe("POST /v1/code/lsp/hover", zip.Doc{
+	zip.Describe("POST /v1/lsp/hover", zip.Doc{
 		Description: "Renders the type and documentation of the symbol at a position, as the\nlanguage server itself renders it.\n\nPositions are the LSP's: line and character are 0-BASED and character counts\nUTF-16 code units, so an editor's 1-based line must have 1 subtracted before it\nis sent. The repository is named by slug and is always one in the caller's own\norg; rev pins a branch, tag or commit sha, and empty means the default branch.",
 		Fields: map[string]string{
 			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
@@ -48,7 +48,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/lsp.go","line":120,"character":18}`),
 	})
-	zip.Describe("POST /v1/code/lsp/locate", zip.Doc{
+	zip.Describe("POST /v1/lsp/locate", zip.Doc{
 		Description: "Finds where a symbol lives: its definition, its references, its type or\nits implementations, chosen by relation (definition, reference, type,\nimplementation — empty means definition).\n\nIt resolves THROUGH dependencies. An answer whose external flag is set left the\nrepository, and its path is then the module coordinate it landed in — which is\nthe question a static index cannot answer and this service exists for.",
 		Fields: map[string]string{
 			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",
@@ -61,7 +61,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"repo":"cloud","path":"apps/lsp/lsp.go","line":120,"character":18,"relation":"definition"}`),
 	})
-	zip.Describe("POST /v1/code/lsp/symbols", zip.Doc{
+	zip.Describe("POST /v1/lsp/symbols", zip.Doc{
 		Description: "Outlines one file: every declaration in it, with its kind and its span.\nThe position is ignored — the answer is the whole file.",
 		Fields: map[string]string{
 			"Answer.cold":     "Cold reports that this request paid to PREPARE the revision — the tree\nwrite, the dependency fetch and the language server's first index. It is\nthe billed event, surfaced so a caller can see what it was charged for.",

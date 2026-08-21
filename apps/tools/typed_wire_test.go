@@ -40,7 +40,7 @@ var untypedByDesign = map[string]string{
 	// So this is a 201-or-422 pair of DIFFERENT shapes and zip has one Out and one
 	// declared status per op — the multi-status gap (#78), not an oversight.
 	// TestBuildFailureCarriesItsDiagnostics pins the 422 body.
-	"POST /v1/plugins/build": "a failed build answers 422 carrying the build diagnostics (detail, source, " +
+	"POST /v1/tools/plugins/build": "a failed build answers 422 carrying the build diagnostics (detail, source, " +
 		"generated) as a domain body; a typed op's only refusal is a returned error, which zip renders as the " +
 		"flat HTTPError with nowhere to put them — one Out and one declared status per op.",
 }
@@ -183,7 +183,7 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 // plugin, and a shape zip's flat HTTPError has nowhere to put.
 func TestBuildFailureCarriesItsDiagnostics(t *testing.T) {
 	app := newApp(t, nil)
-	r := do(t, app, http.MethodPost, "/v1/plugins/build", "acme", map[string]any{
+	r := do(t, app, http.MethodPost, "/v1/tools/plugins/build", "acme", map[string]any{
 		"name": "broken", "source": "export const x = {",
 	})
 	if r.Code != 422 {
@@ -222,7 +222,7 @@ func TestTheUntypedRouteStillDeclaresItsBody(t *testing.T) {
 		} `json:"schema"`
 	}
 	for _, c := range []struct{ path, req, resp string }{
-		{"/v1/plugins/build", "buildRequest", "buildOut"},
+		{"/v1/tools/plugins/build", "buildRequest", "buildOut"},
 	} {
 		raw, err := json.Marshal(doc.Paths[c.path]["post"])
 		if err != nil {
@@ -345,7 +345,7 @@ func TestActivatedFilterIsTheLiteralTrue(t *testing.T) {
 // (zip answers 204 only for a nil Out of an unnamed type), then 404 once gone.
 func TestServerLifecycleKeepsItsStatuses(t *testing.T) {
 	app := newApp(t, nil)
-	create := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme", map[string]any{
+	create := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme", map[string]any{
 		"name": "myserver", "url": "https://mcp.example.com/rpc",
 	})
 	if create.Code != 201 {
@@ -361,14 +361,14 @@ func TestServerLifecycleKeepsItsStatuses(t *testing.T) {
 
 	// Another tenant cannot delete it: the org comes from the validated principal,
 	// never from the URL, so this is a 404 and not a cross-tenant delete.
-	if r := do(t, app, http.MethodDelete, "/v1/mcp/servers/"+made.ID, "evil", nil); r.Code != 404 {
+	if r := do(t, app, http.MethodDelete, "/v1/tools/mcp/servers/"+made.ID, "evil", nil); r.Code != 404 {
 		t.Fatalf("cross-tenant delete = %d (%s), want 404", r.Code, r.Body)
 	}
-	del := do(t, app, http.MethodDelete, "/v1/mcp/servers/"+made.ID, "acme", nil)
+	del := do(t, app, http.MethodDelete, "/v1/tools/mcp/servers/"+made.ID, "acme", nil)
 	if del.Code != 204 || len(del.Body) != 0 {
 		t.Fatalf("delete server = %d body %q, want 204 with no body", del.Code, del.Body)
 	}
-	if r := do(t, app, http.MethodDelete, "/v1/mcp/servers/"+made.ID, "acme", nil); r.Code != 404 {
+	if r := do(t, app, http.MethodDelete, "/v1/tools/mcp/servers/"+made.ID, "acme", nil); r.Code != 404 {
 		t.Errorf("second delete = %d (%s), want 404", r.Code, r.Body)
 	}
 }
@@ -380,7 +380,7 @@ func TestServerLifecycleKeepsItsStatuses(t *testing.T) {
 // is stored under the caller's, and the other org cannot see it.
 func TestSkillWriteIsTenantedByThePrincipalNotTheBody(t *testing.T) {
 	app := newApp(t, nil)
-	w := do(t, app, http.MethodPost, "/v1/skills", "acme", map[string]any{
+	w := do(t, app, http.MethodPost, "/v1/tools/skills", "acme", map[string]any{
 		"org": "evil", "id": "smuggled", "name": "triage", "content": "# Triage", "createdAt": 1,
 	})
 	if w.Code != 201 {
@@ -396,16 +396,16 @@ func TestSkillWriteIsTenantedByThePrincipalNotTheBody(t *testing.T) {
 	if made.Skill.Org != "acme" || made.Skill.ID != "triage" || made.Skill.CreatedAt == 1 {
 		t.Fatalf("stored skill = %+v, want org acme, id triage and a server-stamped time", made.Skill)
 	}
-	mine := do(t, app, http.MethodGet, "/v1/skills/authored", "acme", nil)
+	mine := do(t, app, http.MethodGet, "/v1/tools/skills/authored", "acme", nil)
 	if !strings.Contains(string(mine.Body), "triage") {
 		t.Errorf("the author's org must see its skill, got %s", mine.Body)
 	}
-	theirs := do(t, app, http.MethodGet, "/v1/skills/authored", "evil", nil)
+	theirs := do(t, app, http.MethodGet, "/v1/tools/skills/authored", "evil", nil)
 	if strings.Contains(string(theirs.Body), "triage") {
 		t.Errorf("the org named in the BODY must not see the skill, got %s", theirs.Body)
 	}
 	// And the delete is org-scoped the same way.
-	if r := do(t, app, http.MethodDelete, "/v1/skills/triage", "acme", nil); r.Code != 200 {
+	if r := do(t, app, http.MethodDelete, "/v1/tools/skills/triage", "acme", nil); r.Code != 200 {
 		t.Errorf("delete skill = %d (%s), want 200", r.Code, r.Body)
 	}
 }
@@ -425,17 +425,17 @@ func TestTypedOpsFailClosedWithoutAPrincipal(t *testing.T) {
 		{http.MethodGet, "/v1/tools", nil},
 		{http.MethodGet, "/v1/tools/activation", nil},
 		{http.MethodPut, "/v1/tools/activation", map[string]any{"activate": []string{"x"}}},
-		{http.MethodGet, "/v1/skills", nil},
-		{http.MethodPost, "/v1/skills", map[string]any{"name": "x", "content": "y"}},
-		{http.MethodGet, "/v1/skills/authored", nil},
-		{http.MethodDelete, "/v1/skills/x", nil},
+		{http.MethodGet, "/v1/tools/skills", nil},
+		{http.MethodPost, "/v1/tools/skills", map[string]any{"name": "x", "content": "y"}},
+		{http.MethodGet, "/v1/tools/skills/authored", nil},
+		{http.MethodDelete, "/v1/tools/skills/x", nil},
 		{http.MethodPost, "/v1/tools/call", map[string]any{"name": "x", "arguments": map[string]any{}}},
-		{http.MethodGet, "/v1/mcp/servers", nil},
-		{http.MethodPost, "/v1/mcp/servers", map[string]any{"name": "x", "url": "https://mcp.example.com"}},
-		{http.MethodDelete, "/v1/mcp/servers/x", nil},
-		{http.MethodGet, "/v1/plugins", nil},
-		{http.MethodGet, "/v1/plugins/authored", nil},
-		{http.MethodDelete, "/v1/plugins/authored/x", nil},
+		{http.MethodGet, "/v1/tools/mcp/servers", nil},
+		{http.MethodPost, "/v1/tools/mcp/servers", map[string]any{"name": "x", "url": "https://mcp.example.com"}},
+		{http.MethodDelete, "/v1/tools/mcp/servers/x", nil},
+		{http.MethodGet, "/v1/tools/plugins", nil},
+		{http.MethodGet, "/v1/tools/plugins/authored", nil},
+		{http.MethodDelete, "/v1/tools/plugins/authored/x", nil},
 	} {
 		if r := do(t, app, c.method, c.path, "", c.body); r.Code != 403 {
 			t.Errorf("%s %s with no principal = %d (%s), want 403", c.method, c.path, r.Code, r.Body)

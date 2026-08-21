@@ -21,9 +21,6 @@
     },
     {
       "name": "agents"
-    },
-    {
-      "name": "coding"
     }
   ],
   "paths": {
@@ -241,6 +238,40 @@
               }
             },
             "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/agents/coding": {
+      "post": {
+        "operationId": "post_agents_coding",
+        "summary": "Start one autonomous coding run against a repo in the caller's org",
+        "description": "Runs a coding task on a repository: clones it into a sandbox, lets a model read\nand edit the code, run the tests, and push the work to a branch. Say the thing\nyou want done — \"fix the failing auth test in hanzoai/cloud\" — and the run\ninfers the repo, the branch and the plan. No prefix, no ceremony.\n\nIt answers 202 with the run's handle the moment the run is ADMITTED — not when\nit finishes. A coding run takes minutes; holding a request open for one would\ntie a connection to a model loop and give the caller nothing it cannot get\nbetter from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis door does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.\n\nIt is also how work CONTINUES. Pass an earlier run's session as `after` and\nthis one starts from where that one stopped, so \"now add tests for it\" builds\non the branch already pushed instead of a fresh clone. The follow-up still gets\nits own branch and its own session — one run, one branch, always reviewable on\nits own.",
+        "tags": [
+          "agents"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodingStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodingStarted"
+                }
+              }
+            },
+            "description": "accepted"
           }
         },
         "x-public": true,
@@ -1212,40 +1243,6 @@
         "x-public": true,
         "x-tool": true
       }
-    },
-    "/v1/coding": {
-      "post": {
-        "operationId": "post_coding",
-        "summary": "Start one autonomous coding run against a repo in the caller's org",
-        "description": "Runs a coding task on a repository: clones it into a sandbox, lets a model read\nand edit the code, run the tests, and push the work to a branch. Say the thing\nyou want done — \"fix the failing auth test in hanzoai/cloud\" — and the run\ninfers the repo, the branch and the plan. No prefix, no ceremony.\n\nIt answers 202 with the run's handle the moment the run is ADMITTED — not when\nit finishes. A coding run takes minutes; holding a request open for one would\ntie a connection to a model loop and give the caller nothing it cannot get\nbetter from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis door does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.\n\nIt is also how work CONTINUES. Pass an earlier run's session as `after` and\nthis one starts from where that one stopped, so \"now add tests for it\" builds\non the branch already pushed instead of a fresh clone. The follow-up still gets\nits own branch and its own session — one run, one branch, always reviewable on\nits own.",
-        "tags": [
-          "coding"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CodingStartIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CodingStarted"
-                }
-              }
-            },
-            "description": "accepted"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
     }
   },
   "components": {
@@ -1277,7 +1274,7 @@
             "type": "string"
           },
           "replyChannel": {
-            "description": "ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door\nthat started it has somewhere for it to talk. Empty means nobody is\nlistening and the run simply does not narrate — which is the app door's\ncase, because /v1/coding hands back a session id and the session stream is\na better progress feed than any message could be.\n\nIt is an ADDRESS and not a token: the engine says \"put this text there\",\nand the process that owns the workspace's bot credential is the one that\nactually posts. So a run reports into a Slack thread without the engine\never holding the token that could post anywhere else in that workspace.",
+            "description": "ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door\nthat started it has somewhere for it to talk. Empty means nobody is\nlistening and the run simply does not narrate — which is the app door's\ncase, because /v1/agents/coding hands back a session id and the session stream is\na better progress feed than any message could be.\n\nIt is an ADDRESS and not a token: the engine says \"put this text there\",\nand the process that owns the workspace's bot credential is the one that\nactually posts. So a run reports into a Slack thread without the engine\never holding the token that could post anywhere else in that workspace.",
             "type": "string"
           },
           "replyThread": {

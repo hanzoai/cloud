@@ -48,7 +48,7 @@ func raw(t *testing.T, app *zip.App, method, path string, body string, hdr map[s
 // X-Org-Id REQUEST HEADER — and SanitizeIdentity deliberately RESTORES that header
 // for a request with no validated bearer (middleware_identity.go:455). So
 // `X-Org-Id: victim-corp` on a service-key request made storeFor open victim-corp's
-// sandbox store: the run executed there, and /v1/files and /v1/download read its
+// sandbox store: the run executed there, and /v1/exec/files and /v1/exec/download read its
 // artifacts back out.
 //
 // A header names nothing now. The tenant is principal.OrgFrom — the org a VALIDATED
@@ -121,7 +121,7 @@ func TestPathCaseCannotSkipTheCredential(t *testing.T) {
 	}
 
 	// The file surface, case-flipped: this is how the artifacts came out.
-	for _, path := range []string{"/V1/FILES/m_0000a", "/V1/DOWNLOAD/m_0000a/secret.csv"} {
+	for _, path := range []string{"/V1/EXEC/FILES/m_0000a", "/V1/EXEC/DOWNLOAD/m_0000a/secret.csv"} {
 		resp := raw(t, app, http.MethodGet, path, "", map[string]string{"X-API-Key": "wrong"})
 		if resp.StatusCode != http.StatusUnauthorized {
 			b, _ := io.ReadAll(resp.Body)

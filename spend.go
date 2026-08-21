@@ -264,7 +264,9 @@ var inference = map[string]bool{
 //     non-LLM billing gap was opened for — were not billable paths at all.
 //   - projects answers /v1/sites and /v1/platform/sites, not only /v1/projects.
 //   - venue answers /v1/cloud. It was absent entirely.
-//   - tools answers /v1/skills, /v1/plugins and /v1/mcp/servers beside /v1/tools.
+//   - tools answered /v1/skills, /v1/plugins and /v1/mcp/servers beside /v1/tools.
+//     All three have since folded under /v1/tools, which is the other half of the
+//     lesson: reading the manifest is what makes an address move cost nothing here.
 //
 // And ten Metered surfaces were missing outright (ask, auto, automations, content,
 // flow, platform, provisioning, todo, translate, venue). The list had to be
