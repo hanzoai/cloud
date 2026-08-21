@@ -65501,27 +65501,6 @@ paths:
       - auto
       x-app: auto
       x-public: true
-  /v1/auto/pieces:
-    get:
-      description: |-
-        Pieces is the retired-name alias of the connector catalogue. It serves exactly
-        what GET /v1/auto/connectors serves, under the name this surface used
-        before "piece" (the ActivePieces term) became "connector", and stays valid for
-        clients pinned to the old path. Prefer /connectors.
-      operationId: get_auto_pieces
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Catalog'
-          description: ok
-      summary: Pieces is the retired-name alias of the connector catalogue.
-      tags:
-      - auto
-      x-app: auto
-      x-public: true
-      x-tool: true
   /v1/auto/runs:
     get:
       description: |-
