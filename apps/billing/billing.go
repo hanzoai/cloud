@@ -1,11 +1,16 @@
 // Package billing is your org's balance, what it has spent, and the cards it pays with.
 //
 // It is the customer's own money door, serving the org-scoped
-// /v1/billing/{usage,usage/accounts,balance,payment-methods}
-// reads plus the six /v1/finance/{balance,credits,usage,invoices,payment-methods,ledger}
-// projections the finance UI renders (finance.go). It owns NEITHER prefix whole —
-// commerce serves the merchant half of /v1/billing/* (invoices, subscriptions,
-// alerts, webhooks) and treasury serves /v1/finance/{treasury,accounts}.
+// /v1/billing/{balance,usage,usage/accounts,ledger} reads. It does not own the
+// prefix whole: commerce serves the merchant half of /v1/billing/* (invoices,
+// subscriptions, alerts, methods, webhooks) from the store it keeps.
+//
+// It answered a second prefix once. /v1/finance was six more reads of this same
+// wallet under another name — balance and usage were these reads respelled,
+// credits, invoices and payment-methods were addresses commerce already serves —
+// so HIP-0139 §7 closed it, and closing a shared address by fold means the
+// duplicate is deleted rather than moved. What survived is the ledger read
+// (ledger.go), at /v1/billing/ledger, where nobody else answers.
 //
 // WHY THIS EXISTS. On the console host (console.hanzo.ai) the ingress routes
 // /v1/* straight to cloud-api:8000 — the console's Next BFF is reached only at
@@ -131,8 +136,7 @@ func build(b cloud.Base) (state, error) {
 	return state{commerce: cp}, nil
 }
 
-// routes registers the customer-facing /v1/billing/* read surface plus the
-// /v1/finance/* projection (same commerceProxy).
+// routes registers the customer-facing /v1/billing/* read surface.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 
@@ -176,10 +180,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// falling through to anyone else. It did — a customer could ADD a card and never
 	// REMOVE one.
 
-	// The customer-facing /v1/finance/* PROJECTION of this same commerce plane (the
-	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
-	// + per-org subject-pinning; the treasury lane owns /v1/finance/treasury alongside it.
-	mountFinance(app, o)
+	// The org's own postings, signed — the widest read of the same wallet the two
+	// above answer for. Typed, where they are raw (ledger.go says why).
+	mountLedger(app, o)
 }
 
 // The PROSE for the raw routes above. Each survivor is a raw *zip.Ctx handler

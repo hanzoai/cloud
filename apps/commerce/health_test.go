@@ -20,11 +20,11 @@ import (
 // field is a behavior change even when the JSON is "equal".
 func TestHealth_AnswerIsByteIdentical(t *testing.T) {
 	app := zip.New(zip.Config{})
-	zip.Get(app, "/_/commerce/healthz", health)
+	zip.Get(app, "/v1/commerce/health", health)
 
-	resp, err := app.Test(httptest.NewRequest("GET", "/_/commerce/healthz", nil))
+	resp, err := app.Test(httptest.NewRequest("GET", "/v1/commerce/health", nil))
 	if err != nil {
-		t.Fatalf("GET /_/commerce/healthz: %v", err)
+		t.Fatalf("GET /v1/commerce/health: %v", err)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -45,7 +45,7 @@ func TestHealth_AnswerIsByteIdentical(t *testing.T) {
 // exists. The raw route it replaced appeared in none of them.
 func TestHealth_IsAPublishedOp(t *testing.T) {
 	app := zip.New(zip.Config{})
-	zip.Get(app, "/_/commerce/healthz", health)
+	zip.Get(app, "/v1/commerce/health", health)
 
 	spec, err := json.Marshal(app.OpenAPISpec())
 	if err != nil {
@@ -57,7 +57,7 @@ func TestHealth_IsAPublishedOp(t *testing.T) {
 	if err := json.Unmarshal(spec, &doc); err != nil {
 		t.Fatalf("unmarshal spec: %v", err)
 	}
-	if _, ok := doc.Paths["/_/commerce/healthz"]["get"]; !ok {
-		t.Fatalf("GET /_/commerce/healthz is not in the op registry — the probe went raw again; paths: %v", doc.Paths)
+	if _, ok := doc.Paths["/v1/commerce/health"]["get"]; !ok {
+		t.Fatalf("GET /v1/commerce/health is not in the op registry — the probe went raw again; paths: %v", doc.Paths)
 	}
 }
