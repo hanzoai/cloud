@@ -348,10 +348,11 @@ zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	# same command on the same sha reported every file current locally. A gate
 	# that cannot say why it refused sends the next reader to regenerate files
 	# that are already correct — which is what I did, and it changed nothing.
-	@stale=""; why=$$(mktemp -d); \
-	for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | grep -v '/\.' | xargs -n1 dirname | sed 's|^\./||' | sort -u); do \
-	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) > "$$why/$$(echo $$d | tr / _).out" 2>&1 || stale="$$stale $$d"; \
-	done; \
+	@why=$$(mktemp -d); bin="$$why/zipdoc"; \
+	$(GO) build -o "$$bin" github.com/zap-proto/zip/cmd/zipdoc || { echo "zipdoc: the generator itself does not build"; exit 1; }; \
+	grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | grep -v '/\.' | xargs -n1 dirname | sed 's|^\./||' | sort -u \
+	  | xargs -P "$$(nproc)" -I{} sh -c 'cd "{}" && "$$0" -check > "$$1/$$(echo {} | tr / _).out" 2>&1 || echo {} >> "$$1/stale"' "$$bin" "$$why"; \
+	stale=$$(cat "$$why/stale" 2>/dev/null | tr '\n' ' '); \
 	if [ -n "$$stale" ]; then \
 	  echo ""; \
 	  echo "STALE: the lifted prose no longer matches the source it was lifted from."; \
