@@ -85,6 +85,45 @@ func describeWebhooks() {
 // ---- /v1/commerce/catalog — the platform-admin product CMS ----
 
 func describeCatalog() {
+	// THE RATE AUTHORITY'S CRUD (api/rate/handlers.go in hanzoai/commerce). Its
+	// handlers carry good doc comments, but zipdoc lifts prose only from source in
+	// THIS repo, so a comment one module over reaches no reader. These say the same
+	// thing at the seam that can be read.
+	openapi.Describe("/v1/commerce/rates/entries", http.MethodGet,
+		"List what one unit of each metered thing costs",
+		"Returns the rate authority's rows — the prices every metered charge resolves against. "+
+			"Narrow with ?product= to show one surface at a time rather than every rate at once. "+
+			"SuperAdmin only: a rate is cross-tenant money, so the handler asks for the reserved "+
+			"admin org's owner claim itself rather than trusting the bundle's token gate.")
+	openapi.Describe("/v1/commerce/rates/entries", http.MethodPost,
+		"Add a rate",
+		"Creates one rate. Product AND meter are both required, because together they are the "+
+			"identity: a rate keyed on the metered thing alone would let one product's price "+
+			"overwrite another's under the same name. A slug that already exists is refused rather "+
+			"than silently replaced. SuperAdmin only.")
+	openapi.Describe("/v1/commerce/rates/entries/:slug", http.MethodPut,
+		"Edit a rate, and mark it as operator-set",
+		"Edits one rate and MARKS it edited, which is the whole contract with the importer: an "+
+			"operator's price outranks the document it came from, so a later import leaves this row "+
+			"alone. Without that mark a price set here would apply, work, and silently revert on the "+
+			"next import. Only the editable fields move; identity and bookkeeping are not writable "+
+			"from the body. SuperAdmin only.")
+	openapi.Describe("/v1/commerce/rates/entries/:slug", http.MethodDelete,
+		"Remove a rate outright",
+		"Deletes the row. ARCHIVING is usually what is wanted instead — a deleted rate cannot "+
+			"price a historical charge, so a past invoice that has to re-resolve its rate finds "+
+			"nothing to read. Reach for status=archived unless the rate never priced anything. "+
+			"SuperAdmin only.")
+	openapi.Describe("/v1/commerce/rates/import", http.MethodPost,
+		"Load the published price document, reconciling rather than replacing",
+		"Takes an array of rates and seeds the authority from it. This is the seed, driven from "+
+			"admin rather than compiled in, because 506 published prices in an embed made a price "+
+			"change wait for a build. It RECONCILES: a row that matches is left alone, a row that "+
+			"has drifted is corrected, and a row an operator edited is skipped — so importing the "+
+			"same document twice is a no-op and importing a corrected one moves exactly the rows "+
+			"that changed. Answers what it received, created, corrected and left unchanged, so an "+
+			"import that changes nothing reads as nothing to do rather than as a failure. An empty "+
+			"array is refused 400. SuperAdmin only.")
 	openapi.Describe("/v1/commerce/catalog/entries", http.MethodGet,
 		"The raw catalog entries, including the unpublished ones",
 		"Returns every catalog row as stored — the admin view, which unlike the public "+
