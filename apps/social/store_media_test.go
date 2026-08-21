@@ -63,7 +63,7 @@ func TestMigrateAddsMediaColumnToOldPosts(t *testing.T) {
 
 	// The exact prod repro: a create that writes media must now SUCCEED, not 500 with
 	// "no column named media".
-	if _, err := s.CreatePost(ctx, Post{
+	if _, err := s.CreatePost(ctx, socialPost{
 		ID: "new1", Org: "karma", Content: "with media", Channel: "x", Status: "draft",
 		Media: []string{"https://s3.hanzo.ai/a.png", "https://s3.hanzo.ai/b.png"}, CreatedAt: 10, UpdatedAt: 10,
 	}); err != nil {
