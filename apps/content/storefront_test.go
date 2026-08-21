@@ -231,8 +231,8 @@ func TestTransitionStorefrontFailClosed(t *testing.T) {
 // ---- integration: the REAL commerce S2S edge (over the in-process transport) ----
 
 // TestCommerceStorefrontWire proves the real edge speaks the exact commerce contract:
-// resolve the org's store (GET /v1/store/current), then upsert the product Listing
-// (PUT /v1/store/:id/listing/:slug) with headerImage.url = the asset S3 URL — every
+// resolve the org's store (GET /v1/commerce/store/current), then upsert the product Listing
+// (PUT /v1/commerce/store/:id/listing/:slug) with headerImage.url = the asset S3 URL — every
 // call admin-bearer + X-Org-Id pinned to the caller's own org (tenant isolation).
 func TestCommerceStorefrontWire(t *testing.T) {
 	t.Setenv(commerceTokenEnv, "svc-admin-token")
@@ -246,11 +246,11 @@ func TestCommerceStorefrontWire(t *testing.T) {
 	transport.SetHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/store/current":
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/commerce/store/current":
 			gotCurrentOrg = r.Header.Get("X-Org-Id")
 			gotCurrentAuth = r.Header.Get("Authorization")
 			_, _ = io.WriteString(w, `{"store":{"id":"STORE123","name":"Karma"}}`)
-		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/v1/store/STORE123/listing/"):
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/v1/commerce/store/STORE123/listing/"):
 			gotListingPath = r.URL.Path
 			gotListingOrg = r.Header.Get("X-Org-Id")
 			raw, _ := io.ReadAll(r.Body)
@@ -283,7 +283,7 @@ func TestCommerceStorefrontWire(t *testing.T) {
 		t.Errorf("store/current X-Org-Id = %q, want %q", gotCurrentOrg, org)
 	}
 	// Listing upsert: keyed by slug, pinned to the caller org.
-	if gotListingPath != "/v1/store/STORE123/listing/valentina" {
+	if gotListingPath != "/v1/commerce/store/STORE123/listing/valentina" {
 		t.Errorf("listing path = %q", gotListingPath)
 	}
 	if gotListingOrg != org {

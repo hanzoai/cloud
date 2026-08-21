@@ -523,10 +523,10 @@ func describeBilling() {
 			"until they see a 2xx.")
 }
 
-// ---- /v1/catalog — the platform-admin product CMS ----
+// ---- /v1/commerce/catalog — the platform-admin product CMS ----
 
 func describeCatalog() {
-	openapi.Describe("/v1/catalog/entries", http.MethodGet,
+	openapi.Describe("/v1/commerce/catalog/entries", http.MethodGet,
 		"The raw catalog entries, including the unpublished ones",
 		"Returns every catalog row as stored — the admin view, which unlike the public "+
 			"projection includes entries that are not published. It is cross-tenant platform "+
@@ -534,14 +534,14 @@ func describeCatalog() {
 			"how privileged they are inside their own org, enforced by the handler itself and not "+
 			"only by the route's token middleware.")
 
-	openapi.Describe("/v1/catalog/entries", http.MethodPost,
+	openapi.Describe("/v1/commerce/catalog/entries", http.MethodPost,
 		"Add a catalog entry",
 		"Creates a catalog row from the body and answers it at 201. The slug is required and is "+
 			"the globally-unique catalog key, so a second entry claiming a slug already in use is "+
 			"refused 409 rather than shadowing the first. PLATFORM admin only — this is "+
 			"cross-tenant pricing and packaging data, and an org-level admin is refused 403.")
 
-	openapi.Describe("/v1/catalog/entries/*", http.MethodPut,
+	openapi.Describe("/v1/commerce/catalog/entries/*", http.MethodPut,
 		"Replace a catalog entry, keeping its slug",
 		"Loads the addressed entry, applies the body over it and answers the stored result. The "+
 			"slug is the entry's IDENTITY and is re-stamped from the path after decoding, so a "+
@@ -551,14 +551,14 @@ func describeCatalog() {
 			"would stop at it and leave most catalog rows unaddressable. PLATFORM admin only; an "+
 			"unknown slug is 404.")
 
-	openapi.Describe("/v1/catalog/entries/*", http.MethodDelete,
+	openapi.Describe("/v1/commerce/catalog/entries/*", http.MethodDelete,
 		"Remove a catalog entry",
 		"Deletes the entry with the addressed slug and answers 204. The slug is matched as a "+
 			"trailing wildcard, not a single segment, because a model slug contains a slash. "+
 			"PLATFORM admin only — an org-level admin is refused 403 — and an unknown slug is "+
 			"404, so the call is safe to repeat but not silently idempotent.")
 
-	openapi.Describe("/v1/catalog/models", http.MethodPost,
+	openapi.Describe("/v1/commerce/catalog/models", http.MethodPost,
 		"Land a syncer's view of the model catalog: upstream costs and machine facts",
 		"Takes a batch of model rows and upserts each one's upstream COST and machine-observable "+
 			"facts, answering what was created and changed. It deliberately touches nothing a "+
@@ -568,7 +568,7 @@ func describeCatalog() {
 			"job holding the internal service token, which carries platform scope but no admin "+
 			"claim.")
 
-	openapi.Describe("/v1/catalog/models/refresh", http.MethodPost,
+	openapi.Describe("/v1/commerce/catalog/models/refresh", http.MethodPost,
 		"Refresh the model catalog by reading the upstream provider",
 		"Pulls the upstream model list and lands it through the same upsert the push door uses, "+
 			"so the rule that a sync owns cost and an administrator owns price holds no matter "+
@@ -578,7 +578,7 @@ func describeCatalog() {
 			"that conclusion would withdraw every model on sale. The gate is a PLATFORM principal "+
 			"so the scheduled job's service token qualifies.")
 
-	openapi.Describe("/v1/catalog/seed", http.MethodPost,
+	openapi.Describe("/v1/commerce/catalog/seed", http.MethodPost,
 		"Seed the embedded catalog, without disturbing edits already made",
 		"Upserts the shipped catalog seed and answers how many entries it created. It is "+
 			"idempotent and non-destructive — an entry an administrator has since edited is left "+
@@ -636,17 +636,17 @@ func describePublic() {
 			"for a minute.")
 }
 
-// ---- /v1/plans — the platform-admin subscription plan authority ----
+// ---- /v1/commerce/plans — the platform-admin subscription plan authority ----
 
 func describePlans() {
-	openapi.Describe("/v1/plans/entries", http.MethodGet,
+	openapi.Describe("/v1/commerce/plans/entries", http.MethodGet,
 		"The raw plan authority rows",
 		"Returns every plan row as stored — the administrative view behind the public plan "+
 			"catalog. The plan authority is cross-tenant pricing data, so the gate is a PLATFORM "+
 			"admin enforced by the handler itself: an org-level admin is refused 403 no matter "+
 			"what they may do inside their own org.")
 
-	openapi.Describe("/v1/plans/entries", http.MethodPost,
+	openapi.Describe("/v1/commerce/plans/entries", http.MethodPost,
 		"Add a subscription plan",
 		"Creates a plan from the body and answers it at 201. The slug is required and globally "+
 			"unique — a duplicate is 409 — and the row is marked authoritative on creation, so "+
@@ -654,7 +654,7 @@ func describePlans() {
 			"flag are stored exactly as sent, never coerced, so the difference between a free "+
 			"plan and a quote-only plan survives. PLATFORM admin only.")
 
-	openapi.Describe("/v1/plans/entries/:slug", http.MethodPut,
+	openapi.Describe("/v1/commerce/plans/entries/:slug", http.MethodPut,
 		"Edit a plan, leaving the fields you omit alone",
 		"Loads the addressed plan, applies the body over it and answers the stored result, so a "+
 			"partial edit never silently zeroes a price or the contact-sales flag. The slug is "+
@@ -663,14 +663,14 @@ func describePlans() {
 			"deprecate and create instead. An admin edit marks the row authoritative so the seed "+
 			"stops correcting it. PLATFORM admin only; an unknown slug is 404.")
 
-	openapi.Describe("/v1/plans/entries/:slug", http.MethodDelete,
+	openapi.Describe("/v1/commerce/plans/entries/:slug", http.MethodDelete,
 		"Remove a plan from the authority",
 		"Deletes the addressed plan and answers 204. It removes the plan from the catalog buyers "+
 			"choose from; it does not touch subscriptions already sold against it, which keep "+
 			"their stored plan id. PLATFORM admin only — an org-level admin is refused 403 — and "+
 			"an unknown slug is 404.")
 
-	openapi.Describe("/v1/plans/seed", http.MethodPost,
+	openapi.Describe("/v1/commerce/plans/seed", http.MethodPost,
 		"Seed the embedded plan catalog, without overwriting administrative edits",
 		"Upserts the shipped plan rows and answers how many were created and how many corrected. "+
 			"It is idempotent and non-destructive — a row an administrator authored or edited is "+
@@ -679,10 +679,10 @@ func describePlans() {
 			"wired answers 500 rather than quietly seeding nothing.")
 }
 
-// ---- /v1/store — storefronts, their listings, and the catalog they overlay ----
+// ---- /v1/commerce/store — storefronts, their listings, and the catalog they overlay ----
 
 func describeStore() {
-	openapi.Describe("/v1/store/", http.MethodGet,
+	openapi.Describe("/v1/commerce/store/", http.MethodGet,
 		"List your org's storefronts as a page",
 		"Answers a pagination envelope — page, display, the rows, and a total count — read from "+
 			"the caller org's OWN namespaced database, so one tenant can never list another's "+
@@ -693,7 +693,7 @@ func describeStore() {
 			"namespace is served an empty page, never an unscoped scan. Readable with an admin "+
 			"token, a store-scoped token, or the anonymous published storefront key.")
 
-	openapi.Describe("/v1/store/", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/", http.MethodPost,
 		"Create a storefront",
 		"Creates a store from the body inside the caller org's own namespaced database, so the "+
 			"row is physically isolated to that tenant from its first write, and answers it at 201 "+
@@ -701,7 +701,7 @@ func describeStore() {
 			"anonymous published storefront key may READ stores but never create one. A body that "+
 			"fails to decode is 400.")
 
-	openapi.Describe("/v1/store/access", http.MethodGet,
+	openapi.Describe("/v1/commerce/store/access", http.MethodGet,
 		"Whether a store is entitled to trade, and why",
 		"Answers allowed, the store id, and a status of trial, active, payment_required, "+
 			"store_required or unavailable — the entitlement check a merchant surface gates on. "+
@@ -713,7 +713,7 @@ func describeStore() {
 			"resolving is store_required with allowed false, and a backing-store failure is 503 "+
 			"with status unavailable — a retry signal, not a denial.")
 
-	openapi.Describe("/v1/store/current", http.MethodGet,
+	openapi.Describe("/v1/commerce/store/current", http.MethodGet,
 		"Resolve your org's active storefront without naming an id",
 		"Returns the caller org's store resolved FROM THE AUTHENTICATED ORG rather than from a "+
 			"path id — which is how an admin dashboard or a storefront edge learns the store id it "+
@@ -725,7 +725,7 @@ func describeStore() {
 			"context, or provisioning fails, does it fall back to a placeholder store literally "+
 			"named default, which a storefront edge should treat as unconfigured.")
 
-	openapi.Describe("/v1/store/token", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/token", http.MethodPost,
 		"Mint your org's least-privilege storefront read key",
 		"Answers a freshly minted token carrying ONLY the published-read permission — enough for "+
 			"a logged-out shopper's storefront to read your published catalog and nothing more, "+
@@ -737,7 +737,7 @@ func describeStore() {
 			"does not apply on the identity path and a plain member must not be able to mint their "+
 			"org's key.")
 
-	openapi.Describe("/v1/store/:storeid", http.MethodGet,
+	openapi.Describe("/v1/commerce/store/:storeid", http.MethodGet,
 		"Fetch one storefront",
 		"Reads the addressed store from the caller org's own namespaced database, so an id "+
 			"belonging to another tenant is simply absent there and answers 404 rather than "+
@@ -746,7 +746,7 @@ func describeStore() {
 			"published storefront key, which is what lets a logged-out storefront resolve the "+
 			"store it is rendering.")
 
-	openapi.Describe("/v1/store/:storeid", http.MethodPut,
+	openapi.Describe("/v1/commerce/store/:storeid", http.MethodPut,
 		"Replace a storefront outright",
 		"This is a true REPLACEMENT, not a merge: the stored key is preserved but the body is "+
 			"decoded onto a fresh entity, so every field the body omits is written back as its "+
@@ -755,7 +755,7 @@ func describeStore() {
 			"404 before anything is written. Requires an admin token, or one holding both store "+
 			"read and store write.")
 
-	openapi.Describe("/v1/store/:storeid", http.MethodPatch,
+	openapi.Describe("/v1/commerce/store/:storeid", http.MethodPatch,
 		"Change part of a storefront",
 		"Loads the stored store and decodes the body over it, so only the fields the body names "+
 			"change and everything else keeps its stored value — the difference from the full "+
@@ -763,7 +763,7 @@ func describeStore() {
 			"resolved inside the caller org's own namespace, so an unknown or foreign id is 404. "+
 			"Requires an admin token, or one holding both store read and store write.")
 
-	openapi.Describe("/v1/store/:storeid", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid", http.MethodPost,
 		"Method-override tunnel for clients that cannot send PUT, PATCH or DELETE",
 		"Re-dispatches the request into the handler the intended verb would have reached, taking "+
 			"that verb from a _method form value or query parameter and then from the "+
@@ -773,7 +773,7 @@ func describeStore() {
 			"create. Authorization is whatever the underlying operation requires, since the real "+
 			"handler runs.")
 
-	openapi.Describe("/v1/store/:storeid", http.MethodDelete,
+	openapi.Describe("/v1/commerce/store/:storeid", http.MethodDelete,
 		"Delete a storefront, keeping a recoverable copy",
 		"Removes the addressed store and answers 204 with no body. Before the live row goes, the "+
 			"entity is written once more under a tombstone kind, so the deletion leaves a "+
@@ -782,7 +782,7 @@ func describeStore() {
 			"org's own namespace, so an unknown or foreign id is 404. Requires an admin or "+
 			"store-write token.")
 
-	openapi.Describe("/v1/store/:storeid/trial", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/trial", http.MethodPost,
 		"Start this store's no-card trial on the entry plan",
 		"Creates a trialing subscription for the addressed store on the entry plan and grants "+
 			"that plan's trial credit, answering 201 when this call actually started one and 200 "+
@@ -794,7 +794,7 @@ func describeStore() {
 			"Admin-gated and namespaced to the caller's org: no resolvable store is 404 with "+
 			"store_required, and a backing-store failure is 503.")
 
-	openapi.Describe("/v1/store/:storeid/bundle/:key", http.MethodGet,
+	openapi.Describe("/v1/commerce/store/:storeid/bundle/:key", http.MethodGet,
 		"Fetch a bundle as this storefront sells it",
 		"Returns the stored bundle with the store's listing for it laid over the top — every "+
 			"non-empty listing field wins, and the currency is forced to the store's own — so the "+
@@ -804,7 +804,7 @@ func describeStore() {
 			"unknown store or key is 404. Readable with an admin token or the anonymous published "+
 			"storefront key.")
 
-	openapi.Describe("/v1/store/:storeid/product/:key", http.MethodGet,
+	openapi.Describe("/v1/commerce/store/:storeid/product/:key", http.MethodGet,
 		"Fetch a product as this storefront sells it",
 		"Returns the stored product with the store's listing for it laid over the top — non-empty "+
 			"listing fields replace the catalog values and the currency is forced to the store's "+
@@ -813,7 +813,7 @@ func describeStore() {
 			"only under a slug or SKU does not apply here. An unknown store or key is 404. "+
 			"Readable with an admin token or the anonymous published storefront key.")
 
-	openapi.Describe("/v1/store/:storeid/variant/:key", http.MethodGet,
+	openapi.Describe("/v1/commerce/store/:storeid/variant/:key", http.MethodGet,
 		"Fetch a variant as this storefront sells it",
 		"Returns the stored variant with the store's listing for it overlaid — non-empty listing "+
 			"fields replace the catalog values and the currency is forced to the store's own — "+
@@ -821,7 +821,7 @@ func describeStore() {
 			"is keyed by the variant's ID, never by its slug or SKU. An unknown store or key is "+
 			"404. Readable with an admin token or the anonymous published storefront key.")
 
-	openapi.Describe("/v1/store/:storeid/listing", http.MethodGet,
+	openapi.Describe("/v1/commerce/store/:storeid/listing", http.MethodGet,
 		"The storefront's whole listing override map",
 		"Returns every override this store applies to catalog items — name, price, list price, "+
 			"media, availability and the hidden flag — keyed by product or variant id, in one "+
@@ -830,7 +830,7 @@ func describeStore() {
 			"own namespaced database, so a store id belonging to another tenant is 404. Readable "+
 			"with an admin token or the anonymous published storefront key.")
 
-	openapi.Describe("/v1/store/:storeid/listing/:key", http.MethodGet,
+	openapi.Describe("/v1/commerce/store/:storeid/listing/:key", http.MethodGet,
 		"Fetch one listing override, by item id or by its slug or SKU",
 		"Looks the key up in the store's listing map first and, failing that, matches it against "+
 			"each listing's slug and then its SKU — so a storefront holding only a product's URL "+
@@ -839,7 +839,7 @@ func describeStore() {
 			"as is a store id outside the caller org's namespace. Readable with an admin token or "+
 			"the anonymous published storefront key.")
 
-	openapi.Describe("/v1/store/:storeid/listing/:key", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/listing/:key", http.MethodPost,
 		"Add a listing override under a new key",
 		"Creates the override and answers the store's ENTIRE listing map at 201 with a Location "+
 			"header — not just the entry that was added. A key already present is refused 400: "+
@@ -849,7 +849,7 @@ func describeStore() {
 			"the slug or SKU fallback the read allows. Admin-gated and resolved inside the caller "+
 			"org's namespace.")
 
-	openapi.Describe("/v1/store/:storeid/listing/:key", http.MethodPut,
+	openapi.Describe("/v1/commerce/store/:storeid/listing/:key", http.MethodPut,
 		"Upsert a listing override",
 		"Decodes the body over the existing listing when the key is present, so fields it omits "+
 			"keep their stored values, and builds the listing from the body alone when the key is "+
@@ -858,7 +858,7 @@ func describeStore() {
 			"entry. Unlike creation, this path does NOT restamp the listing's currency from the "+
 			"store. Admin-gated, with the store resolved inside the caller org's namespace.")
 
-	openapi.Describe("/v1/store/:storeid/listing/:key", http.MethodPatch,
+	openapi.Describe("/v1/commerce/store/:storeid/listing/:key", http.MethodPatch,
 		"Confirm a listing override exists and re-save the store",
 		"Requires the key to already be present — an absent one is 404 — and answers the store's "+
 			"listing map at 200. Read the behaviour before relying on it: the decoded body is "+
@@ -868,7 +868,7 @@ func describeStore() {
 			"its result back into the store. A body that fails to decode is still 400. "+
 			"Admin-gated and namespaced to the caller's org.")
 
-	openapi.Describe("/v1/store/:storeid/listing/:key", http.MethodDelete,
+	openapi.Describe("/v1/commerce/store/:storeid/listing/:key", http.MethodDelete,
 		"Remove a listing override",
 		"Drops the key from the store's listing map and re-saves the store, answering 204 with no "+
 			"body. It UN-OVERRIDES rather than deletes: the product, variant or bundle itself is "+
@@ -877,7 +877,7 @@ func describeStore() {
 			"Admin-gated.")
 }
 
-// ---- /v1/store checkout — the two-step and one-step payment flows ----
+// ---- /v1/commerce/store checkout — the two-step and one-step payment flows ----
 //
 // The /checkout-prefixed addresses bind the SAME handlers as their shorter
 // siblings: the prefix is the newer spelling of one operation, not a second
@@ -886,7 +886,7 @@ func describeStore() {
 // otherwise get wrong.
 
 func describeCheckout() {
-	openapi.Describe("/v1/store/:storeid/authorize", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/authorize", http.MethodPost,
 		"Authorize a new order against a storefront, holding the funds without settling them",
 		"Tallies a new order for the addressed store from the user, payment and order body, "+
 			"reserves its items, runs the processor authorization and answers the saved order with "+
@@ -898,7 +898,7 @@ func describeCheckout() {
 			"released and the order and payment are persisted as cancelled, so a failed attempt "+
 			"still leaves a durable record. Capture is a separate call.")
 
-	openapi.Describe("/v1/store/:storeid/authorize/:orderid", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/authorize/:orderid", http.MethodPost,
 		"Authorize an order that already exists, holding the funds without settling them",
 		"Continues the order named in the path rather than minting a new one, holding funds for "+
 			"it. The order is loaded from the caller org's own store, so an id belonging to "+
@@ -908,7 +908,7 @@ func describeCheckout() {
 			"resolution and the currency override behave exactly as on the bodiless-id sibling, "+
 			"and settling is still the capture call's job.")
 
-	openapi.Describe("/v1/store/:storeid/capture/:orderid", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/capture/:orderid", http.MethodPost,
 		"Capture a previously authorized order and settle the payment",
 		"Settles the order named in the path — the second half of the two-step flow — and answers "+
 			"the updated order with a Location header. Dispatch follows the order's STORED payment "+
@@ -918,7 +918,7 @@ func describeCheckout() {
 			"are emitted. A capture failure releases the order's inventory reservations and "+
 			"answers 400, so a failed settlement never leaves items held.")
 
-	openapi.Describe("/v1/store/:storeid/charge", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/charge", http.MethodPost,
 		"Authorize and capture a new order in one call",
 		"Runs authorization and capture back to back against a freshly created order — the "+
 			"one-step flow for callers with no reason to hold funds. It takes the authorize body "+
@@ -929,7 +929,7 @@ func describeCheckout() {
 			"confirmation email, redemptions, stats, the paid and completed events — run only when "+
 			"both halves succeed.")
 
-	openapi.Describe("/v1/store/:storeid/paypal/pay", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/paypal/pay", http.MethodPost,
 		"Start a PayPal authorization for a new order",
 		"Runs the ordinary store authorize flow — the route binds that very handler, so the body, "+
 			"the store resolution, the tally, the reservations and the failure behaviour are the "+
@@ -940,7 +940,7 @@ func describeCheckout() {
 			"filter on. It is the older entry point; the plain authorize address is the one to "+
 			"build against.")
 
-	openapi.Describe("/v1/store/:storeid/paypal/confirm/:payKey", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/paypal/confirm/:payKey", http.MethodPost,
 		"PayPal confirm by pay key — refuses, because a pay key alone does not identify the order",
 		"Intended to mark every payment carrying the given pay key as paid and flip the order to "+
 			"paid, it cannot do that from this address and does not pretend to: the shared "+
@@ -951,7 +951,7 @@ func describeCheckout() {
 			"401 and an unloadable store still 500. Drive a PayPal return through an address that "+
 			"carries the order id.")
 
-	openapi.Describe("/v1/store/:storeid/paypal/cancel/:payKey", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/paypal/cancel/:payKey", http.MethodPost,
 		"PayPal cancel by pay key — refuses, because a pay key alone does not identify the order",
 		"Intended to void the payments carrying the given pay key, stamp them cancelled and "+
 			"cancel the order, it never reaches that work: the shared checkout handler reads its "+
@@ -961,7 +961,7 @@ func describeCheckout() {
 			"missing token is 401 and an unloadable store 500. Cancelling a real PayPal "+
 			"authorization needs an address that carries the order id.")
 
-	openapi.Describe("/v1/store/:storeid/checkout/authorize", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/checkout/authorize", http.MethodPost,
 		"Authorize a new order against a storefront, holding the funds — the checkout spelling",
 		"Authorizes a new order for the addressed store and holds the funds, answering the saved "+
 			"order with a Location header. It binds the identical handler as the shorter authorize "+
@@ -971,7 +971,7 @@ func describeCheckout() {
 			"reserved before the processor call, and reservations released with the order "+
 			"persisted cancelled on failure. Nothing is settled here.")
 
-	openapi.Describe("/v1/store/:storeid/checkout/authorize/:orderid", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/checkout/authorize/:orderid", http.MethodPost,
 		"Authorize an existing order, holding the funds — the checkout spelling",
 		"Continues the order named in the path rather than minting one, and shares its handler "+
 			"byte for byte with the unprefixed authorize-by-id address. The order is loaded from "+
@@ -981,7 +981,7 @@ func describeCheckout() {
 			"on every other authorize address; settle with the capture address and the same order "+
 			"id.")
 
-	openapi.Describe("/v1/store/:storeid/checkout/capture/:orderid", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/checkout/capture/:orderid", http.MethodPost,
 		"Capture a previously authorized order and settle it — the checkout spelling",
 		"Settles the authorized order named in the path and answers the updated order with a "+
 			"Location header, running the same handler as the unprefixed capture address. Dispatch "+
@@ -990,7 +990,7 @@ func describeCheckout() {
 			"confirmation email, and the paid and completed events — while a failure releases the "+
 			"order's inventory reservations and answers 400.")
 
-	openapi.Describe("/v1/store/:storeid/checkout/charge", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/checkout/charge", http.MethodPost,
 		"Authorize and capture a new order in one call — the checkout spelling",
 		"Performs authorization and capture back to back against a newly created order for the "+
 			"addressed store, on the same handler as the unprefixed charge address. It takes the "+
@@ -1000,7 +1000,7 @@ func describeCheckout() {
 			"Either half failing answers 400, and the capture side effects run only when both "+
 			"succeed.")
 
-	openapi.Describe("/v1/store/:storeid/checkout/paypal/pay", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/checkout/paypal/pay", http.MethodPost,
 		"Start a PayPal authorization for a new order — the checkout spelling",
 		"Begins a PayPal authorization by running the ordinary store authorize flow, since the "+
 			"route binds that exact handler — body, store resolution, tally, reservations and "+
@@ -1010,7 +1010,7 @@ func describeCheckout() {
 			"key the confirm and cancel addresses filter on. Build against the plain authorize "+
 			"address instead.")
 
-	openapi.Describe("/v1/store/:storeid/checkout/paypal/confirm/:payKey", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/checkout/paypal/confirm/:payKey", http.MethodPost,
 		"PayPal confirm by pay key — refuses, exactly as the unprefixed address does",
 		"Meant to mark the payments carrying the given pay key as paid and set the order to paid, "+
 			"it cannot reach that work from this address: the shared checkout handler takes its "+
@@ -1021,7 +1021,7 @@ func describeCheckout() {
 			"identical to the unprefixed confirm address; the checkout prefix changes nothing "+
 			"here.")
 
-	openapi.Describe("/v1/store/:storeid/checkout/paypal/cancel/:payKey", http.MethodPost,
+	openapi.Describe("/v1/commerce/store/:storeid/checkout/paypal/cancel/:payKey", http.MethodPost,
 		"PayPal cancel by pay key — refuses, exactly as the unprefixed address does",
 		"Meant to void the payments carrying the given pay key, stamp them cancelled and cancel "+
 			"the order, but the shared checkout handler resolves its order from an ORDER ID path "+

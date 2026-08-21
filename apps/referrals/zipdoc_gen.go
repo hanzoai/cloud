@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/referrals/bonuses", zip.Doc{
-		Description: "Returns every referral edge in the directory with a fleet summary.\n\nSuperAdmin only, fail-closed. This is the ATTRIBUTION directory — who referred\nwhom and whether that referee became a customer. It carries no amounts because\nthis package issues none. The cross-tenant referral ANALYTICS board (top\nreferrers, conversion) is a different surface, GET /v1/admin/referrals, owned by\nthe affiliates subsystem over the shared attribution spine.",
+		Description: "Returns every referral edge in the directory with a fleet summary.\n\nSuperAdmin only, fail-closed. This is the ATTRIBUTION directory — who referred\nwhom and whether that referee became a customer. It carries no amounts because\nthis package issues none. The cross-tenant referral ANALYTICS board (top\nreferrers, conversion) is a different surface, GET /v1/admin/affiliates/referrals,\nowned by the affiliates subsystem over the shared attribution spine.",
 		Fields: map[string]string{
 			"adminBonusDirectory.referrals": "Referrals is every referral in the directory, both orgs exposed.",
 			"adminBonusDirectory.summary":   "Summary is the fleet tally across those referrals.",

@@ -16,7 +16,7 @@ package pricing
 // each reason below is additionally PROVED there against the toolchain in go.mod
 // rather than asserted: a blocker fixed upstream turns the suite red.
 //
-//   - PATCH /v1/admin/catalog/models/* addresses a model id that may contain
+//   - PATCH /v1/admin/pricing/catalog/models/* addresses a model id that may contain
 //     '/', so it routes through a greedy wildcard — and typing it does not merely
 //     publish a bad parameter, it REFUSES THE WHOLE DOCUMENT. zip keys a typed op
 //     by the fiber pattern (".../models/*"); the document keys the same route by
@@ -29,7 +29,7 @@ package pricing
 //     which the document's own `{wildcard1}` could never agree with. A schema
 //     nobody can read is worse than none; a document that will not build is worse
 //     than both.
-// PATCH /v1/admin/catalog/providers/:name was on this list and is now an op. Its
+// PATCH /v1/admin/pricing/catalog/providers/:name was on this list and is now an op. Its
 // reason was that `overrides`, an RFC 7386 merge patch stored and echoed verbatim,
 // pins the Go type to json.RawMessage — which zip published as an ARRAY OF
 // INTEGERS, because schemaOf took the Slice arm before it asked whether the type
@@ -62,24 +62,21 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Prefixes are the absolute subtrees this subsystem answers on. It serves four,
-// not the one the /v1/<name> convention would assume: the catalog read plane
-// (/v1/pricing), the self-service enablement plane (/v1/enablement) and the two
-// admin planes over the same overlay store (/v1/admin/catalog,
-// /v1/admin/enablement).
+// Prefixes are the absolute subtrees this subsystem answers on: the customer
+// plane (/v1/pricing — the catalog read AND the self-service enablement leaves
+// under it) and the operator plane (/v1/admin/pricing — the catalog overlay
+// editor and the enablement mutations, HIP-0139 §3.2).
 //
 // Declaring them is not decoration. cloud.Declare builds the prefix table that
 // resolves a request's subsystem label and its declared Price from this, and
 // cloud's scope refuses middleware a subsystem installs outside what it declared
 // — so an undeclared subtree is one whose requests are attributed to somebody
 // else. The same
-// four are listed in manifest/apps.go, which the light host reads to route to
+// two are listed in manifest/apps.go, which the light host reads to route to
 // this plugin; that copy is a literal on purpose (the host must not import an
 // app package), so the two are kept equal by hand.
 var Prefixes = []string{
-	"/v1/admin/catalog",
-	"/v1/admin/enablement",
-	"/v1/enablement",
+	"/v1/admin/pricing",
 	"/v1/pricing",
 }
 

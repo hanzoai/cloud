@@ -20,16 +20,13 @@
       "name": "admin"
     },
     {
-      "name": "enablement"
-    },
-    {
       "name": "pricing"
     }
   ],
   "paths": {
-    "/v1/admin/catalog": {
+    "/v1/admin/pricing/catalog": {
       "get": {
-        "operationId": "get_admin_catalog",
+        "operationId": "get_admin_pricing_catalog",
         "summary": "Returns the full model and provider catalog annotated with each entry's enablement state, for the operator console.",
         "description": "Returns the full model and provider catalog annotated with\neach entry's enablement state, for the operator console. Nothing is hidden:\nthis is the admin's view of what exists and what is currently off, in beta or\ngenerally available. SuperAdmin only; every other caller is refused.",
         "tags": [
@@ -50,9 +47,9 @@
         "x-tool": true
       }
     },
-    "/v1/admin/catalog/models/{wildcard1}": {
+    "/v1/admin/pricing/catalog/models/{wildcard1}": {
       "patch": {
-        "operationId": "patch_admin_catalog_models_by_wildcard1",
+        "operationId": "patch_admin_pricing_catalog_models_by_wildcard1",
         "summary": "Turn one model off, into beta for named orgs, or generally available",
         "description": "Sets one model's availability overlay — and the price overrides applied on top of the catalog — then answers the new effective overlay, so a console needs no second read. The model id is the whole remaining path, so a slashed id like `acme/some-model-1` addresses intact.\n\nSuperAdmin only; every other caller is 403, decided before the body is read. The overlay is PLATFORM-WIDE — this is the catalog every org prices against, not a per-org setting — and `betaOrgs` is what narrows a beta to named orgs.\n\nOnly the fields the patch names change; an entry with no overlay yet starts from the catalog default, which is enabled. `state` is the coherent tri-state setter (`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied AFTER it, so they win where both are sent; anything else in `state` is 400. A field sent as an explicit `null` arrives indistinguishable from an absent one, so null does not clear anything.\n\nThe rule worth reading twice: a disabled entry that still carries beta orgs IS a beta — `{\"enabled\":false,\"betaOrgs\":[\"acme\"]}` leaves acme seeing the model. Only an explicit `off` (or `beta:false`) with an empty list is the absolute kill switch that a user's own beta opt-in can never re-open.\n\n`overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it must be a JSON object or null — an array or a scalar is refused — and is bounded in size and nesting depth. An uninitialised overlay store answers 503.",
         "tags": [
@@ -70,9 +67,9 @@
         ]
       }
     },
-    "/v1/admin/catalog/providers/{name}": {
+    "/v1/admin/pricing/catalog/providers/{name}": {
       "patch": {
-        "operationId": "patch_admin_catalog_providers_by_name",
+        "operationId": "patch_admin_pricing_catalog_providers_by_name",
         "summary": "Sets one provider's availability overlay.",
         "description": "Sets one provider's availability overlay.\n\nThe overlay decides whether a provider is off, in beta for named orgs, or\ngenerally available, and carries the price overrides applied on top of the\ncatalog. Only the fields the patch names change; every other field keeps the\nvalue it had, and an absent overlay starts from the catalog default (enabled).\nAnswers the new effective overlay, so a console needs no second read.\n\nSuperAdmin only.",
         "tags": [
@@ -114,9 +111,9 @@
         "x-tool": true
       }
     },
-    "/v1/admin/enablement": {
+    "/v1/admin/pricing/enablement": {
       "get": {
-        "operationId": "get_admin_enablement",
+        "operationId": "get_admin_pricing_enablement",
         "summary": "Returns every item an operator has set an enablement state on — its global state (off, beta or ga) and the orgs granted its beta.",
         "description": "Returns every item an operator has set an enablement state on —\nits global state (off, beta or ga) and the orgs granted its beta. An item\nnobody has touched is absent, because an untouched item is generally\navailable; the console composes the candidate list from the live catalog.\nSuperAdmin only; every other caller is refused.",
         "tags": [
@@ -137,7 +134,7 @@
         "x-tool": true
       },
       "put": {
-        "operationId": "put_admin_enablement",
+        "operationId": "put_admin_pricing_enablement",
         "summary": "Sets one item's global enablement state — off, beta or ga — and optionally replaces the list of orgs granted its beta.",
         "description": "Sets one item's global enablement state — off, beta or ga — and\noptionally replaces the list of orgs granted its beta. It is generic over\nkind, so the same call manages models, providers and product features through\nthe one registry. `off` is an absolute kill switch: a self-service opt-in can\nnever re-open it. SuperAdmin only; every other caller is refused.",
         "tags": [
@@ -173,106 +170,6 @@
             "description": "ok"
           }
         },
-        "x-tool": true
-      }
-    },
-    "/v1/enablement": {
-      "get": {
-        "operationId": "get_enablement",
-        "summary": "Returns what the caller's org can actually use: every managed item with its global state, whether it is effective here, whether this org is already opted into its beta, and whether it may still opt in.",
-        "description": "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
-        "tags": [
-          "enablement"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/enablementBoard"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/enablement/optin": {
-      "post": {
-        "operationId": "post_enablement_optin",
-        "summary": "Opts the caller's OWN org into a beta item.",
-        "description": "Opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org.",
-        "tags": [
-          "enablement"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "labs",
-                "kind": "feature"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/enablementOptRef"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/userEnablementItem"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/enablement/optout": {
-      "post": {
-        "operationId": "post_enablement_optout",
-        "summary": "Removes the caller's OWN org from a beta item's grant list, the reverse of OptIntoBeta and idempotent.",
-        "description": "Removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent. The org is the caller's validated one,\nso this can never revoke another org's grant. Requires a signed-in caller with\nan org.",
-        "tags": [
-          "enablement"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "labs",
-                "kind": "feature"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/enablementOptRef"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/userEnablementItem"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
         "x-tool": true
       }
     },
@@ -521,6 +418,106 @@
                     "type": "object"
                   },
                   "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/pricing/enablement": {
+      "get": {
+        "operationId": "get_pricing_enablement",
+        "summary": "Returns what the caller's org can actually use: every managed item with its global state, whether it is effective here, whether this org is already opted into its beta, and whether it may still opt in.",
+        "description": "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
+        "tags": [
+          "pricing"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/enablementBoard"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/pricing/enablement/optin": {
+      "post": {
+        "operationId": "post_pricing_enablement_optin",
+        "summary": "Opts the caller's OWN org into a beta item.",
+        "description": "Opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org.",
+        "tags": [
+          "pricing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "labs",
+                "kind": "feature"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/enablementOptRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/userEnablementItem"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/pricing/enablement/optout": {
+      "post": {
+        "operationId": "post_pricing_enablement_optout",
+        "summary": "Removes the caller's OWN org from a beta item's grant list, the reverse of OptIntoBeta and idempotent.",
+        "description": "Removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent. The org is the caller's validated one,\nso this can never revoke another org's grant. Requires a signed-in caller with\nan org.",
+        "tags": [
+          "pricing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "labs",
+                "kind": "feature"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/enablementOptRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/userEnablementItem"
                 }
               }
             },

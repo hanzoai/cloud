@@ -3,14 +3,14 @@ package pricing
 // The enablement REGISTRY surface (#30/#31) — the three-level model over the ONE
 // catalog overlay store: global off|beta|ga, per-org beta grants, and user
 // self-service beta opt-in. It reuses the SAME overlay the /v1/pricing catalog gate
-// and /v1/admin/catalog admin surface use — there is ONE enablement registry and
+// and /v1/admin/pricing/catalog admin surface use — there is ONE enablement registry and
 // ONE resolver (Overlay.visibleTo / .State), never a parallel copy.
 //
-//	GET  /v1/admin/enablement          SuperAdmin: the full managed registry
-//	PUT  /v1/admin/enablement          SuperAdmin: set an item off|beta|ga (+ grant orgs)
-//	GET  /v1/enablement                any authed: the caller's EFFECTIVE view + betas
-//	POST /v1/enablement/optin          authed: opt the caller's OWN org into a beta
-//	POST /v1/enablement/optout         authed: opt the caller's own org back out
+//	GET  /v1/admin/pricing/enablement          SuperAdmin: the full managed registry
+//	PUT  /v1/admin/pricing/enablement          SuperAdmin: set an item off|beta|ga (+ grant orgs)
+//	GET  /v1/pricing/enablement                any authed: the caller's EFFECTIVE view + betas
+//	POST /v1/pricing/enablement/optin          authed: opt the caller's OWN org into a beta
+//	POST /v1/pricing/enablement/optout         authed: opt the caller's own org back out
 //
 // SECURITY — the two-way crux RED verifies:
 //   - Global state is SUPERADMIN only (c.IsAdmin()). A customer/org-admin can

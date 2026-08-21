@@ -3,7 +3,10 @@
 //
 // It serves /v1/pricing/* — plus the enablement registry that
 // decides which catalog entries a caller may even see
-// (/v1/enablement{,/optin,/optout} and the SuperAdmin /v1/admin/{catalog,enablement}).
+// (/v1/pricing/enablement{,/optin,/optout} and the SuperAdmin
+// /v1/admin/pricing/{catalog,enablement}). Enablement is served here, over the
+// same overlay store the price gate reads, so it is not a second capability: a
+// second app on one store is the split HIP-0139 §7.2 refuses.
 //
 // It shares the @hanzo/plans catalog with apps/plan, so eight of its sections
 // (cloud, subscriptions, blockchain, gpu, tools, policy, and the cloud/{regions,storage}
@@ -135,11 +138,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// here and every consumer follows from it.
 	//
 	// They are declared on the APP with absolute paths rather than on a group per
-	// prefix. This surface answers five top-level prefixes (Prefixes), and one of
+	// prefix. This surface answers two top-level prefixes (Prefixes), and one of
 	// its ops IS a prefix: GET /v1/pricing has no leaf, and a group cannot express
-	// it — zip.Get(g, "") composes to "/v1/pricing/", a different route. Five
-	// groups plus an app-level exception is two idioms; one absolute address per
-	// op is one, and it is the form apps/marketing already uses.
+	// it — zip.Get(g, "") composes to "/v1/pricing/", a different route. Groups
+	// plus an app-level exception is two idioms; one absolute address per op is
+	// one, and it is the form apps/marketing already uses.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
 		return fmt.Errorf("pricing.Mount: router is not backed by a zip app — typed ops have no registry to declare into")
@@ -185,17 +188,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// integers (it is []byte) — while map[string]any would reorder it. ops.go
 	// carries the full reasoning and typed_wire_test.go PROVES both, so a fix
 	// upstream shows up as a red test rather than as stale prose.
-	zip.Get(zapp, "/v1/admin/catalog", o.adminCatalog)
-	app.Patch("/v1/admin/catalog/models/*", adminPatchModel)
-	zip.Patch(zapp, "/v1/admin/catalog/providers/:name", adminPatchProvider)
+	zip.Get(zapp, "/v1/admin/pricing/catalog", o.adminCatalog)
+	app.Patch("/v1/admin/pricing/catalog/models/*", adminPatchModel)
+	zip.Patch(zapp, "/v1/admin/pricing/catalog/providers/:name", adminPatchProvider)
 
 	// Enablement registry (#30/#31) over the SAME overlay store (see enablement.go):
 	// global off|beta|ga (admin) + per-user/org beta self-opt-in (any authed user).
-	zip.Get(zapp, "/v1/admin/enablement", o.adminEnablementList)
-	zip.Put(zapp, "/v1/admin/enablement", o.adminEnablementSet)
-	zip.Get(zapp, "/v1/enablement", o.enablementView)
-	zip.Post(zapp, "/v1/enablement/optin", o.enablementOptIn)
-	zip.Post(zapp, "/v1/enablement/optout", o.enablementOptOut)
+	zip.Get(zapp, "/v1/admin/pricing/enablement", o.adminEnablementList)
+	zip.Put(zapp, "/v1/admin/pricing/enablement", o.adminEnablementSet)
+	zip.Get(zapp, "/v1/pricing/enablement", o.enablementView)
+	zip.Post(zapp, "/v1/pricing/enablement/optin", o.enablementOptIn)
+	zip.Post(zapp, "/v1/pricing/enablement/optout", o.enablementOptOut)
 
 	// Convenience aliases (the cleaner top-level surface from server.mjs).
 	// NOTE: the bare /v1/models alias is DELIBERATELY NOT mounted here. In the
@@ -214,7 +217,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		"prefix", "/v1/pricing",
 		"section_routes", 14, // the fixed plans/infra/tools/gpu/policy sections
 		"gated_routes", 6, // models, free, featured, providers, summary, model/:name
-		"admin_routes", 3, // GET /v1/admin/catalog + PATCH models/* + PATCH providers/:name
+		"admin_routes", 3, // GET /v1/admin/pricing/catalog + PATCH models/* + PATCH providers/:name
 		"overlay_db", "catalog", // the subsystem; build.go already logs the data dir
 		"express", false,
 		"goja", true,
