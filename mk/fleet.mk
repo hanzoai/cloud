@@ -327,7 +327,7 @@ endif
 
 describe: ## Every app describes itself (one binary per app, all at once).
 	@$(MAKE) --no-print-directory ramfs-check
-	@GOOS= GOARCH= $(GO) generate -run zipdoc $(ROOT)/...
+	@GOOS= GOARCH= sh $(ROOT)/mk/zipdoc.sh write
 	@echo ">> build-only: $(UNMOUNTABLE) — no standalone mount to project (broker / coresident)"
 	+@$(call fan,$(addprefix describe/,$(DESCRIBABLE)) $(addprefix build/,$(UNMOUNTABLE)))
 	@echo ">> $$(ls $(ROOT)/plugin/*/openapi.json | wc -l) app documents"
