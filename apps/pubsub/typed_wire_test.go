@@ -153,7 +153,7 @@ func TestKVRoundTrip(t *testing.T) {
 	app := mountWire(t)
 	const org = "org_kv"
 
-	code, raw := doJSON(t, app, http.MethodPost, "/v1/pubsub/kv/CFG", org, map[string]any{"history": 5})
+	code, raw := doJSON(t, app, http.MethodPost, "/v1/kv/CFG", org, map[string]any{"history": 5})
 	if code != http.StatusCreated {
 		t.Fatalf("create bucket = %d: %s", code, raw)
 	}
@@ -161,19 +161,19 @@ func TestKVRoundTrip(t *testing.T) {
 		t.Errorf("bucket = %v, want CFG with history 5", b)
 	}
 
-	code, raw = doJSON(t, app, http.MethodPut, "/v1/pubsub/kv/CFG/theme", org, map[string]any{"value": "light"})
+	code, raw = doJSON(t, app, http.MethodPut, "/v1/kv/CFG/theme", org, map[string]any{"value": "light"})
 	if code != http.StatusOK {
 		t.Fatalf("put = %d: %s", code, raw)
 	}
 	if ack := obj(t, raw); ack["revision"] != float64(1) {
 		t.Errorf("first put revision = %v, want 1", ack["revision"])
 	}
-	_, raw = doJSON(t, app, http.MethodPut, "/v1/pubsub/kv/CFG/theme", org, map[string]any{"value": "dark"})
+	_, raw = doJSON(t, app, http.MethodPut, "/v1/kv/CFG/theme", org, map[string]any{"value": "dark"})
 	if ack := obj(t, raw); ack["revision"] != float64(2) {
 		t.Errorf("second put revision = %v, want 2", ack["revision"])
 	}
 
-	code, raw = send(t, app, http.MethodGet, "/v1/pubsub/kv/CFG/theme", org, "", "")
+	code, raw = send(t, app, http.MethodGet, "/v1/kv/CFG/theme", org, "", "")
 	if code != http.StatusOK {
 		t.Fatalf("get = %d: %s", code, raw)
 	}
@@ -181,7 +181,7 @@ func TestKVRoundTrip(t *testing.T) {
 		t.Errorf("entry = %v, want dark at revision 2", e)
 	}
 
-	code, raw = send(t, app, http.MethodGet, "/v1/pubsub/kv/CFG/theme/history", org, "", "")
+	code, raw = send(t, app, http.MethodGet, "/v1/kv/CFG/theme/history", org, "", "")
 	if code != http.StatusOK {
 		t.Fatalf("history = %d: %s", code, raw)
 	}
@@ -189,17 +189,17 @@ func TestKVRoundTrip(t *testing.T) {
 		t.Errorf("history = %v, want both revisions", page["data"])
 	}
 
-	if code, _ := send(t, app, http.MethodDelete, "/v1/pubsub/kv/CFG/theme", org, "", ""); code != http.StatusNoContent {
+	if code, _ := send(t, app, http.MethodDelete, "/v1/kv/CFG/theme", org, "", ""); code != http.StatusNoContent {
 		t.Errorf("delete key = %d, want 204", code)
 	}
-	if code, _ := send(t, app, http.MethodGet, "/v1/pubsub/kv/CFG/theme", org, "", ""); code != http.StatusNotFound {
+	if code, _ := send(t, app, http.MethodGet, "/v1/kv/CFG/theme", org, "", ""); code != http.StatusNotFound {
 		t.Errorf("get after delete = %d, want 404 (tombstone)", code)
 	}
 
-	if code, _ := send(t, app, http.MethodDelete, "/v1/pubsub/kv/CFG", org, "", ""); code != http.StatusNoContent {
+	if code, _ := send(t, app, http.MethodDelete, "/v1/kv/CFG", org, "", ""); code != http.StatusNoContent {
 		t.Errorf("delete bucket = %d, want 204", code)
 	}
-	if code, _ := send(t, app, http.MethodGet, "/v1/pubsub/kv/CFG/theme", org, "", ""); code != http.StatusNotFound {
+	if code, _ := send(t, app, http.MethodGet, "/v1/kv/CFG/theme", org, "", ""); code != http.StatusNotFound {
 		t.Errorf("get in a deleted bucket = %d, want 404", code)
 	}
 }
@@ -213,19 +213,19 @@ func TestKVRoundTrip(t *testing.T) {
 func TestPubsubTenancyIsNeverACallerField(t *testing.T) {
 	app := mountWire(t)
 
-	if code, raw := doJSON(t, app, http.MethodPost, "/v1/pubsub/kv/VAULT", "acme", nil); code != http.StatusCreated {
+	if code, raw := doJSON(t, app, http.MethodPost, "/v1/kv/VAULT", "acme", nil); code != http.StatusCreated {
 		t.Fatalf("seed bucket = %d: %s", code, raw)
 	}
-	if code, _ := doJSON(t, app, http.MethodPut, "/v1/pubsub/kv/VAULT/pin", "acme", map[string]any{"value": "1234"}); code != http.StatusOK {
+	if code, _ := doJSON(t, app, http.MethodPut, "/v1/kv/VAULT/pin", "acme", map[string]any{"value": "1234"}); code != http.StatusOK {
 		t.Fatal("seed key")
 	}
 
 	// Another org: the same addresses answer 404. Writes carry a valid body so
 	// the 404 is tenancy's, not a bind refusal's.
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/v1/pubsub/kv/VAULT/pin"},
-		{http.MethodGet, "/v1/pubsub/kv/VAULT/pin/history"},
-		{http.MethodDelete, "/v1/pubsub/kv/VAULT"},
+		{http.MethodGet, "/v1/kv/VAULT/pin"},
+		{http.MethodGet, "/v1/kv/VAULT/pin/history"},
+		{http.MethodDelete, "/v1/kv/VAULT"},
 	} {
 		var body any
 		if tc.method == http.MethodPost || tc.method == http.MethodPut {
@@ -237,7 +237,7 @@ func TestPubsubTenancyIsNeverACallerField(t *testing.T) {
 	}
 
 	// And the same name is another org's to claim, not a collision.
-	if code, _ := doJSON(t, app, http.MethodPost, "/v1/pubsub/kv/VAULT", "other", nil); code != http.StatusCreated {
+	if code, _ := doJSON(t, app, http.MethodPost, "/v1/kv/VAULT", "other", nil); code != http.StatusCreated {
 		t.Errorf("the same bucket name in another org = %d, want its own 201", code)
 	}
 
@@ -245,10 +245,10 @@ func TestPubsubTenancyIsNeverACallerField(t *testing.T) {
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodPost, "/v1/pubsub/publish"},
 		{http.MethodPost, "/v1/pubsub/request"},
-		{http.MethodPost, "/v1/pubsub/kv/VAULT"},
-		{http.MethodGet, "/v1/pubsub/kv/VAULT/pin"},
-		{http.MethodPut, "/v1/pubsub/kv/VAULT/pin"},
-		{http.MethodDelete, "/v1/pubsub/kv/VAULT"},
+		{http.MethodPost, "/v1/kv/VAULT"},
+		{http.MethodGet, "/v1/kv/VAULT/pin"},
+		{http.MethodPut, "/v1/kv/VAULT/pin"},
+		{http.MethodDelete, "/v1/kv/VAULT"},
 	} {
 		if code, _ := send(t, app, tc.method, tc.path, "", "application/json", "{}"); code != http.StatusForbidden {
 			t.Errorf("no-principal %s %s = %d, want 403", tc.method, tc.path, code)
@@ -272,7 +272,16 @@ func pubsubRoutes(t *testing.T, app *zip.App) (served map[string]bool, typed map
 		t.Fatalf("typed registry: %v", err)
 	}
 	// The health route is Serve's, not this package's.
+	//
+	// TWO prefixes, because this app answers at two addresses: the bus at
+	// /v1/pubsub, and key-value at /v1/kv, which is a store rather than a
+	// message and says so in its address. One predicate names both, so a route
+	// added to either is counted — a census that knew only one prefix would
+	// report the other half as nothing to check.
 	ours := func(p string) bool {
+		if strings.HasPrefix(p, "/v1/kv") {
+			return true
+		}
 		return strings.HasPrefix(p, "/v1/pubsub") && p != "/v1/pubsub/health"
 	}
 	served, typed = map[string]bool{}, map[string]string{}
@@ -302,7 +311,7 @@ func TestEveryPubsubRouteIsTypedAndDescribed(t *testing.T) {
 		t.Fatal("the router serves no pubsub routes")
 	}
 	if len(typed) != 8 {
-		t.Errorf("typed ops = %d, want the 8 the door declares", len(typed))
+		t.Errorf("typed ops = %d, want the 8 the door declares (2 bus, 6 kv)", len(typed))
 	}
 	var bad []string
 	for key := range served {

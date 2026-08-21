@@ -86,7 +86,7 @@ func consume(s *cloud.Service[state], org string, evs []event.SinkEvent) {
 func resolveSecret(s *cloud.Service[state], org string, dest Destination, _ Config) (string, error) {
 	spec := dest.Spec()
 	// A destination that declares no Secret and no Fallback is a PUBLIC-INGEST sink
-	// (Umami's /api/send is keyed only by its non-secret website id): it needs no
+	// (Analytics's /api/send is keyed only by its non-secret website id): it needs no
 	// credential, so it resolves to an empty secret and the fan-out forwards it.
 	if len(spec.Secrets) == 0 && spec.Fallback == "" {
 		return "", nil

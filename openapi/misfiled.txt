@@ -11,3 +11,4 @@
 /meet meet
 /tasks tasks
 /v1/billing commerce
+/v1/kv pubsub
