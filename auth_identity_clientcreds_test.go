@@ -23,8 +23,11 @@ import (
 // machineClaims builds a client_credentials token as IAM mints one: the client is the
 // subject ("<org>/<app>"), the sole audience, and the authorized party — and there is
 // no membership set, which is correct for a machine rather than a degraded token.
+// Spelled the way IAM spells one. `Type` is the claim the client_credentials
+// grant stamps and a person's token never carries; a fixture without it is a
+// token shape no issuer mints, and a reader validated against it proves nothing.
 func machineClaims(app, owner string, exp time.Time) idClaims {
-	c := idClaims{Claims: authz.Claims{Owner: owner, Organization: owner, Azp: app}}
+	c := idClaims{Claims: authz.Claims{Owner: owner, Organization: owner, Azp: app, Type: authz.Program}}
 	c.Issuer = testIssuer
 	c.Subject = "admin/" + app
 	c.Audience = jwt.ClaimStrings{app}
@@ -79,14 +82,31 @@ func TestAppPrincipalNarrowings(t *testing.T) {
 		}
 	})
 
-	t.Run("an application is a machine first", func(t *testing.T) {
+	// The two kinds are exclusive from BOTH sides, and a membership set does not
+	// move a token between them. IAM signs the kind; carrying memberships as well
+	// used to be enough to read a program as a person, and a person in the
+	// reserved org is an operator.
+	t.Run("a program in the reserved org is never an operator", func(t *testing.T) {
 		c := machineClaims("hanzo-kms", "admin", exp)
 		c.Orgs = []authz.Membership{{Org: authz.AdminOrg, Role: authz.Admin}}
+		if !appPrincipal(&c) {
+			t.Fatal("IAM signed this as a program and the membership set outvoted the claim")
+		}
+		if platformSudo(&c) {
+			t.Fatal("one principal was both platform sudo and an application — the two kinds must never coincide")
+		}
+	})
+
+	t.Run("a person in the reserved org is the operator", func(t *testing.T) {
+		c := machineClaims("hanzo-console", "admin", exp)
+		c.Type = "" // a person's token carries no kind
+		c.Subject = "admin/z"
+		c.Orgs = []authz.Membership{{Org: authz.AdminOrg, Role: authz.Admin}}
 		if !platformSudo(&c) {
-			t.Fatal("precondition: a membership set makes these claims a person, and this one an operator")
+			t.Fatal("precondition: a member of the reserved org is the operator this contrasts against")
 		}
 		if appPrincipal(&c) {
-			t.Fatal("one principal was both platform sudo and an application — the two kinds must never coincide")
+			t.Fatal("a person read as an application")
 		}
 	})
 }
@@ -152,4 +172,31 @@ func TestPartialMachineShapeIsRefused(t *testing.T) {
 			t.Fatal("<org>/<app> is the shape; a bare name is not it")
 		}
 	})
+}
+
+// THE SHAPE ALONE IS NOT THE PROOF.
+//
+// A person's token can wear every mark this file used to read as a machine: a
+// subject that looks like "<org>/<app>", one audience equal to azp, and no
+// membership set — which is what an unresolved membership lookup leaves behind.
+// Reading that as an application handed it the org off `owner` and a build
+// door's whole registry namespace.
+//
+// IAM signs the kind, so the answer no longer depends on a shape anyone can
+// arrange. This pins the exact claims that used to pass.
+func TestATokenShapedLikeAMachineIsNotOneWithoutTheClaim(t *testing.T) {
+	c := machineClaims("hanzo-console", "hanzo", time.Now().Add(time.Hour))
+	c.Subject = "acme/hanzo-console"
+	c.Orgs = nil
+	c.Type = "" // the one difference: IAM never signed this as a program
+
+	if isClientCredentialsPrincipal(&c) != true {
+		t.Fatal("precondition: this is exactly the shape the old reading accepted")
+	}
+	if appPrincipal(&c) {
+		t.Fatal("a token IAM never called a program was admitted as one on shape alone")
+	}
+	if got := c.homeOrg(); got != "" {
+		t.Fatalf("homeOrg=%q, want empty — nothing may be resolved for it", got)
+	}
 }
