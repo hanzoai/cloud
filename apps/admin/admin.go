@@ -36,6 +36,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -233,16 +234,21 @@ func (o ops) me(ctx context.Context, _ *core.None) (*meOut, error) {
 // Response: {"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","users":7,
 // "products":0,"spendCents":12500,"creditsCents":5000,"tokens":0,
 // "created":"2026-01-04T00:00:00Z"}],"total":1}
-func (o ops) orgs(ctx context.Context, _ *core.None) (*orgsOut, error) {
+func (o ops) orgs(ctx context.Context, in *orgsIn) (*orgsOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
 	cr := core.CallerCreds(c)
-	orgs, err := core.ScopedOrgs(o.s, ctx, c, cr)
+	all, err := core.ScopedOrgs(o.s, ctx, c, cr)
 	if err != nil {
 		return &orgsOut{Status: core.Err, Msg: err.Error()}, nil
 	}
+	// Page BEFORE the fan-out, which is the whole point: the rows we are about to
+	// return decide how many per-org reads happen. Paging the answer but not the
+	// work would render one screen and still pay for the directory.
+	total := len(all)
+	orgs := pageOrgs(all, in)
 	// The whole directory's AI usage in ONE read, keyed by org — the spend and token
 	// columns for every row. Per-org it would be a query per tenant, and this fleet has
 	// eighty-one; a directory that costs O(orgs) round-trips gets slower every signup.
@@ -283,7 +289,7 @@ func (o ops) orgs(ctx context.Context, _ *core.None) (*orgsOut, error) {
 	}
 	wg.Wait()
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Org < rows[j].Org })
-	return &orgsOut{Status: core.OK, Data: rows, Total: core.Total(len(rows))}, nil
+	return &orgsOut{Status: core.OK, Data: rows, Total: core.Total(total)}, nil
 }
 
 // ── /v1/admin/users — cross-org directory (OperatorUser[]) ───────────────────
@@ -660,6 +666,30 @@ func syncNow(ctx context.Context, _ *core.None) (*syncOut, error) {
 
 // orgUserCount returns the member count for one org from the IAM list total.
 // Best-effort: an error yields 0 rather than failing the whole row.
+
+// pageOrgs narrows the directory to one page. An out-of-range page is an empty
+// page, not an error: a client that walks past the end gets a clean stop.
+func pageOrgs(all []iam.Org, in *orgsIn) []iam.Org {
+	page, size := 1, 200
+	if in != nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(in.Page)); err == nil && n > 0 {
+			page = n
+		}
+		if n, err := strconv.Atoi(strings.TrimSpace(in.PageSize)); err == nil && n > 0 {
+			size = n
+		}
+	}
+	start := (page - 1) * size
+	if start >= len(all) {
+		return nil
+	}
+	end := start + size
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[start:end]
+}
+
 func orgUserCount(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds, org string) int {
 	q := url.Values{}
 	q.Set("owner", org)
