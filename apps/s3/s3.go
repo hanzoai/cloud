@@ -1,4 +1,4 @@
-// Package storage is object storage: your buckets and the files in them, with
+// Package s3 is object storage: your buckets and the files in them, with
 // signed URLs for upload and download.
 //
 // It serves an org's buckets and objects at /v1/s3 — list, create, delete, and
@@ -54,7 +54,7 @@
 //     is unwired in serve.go, platform-wide). The 5-minute TTL bounds a minted
 //     capability's post-revocation lifetime; a per-route limiter is the platform
 //     follow-up.
-package storage
+package s3
 
 import (
 	"encoding/json"
@@ -109,15 +109,17 @@ var bucketNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 // source exists — there is no second metering path.
 const opFeeEnvPrefix = "CLOUD_S3_FEE_CENTS"
 
-// state is storage's own data; shared deps live in the embedded cloud.Base. It
-// holds the shared S3 admin connection and the per-org resource gate+meter. The
-// meter is kept here (not in Base.Bill) because its commerce product label is "s3",
-// NOT the subsystem name "storage". A not-Configured() admin means no credentials
-// are present; the subsystem then mounts health/config only and every op fails
-// closed 503. A nil/!Enabled() bill makes Gate allow and Meter a no-op.
+// state is s3's own data; shared deps live in the embedded cloud.Base. It holds
+// the shared S3 admin connection and nothing else: the per-org gate+meter is
+// Base.Bill, whose commerce product label is the subsystem name, and that name
+// is "s3" — the label the ledger has always carried for this plane. There was a
+// second ResourceMeter here only because the package was called storage and the
+// label was not; one name for the app removes the second meter with it. A
+// not-Configured() admin means no credentials are present; the subsystem then
+// mounts health/config only and every op fails closed 503. A nil/!Enabled() Bill
+// makes Gate allow and Meter a no-op.
 type state struct {
 	admin s3admin.Admin
-	bill  *cloud.ResourceMeter
 }
 
 // metered is the sentence the seven data-plane operations share. Each is read
@@ -210,14 +212,13 @@ func init() {
 			"no credential, bucket or tenant detail.")
 }
 
-// Mount wires /v1/s3/* onto app. The "s3"-product meter and the guard-wrapped,
-// unconditional route set make this a direct construction (cloud.NewBase), not
-// cloud.Mount.
+// Mount wires /v1/s3/* onto app. The guard-wrapped, unconditional route set
+// makes this a direct construction (cloud.NewBase), not cloud.Mount.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("s3.Mount: nil app")
 	}
-	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "storage"), State: state{admin: s3admin.New(), bill: cloud.NewResourceMeter(deps, "s3")}}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "s3"), State: state{admin: s3admin.New()}}
 
 	// Register the FULL surface unconditionally — even when S3 is unconfigured.
 	// The guard fails each op closed with 503 (s.State.admin.Configured() is false),
@@ -301,13 +302,13 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 
 		fee := cloud.ResourceFeeCents(opFeeEnvPrefix, "op")
 		project, projectValidated := principal.ValidatedProject(ctx)
-		if err := s.State.bill.Gate(ctx.Context(), principal.Ledger(ctx), project, projectValidated, "op", fee); err != nil {
+		if err := s.Bill.Gate(ctx.Context(), principal.Ledger(ctx), project, projectValidated, "op", fee); err != nil {
 			return cloud.DenyResource(ctx, err)
 		}
 		if err := h(ctx); err != nil {
 			return err // handler failed — surface it; do not bill failed work.
 		}
-		s.State.bill.Meter(principal.Ledger(ctx), principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
+		s.Bill.Meter(principal.Ledger(ctx), principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
 		return nil
 	})
 	return func(ctx *zip.Ctx) error {

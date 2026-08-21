@@ -73817,8 +73817,8 @@ paths:
       operationId: get_s3_buckets
       summary: List your org's buckets
       tags:
-      - storage
-      x-app: storage
+      - s3
+      x-app: s3
       x-public: true
     post:
       description: |-
@@ -73830,8 +73830,8 @@ paths:
       operationId: post_s3_buckets
       summary: Create a bucket in your org
       tags:
-      - storage
-      x-app: storage
+      - s3
+      x-app: s3
       x-public: true
   /v1/s3/buckets/{bucket}:
     delete:
@@ -73850,8 +73850,8 @@ paths:
           type: string
       summary: Delete an empty bucket
       tags:
-      - storage
-      x-app: storage
+      - s3
+      x-app: s3
       x-public: true
   /v1/s3/buckets/{bucket}/objects:
     get:
@@ -73872,8 +73872,8 @@ paths:
           type: string
       summary: Browse one level of a bucket
       tags:
-      - storage
-      x-app: storage
+      - s3
+      x-app: s3
       x-public: true
     post:
       description: |-
@@ -73891,8 +73891,8 @@ paths:
           type: string
       summary: Get a URL to upload one object directly
       tags:
-      - storage
-      x-app: storage
+      - s3
+      x-app: s3
       x-public: true
   /v1/s3/health:
     get:
@@ -73903,8 +73903,8 @@ paths:
       operationId: get_s3_health
       summary: Whether object storage is usable here
       tags:
-      - storage
-      x-app: storage
+      - s3
+      x-app: s3
       x-public: true
   /v1/sandboxes:
     get:
@@ -79459,6 +79459,9 @@ tags:
 - description: 'Package registry is your container and package registry: push images,
     pull them back, see what you store.'
   name: registry
+- description: 'Package s3 is object storage: your buckets and the files in them,
+    with signed URLs for upload and download.'
+  name: s3
 - description: 'Package sandbox is the ONE compute primitive: a sandbox is a gVisor
     pod that runs somebody else''s code, and every lifetime is the same object.'
   name: sandboxes
@@ -79468,9 +79471,6 @@ tags:
 - description: Package settings is how an org configures each product it uses, secret
     fields included.
   name: settings
-- description: 'Package storage is object storage: your buckets and the files in them,
-    with signed URLs for upload and download.'
-  name: storage
 - description: 'Package sync is data sync: link two endpoints and keep them in step,
     on a webhook, on a schedule, or on demand.'
   name: sync

@@ -1,4 +1,4 @@
-package storage_test
+package s3_test
 
 // Integration tests for the /v1/s3 file-manager subsystem, driven through the
 // REAL orchestrator path (BuildDeps → the init()-registered App → the
@@ -32,11 +32,11 @@ import (
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 
-	// Mount storage (118) then provisioning (120) IN ORDER via their composition-root
-	// specs, so storage's static /v1/s3/buckets + /v1/s3/health register before
+	// Mount s3 (118) then provisioning (120) IN ORDER via their composition-root
+	// specs, so s3's static /v1/s3/buckets + /v1/s3/health register before
 	// provisioning's /v1/s3/:name — the route-precedence guarantee, on the real Mounts.
 	"github.com/hanzoai/cloud/apps/provisioning"
-	"github.com/hanzoai/cloud/apps/storage"
+	"github.com/hanzoai/cloud/apps/s3"
 )
 
 // store is the object store this harness points S3_ADMIN_ENDPOINT at: an
@@ -88,13 +88,13 @@ func newApp(t *testing.T, creds bool) *zip.App {
 		DataDir:   t.TempDir(),
 		// Enable both subsystems under test. (Empty Enable = all-on, but naming
 		// them keeps the harness explicit and fast.)
-		Enable: []string{"storage", "provisioning"},
+		Enable: []string{"s3", "provisioning"},
 	}
 	deps := cloud.BuildDeps(cfg)
 	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	specs := []cloud.Plugin{
-		{Name: "storage", Mount: storage.Mount, OwnsHealth: true},
+		{Name: "s3", Mount: s3.Mount, OwnsHealth: true},
 		{Name: "provisioning", Mount: provisioning.Mount},
 	}
 	if err := cloud.MountAll(app, specs, cfg, deps); err != nil {

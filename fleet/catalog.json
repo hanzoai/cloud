@@ -4221,6 +4221,7 @@
  "research": [],
  "risk": [],
  "rollingcap": [],
+ "s3": [],
  "sandboxes": [
   {
    "id": "end_sandbox",
@@ -4280,7 +4281,6 @@
  "share": [],
  "skills": [],
  "social": [],
- "storage": [],
  "sync": [
   {
    "id": "delete_sync_by_id",

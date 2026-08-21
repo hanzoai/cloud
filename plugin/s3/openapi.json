@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package storage is object storage: your buckets and the files in them, with signed URLs for upload and download.",
+    "description": "Package s3 is object storage: your buckets and the files in them, with signed URLs for upload and download.",
     "version": "v1"
   },
   "servers": [
