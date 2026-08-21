@@ -82863,7 +82863,9 @@ tags:
 - description: 'Package auditlog is your org''s tamper-evident audit trail: every
     security-relevant event, hash-chained and readable.'
   name: audit
-- name: authz
+- description: 'Package serve is the access decision behind an org-scoped call: who
+    may do what, where, answered allow or deny.'
+  name: authz
 - description: Package auto is workflows that run themselves, on a schedule or a webhook.
   name: auto
 - description: 'Package base is managed Hanzo Base: a hosted backend for your app
