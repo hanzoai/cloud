@@ -58189,8 +58189,8 @@ paths:
           description: ok
       summary: Connectors returns the connector catalogue.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/flows:
@@ -58215,15 +58215,15 @@ paths:
           description: ok
       summary: Returns the caller org's automations, most-recently-updated first.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
     post:
       description: |-
         Creates an automation and its initial DRAFT version in one call. The
         new flow is DISABLED — creating it does not arm its trigger; POST
-        /v1/automations/flows/{id}/enable does that.
+        /v1/auto/flows/{id}/enable does that.
       operationId: post_auto_flows
       requestBody:
         content:
@@ -58250,8 +58250,8 @@ paths:
           description: created
       summary: Creates an automation and its initial DRAFT version in one call.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/flows/{id}:
@@ -58273,8 +58273,8 @@ paths:
           description: no content
       summary: Deletes one automation, its versions and its run history.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
     get:
@@ -58299,8 +58299,8 @@ paths:
           description: ok
       summary: Returns one automation and its latest version.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
     patch:
@@ -58335,8 +58335,8 @@ paths:
           description: ok
       summary: Updates one automation's metadata in place.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/flows/{id}/disable:
@@ -58363,8 +58363,8 @@ paths:
           description: ok
       summary: Disarms a flow's trigger and marks it DISABLED.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/flows/{id}/enable:
@@ -58392,8 +58392,8 @@ paths:
           description: ok
       summary: Arms a flow's trigger and marks it ENABLED.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/flows/{id}/operations:
@@ -58412,8 +58412,8 @@ paths:
       summary: Edit a flow — rename it, retarget its trigger, or add, move and delete
         steps
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
   /v1/auto/flows/{id}/run:
     post:
@@ -58441,8 +58441,8 @@ paths:
           description: created
       summary: Starts one durable run of a flow now.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/flows/{id}/versions:
@@ -58474,8 +58474,8 @@ paths:
           description: ok
       summary: Returns one flow's versions, newest first.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
     post:
@@ -58510,8 +58510,8 @@ paths:
           description: created
       summary: Adds a new DRAFT version to a flow.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/hooks/{source}/{event}:
@@ -58536,14 +58536,14 @@ paths:
           type: string
       summary: Fire an event that starts every enabled flow subscribed to it
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
   /v1/auto/pieces:
     get:
       description: |-
         Pieces is the retired-name alias of the connector catalogue. It serves exactly
-        what GET /v1/automations/connectors serves, under the name this surface used
+        what GET /v1/auto/connectors serves, under the name this surface used
         before "piece" (the ActivePieces term) became "connector", and stays valid for
         clients pinned to the old path. Prefer /connectors.
       operationId: get_auto_pieces
@@ -58556,8 +58556,8 @@ paths:
           description: ok
       summary: Pieces is the retired-name alias of the connector catalogue.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/runs:
@@ -58589,8 +58589,8 @@ paths:
           description: ok
       summary: Returns the caller org's run history, newest first.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/runs/{id}:
@@ -58617,8 +58617,8 @@ paths:
           description: ok
       summary: Returns one run.
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
       x-tool: true
   /v1/auto/runs/{id}/resume:
@@ -58638,8 +58638,8 @@ paths:
           type: string
       summary: Release a run waiting at an approval step, with the approval payload
       tags:
-      - automations
-      x-app: automations
+      - auto
+      x-app: auto
       x-public: true
   /v1/base/health:
     get:
@@ -115423,9 +115423,8 @@ tags:
     you get paid.'
   name: authors
 - name: authz
-- description: Package automations is workflows that run themselves, on a schedule
-    or a webhook.
-  name: automations
+- description: Package auto is workflows that run themselves, on a schedule or a webhook.
+  name: auto
 - description: 'Package base is managed Hanzo Base: a hosted backend for your app
     — collections, records, access rules and sign-in.'
   name: base

@@ -54,7 +54,7 @@ var unwired = []string{
 // either way the pin comes off.
 var unextracted = []string{
 	"admission", "ads", "affiliates", "agents", "allowance", "answer", "ask",
-	"auditlog", "authors", "automations", "benchmark", "blueprint", "books", "bots",
+	"auditlog", "authors", "auto", "benchmark", "blueprint", "books", "bots",
 	"campaign", "catalog", "catalogsync", "channels", "cloudflare", "cms",
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
 	"controlplane", "crawl", "crm", "cron", "dataset", "graph",

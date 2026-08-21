@@ -424,7 +424,14 @@ var Apps = []App{
 	{Name: "admission", Prefixes: []string{"/v1/admission"}},
 	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},
 	{Name: "tel", Prefixes: []string{"/v1/tel"}},
-	{Name: "automations", Prefixes: []string{"/v1/auto"}},
+	// The address was already the word: the product is Hanzo Auto, the app has
+	// always served one group at /v1/auto, and HIP-1063's front matter reads
+	// capability: auto. Only the package name was out of step, so HIP-0139 §7.3
+	// closes "/v1/auto automations" by renaming the app and moving no route. What
+	// does NOT move with it: the store's sub name and the ledger product, both
+	// still "automations", because both key rows already written (apps/auto/store.go,
+	// apps/auto/auto.go Mount).
+	{Name: "auto", Prefixes: []string{"/v1/auto"}},
 	{Name: "flow", Prefixes: []string{"/v1/flow"}},
 	{Name: "engine", Prefixes: []string{"/v1/engine"}},
 	{Name: "registry", Prefixes: []string{"/v1/registry"}},
