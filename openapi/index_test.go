@@ -300,3 +300,67 @@ func TestBothDoorsAreInTheDocument(t *testing.T) {
 			doc.Paths[RootPath]["get"].OperationID)
 	}
 }
+
+// A /v1 answer says what its address accepts and what sits above it. Both are
+// read off the woven contract, so neither can name an address the fleet does
+// not serve — a link to a 404 is worse than no link.
+func TestAnAnswerSaysWhatItAcceptsAndWhatIsAboveIt(t *testing.T) {
+	app := indexed(t)
+
+	for _, tc := range []struct{ path, allow, rel, up string }{
+		// A member's parent is the collection it belongs to (RFC 6573).
+		{path: "/v1/agents/a1", allow: "GET", rel: "collection", up: "/v1/agents"},
+		{path: "/v1/kms/secrets/db", allow: "PUT", rel: "collection", up: "/v1/kms/secrets"},
+		// Asked with the wrong method, the answer still says which one works.
+		{path: "/v1/search", allow: "POST"},
+		// /v1/kms is not an address, so nothing points at it — and one segment
+		// under the root there is nothing above worth naming either, because /v1
+		// is already on every answer as the index.
+		{path: "/v1/kms/secrets", allow: "GET"},
+		// labs is beta. A capability the index will not name does not get its
+		// methods advertised here either: one rule, asked in both places.
+		{path: "/v1/labs/things", allow: ""},
+	} {
+		resp, _ := served(t, app, http.MethodGet, tc.path)
+		if got := resp.Header.Get("Allow"); got != tc.allow {
+			t.Errorf("%s: Allow = %q, want %q", tc.path, got, tc.allow)
+		}
+		links := strings.Join(resp.Header.Values("Link"), " ")
+		if tc.rel == "" {
+			if strings.Contains(links, `rel="collection"`) || strings.Contains(links, `rel="up"`) {
+				t.Errorf("%s: carries %v — there is no address above it", tc.path, resp.Header.Values("Link"))
+			}
+			continue
+		}
+		if want := "<" + tc.up + `>; rel="` + tc.rel + `"`; !strings.Contains(links, want) {
+			t.Errorf("%s: carries %v, missing %q", tc.path, resp.Header.Values("Link"), want)
+		}
+	}
+}
+
+// An operation's template is found by SHAPE, because the front door proxies and
+// the route a request matched there is the proxy's own. Where two templates fit
+// the same path, the one made of literals is the address the caller asked for.
+func TestALiteralAddressBeatsTheTemplateItFits(t *testing.T) {
+	pub := func(id string) *Operation {
+		return &Operation{OperationID: id, Summary: id, Public: true}
+	}
+	a := addressesOf(&Document{Paths: map[string]PathItem{
+		"/v1/nodes":      {"get": pub("get_nodes")},
+		"/v1/nodes/{id}": {"get": pub("get_node")},
+		"/v1/nodes/peer": {"post": pub("post_nodes_peer")},
+	}})
+
+	if got, ok := a.at("/v1/nodes/peer"); !ok || got.allow != "POST" || got.member {
+		t.Errorf("/v1/nodes/peer resolved to %+v — it is an address, not a node id", got)
+	}
+	if got, ok := a.at("/v1/nodes/n1"); !ok || got.allow != "GET" || !got.member {
+		t.Errorf("/v1/nodes/n1 resolved to %+v — it is a member of the collection", got)
+	}
+	if got, ok := a.at("/v1/nodes"); !ok || got.hasUp {
+		t.Errorf("/v1/nodes resolved to %+v — /v1 is the index, not its collection", got)
+	}
+	if _, ok := a.at("/v1/nodes/n1/deeper"); ok {
+		t.Error("a path the contract does not serve resolved to an address")
+	}
+}
