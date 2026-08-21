@@ -12922,6 +12922,40 @@ components:
           description: Name is the bucket name to create.
           type: string
       type: object
+    bucketIn:
+      properties:
+        name:
+          description: |-
+            Name is the bucket's friendly name, matching
+            ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. It is validated AS GIVEN and never
+            lower-cased for you: a client that creates "Photos" and then lists "photos"
+            would be reading a bucket it did not make, so mixed case is a clean 400.
+          type: string
+      type: object
+    bucketItem:
+      properties:
+        createdAt:
+          description: unix seconds
+          type: integer
+        name:
+          description: friendly name
+          type: string
+      type: object
+    bucketList:
+      properties:
+        buckets:
+          description: |-
+            Buckets are the caller org's buckets, friendly names, oldest first as the
+            store returns them.
+          items:
+            $ref: '#/components/schemas/bucketItem'
+          type: array
+        total:
+          description: |-
+            Total is how many buckets this org has. It equals len(buckets): the listing
+            is not paged, because an org's bucket count is small by construction.
+          type: integer
+      type: object
     bucketRecord:
       properties:
         bucket:
@@ -38039,6 +38073,45 @@ components:
             back out.
           type: string
       type: object
+    objectItem:
+      properties:
+        etag:
+          type: string
+        isDir:
+          description: true for a folder (common prefix)
+          type: boolean
+        key:
+          description: key RELATIVE to the requested prefix
+          type: string
+        lastModified:
+          description: unix seconds (0 for a folder)
+          type: integer
+        size:
+          description: bytes (0 for a folder)
+          type: integer
+      type: object
+    objectList:
+      properties:
+        bucket:
+          description: Bucket is the bucket that was listed, friendly name.
+          type: string
+        objects:
+          description: Objects are the entries at this level, keys RELATIVE to Prefix.
+          items:
+            $ref: '#/components/schemas/objectItem'
+          type: array
+        prefix:
+          description: |-
+            Prefix is the sub-folder the listing was scoped to, cleaned. Empty for the
+            bucket root.
+          type: string
+        total:
+          description: |-
+            Total is how many entries came back. The listing is BOUNDED, so a bucket
+            with more keys than the cap answers the cap and this says so — it is not a
+            count of what the bucket holds.
+          type: integer
+      type: object
     onboardReq:
       properties:
         name:
@@ -39052,6 +39125,20 @@ components:
           items:
             $ref: '#/components/schemas/Preset'
           type: array
+      type: object
+    presignResponse:
+      properties:
+        expiresIn:
+          description: seconds until the URL expires
+          type: integer
+        key:
+          type: string
+        method:
+          description: '"PUT" (upload) or "GET" (download)'
+          type: string
+        url:
+          description: presigned URL the browser follows directly
+          type: string
       type: object
     previewReq:
       properties:
@@ -44229,6 +44316,40 @@ components:
             $ref: '#/components/schemas/runRecord'
           type: array
       type: object
+    s3Health:
+      properties:
+        error:
+          description: Error is why the probe is degraded, in plain words. Absent
+            when it is not.
+          type: string
+        presign:
+          description: |-
+            Presign is whether presigned upload and download URLs can be minted, which
+            needs a PUBLIC endpoint on top of the credentials. False does not make the
+            surface degraded — listing and creating still work.
+
+            NOT omitempty. On the ready path the untyped probe wrote this key
+            unconditionally, and omitting a false one would turn what a
+            healthy-but-presignless deployment reports from "presign: false" into
+            silence — two different facts. The degraded body now carries it too, which is
+            the one delta of typing this: the probe answers ONE shape under both of its
+            statuses, which is what makes a single declared Out honest.
+          type: boolean
+        ready:
+          description: |-
+            Ready is whether this deployment can serve object operations at all: true
+            only when admin credentials are configured.
+          type: boolean
+        service:
+          description: Service names the subsystem this probe is for. Always "s3".
+          type: string
+        status:
+          description: |-
+            Status is "ok" when the store is reachable in principle, "degraded" when it
+            is not. It is the field to read; the HTTP status carries the same fact for a
+            caller that only looks at the code.
+          type: string
+      type: object
     safeIn:
       properties:
         documentIds:
@@ -47335,6 +47456,17 @@ components:
           type: string
         structure:
           description: 'Structure is the entity kind: c-corp, llc or dao-llc.'
+          type: string
+      type: object
+    uploadIn:
+      properties:
+        bucket:
+          description: Bucket is the bucket to upload into, from the path.
+          type: string
+        key:
+          description: |-
+            Key is the object key relative to the bucket root. It is path-cleaned, so a
+            "../" cannot escape the bucket, and an empty or unclean key is 400.
           type: string
       type: object
     usage:
@@ -105378,103 +105510,183 @@ paths:
   /v1/s3/buckets:
     get:
       description: |-
-        Returns the caller's own buckets under the friendly names they were created with, each with its creation time.
+        Lists the caller org's own buckets.
 
-        Another tenant's bucket is not refused, it is INVISIBLE — a bucket outside the caller's namespace is skipped during the listing rather than reported, so the operation cannot be used to discover that a name is taken elsewhere.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        Only the caller's: every bucket is physically named under a per-org prefix and
+        the listing strips that prefix, so a tenant sees friendly names and another
+        tenant's buckets are not in the answer at all.
       operationId: get_s3_buckets
-      summary: List your org's buckets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bucketList'
+          description: ok
+      summary: Lists the caller org's own buckets.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
     post:
       description: |-
-        Creates a new bucket in the caller's own namespace and answers 201 with its friendly name and creation time.
+        Makes a new bucket for the caller's org and answers 201 with it.
 
-        The name is validated exactly as sent and never quietly normalised: it must match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, so a mixed-case name is a clean 400 rather than a bucket created as `photos` that the caller keeps asking for as `Photos`. A name already in use in the caller's own namespace is 409.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        The physical name is derived from the caller's validated org, so a tenant can
+        only ever create inside its own namespace and no request field can redirect
+        that. A name already taken in the org is 409.
       operationId: post_s3_buckets
-      summary: Create a bucket in your org
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/bucketIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bucketItem'
+          description: created
+      summary: Makes a new bucket for the caller's org and answers 201 with it.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
   /v1/s3/buckets/{bucket}:
     delete:
       description: |-
-        Removes one of the caller's buckets, and only when it is already EMPTY — a bucket with objects in it answers 409 instead.
+        Removes an EMPTY bucket and answers 204.
 
-        That refusal is deliberate rather than a limitation: this API does not cascade a delete of a tenant's objects behind a single bucket call, so emptying the bucket stays an explicit act. A bucket that does not exist is 404, and a successful delete answers 204 with no body.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        A non-empty bucket is 409 rather than a cascade: deleting a tenant's objects
+        behind a single bucket call is not a thing this surface will do silently. A
+        bucket the caller's org does not own is the same 404 an unknown name gives.
       operationId: delete_s3_buckets_by_bucket
       parameters:
-      - in: path
+      - description: Bucket is the bucket's friendly name, from the path.
+        in: path
         name: bucket
         required: true
         schema:
           type: string
-      summary: Delete an empty bucket
+      responses:
+        "204":
+          description: no content
+      summary: Removes an EMPTY bucket and answers 204.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
   /v1/s3/buckets/{bucket}/objects:
     get:
       description: |-
-        Lists one folder level of a bucket: each entry's key, whether it is a folder, its size, last-modified time and ETag. `prefix` scopes the read to a sub-folder.
+        Lists one folder level of a bucket.
 
-        Keys come back RELATIVE to the requested prefix, not absolute, which is what lets a client render a breadcrumb without re-deriving it. The default is the folder view — sub-prefixes are returned as directory entries — and `recursive=true` flattens it to every key beneath the prefix instead.
-
-        The listing is bounded at 1000 entries so a large bucket cannot exhaust memory; treat a full page as "there may be more" rather than as the whole bucket.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        Folder-style by default: sub-prefixes come back as directory entries, which is
+        the file-manager view. `?recursive=true` lists every key flat under the prefix
+        instead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge
+        bucket cannot exhaust memory — Total is what came back, not what the bucket
+        holds.
       operationId: get_s3_buckets_by_bucket_objects
       parameters:
-      - in: path
+      - description: Bucket is the bucket to list, from the path.
+        in: path
         name: bucket
         required: true
         schema:
           type: string
-      summary: Browse one level of a bucket
+      - in: query
+        name: prefix
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: recursive
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/objectList'
+          description: ok
+      summary: Lists one folder level of a bucket.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
     post:
       description: |-
-        Returns a short-lived presigned PUT URL, with the method, the cleaned key and the seconds until it expires. The client uploads to that URL DIRECTLY — the bytes never pass through this API, and the storage credential never leaves the server.
+        Mints a presigned PUT URL the caller uploads to DIRECTLY.
 
-        The URL is signed against the public storage host and scoped to exactly one bucket and key, and it expires five minutes after it is issued. The key is path-cleaned before signing, so a traversal cannot escape the bucket. A deployment with no public storage endpoint answers 503, because there is no host to sign a browser-followable URL against.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        The bytes never pass through this binary and the admin credential never leaves
+        the server: the URL is signed against the PUBLIC host, scoped to exactly this
+        bucket and key, and expires. A deployment with no public endpoint configured
+        cannot mint one and answers 503 rather than a URL that will not work.
       operationId: post_s3_buckets_by_bucket_objects
       parameters:
-      - in: path
+      - description: Bucket is the bucket to upload into, from the path.
+        in: path
         name: bucket
         required: true
         schema:
           type: string
-      summary: Get a URL to upload one object directly
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/uploadIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/presignResponse'
+          description: ok
+      summary: Mints a presigned PUT URL the caller uploads to DIRECTLY.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
   /v1/s3/health:
     get:
       description: |-
-        A real readiness probe rather than a liveness stub: 200 only when the storage credentials are present, and it additionally reports whether presigning is available — the capability the two URL-issuing operations need and refuse without.
+        Health reports whether this deployment can serve object storage.
 
-        An unconfigured deployment answers 503 with `ready:false` and the reason, which is the same state in which every data-plane operation here refuses. Not token-gated, so the platform can probe it without a credential, and it carries no credential, bucket or tenant detail.
+        It is a REAL probe rather than a constant: 200 when admin credentials are
+        present, so the store is reachable in principle, and 503 with the reason when
+        they are not. It is deliberately NOT gated — liveness has to be probe-able
+        without a token — so it is the one operation here that names no bucket and
+        bills nothing.
       operationId: get_s3_health
-      summary: Whether object storage is usable here
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/s3Health'
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/s3Health'
+          description: service unavailable
+      summary: Health reports whether this deployment can serve object storage.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
   /v1/sandbox:
     get:
       description: |-

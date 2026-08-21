@@ -1,7 +1,7 @@
 ---
 name: s3_health
 version: "8.0.0"
-description: "Read s3 health: Whether object storage is usable here."
+description: "Read s3 health: Health reports whether this deployment can serve object storage.."
 ---
 
 # Lux · S3 · health
@@ -14,11 +14,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/s3/health` — Whether object storage is usable here
+- `GET https://api.lux.network/v1/s3/health` — Health reports whether this deployment can serve object storage.
 
 ## Response
 
-- `/v1/s3/health` → JSON object.
+- `/v1/s3/health` → `s3Health` object with fields: `error`, `presign`, `ready`, `service`, `status`.
 
 ## Example
 
