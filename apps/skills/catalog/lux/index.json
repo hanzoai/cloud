@@ -64,11 +64,11 @@
       "sha256": "5ec110cb815daec6537045518f89dd933e1790d61902b05d47add7b458befec2"
     },
     {
-      "description": "Read admin applications: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's get-applications..",
+      "description": "Read admin applications: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's application list..",
       "name": "admin_applications",
       "path": "admin_applications/SKILL.md",
       "service": "admin",
-      "sha256": "3a53ffebbb7086bc401fbf73aa81803e7bb00ceafb24f9717add9f1d19a6641f"
+      "sha256": "fe6414ca516bf6c0165dfe4aa246112ef32239fdabf19a12f966b536c3fed386"
     },
     {
       "description": "Read admin audit: Reads one chain of cloud's tamper-evident audit trail, newest first, with that chain's live integrity attached so a listing can be badged as verified., Walks EVERY hash chain this deployment keeps and reports each one: which chains were checked, how many records",
@@ -180,7 +180,7 @@
       "name": "admin_orgs",
       "path": "admin_orgs/SKILL.md",
       "service": "admin",
-      "sha256": "54789d79c91afea46ff32791c9f2a06fe7587ae3b9bbc657de4a291b4f4bb659"
+      "sha256": "cbcbd11f15f9fd373f5614a5377cf8a2ed1a17638a15469c9639ccd19ba001e7"
     },
     {
       "description": "Read admin overview: Is the Platform Overview tiles: how many orgs and users are in the caller's tenant window, the fleet workload counts, and month-to-date spend and credits..",
@@ -246,11 +246,11 @@
       "sha256": "8173f752d692c90b25b396a836091363ec2e69e57b9554b812cd434a65c570b7"
     },
     {
-      "description": "Read admin roles: Lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles..",
+      "description": "Read admin roles: Lists IAM roles for one owner org, forwarded VERBATIM from IAM's role list..",
       "name": "admin_roles",
       "path": "admin_roles/SKILL.md",
       "service": "admin",
-      "sha256": "90d555176457ea512e491928cdd49744f761032570602f7c77e58034e854efbf"
+      "sha256": "ca88ba8b81d669b8ecc4457aed3425b3e8dc0c84aa9fd3a7f72adad9f606b1f0"
     },
     {
       "description": "Read admin services: Reads the launch board: every hosted service in the registry with its LIVE waitlist mode, evaluated through the flag engine..",
