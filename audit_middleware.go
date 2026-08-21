@@ -670,11 +670,26 @@ const maxUserAgentLen = 512
 // of another is never mis-replaced. A normal UA ("Mozilla/5.0 (Macintosh …)") is
 // unchanged because none of its words is credential-shaped.
 func scrubFreeText(s string) string {
-	if s == "" {
-		return ""
-	}
 	if len(s) > maxUserAgentLen {
 		s = s[:maxUserAgentLen]
+	}
+	return ScrubText(s)
+}
+
+// ScrubText scrubs credential-shaped words out of free text, leaving every other
+// byte alone. It is the same walk scrubFreeText performs, without that one's
+// User-Agent length cap — the cap is a policy about what a trail records, not
+// part of the rule for what a credential looks like, and braiding the two meant
+// the only shared scrubber for prose also truncated it.
+//
+// The rule is scrubToken's, so a value is judged by its SHAPE. That is what the
+// key-name scrubbers cannot do: an upstream that answers "Invalid API key: sk-…"
+// gives no field name to key on, so the credential rides out in the message. Any
+// surface relaying text it did not author — an upstream refusal, a tool's log
+// tail — passes it through here first.
+func ScrubText(s string) string {
+	if s == "" {
+		return ""
 	}
 	var b strings.Builder
 	b.Grow(len(s))
