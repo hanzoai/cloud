@@ -205,6 +205,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeMeter(deps.Metering)
 	exposeCredit()
 	exposeUsage()
+	exposeSubs()
 	exposeTxns()
 	exposeSpend()
 	exposeScopeRules()
