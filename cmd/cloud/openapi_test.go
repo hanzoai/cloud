@@ -8,13 +8,19 @@ package main
 // /zap, /{wildcard1} — while the fleet serves 1039. Nothing on the host claimed the
 // path, so it fell to ai's bare "/v1" and was answered by the ai child describing
 // its own router. Every SDK generator, spec-derived CLI and third party reading the
-// published spec read that instead, and no gate could see it: openapi.yaml was
-// correct the whole time, because openapi.yaml is not what the deployment served.
+// published spec read that instead, and no gate could see it: the committed artifact
+// was correct the whole time, because the artifact is not what the deployment served.
 //
 // So the questions here are the two nobody was asking:
 //
 //	WHO answers /v1/openapi.json on the host?   → the host, never a plugin.
-//	WHAT does it answer with?                   → the committed artifact, exactly.
+//	WHAT does it answer with?                   → openapi.yaml, exactly. The door is
+//	                                              unauthenticated, so what it answers
+//	                                              with is the CUSTOMER contract, the
+//	                                              same bytes every SDK is generated
+//	                                              from. It answered with the internal
+//	                                              document until openapi.MountFleet
+//	                                              projected it.
 //
 // Both are asked of the real thing: mount() and spec() are the host's own, in the
 // host's own order, and only the WIRE is replaced — each plugin becomes an oracle
@@ -36,8 +42,14 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// golden is the artifact the SDK repos pull, relative to this package.
-const golden = "../../openapi.yaml"
+// golden is the artifact the SDK repos pull AND the bytes the host answers with —
+// the customer contract. served is everything this fleet actually routes, which
+// is a different question and has a different reader: an address is served
+// whatever audience may call it. Both relative to this package.
+const (
+	golden = "../../openapi.yaml"
+	served = "../../private.yaml"
+)
 
 // oracle answers with its own address, so a mounted plugin's NAME is what comes
 // back off the wire. It replaces the transport and nothing else: the prefixes,

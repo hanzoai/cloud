@@ -12,15 +12,17 @@ import (
 // There are now four projections of this one API, and they are compared against
 // each other by TEST:
 //
-//	the woven golden               openapi.yaml, written by the weave (make describe)
 //	each app binary's own subset   `<app> openapi`, one file per app
-//	the woven fleet document       Weave() over those subsets
-//	the live endpoint              GET /v1/openapi.json
+//	the woven fleet document       Weave() over those subsets — private.yaml
+//	its public projection          Publish() over that — openapi.yaml
+//	the live endpoint              GET /v1/openapi.json, the public projection
 //
-// And one projection OF the golden, downstream and in another repo:
+// And one projection OF the public contract, downstream and in another repo:
 // hanzoai/openapi's hanzo.yaml, which every published SDK is generated from.
 // It refutes itself against the LIVE endpoint above (`publish.py --served`),
-// because that is the only one of the four a repo without a checkout can read.
+// because that is the only one of these a repo without a checkout can read — and
+// the two now describe one audience, so the refutation is a comparison of two
+// readings rather than of two surfaces.
 //
 // An info block that differed between them would make two documents OF THE SAME
 // API compare unequal for a reason that has nothing to do with the API — which
@@ -78,8 +80,8 @@ var (
 		Title:   fleetInfo.Title,
 		Version: fleetInfo.Version,
 		Description: "The Hanzo Cloud API as a customer calls it: every operation under /v1/ except " +
-			"the operator's admin product, relay doors and legacy spellings. The full document at " +
-			"/v1/openapi.json carries those too. Tagged by product: the first path segment after /v1/.",
+			"the operator's admin product, relay doors, legacy spellings and capabilities still " +
+			"reached by flag. Tagged by product: the first path segment after /v1/.",
 	}
 )
 
@@ -196,9 +198,18 @@ func Fleet(subsets []Part) (*Document, error) {
 	return Weave(parts)
 }
 
-// MountFleet serves the FLEET's document at Path: the composition of what this
-// deployment's plugins serve, woven from the subsets their binaries projected
-// when they were built.
+// MountFleet serves the fleet's PUBLIC CONTRACT at Path: the composition of what
+// this deployment's plugins serve, woven from the subsets their binaries
+// projected when they were built, and then projected to the customer surface
+// ([Publish]).
+//
+// The projection is here, not at the caller, because this door and openapi.yaml
+// are one artifact — cmd/cloud/openapi_test.go holds the served bytes against the
+// committed file — and a projection applied at only one of the two is how they
+// come to differ. It answered with the INTERNAL document until this was written,
+// so an unauthenticated GET returned the operator's whole /v1/admin family and
+// every alpha capability, which is the same reach a generated SDK has: the
+// audience rule was stated in one place and applied in another.
 //
 // It exists because [Mount]'s answer is WRONG on the light host, and wrong in the
 // way that is hardest to see. The host mounts no subsystem — that laziness is
@@ -220,6 +231,10 @@ func MountFleet(app *zip.App, subsets func() ([]Part, error)) {
 		if err != nil {
 			return nil, err
 		}
-		return Fleet(parts)
+		woven, err := Fleet(parts)
+		if err != nil {
+			return nil, err
+		}
+		return Publish(woven)
 	})
 }

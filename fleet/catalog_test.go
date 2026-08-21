@@ -22,7 +22,7 @@ import (
 // catalog and the door would publish an operation set the fleet no longer
 // serves — the exact way the hand-kept catalogue this replaced went stale.
 //
-// The AUDIENCE is read off public.yaml and not off the subset, for the reason
+// The AUDIENCE is read off openapi.yaml and not off the subset, for the reason
 // gen-fleet-catalog states: a subset's x-public is what an app could derive about
 // itself, and the stage (HIP-0139 §8) is a fleet fact it cannot see. Asking the
 // subset here would demand of the catalog every beta operation the contract
@@ -102,16 +102,16 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 	}
 }
 
-// contract is every operationId in the published contract, read off public.yaml
+// contract is every operationId in the published contract, read off openapi.yaml
 // — the same set gen-fleet-catalog reads, from the same file, because the two
 // must be asking one question. It is small enough to state twice and the second
 // statement is what makes this a check rather than a restatement of the
 // generator's own bookkeeping.
 func contract(t *testing.T) map[string]bool {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "public.yaml"))
+	raw, err := os.ReadFile(filepath.Join("..", "openapi.yaml"))
 	if err != nil {
-		t.Fatalf("read public.yaml: %v — run `make -f mk/fleet.mk openapi`", err)
+		t.Fatalf("read openapi.yaml: %v — run `make -f mk/fleet.mk openapi`", err)
 	}
 	var doc struct {
 		Paths map[string]map[string]struct {
@@ -119,7 +119,7 @@ func contract(t *testing.T) map[string]bool {
 		} `json:"paths"`
 	}
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("parse public.yaml: %v", err)
+		t.Fatalf("parse openapi.yaml: %v", err)
 	}
 	ids := map[string]bool{}
 	for _, methods := range doc.Paths {
@@ -131,7 +131,7 @@ func contract(t *testing.T) map[string]bool {
 		}
 	}
 	if len(ids) == 0 {
-		t.Fatal("public.yaml names no operation — every comparison below would pass by being empty")
+		t.Fatal("openapi.yaml names no operation — every comparison below would pass by being empty")
 	}
 	return ids
 }

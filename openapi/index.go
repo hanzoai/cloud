@@ -16,7 +16,7 @@ package openapi
 // [Path]: the capability is the operation's own tag (HIP-0139 §4, which is
 // x-app), its sentence is that tag's description (openapi/synopsis.go lifted it
 // from the package doc), its stage is x-stage and whether it is shown at all is
-// x-public — the audience rule public.yaml is projected by ([stamp]). There is
+// x-public — the audience rule openapi.yaml is projected by ([stamp]). There is
 // no list here to keep current: a capability that ships next month is in the
 // index the day its routes are in the document, and one that goes beta leaves
 // it the day its manifest row says so.
@@ -118,7 +118,7 @@ type Index struct {
 // The surface is the PUBLIC one — an operation carries the audience the weave
 // stamped on it, so the operator's admin product, the relay doors, the legacy
 // spellings and every capability that is not yet ga are absent from both halves
-// at once. That is the same rule public.yaml is projected by and it is asked
+// at once. That is the same rule openapi.yaml is projected by and it is asked
 // once, here, rather than restated: a beta capability being missing from the
 // root and its name 404ing one segment down are the same fact, which is what
 // keeps the index from telling an unflagged caller that a capability exists.

@@ -229,7 +229,7 @@ test:
     # it runs the raw-go steps in this file — so that check has never once executed
     # in CI. app-contract cannot cover it either: it regenerates these files as a
     # side effect (mk/plugin.mk: describe → build → generate) and then scopes its
-    # porcelain check to openapi.yaml, public.yaml, openapi/floor.json and plugin/, so a stale
+    # porcelain check to openapi.yaml, private.yaml, openapi/floor.json and plugin/, so a stale
     # lift is silently repaired in the runner's tree and never reported. Main went
     # stale straight through that gap — plane.go documents RunOnBehalfIn.Model and
     # apps/agents/zipdoc_gen.go did not carry a word of it.
@@ -353,7 +353,8 @@ test:
     # caught when apps/git's /:org/:repo was swallowing its neighbours.
     #
     # It also pins FRESHNESS, which is why it earns its own entry rather than
-    # riding go-unit: the monolith is gone, so the woven document IS openapi.yaml —
+    # riding go-unit: the monolith is gone, so the woven document IS private.yaml and
+    # openapi.yaml is its customer projection —
     # `make describe` writes it through this same weave, and this verifies the
     # committed subsets weave back to the committed golden byte for byte. A route
     # change that regenerates one and not the other goes red here, in seconds,

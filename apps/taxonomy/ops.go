@@ -35,7 +35,7 @@ const (
 // Nothing here calls openapi.Public, and that is a different question from the
 // one the gate below answers. PUBLIC-READABLE is about AUTHORIZATION: the
 // catalogue read asks for no credential, so the marketing landing renders from it
-// signed out. public.yaml is about AUDIENCE, and this deployment publishes the
+// signed out. openapi.yaml is about AUDIENCE, and this deployment publishes the
 // INFERENCE surface there and nothing else — a rule openapi's own weave enforces.
 // A product catalogue is not inference, so it stays out of the published contract
 // while remaining perfectly reachable.
