@@ -69,7 +69,7 @@ var refusals = []struct{ name, why string }{
 	{"post_git_keys", "POST /v1/git/keys — an SSH key is a credential even on the git surface"},
 	{"delete_git_keys_id", "and removing one is still key management"},
 	{"post_agents_targets_id_key", "POST /v1/agents/targets/{id}/key — enrols a machine agent"},
-	{"delete_keys", "DELETE /v1/keys — the head resource, so no store owns it"},
+	{"delete_account_keys", "DELETE /v1/account/keys — the head resource, so no store owns it"},
 }
 
 // survivors is the useful half: what an agent is FOR. Several of these are here

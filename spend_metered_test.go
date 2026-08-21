@@ -198,14 +198,13 @@ func TestOwnerOfPrefersTheMoreSpecificApp(t *testing.T) {
 		t.Errorf("OwnerOf(unmatched /v1) = %q, want ai (the catch-all)", got)
 	}
 	// A parameterized prefix owns every spelling of its address: the manifest
-	// says :org, a document says {org}, a request carries the slug itself.
+	// says :skill, a document says {skill}, a request carries the slug itself.
 	for _, p := range []string{
-		"/v1/orgs/{org}/entitlements",
-		"/v1/orgs/acme/entitlements",
-		"/v1/orgs/acme/entitlements/anything-below",
+		"/.well-known/agent-skills/{skill}/SKILL.md",
+		"/.well-known/agent-skills/anything/SKILL.md",
 	} {
-		if got := manifest.OwnerOf(p); got != "entitlements" {
-			t.Errorf("OwnerOf(%s) = %q, want entitlements (the :org row)", p, got)
+		if got := manifest.OwnerOf(p); got != "skills" {
+			t.Errorf("OwnerOf(%s) = %q, want skills (the :skill row)", p, got)
 		}
 	}
 	if got := manifest.OwnerOf("/healthz"); got != "" {

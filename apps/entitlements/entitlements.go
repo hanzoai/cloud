@@ -6,9 +6,9 @@
 //
 // Surface (/v1 only):
 //
-//	GET  /v1/entitlements             -> per-app booleans from the org's PLAN (projection.go)
-//	GET  /v1/orgs/:org/entitlements   -> { "enabled": ["engine","chat",...] }
-//	POST /v1/orgs/:org/entitlements   { "add":[...], "remove":[...] }  -> { "enabled":[...] }
+//	GET  /v1/entitlements            -> per-app booleans from the org's PLAN (projection.go)
+//	GET  /v1/entitlements/orgs/:org  -> { "enabled": ["engine","chat",...] }
+//	POST /v1/entitlements/orgs/:org  { "add":[...], "remove":[...] }  -> { "enabled":[...] }
 //
 // TWO AUTHORITIES, NEVER BRAIDED.
 //   - ENABLEMENT (this store): which products the org has toggled on. The org's
@@ -23,7 +23,8 @@
 // product off is never gated). A SUPER ADMIN (owner==AdminOrg) BYPASSES the commerce
 // gate — the operator can comp/grant any product to any org — and may target ANY :org.
 //
-// ORG SCOPING mirrors apps/kms (/v1/kms/orgs/:org): {:org} must equal the
+// ORG SCOPING mirrors apps/kms (/v1/kms/orgs/:org), and so does the address:
+// {:org} must equal the
 // caller's VALIDATED org (c.Org()), unless the caller is a super admin (c.IsAdmin(),
 // minted only for owner==AdminOrg by SanitizeIdentity — never client-forgeable), who
 // may act on any org. A bearer-less forge (X-Org-Id restored, no X-User-Id) fails the
@@ -44,6 +45,13 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// orgs is the per-org enablement sub-tree. It answered at /v1/orgs/:org/entitlements
+// — a root this capability does not own (HIP-0139 §3, §7) — and folds home to the
+// shape apps/kms already serves, so the org scoping rule and the address now read
+// the same way round. One constant, because cmd/zipdoc resolves a typed op's prefix
+// from the CONSTANT VALUE of the Group argument.
+const orgs = "/v1/entitlements/orgs"
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document
@@ -98,7 +106,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mounted = s
 	routes(app, s)
 
-	log.Info("entitlements surface mounted", "prefix", "/v1/orgs/:org/entitlements", "brand", deps.Brand, "commerce", deps.Commerce != nil)
+	log.Info("entitlements surface mounted", "prefix", orgs, "brand", deps.Brand, "commerce", deps.Commerce != nil)
 	return nil
 }
 
@@ -123,9 +131,9 @@ func routes(app cloud.Router, s *service) {
 	// is the identity every projection keys on, and cmd/zipdoc resolves the prefix
 	// the same way, so the prose reaches the document and the tool list.
 	o := ops{s: s}
-	og := app.Group("/v1/orgs")
-	zip.Get(og, "/:org/entitlements", o.get)
-	zip.Post(og, "/:org/entitlements", o.post)
+	og := app.Group(orgs)
+	zip.Get(og, "/:org", o.get)
+	zip.Post(og, "/:org", o.post)
 
 	// The ENTITLEMENT (commerce) projection the @hanzogui/shell reads — the READ
 	// side of the unified paywall (projection.go), distinct from the ENABLEMENT

@@ -31,10 +31,11 @@
 // no plugin/<name> app-binary is missing from this list. manifest/order_test.go
 // freezes the sequence so a reorder is a decision, never an accident — but what a
 // reorder can actually change is narrow, and this header used to overstate it: it
-// claimed account's /v1/commerce/topup/wallet "must precede" commerce's
-// /v1/commerce. Measured, it does not — registering commerce FIRST still delivers
-// /v1/commerce/topup/wallet to account, because the deeper prefix is the more
-// specific one. Which app answers a path is pinned by
+// claimed account had to precede commerce because account named two prefixes under
+// /v1/commerce. Measured, order never decided it — the deeper prefix is the more
+// specific one and wins wherever it is registered — and those two routes are since
+// deleted, so account claims nothing under another app's stem at all. Which app
+// answers a path is pinned by
 // TestEveryServedPathReachesTheAppThatServesIt (manifest/router_test.go), which
 // asks the real router built from these rows; the freeze guards the sequence, not
 // the routing.
@@ -58,7 +59,7 @@ var Apps = []App{
 	// the bare "/v1" remainder, which serves none of them.
 	{Name: "metrics", Prefixes: []string{"/v1/logs", "/v1/metrics", "/v1/traces"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
-	{Name: "account", Prefixes: []string{"/v1/appearance", "/v1/avatar", "/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed", "/v1/keys", "/v1/orgs"}},
+	{Name: "account", Prefixes: []string{"/v1/account"}},
 	// The three root /.well-known documents are named EXACTLY, one prefix each, and
 	// naming them at all is new: OIDC discovery and JWKS live at the ISSUER root by
 	// spec (RFC 8414 / OIDC Discovery 1.0), so before iam was grafted the only thing
@@ -351,14 +352,14 @@ var Apps = []App{
 	{Name: "destinations", Prefixes: []string{"/v1/destinations"}},
 	{Name: "cloudflare", Prefixes: []string{"/v1/cloudflare"}},
 	{Name: "sbom", Prefixes: []string{"/v1/sbom"}, Stage: Beta},
-	// /collaborator is team's SECOND plane and it is app-level on purpose: the Team
-	// front derives both the Y.js WebSocket (GET /collaborator) and the markup
-	// snapshot RPC (POST /collaborator/rpc/{documentId}) from COLLABORATOR_URL, not
-	// from the /v1/team base. Unnamed here they fell past every prefix to the
-	// console the host serves at "/", so the collaborative editor got the HTML shell
-	// and the typed RPC — published in openapi.yaml and therefore in every generated
-	// SDK and the MCP tool list — reached no app at all.
-	{Name: "team", Prefixes: []string{"/collaborator", "/v1/team"}},
+	// The collaborator lanes — the Y.js WebSocket and the markup snapshot RPC — are
+	// branches of /v1/team now. They answered at a bare /collaborator, app-level
+	// because the Team front derives both from COLLABORATOR_URL rather than from the
+	// /v1/team base; unnamed here they fell past every prefix to the console the host
+	// serves at "/", so the collaborative editor got the HTML shell and the typed RPC
+	// reached no app at all. Under one prefix that cannot happen again, and the front
+	// names the new address in the one config value it already reads.
+	{Name: "team", Prefixes: []string{"/v1/team"}},
 	// /meet is the native call client, embedded in meet's own binary and served
 	// from the same origin as its API — the same one-binary/one-origin shape
 	// tasks has just above. The API side is the whole /v1/meet subtree now that
@@ -371,7 +372,7 @@ var Apps = []App{
 	{Name: "notify", Prefixes: []string{"/v1/notify"}},
 	{Name: "channels", Prefixes: []string{"/v1/channels"}},
 	{Name: "gateway", Prefixes: []string{"/v1/gateway"}},
-	{Name: "entitlements", Prefixes: []string{"/v1/entitlements", "/v1/orgs/:org/entitlements"}},
+	{Name: "entitlements", Prefixes: []string{"/v1/entitlements"}},
 	// The three file addresses used to be roots of their own — /v1/upload,
 	// /v1/download, /v1/files — because that is the shape the LibreChat code
 	// interpreter's clients compose. They compose them off a CONFIGURABLE base,
