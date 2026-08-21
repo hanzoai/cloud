@@ -42,11 +42,11 @@
       "sha256": "d33661dee3660ab83bf4054192400e934922cd876a88b0c9789b9bedf30759b3"
     },
     {
-      "description": "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents., Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (ref",
-      "name": "admin_affiliates",
-      "path": "admin_affiliates/SKILL.md",
+      "description": "Read admin affiliate: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents., Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (refe",
+      "name": "admin_affiliate",
+      "path": "admin_affiliate/SKILL.md",
       "service": "admin",
-      "sha256": "a2cf9751861ac31430c53390e19c93e663ba730c984da14e3d7b7e5b4654dc5b"
+      "sha256": "d71716465c93c4434543c3a0ad02c4bec0769f877d708edf19c162dce85add73"
     },
     {
       "description": "Read admin aimetrics: Is the fleet AI board: LLM generations over gen_ai spans (count, cost, avg/p95 latency, per-model), per-model usage from the live cloud_usage ledger, and the eval plane (traces, scores, score names, runs, and the average-score trend)..",
@@ -77,11 +77,11 @@
       "sha256": "aaed82b261a2ad6aacd3913aa61e6f045e3465816d75c71dd625d5a22711df59"
     },
     {
-      "description": "Read admin authors: Returns the platform's whole author program — every org's author record, not the caller's — with each one's repository and deploy counts and a fleet roll-up of the money accrued, pending and paid., Returns the audit trail behind ONE author's royalty — the same",
-      "name": "admin_authors",
-      "path": "admin_authors/SKILL.md",
+      "description": "Read admin author: Returns the platform's whole author program — every org's author record, not the caller's — with each one's repository and deploy counts and a fleet roll-up of the money accrued, pending and paid., Returns the audit trail behind ONE author's royalty — the same ",
+      "name": "admin_author",
+      "path": "admin_author/SKILL.md",
       "service": "admin",
-      "sha256": "cf3b4db3fe7a3111c4aa051b21c6d1e650e66b15f6c5efe89ba0918da8b399ba"
+      "sha256": "52b60bbe13c8ff6441db77956494762a63ed47ad7087d36564bf0830ed876483"
     },
     {
       "description": "Read admin bases: Lists the tenant Base instances in the caller's window — a SuperAdmin sees every tenant's, anyone else only their own subtree's..",
@@ -231,11 +231,11 @@
       "sha256": "c1a66d652d36691706f681f62c84420ccc805e1c544e2e693196ab5edd650c41"
     },
     {
-      "description": "Read admin referrals: Returns every referral edge in the directory with a fleet summary..",
-      "name": "admin_referrals",
-      "path": "admin_referrals/SKILL.md",
+      "description": "Read admin referral: Returns every referral edge in the directory with a fleet summary..",
+      "name": "admin_referral",
+      "path": "admin_referral/SKILL.md",
       "service": "admin",
-      "sha256": "1858c7f4d3390e8bc4210c8798b764d219c48c547a97ef7b360b0c632fc0b9ad"
+      "sha256": "3361580c0fa56af8ccd5ded237c064b3eb082bed2cb54395135d5b5175d5d880"
     },
     {
       "description": "Read admin revenue: Is the fleet money board: total prepaid balances held, total realized spend, MRR, ARPU, a per-customer table sorted highest-revenue first, and a real 30-day spend trend from the usage ledger..",
@@ -329,25 +329,25 @@
       "sha256": "2eae5d835536ad2085aa7a2bfb80efe984b150499c70757c97c8db815bfaa8c9"
     },
     {
-      "description": "Read affiliates affiliates: Answers the caller org's OWN affiliate standing: status, referral code and share link, commission rate, how many orgs it has referred, and its lifetime accrued, still-pending and already-paid commission in integer cents, with its payout history..",
-      "name": "affiliates_affiliates",
-      "path": "affiliates_affiliates/SKILL.md",
-      "service": "affiliates",
-      "sha256": "e56f3612e92c7ff747a4ce068e3352e46c4c10d6f3ab6c2d1565a4162c20c964"
+      "description": "Read affiliate affiliate: Answers the caller org's OWN affiliate standing: status, referral code and share link, commission rate, how many orgs it has referred, and its lifetime accrued, still-pending and already-paid commission in integer cents, with its payout history..",
+      "name": "affiliate_affiliate",
+      "path": "affiliate_affiliate/SKILL.md",
+      "service": "affiliate",
+      "sha256": "81189c5d3f5583749ccdb74c1dd7ce323323c555782eb110c37a32e8fa04e2d8"
     },
     {
-      "description": "Read affiliates leaderboard: Answers the top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank..",
-      "name": "affiliates_leaderboard",
-      "path": "affiliates_leaderboard/SKILL.md",
-      "service": "affiliates",
-      "sha256": "a32565f7e8d977fd513d5c8df995122f39d87b7860f30224cec4a15c11287b1b"
+      "description": "Read affiliate leaderboard: Answers the top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank..",
+      "name": "affiliate_leaderboard",
+      "path": "affiliate_leaderboard/SKILL.md",
+      "service": "affiliate",
+      "sha256": "fc4150b742d27afa71a5c6a8361c357f80689a189a7ea2aacacf71bfe0b01743"
     },
     {
-      "description": "Read affiliates me: Answers the richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there., Answers",
-      "name": "affiliates_me",
-      "path": "affiliates_me/SKILL.md",
-      "service": "affiliates",
-      "sha256": "afd712e6537bd157c42f1fa729239a4b134fe030e8b11d4b31cea58856c80a5c"
+      "description": "Read affiliate me: Answers the richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there., Answers ",
+      "name": "affiliate_me",
+      "path": "affiliate_me/SKILL.md",
+      "service": "affiliate",
+      "sha256": "d6537565b37363c817fbc9c5f0cd2a6d9cf998bc6fdfecb2600c5d2496eed6f1"
     },
     {
       "description": "Read agents activity: Serves the org-wide recent-activity feed..",
@@ -700,18 +700,18 @@
       "sha256": "b1a45227307f3560392a587f5e22eeff8a308baa78e40aa8a76349b99f9c151f"
     },
     {
-      "description": "Read authors authors: Returns the caller's author-program dashboard: enrolment status, linked forge login, verified repositories and owner-wide claims, recorded deploys, accrued / pending / paid royalty, and the payout history..",
-      "name": "authors_authors",
-      "path": "authors_authors/SKILL.md",
-      "service": "authors",
-      "sha256": "10bdb91432c433435bc2216c43d81cebf2b6e0cc6eb9516de6da4012bc904c8e"
+      "description": "Read author author: Returns the caller's author-program dashboard: enrolment status, linked forge login, verified repositories and owner-wide claims, recorded deploys, accrued / pending / paid royalty, and the payout history..",
+      "name": "author_author",
+      "path": "author_author/SKILL.md",
+      "service": "author",
+      "sha256": "bedfc12d0ca5f6c3190d50f73e85b8fb8943a8fdfdbea0305f6d8ac2be865b2e"
     },
     {
-      "description": "Read authors basis: Returns the AUDIT TRAIL behind the caller's own royalty: every ledger row with the spend it was computed from, the share applied at the time, the platform's matching half, whether each row satisfies the formula, and the attribution edges that already existed w",
-      "name": "authors_basis",
-      "path": "authors_basis/SKILL.md",
-      "service": "authors",
-      "sha256": "91f96c6dbc1b202511fef64b3515b378460c32ab758e6170261f9687d4c035fa"
+      "description": "Read author basis: Returns the AUDIT TRAIL behind the caller's own royalty: every ledger row with the spend it was computed from, the share applied at the time, the platform's matching half, whether each row satisfies the formula, and the attribution edges that already existed wh",
+      "name": "author_basis",
+      "path": "author_basis/SKILL.md",
+      "service": "author",
+      "sha256": "9fc371c255dbd18eee10c3669eca711fa20015f48f9c245df17d9a4f561a21f4"
     },
     {
       "description": "Read authz health: Liveness of the policy engine.",
@@ -1792,18 +1792,18 @@
       "sha256": "3b68f15068a05afec920393d5099e7b2cc030f362163991871dc79359dfdb8eb"
     },
     {
-      "description": "Read entitlements entitlements: Projection reports which console apps the CALLER's org may open, and the plan slug that decides it..",
-      "name": "entitlements_entitlements",
-      "path": "entitlements_entitlements/SKILL.md",
-      "service": "entitlements",
-      "sha256": "ce939647f85cab654d41c2c2deb3f0527f3a99bc8b28e1cf496a1e2f1c7c12d0"
+      "description": "Read entitlement entitlement: Projection reports which console apps the CALLER's org may open, and the plan slug that decides it..",
+      "name": "entitlement_entitlement",
+      "path": "entitlement_entitlement/SKILL.md",
+      "service": "entitlement",
+      "sha256": "45fcfdacfc5fb533e79ddf9aa48ddad38b9221c6805994709c3182d5674285bf"
     },
     {
-      "description": "Read entitlements orgs: Get lists the products an org has ENABLED — its own intent, which the console's paid-product sidebar reads to decide what to show..",
-      "name": "entitlements_orgs",
-      "path": "entitlements_orgs/SKILL.md",
-      "service": "entitlements",
-      "sha256": "8d9840077c4954ba875d7d806e4f3f2f42bccb19c045bbe6e7bec35e33fd950c"
+      "description": "Read entitlement orgs: Get lists the products an org has ENABLED — its own intent, which the console's paid-product sidebar reads to decide what to show..",
+      "name": "entitlement_orgs",
+      "path": "entitlement_orgs/SKILL.md",
+      "service": "entitlement",
+      "sha256": "8c808ad524b3b7466603f03888c5bf624eb785d7cdbac3b7624e45a8f50cfc63"
     },
     {
       "description": "Read esign documents: Returns your org's documents, newest first., Returns one document with its recipients and field layout., Returns the document's full audit trail, oldest first..",
@@ -1827,53 +1827,53 @@
       "sha256": "20bbc29cf1427cae78545841c4db2f4d245d8885673ddaa62ba13fe687a6ea63"
     },
     {
-      "description": "Read evals datasets: Is the datasets your org has, each with its name, description, metadata and timestamps., Returns one dataset of the caller's org by name, together with its live item count — the one read that answers how big the set actually is., Is the examples in one of you",
-      "name": "evals_datasets",
-      "path": "evals_datasets/SKILL.md",
-      "service": "evals",
-      "sha256": "4f4b80a55f043d9b88a0de17aac3d41bfc469f17b1c5aad7fefbf551d3159ea4"
+      "description": "Read eval datasets: Is the datasets your org has, each with its name, description, metadata and timestamps., Returns one dataset of the caller's org by name, together with its live item count — the one read that answers how big the set actually is., Is the examples in one of your",
+      "name": "eval_datasets",
+      "path": "eval_datasets/SKILL.md",
+      "service": "eval",
+      "sha256": "04f488a187b33f26d70bf72d89cbde01495536103a0a4b3674d9f92b382dc236"
     },
     {
-      "description": "Read evals evaluators: Is the judges your org has defined, each with its judge model, criteria and the score name it writes under..",
-      "name": "evals_evaluators",
-      "path": "evals_evaluators/SKILL.md",
-      "service": "evals",
-      "sha256": "89fc17f1ddd7aab565d86c0130ba4b7de47bddf7713fef8b9dda8068082a6f6c"
+      "description": "Read eval evaluators: Is the judges your org has defined, each with its judge model, criteria and the score name it writes under..",
+      "name": "eval_evaluators",
+      "path": "eval_evaluators/SKILL.md",
+      "service": "eval",
+      "sha256": "336ff7bfb54ca6af617447c3125ee4550e4dd05c195501528235b8c5928dbcd4"
     },
     {
-      "description": "Read evals metrics: Is your org's AI overview board over a window: totals (generations, prompt and completion tokens, cost in cents, errors, success rate, distinct models and users), a gap-filled time series, a per-model breakdown with the long tail folded into \"other\", and laten",
-      "name": "evals_metrics",
-      "path": "evals_metrics/SKILL.md",
-      "service": "evals",
-      "sha256": "a27b911a299fcef804c7729653bffbc6acb748b004961722140cae9b2b0152b4"
+      "description": "Read eval metrics: Is your org's AI overview board over a window: totals (generations, prompt and completion tokens, cost in cents, errors, success rate, distinct models and users), a gap-filled time series, a per-model breakdown with the long tail folded into \"other\", and latenc",
+      "name": "eval_metrics",
+      "path": "eval_metrics/SKILL.md",
+      "service": "eval",
+      "sha256": "40a207a4ad4e505b407bcaeb73b3762b3bfa46c0ce67f62ebf3ac576bcf095a8"
     },
     {
-      "description": "Read evals rubrics: Is the score shapes your org has declared — each name's data type, its numeric bounds and its allowed categories..",
-      "name": "evals_rubrics",
-      "path": "evals_rubrics/SKILL.md",
-      "service": "evals",
-      "sha256": "3d3684e14ec3162a3f4fc0cdcfe5aac40f2fffbd013a9a47dcf9596df064634b"
+      "description": "Read eval rubrics: Is the score shapes your org has declared — each name's data type, its numeric bounds and its allowed categories..",
+      "name": "eval_rubrics",
+      "path": "eval_rubrics/SKILL.md",
+      "service": "eval",
+      "sha256": "19b90a2a57d37f8b382012f6bc704d8418a5172e6abf34ea85067f1ca65ac6a1"
     },
     {
-      "description": "Read evals runs: Is your past runs and how they scored — the dataset and model, the judge model, how many examples were attempted and how many scored, the average score, and when it happened..",
-      "name": "evals_runs",
-      "path": "evals_runs/SKILL.md",
-      "service": "evals",
-      "sha256": "b2f9ca7098b2b2eb2839312a216a2fd09a09aed3b7a8d1749ebfe792c6a4537f"
+      "description": "Read eval runs: Is your past runs and how they scored — the dataset and model, the judge model, how many examples were attempted and how many scored, the average score, and when it happened..",
+      "name": "eval_runs",
+      "path": "eval_runs/SKILL.md",
+      "service": "eval",
+      "sha256": "c6f8fe97a8a2ca395cfbaf7137ee895a68d8ba7abec0c9e31f90ab775eb8ca44"
     },
     {
-      "description": "Read evals scores: Is the score events your org has recorded, narrowed by any of name, runName and traceId..",
-      "name": "evals_scores",
-      "path": "evals_scores/SKILL.md",
-      "service": "evals",
-      "sha256": "5f0e5df2976ac72133e0e541ad6a0f1913722256292d9a2d33b93b4b0c6056a9"
+      "description": "Read eval scores: Is the score events your org has recorded, narrowed by any of name, runName and traceId..",
+      "name": "eval_scores",
+      "path": "eval_scores/SKILL.md",
+      "service": "eval",
+      "sha256": "f1bcaf6925d748579b06b6d86b2932001d7803f78bdbce619523bc6764e090f2"
     },
     {
-      "description": "Read evals traces: Is the traces behind your evaluations — one per model call an evaluation made, carrying its input, output, model and timing — narrowed by any of sessionId, runName and datasetName..",
-      "name": "evals_traces",
-      "path": "evals_traces/SKILL.md",
-      "service": "evals",
-      "sha256": "743e662dd2a99dbfd24778edb629b1c3c0c62fa6884ad5ba83f5e34a58ef5812"
+      "description": "Read eval traces: Is the traces behind your evaluations — one per model call an evaluation made, carrying its input, output, model and timing — narrowed by any of sessionId, runName and datasetName..",
+      "name": "eval_traces",
+      "path": "eval_traces/SKILL.md",
+      "service": "eval",
+      "sha256": "19c6fef20d46ab9cc78fb643fbdf30dcc0047a3262dc7ee3bb96e606918a7dfe"
     },
     {
       "description": "Read event errors: Errors returns the caller org's most recently captured errors, newest first..",
@@ -1939,25 +1939,25 @@
       "sha256": "b65a79e483c4ec1e020bd2117fbad8d33565ee6dce98681d144135bc35b9c1f4"
     },
     {
-      "description": "Read experiments assign: Is the variant one subject is bucketed into, and the payload that variant carries..",
-      "name": "experiments_assign",
-      "path": "experiments_assign/SKILL.md",
-      "service": "experiments",
-      "sha256": "bccc31483d7cb678488eae544d6e1f6f50e489659ef4173b5ba323c487d326e2"
+      "description": "Read experiment assign: Is the variant one subject is bucketed into, and the payload that variant carries..",
+      "name": "experiment_assign",
+      "path": "experiment_assign/SKILL.md",
+      "service": "experiment",
+      "sha256": "6a93e7c61c6104e17640ca51abe66814682d024b13d86b594e52551474b78d4e"
     },
     {
-      "description": "Read experiments experiments: Is every experiment in the caller's org, with its variants, status and decision, ordered by project then id., Is one experiment's definition and lifecycle: variants, weights, control arm, status and winner..",
-      "name": "experiments_experiments",
-      "path": "experiments_experiments/SKILL.md",
-      "service": "experiments",
-      "sha256": "2b314c9bdf1192ccfee9027a4f4841970b92032bc514daf13d04935f73e1ab44"
+      "description": "Read experiment experiment: Is every experiment in the caller's org, with its variants, status and decision, ordered by project then id., Is one experiment's definition and lifecycle: variants, weights, control arm, status and winner..",
+      "name": "experiment_experiment",
+      "path": "experiment_experiment/SKILL.md",
+      "service": "experiment",
+      "sha256": "b6de9e3c7911d6801ad6e1ac6b6c324ca49d78049435d3af741834993f918b74"
     },
     {
-      "description": "Read experiments health: Is whether the experiments subsystem is mounted and serving in this process..",
-      "name": "experiments_health",
-      "path": "experiments_health/SKILL.md",
-      "service": "experiments",
-      "sha256": "be95d013d21a1247d6e19a711bf74d4048da0f6b8bc1acedb4fe9508aa75b5e3"
+      "description": "Read experiment health: Is whether the experiments subsystem is mounted and serving in this process..",
+      "name": "experiment_health",
+      "path": "experiment_health/SKILL.md",
+      "service": "experiment",
+      "sha256": "dfb315b6d4c062b2e24fd760b161b99e96cd2e6d676d2b814d5532dd47b1a09f"
     },
     {
       "description": "Read explorer indexers: Reports the deployment's chain indexer(s) and how far each has indexed..",
@@ -3836,11 +3836,11 @@
       "sha256": "f3f2bd286e2304957ed44b47a24138879d66d3033351620e876f92d8e1722eb7"
     },
     {
-      "description": "Read prefs prefs: Returns the signed-in caller's OWN preference document — the theme, density and pinned nav that follow them across every Zoo surface..",
-      "name": "prefs_prefs",
-      "path": "prefs_prefs/SKILL.md",
-      "service": "prefs",
-      "sha256": "05c63a7624fae7a0f79ae0a7978b9eb0b9455a30e3207bf2acebba140b6adea9"
+      "description": "Read pref pref: Returns the signed-in caller's OWN preference document — the theme, density and pinned nav that follow them across every Zoo surface..",
+      "name": "pref_pref",
+      "path": "pref_pref/SKILL.md",
+      "service": "pref",
+      "sha256": "a023d51cf50c05aaee156e63e0ef3c0b05e2061af02d7e7dbee0cd7050515f79"
     },
     {
       "description": "Read pricing base: Returns the Zoo Base plans — the managed-instance tiers, each with its monthly and annual price, storage and request allowances and feature list..",
@@ -4123,11 +4123,11 @@
       "sha256": "e166f1be19ea33557f826437edf64441de2fd9035ab1129769d8d5398d5a1ded"
     },
     {
-      "description": "Read referrals referrals: Returns the caller's referral code, share link and the referrals they have made..",
-      "name": "referrals_referrals",
-      "path": "referrals_referrals/SKILL.md",
-      "service": "referrals",
-      "sha256": "0b8cac8d5729d9eff15508b11163ea5822ec35f637e7c1887dec03e8ed5b759b"
+      "description": "Read referral referral: Returns the caller's referral code, share link and the referrals they have made..",
+      "name": "referral_referral",
+      "path": "referral_referral/SKILL.md",
+      "service": "referral",
+      "sha256": "0237f48babc0cd260154c4d18eac365abfe26a5957c798ad713d29539889df45"
     },
     {
       "description": "Read registry images: Images lists the org's container repositories, read live from the OCI catalog and filtered server-side to the org's namespace — the page can only ever hold the caller's own images..",
@@ -4578,18 +4578,18 @@
       "sha256": "4638de7e986c340ef8f7889ea0915e0c336d8869a841c124e2acccbb74496fe4"
     },
     {
-      "description": "Read validators challenge: Issues the single-use nonce and the exact message a wallet must sign to claim a validator slot..",
-      "name": "validators_challenge",
-      "path": "validators_challenge/SKILL.md",
-      "service": "validators",
-      "sha256": "02a278e90a8b137d5721c17cb059048adf8f2f7bc6e8404a0b17c045f04538b0"
+      "description": "Read validator challenge: Issues the single-use nonce and the exact message a wallet must sign to claim a validator slot..",
+      "name": "validator_challenge",
+      "path": "validator_challenge/SKILL.md",
+      "service": "validator",
+      "sha256": "d2a257d1f81bfbee57764ad1610ff14bd0a4dd7dd41c8d999d00b181acb65067"
     },
     {
-      "description": "Read validators validators: Returns the validator slots the caller's org has claimed., Returns one claimed validator slot, scoped to the caller's org..",
-      "name": "validators_validators",
-      "path": "validators_validators/SKILL.md",
-      "service": "validators",
-      "sha256": "efbbdbb47fd011ac76b6a76cb0f01b8899f9a8217f19b588cadfea0946b61c43"
+      "description": "Read validator validator: Returns the validator slots the caller's org has claimed., Returns one claimed validator slot, scoped to the caller's org..",
+      "name": "validator_validator",
+      "path": "validator_validator/SKILL.md",
+      "service": "validator",
+      "sha256": "74b4e826cf086e2e9f565f2d35a3f2293590ac93050afd401c5d1331d3a632f6"
     },
     {
       "description": "Read videos content: Implements GET /v1/videos/{id}/content — download the finished MP4..",

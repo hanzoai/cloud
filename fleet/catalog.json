@@ -68,50 +68,50 @@
    "doc": "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution."
   }
  ],
- "affiliates": [
+ "affiliate": [
   {
-   "id": "get_affiliates",
+   "id": "get_affiliate",
    "doc": "Answers the caller org's OWN affiliate standing: status, referral\ncode and share link, commission rate, how many orgs it has referred, and its\nlifetime accrued, still-pending and already-paid commission in integer cents,\nwith its payout history.\n\nAn org that never applied gets an honest `isAffiliate:false` and the default\nrate rather than a 404 — the console renders the apply form off that answer.\n\nThe affiliate is resolved from the VALIDATED org, never from a field, so this\ncan only ever read the caller's own row; without a principal it is refused. It\nis a PURE READ: nothing accrues until the sweep runs. Commission is earned on\nHanzo's MARGIN, never on the referred customer's bill, so nothing here changes\nwhat that customer pays.",
    "read": true
   },
   {
-   "id": "get_affiliates_leaderboard",
+   "id": "get_affiliate_leaderboard",
    "doc": "Answers the top affiliates by lifetime accrued commission, shown by\nOPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.\n\nIt never discloses an org identity and never a referred org's usage. An\naffiliate that has set no handle still OCCUPIES its rank but is not listed —\nso opting out hides the name, not the position, and the visible board must not\nbe read as a complete roster.\n\nThe caller's own row carries its exact GLOBAL rank, computed over the whole\napproved set rather than over the page, so it is right well outside the top of\nthe board. Only an approved affiliate has a rank. Requires a validated\nprincipal; a signed-in non-affiliate may read the board but gets no personal\nrow.",
    "read": true
   },
   {
-   "id": "get_affiliates_me",
+   "id": "get_affiliate_me",
    "doc": "Answers the richer self-view: the same lifetime accrued, pending and paid\ncommission and payout history, plus the caller's downline broken out by upline\nLEVEL — direct, second, third — each with the rate paid at that level and how\nmany orgs sit there.\n\nCommission is MULTI-LEVEL: a referred org's spend pays up its referral chain,\nthree levels deep and no further. The direct level is the affiliate's own\nnegotiated rate; the second and third are platform-wide switches, read live,\nso the schedule shown is the one actually in force rather than one compiled\nin. A caller that has not applied still gets that schedule alongside\n`isAffiliate:false`, so the console can show what it would earn.\n\nScoped to the validated org and nothing else, and refused without a\nprincipal. A PURE READ — it reports the downline but accrues nothing.",
    "read": true
   },
   {
-   "id": "get_affiliates_me_earnings",
+   "id": "get_affiliate_me_earnings",
    "doc": "Answers the caller's own commission ledger: per period, the margin it\nearned against and the commission taken from that margin; and per referred\norg, that referral's aggregate contribution. Integer cents throughout.\n\nThe per-org view deliberately carries the affiliate's OWN earned share and NOT\nthe referred org's spend or margin. An affiliate is entitled to what it\nearned, not to a restatement of its customer's usage — the period view is\nwhere the margin base appears, aggregated across every referral.\n\nScoped server-side to the validated caller's affiliate; a caller that is not\none gets `isAffiliate:false`.",
    "read": true
   },
   {
-   "id": "get_affiliates_me_links",
+   "id": "get_affiliate_me_links",
    "doc": "Answers the caller's share links, each with its URL and its funnel:\nclicks tracked, signups — orgs attributed with that code — and conversions,\nmeaning how many of those signups have actually produced commission.\n\nSignups and conversions are DERIVED from the commission ledger and never\nstored, so they cannot drift from the money. Clicks are the one stored counter\nand the one that is pure vanity.\n\nAny pending public click pings are folded into the store before the read, in\none batch — which is how the counters stay current without a database write\nper click. Scoped to the validated caller's own affiliate; a non-affiliate\ngets `isAffiliate:false` and the link cap.",
    "read": true
   },
   {
-   "id": "post_affiliates_apply",
+   "id": "post_affiliate_apply",
    "doc": "Enrolls the caller's OWN org as an affiliate at status `applied`,\noptionally requesting a vanity code, and answers the record — 201 on the first\napply, 200 with `created:false` afterwards.\n\nIDEMPOTENT, first apply wins: one affiliate per org, so re-applying never\ncreates a second row and never resets an existing approval. Applying is not\njoining — no code is minted and nothing accrues until staff approve, which is\nwhere both the code and the commission rate come from.\n\nThe org is the validated caller's, never a field. A malformed vanity code is\nrefused up front; the code is only REQUESTED here, and approval may mint a\ndifferent one if the requested code is taken."
   },
   {
-   "id": "post_affiliates_attribute",
+   "id": "post_affiliate_attribute",
    "doc": "Records the first-touch edge every later commission is computed\nfrom: the caller's org was referred by the affiliate that owns this code.\n\nThe REFERRED org is the validated caller, never a field. A caller that could\nname the referred org could attach itself to somebody else's revenue. The\naffiliate is resolved from the code, and only an APPROVED affiliate's code\nresolves.\n\nFIRST TOUCH WINS, set once: one affiliate per referred org, so a re-post\nanswers the existing edge with `created:false` rather than moving the\nattribution. Self-attribution is refused, and so is a code that would make a\ncycle in the upline chain. An unknown code is a 404, deliberately: an\naffiliate code IS a public shareable link, so whether one is real is public by\ndesign, and the caller legitimately needs to know its link resolved.\n\nA user-level mirror of the edge is written best-effort; a conflict there never\nfails the org attribution, which is the money-bearing one."
   },
   {
-   "id": "post_affiliates_click",
+   "id": "post_affiliate_click",
    "doc": "Counts a click on a share link. PUBLIC — it takes no principal, because\na visitor clicking a shareable link has no session yet.\n\nThe ping folds into an in-memory buffer and NEVER writes the money database\nsynchronously, so a click flood cannot contend with the accrual and payout\nwrite path; tallies are flushed in one batch on the next authenticated links\nread and at shutdown. Clicks are a vanity metric: no accrual and no payout\never reads them — those key on real metered spend — so click inflation cannot\nmove money.\n\nAny well-formed code is accepted WITHOUT checking that it exists,\ndeliberately: this is not a code-existence oracle. `counted` reports that the\nbuffer took the ping, not that the code is real; an unknown code simply no-ops\nat flush time."
   },
   {
-   "id": "post_affiliates_me_handle",
+   "id": "post_affiliate_me_handle",
    "doc": "Sets the caller's public leaderboard display name, or clears it.\n\nThe handle IS the opt-in. An empty handle opts out: the affiliate keeps its\nrank and can still see its own row, it simply stops being listed to anyone\nelse. That is the whole privacy control — there is no separate visibility\nflag, and no way to be listed without choosing a name.\n\nRequires a validated principal and an existing affiliate record; apply first.\nThe handle is bounded and restricted to letters, digits, space, hyphen,\nunderscore and dot."
   },
   {
-   "id": "post_affiliates_me_links",
+   "id": "post_affiliate_me_links",
    "doc": "Mints a new share link for the caller's own affiliate and answers it\nwith its full URL, 201.\n\nAPPROVAL IS REQUIRED: an org that has applied but is not approved is refused,\nbecause a link that cannot accrue is a link that quietly loses the referral. A\nrequested vanity code must be valid and free across the WHOLE directory —\ncodes are one global namespace, so a taken code is a 409 rather than a silent\nalias. Omit the code and a random one is minted.\n\nBounded per affiliate. The label is cosmetic: it is trimmed, stripped of\ncontrol characters and capped, and it is never part of a code."
   }
  ],
@@ -263,27 +263,27 @@
    "read": true
   }
  ],
- "authors": [
+ "author": [
   {
-   "id": "get_authors",
+   "id": "get_author",
    "doc": "Returns the caller's author-program dashboard: enrolment status,\nlinked forge login, verified repositories and owner-wide claims, recorded deploys,\naccrued / pending / paid royalty, and the payout history.\n\nIt answers ONE OF TWO SHAPES from this address. An org that has never connected\ngets {\"isAuthor\": false, \"defaultShareBps\", \"badgeBase\"} — an honest \"not enrolled\"\nrather than a 404, so the console can render the connect form. An enrolled org gets\nthe dashboard: isAuthor, id, status, githubLogin, verified, verifyCode, verifyFile,\nverifySnippet, shareBps, badgeBase, repos, orgs, deploys, accruedCents,\npendingCents, paidCents, payouts and ledger.\n\nFor an APPROVED author this read ALSO runs the accrual sweep opportunistically, so\nthe dashboard is self-updating. That is why the royalty AUDIT lives at its own\naddress: an audit must not move the money it is auditing.",
    "read": true
   },
   {
-   "id": "get_authors_basis",
+   "id": "get_author_basis",
    "doc": "Returns the AUDIT TRAIL behind the caller's own royalty: every\nledger row with the spend it was computed from, the share applied at the time, the\nplatform's matching half, whether each row satisfies the formula, and the\nattribution edges that already existed when the row was written.\n\nIt answers ONE OF TWO SHAPES. An org that has never connected gets\n{\"isAuthor\": false, \"defaultShareBps\"} — never a 404, which would answer \"is this\norg an author?\" for anyone who asked. An enrolled org gets the basis: isAuthor, id,\nstatus, asOf, shareBps, platformShareBps, defaultShareBps, shareSource, settlesTo,\nmethod (the formula, the rate card and the sizing), ledger, reconciliation, window,\nand period when one was requested.\n\nThis read NEVER sweeps, and that is the point of it being a separate address from\nthe dashboard: an audit must not move the money it is auditing, so calling it N\ntimes leaves the balances and the ledger byte-identical.",
    "read": true
   },
   {
-   "id": "post_authors_connect",
+   "id": "post_author_connect",
    "doc": "Enrols the caller's org in the author program at status \"connected\"\nand returns its enrolment, including the verify code the file method needs. It is\nIDEMPOTENT: a second call returns the same enrolment rather than a conflict.\n\nThe forge login is taken from IAM's LINKED account for the provider when there is\none — that is identity proof, not a claim — and only otherwise from the login in\nthe body, which then has to be proven per repository. Connecting does not admit an\norg to earning: a platform reviewer approves that separately.\n\nAnswers 201 when it enrolled the org and 200 when it found an existing enrolment."
   },
   {
-   "id": "post_authors_deploys_record",
+   "id": "post_author_deploys_record",
    "doc": "Records that the caller's org deployed a project built from a\nsource repository, which is the edge that makes an author's work earn royalty.\n\nIt is deliberately NOT an error for a deploy to attribute to nobody: a project\nbuilt from no repository, or from one no author has verified, answers\n{\"recorded\": false, \"reason\"} so a deploy pipeline can fire this on every deploy\nwithout branching. Attribution resolves per-repository first, then owner-wide, so a\nrepository with its own claim always earns for its own author.\n\nA deploy of a Hanzo-maintained template attributes to the platform treasury, and a\nself-deploy (the author's own org deploying its own repository) is recorded for\nprovenance but excluded from accrual. The edge is idempotent per\nrepository+project+org.\n\nAnswers 201 when it recorded a new edge and 200 otherwise."
   },
   {
-   "id": "post_authors_repos_verify",
+   "id": "post_author_repos_verify",
    "doc": "Proves that the caller owns a repository — or a whole OWNER — and\nrecords the claim, which is what makes deploys of that code earn royalty.\n\nOwnership is proven the SAME two ways in both cases, tried in order: an IAM-linked\nforge token with admin or push permission, or a hanzo.json on the default branch\ncarrying the author's verify code. Claiming an OWNER proves it against that\nowner's \".github\" control repository, and is exactly as strong as a per-repository\nclaim — an owner the caller cannot prove is refused with 422, never assumed.\n\nA per-repository claim wins over an owner-wide one, so a specifically-claimed\nrepository always earns for its own author. A repository another author has\nalready verified is a 409. The org must have connected first.\n\nAnswers 201 when it recorded a new claim and 200 when the claim already existed."
   }
  ],
@@ -1523,19 +1523,19 @@
    "read": true
   }
  ],
- "entitlements": [
+ "entitlement": [
   {
-   "id": "get_entitlements",
-   "doc": "Projection reports which console apps the CALLER's org may open, and the plan slug\nthat decides it. It is the READ side of the unified paywall: the org's plan tier\nresolved from commerce, which is a different authority from the enablement store\nbehind GET /v1/entitlements/orgs/{org} (that one is the org's own on/off intent).\n\nIt fails SAFE-TO-LOCKED, never 500: an unvalidated principal is a 403, but a\ncommerce outage reports every app locked at 200 rather than breaking the shell.\nThe ENFORCEMENT path still fails open, so functionality survives the same outage\neven while the UI conservatively shows locked.",
+   "id": "get_entitlement",
+   "doc": "Projection reports which console apps the CALLER's org may open, and the plan slug\nthat decides it. It is the READ side of the unified paywall: the org's plan tier\nresolved from commerce, which is a different authority from the enablement store\nbehind GET /v1/entitlement/orgs/{org} (that one is the org's own on/off intent).\n\nIt fails SAFE-TO-LOCKED, never 500: an unvalidated principal is a 403, but a\ncommerce outage reports every app locked at 200 rather than breaking the shell.\nThe ENFORCEMENT path still fails open, so functionality survives the same outage\neven while the UI conservatively shows locked.",
    "read": true
   },
   {
-   "id": "get_entitlements_orgs_by_org",
-   "doc": "Get lists the products an org has ENABLED — its own intent, which the console's\npaid-product sidebar reads to decide what to show. It is distinct from what the\norg's plan ENTITLES it to (that is GET /v1/entitlements, resolved from commerce).\n\nA caller may only read its OWN org's row; a platform super admin may read any.",
+   "id": "get_entitlement_orgs_by_org",
+   "doc": "Get lists the products an org has ENABLED — its own intent, which the console's\npaid-product sidebar reads to decide what to show. It is distinct from what the\norg's plan ENTITLES it to (that is GET /v1/entitlement, resolved from commerce).\n\nA caller may only read its OWN org's row; a platform super admin may read any.",
    "read": true
   },
   {
-   "id": "post_entitlements_orgs_by_org",
+   "id": "post_entitlement_orgs_by_org",
    "doc": "Post turns products on or off for an org and returns the enabled set afterwards.\n\nA product may only be ENABLED if the org's plan already ENTITLES it, so enabling\nnever spends new money — a product the plan does not grant answers 402 and the\nconsole routes that to an upgrade prompt. DISABLING is never gated. A platform\nsuper admin bypasses the plan check (operator comp/grant) and may target any org;\neveryone else may only change their own. Commerce unreachable is a 503, never an\nimplicit yes."
   }
  ],
@@ -1599,78 +1599,78 @@
    "doc": "Declines to sign, with an optional reason.\n\nIt records this recipient's refusal and moves the WHOLE DOCUMENT to REJECTED —\none declining signer ends it for everyone, and there is no route back: the\ndocument cannot then be signed or completed. An optional reason is stored and\nwritten onto the audit trail with the rejection, which is what the sender sees.\n\nA document not out for signature is a 409, and so is a recipient who has already\nsigned or already rejected — a refusal cannot be taken back or repeated. The\ntoken is the whole credential; one that does not resolve under the org segment\nis a 404."
   }
  ],
- "evals": [
+ "eval": [
   {
-   "id": "delete_evals_datasets_by_name",
+   "id": "delete_eval_datasets_by_name",
    "doc": "Removes the named dataset of the caller's org AND all of its\nexamples, in one transaction.\n\nThis is not a detach: the examples are gone with the set, so a dataset cannot\nbe resurrected by re-creating the name. A name this org does not have is 404 —\nnever a silent success — and a name belonging to another tenant is the same\n404, because the delete is predicated on the validated org. Requires a\nvalidated principal; 403 without one. Runs and scores already recorded against\nthe dataset are telemetry events and are NOT deleted with it."
   },
   {
-   "id": "get_evals_datasets",
+   "id": "get_eval_datasets",
    "doc": "Is the datasets your org has, each with its name, description,\nmetadata and timestamps.\n\nIt is the only way to enumerate what an org holds. Requires a validated\nprincipal; 403 without one. Every row is filtered on the validated org, so\nthere is no parameter that reaches another tenant's datasets. The item count is\nNOT populated here — read one dataset to get it.",
    "read": true
   },
   {
-   "id": "get_evals_datasets_by_name",
+   "id": "get_eval_datasets_by_name",
    "doc": "Returns one dataset of the caller's org by name, together with its\nlive item count — the one read that answers how big the set actually is.\n\nA name this org does not have is 404, which is also what another tenant's\ndataset looks like from here. Requires a validated principal; 403 without one.",
    "read": true
   },
   {
-   "id": "get_evals_datasets_by_name_items",
+   "id": "get_eval_datasets_by_name_items",
    "doc": "Is the examples in one of your datasets — the set is named in the\npath, because this collection only exists inside one.\n\nArchived examples are included, so the caller sees the whole set rather than\nonly what a run would use. Requires a validated principal; 403 without one, and\nthe read is filtered on the validated org, so naming another tenant's dataset\nreturns nothing rather than its contents.",
    "read": true
   },
   {
-   "id": "get_evals_evaluators",
+   "id": "get_eval_evaluators",
    "doc": "Is the judges your org has defined, each with its judge model,\ncriteria and the score name it writes under.\n\nRequires a validated principal; 403 without one, and the listing is filtered on\nthe validated org.",
    "read": true
   },
   {
-   "id": "get_evals_metrics",
+   "id": "get_eval_metrics",
    "doc": "Is your org's AI overview board over a window: totals\n(generations, prompt and completion tokens, cost in cents, errors, success\nrate, distinct models and users), a gap-filled time series, a per-model\nbreakdown with the long tail folded into \"other\", and latency percentiles read\nfrom the GenAI spans.\n\nThe window the answer was actually computed over is echoed back, so a client\nnever has to infer it. A platform admin sees the board across ALL orgs;\neveryone else sees their own.\n\nThe board is HONEST-EMPTY where it cannot be computed: with no datastore wired,\nor under a named project scope the usage ledger does not yet carry, it answers a\nvalid board with zero totals and a flat series rather than a fabricated number\nor a 500. Requires a validated principal; 403 without one.",
    "read": true
   },
   {
-   "id": "get_evals_rubrics",
+   "id": "get_eval_rubrics",
    "doc": "Is the score shapes your org has declared — each name's data\ntype, its numeric bounds and its allowed categories.\n\nRequires a validated principal; 403 without one, and the listing is filtered on\nthe validated org.",
    "read": true
   },
   {
-   "id": "get_evals_runs",
+   "id": "get_eval_runs",
    "doc": "Is your past runs and how they scored — the dataset and model, the\njudge model, how many examples were attempted and how many scored, the average\nscore, and when it happened.\n\nRequires a validated principal; 403 without one, and rows are filtered on the\nvalidated org. These records come from the metastore rather than the datastore,\nso they are readable on a deployment with no telemetry wired — but a run's\ntraces and scores are not.",
    "read": true
   },
   {
-   "id": "get_evals_scores",
+   "id": "get_eval_scores",
    "doc": "Is the score events your org has recorded, narrowed by any of name,\nrunName and traceId.\n\nThe org is bound as an authoritative predicate on the query, never taken from a\nheader, so a filter can narrow the caller's own scores but can never widen past\nthem. Requires a validated principal; 403 without one. Scores live in the\ndatastore, so a deployment with none wired answers 503 rather than an empty\npage that would read as \"no scores\".",
    "read": true
   },
   {
-   "id": "get_evals_traces",
+   "id": "get_eval_traces",
    "doc": "Is the traces behind your evaluations — one per model call an\nevaluation made, carrying its input, output, model and timing — narrowed by any\nof sessionId, runName and datasetName.\n\nScoped by org AND by project: the project is the caller's server-minted scope,\nnot a parameter, so it cannot be widened by asking. Requires a validated\nprincipal; 403 without one. Traces live in the datastore, so a deployment with\nnone wired answers 503 rather than an empty page.",
    "read": true
   },
   {
-   "id": "post_evals_datasets",
+   "id": "post_eval_datasets",
    "doc": "Writes a dataset — the named set of graded examples a run scores\na model against — under the caller's org and answers 201 with it.\n\nThe NAME is the key, not an id: posting a name the org already has updates that\ndataset's description and metadata and keeps its original creation time, so this\nis create-or-edit and never a duplicate. Its items are untouched.\n\nRequires a validated principal; 403 without one. The org comes from the\nvalidated owner claim, never from a client X-Org-Id, so a dataset can only ever\nbe written under the caller's own tenant. A description over 64 KiB is 400."
   },
   {
-   "id": "post_evals_datasets_by_name_items",
+   "id": "post_eval_datasets_by_name_items",
    "doc": "Writes one graded example — its input, its expected output,\nfree-form metadata and a status — into the dataset named in the path, and\nanswers 201 with it.\n\nThat dataset MUST already exist for this org: an unknown one is 404, never a\nsilent create. Requires a validated principal; 403 without one."
   },
   {
-   "id": "post_evals_evaluators",
+   "id": "post_eval_evaluators",
    "doc": "Saves a reusable judge for the caller's org — the judge model\nand the written criteria it grades against — and answers 201 with it.\n\nLike a dataset, the NAME is the key: re-posting a name edits that judge rather\nthan adding a second one. Requires a validated principal; 403 without one."
   },
   {
-   "id": "post_evals_rubrics",
+   "id": "post_eval_rubrics",
    "doc": "Defines the shape of one score name for the caller's org and\nanswers 201 with it.\n\nThis is the integrity contract, not documentation: once a rubric exists for a\nname, every score recorded under that name is checked against it and the\nrubric's data type is AUTHORITATIVE — a caller cannot claim a different one.\nOut-of-range values, unlisted labels and non-finite numbers are refused at\nwrite time.\n\nA CATEGORICAL rubric with no categories is 400, as is a non-finite bound or a\nminValue above maxValue. Requires a validated principal; 403 without one."
   },
   {
-   "id": "post_evals_runs",
+   "id": "post_eval_runs",
    "doc": "Runs a real evaluation and answers the summary when it is finished —\nthis is synchronous work, not a job id.\n\nFor each ACTIVE example in the dataset it calls the model under test, records a\ntrace, calls the LLM-as-judge, and records the judge's score with its\nreasoning. The answer carries the per-item results (item id, trace id, score,\noutput or error) alongside items, scored and avgScore.\n\nThe dataset must belong to the caller's org (404 otherwise) and must have at\nleast one ACTIVE example (422 otherwise).\n\nIt runs as YOU: the caller's own Authorization bearer drives the model gateway,\nso a request without one is 401 rather than a run made anonymously or under a\nservice identity. Only a non-reversible hash of that credential is recorded on\nthe traces.\n\nBounded and honest about it: an org may have at most 4 runs in flight and the\nfifth is 429 rather than queued, and the whole run is capped at 10 minutes —\nexamples past the deadline come back with an error instead of a score, and\nscored counts only real successes. A run where NOTHING scored answers 502, not\na 200 that looks like an evaluation. A run must be able to persist what it\nproduces, so a deployment with no datastore wired is 503 up front. Requires a\nvalidated principal; 403 without one."
   },
   {
-   "id": "post_evals_scores",
+   "id": "post_eval_scores",
    "doc": "Files one score event for the caller's org and answers 201 with it.\n\nThis is how human review and out-of-band graders land beside the automatic\nones: name the score, give it a value (or a stringValue for a categorical\nlabel), and attach it to a trace, a run, a dataset example, or any combination.\n\nScores are validated fail-closed. A value must be FINITE — NaN and Inf are 400\n— and if the org has declared a rubric for this name, that rubric decides the\ntype and the value must satisfy it: inside the numeric bounds, or one of the\nallowed categories. A caller cannot override the declared type by sending a\ndifferent dataType.\n\nA score is TELEMETRY, not metadata, so it needs the datastore: a deployment\nwith none wired answers 503 rather than accepting a score it cannot persist.\nRequires a validated principal; 403 without one, and the org is stamped from\nthe validated claim rather than read off the body."
   }
  ],
@@ -1717,37 +1717,37 @@
    "doc": "Executes a program in a throwaway sandbox and answers with what it printed\nand what it left behind.\n\n`lang` names one of the thirteen the sandbox image carries — py, js, ts, bash, r,\nphp, go, rs, c, cpp, java, d, f90 — and `code` is the whole program, not a\nfragment: a compiled language is compiled and then run, an interpreted one is\ninterpreted, and `args` becomes the program's own argv either way. Nothing is\ninstalled for you; the image is the environment.\n\nA PROGRAM THAT FAILS IS A SUCCESSFUL CALL. A non-zero exit answers 200 with the\ndiagnostics on `stderr`, because \"the code threw\" and \"the interpreter is down\"\nare different facts a caller renders differently. Only the second is an error\nstatus.\n\nRuns are stateful through `session_id`. Omit it and the run gets a fresh sandbox\nwhose id comes back on the answer; pass that id again and the next run sees the\nsame filesystem, so a program can write a file one call and read it the next.\n`files` names bytes already uploaded to a session (POST /v1/exec/upload), copied in\nbefore the program starts. `files` on the ANSWER is what the program created or\nchanged, by comparison against a marker taken at start — so it is the run's real\noutput, not a listing of the directory — and each is fetched from\nGET /v1/exec/download/{session}/{name}.\n\nThe tenant is the caller's, never the body's, at every door. A typed op is also\nan MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no\nroute and therefore no middleware, so nothing there could have checked a\ncredential. tenantOf refuses a context carrying neither a validated principal nor\nexec's own admission marker, so those doors fail closed without a second gate to\nkeep in step."
   }
  ],
- "experiments": [
+ "experiment": [
   {
-   "id": "get_experiments",
+   "id": "get_experiment",
    "doc": "Is every experiment in the caller's org, with its variants, status and\ndecision, ordered by project then id.\n\nScoped to the org resolved from the validated principal — a distinct org is a\ndistinct physical store, so no query here can reach another tenant's rows — and\nfurther narrowed to the caller's project scope when the credential carries one.\nA principal with NO project scope sees the org's experiments across all of its\nprojects, which is the answer a reader most often expects to be filtered and is\nnot.\n\nRequires a validated principal; refuses without one rather than answering an\nempty list.",
    "read": true
   },
   {
-   "id": "get_experiments_by_id",
+   "id": "get_experiment_by_id",
    "doc": "Is one experiment's definition and lifecycle: variants, weights, control\narm, status and winner.\n\nIt reads the registry row only — the definition and the decision, never live\nmeasurements. Assignment lives in the flags plane and outcomes in analytics;\nthis is the value that names both.\n\nScoped to the caller's org and project from the validated principal, so another\ntenant's experiment of the same id is simply not found. An id that is not a\nlegal slug is answered the same way, without a store read — the shape check and\nthe existence check are one answer, so neither leaks the other.",
    "read": true
   },
   {
-   "id": "get_experiments_by_id_assign",
+   "id": "get_experiment_by_id_assign",
    "doc": "Is the variant one subject is bucketed into, and the payload that\nvariant carries.\n\nThe bucketing is a deterministic hash of the subject, so the same subject gets\nthe same arm on every call for as long as the flag definition is unchanged —\nand this is a pure READ: it records nothing. In particular it does NOT record an\nexposure. The caller's SDK must emit the experiment's exposure event itself, or\nthe analysis has an empty denominator and every arm measures zero.\n\nAn empty variant with on false is not an error — it means the flag returned\nnothing for this subject, so the subject is not enrolled. A flags engine that is\nunavailable refuses rather than defaulting to an arm. Requires a validated\nprincipal, and the experiment must exist in the caller's org and project.",
    "read": true
   },
   {
-   "id": "get_experiments_health",
+   "id": "get_experiment_health",
    "doc": "Is whether the experiments subsystem is mounted and serving in this\nprocess.\n\nIt answers unconditionally. It proves exactly one thing — that this binary\nregistered the experiments routes and is dispatching them — and deliberately no\nmore: it reads no principal, opens no per-org registry, and touches neither the\nflags engine nor the analytics plane, so a 200 here says nothing about whether a\ngiven tenant's store will open or whether an analysis can run. It is the only\nroute on this surface that needs no org.\n\nThe static path is registered ahead of the /:id read, so it always wins the\nfirst-match scan. \"health\" is a legal experiment id, which means an experiment\ncreated under that id can never be fetched by id — pick another.",
    "read": true
   },
   {
-   "id": "post_experiments",
+   "id": "post_experiment",
    "doc": "Registers a controlled experiment AND puts its assignment flag live, in\nthat order, so the arms start bucketing subjects the moment this returns 201 —\nthe flag is created active at 100% rollout, with each variant weighted as\ndeclared. There is no separate start call; creating IS starting.\n\nA variant carries an opaque payload this primitive never interprets: a feature\nconfig, an ad-creative id, a subject line, a model id.\n\nRequires a validated principal, and refuses without one. The org and project are\ntaken from that principal and the creator is stamped from the credential — none\nof the three is a body field, so an experiment cannot be filed against another\ntenant. An id already used in this project is a conflict, never a silent\noverwrite: re-creating would stomp the assignment flag of a run in progress.\n\nIt fails closed on the flag write. An experiment whose assignment flag does not\nexist would assign nobody, so if that write fails nothing is registered."
   },
   {
-   "id": "post_experiments_by_id_analyze",
+   "id": "post_experiment_by_id_analyze",
    "doc": "Is per-variant conversion, lift and statistical significance against\nthe control arm.\n\nIt reads per-subject outcomes from the analytics plane over a window, folds them\ninto per-variant samples, and returns each arm's exposed count, conversions,\nrate, lift versus control, two-proportion z, two-tailed p-value and whether it\nclears alpha. Arms with no data still appear with zero exposed, so the read is\ncomplete over the experiment's declared arms; the control arm sorts first. The\npooled-variance estimator is used and the p-value is exact; a degenerate\ncomparison (an empty arm, no variance) answers z 0 and p 1 — not significant,\nnever an error.\n\nOnly EXPOSED subjects are counted, and each is joined to its arm by re-evaluating\nthe assignment flag AT ANALYSIS TIME — not from what was in force during the\nwindow. That is the one rule to get right: analyzing an experiment after its\nwinner has been promoted re-buckets every subject into the promoted arm,\ncollapsing the control to zero exposed and making the result meaningless. Read\nthe analysis before deciding. A subject the flag cannot place is dropped rather\nthan allowed to poison the fold.\n\nThe winner in the response is ADVISORY — the significant, control-beating arm\nwith the highest rate, or empty when inconclusive. It promotes nothing; the\ndecision is a separate, explicit act.\n\nEvery plane read is scoped to the caller's org. Per-variant samples are also\nwritten to the research evidence plane as immutable ab rows, best-effort: the\nanalysis is still returned if that write fails, because the samples are\nrecomputable, and the failure is logged rather than swallowed."
   },
   {
-   "id": "post_experiments_by_id_decide",
+   "id": "post_experiment_by_id_decide",
    "doc": "Promotes one variant to the whole rollout and records who decided.\n\nIt rewrites the assignment flag so the named winner serves 100% of the rollout\nand every other arm 0%, preserving the flag's targeting groups and payloads,\nthen stamps the experiment decided with the winner, the deciding credential and\nthe time. This is a production behaviour change that takes effect immediately\nfor every subject the flag evaluates.\n\nIt requires an ORG ADMIN of the caller's own org — a stricter gate than the rest\nof this surface, matching the flags write plane, because promoting is a flag\nwrite. The admin check runs AFTER the experiment is found, so a caller from\nanother tenant is answered not-found rather than forbidden and learns nothing\nabout what exists.\n\nAn experiment whose assignment flag has gone missing is a conflict rather than a\nsilent no-op — there is nothing to promote.\n\nDeciding is NOT terminal. A second call re-promotes a different variant and\nre-stamps the row; the status stays decided and the previous winner is\noverwritten with no record that it was ever chosen. Nothing here reverts the\nflag to its original weights either, so an experiment cannot be un-decided\nthrough this route — restoring a split means writing the flag definition back\nthrough the flags plane."
   }
  ],
@@ -5393,9 +5393,9 @@
   }
  ],
  "plugins": [],
- "prefs": [
+ "pref": [
   {
-   "id": "get_prefs",
+   "id": "get_pref",
    "doc": "Returns the signed-in caller's OWN preference document — the theme,\ndensity and pinned nav that follow them across every Hanzo surface. There is no\npath to another user's preferences: not for an org admin, not for a platform\nSuperAdmin, because the subject is built from the validated credential and is the\nmandatory predicate on the read. A caller who has never saved anything gets an\nempty document at 200, never a 404, so the user menu always renders.",
    "read": true
   }
@@ -5814,15 +5814,15 @@
    "doc": "Writes your organisation's own allow and deny entries over a set.\n\nIdempotent on the key: writing the same entry twice is one entry, and writing\nit again replaces the verdict and the note. The whole batch is one\ntransaction, so a batch that would cross the per-set bound writes nothing\nrather than half of itself — a half-applied deny list is worse than a refused\none, because nobody can tell which half applied.\n\nYour entries are held in your organisation's own store and are never visible\nto another organisation, and they never change what any other organisation\nsees. The shared baseline is not writable from here at all."
   }
  ],
- "referrals": [
+ "referral": [
   {
-   "id": "get_referrals",
-   "doc": "Returns the caller's referral code, share link and the referrals they have made.\n\nThe code is a stable, deterministic function of the org, so the link in this\nresponse is the same one every time. Each row carries the referee and the status\nof that attribution.\n\nIT IS A PURE READ. It advances no referral, grants nothing and deposits nothing\n— a GET reports state, it never changes it. Qualification is the admin sweep's\njob (POST /v1/admin/referrals/sweep). The one row this handler can write is the\ncaller's OWN code-directory entry (EnsureCode), which materialises a value\nderiveCode already computes deterministically from the org id so the code has an\nO(1) reverse lookup; it carries no money, no referral state and no other tenant.",
+   "id": "get_referral",
+   "doc": "Returns the caller's referral code, share link and the referrals they have made.\n\nThe code is a stable, deterministic function of the org, so the link in this\nresponse is the same one every time. Each row carries the referee and the status\nof that attribution.\n\nIT IS A PURE READ. It advances no referral, grants nothing and deposits nothing\n— a GET reports state, it never changes it. Qualification is the admin sweep's\njob (POST /v1/admin/referral/sweep). The one row this handler can write is the\ncaller's OWN code-directory entry (EnsureCode), which materialises a value\nderiveCode already computes deterministically from the org id so the code has an\nO(1) reverse lookup; it carries no money, no referral state and no other tenant.",
    "read": true
   },
   {
-   "id": "post_referrals_claim",
-   "doc": "Records that the caller's org signed up through a referral code.\n\nThe REFEREE is the validated caller, never a client field, and the referrer is\nresolved from the code — so a caller can only ever attach THEMSELVES to someone\nelse's code. Referring yourself is 400 and an unknown code is 404.\n\nIt is idempotent and first-touch: an org can be referred once, ever. A repeat\ncall returns the referral already on file with created=false and 200, where the\nfirst call answers 201.\n\nRecording a referral grants nothing, and neither does anything downstream of it:\nthe edge later advances to qualified when the referee makes metered spend\n(POST /v1/admin/referrals/sweep), and that is the end of it. No credit is ever\nissued from this package."
+   "id": "post_referral_claim",
+   "doc": "Records that the caller's org signed up through a referral code.\n\nThe REFEREE is the validated caller, never a client field, and the referrer is\nresolved from the code — so a caller can only ever attach THEMSELVES to someone\nelse's code. Referring yourself is 400 and an unknown code is 404.\n\nIt is idempotent and first-touch: an org can be referred once, ever. A repeat\ncall returns the referral already on file with created=false and 200, where the\nfirst call answers 201.\n\nRecording a referral grants nothing, and neither does anything downstream of it:\nthe edge later advances to qualified when the referee makes metered spend\n(POST /v1/admin/referral/sweep), and that is the end of it. No credit is ever\nissued from this package."
   }
  ],
  "registry": [
@@ -6450,24 +6450,24 @@
    "doc": "Ingests a batch of account-usage samples — what a developer's OWN AI\naccounts have consumed of their OWN plans, metered from each provider's own\nlogin — and appends them to the warehouse series. Answers 202.\n\nSend either a `samples` array or one sample's fields at the top level. Every\nsample needs a provider, a machine and a known window class; an unknown window or\nkind is refused rather than silently rewritten, because a dash filled with a class\nnobody reported is worse than an error. There is no timestamp field: the server\nowns the observation clock, and a sample says which window it measured with\nwindowStart or resetsAt.\n\nIt is FAIL-SOFT on storage: a warehouse outage costs a poll of history\n(stored:false), never a failed request. It records usage ONLY — the link registry\nis refreshed separately via POST /v1/link, so there is one and only one way to\nupdate an account row."
   }
  ],
- "validators": [
+ "validator": [
   {
-   "id": "get_validators",
+   "id": "get_validator",
    "doc": "Returns the validator slots the caller's org has claimed.\n\nOne entry per claimed slot with its node identity, its live-ish node status and\nthe owner-gated registration queued for it, if any. Slots are org-scoped by the\nvalidated identity, so a caller can only ever see their own — a slot claimed by\nanother org is not merely hidden from this list, it is unreachable through the\nwhole surface.",
    "read": true
   },
   {
-   "id": "get_validators_by_tokenid",
+   "id": "get_validator_by_tokenid",
    "doc": "Returns one claimed validator slot, scoped to the caller's org.\n\nA slot another org holds, and a slot nobody holds, are both 404 — never a\ndifferent status, so this route cannot be used to probe which slots are taken.",
    "read": true
   },
   {
-   "id": "get_validators_challenge",
-   "doc": "Issues the single-use nonce and the exact message a wallet must sign\nto claim a validator slot.\n\nThe nonce is bound to (validated org, slot) and stored server-side, so a\nsignature obtained for one org or one slot can never be replayed for another,\nand the message POST /v1/validators verifies is rebuilt from those same server\nfacts rather than trusted from the caller. Redeem it with\nPOST /v1/validators before it expires; it can be redeemed once.\n\nA tokenId outside the Validator tier is refused here rather than after signing.",
+   "id": "get_validator_challenge",
+   "doc": "Issues the single-use nonce and the exact message a wallet must sign\nto claim a validator slot.\n\nThe nonce is bound to (validated org, slot) and stored server-side, so a\nsignature obtained for one org or one slot can never be replayed for another,\nand the message POST /v1/validator verifies is rebuilt from those same server\nfacts rather than trusted from the caller. Redeem it with\nPOST /v1/validator before it expires; it can be redeemed once.\n\nA tokenId outside the Validator tier is refused here rather than after signing.",
    "read": true
   },
   {
-   "id": "post_validators",
+   "id": "post_validator",
    "doc": "Claims a validator slot and provisions its node, after proving the\ncaller's wallet owns the slot's NFT.\n\nThe pipeline, all server-enforced: burn the single-use challenge (so a replayed\nor forged nonce dies before any chain read), recover the signer from the message\nthis server rebuilds, require that wallet to hold Validator-tier GenesisNFT\n#tokenId on Ethereum mainnet, generate a fresh luxd staking identity and seal it\ninto KMS, write a LuxNetwork CR for a NEW node, and ENQUEUE an owner-gated\nregistration. The registration is never auto-submitted to any P-Chain — the\nowner co-signs it out of band — and the stake weight is set at co-sign time,\nnever derived from the NFT.\n\nIt fails CLOSED at every gate: a bad signature, a non-owner, a non-tier slot or\nan unavailable KMS all leave no claim persisted and no key material exposed.\nRe-claiming a slot this org already holds re-applies the node CR and returns 200\nwith the existing identity (keys and NodeID are stable); a slot held by another\norg is 409. A cluster-less deployment still claims the slot, seals the keys and\nqueues the registration, reporting the node as \"node_pending\"."
   }
  ],

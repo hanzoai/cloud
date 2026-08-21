@@ -105,7 +105,7 @@ func TestCatalogAddressesAreServed(t *testing.T) {
 			"The path is not a name to be guessed from the slug — it is where the router "+
 			"actually delivers, and manifest/apps.go is the one place that decides. Look for "+
 			"where the product WENT before concluding it is gone: /v1/vpc became /v1/vpcs, "+
-			"score-configs became /v1/evals/rubrics, annotation-queues became /v1/o11y/reviews, "+
+			"score-configs became /v1/eval/rubrics, annotation-queues became /v1/o11y/reviews, "+
 			"builds/environments/pipelines/releases fold under /v1/platform (HIP-0139 §7, one "+
 			"capability one prefix), and /v1/edge was taken away as a top-level address. When a "+
 			"product genuinely has no API here, "+

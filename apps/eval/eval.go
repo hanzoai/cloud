@@ -1,6 +1,6 @@
 // Package eval is scoring a model on your own data, with a judge you choose.
 //
-// /v1/evals: datasets, dataset items, evaluators, score configs, runs, scores
+// /v1/eval: datasets, dataset items, evaluators, score configs, runs, scores
 // and traces, per org. Native, and nothing proxies to the retired observability
 // console.
 //
@@ -27,25 +27,25 @@
 //
 // Surface (all org-scoped; /v1 only):
 //
-//	POST   /v1/evals/datasets         create/upsert a dataset            -> Dataset
-//	GET    /v1/evals/datasets         list the org's datasets            -> {data:[…]}
-//	GET    /v1/evals/datasets/:name   dataset detail + item count        -> Dataset
-//	DELETE /v1/evals/datasets/:name   delete a dataset (+ its items)
-//	POST   /v1/evals/datasets/:name/items  create/upsert an item         -> DatasetItem
-//	GET    /v1/evals/datasets/:name/items  list a dataset's items (limit) -> {data:[…]}
-//	POST   /v1/evals/evaluators       create/upsert an evaluator         -> Evaluator
-//	GET    /v1/evals/evaluators       list the org's evaluators          -> {data:[…]}
-//	POST   /v1/evals/rubrics          create/upsert a rubric             -> ScoreConfig
-//	GET    /v1/evals/rubrics          list the org's rubrics             -> {data:[…]}
-//	POST   /v1/evals/scores           record a score event               -> ScoreView
-//	GET    /v1/evals/scores           list score events (filters+limit)  -> {data:[…]}
-//	GET    /v1/evals/traces           list traces (filters+limit)        -> {data:[…]}
-//	POST   /v1/evals/runs             run a dataset through model+judge   -> runSummary
-//	GET    /v1/evals/runs             list run records (datasetName)     -> {data:[…]}
-//	GET    /v1/evals/metrics          the org's AI overview board        -> board
+//	POST   /v1/eval/datasets         create/upsert a dataset            -> Dataset
+//	GET    /v1/eval/datasets         list the org's datasets            -> {data:[…]}
+//	GET    /v1/eval/datasets/:name   dataset detail + item count        -> Dataset
+//	DELETE /v1/eval/datasets/:name   delete a dataset (+ its items)
+//	POST   /v1/eval/datasets/:name/items  create/upsert an item         -> DatasetItem
+//	GET    /v1/eval/datasets/:name/items  list a dataset's items (limit) -> {data:[…]}
+//	POST   /v1/eval/evaluators       create/upsert an evaluator         -> Evaluator
+//	GET    /v1/eval/evaluators       list the org's evaluators          -> {data:[…]}
+//	POST   /v1/eval/rubrics          create/upsert a rubric             -> ScoreConfig
+//	GET    /v1/eval/rubrics          list the org's rubrics             -> {data:[…]}
+//	POST   /v1/eval/scores           record a score event               -> ScoreView
+//	GET    /v1/eval/scores           list score events (filters+limit)  -> {data:[…]}
+//	GET    /v1/eval/traces           list traces (filters+limit)        -> {data:[…]}
+//	POST   /v1/eval/runs             run a dataset through model+judge   -> runSummary
+//	GET    /v1/eval/runs             list run records (datasetName)     -> {data:[…]}
+//	GET    /v1/eval/metrics          the org's AI overview board        -> board
 //
-// Order 145: binds /v1/evals/* BEFORE the AI subsystem's /v1/* catch-all (150),
-// the same slot product uses. serve.go auto-registers GET /v1/evals/health.
+// Order 145: binds /v1/eval/* BEFORE the AI subsystem's /v1/* catch-all (150),
+// the same slot product uses. serve.go auto-registers GET /v1/eval/health.
 package eval
 
 import (
@@ -86,7 +86,7 @@ const (
 	defaultListLimit = 100
 	maxListLimit     = 500
 
-	// maxConcurrentRunsPerOrg caps how many /v1/evals/runs one org may have
+	// maxConcurrentRunsPerOrg caps how many /v1/eval/runs one org may have
 	// in-flight at once (Red MED). A run drives up to maxRunItems paired LLM calls
 	// against the SHARED in-process gateway; without a cap, one org firing many
 	// concurrent 100-item runs exhausts gateway connections/goroutines and
@@ -136,7 +136,7 @@ func releaseRunSlot(org string) {
 }
 
 // nameRE constrains a dataset / evaluator / score-config / score name: it is BOTH
-// the org-unique handle AND a URL path segment (/v1/evals/datasets/:name), so
+// the org-unique handle AND a URL path segment (/v1/eval/datasets/:name), so
 // this is the injection/traversal guard at the boundary.
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
@@ -155,12 +155,12 @@ type service struct {
 // mounted is the active service so Shutdown can release the stores.
 var mounted *service
 
-// Mount registers the /v1/evals/* surface on app per HIP-0106.
+// Mount registers the /v1/eval/* surface on app per HIP-0106.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("eval.Mount: nil app")
 	}
-	log := luxlog.Default().New("subsystem", "evals")
+	log := luxlog.Default().New("subsystem", "eval")
 	if deps.DataDir == "" {
 		return fmt.Errorf("eval.Mount: empty DataDir")
 	}
@@ -204,7 +204,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 func routes(app cloud.Router, s *service) {
 	// Static sub-routes are registered before any :name param route so a real
 	// dataset name can never shadow a collection route.
-	g := app.Group("/v1/evals")
+	g := app.Group("/v1/eval")
 
 	zip.Post(g, "/datasets", s.createDataset, zip.WithStatus(http.StatusCreated))
 	zip.Get(g, "/datasets", s.listDatasets)

@@ -9,7 +9,7 @@ import "sync/atomic"
 // routers. So the root package can never import flags — and without a seam, no
 // filter mounted from serve.go can read a switch at all. That is not a
 // theoretical gap: the `paywall_enforced` switch was registered in the cockpit
-// and governed only clients/entitlements.RequireProduct, a leaf free to import
+// and governed only clients/entitlement.RequireProduct, a leaf free to import
 // flags, while the paywall serve.go actually mounts stayed env-gated. Flipping
 // the switch in admin.hanzo.ai changed nothing.
 //
