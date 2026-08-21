@@ -85,44 +85,43 @@ var Apps = []App{
 	// apps/o11y/summary.go.
 	{Name: "o11y", Prefixes: []string{"/v1/o11y"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
-	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
-	// the fleet's route of last resort: every path no app named deeper — the whole
-	// OpenAI-compatible surface among them — landed on commerce and answered its
-	// 404. The "/v1" remainder is ai's row now, at the tail. Each subtree here is
-	// DEEPER than the sibling that shares its stem, because a static prefix outranks
-	// a sibling wildcard regardless of mount order. Nobody claims the bare
-	// /v1/billing or /v1/commerce REMAINDER — every leaf either row serves is named
-	// deeper here or on billing's row below, so the remainder is surface no app
-	// answers and claiming it would only re-create the catch-all that swallowed them.
+	// ONE ROOT. As "/v1" this row was the fleet's route of last resort: every path
+	// no app named deeper — the whole OpenAI-compatible surface among them — landed
+	// on commerce and answered its 404. The "/v1" remainder is ai's row now, at the
+	// tail, and commerce claims exactly the address it is named for.
+	//
+	// It held twenty-three more prefixes until the /v1/billing family became
+	// billing's (the row below) and the tenant-admin read came in from /_. Every one
+	// of those was a leaf of somebody else's address that commerce happened to
+	// answer, and each had to be named here for the same reason: unclaimed, a path
+	// falls to ai's bare "/v1" remainder, whose prepaid balance gate would make
+	// filling a basket — or topping up — require the balance the act exists to
+	// create. Naming them was right while commerce served them. Nothing is dropped
+	// by removing them, because nothing behind them is commerce's any more.
+	//
+	// The merchant nouns are LEAVES, not roots (HIP-1220 §1): cart, catalog,
+	// payments, plans, store, the storefront resources and the processor webhook
+	// intake all answer under /v1/commerce, so one claim covers them all.
+	//
 	// This is NOT commerce.Prefixes imported (that would re-fatten the host): the
 	// app states its fail-closed set once (apps/commerce/mount.go); this row states
 	// what the ROUTER may hand it, and router_test.go's oracle keeps the two honest.
-	// The merchant nouns are LEAVES now, not roots (HIP-1220 §1): cart, catalog,
-	// payments, plans and store each answer under /v1/commerce, so this row names
-	// them nowhere — one claim covers them all. Those five used to be five
-	// top-level rows here, and each was here for one reason: unclaimed, a path
-	// falls to ai's bare "/v1" remainder, whose prepaid balance gate would make
-	// filling a basket require the balance the basket exists to create. /v1/catalog
-	// is apps/catalog's alone now, with no sibling holding two leaves inside it;
-	// /v1/plans is nobody's — apps/plan answers at /v1/plan, so what commerce
-	// vacated there is a stem no app claims rather than a stem it shares.
-	// /v1/billing/topup is the stem, not /v1/billing/topup/token, because commerce
-	// serves BOTH top-up doors and a prefix owns its whole subtree — naming the stem
-	// states that once instead of twice. The saved-card door was added beside the
-	// token one but never named here, so the fleet published it and routed it to
-	// ai's bare "/v1" remainder, whose prepaid balance gate would have made topping
-	// up require the balance the top-up exists to create — the same trap the merchant
-	// nouns describe above, on the door that funds it.
-	// The customer's own ledger — transactions, credit-balance, accounts (and its
-	// /:id/members child, which the accounts prefix covers) — is named here because
-	// naming it in mount.go is only half an address. mount.go says what the APP will
-	// answer; this row says what the ROUTER may hand it, and a leaf missing here never
-	// reaches commerce at all: it falls to the "/v1" remainder on ai's row and answers
-	// ai's bare 404. That is indistinguishable from an unmounted route from outside,
-	// which is what made this bug survive a correct mount — the binary held the route
-	// and the host never delivered to it. credit-balance is its own entry and not
-	// covered by credits: they are sibling prefixes, not parent and child.
-	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/commerce", "/v1/billing/accounts", "/v1/billing/alerts", "/v1/billing/credit-balance", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/invoices", "/v1/billing/methods", "/v1/billing/mode", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/portal/methods", "/v1/billing/recharge", "/v1/billing/settings", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/topup", "/v1/billing/transactions", "/v1/billing/usage/rollup", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/collection", "/v1/commerce/currencies", "/v1/commerce/disclosure", "/v1/commerce/discount", "/v1/commerce/movie", "/v1/commerce/note", "/v1/commerce/product", "/v1/commerce/return", "/v1/commerce/saleschannel", "/v1/commerce/stocklocation", "/v1/commerce/submission", "/v1/commerce/subscriber", "/v1/commerce/tokentransaction", "/v1/commerce/transfer", "/v1/commerce/variant", "/v1/commerce/wallet", "/v1/commerce/watchlist", "/v1/commerce/webhook"}},
+	// One prefix, because a capability answers at its own name (HIP-0139 §3).
+	// The merchant nouns are LEAVES: cart, catalog, payments, plans and store each
+	// answer under /v1/commerce, so this row names them nowhere — one claim covers
+	// them all. Those five used to be five top-level rows here, and each was here
+	// for one reason: unclaimed, a path falls to ai's bare "/v1" remainder, whose
+	// prepaid balance gate would make filling a basket require the balance the
+	// basket exists to create.
+	//
+	// The twenty /v1/billing leaves that used to sit beside them are gone too, and
+	// that is the second half of the same rule: /v1/billing is BILLING's address
+	// (HIP-0018, HIP-1220 §2), so commerce keeps the store and publishes the plane
+	// operations that answer from it while billing owns the door. A row here is what
+	// the ROUTER may hand an app, so vacating those leaves is what actually moves
+	// the address — leaving one behind would keep delivering a billing question to
+	// the app that no longer publishes it.
+	{Name: "commerce", Prefixes: []string{"/v1/commerce"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plan"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/pricing", "/v1/pricing"}},
@@ -145,7 +144,15 @@ var Apps = []App{
 	// prefix is the operator's whole-backend view of the vector store it allocates
 	// into (apps/provisioning/inventory.go).
 	{Name: "provisioning", Prefixes: []string{"/v1/admin/provisioning", "/v1/provisioning"}},
-	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/ledger", "/v1/billing/usage"}},
+	// The customer's money door owns its whole root now. It held three leaves —
+	// balance, ledger, usage — beside twenty of commerce's, because the two split
+	// the address and neither claimed the stem: an unnamed leaf falls to ai's bare
+	// "/v1" remainder and answers ai's 404, which is indistinguishable from an
+	// unmounted route, so every leaf either app served had to be spelled out.
+	// HIP-0018 carries `capability: billing`, so the root is this app's; the
+	// merchant half answers the same questions over the internal plane from the
+	// store it still owns, and the bare stem is finally somebody's.
+	{Name: "billing", Prefixes: []string{"/v1/billing"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	// The free lane's ceiling, beside the priced lane's. rollingcap bounds how fast
 	// a caller may burn their OWN money; allowance bounds how much of OUR compute a
