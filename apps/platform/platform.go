@@ -78,9 +78,19 @@ var buildTypes = map[string]bool{
 
 // EnvVarJSON is the JSON shape of one application env var as stored/served.
 type EnvVarJSON struct {
-	Key    string `json:"key"`
-	Value  string `json:"value"`
-	Secret bool   `json:"secret"`
+	// Key is the variable's name in the container, which must match
+	// `^[A-Za-z_][A-Za-z0-9_]*$`. For a sealed value it is also the last segment
+	// of the KMS ref, so it is what identifies the value across a round trip.
+	Key string `json:"key"`
+	// Value is the plaintext, and it is WRITE-ONLY once the entry is secret: a
+	// sealed value reads back as "", and sending "" again KEEPS what is sealed
+	// rather than wiping it. Only a non-empty value seals a new one.
+	Value string `json:"value"`
+	// Secret says the value lives in KMS and never in the database. A caller may
+	// only ADD secrecy: the server seals a value whose key or shape looks like a
+	// credential anyway (secretshape.go), so an entry can come back secret that
+	// was not sent that way.
+	Secret bool `json:"secret"`
 }
 
 // state is platform's own data; the shared deps (log, kms, bill, brand, env,
@@ -370,44 +380,125 @@ func tenant(c *zip.Ctx) (string, bool) {
 
 // ── HTTP views (the published contract; mirrors the Goa design result types) ──
 
+// gitSource is the git origin of an application as the views serve it back — the
+// read side of the gitOrigin a create sends.
 type gitSource struct {
-	URL      string `json:"url,omitempty"`
-	Branch   string `json:"branch,omitempty"`
+	// URL is the clone URL a git app builds from, stored as sent once the build
+	// path's allowlist accepted it (validateRepoURL). It is also what a landed
+	// push is MATCHED against, so a push to any other repo never builds this app.
+	URL string `json:"url,omitempty"`
+	// Branch is the branch a push-to-deploy build tracks, `main` when the create
+	// named none — a push to any other branch, and every tag push, builds nothing
+	// here. A deploy may name a commit instead, for that deploy alone.
+	Branch string `json:"branch,omitempty"`
+	// Provider is derived from the URL — github, gitlab, bitbucket, or `git` for
+	// anything else. It is a label for display; no behaviour keys on it.
 	Provider string `json:"provider,omitempty"`
 }
 
+// imageView is the container image an application runs, as the views serve it
+// back. For a git app the built image ref is on the deployment instead.
 type imageView struct {
+	// Repository is the image path without a tag (ghcr.io/acme/api). Required for
+	// source `image`, which runs it as-is. A git app's built image is NOT this: the
+	// build pushes to a path derived from the org and slug, and the deployment
+	// records that full ref.
 	Repository string `json:"repository,omitempty"`
-	Tag        string `json:"tag,omitempty"`
+	// Tag is the tag to run: what the create declared, then RE-STAMPED on every
+	// transition to live with the tag that actually went live. So after a deploy
+	// it names what is running, not what was asked for.
+	Tag string `json:"tag,omitempty"`
 }
 
 type appView struct {
-	ID                  string       `json:"id"`
-	Org                 string       `json:"org"`
-	ProjectID           string       `json:"projectId"`
-	Slug                string       `json:"slug"`
-	Name                string       `json:"name"`
-	Description         string       `json:"description,omitempty"`
-	Environment         string       `json:"environment"`
-	Source              string       `json:"source"`
-	Repo                gitSource    `json:"repo"`
-	Image               imageView    `json:"image"`
-	BuildType           string       `json:"buildType,omitempty"`
-	Dockerfile          string       `json:"dockerfile,omitempty"`
-	Env                 []EnvVarJSON `json:"env"`
-	Port                int          `json:"port"`
-	Replicas            int          `json:"replicas"`
-	StorageGB           int          `json:"storageGb,omitempty"` // GiB; absent means stateless
-	Domains             []string     `json:"domains"`
-	Status              string       `json:"status"`
-	Namespace           string       `json:"namespace,omitempty"`
-	CurrentDeploymentID string       `json:"currentDeploymentId,omitempty"`
-	Phase               string       `json:"phase,omitempty"`
-	Health              string       `json:"health,omitempty"`
-	SecretSync          string       `json:"secretSync,omitempty"`       // ""|pending|syncing|ready|failed (secrets.go)
-	SecretSyncDetail    string       `json:"secretSyncDetail,omitempty"` // honest reason when not ready
-	CreatedAt           int64        `json:"createdAt"`
-	UpdatedAt           int64        `json:"updatedAt"`
+	// ID is the server-minted application id (`app_…`). Routes address an app by
+	// project and slug; this is the key its deployments and builds carry.
+	ID string `json:"id"`
+	// Org is the tenant that owns the app. It comes from the validated identity,
+	// never from the request, and it is the boundary every route is scoped to.
+	Org string `json:"org"`
+	// ProjectID is the IAM project the app lives under, and it is that project's
+	// NAME — the (org,name) key IAM identifies it by, which is also what the
+	// `:project` path segment carries. There is no platform-minted project id.
+	ProjectID string `json:"projectId"`
+	// Slug is the app's identity in the cluster: the operator CR's name, the first
+	// label of its default host, and the `:app` path segment. Unique per project.
+	Slug string `json:"slug"`
+	// Name is the display name. It is not an address — the slug is.
+	Name string `json:"name"`
+	// Description is free text about what the app is. Nothing derives from it.
+	Description string `json:"description,omitempty"`
+	// Environment is the deploy target this app names, `production` when none was
+	// given. It is a LABEL: /v1/platform/environments derives the environment list
+	// from the apps that name one, so an environment exists as long as an app
+	// points at it and no route creates or deletes one.
+	Environment string `json:"environment"`
+	// Source is what the app deploys FROM: `git`, which builds Repo, or `image`,
+	// which runs Image as it is. It decides whether a deploy builds at all.
+	Source string `json:"source"`
+	// Repo is the git origin a source `git` app builds from, and the repo+branch a
+	// landed push has to match to build it.
+	Repo gitSource `json:"repo"`
+	// Image is the image a source `image` app runs. For a git app only the tag is
+	// filled, stamped by the deploy that went live; the built ref is on the
+	// deployment.
+	Image imageView `json:"image"`
+	// BuildType is how a git app builds: `pack`, the zero-config default that
+	// detects the project, or `dockerfile`. An image app carries `image`, which
+	// means it never builds.
+	BuildType string `json:"buildType,omitempty"`
+	// Dockerfile is the path inside the repo to build from, for buildType
+	// `dockerfile`. The build path keys off its presence, and it is validated at
+	// create against the same allowlist the privileged build enforces.
+	Dockerfile string `json:"dockerfile,omitempty"`
+	// Env is the app's environment variables, with every SECRET value masked to ""
+	// — the plaintext is in KMS and this surface never echoes it. That masking is
+	// why an empty secret value means "keep what is sealed" when posted back.
+	Env []EnvVarJSON `json:"env"`
+	// Port is the container port traffic is sent to. 8080 when the create asked
+	// for none, or for one outside 1–65535.
+	Port int `json:"port"`
+	// Replicas is how many copies the CR declares. It is CLAMPED to the
+	// deployment's ceiling rather than refused, so it can be below what was asked.
+	Replicas int `json:"replicas"`
+	// StorageGB is the persistent volume size in GiB. Absent means stateless —
+	// no volume at all — and it is clamped like Replicas.
+	StorageGB int `json:"storageGb,omitempty"`
+	// Domains are the ingress hosts rendered into the app's CR, its own
+	// `<slug>.<org>.<sites host>` first. That one is seeded at create and cannot be
+	// removed; a custom host joins only after add-domain and DNS verification.
+	Domains []string `json:"domains"`
+	// Status is the lifecycle THIS store records: draft (created, nothing in the
+	// cluster yet), building, deploying, live, stopped or error. What the cluster
+	// itself says is Phase and Health.
+	Status string `json:"status"`
+	// Namespace is where the app's cluster objects live, `tenant-<org>`. It is
+	// derived from the validated org and is never accepted from a request.
+	Namespace string `json:"namespace,omitempty"`
+	// CurrentDeploymentID is the deployment that is live — the pointer a deploy
+	// advances monotonically by version, so it never regresses to an older one.
+	// Empty until the first deploy reaches the cluster.
+	CurrentDeploymentID string `json:"currentDeploymentId,omitempty"`
+	// Phase is the operator's own `status.phase` for the app's Service CR, read
+	// from the cluster on this request. Empty when there is no CR yet or the
+	// cluster could not be read.
+	Phase string `json:"phase,omitempty"`
+	// Health rolls ready-vs-desired replicas up to a colour: green (all ready),
+	// yellow (some ready, or deliberately scaled to zero), red (none), or "" when
+	// the cluster reports no replica counts at all — unknown, never a guessed green.
+	Health string `json:"health,omitempty"`
+	// SecretSync is how far the app's secret env has got into the cluster:
+	// ""|pending|syncing|ready|failed (secrets.go). It is best-effort and never
+	// fails a deploy, so `pending` is ordinary right after one.
+	SecretSync string `json:"secretSync,omitempty"`
+	// SecretSyncDetail is the honest reason when the sync is not ready — a missing
+	// CRD, an RBAC grant, a per-tenant credential. Empty when it is.
+	SecretSyncDetail string `json:"secretSyncDetail,omitempty"`
+	// CreatedAt is when the app was created, unix seconds.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when it last changed, unix seconds. Every lifecycle transition
+	// moves it, so it tracks deploys as well as edits.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 func toAppView(a Application) appView {
@@ -437,18 +528,42 @@ func toAppView(a Application) appView {
 }
 
 type deploymentView struct {
-	ID            string `json:"id"`
-	Org           string `json:"org"`
+	// ID is the deployment's id (`dep_…`), minted when the attempt is recorded.
+	// The app's currentDeploymentId points at one of these.
+	ID string `json:"id"`
+	// Org is the tenant the deployment belongs to, from the validated identity.
+	Org string `json:"org"`
+	// ApplicationID is the app this deployed — the app's `id`, not its slug.
 	ApplicationID string `json:"applicationId"`
-	Version       int    `json:"version"`
-	Status        string `json:"status"`
-	Source        string `json:"source"`
-	Commit        string `json:"commit,omitempty"`
-	Image         string `json:"image,omitempty"`
-	BuildID       string `json:"buildId,omitempty"`
-	Message       string `json:"message,omitempty"`
-	CreatedAt     int64  `json:"createdAt"`
-	UpdatedAt     int64  `json:"updatedAt"`
+	// Version counts this app's deployments, from 1 and monotonically. It is what
+	// ORDERS them: a deploy only goes live if no higher version already is, so a
+	// build that finishes late is superseded instead of overwriting a newer one.
+	Version int `json:"version"`
+	// Status is where the attempt got to: `building` while its image is being
+	// built, `deploying` once its CR reached the cluster — which is the terminal
+	// success state, the app's own status is what turns `live` — `error` with the
+	// reason in Message, or `superseded` when a newer version went live first.
+	Status string `json:"status"`
+	// Source is which lane produced it: `git` (built from the repo) or `image`
+	// (an already-built ref deployed as-is, including promote and rollback).
+	Source string `json:"source"`
+	// Commit is the git ref this built — the commit a deploy or a push named,
+	// else the app's branch. Empty for an image deploy, which builds nothing.
+	Commit string `json:"commit,omitempty"`
+	// Image is the full `repo:tag` this deployment put in the CR. For a git deploy
+	// it is the ref the in-cluster build pushes to, known before the build runs.
+	Image string `json:"image,omitempty"`
+	// BuildID is the build record behind a git deploy, whose logs and status live
+	// at /v1/platform/builds. Empty for an image deploy.
+	BuildID string `json:"buildId,omitempty"`
+	// Message is why this attempt is not live: the failure, or the note that a
+	// newer deployment went live before this build finished. Empty while it is fine.
+	Message string `json:"message,omitempty"`
+	// CreatedAt is when the attempt was recorded, unix seconds.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is its last transition, unix seconds — so for a terminal
+	// deployment it is when it reached that state.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 func toDeploymentView(d Deployment) deploymentView {
