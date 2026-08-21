@@ -3,9 +3,13 @@
 package ai
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/flags"
 )
 
 // MONEY CROSSES THE PROCESS BOUNDARY OVER THE PLANE — ZAP on the canonical unix
@@ -68,19 +72,49 @@ func TestMoneyCrossesTheProcessBoundaryOverThePlaneNotHTTP(t *testing.T) {
 	}
 }
 
-// The rolling cap IS a genuine trampoline and must stay one: clients/rollingcap
-// installs it from Mount — after this package, in some binaries — and unlike the money
-// hooks a missing cap is benign (uncapped), so resolving per call is safe.
-func TestRollingCapStaysATrampoline(t *testing.T) {
-	src, err := os.ReadFile("ai.go")
-	if err != nil {
-		t.Fatalf("read ai.go: %v", err)
+// The ceiling's switches must REGISTER, and register here, in the binary that reads
+// them. They used to be registered by apps/rollingcap — a process this one does not
+// link and nothing ever started — so every lookup missed and the ceiling was
+// uncapped everywhere. Asking the live registry (not the seed map) is the whole
+// point: it is the only reading that can tell the two situations apart.
+func TestCeilingSwitchesAreLiveInThisBinary(t *testing.T) {
+	if got := flags.Int(capWindow); got != 3 {
+		t.Errorf("%s = %d, want 3 — the window switch is not registered in this binary", capWindow, got)
 	}
-	body := string(src)
-	if !strings.Contains(body, "aiobject.SetRollingCapReader(func(") {
-		t.Error("RollingCapReader must resolve cloud.RollingCapReader() per call")
+	for tier, cents := range capSeed {
+		if got := flags.Int(capOf(tier)); got != cents {
+			t.Errorf("%s = %d, want %d (the seeded default)", capOf(tier), got, cents)
+		}
 	}
-	if !strings.Contains(body, "cloud.RollingCapReader()") {
-		t.Error("RollingCapReader trampoline must re-resolve the host hook inside the closure")
+	if got := flags.Int(capFallback); got != 0 {
+		t.Errorf("%s = %d, want 0 — the fallback is opt-in", capFallback, got)
+	}
+}
+
+// A tier this deployment cannot look up takes the SAME path an unseeded plan takes:
+// no ceiling of its own, so the fallback decides. With the fallback at its opt-in
+// default that is uncapped, and — the part that matters — overCap must answer
+// without asking commerce anything, since there is no ledger in a bare binary and a
+// plane read would be an error where the honest answer is "no ceiling".
+func TestNoCeilingAdmitsWithoutReadingTheLedger(t *testing.T) {
+	if cloud.TierReader() != nil {
+		t.Fatal("a bare test binary has no tier reader; this case is about that")
+	}
+	cents, err := capFor(context.Background(), "s", "o")
+	if err != nil || cents != 0 {
+		t.Fatalf("capFor with no tier reader = %d,%v, want 0,nil (fallback, uncapped)", cents, err)
+	}
+	if over, err := overCap(context.Background(), "s", "o"); over || err != nil {
+		t.Fatalf("overCap = %v,%v, want false,nil — an uncapped caller must never reach the plane", over, err)
+	}
+}
+
+// Both taxonomies commerce may answer with are seeded, so whichever name comes back
+// resolves to a ceiling instead of silently reading 0.
+func TestSeedCoversBothTaxonomies(t *testing.T) {
+	for _, tier := range []string{"free", "developer", "starter", "pro", "plus", "max", "enterprise"} {
+		if _, ok := capSeed[tier]; !ok {
+			t.Errorf("capSeed has no %q — an unseeded tier reads 0 and falls to the fallback", tier)
+		}
 	}
 }

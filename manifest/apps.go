@@ -165,10 +165,12 @@ var Apps = []App{
 	// merchant half answers the same questions over the internal plane from the
 	// store it still owns, and the bare stem is finally somebody's.
 	{Name: "billing", Prefixes: []string{"/v1/billing"}},
-	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
-	// The free lane's ceiling, beside the priced lane's. rollingcap bounds how fast
-	// a caller may burn their OWN money; allowance bounds how much of OUR compute a
-	// caller with no money may take. Sibling questions, one row each.
+	// The free lane's ceiling: how much of OUR compute a caller with no money may
+	// take. The paid lane's ceiling — how fast a caller may burn their OWN money —
+	// used to sit beside it as `rollingcap`, and it is not a row any more. It
+	// answered no path, opened no store and installed a hook in the `ai` module,
+	// so the only process it could ever take effect in is ai's own; it lives in
+	// apps/ai/cap.go, where the gate that reads it runs.
 	{Name: "allowance", Prefixes: []string{"/v1/allowance"}},
 	// ONE PREFIX, because every route this app serves is now under it (HIP-0139
 	// §3.1). It used to name six families of /v1/platform beside seven flat roots —
@@ -219,7 +221,6 @@ var Apps = []App{
 	{Name: "graph", Prefixes: []string{"/v1/graph"}},
 	{Name: "help", Prefixes: []string{"/v1/help"}},
 	{Name: "content", Prefixes: []string{"/v1/content"}},
-	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
 	{Name: "webhook", Prefixes: []string{"/v1/webhook"}},
 	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models"}},
 	// risk owns /v1/risk OUTRIGHT — the per-organisation model plane that decides
