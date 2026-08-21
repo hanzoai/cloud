@@ -90,14 +90,18 @@ func reset(t *testing.T) {
 
 // ── request/route helpers ──────────────────────────────────────────────────────
 
-func devStartPath(provider string) string { return "/v1/integrations/connectors/" + provider + "/device" }
+func devStartPath(provider string) string {
+	return "/v1/integrations/connectors/" + provider + "/device"
+}
 func devPollPath(provider, flow string) string {
 	return "/v1/integrations/connectors/" + provider + "/device/" + flow + "/poll"
 }
-func credPath(provider string) string { return "/v1/integrations/connectors/" + provider + "/credential" }
-func tokenPath(id string) string      { return "/v1/integrations/connectors/" + id + "/token" }
-func refreshPath(id string) string    { return "/v1/integrations/connectors/" + id + "/refresh" }
-func connPath(id string) string       { return "/v1/integrations/connectors/" + id }
+func credPath(provider string) string {
+	return "/v1/integrations/connectors/" + provider + "/credential"
+}
+func tokenPath(id string) string   { return "/v1/integrations/connectors/" + id + "/token" }
+func refreshPath(id string) string { return "/v1/integrations/connectors/" + id + "/refresh" }
+func connPath(id string) string    { return "/v1/integrations/connectors/" + id }
 
 // as issues a request with an EXPLICIT user identity (req() derives u-<org>).
 // Empty org/user sends no identity headers — the 403 leg.
