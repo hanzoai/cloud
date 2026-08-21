@@ -1,0 +1,1125 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package trust is your trust centre: the controls you publish, the coverage they compute to, the documents a reviewer asks for, and who you send data to.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "trust"
+    }
+  ],
+  "paths": {
+    "/v1/trust": {
+      "get": {
+        "operationId": "get_trust",
+        "summary": "Reads YOUR organization's whole trust centre, including the addresses of your own gated documents.",
+        "description": "Reads YOUR organization's whole trust centre, including the addresses of your\nown gated documents. Same shape as the published door; the difference is that\nthis one is resolved from your validated bearer and shows you your own\nartifacts.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/centre"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/controls": {
+      "get": {
+        "operationId": "get_trust_controls",
+        "summary": "Lists every control your organization publishes, with the counts.",
+        "description": "Lists every control your organization publishes, with the counts.\n\nA control names what it asserts, the mechanism behind it, the repository and\nfile where that mechanism is enforced, how it is verified, and the framework\nclauses it maps to. Status is automated, partial or absent — and an absent one\nstill names the clause it would satisfy, which is a roadmap, while never\nmoving a coverage number.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/controlList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/controls/{id}": {
+      "get": {
+        "operationId": "get_trust_controls_by_id",
+        "summary": "Reads one control by id.",
+        "description": "Reads one control by id.",
+        "tags": [
+          "trust"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the control's id, dotted lowercase — \"iam.pkce.s256\".",
+            "schema": {
+              "type": "string"
+            },
+            "example": "iam.pkce.s256"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/coverage": {
+      "get": {
+        "operationId": "get_trust_coverage",
+        "summary": "Reads coverage: per framework, how many clauses have an automated control behind them, how many are partial, and how many have none — each carrying the unit it is counted in, because \"12 of 20\" is not a fact until you know what the 20 are.",
+        "description": "Reads coverage: per framework, how many clauses have an automated control\nbehind them, how many are partial, and how many have none — each carrying the\nunit it is counted in, because \"12 of 20\" is not a fact until you know what\nthe 20 are.\n\nNothing here is a verdict. There is no boolean, and a control that only a\nperson has read counts one rung weaker than it claims to be, because only a\ncheck that can FAIL is evidence.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/trustCoverage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/coverage/{framework}": {
+      "get": {
+        "operationId": "get_trust_coverage_by_framework",
+        "summary": "Reads one framework clause by clause: every clause the standard publishes, what covers it, and which controls stand behind it — so a coverage number can be checked line by line rather than taken on trust.",
+        "description": "Reads one framework clause by clause: every clause the standard publishes,\nwhat covers it, and which controls stand behind it — so a coverage number can\nbe checked line by line rather than taken on trust.",
+        "tags": [
+          "trust"
+        ],
+        "parameters": [
+          {
+            "name": "framework",
+            "in": "path",
+            "required": true,
+            "description": "Framework is the framework id — \"soc2\", \"iso27001\", \"nist80053\".",
+            "schema": {
+              "type": "string"
+            },
+            "example": "soc2"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/clauseCoverage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/documents": {
+      "get": {
+        "operationId": "get_trust_documents",
+        "summary": "Lists your organization's documents.",
+        "description": "Lists your organization's documents. Because this is your own centre, a gated\nartifact carries its address here; through the published door it does not.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/trustDocuments"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/evidence": {
+      "get": {
+        "operationId": "get_trust_evidence",
+        "summary": "Reads the audit rows that stand behind one control, over a window.",
+        "description": "Reads the audit rows that stand behind one control, over a window.\n\nThe inventory decides what evidences what: a control names the audit actions\nthat are its trail, and this resolves the control id to those actions and\nreads them. So evidence cannot drift from the inventory, and it is scoped to\nyour own organization — the query carries no organization field for a caller\nto fill in.\n\nA control that nothing in the trail evidences says so plainly rather than\nanswering an empty page, because an empty page reads like a clean quarter. A\ndeployment with no audit store answers 501 and says the trail was not read,\nfor the same reason.",
+        "tags": [
+          "trust"
+        ],
+        "parameters": [
+          {
+            "name": "control",
+            "in": "query",
+            "required": false,
+            "description": "Control is the control id whose trail to read. Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "iam.refresh.rotation"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the inclusive lower bound, an RFC 3339 date or instant\n(\"2026-01-01\" or \"2026-01-01T00:00:00Z\"). Empty leaves it unbounded. A\nmalformed bound is refused rather than silently widening the window.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-01-01"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the upper bound, same form and same tolerance.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned, 1..1000, default 100. It is a string because\nan unparseable value is refused rather than read as zero.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "50"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/faq": {
+      "get": {
+        "operationId": "get_trust_faq",
+        "summary": "Lists your knowledge base — the questions a reviewer asks, answered once.",
+        "description": "Lists your knowledge base — the questions a reviewer asks, answered once.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/faqList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/frameworks": {
+      "get": {
+        "operationId": "get_trust_frameworks",
+        "summary": "Lists the frameworks coverage is computed against, and how many clauses each publishes.",
+        "description": "Lists the frameworks coverage is computed against, and how many clauses each\npublishes. That count is the denominator of every coverage number, which is\nwhat keeps an uncovered clause visible instead of dropping out of the\nfraction.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/frameworkList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/health": {
+      "get": {
+        "operationId": "get_trust_health",
+        "summary": "Health reports that the trust subsystem is mounted and which inventory it is running.",
+        "description": "Health reports that the trust subsystem is mounted and which inventory it is\nrunning. Open: a liveness probe that needs a credential cannot answer the\nquestion it is asked.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/probe"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/policies": {
+      "get": {
+        "operationId": "get_trust_policies",
+        "summary": "Lists your organization's published policies.",
+        "description": "Lists your organization's published policies.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/policyList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/profile": {
+      "get": {
+        "operationId": "get_trust_profile",
+        "summary": "Reads your organization's trust-centre profile — the name, tagline and summary a visitor sees, whether the centre is published, and where to send somebody who wants a gated document.",
+        "description": "Reads your organization's trust-centre profile — the name, tagline and\nsummary a visitor sees, whether the centre is published, and where to send\nsomebody who wants a gated document.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/published/{org}": {
+      "get": {
+        "operationId": "get_trust_published_by_org",
+        "summary": "Reads a published trust centre — the whole thing in one answer: the organization's profile, its control inventory, coverage computed against each framework's whole published clause list, its documents, subprocessors, policies, knowledge base, updates and risk profile.",
+        "description": "Reads a published trust centre — the whole thing in one answer: the\norganization's profile, its control inventory, coverage computed against each\nframework's whole published clause list, its documents, subprocessors,\npolicies, knowledge base, updates and risk profile.\n\nThis is the PUBLIC door and needs no credential, because a published trust\ncentre is a public document. It answers only for an organization that has\npublished one — an organization that has not is not found rather than empty,\nsince an empty centre and a centre nobody meant to show read the same and are\nnot the same thing.\n\nA gated document appears here with its title, its type and its date and NO\naddress: the listing says the artifact exists and that reading it takes a\ngrant. Nothing an independent auditor signed is ever released through this\ndoor.",
+        "tags": [
+          "trust"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Org is the organization's slug — the name in its address.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "hanzo"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/centre"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "security": [],
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/risk": {
+      "get": {
+        "operationId": "get_trust_risk",
+        "summary": "Reads your risk profile — the label and value pairs describing what your organization handles and how.",
+        "description": "Reads your risk profile — the label and value pairs describing what your\norganization handles and how.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/subprocessors": {
+      "get": {
+        "operationId": "get_trust_subprocessors",
+        "summary": "Lists the third parties your organization sends data to, each naming what it is for.",
+        "description": "Lists the third parties your organization sends data to, each naming what it\nis for.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/subprocessorList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/updates": {
+      "get": {
+        "operationId": "get_trust_updates",
+        "summary": "Lists your trust-centre updates, newest as you ordered them.",
+        "description": "Lists your trust-centre updates, newest as you ordered them.",
+        "tags": [
+          "trust"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/updateList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/trust/{kind}/{id}": {
+      "delete": {
+        "operationId": "delete_trust_by_kind_by_id",
+        "summary": "Removes one record from a section of your organization's trust centre.",
+        "description": "Removes one record from a section of your organization's trust centre. A\nrecord that is not there is a 404, never a silent success. A control that\nbelongs to the deployment's own inventory is removed by a commit, not by a\nrequest.",
+        "tags": [
+          "trust"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "description": "Kind is the section — profile, control, document, subprocessor, policy,\nfaq, update or risk. Anything else is not found. The URL is the authority:\na value here is bound from the path, which zip binds last.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "faq"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record's id within that section. The single-valued sections\n(profile, risk) hold one record whatever id is named.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "where-is-data-held"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/dropped"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_trust_by_kind_by_id",
+        "summary": "Writes one record into a section of YOUR organization's trust centre — profile, control, document, subprocessor, policy, faq, update or risk.",
+        "description": "Writes one record into a section of YOUR organization's trust centre —\nprofile, control, document, subprocessor, policy, faq, update or risk.\n\nA control written here is held to exactly the rule a control committed to the\ndeployment's own inventory is held to, by the same validator: its prose may\nnot claim a certificate and may not name a framework (a framework belongs in\nthe mappings, where it arrives attached to a number), anything short of\nautomated must say what is missing, and a mapping to a clause no framework\ndeclares is refused rather than scored as nothing.\n\nA document defaults to GATED. An artifact an independent auditor signed — a\nSOC 2 report, an ISO certificate, a penetration test, an auditor letter —\ncannot be made public at all; it is released through a grant. A\nself-assessment can, because the organization is the one attesting it.\n\nThe deployment's OWN control inventory is governed in git and is not writable\nhere: naming one of its ids is a conflict, not an overwrite.",
+        "tags": [
+          "trust"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "description": "Kind is the section being written. The URL is the authority.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "subprocessor"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the record's id. Omit it on a create and one is minted; the\nsingle-valued sections (profile, risk) hold one record whatever is named.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "acme-cloud"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "data": {
+                  "name": "A cloud",
+                  "purpose": "Compute"
+                },
+                "id": "acme-cloud",
+                "kind": "subprocessor"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/sectionWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/written"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "centre": {
+        "properties": {
+          "controls": {
+            "description": "Controls is the control inventory, each entry naming what it asserts, the\nmechanism, where it is enforced, how it is verified and the clauses it maps\nto.",
+            "items": {},
+            "type": "array"
+          },
+          "coverage": {
+            "description": "Coverage is the per-framework counts, computed from Controls against each\nframework's whole published clause list.",
+            "items": {
+              "$ref": "#/components/schemas/coverRow"
+            },
+            "type": "array"
+          },
+          "documents": {
+            "description": "Documents are the artifacts, each saying whether this reader may read it.",
+            "items": {
+              "$ref": "#/components/schemas/docRow"
+            },
+            "type": "array"
+          },
+          "faq": {
+            "description": "Faq is the knowledge base — the questions a reviewer asks, answered.",
+            "items": {},
+            "type": "array"
+          },
+          "frameworks": {
+            "description": "Frameworks are the clause universes the coverage is computed against.",
+            "items": {
+              "$ref": "#/components/schemas/frameworkRow"
+            },
+            "type": "array"
+          },
+          "generated": {
+            "description": "Generated is when this answer was computed, unix milliseconds.",
+            "type": "integer"
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/trustTally",
+            "description": "Inventory is how the controls themselves stand, independent of framework."
+          },
+          "org": {
+            "description": "Org is whose centre this is.",
+            "type": "string"
+          },
+          "policies": {
+            "description": "Policies are the published policies.",
+            "items": {},
+            "type": "array"
+          },
+          "profile": {
+            "description": "Profile is the organization's own description of itself."
+          },
+          "risk": {
+            "description": "Risk is the risk profile — label and value pairs describing what this\norganization handles and how."
+          },
+          "subprocessors": {
+            "description": "Subprocessors are the third parties this organization sends data to.",
+            "items": {},
+            "type": "array"
+          },
+          "updates": {
+            "description": "Updates is the changelog, newest as the organization ordered it.",
+            "items": {},
+            "type": "array"
+          },
+          "version": {
+            "description": "Version is the embedded inventory's version.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "clauseCoverage": {
+        "properties": {
+          "automated": {
+            "description": "Automated is how many clauses have an automated control behind them that\nsomething can fail on behalf of.",
+            "type": "integer"
+          },
+          "clauses": {
+            "description": "Clauses is every clause the standard publishes, with what stands behind it.",
+            "items": {
+              "$ref": "#/components/schemas/clauseRow"
+            },
+            "type": "array"
+          },
+          "edition": {
+            "description": "Edition is which edition this clause list is taken from.",
+            "type": "string"
+          },
+          "framework": {
+            "description": "Framework is the framework id — \"soc2\", \"iso27001\", \"nist80053\".",
+            "type": "string"
+          },
+          "generated": {
+            "description": "Generated is when this was computed, unix milliseconds.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the published standard's name.",
+            "type": "string"
+          },
+          "none": {
+            "description": "None is how many have nothing behind them.",
+            "type": "integer"
+          },
+          "note": {
+            "description": "Note is what this clause list is scoped to, when a count alone would\nmisrepresent it.",
+            "type": "string"
+          },
+          "partial": {
+            "description": "Partial is how many are answered in part.",
+            "type": "integer"
+          },
+          "publisher": {
+            "description": "Publisher is who publishes it — AICPA, ISO/IEC, NIST.",
+            "type": "string"
+          },
+          "statement": {
+            "description": "Statement is the counts as one sentence, carrying the unit.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is the framework's WHOLE published clause list — the denominator.",
+            "type": "integer"
+          },
+          "unit": {
+            "description": "Unit is what ONE clause is — \"criterion\", \"control\", \"family\".",
+            "type": "string"
+          },
+          "units": {
+            "description": "Units is the plural of Unit, for rendering a sentence.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the embedded inventory's version.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "clauseRow": {
+        "properties": {
+          "controls": {
+            "description": "Controls are the ids behind it, strongest first. Empty when nothing covers\nit — and an absent control is never listed here, however it maps.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "group": {
+            "description": "Group is the clause's section within the standard, when it has one.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the clause id as the standard publishes it — \"CC6.1\", \"A.5.15\", \"AC\".",
+            "type": "string"
+          },
+          "level": {
+            "description": "Level is what the strongest control pointed at this clause is worth:\n\"automated\", \"partial\" or \"none\".",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the standard's own words for that clause.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "controlList": {
+        "properties": {
+          "absent": {
+            "description": "Absent is how many the organization does not have. Each still names the\nclause it would satisfy, and none of them moves a coverage number.",
+            "type": "integer"
+          },
+          "automated": {
+            "description": "Automated is how many run with nobody in the loop.",
+            "type": "integer"
+          },
+          "controls": {
+            "description": "Controls is every control, opaque because the organization owns its shape.",
+            "items": {},
+            "type": "array"
+          },
+          "partial": {
+            "description": "Partial is how many run but do not cover their whole claim.",
+            "type": "integer"
+          },
+          "statement": {
+            "description": "Statement is the counts as one sentence, safe to quote.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many controls this organization publishes.",
+            "type": "integer"
+          },
+          "unverified": {
+            "description": "Unverified is how many rest on somebody having read the source rather than\non a test or an audit row.",
+            "type": "integer"
+          },
+          "version": {
+            "description": "Version is the embedded inventory's version.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "coverRow": {
+        "properties": {
+          "automated": {
+            "description": "Automated is how many clauses have an automated control behind them that\nsomething can fail on behalf of.",
+            "type": "integer"
+          },
+          "edition": {
+            "description": "Edition is which edition the clause list is taken from.",
+            "type": "string"
+          },
+          "framework": {
+            "description": "Framework is the framework id — \"soc2\", \"iso27001\", \"nist80053\".",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the published standard's name.",
+            "type": "string"
+          },
+          "none": {
+            "description": "None is how many have nothing behind them. It stays visible rather than\ndropping out of the fraction.",
+            "type": "integer"
+          },
+          "note": {
+            "description": "Note is what the clause list itself is scoped to, when the framework's\ncatalog says something a count alone would misrepresent.",
+            "type": "string"
+          },
+          "partial": {
+            "description": "Partial is how many are answered in part.",
+            "type": "integer"
+          },
+          "publisher": {
+            "description": "Publisher is who publishes it — AICPA, ISO/IEC, NIST.",
+            "type": "string"
+          },
+          "statement": {
+            "description": "Statement is the counts as one sentence, carrying the unit.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is the framework's WHOLE published clause list — the denominator.\nCounting only the clauses some control happened to name would report 100%\nevery time.",
+            "type": "integer"
+          },
+          "unit": {
+            "description": "Unit is what ONE clause is — \"criterion\", \"control\", \"family\". A count\nwithout its unit is not a fact, so it travels with every number here.",
+            "type": "string"
+          },
+          "units": {
+            "description": "Units is the plural of Unit, for rendering a sentence.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "docRow": {
+        "properties": {
+          "attested": {
+            "description": "Attested reports whether somebody OUTSIDE this organization put their name\nto it. Those are the artifacts a reviewer asks for, and they are released\nthrough a grant rather than published — there is no field that can say\notherwise.",
+            "type": "boolean"
+          },
+          "href": {
+            "description": "Href is where to read it, present only when this reader may.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the document's id within this organization's centre.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the artifact type — soc2, iso, pentest, letter, caiq, sig, vsa,\nquestionnaire, policy or other.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the artifact type in words, for rendering.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note is anything the organization says about this artifact.",
+            "type": "string"
+          },
+          "released": {
+            "description": "Released reports whether THIS reader may read it. False means the artifact\nexists and is available on request.",
+            "type": "boolean"
+          },
+          "tier": {
+            "description": "Tier is \"public\" or \"gated\". It defaults to gated, so a new artifact is\nclosed until somebody opens it deliberately.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is what the document is called.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when the record last changed, unix milliseconds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "dropped": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is always true; a record that was not there is a 404 instead.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the record removed.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the section.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "faqList": {
+        "properties": {
+          "faq": {
+            "description": "Faq is the questions and their answers.",
+            "items": {},
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "frameworkList": {
+        "properties": {
+          "frameworks": {
+            "description": "Frameworks is each framework and how many clauses it publishes.",
+            "items": {
+              "$ref": "#/components/schemas/frameworkRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "frameworkRow": {
+        "properties": {
+          "edition": {
+            "description": "Edition is which edition this clause list is taken from.",
+            "type": "string"
+          },
+          "framework": {
+            "description": "Framework is the framework id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the published standard's name.",
+            "type": "string"
+          },
+          "publisher": {
+            "description": "Publisher is who publishes it.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many clauses the standard publishes.",
+            "type": "integer"
+          },
+          "unit": {
+            "description": "Unit is what one clause is; Units is its plural.",
+            "type": "string"
+          },
+          "units": {
+            "description": "Units is the plural of Unit.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "policyList": {
+        "properties": {
+          "policies": {
+            "description": "Policies is the list.",
+            "items": {},
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "probe": {
+        "properties": {
+          "service": {
+            "description": "Service names the subsystem answering, always \"trust\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when the bundle is compiled and dispatching.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the embedded inventory's version — which inventory is running.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sectionWrite": {
+        "properties": {
+          "data": {
+            "description": "Data is the record. What may be in it depends on the section, and every\nsection's required fields are validated: a control is held to the same rule\na committed one is, a subprocessor must say what it is for, an update must\ncarry the date it describes."
+          },
+          "id": {
+            "description": "ID is the record's id. Omit it on a create and one is minted; the\nsingle-valued sections (profile, risk) hold one record whatever is named.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the section being written. The URL is the authority.",
+            "type": "string"
+          },
+          "ord": {
+            "description": "Ord orders this record within its section, ascending, ties broken by id.\nIt is the organization's own ordering — the page renders in it.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "subprocessorList": {
+        "properties": {
+          "subprocessors": {
+            "description": "Subprocessors is the list, each naming at least what it is and what it is\nfor — a name alone says nothing.",
+            "items": {},
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "trustCoverage": {
+        "properties": {
+          "controls": {
+            "$ref": "#/components/schemas/trustTally",
+            "description": "Controls is how the controls stand, independent of any framework."
+          },
+          "frameworks": {
+            "description": "Frameworks is the per-framework counts.",
+            "items": {
+              "$ref": "#/components/schemas/coverRow"
+            },
+            "type": "array"
+          },
+          "generated": {
+            "description": "Generated is when this was computed, unix milliseconds.",
+            "type": "integer"
+          },
+          "version": {
+            "description": "Version is the embedded inventory's version.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "trustDocuments": {
+        "properties": {
+          "documents": {
+            "description": "Documents is the list; a gated entry carries no address.",
+            "items": {
+              "$ref": "#/components/schemas/docRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "trustTally": {
+        "properties": {
+          "absent": {
+            "description": "Absent is how many the organization does not have. An absent control still\nnames the clause it would satisfy — that is a roadmap — but it never moves\na coverage number.",
+            "type": "integer"
+          },
+          "automated": {
+            "description": "Automated is how many run with nobody in the loop.",
+            "type": "integer"
+          },
+          "partial": {
+            "description": "Partial is how many run but do not cover their whole claim. Each says what\nis missing.",
+            "type": "integer"
+          },
+          "statement": {
+            "description": "Statement is the counts as one sentence, safe to quote.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many controls this organization publishes.",
+            "type": "integer"
+          },
+          "unverified": {
+            "description": "Unverified is how many rest on somebody having READ the source rather than\non a test or an audit row. Only a check that can FAIL counts as verified,\nand coverage counts those one rung weaker than they claim to be.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "updateList": {
+        "properties": {
+          "updates": {
+            "description": "Updates is the entries, each carrying the date it describes.",
+            "items": {},
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "written": {
+        "properties": {
+          "id": {
+            "description": "ID is the record's id — the one supplied, or the one minted when the\ncaller supplied none.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the section written.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when it was written, unix milliseconds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

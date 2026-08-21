@@ -62,7 +62,7 @@ var frozen = []string{
 	// reads it, and the catalog loop — open at BOTH ends, since commerce publishes
 	// product.created only when PUBSUB_URL is set and nothing sets it — was deleted
 	// rather than rehomed.
-	"guide", "company", "compliance", "legal", "ask",
+	"guide", "company", "compliance", "trust", "legal", "ask",
 	// ai precedes zen — a DECISION, not drift: both claim "/v1", equal patterns
 	// resolve by mount order, and the /v1 remainder (the OpenAI-compatible
 	// surface) must land on ai. zen's row is deliberately shadowed on the light
