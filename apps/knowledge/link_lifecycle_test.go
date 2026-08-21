@@ -37,7 +37,7 @@ func edgeCount(t *testing.T, app *zip.App, org, source string) int {
 
 func graphOf(t *testing.T, app *zip.App, org string) graphResp {
 	t.Helper()
-	code, b := req(t, app, http.MethodGet, "/v1/kb/graph", org, nil)
+	code, b := req(t, app, http.MethodGet, "/v1/knowledge/graph", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("graph: %d %s", code, b)
 	}

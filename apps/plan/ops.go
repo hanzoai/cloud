@@ -1,13 +1,13 @@
 package plan
 
-// The typed-op seam for the /v1/plans catalog surface.
+// The typed-op seam for the /v1/plan catalog surface.
 //
 // A typed op (zip.Get[In, Out]) is ONE registry entry with N projections — the
 // REST route, the OpenAPI operation's schema AND prose, the MCP tool, the CLI
 // command and the generated SDK method all follow from it. An untyped route gets
 // a route and a bare operation (method, path, product) and nothing else: no
 // schema, no prose, no MCP tool, no CLI command, no SDK method. All fifteen
-// operations on this surface were untyped, so /v1/plans published fifteen
+// operations on this surface were untyped, so /v1/plan published fifteen
 // addresses and said nothing whatsoever about any of them.
 //
 // They were typeable all along. The premise that held them back — "a typed op

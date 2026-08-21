@@ -261,7 +261,7 @@ func TestProseIsTheAppsOwnSentence(t *testing.T) {
 		}},
 		{App: "plan", Doc: &Document{
 			Info:  Info{Description: "Package plan is the plan catalog: every tier you can buy."},
-			Paths: map[string]PathItem{"/v1/plans": {"get": {Tags: []string{"plan"}}}},
+			Paths: map[string]PathItem{"/v1/plan": {"get": {Tags: []string{"plan"}}}},
 		}},
 	}
 	said := prose(parts)

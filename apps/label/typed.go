@@ -162,34 +162,34 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 
 	// Declared on the App with WHOLE paths: the collection route IS the prefix,
 	// which a group cannot spell.
-	zip.Post(zapp, "/v1/risk/labels", o.label,
+	zip.Post(zapp, "/v1/label", o.label,
 		zip.WithOperationID("riskLabel"),
 		zip.WithSummary("Assert ground truth about events"),
-		zip.WithTags("risk"))
-	zip.Get(zapp, "/v1/risk/labels", o.labels,
+		zip.WithTags("label"))
+	zip.Get(zapp, "/v1/label", o.labels,
 		zip.WithOperationID("riskLabels"),
 		zip.WithSummary("Read the assertions this tenant has recorded"),
-		zip.WithTags("risk"))
-	zip.Post(zapp, "/v1/risk/labels/resolve", o.resolve,
+		zip.WithTags("label"))
+	zip.Post(zapp, "/v1/label/resolve", o.resolve,
 		zip.WithOperationID("riskResolveLabels"),
 		zip.WithSummary("Resolve the label in force for named events, as of each event's own horizon"),
-		zip.WithTags("risk"))
-	zip.Get(zapp, "/v1/risk/labels/coverage", o.coverage,
+		zip.WithTags("label"))
+	zip.Get(zapp, "/v1/label/coverage", o.coverage,
 		zip.WithOperationID("riskLabelCoverage"),
 		zip.WithSummary("How much of the window has matured, and how much of that is judged"),
-		zip.WithTags("risk"))
-	zip.Get(zapp, "/v1/risk/labels/vocabulary", o.vocabulary,
+		zip.WithTags("label"))
+	zip.Get(zapp, "/v1/label/vocabulary", o.vocabulary,
 		zip.WithOperationID("riskLabelVocabulary"),
 		zip.WithSummary("The closed vocabularies and the precedence rule that resolves a conflict"),
-		zip.WithTags("risk"))
-	zip.Post(zapp, "/v1/risk/labels/dispose", o.dispose,
+		zip.WithTags("label"))
+	zip.Post(zapp, "/v1/label/dispose", o.dispose,
 		zip.WithOperationID("riskDisposeLabels"),
 		zip.WithSummary("Dispose of this tenant's expired assertions, whole records only"),
-		zip.WithTags("risk"))
-	zip.Post(zapp, "/v1/risk/labels/hold", o.hold,
+		zip.WithTags("label"))
+	zip.Post(zapp, "/v1/label/hold", o.hold,
 		zip.WithOperationID("riskHoldLabels"),
 		zip.WithSummary("Place or release a litigation hold on named records"),
-		zip.WithTags("risk"))
+		zip.WithTags("label"))
 }
 
 // ── assert ───────────────────────────────────────────────────────────────────
