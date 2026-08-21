@@ -179,6 +179,10 @@ var Apps = []App{
 	{Name: "blueprint", Prefixes: []string{"/v1/blueprint"}},
 	{Name: "framework", Prefixes: []string{"/v1/framework"}, Stage: Beta},
 	{Name: "knowledge", Prefixes: []string{"/v1/kb/connectors", "/v1/kb/graph", "/v1/kb/import", "/v1/kb/search"}},
+	// graph is the assertion plane: entities, the relations between them, and
+	// who asserted each one when. It owns /v1/graph outright. alpha until it
+	// carries retention (HIP-1196).
+	{Name: "graph", Prefixes: []string{"/v1/graph"}, Stage: Alpha},
 	{Name: "help", Prefixes: []string{"/v1/help"}},
 	{Name: "content", Prefixes: []string{"/v1/content"}, Stage: Beta},
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
