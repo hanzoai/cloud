@@ -1,0 +1,442 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package graph is one organization's entities and the relations between them, held as assertions: somebody, at some moment, from some evidence, asserted that this thing stands in that relation to that other thing.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "graph"
+    }
+  ],
+  "paths": {
+    "/v1/graph": {
+      "get": {
+        "operationId": "graphRead",
+        "summary": "Read the assertions this organization has recorded",
+        "tags": [
+          "graph"
+        ],
+        "parameters": [
+          {
+            "name": "entity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "relation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "value",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphReadOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "graphAssert",
+        "summary": "Assert what is true of an entity",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/graphAssertIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphAssertOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/neighbors": {
+      "post": {
+        "operationId": "graphNeighbors",
+        "summary": "Walk the edges from a seed set, bounded",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/graphNeighborsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphNeighborsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/resolve": {
+      "post": {
+        "operationId": "graphResolve",
+        "summary": "What is in force about an entity as of an instant, and what disagreed",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/graphResolveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphResolveOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/graph/vocabulary": {
+      "get": {
+        "operationId": "graphVocabulary",
+        "summary": "The relations in use, and the rule that resolves a conflict",
+        "tags": [
+          "graph"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphVocabularyOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "graphAssertIn": {
+        "properties": {
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/graphFact"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "graphAssertOut": {
+        "properties": {
+          "duplicate": {
+            "type": "integer"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "recorded": {
+            "type": "integer"
+          },
+          "refused": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "graphFact": {
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "entity": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "names": {
+            "type": "boolean"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "seen": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graphNeighborsIn": {
+        "properties": {
+          "as_of": {
+            "type": "string"
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "seeds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "graphNeighborsOut": {
+        "properties": {
+          "bound": {
+            "type": "integer"
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "entities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "graphReadOut": {
+        "properties": {
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/wireFact"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "graphResolveIn": {
+        "properties": {
+          "as_of": {
+            "type": "string"
+          },
+          "entity": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "graphResolveOut": {
+        "properties": {
+          "as_of": {
+            "type": "string"
+          },
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/wireFact"
+            },
+            "type": "array"
+          },
+          "contested": {
+            "type": "boolean"
+          },
+          "entity": {
+            "type": "string"
+          },
+          "known": {
+            "type": "boolean"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "winner": {
+            "$ref": "#/components/schemas/wireFact"
+          }
+        },
+        "type": "object"
+      },
+      "graphVocabularyOut": {
+        "properties": {
+          "bound": {
+            "type": "integer"
+          },
+          "relations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rule": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "wireFact": {
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "entity": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "knowable": {
+            "type": "string"
+          },
+          "names": {
+            "type": "boolean"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "seen": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}
