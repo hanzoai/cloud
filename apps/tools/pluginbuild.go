@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/connectorruntime"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/types"
@@ -52,12 +50,7 @@ var pluginName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 // the wrong place, and a silently-stripped key looks like it worked.
 var secretish = regexp.MustCompile(`(?i)(sk-[a-z0-9]{16,}|ghp_[a-z0-9]{20,}|xox[baprs]-[a-z0-9-]{10,}|AKIA[A-Z0-9]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)`)
 
-// buildRequest is what this route accepts. Staying untyped costs prose, an MCP
-// tool and a CLI command — it does not have to cost the SHAPE, so this struct is
-// DECLARED through openapi.Register (tools.go's init). Without that declaration
-// the operation renders with no requestBody, which is what a route taking no
-// input publishes, and every generated SDK offered a build call with nowhere to
-// put the source.
+// buildRequest is what this route accepts.
 type buildRequest struct {
 	// Name is the plugin's name: one lowercase path segment (a-z0-9, _ or -),
 	// and the id the runtime loads it by.
@@ -73,20 +66,11 @@ type buildRequest struct {
 	Spec string `json:"spec,omitempty"`
 }
 
-// buildOut is the builder's receipt for a plugin that built and was stored. It is
-// a named type so the 201 response can be DECLARED (openapi.Register, tools.go's
-// init) and so the declaration and the value the handler returns are the same
-// shape — a map literal here and a struct in the document is how the two drift
-// apart.
+// buildOut is the builder's receipt for a plugin that built and was stored.
 //
 // The fields are ALPHABETICAL because the wire they replace was a Go map, which
 // encoding/json writes in sorted key order. TestBuildReceiptIsByteIdentical pins
 // that, so naming the shape cannot move a byte of it.
-//
-// The FAILURE body (422) has no equivalent here on purpose: openapi.Register
-// states the success shape under the "2XX" range key only, so the diagnostics
-// this route answers with stay undeclarable — the same missing capability that
-// keeps the route out of zip's registry in the first place.
 type buildOut struct {
 	// Bytes is the size of the bundled CommonJS the runtime will execute.
 	Bytes int `json:"bytes"`
@@ -97,82 +81,92 @@ type buildOut struct {
 	Plugin AuthoredPlugin `json:"plugin"`
 }
 
-// buildPlugin builds, validates and stores one plugin for the caller's org.
+// BuildPlugin builds and stores one plugin for the caller's org. The 201 carries
+// the bundle's size, whether a model wrote the source, and the plugin as stored.
 //
-// UNTYPED BY DESIGN — see untypedByDesign in typed_wire_test.go, which holds this
-// route as a closed-list entry. A failed build answers 422 carrying the BUILD
-// DIAGNOSTICS as a domain body (the bundler's error, the source that failed, and
-// whether the model wrote it), which is the only reason a caller can fix the
-// plugin. A typed op can refuse only by RETURNING an error, and zip renders that
-// as the flat HTTPError {status, code, error} — there is nowhere in it for the
-// source or the generated flag. Writing the body from inside the op does not
-// escape it either: a nil Out makes zip stamp cmp.Or(op.Status, 204) over the 422
-// (zip@v1.18.11/typed.go:305). So this route is a 201-or-422 pair of DIFFERENT
-// shapes, and zip has one Out and one declared status per op.
-func buildPlugin(s *cloud.Service[state], c *zip.Ctx) error {
-	p, ok := PrincipalFrom(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// Post `source` to build TypeScript as-is, or `spec` — an OpenAPI document or
+// plain prose describing the endpoints — to have one generated; the generated
+// source comes back in the answer, so a caller reads what will run before it
+// runs. Exactly one of the two, and `name` must be one lowercase path segment;
+// both or neither is 400.
+//
+// COMPILING IS THE GATE. The source goes through the same pipeline the committed
+// connectors do — esbuild to one CommonJS program, then compiled in the goja
+// runtime that will actually execute it — and anything that fails is rejected and
+// NEVER stored. So a plugin in the store is one this deployment has already
+// loaded once, not one a model claimed was fine. A failed build answers 422
+// carrying the diagnostics a caller needs to fix it: the bundler's error
+// (`detail`), the source that failed, and whether the model wrote it.
+//
+// CREDENTIALS ARE NOT PART OF A PLUGIN. A plugin names the connectors `provider`
+// it needs and reads that credential from `ctx.auth` at run time, under KMS
+// custody. Source that carries something key-shaped is REFUSED rather than
+// silently persisted — a scrubbed key looks like it worked.
+//
+// Example: {"name":"acme","provider":"acme","spec":"POST /v1/things creates a thing"}
+func (o toolOps) buildPlugin(ctx context.Context, req *buildRequest) (*buildOut, error) {
+	p, err := principalOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if s.State.authored == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "the plugin store is not open")
-	}
-	var req buildRequest
-	if err := json.Unmarshal(c.Body(), &req); err != nil {
-		return zip.ErrBadRequest("malformed body: " + err.Error())
+	if o.s.State.authored == nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "the plugin store is not open")
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if !pluginName.MatchString(req.Name) {
-		return zip.ErrBadRequest("name must be one lowercase path segment (a-z0-9, _ or -)")
+		return nil, zip.ErrBadRequest("name must be one lowercase path segment (a-z0-9, _ or -)")
 	}
 	if (req.Source == "") == (req.Spec == "") {
-		return zip.ErrBadRequest("provide exactly one of source or spec")
+		return nil, zip.ErrBadRequest("provide exactly one of source or spec")
 	}
 	if len(req.Source) > maxPluginSource || len(req.Spec) > maxSpecBytes {
-		return zip.ErrBadRequest("input too large")
+		return nil, zip.ErrBadRequest("input too large")
 	}
 
 	source := req.Source
 	generated := false
 	if req.Spec != "" {
-		if s.State.ai == nil {
-			return zip.Errorf(http.StatusServiceUnavailable, "no AI client is configured; post source instead of spec")
+		if o.s.State.ai == nil {
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "no AI client is configured; post source instead of spec")
 		}
-		out, err := generateSource(c.Context(), s.State.ai, p.Org, req.Name, req.Provider, req.Spec)
+		out, err := generateSource(ctx, o.s.State.ai, p.Org, req.Name, req.Provider, req.Spec)
 		if err != nil {
-			return zip.Errorf(http.StatusBadGateway, "generate: %s", err.Error())
+			return nil, zip.Errorf(http.StatusBadGateway, "generate: %s", err.Error())
 		}
 		source, generated = out, true
 	}
 	if m := secretish.FindString(source); m != "" {
-		return zip.ErrBadRequest(
+		return nil, zip.ErrBadRequest(
 			"source contains what looks like a credential (" + m[:min(8, len(m))] +
 				"…): a plugin reads its credential from ctx.auth, so register it as a connector instead")
 	}
 
 	bundled, err := bundleSource(req.Name, source)
 	if err != nil {
-		return c.JSON(http.StatusUnprocessableEntity, map[string]any{
-			"error":     "build failed",
+		// The diagnostics ride the refusal as RFC 9457 extension members
+		// (zip >= v1.31.3): they merge under the envelope, so a caller reads one
+		// object rather than a body filed under a key it has to know about. The
+		// envelope is written last, so a domain key can never displace the status.
+		return nil, zip.ErrUnprocessable("build failed").With(map[string]any{
 			"detail":    err.Error(),
 			"source":    source,
 			"generated": generated,
 		})
 	}
 
-	stored, err := s.State.authored.Put(c.Context(), AuthoredPlugin{
+	stored, err := o.s.State.authored.Put(ctx, AuthoredPlugin{
 		Org: p.Org, Name: req.Name, Provider: req.Provider,
 		Source: source, Bundled: string(bundled),
 	})
 	if err != nil {
-		return fmt.Errorf("store plugin: %w", err)
+		return nil, fmt.Errorf("store plugin: %w", err)
 	}
-	audrecordAction(s, c, "plugin.build", p.Org, req.Name, "success", http.StatusCreated)
-	return c.JSON(http.StatusCreated, buildOut{
+	o.audit(ctx, "plugin.build", p.Org, req.Name, "success", http.StatusCreated)
+	return &buildOut{
 		Bytes:     len(bundled),
 		Generated: generated,
 		Plugin:    stored,
-	})
+	}, nil
 }
 
 // bundleSource writes the TypeScript to a temp entrypoint and runs the SAME
