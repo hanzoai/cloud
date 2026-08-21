@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
+	"github.com/hanzoai/cloud/plane"
+	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -17,12 +18,21 @@ import (
 // service-token seam —
 //
 //	promos      → commerce /v1/platform/promo   (the admin-configured plan promo)
-//	caps        → commerce /v1/billing/alerts (a per-org usage cap override)
+//	caps        → commerce's spend-alert ops, BY NAME over the internal plane
 //
 // so admin.hanzo.ai configures the 50%-off promo and oversees/overrides any org's
 // caps without a parallel model. Promo ops are platform-only (core.Admit); cap
 // ops are org-scoped (core.AdmitScoped) so a SuperAdmin targets any org via org=
 // while a lesser admin is hard-pinned to their own.
+//
+// THE CAPS HALF NO LONGER FORWARDS, and it could not have gone on doing so. The
+// forward re-entered this binary's own router at /v1/billing/alerts, and that
+// address is the billing capability's now — so the hop would have been admin →
+// billing → commerce for a question commerce answers, with the tenant re-derived
+// at each stop from a header rather than carried. cloud.As is what an operator
+// acting on someone else's books needs and a header hop cannot express: the
+// SuperAdmin's own principal travels WHOLE and only the tenant is re-pointed, so
+// the callee still applies its own rules to the caller who is really there.
 
 // limitRoutes registers the promo + cap control plane. Called from routes().
 func limitRoutes(z *zip.App, o ops) {
@@ -121,8 +131,11 @@ func (o ops) listCaps(ctx context.Context, in *capIn) (*rawOut, error) {
 	if !ok {
 		return &rawOut{Status: core.Err, Msg: "org required"}, nil
 	}
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodGet, "/v1/billing/alerts", org, nil)
-	return relay(raw, status, err)
+	out, cerr := commercepeer.BillingAlerts(cloud.As(c, org), &plane.SubjectIn{Subject: org})
+	if cerr != nil {
+		return capFailed(cerr), nil
+	}
+	return &rawOut{Status: core.OK, Data: out.Rows, Total: core.Total(0)}, nil
 }
 
 // createCap sets a usage cap on one org — a platform override of a customer budget,
@@ -142,8 +155,18 @@ func (o ops) createCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	if !ok {
 		return &rawOut{Status: core.Err, Msg: "org required"}, nil
 	}
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodPost, "/v1/billing/alerts", org, c.Body())
-	return relay(raw, status, err)
+	spec := plane.AlertSpec{Subject: org}
+	if len(c.Body()) > 0 {
+		if err := json.Unmarshal(c.Body(), &spec); err != nil {
+			return &rawOut{Status: core.Err, Msg: "invalid request body"}, nil
+		}
+		spec.Subject = org
+	}
+	out, cerr := commercepeer.BillingAlertRaise(cloud.As(c, org), &spec)
+	if cerr != nil {
+		return capFailed(cerr), nil
+	}
+	return &rawOut{Status: core.OK, Data: out}, nil
 }
 
 // updateCap edits one cap by id — raise or lower the ceiling, flip enforcement. The
@@ -166,8 +189,18 @@ func (o ops) updateCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	if id == "" {
 		return &rawOut{Status: core.Err, Msg: "cap id required"}, nil
 	}
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodPatch, "/v1/billing/alerts/"+url.PathEscape(id), org, c.Body())
-	return relay(raw, status, err)
+	patch := plane.AlertPatch{Subject: org, ID: id}
+	if len(c.Body()) > 0 {
+		if err := json.Unmarshal(c.Body(), &patch); err != nil {
+			return &rawOut{Status: core.Err, Msg: "invalid request body"}, nil
+		}
+		patch.Subject, patch.ID = org, id
+	}
+	out, cerr := commercepeer.BillingAlertAmend(cloud.As(c, org), &patch)
+	if cerr != nil {
+		return capFailed(cerr), nil
+	}
+	return &rawOut{Status: core.OK, Data: out}, nil
 }
 
 // deleteCap removes one cap by id, lifting the ceiling entirely.
@@ -188,8 +221,10 @@ func (o ops) deleteCap(ctx context.Context, in *capIn) (*rawOut, error) {
 	if id == "" {
 		return &rawOut{Status: core.Err, Msg: "cap id required"}, nil
 	}
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodDelete, "/v1/billing/alerts/"+url.PathEscape(id), org, nil)
-	return relay(raw, status, err)
+	if _, cerr := commercepeer.BillingAlertDrop(cloud.As(c, org), &plane.AlertRef{Subject: org, ID: id}); cerr != nil {
+		return capFailed(cerr), nil
+	}
+	return &rawOut{Status: core.OK, Data: map[string]bool{"ok": true}}, nil
 }
 
 // targetOrg resolves which org a cap operation acts on: a SuperAdmin names it with
@@ -214,6 +249,22 @@ func targetOrg(s *cloud.Service[core.State], c *zip.Ctx, want string) (string, b
 // JSON through as data (so the console decodes the exact SpendAlert/Promo shape), a
 // non-2xx becomes an honest failure carrying commerce's status + message rather than
 // masking a 400 validation as success.
+// capFailed renders a refused cap call the way this board's every other answer
+// renders one: a 200 carrying {status:"error", msg}, never an HTTP error.
+//
+// That is not politeness, it is the contract the console reads — an operator
+// board shows the refusal beside the row it belongs to, and an HTTP error would
+// blank the whole panel to report one failed edit. The peer's own sentence is
+// carried through, so a 404 for a cap that is not there and a 400 for a cap that
+// bounds nothing still say which they are.
+func capFailed(err error) *rawOut {
+	msg := strings.TrimSpace(err.Error())
+	if msg == "" {
+		msg = http.StatusText(http.StatusBadGateway)
+	}
+	return &rawOut{Status: core.Err, Msg: msg}
+}
+
 func relay(raw []byte, status int, err error) (*rawOut, error) {
 	if err != nil {
 		return &rawOut{Status: core.Err, Msg: err.Error()}, nil

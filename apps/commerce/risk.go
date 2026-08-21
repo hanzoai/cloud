@@ -512,12 +512,67 @@ func (s screen) record(ctx context.Context, p payment, ref, id string) error {
 // read; the structural check (risk_payments_test.go) is what makes that the only way
 // a new mint op can be registered at all.
 func (s screen) op(core zip.TypedHandler[PaymentIn, PaymentOut]) zip.TypedHandler[PaymentIn, PaymentOut] {
-	return func(ctx context.Context, in *PaymentIn) (*PaymentOut, error) {
-		// The door is the op's OWN address, stated rather than read off the request:
-		// over MCP the request path is /mcp, which is the transport and not the mint.
-		p := payment{door: paymentsPrefix}
+	return screened(s, paymentsPrefix,
+		func(in *PaymentIn) (int64, string) { return in.AmountCents, in.Currency },
+		func(out *PaymentOut) (string, string) {
+			// An op that RETURNED a receipt returned it because the charge cleared, so
+			// the answer's own fields are the settlement fact the raw door has to read
+			// its response bytes for.
+			ref, _ := firstRef(out.ProcessorRef, out.ID)
+			return ref, out.ID
+		}, core)
+}
+
+// screened composes the screen onto ANY typed mint op's handler, and it is the
+// ONE composition point for all of them.
+//
+// [screen.op] is this function with its projections fixed to one op's types, and
+// that method stood alone only while there was one typed mint. There are four
+// now — the agent's payment, the browser top-up, the saved-card top-up and the
+// card subscription — and four copies of the composition is precisely the state
+// that made the first screen a bound on one entrance with others beside it.
+//
+// It takes the two facts a door cannot state for itself, and takes them as
+// VALUES rather than reading the wire:
+//
+//	WHAT THE INPUT IS WORTH, off the DECODED input. Over MCP the body is a
+//	JSON-RPC envelope with the payment inside `arguments`, so a body reader
+//	states no value on exactly the door an agent calls — the sharpest axis a
+//	credit door has, blind on the agent plane and fine on the browser's.
+//
+//	WHAT THE ANSWER SETTLED, off the RETURNED receipt. Over MCP the answer is
+//	wrapped in a tools/call result and no HTTP response exists when the handler
+//	returns, so a response reader would watch an agent's payment settle and
+//	teach nothing.
+//
+// WHAT A PROJECTION CANNOT SUPPLY IS OMITTED, NEVER SKIPPED. The payer, the
+// address and the jurisdiction come off the request the op is served over
+// ([cloud.Request], parked by the app-wide Bridge, which runs for /mcp and the
+// op plane exactly as for a REST route). A call with NO request at all — the
+// CLI's local invoke — resolves no payer: that is the same state a request
+// naming no organisation is in, it is screened AS that state rather than
+// exempted from it, and the handler's own gate refuses it after ([payingOrg]).
+//
+// THE ORDER IS THE CONTROL. decide runs before the core, so a refusal costs no
+// card authorization; record runs after it and only on an answer, so the model
+// learns from payments that happened and nothing else. A credit that cannot be
+// posted refuses the op and the receipt is withheld, so a caller is never told a
+// balance exists that does not.
+func screened[In, Out any](
+	s screen,
+	door string,
+	worth func(*In) (cents int64, currency string),
+	receipt func(*Out) (ref, id string),
+	core zip.TypedHandler[In, Out],
+) zip.TypedHandler[In, Out] {
+	return func(ctx context.Context, in *In) (*Out, error) {
+		// The door is the op's OWN address, stated rather than read off the
+		// request: over MCP the request path is /mcp, which is the transport and
+		// not the mint.
+		p := payment{door: door}
 		if c, ok := cloud.Request(ctx); ok {
-			p = seen(c, paymentsPrefix, in.AmountCents, in.Currency)
+			cents, currency := worth(in)
+			p = seen(c, door, cents, currency)
 		}
 		if err := s.decide(ctx, p); err != nil {
 			return nil, err
@@ -526,15 +581,10 @@ func (s screen) op(core zip.TypedHandler[PaymentIn, PaymentOut]) zip.TypedHandle
 		if err != nil || out == nil {
 			return out, err
 		}
-		// An op that RETURNED a receipt returned it because the charge cleared, so the
-		// answer's own fields are the settlement fact the raw door has to read its
-		// response bytes for.
-		ref, _ := firstRef(out.ProcessorRef, out.ID)
-		// The same two halves in the same order as the raw door, through the same value
-		// ([screen.record]): the ledger the gate reads, then the model. A credit that
-		// cannot be posted refuses the op and the receipt is withheld, so an agent is
-		// never told a balance exists that does not (settle.go).
-		if err := s.record(ctx, p, ref, out.ID); err != nil {
+		ref, id := receipt(out)
+		// The same two halves in the same order as the raw door, through the same
+		// value ([screen.record]): the ledger the gate reads, then the model.
+		if err := s.record(ctx, p, ref, id); err != nil {
 			return nil, err
 		}
 		return out, nil

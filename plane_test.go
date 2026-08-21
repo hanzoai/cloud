@@ -134,6 +134,14 @@ func TestNoPlaneInputCanNameAnOrg(t *testing.T) {
 		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{}, plane.TxnsIn{},
 		plane.SecretIn{}, plane.FilesIn{}, plane.Visibility{}, plane.ReserveIn{},
 		plane.FlagIn{},
+		// The billing family, which is where the rule is easiest to break: every
+		// one of these carries a SUBJECT, and a subject is a wallet inside the
+		// org the caller already pinned. One field named Org beside it and the
+		// same input would name the tenant instead of an account within it.
+		plane.SubjectIn{}, plane.CallerIn{}, plane.HoldersIn{},
+		plane.TransactionsIn{}, plane.InvoicesIn{}, plane.RaiseIn{}, plane.InvoiceRef{},
+		plane.AlertSpec{}, plane.AlertPatch{}, plane.AlertRef{}, plane.CapIn{},
+		plane.CryptoMintIn{}, plane.CryptoDepositIn{}, plane.WireIn{},
 	}
 	for _, in := range inputs {
 		typ := reflect.TypeOf(in)
