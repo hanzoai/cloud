@@ -97,7 +97,10 @@ func URL() string {
 		return u
 	}
 	port, err := clientPort()
-	if err != nil {
+	if err != nil || port <= 0 {
+		// -1 is the server's "any free port" and is not an address: a client
+		// dialing an ephemeral bus is told where it landed through
+		// CLOUD_PUBSUB_URL, and one that was told nothing dials the default.
 		port = defaultPort
 	}
 	return "nats://" + net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
@@ -105,6 +108,15 @@ func URL() string {
 
 // clientPort resolves the port the embedded server binds and the default URL dials —
 // ONE parse, so the server and its clients cannot land on different ports.
+//
+// 0 means ANY FREE PORT, and it is spelled -1 to the library, which reads 0 as
+// "use my default" and lands back on 4222. It exists for the same reason
+// GIT_SSH_ADDR=127.0.0.1:0 does in mk/plugin.mk: describing an app MOUNTS it,
+// mounting this one binds a real bus, and a projection of the route table is no
+// reason to contend for a fixed port with whatever else is on the host. Without
+// it two describes on one machine cannot run at once — and the second fails as a
+// bare make Error 2 that names no app, because the parallel run swallows which
+// target died.
 func clientPort() (int, error) {
 	v := strings.TrimSpace(os.Getenv(portEnv))
 	if v == "" {
@@ -113,6 +125,9 @@ func clientPort() (int, error) {
 	p, err := strconv.Atoi(v)
 	if err != nil {
 		return 0, fmt.Errorf("bad %s %q: %w", portEnv, v, err)
+	}
+	if p == 0 {
+		return -1, nil
 	}
 	return p, nil
 }
@@ -169,8 +184,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// aborts through cloud's own path. It cannot close the race completely (the port
 	// can be taken between this Close and the server's own bind), which is why the
 	// library's exit stays as the backstop rather than being papered over.
-	if err := claimable(host, port); err != nil {
-		return fmt.Errorf("pubsub.Mount: cannot bind %s (fail-closed): %w", net.JoinHostPort(host, strconv.Itoa(port)), err)
+	// An ephemeral port has nothing to probe: the kernel picks one that is free
+	// by definition, so the pre-flight below would be asking whether -1 is taken.
+	if port > 0 {
+		if err := claimable(host, port); err != nil {
+			return fmt.Errorf("pubsub.Mount: cannot bind %s (fail-closed): %w", net.JoinHostPort(host, strconv.Itoa(port)), err)
+		}
 	}
 
 	s, err := psembed.Open(psembed.Options{

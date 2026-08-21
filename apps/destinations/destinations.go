@@ -239,7 +239,7 @@ type noInput struct{}
 // a body says.
 type destinationRef struct {
 	// Platform is the destination to act on, from the path: ga4 | meta | tiktok |
-	// linkedin | x | reddit | posthog | umami.
+	// linkedin | x | reddit | insights | analytics.
 	Platform string `json:"platform"`
 }
 
@@ -541,7 +541,7 @@ type DestinationStatus struct {
 	Enabled bool `json:"enabled"`
 	// Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this
 	// org, else the integrations connection named by the platform's Fallback, else
-	// no credential needed at all (a public-ingest sink like Umami). False on a
+	// no credential needed at all (a public-ingest sink like Analytics). False on a
 	// connected destination whose secret has gone missing — Connected && !Live is
 	// exactly the "reconnect me" state.
 	Live bool `json:"live"`
@@ -558,6 +558,12 @@ type DestinationStatus struct {
 	// Secrets are the KMS secret NAMES this platform custodies for the org — names
 	// only, never values. The connect body accepts each under its camelCase form.
 	Secrets []string `json:"secrets"`
+	// Pixel is whether the hosted tag can inject a browser pixel for this platform,
+	// so a console offers a per-SITE pixel input for exactly these. False means the
+	// platform receives conversions server-side only, and an input would promise an
+	// injection that never happens. Derived from the tag's own map (event.BrowserTags),
+	// never restated — a second list is how a console offers a pixel nothing fires.
+	Pixel bool `json:"pixel"`
 }
 
 // statusOf builds the card for a destination, folding in the org's live row (row may
@@ -567,6 +573,7 @@ func statusOf(s *cloud.Service[state], ctx context.Context, org string, dest Des
 	st := DestinationStatus{
 		Platform: dest.ID(), Name: dest.Name(), Category: dest.Category(),
 		Fields: spec.Fields, Secrets: spec.Secrets,
+		Pixel: event.HasPixel(dest.ID()),
 	}
 	if row != nil {
 		st.Connected = true
