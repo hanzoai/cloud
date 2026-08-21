@@ -161,6 +161,10 @@ var allowedRequestUses = map[string]string{
 		"request. Fails closed off the HTTP path: no request means the unbilled, default-project answer, " +
 		"and principal.Acting has already refused before any op reaches it.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
+	"apps/graph/graph.go": "actor — every assertion records WHO asserted it, and that identity is " +
+		"the caller's home org plus their user name (principal.Owner + c.User), strictly more than " +
+		"the tenant OrgFrom carries. The org itself still resolves through principal.OrgFrom beside " +
+		"it, so the request supplies only the asserting identity, never the scope.",
 	"apps/seo/typed.go": "who — an identity gate reading strictly more than the org, and the two facts " +
 		"it reads are not the same fact. cloud.Request says a request EXISTS; principal.ValidatedFrom " +
 		"says the identity middleware minted the caller from a verified credential rather than the " +
