@@ -178,6 +178,8 @@ type availabilityPoint struct {
 // instant inventory and the trend that used to cost three separate PromQL
 // round-trips.
 type availabilityResponse struct {
+	// Range is the window and bucket width actually used, after clamping — not what
+	// was asked for, which is why a caller reads it back rather than assuming.
 	Range struct {
 		// SinceSec is the window actually used, after clamping.
 		SinceSec int `json:"sinceSec"`
