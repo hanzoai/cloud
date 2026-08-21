@@ -25,10 +25,10 @@ func TestACustomerOperationIsPublicByItsAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	for path, want := range map[string]bool{
-		"/v1/widgets":         true,
-		"/v1/admin/widgets":   false,
+		"/v1/widgets":          true,
+		"/v1/admin/widgets":    false,
 		"/.well-known/widgets": false,
-		"/_/widgets":          false,
+		"/_/widgets":           false,
 	} {
 		op := doc.Paths[path]["get"]
 		if op == nil {

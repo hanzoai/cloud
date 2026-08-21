@@ -47014,6 +47014,8 @@ paths:
         falls through to their own routes, so it can never shadow them.
       operationId: get
       summary: Browse your org's repositories
+      tags:
+      - git
       x-app: git
   /.well-known/agent-skills/{skill}/SKILL.md:
     get:
@@ -47031,6 +47033,8 @@ paths:
         schema:
           type: string
       summary: One skill's document, as markdown
+      tags:
+      - skills
       x-app: skills
   /.well-known/agent-skills/index.json:
     get:
@@ -47042,6 +47046,8 @@ paths:
         Public by design: the discovery surface carries no secrets, so there is no bearer and no tenant scope. Answers `Cache-Control: public, max-age=300`, and a catalogue that is not embedded is `{"error":…}` at 404.
       operationId: get_.well-known_agent-skills_index.json
       summary: The brand's master catalogue of agent skills
+      tags:
+      - skills
       x-app: skills
   /.well-known/jwks:
     get:
@@ -47057,6 +47063,8 @@ paths:
       summary: Publishes the public keys that verify the tokens issued here — the
         one URL you point a service at so it can check a token itself, offline, without
         calling back and without holding any secret of ours.
+      tags:
+      - iam
       x-app: iam
   /.well-known/oauth-authorization-server:
     get:
@@ -47076,6 +47084,8 @@ paths:
       summary: Returns the OpenID Connect discovery document — the one URL you point
         a standards-compliant client at so it can find every other endpoint on its
         own, instead of you configuring them by hand.
+      tags:
+      - iam
       x-app: iam
   /.well-known/openapi.json:
     get:
@@ -47086,6 +47096,8 @@ paths:
       operationId: get_.well-known_openapi.json
       security: []
       summary: The API description, at the conventional address
+      tags:
+      - openapi
       x-app: openapi
   /.well-known/openid-configuration:
     get:
@@ -47105,6 +47117,8 @@ paths:
       summary: Returns the OpenID Connect discovery document — the one URL you point
         a standards-compliant client at so it can find every other endpoint on its
         own, instead of you configuring them by hand.
+      tags:
+      - iam
       x-app: iam
   /_/commerce/deposits:
     get:
@@ -47122,6 +47136,8 @@ paths:
         would publish that credential to every reader of this status.'
       operationId: get___commerce_deposits
       summary: Read the crypto deposit watcher's runtime state, asset by asset
+      tags:
+      - commerce
       x-app: commerce
   /_/commerce/healthz:
     get:
@@ -47143,6 +47159,8 @@ paths:
                 $ref: '#/components/schemas/liveness'
           description: ok
       summary: Answers ok whenever the commerce subsystem is mounted.
+      tags:
+      - commerce
       x-app: commerce
       x-tool: true
   /{org}/{project}/{repo}/git-receive-pack:
@@ -47177,6 +47195,8 @@ paths:
               format: binary
               type: string
       summary: Accept a push, and turn it into a build
+      tags:
+      - git
       x-app: git
   /{org}/{project}/{repo}/git-upload-pack:
     post:
@@ -47208,6 +47228,8 @@ paths:
               format: binary
               type: string
       summary: Serve a clone or fetch
+      tags:
+      - git
       x-app: git
   /{org}/{project}/{repo}/info/refs:
     get:
@@ -47233,6 +47255,8 @@ paths:
         schema:
           type: string
       summary: Advertise a repository's refs to a git client
+      tags:
+      - git
       x-app: git
   /{org}/{repo}:
     get:
@@ -47263,6 +47287,8 @@ paths:
         schema:
           type: string
       summary: Open a repository's home page
+      tags:
+      - git
       x-app: git
   /{org}/{repo}/blob/{wildcard1}:
     get:
@@ -47297,6 +47323,8 @@ paths:
         schema:
           type: string
       summary: View a file in a repository
+      tags:
+      - git
       x-app: git
   /{org}/{repo}/commits:
     get:
@@ -47325,6 +47353,8 @@ paths:
         schema:
           type: string
       summary: Read a repository's commit log
+      tags:
+      - git
       x-app: git
   /{org}/{repo}/git-receive-pack:
     post:
@@ -47353,6 +47383,8 @@ paths:
               format: binary
               type: string
       summary: Accept a push, and turn it into a build
+      tags:
+      - git
       x-app: git
   /{org}/{repo}/git-upload-pack:
     post:
@@ -47379,6 +47411,8 @@ paths:
               format: binary
               type: string
       summary: Serve a clone or fetch
+      tags:
+      - git
       x-app: git
   /{org}/{repo}/info/refs:
     get:
@@ -47399,6 +47433,8 @@ paths:
         schema:
           type: string
       summary: Advertise a repository's refs to a git client
+      tags:
+      - git
       x-app: git
   /{org}/{repo}/tree/{wildcard1}:
     get:
@@ -47433,6 +47469,8 @@ paths:
         schema:
           type: string
       summary: Browse a directory inside a repository
+      tags:
+      - git
       x-app: git
   /collaborator:
     get:
@@ -47448,6 +47486,8 @@ paths:
         The server pings every twenty seconds and drops a socket silent for sixty, so a backgrounded tab — whose JS timers are throttled but whose network stack still auto-pongs — stays connected instead of dying into a reconnect loop.
       operationId: get_collaborator
       summary: Open the live collaborative-editing socket
+      tags:
+      - team
       x-app: team
   /collaborator/rpc/{documentId}:
     post:
@@ -47502,6 +47542,8 @@ paths:
         editor speaks: createContent stores a document field''s markup at a fresh,
         immutable blob ref and returns it, updateContent stores a new snapshot and
         answers nothing, and getContent reads back the exact snapshot a ref names.'
+      tags:
+      - team
       x-app: team
       x-tool: true
   /explore:
@@ -47520,6 +47562,8 @@ paths:
         hosts it falls through to their own routes, so it can never shadow them.'
       operationId: get_explore
       summary: Discover public repositories across every org
+      tags:
+      - git
       x-app: git
   /git:
     get:
@@ -47535,6 +47579,8 @@ paths:
         console embeds the git browser under /git.
       operationId: get_git
       summary: Browse your org's repositories
+      tags:
+      - git
       x-app: git
   /git/{org}/{repo}:
     get:
@@ -47564,6 +47610,8 @@ paths:
         schema:
           type: string
       summary: Open a repository's home page
+      tags:
+      - git
       x-app: git
   /git/{org}/{repo}/blob/{wildcard1}:
     get:
@@ -47597,6 +47645,8 @@ paths:
         schema:
           type: string
       summary: View a file in a repository
+      tags:
+      - git
       x-app: git
   /git/{org}/{repo}/commits:
     get:
@@ -47624,6 +47674,8 @@ paths:
         schema:
           type: string
       summary: Read a repository's commit log
+      tags:
+      - git
       x-app: git
   /git/{org}/{repo}/tree/{wildcard1}:
     get:
@@ -47657,6 +47709,8 @@ paths:
         schema:
           type: string
       summary: Browse a directory inside a repository
+      tags:
+      - git
       x-app: git
   /git/explore:
     get:
@@ -47673,6 +47727,8 @@ paths:
         which is how the console embeds the git browser under /git.'
       operationId: get_git_explore
       summary: Discover public repositories across every org
+      tags:
+      - git
       x-app: git
   /meet:
     delete:
@@ -47680,6 +47736,8 @@ paths:
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: delete_meet_app
       summary: Not served by the call client
+      tags:
+      - meet
       x-app: meet
     get:
       description: |-
@@ -47688,24 +47746,32 @@ paths:
         This is the call client itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.
       operationId: get_meet_app
       summary: The call client
+      tags:
+      - meet
       x-app: meet
     patch:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: patch_meet_app
       summary: Not served by the call client
+      tags:
+      - meet
       x-app: meet
     post:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: post_meet_app
       summary: Not served by the call client
+      tags:
+      - meet
       x-app: meet
     put:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: put_meet_app
       summary: Not served by the call client
+      tags:
+      - meet
       x-app: meet
   /meet/{wildcard1}:
     delete:
@@ -47719,6 +47785,8 @@ paths:
         schema:
           type: string
       summary: Not served by the call client
+      tags:
+      - meet
       x-app: meet
     get:
       description: |-
@@ -47737,6 +47805,8 @@ paths:
         schema:
           type: string
       summary: The call client's assets and client-side routes
+      tags:
+      - meet
       x-app: meet
     patch:
       description: 'Published because this address accepts every method, but a static
@@ -47749,6 +47819,8 @@ paths:
         schema:
           type: string
       summary: Not served by the call client
+      tags:
+      - meet
       x-app: meet
     post:
       description: 'Published because this address accepts every method, but a static
@@ -47761,6 +47833,8 @@ paths:
         schema:
           type: string
       summary: Not served by the call client
+      tags:
+      - meet
       x-app: meet
     put:
       description: 'Published because this address accepts every method, but a static
@@ -47773,6 +47847,8 @@ paths:
         schema:
           type: string
       summary: Not served by the call client
+      tags:
+      - meet
       x-app: meet
   /tasks:
     delete:
@@ -47780,6 +47856,8 @@ paths:
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: delete_tasks_app
       summary: Not served by the tasks console
+      tags:
+      - tasks
       x-app: tasks
     get:
       description: |-
@@ -47788,24 +47866,32 @@ paths:
         This is the tasks console itself — HTML and hashed assets, not an API. Only GET and HEAD are served; every other method is refused 405. Hashed assets are returned immutable and cached for a year, while the shell is always revalidated, so a new deployment replaces a stale one on the next request.
       operationId: get_tasks_app
       summary: The tasks console
+      tags:
+      - tasks
       x-app: tasks
     patch:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: patch_tasks_app
       summary: Not served by the tasks console
+      tags:
+      - tasks
       x-app: tasks
     post:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: post_tasks_app
       summary: Not served by the tasks console
+      tags:
+      - tasks
       x-app: tasks
     put:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
       operationId: put_tasks_app
       summary: Not served by the tasks console
+      tags:
+      - tasks
       x-app: tasks
   /tasks/{wildcard1}:
     delete:
@@ -47819,6 +47905,8 @@ paths:
         schema:
           type: string
       summary: Not served by the tasks console
+      tags:
+      - tasks
       x-app: tasks
     get:
       description: |-
@@ -47837,6 +47925,8 @@ paths:
         schema:
           type: string
       summary: The tasks console's assets and client-side routes
+      tags:
+      - tasks
       x-app: tasks
     patch:
       description: 'Published because this address accepts every method, but a static
@@ -47849,6 +47939,8 @@ paths:
         schema:
           type: string
       summary: Not served by the tasks console
+      tags:
+      - tasks
       x-app: tasks
     post:
       description: 'Published because this address accepts every method, but a static
@@ -47861,6 +47953,8 @@ paths:
         schema:
           type: string
       summary: Not served by the tasks console
+      tags:
+      - tasks
       x-app: tasks
     put:
       description: 'Published because this address accepts every method, but a static
@@ -47873,6 +47967,8 @@ paths:
         schema:
           type: string
       summary: Not served by the tasks console
+      tags:
+      - tasks
       x-app: tasks
   /v1/admin/affiliates:
     get:
@@ -47907,7 +48003,7 @@ paths:
         fleet summary of lifetime accrued, still-pending and paid commission in integer
         cents.
       tags:
-      - admin
+      - affiliates
       x-app: affiliates
       x-tool: true
   /v1/admin/affiliates/{id}/approve:
@@ -47950,7 +48046,7 @@ paths:
       summary: Approves an affiliate and MINTS its referral code — the moment the
         partner has a working share link and starts accruing.
       tags:
-      - admin
+      - affiliates
       x-app: affiliates
       x-tool: true
   /v1/admin/affiliates/{id}/payout:
@@ -47997,7 +48093,7 @@ paths:
       summary: Pays out accrued commission and answers the payout row with the affiliate's
         updated balances.
       tags:
-      - admin
+      - affiliates
       x-app: affiliates
       x-tool: true
   /v1/admin/affiliates/{id}/rate:
@@ -48043,7 +48139,7 @@ paths:
       summary: Sets one affiliate's DIRECT commission rate, in basis points of Hanzo's
         margin.
       tags:
-      - admin
+      - affiliates
       x-app: affiliates
       x-tool: true
   /v1/admin/affiliates/{id}/suspend:
@@ -48073,7 +48169,7 @@ paths:
       summary: 'Suspends an affiliate: it stops accruing on the next sweep, and its
         code stops resolving for new attributions.'
       tags:
-      - admin
+      - affiliates
       x-app: affiliates
       x-tool: true
   /v1/admin/affiliates/sweep:
@@ -48111,7 +48207,7 @@ paths:
         its referral chain, then answers how many sources were swept and how many
         NEW accruals landed.'
       tags:
-      - admin
+      - affiliates
       x-app: affiliates
       x-tool: true
   /v1/admin/aimetrics:
@@ -48453,7 +48549,7 @@ paths:
         not the caller's — with each one's repository and deploy counts and a fleet
         roll-up of the money accrued, pending and paid.
       tags:
-      - admin
+      - authors
       x-app: authors
       x-tool: true
   /v1/admin/authors/{id}/approve:
@@ -48495,7 +48591,7 @@ paths:
           description: ok
       summary: Admits one author to EARNING, optionally on a negotiated royalty share.
       tags:
-      - admin
+      - authors
       x-app: authors
       x-tool: true
   /v1/admin/authors/{id}/basis:
@@ -48542,7 +48638,7 @@ paths:
         the author reads at /v1/authors/basis, from the same builder, so support sees
         exactly what the author sees rather than a parallel view free to drift.
       tags:
-      - admin
+      - authors
       x-app: authors
       x-tool: true
   /v1/admin/authors/{id}/payout:
@@ -48588,7 +48684,7 @@ paths:
           description: ok
       summary: Records a payout of accrued royalty and settles it.
       tags:
-      - admin
+      - authors
       x-app: authors
       x-tool: true
   /v1/admin/authors/{id}/suspend:
@@ -48616,7 +48712,7 @@ paths:
           description: ok
       summary: Stops one author earning.
       tags:
-      - admin
+      - authors
       x-app: authors
       x-tool: true
   /v1/admin/authors/sweep:
@@ -48644,7 +48740,7 @@ paths:
         deploying orgs it computes this period''s royalty from that org''s metered
         spend and latches it at most once per period.'
       tags:
-      - admin
+      - authors
       x-app: authors
       x-tool: true
   /v1/admin/bases:
@@ -48874,7 +48970,7 @@ paths:
       summary: Returns the full model and provider catalog annotated with each entry's
         enablement state, for the operator console.
       tags:
-      - admin
+      - pricing
       x-app: pricing
       x-tool: true
   /v1/admin/catalog/models/{wildcard1}:
@@ -48898,7 +48994,7 @@ paths:
           type: string
       summary: Turn one model off, into beta for named orgs, or generally available
       tags:
-      - admin
+      - pricing
       x-app: pricing
   /v1/admin/catalog/providers/{name}:
     patch:
@@ -48935,7 +49031,7 @@ paths:
           description: ok
       summary: Sets one provider's availability overlay.
       tags:
-      - admin
+      - pricing
       x-app: pricing
       x-tool: true
   /v1/admin/compute:
@@ -49224,7 +49320,7 @@ paths:
       summary: Returns every item an operator has set an enablement state on — its
         global state (off, beta or ga) and the orgs granted its beta.
       tags:
-      - admin
+      - pricing
       x-app: pricing
       x-tool: true
     put:
@@ -49257,7 +49353,7 @@ paths:
       summary: Sets one item's global enablement state — off, beta or ga — and optionally
         replaces the list of orgs granted its beta.
       tags:
-      - admin
+      - pricing
       x-app: pricing
       x-tool: true
   /v1/admin/finance:
@@ -50269,7 +50365,7 @@ paths:
         RSS, thread and fd cost — read from the kernel, which is only answerable at
         all because a plugin is a process.'
       tags:
-      - admin
+      - plugins
       x-app: plugins
       x-tool: true
   /v1/admin/plugins/{name}/disable:
@@ -50316,7 +50412,7 @@ paths:
           description: ok
       summary: Stops the plugin.
       tags:
-      - admin
+      - plugins
       x-app: plugins
       x-tool: true
   /v1/admin/plugins/{name}/enable:
@@ -50359,7 +50455,7 @@ paths:
         has: the zero Plugin names no new artifact, so Reload reuses the loaded spec
         and clears the disabled flag.'
       tags:
-      - admin
+      - plugins
       x-app: plugins
       x-tool: true
   /v1/admin/plugins/{name}/reload:
@@ -50410,7 +50506,7 @@ paths:
           description: ok
       summary: Swaps a plugin for another build without dropping a request.
       tags:
-      - admin
+      - plugins
       x-app: plugins
       x-tool: true
   /v1/admin/products:
@@ -50603,7 +50699,7 @@ paths:
         over all referred orgs), and the accrual LIABILITY the platform owes, broken
         out by upline level.'
       tags:
-      - admin
+      - affiliates
       x-app: affiliates
       x-tool: true
   /v1/admin/referrals/bonuses:
@@ -50638,7 +50734,7 @@ paths:
           description: ok
       summary: Returns every referral edge in the directory with a fleet summary.
       tags:
-      - admin
+      - referrals
       x-app: referrals
       x-tool: true
   /v1/admin/referrals/sweep:
@@ -50668,7 +50764,7 @@ paths:
       summary: Qualify-checks every pending referral and advances the ones that now
         qualify.
       tags:
-      - admin
+      - referrals
       x-app: referrals
       x-tool: true
   /v1/admin/revenue:
@@ -51007,7 +51103,7 @@ paths:
         report, the recent double-entry journal, and the Hanzo L1 anchor status of
         the ledger root.'
       tags:
-      - admin
+      - treasury
       x-app: treasury
       x-tool: true
   /v1/admin/treasury/anchor:
@@ -51031,7 +51127,7 @@ paths:
       summary: Commits the current ledger root to Hanzo L1, making the books tamper-evident
         on chain, and returns the anchoring status.
       tags:
-      - admin
+      - treasury
       x-app: treasury
       x-tool: true
   /v1/admin/treasury/anchor/signer:
@@ -51055,7 +51151,7 @@ paths:
       summary: Installs the reserve's threshold MPC wallet as the signer for on-chain
         anchors, and returns its EVM address so an operator can fund it for gas.
       tags:
-      - admin
+      - treasury
       x-app: treasury
       x-tool: true
   /v1/admin/treasury/policy:
@@ -51083,7 +51179,7 @@ paths:
       summary: Sets the revenue-share basis points a sweep accrues into the reserve
         fund and returns the stored policy.
       tags:
-      - admin
+      - treasury
       x-app: treasury
       x-tool: true
   /v1/admin/treasury/seed:
@@ -51115,7 +51211,7 @@ paths:
         begin before the first revenue-share sweep, and returns the journal entry
         it wrote.
       tags:
-      - admin
+      - treasury
       x-app: treasury
       x-tool: true
   /v1/admin/treasury/sweep:
@@ -51145,7 +51241,7 @@ paths:
       summary: Posts the revenue-share accrual for one period — revenue into the reserve
         fund, at the current policy's basis points — and returns what it moved.
       tags:
-      - admin
+      - treasury
       x-app: treasury
       x-tool: true
   /v1/admin/usage:
@@ -52092,7 +52188,7 @@ paths:
       operationId: post_agent
       summary: Run one tool-calling round against your org's own tools
       tags:
-      - agent
+      - agents
       x-app: agents
       x-public: true
   /v1/agent/conversations:
@@ -52104,7 +52200,7 @@ paths:
       operationId: get_agent_conversations
       summary: List the agent threads in your org
       tags:
-      - agent
+      - agents
       x-app: agents
       x-public: true
   /v1/agent/conversations/{id}:
@@ -52122,7 +52218,7 @@ paths:
           type: string
       summary: Read one agent thread in full
       tags:
-      - agent
+      - agents
       x-app: agents
       x-public: true
   /v1/agent/presets:
@@ -52134,7 +52230,7 @@ paths:
       operationId: get_agent_presets
       summary: List the agent presets available to a caller
       tags:
-      - agent
+      - agents
       x-app: agents
       x-public: true
   /v1/agents:
@@ -56447,7 +56543,7 @@ paths:
         density and accent — read from their IAM account so it is the same on every
         device and every Hanzo surface.
       tags:
-      - appearance
+      - account
       x-app: account
       x-public: true
       x-tool: true
@@ -56478,7 +56574,7 @@ paths:
       summary: Stores the caller's appearance preference on their IAM account, preserving
         every other field of the row.
       tags:
-      - appearance
+      - account
       x-app: account
       x-public: true
       x-tool: true
@@ -56561,7 +56657,7 @@ paths:
       summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
         /foley — that the Zen family serves natively.
       tags:
-      - audio
+      - ai
       x-app: ai
       x-public: true
   /v1/audio/music:
@@ -56575,7 +56671,7 @@ paths:
       summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
         /foley — that the Zen family serves natively.
       tags:
-      - audio
+      - ai
       x-app: ai
       x-public: true
   /v1/audio/speech:
@@ -56590,7 +56686,7 @@ paths:
       operationId: post_audio_speech
       summary: The OpenAI-compatible TTS endpoint (POST /v1/audio/speech).
       tags:
-      - audio
+      - ai
       x-app: ai
       x-public: true
   /v1/audio/transcriptions:
@@ -56608,7 +56704,7 @@ paths:
       summary: 'The OpenAI-compatible STT endpoint (POST /v1/audio/transcriptions,
         multipart: file + model [+ language + response_format]).'
       tags:
-      - audio
+      - ai
       x-app: ai
       x-public: true
   /v1/audio/voice:
@@ -56622,7 +56718,7 @@ paths:
       summary: Serves the generative audio verbs — /v1/audio/voice (TTS), /music,
         /foley — that the Zen family serves natively.
       tags:
-      - audio
+      - ai
       x-app: ai
       x-public: true
   /v1/audit:
@@ -56974,7 +57070,7 @@ paths:
           description: ok
       summary: Connectors returns the connector catalogue.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57000,7 +57096,7 @@ paths:
           description: ok
       summary: Returns the caller org's automations, most-recently-updated first.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57035,7 +57131,7 @@ paths:
           description: created
       summary: Creates an automation and its initial DRAFT version in one call.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57058,7 +57154,7 @@ paths:
           description: no content
       summary: Deletes one automation, its versions and its run history.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57084,7 +57180,7 @@ paths:
           description: ok
       summary: Returns one automation and its latest version.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57120,7 +57216,7 @@ paths:
           description: ok
       summary: Updates one automation's metadata in place.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57148,7 +57244,7 @@ paths:
           description: ok
       summary: Disarms a flow's trigger and marks it DISABLED.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57177,7 +57273,7 @@ paths:
           description: ok
       summary: Arms a flow's trigger and marks it ENABLED.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57197,7 +57293,7 @@ paths:
       summary: Edit a flow — rename it, retarget its trigger, or add, move and delete
         steps
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
   /v1/auto/flows/{id}/run:
@@ -57226,7 +57322,7 @@ paths:
           description: created
       summary: Starts one durable run of a flow now.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57259,7 +57355,7 @@ paths:
           description: ok
       summary: Returns one flow's versions, newest first.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57295,7 +57391,7 @@ paths:
           description: created
       summary: Adds a new DRAFT version to a flow.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57321,7 +57417,7 @@ paths:
           type: string
       summary: Fire an event that starts every enabled flow subscribed to it
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
   /v1/auto/pieces:
@@ -57341,7 +57437,7 @@ paths:
           description: ok
       summary: Pieces is the retired-name alias of the connector catalogue.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57374,7 +57470,7 @@ paths:
           description: ok
       summary: Returns the caller org's run history, newest first.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57402,7 +57498,7 @@ paths:
           description: ok
       summary: Returns one run.
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
       x-tool: true
@@ -57423,7 +57519,7 @@ paths:
           type: string
       summary: Release a run waiting at an approval step, with the approval payload
       tags:
-      - auto
+      - automations
       x-app: automations
       x-public: true
   /v1/avatar:
@@ -57437,7 +57533,7 @@ paths:
       operationId: post_avatar
       summary: Set your profile photo
       tags:
-      - avatar
+      - account
       x-app: account
       x-public: true
   /v1/avatar/{org}/{user}/{digest}:
@@ -57465,7 +57561,7 @@ paths:
           type: string
       summary: Fetch a profile photo
       tags:
-      - avatar
+      - account
       x-app: account
       x-public: true
   /v1/base/health:
@@ -57852,7 +57948,7 @@ paths:
       operationId: get_billing_accounts
       summary: The billing account you are signed in to
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/accounts/{id}/members:
@@ -57870,7 +57966,7 @@ paths:
           type: string
       summary: Who is on a billing account
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/alerts:
@@ -57885,7 +57981,7 @@ paths:
       operationId: get_billing_alerts
       summary: List your org's spend caps and rate limits
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
     post:
@@ -57902,7 +57998,7 @@ paths:
       operationId: post_billing_alerts
       summary: Set a spend cap or rate limit on your org
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/alerts/{id}:
@@ -57921,7 +58017,7 @@ paths:
           type: string
       summary: Remove one of your org's spend caps
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
     patch:
@@ -57941,7 +58037,7 @@ paths:
           type: string
       summary: Change one of your org's spend caps
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/alerts/authorize:
@@ -57960,7 +58056,7 @@ paths:
       operationId: get_billing_alerts_authorize
       summary: The per-request spend-cap verdict the metering gate consumes
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/balance:
@@ -57988,7 +58084,7 @@ paths:
       operationId: get_billing_credit-balance
       summary: What is left of your credit, as one number
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/credit-balance/breakdown:
@@ -58000,7 +58096,7 @@ paths:
       operationId: get_billing_credit-balance_breakdown
       summary: What is left of your credit, grouped by where it came from
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/credits:
@@ -58015,7 +58111,7 @@ paths:
       operationId: get_billing_credits
       summary: List the credit grants on your org's balance
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/crypto/deposit:
@@ -58029,7 +58125,7 @@ paths:
       operationId: post_billing_crypto_deposit
       summary: Get a deposit address for a crypto top-up
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/crypto/deposit/{id}:
@@ -58047,7 +58143,7 @@ paths:
           type: string
       summary: Follow one crypto deposit to settlement
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/crypto/options:
@@ -58059,7 +58155,7 @@ paths:
       operationId: get_billing_crypto_options
       summary: Which chains and tokens a crypto top-up can use
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/invoices:
@@ -58073,7 +58169,7 @@ paths:
       operationId: get_billing_invoices
       summary: List your org's billing invoices
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
     post:
@@ -58105,7 +58201,7 @@ paths:
           description: created
       summary: Raise a draft invoice against a customer
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -58135,7 +58231,7 @@ paths:
           description: ok
       summary: Read one invoice
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -58169,7 +58265,7 @@ paths:
           description: ok
       summary: Collect an issued invoice from credits, balance, then card
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -58201,7 +58297,7 @@ paths:
           description: ok
       summary: Issue a draft invoice, making it collectible
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -58223,7 +58319,7 @@ paths:
           type: string
       summary: Download one invoice as a PDF attachment
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/invoices/{id}/void:
@@ -58253,7 +58349,7 @@ paths:
           description: ok
       summary: Void a draft or issued invoice
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -58268,7 +58364,7 @@ paths:
       operationId: get_billing_methods
       summary: Your saved cards, masked — the customer read
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
     post:
@@ -58281,7 +58377,7 @@ paths:
       operationId: post_billing_methods
       summary: Save a card for later charges
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/methods/{id}:
@@ -58301,7 +58397,7 @@ paths:
           type: string
       summary: Remove one of your saved cards
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/mode:
@@ -58318,7 +58414,7 @@ paths:
       operationId: post_billing_mode
       summary: Move an org between sandbox and live billing
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/payouts:
@@ -58331,7 +58427,7 @@ paths:
       operationId: get_billing_payouts
       summary: List your org's payouts, newest first
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/plans:
@@ -58346,7 +58442,7 @@ paths:
       operationId: get_billing_plans
       summary: The public plan catalog, annotated with the active platform promotion
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/portal/methods:
@@ -58360,7 +58456,7 @@ paths:
       operationId: get_billing_portal_methods
       summary: Cards saved against the caller's org, masked — the portal read
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
     post:
@@ -58371,7 +58467,7 @@ paths:
       operationId: post_billing_portal_methods
       summary: Save a card on a subject's behalf — the portal attach
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/portal/methods/{id}:
@@ -58393,7 +58489,7 @@ paths:
           type: string
       summary: Remove a saved card — the portal detach
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/recharge/run-all:
@@ -58411,7 +58507,7 @@ paths:
       summary: 'Platform sweep: top up every org whose balance has fallen below its
         own threshold'
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/settings:
@@ -58427,7 +58523,7 @@ paths:
       operationId: get_billing_settings
       summary: The public payment-provider config your card form needs to initialize
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/subscribe/card:
@@ -58447,7 +58543,7 @@ paths:
       summary: Subscribe to a paid plan with a card, charged for the first period
         immediately
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/subscriptions:
@@ -58460,7 +58556,7 @@ paths:
       operationId: get_billing_subscriptions
       summary: List your org's subscriptions
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/subscriptions/{id}/cancel:
@@ -58481,7 +58577,7 @@ paths:
           type: string
       summary: Cancel a subscription, at period end by default
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/subscriptions/{id}/reactivate:
@@ -58501,7 +58597,7 @@ paths:
           type: string
       summary: Undo a pending cancellation and keep the subscription running
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/tier:
@@ -58528,7 +58624,7 @@ paths:
       summary: The subject's plan tier and the balance a metered call is admitted
         on
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/topup:
@@ -58548,7 +58644,7 @@ paths:
       operationId: post_billing_topup
       summary: Add credit to your balance by charging one of your saved cards
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/topup/token:
@@ -58567,7 +58663,7 @@ paths:
       operationId: post_billing_topup_token
       summary: Add credit to your balance by charging a tokenized card once
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/transactions:
@@ -58579,7 +58675,7 @@ paths:
       operationId: get_billing_transactions
       summary: List the movements on your own balance, newest first
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/usage:
@@ -58664,7 +58760,7 @@ paths:
       operationId: get_billing_usage_rollup
       summary: What plan you are on and how much of it is left, beside the wallet
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/webhooks/{provider}:
@@ -58689,7 +58785,7 @@ paths:
       summary: Payment-provider webhook intake for settlement and subscription lifecycle
         events
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/billing/wire:
@@ -58703,7 +58799,7 @@ paths:
       operationId: get_billing_wire
       summary: Where to wire funds, and the reference that credits them to you
       tags:
-      - billing
+      - commerce
       x-app: commerce
       x-public: true
   /v1/blueprint:
@@ -59657,7 +59753,7 @@ paths:
           type: string
       summary: Relay one of the bot runtime's own operational paths
       tags:
-      - bot
+      - bots
       x-app: bots
     get:
       description: |-
@@ -59677,7 +59773,7 @@ paths:
           type: string
       summary: Relay one of the bot runtime's own operational paths
       tags:
-      - bot
+      - bots
       x-app: bots
     patch:
       description: |-
@@ -59697,7 +59793,7 @@ paths:
           type: string
       summary: Relay one of the bot runtime's own operational paths
       tags:
-      - bot
+      - bots
       x-app: bots
     post:
       description: |-
@@ -59717,7 +59813,7 @@ paths:
           type: string
       summary: Relay one of the bot runtime's own operational paths
       tags:
-      - bot
+      - bots
       x-app: bots
     put:
       description: |-
@@ -59737,7 +59833,7 @@ paths:
           type: string
       summary: Relay one of the bot runtime's own operational paths
       tags:
-      - bot
+      - bots
       x-app: bots
   /v1/bot/connect:
     get:
@@ -59923,7 +60019,7 @@ paths:
           description: ok
       summary: Returns real build records for your org.
       tags:
-      - builds
+      - platform
       x-app: platform
       x-public: true
       x-tool: true
@@ -61008,7 +61104,7 @@ paths:
           description: created
       summary: Open a cart for a shopper to fill
       tags:
-      - cart
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -61045,7 +61141,7 @@ paths:
           description: ok
       summary: Read one cart with its lines and totals
       tags:
-      - cart
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -61084,7 +61180,7 @@ paths:
           description: ok
       summary: Discard a cart the shopper abandoned
       tags:
-      - cart
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -61136,7 +61232,7 @@ paths:
           description: ok
       summary: Set one item's quantity in a cart; zero removes it
       tags:
-      - cart
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -61257,7 +61353,7 @@ paths:
       operationId: get_catalog_entries
       summary: The raw catalog entries, including the unpublished ones
       tags:
-      - catalog
+      - commerce
       x-app: commerce
       x-public: true
     post:
@@ -61269,7 +61365,7 @@ paths:
       operationId: post_catalog_entries
       summary: Add a catalog entry
       tags:
-      - catalog
+      - commerce
       x-app: commerce
       x-public: true
   /v1/catalog/entries/{wildcard1}:
@@ -61288,7 +61384,7 @@ paths:
           type: string
       summary: Remove a catalog entry
       tags:
-      - catalog
+      - commerce
       x-app: commerce
     put:
       description: Loads the addressed entry, applies the body over it and answers
@@ -61307,7 +61403,7 @@ paths:
           type: string
       summary: Replace a catalog entry, keeping its slug
       tags:
-      - catalog
+      - commerce
       x-app: commerce
   /v1/catalog/models:
     post:
@@ -61322,7 +61418,7 @@ paths:
       summary: 'Land a syncer''s view of the model catalog: upstream costs and machine
         facts'
       tags:
-      - catalog
+      - commerce
       x-app: commerce
       x-public: true
   /v1/catalog/models/refresh:
@@ -61338,7 +61434,7 @@ paths:
       operationId: post_catalog_models_refresh
       summary: Refresh the model catalog by reading the upstream provider
       tags:
-      - catalog
+      - commerce
       x-app: commerce
       x-public: true
   /v1/catalog/seed:
@@ -61351,7 +61447,7 @@ paths:
       operationId: post_catalog_seed
       summary: Seed the embedded catalog, without disturbing edits already made
       tags:
-      - catalog
+      - commerce
       x-app: commerce
       x-public: true
   /v1/chains:
@@ -61370,7 +61466,7 @@ paths:
           description: ok
       summary: Reports the chains this deployment can reach.
       tags:
-      - chains
+      - web3
       x-app: web3
       x-public: true
       x-tool: true
@@ -61398,7 +61494,7 @@ paths:
           description: ok
       summary: Reports one chain and whether its upstream is answering.
       tags:
-      - chains
+      - web3
       x-app: web3
       x-public: true
       x-tool: true
@@ -61626,7 +61722,7 @@ paths:
       operationId: post_chat
       summary: Implements the OpenAI-compatible chat completions API
       tags:
-      - chat
+      - ai
       x-app: ai
       x-public: true
   /v1/chat/completions:
@@ -61635,7 +61731,7 @@ paths:
       operationId: post_chat_completions
       summary: Implements the OpenAI-compatible chat completions API
       tags:
-      - chat
+      - ai
       x-app: ai
       x-public: true
   /v1/chat/public:
@@ -61644,7 +61740,7 @@ paths:
       operationId: post_chat_public
       summary: Serves one completion to a caller with no account.
       tags:
-      - chat
+      - ai
       x-app: ai
       x-public: true
   /v1/cloudflare/ai/run/{wildcard1}:
@@ -62698,7 +62794,7 @@ paths:
         clusters projected from Visor''s node pools, and the BYO clusters attached
         to the caller''s project.'
       tags:
-      - clusters
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -62742,7 +62838,7 @@ paths:
         KMS-sealed and added to the fleet — and answers 201 with the cluster as it
         now appears on GET /v1/clusters.
       tags:
-      - clusters
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -62787,7 +62883,7 @@ paths:
       summary: Adds a node pool to one of the caller org's clusters and answers 201
         with the created pool.
       tags:
-      - clusters
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -62822,7 +62918,7 @@ paths:
           description: no content
       summary: Removes a node pool from one of the caller org's clusters.
       tags:
-      - clusters
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -62868,7 +62964,7 @@ paths:
       summary: Resizes a node pool to an absolute node count and returns the pool
         as Visor reports it after the change.
       tags:
-      - clusters
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -62899,7 +62995,7 @@ paths:
           description: ok
       summary: Removes a BYO cluster from the caller org's fleet.
       tags:
-      - clusters
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -63115,7 +63211,7 @@ paths:
       summary: Offers the candidates a language server has at a position, typed and
         resolved through the repository's dependencies rather than guessed from text.
       tags:
-      - code
+      - lsp
       x-app: lsp
       x-public: true
       x-tool: true
@@ -63146,7 +63242,7 @@ paths:
         errors, type errors and lints, each with its span and its severity (1 error,
         2 warning, 3 information, 4 hint).
       tags:
-      - code
+      - lsp
       x-app: lsp
       x-public: true
       x-tool: true
@@ -63182,7 +63278,7 @@ paths:
       summary: Renders the type and documentation of the symbol at a position, as
         the language server itself renders it.
       tags:
-      - code
+      - lsp
       x-app: lsp
       x-public: true
       x-tool: true
@@ -63220,7 +63316,7 @@ paths:
         or its implementations, chosen by relation (definition, reference, type, implementation
         — empty means definition).'
       tags:
-      - code
+      - lsp
       x-app: lsp
       x-public: true
       x-tool: true
@@ -63249,7 +63345,7 @@ paths:
       summary: 'Outlines one file: every declaration in it, with its kind and its
         span.'
       tags:
-      - code
+      - lsp
       x-app: lsp
       x-public: true
       x-tool: true
@@ -63387,7 +63483,7 @@ paths:
           description: accepted
       summary: Start one autonomous coding run against a repo in the caller's org
       tags:
-      - coding
+      - agents
       x-app: agents
       x-public: true
       x-tool: true
@@ -63405,7 +63501,7 @@ paths:
       security: []
       summary: Every operation this API answers, as a command
       tags:
-      - commands
+      - openapi
       x-app: openapi
       x-public: true
   /v1/commerce/admin/catalog:
@@ -67385,7 +67481,7 @@ paths:
       operationId: post_completions
       summary: Implements the OpenAI-compatible chat completions API
       tags:
-      - completions
+      - ai
       x-app: ai
       x-public: true
   /v1/compliance/accreditation:
@@ -67909,7 +68005,7 @@ paths:
       summary: Returns the caller org's bot machines — the kind=bot machines — each
         joined with the agent binding that says which cloud Agent it runs.
       tags:
-      - compute
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -67934,7 +68030,7 @@ paths:
       summary: 'Tears down both halves of a bot: it unbinds the agent (best-effort
         — a bot with no binding still deletes), then terminates the machine.'
       tags:
-      - compute
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -67974,7 +68070,7 @@ paths:
           description: ok
       summary: Returns one of the caller org's bot machines with its agent binding.
       tags:
-      - compute
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -67998,7 +68094,7 @@ paths:
           type: string
       summary: Message a bot, or stop it, by naming the action in the path
       tags:
-      - compute
+      - visor
       x-app: visor
       x-public: true
   /v1/compute/bots/launch:
@@ -68013,7 +68109,7 @@ paths:
       summary: Launch a bot machine — an agent plus the machine that runs it — or
         price one
       tags:
-      - compute
+      - visor
       x-app: visor
       x-public: true
   /v1/compute/regions:
@@ -68027,7 +68123,7 @@ paths:
       operationId: get_compute_regions
       summary: The regions a machine or GPU can be launched into
       tags:
-      - compute
+      - visor
       x-app: visor
       x-public: true
   /v1/compute/sizes:
@@ -68040,7 +68136,7 @@ paths:
       operationId: get_compute_sizes
       summary: The machine and GPU sizes that can be launched
       tags:
-      - compute
+      - visor
       x-app: visor
       x-public: true
   /v1/connectors:
@@ -68071,7 +68167,7 @@ paths:
       summary: Lists the caller's OWN connectors across every provider — the set `hanzo
         connector ls` prints.
       tags:
-      - connectors
+      - integrations
       x-app: integrations
       x-public: true
       x-tool: true
@@ -68104,7 +68200,7 @@ paths:
           description: ok
       summary: 'Forgets a connector: every custodied secret, then the row.'
       tags:
-      - connectors
+      - integrations
       x-app: integrations
       x-public: true
       x-tool: true
@@ -68147,7 +68243,7 @@ paths:
       summary: Forces a token rotation for a connected connector, ahead of the automatic
         rotation a token read would do inside the expiry window.
       tags:
-      - connectors
+      - integrations
       x-app: integrations
       x-public: true
       x-tool: true
@@ -68185,7 +68281,7 @@ paths:
       summary: Hands the custodied access token to its owner — the ONE place custody
         exits.
       tags:
-      - connectors
+      - integrations
       x-app: integrations
       x-public: true
       x-tool: true
@@ -68238,7 +68334,7 @@ paths:
       summary: 'Is the direct intake path: a customer-held token/setup-token (Verify)
         or an externally obtained OAuth bundle from the CLI''s local PKCE (Adopt).'
       tags:
-      - connectors
+      - integrations
       x-app: integrations
       x-public: true
       x-tool: true
@@ -68285,7 +68381,7 @@ paths:
       summary: Begins a device sign-in and returns the code to show the user plus
         how to poll for completion.
       tags:
-      - connectors
+      - integrations
       x-app: integrations
       x-public: true
       x-tool: true
@@ -68336,7 +68432,7 @@ paths:
           description: ok
       summary: Advances a device sign-in.
       tags:
-      - connectors
+      - integrations
       x-app: integrations
       x-public: true
       x-tool: true
@@ -68368,7 +68464,7 @@ paths:
       summary: Lists the user-scoped provider cards — the catalog of what a user can
         connect, and how.
       tags:
-      - connectors
+      - integrations
       x-app: integrations
       x-public: true
       x-tool: true
@@ -69280,7 +69376,7 @@ paths:
         on every money write (mint/revoke a key, top up, onboard, and the billing/commerce
         write verbs).
       tags:
-      - csrf
+      - account
       x-app: account
       x-public: true
       x-tool: true
@@ -70438,7 +70534,7 @@ paths:
       summary: Upgrades to WebSocket and bridges JSON-RPC messages between the browser
         and a hanzo-app-server instance.
       tags:
-      - dev-bridge
+      - ai
       x-app: ai
       x-public: true
   /v1/dns/{wildcard1}:
@@ -70547,7 +70643,7 @@ paths:
         to BOTH Hanzo Vector (semantic) AND Hanzo Search (keyword) under the tenant
         index {owner}-{store}-docs — the same index /v1/chat retrieval reads.'
       tags:
-      - docs
+      - ai
       x-app: ai
       x-public: true
   /v1/documents:
@@ -70556,7 +70652,7 @@ paths:
       operationId: delete_documents
       summary: Handles DELETE /v1/documents — a JSON array of file_ids.
       tags:
-      - documents
+      - ai
       x-app: ai
       x-public: true
   /v1/documents/{file_id}/context:
@@ -70574,7 +70670,7 @@ paths:
       summary: Handles GET /v1/documents/:file_id/context — every chunk of a file,
         as LangChain Documents (used when RAG_USE_FULL_CONTEXT is on).
       tags:
-      - documents
+      - ai
       x-app: ai
       x-public: true
   /v1/domain/availability:
@@ -70849,7 +70945,7 @@ paths:
           type: string
       summary: Download a file from a session
       tags:
-      - download
+      - exec
       x-app: exec
   /v1/edge:
     get:
@@ -70878,7 +70974,7 @@ paths:
       summary: health reports whether a publish reaches readers, rather than whether
         it was accepted.
       tags:
-      - edge
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -70919,7 +71015,7 @@ paths:
         help) may be framed by the caller and is actually running, so a console module
         can choose between the embed and the provision panel.
       tags:
-      - embed
+      - account
       x-app: account
       x-public: true
       x-tool: true
@@ -70935,7 +71031,7 @@ paths:
       operationId: post_embeddings
       summary: Implements POST /v1/embeddings (OpenAI-compatible).
       tags:
-      - embeddings
+      - ai
       x-app: ai
       x-public: true
   /v1/enablement:
@@ -70958,7 +71054,7 @@ paths:
         with its global state, whether it is effective here, whether this org is already
         opted into its beta, and whether it may still opt in.'
       tags:
-      - enablement
+      - pricing
       x-app: pricing
       x-public: true
       x-tool: true
@@ -70989,7 +71085,7 @@ paths:
           description: ok
       summary: Opts the caller's OWN org into a beta item.
       tags:
-      - enablement
+      - pricing
       x-app: pricing
       x-public: true
       x-tool: true
@@ -71020,7 +71116,7 @@ paths:
       summary: Removes the caller's OWN org from a beta item's grant list, the reverse
         of OptIntoBeta and idempotent.
       tags:
-      - enablement
+      - pricing
       x-app: pricing
       x-public: true
       x-tool: true
@@ -71159,7 +71255,7 @@ paths:
           description: ok
       summary: Returns your deploy targets, and what is running on each.
       tags:
-      - environments
+      - platform
       x-app: platform
       x-public: true
       x-tool: true
@@ -71195,7 +71291,7 @@ paths:
       summary: Errors returns the caller org's most recently captured errors, newest
         first.
       tags:
-      - errors
+      - analytics
       x-app: analytics
       x-public: true
       x-tool: true
@@ -72105,7 +72201,7 @@ paths:
           description: Success
       summary: Capture product events into your org's warehouse
       tags:
-      - event
+      - analytics
       x-app: analytics
       x-public: true
   /v1/event.js:
@@ -72130,6 +72226,8 @@ paths:
                 type: string
           description: Success
       summary: The Hanzo event tag — the one-line install for a surface with no bundler
+      tags:
+      - analytics
       x-app: analytics
       x-public: true
   /v1/event/{project}/envelope:
@@ -72158,7 +72256,7 @@ paths:
       summary: Sentry SDK envelope ingest — errors and traces from an unmodified Sentry
         client
       tags:
-      - event
+      - analytics
       x-app: analytics
       x-public: true
   /v1/event/{project}/store:
@@ -72186,7 +72284,7 @@ paths:
               type: string
       summary: Sentry SDK store ingest — the legacy single-event wire
       tags:
-      - event
+      - analytics
       x-app: analytics
       x-public: true
   /v1/exec:
@@ -72573,7 +72671,7 @@ paths:
       summary: Attaches a per-request outcome reward to the routing decision that
         served request_id — the enso training loop's quality signal.
       tags:
-      - feedback
+      - ai
       x-app: ai
       x-public: true
   /v1/files/{sid}:
@@ -72591,7 +72689,7 @@ paths:
           type: string
       summary: List the files in an execution session
       tags:
-      - files
+      - exec
       x-app: exec
       x-public: true
   /v1/finance/accounts:
@@ -72629,7 +72727,7 @@ paths:
           description: ok
       summary: Returns the ledger accounts the caller may see, with their balances.
       tags:
-      - finance
+      - treasury
       x-app: treasury
       x-public: true
       x-tool: true
@@ -72673,7 +72771,7 @@ paths:
         surfaces: `availableCents`, `pendingCents`, `dueCents` and the `asOf` instant
         it was read.'
       tags:
-      - finance
+      - billing
       x-app: billing
       x-public: true
       x-tool: true
@@ -72717,7 +72815,7 @@ paths:
       summary: Answers the money PUT IN to the org's wallet — each staff grant, promo
         and settled top-up as a positive row with its id, label, cents and grant time.
       tags:
-      - finance
+      - billing
       x-app: billing
       x-public: true
       x-tool: true
@@ -72754,7 +72852,7 @@ paths:
                 type: string
       summary: Answers an empty typed array, always.
       tags:
-      - finance
+      - billing
       x-app: billing
       x-public: true
       x-tool: true
@@ -72814,7 +72912,7 @@ paths:
         every other posting DEBITS it (negative, account `usage:<org>`), described
         by its notes or its tags.'
       tags:
-      - finance
+      - billing
       x-app: billing
       x-public: true
       x-tool: true
@@ -72857,7 +72955,7 @@ paths:
       summary: Answers the masked card descriptors for the caller's resolved WALLET
         — id, brand, last four, expiry, default flag — reshaped into the finance contract.
       tags:
-      - finance
+      - billing
       x-app: billing
       x-public: true
       x-tool: true
@@ -72880,7 +72978,7 @@ paths:
       summary: Returns the reserve fund's health and the current revenue-share policy
         for any validated caller.
       tags:
-      - finance
+      - treasury
       x-app: treasury
       x-public: true
       x-tool: true
@@ -72930,7 +73028,7 @@ paths:
       summary: 'Answers metered spend inside `range=`: the window total, a time series
         to plot, and one line per usage TAG.'
       tags:
-      - finance
+      - billing
       x-app: billing
       x-public: true
       x-tool: true
@@ -72943,7 +73041,7 @@ paths:
       summary: Deletes the TrainJob CR, meters the GPU-hours used so far, and marks
         the job cancelled.
       tags:
-      - finetune
+      - ai
       x-app: ai
       x-public: true
   /v1/finetune/deploy:
@@ -72955,7 +73053,7 @@ paths:
       summary: Serves a completed job's checkpoints and registers the result as a
         routable model on api.hanzo.ai.
       tags:
-      - finetune
+      - ai
       x-app: ai
       x-public: true
   /v1/finetune/hf/datasets:
@@ -72964,7 +73062,7 @@ paths:
       operationId: get_finetune_hf_datasets
       summary: Proxies a HuggingFace dataset search (dataset picker).
       tags:
-      - finetune
+      - ai
       x-app: ai
       x-public: true
   /v1/finetune/hf/models:
@@ -72973,7 +73071,7 @@ paths:
       operationId: get_finetune_hf_models
       summary: Proxies a HuggingFace model search (base-model picker).
       tags:
-      - finetune
+      - ai
       x-app: ai
       x-public: true
   /v1/finetune/hf/repo:
@@ -72982,7 +73080,7 @@ paths:
       operationId: get_finetune_hf_repo
       summary: Returns a repo's detail (files, gated/private state).
       tags:
-      - finetune
+      - ai
       x-app: ai
       x-public: true
   /v1/finetune/job:
@@ -72991,7 +73089,7 @@ paths:
       operationId: get_finetune_job
       summary: Returns one job with refreshed live status.
       tags:
-      - finetune
+      - ai
       x-app: ai
       x-public: true
   /v1/finetune/jobs:
@@ -73000,7 +73098,7 @@ paths:
       operationId: get_finetune_jobs
       summary: Returns the org's jobs, refreshing live status for active ones.
       tags:
-      - finetune
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -73012,7 +73110,7 @@ paths:
       summary: Validates the request, resolves efficient defaults, persists the job,
         and submits a real TrainJob CR.
       tags:
-      - finetune
+      - ai
       x-app: ai
       x-public: true
   /v1/finetune/presets:
@@ -73026,7 +73124,7 @@ paths:
         the recommended config so the console can render "Recommended" as a one-click,
         ready-to-run default.
       tags:
-      - finetune
+      - ai
       x-app: ai
       x-public: true
   /v1/flags:
@@ -73307,7 +73405,7 @@ paths:
           description: ok
       summary: Reports whether ONE host is currently gated by the launch waitlist.
       tags:
-      - flags
+      - admission
       x-app: admission
       x-public: true
       x-tool: true
@@ -73355,7 +73453,7 @@ paths:
         each carrying its latest utilization: agent run-targets, the BYO machines
         that dialed in, attached BYO clusters and Visor-provisioned machines.'
       tags:
-      - fleet
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -73409,7 +73507,7 @@ paths:
         the GPU it targets (empty = the shared any-GPU lane) and the node claiming
         it, optionally narrowed to one GPU's queue and/or one status.
       tags:
-      - fleet
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -73448,7 +73546,7 @@ paths:
           description: ok
       summary: Cancels a queued or running render in the caller's org.
       tags:
-      - fleet
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -73503,7 +73601,7 @@ paths:
           description: ok
       summary: Returns the caller org's utilization series, oldest first.
       tags:
-      - fleet
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -73542,7 +73640,7 @@ paths:
       summary: Records a BYO worker's live GPU utilization into the SAME series the
         fleet board overlays.
       tags:
-      - fleet
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -73576,7 +73674,7 @@ paths:
       summary: Returns the caller org's BYO machines — the ones that dialed in via
         `hanzo link` — with everything each host reported about itself.
       tags:
-      - fleet
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -74888,7 +74986,7 @@ paths:
           description: Success
       summary: Receive a push from the forge and trigger its build
       tags:
-      - git-webhook
+      - platform
       x-app: platform
       x-public: true
   /v1/git/{org}/{project}/{repo}/git-receive-pack:
@@ -76285,7 +76383,7 @@ paths:
         from its real GPU machines (the size slug says how many cards a node holds)
         and from the accelerators BYO workers report through nvidia-smi.
       tags:
-      - gpus
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -76309,7 +76407,7 @@ paths:
       summary: 'Is an HONEST empty surface: Visor exposes no GPU alert inventory,
         so this returns [] rather than fabricating alerts.'
       tags:
-      - gpus
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -82147,7 +82245,7 @@ paths:
       operationId: post_images_generations
       summary: Implements POST /v1/images/generations (OpenAI-compatible).
       tags:
-      - images
+      - ai
       x-app: ai
       x-public: true
   /v1/index/health:
@@ -82490,7 +82588,7 @@ paths:
           description: ok
       summary: Reports the deployment's chain indexer(s) and how far each has indexed.
       tags:
-      - indexers
+      - explorer
       x-app: explorer
       x-public: true
       x-tool: true
@@ -83040,7 +83138,7 @@ paths:
           description: ok
       summary: Returns the caller org's most recent product events, newest first.
       tags:
-      - insights
+      - analytics
       x-app: analytics
       x-public: true
       x-tool: true
@@ -83061,7 +83159,7 @@ paths:
           description: ok
       summary: Reports that the unified insights surface is serving.
       tags:
-      - insights
+      - analytics
       x-app: analytics
       x-public: true
       x-tool: true
@@ -83071,7 +83169,7 @@ paths:
       operationId: post_install-patch
       summary: Install an OS patch by patch ID (KB number or title) asynchronously
       tags:
-      - install-patch
+      - ai
       x-app: ai
       x-public: true
   /v1/instances/datastore:
@@ -83092,7 +83190,7 @@ paths:
           description: ok
       summary: Lists the caller org's Hanzo Datastore warehouses.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83122,7 +83220,7 @@ paths:
           description: Success
       summary: Provision a Hanzo Datastore instance for your org
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
   /v1/instances/datastore/{name}:
@@ -83148,7 +83246,7 @@ paths:
           description: no content
       summary: Deprovisions one Hanzo Datastore warehouse.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83178,7 +83276,7 @@ paths:
           description: ok
       summary: Returns one Hanzo Datastore warehouse's metadata.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83201,7 +83299,7 @@ paths:
           description: ok
       summary: ListDocDB lists the caller org's Hanzo DocDB document databases.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83231,7 +83329,7 @@ paths:
           description: Success
       summary: Provision a document database for your org
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
   /v1/instances/docdb/{name}:
@@ -83257,7 +83355,7 @@ paths:
           description: no content
       summary: DropDocDB deprovisions one Hanzo DocDB database.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83287,7 +83385,7 @@ paths:
           description: ok
       summary: GetDocDB returns one Hanzo DocDB database's metadata.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83309,7 +83407,7 @@ paths:
           description: ok
       summary: ListKV lists the caller org's Hanzo KV stores.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83339,7 +83437,7 @@ paths:
           description: Success
       summary: Provision a key-value store for your org
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
   /v1/instances/kv/{name}:
@@ -83365,7 +83463,7 @@ paths:
           description: no content
       summary: DropKV deprovisions one Hanzo KV store.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83395,7 +83493,7 @@ paths:
           description: ok
       summary: GetKV returns one Hanzo KV store's metadata.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83419,7 +83517,7 @@ paths:
           description: ok
       summary: Lists the caller org's object-storage buckets.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83449,7 +83547,7 @@ paths:
           description: Success
       summary: Provision an object storage bucket for your org
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
   /v1/instances/s3/{name}:
@@ -83474,7 +83572,7 @@ paths:
       summary: Deletes one bucket from the shared object store and removes its metadata
         row.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83504,7 +83602,7 @@ paths:
           description: ok
       summary: Returns one bucket's metadata.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83526,7 +83624,7 @@ paths:
           description: ok
       summary: Lists the caller org's search indexes.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83556,7 +83654,7 @@ paths:
           description: Success
       summary: Provision a search index for your org
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
   /v1/instances/search/{name}:
@@ -83581,7 +83679,7 @@ paths:
       summary: Deletes one search index from the shared backend and removes its metadata
         row.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83611,7 +83709,7 @@ paths:
           description: ok
       summary: Returns one search index's metadata.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83633,7 +83731,7 @@ paths:
           description: ok
       summary: ListSQL lists the caller org's Hanzo SQL databases.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83663,7 +83761,7 @@ paths:
           description: Success
       summary: Provision a PostgreSQL database for your org
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
   /v1/instances/sql/{name}:
@@ -83690,7 +83788,7 @@ paths:
           description: no content
       summary: DropSQL deprovisions one Hanzo SQL database.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83721,7 +83819,7 @@ paths:
           description: ok
       summary: GetSQL returns one Hanzo SQL database's metadata.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83743,7 +83841,7 @@ paths:
           description: ok
       summary: Lists the caller org's vector collections.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83773,7 +83871,7 @@ paths:
           description: Success
       summary: Provision a vector collection for your org
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
   /v1/instances/vector/{name}:
@@ -83798,7 +83896,7 @@ paths:
       summary: Deletes one vector collection from the shared backend and removes its
         metadata row.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -83828,7 +83926,7 @@ paths:
           description: ok
       summary: Returns one vector collection's metadata.
       tags:
-      - instances
+      - provisioning
       x-app: provisioning
       x-public: true
       x-tool: true
@@ -84936,7 +85034,7 @@ paths:
       summary: Lists the org's DOKS clusters (Visor, house account) folded with the
         org's BYO clusters — ONE fleet cluster view under the unified k8s noun.
       tags:
-      - k8s
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -84979,7 +85077,7 @@ paths:
           description: ok
       summary: Provisions a DOKS cluster for the caller's org and answers 201.
       tags:
-      - k8s
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -85004,7 +85102,7 @@ paths:
           description: no content
       summary: Destroys a DOKS cluster by id and answers 204.
       tags:
-      - k8s
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -85049,7 +85147,7 @@ paths:
           description: ok
       summary: 'Returns one cluster''s detail: node pools + worker nodes.'
       tags:
-      - k8s
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -85079,7 +85177,7 @@ paths:
         the SAME set the fleet folds in (managedMachines), exposed directly under
         the k8s noun.
       tags:
-      - k8s
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -85102,7 +85200,7 @@ paths:
       summary: Returns every supported knowledge connector with THIS org's connection
         state and the REAL number of documents each has ingested into the org's store.
       tags:
-      - kb
+      - knowledge
       x-app: knowledge
       x-public: true
       x-tool: true
@@ -85134,7 +85232,7 @@ paths:
         sync cannot reuse it, purges this provider''s points from the org''s vector
         namespace, and marks the connector disconnected.'
       tags:
-      - kb
+      - knowledge
       x-app: knowledge
       x-public: true
       x-tool: true
@@ -85185,7 +85283,7 @@ paths:
         the provider''s code for a token, seals that token in KMS, and records the
         connection.'
       tags:
-      - kb
+      - knowledge
       x-app: knowledge
       x-public: true
       x-tool: true
@@ -85216,7 +85314,7 @@ paths:
       summary: StartConnectorOAuth returns the provider authorize URL the console
         opens to connect this org's account.
       tags:
-      - kb
+      - knowledge
       x-app: knowledge
       x-public: true
       x-tool: true
@@ -85249,7 +85347,7 @@ paths:
         as knowledge sources, which the store's own hook then indexes — so a synced
         document is retrievable exactly like a hand-written page.
       tags:
-      - kb
+      - knowledge
       x-app: knowledge
       x-public: true
       x-tool: true
@@ -85282,7 +85380,7 @@ paths:
         first-party connector and every long-tail one, in a single list sorted by
         provider.'
       tags:
-      - kb
+      - knowledge
       x-app: knowledge
       x-public: true
       x-tool: true
@@ -85317,7 +85415,7 @@ paths:
         page parent tree, the wikilinks between pages, and each source''s connector
         provenance as edges.'
       tags:
-      - kb
+      - knowledge
       x-app: knowledge
       x-public: true
       x-tool: true
@@ -85333,7 +85431,7 @@ paths:
       summary: Import an Obsidian, Notion, Roam or Evernote export into the org's
         knowledge base
       tags:
-      - kb
+      - knowledge
       x-app: knowledge
       x-public: true
   /v1/kb/search:
@@ -85368,7 +85466,7 @@ paths:
         pages, its agent memories and everything its connectors have synced — and
         returns the matching passages.
       tags:
-      - kb
+      - knowledge
       x-app: knowledge
       x-public: true
       x-tool: true
@@ -85408,7 +85506,7 @@ paths:
           description: ok
       summary: Revokes the caller's own API key of the requested class.
       tags:
-      - keys
+      - account
       x-app: account
       x-public: true
       x-tool: true
@@ -85434,7 +85532,7 @@ paths:
         from IAM rather than from the session claim, which lags a key minted moments
         ago.
       tags:
-      - keys
+      - account
       x-app: account
       x-public: true
       x-tool: true
@@ -85465,7 +85563,7 @@ paths:
       summary: Creates — or rotates — the caller's API key of the requested type and
         returns it ONCE.
       tags:
-      - keys
+      - account
       x-app: account
       x-public: true
       x-tool: true
@@ -86317,7 +86415,7 @@ paths:
           description: ok
       summary: Lists your linked accounts and the devices they sit on.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86349,7 +86447,7 @@ paths:
           description: created
       summary: Registers a signed-in AI provider account on a machine.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86386,7 +86484,7 @@ paths:
           description: ok
       summary: Logs out one account and stops the sessions it was running.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86421,7 +86519,7 @@ paths:
           description: ok
       summary: Reads one linked account.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86457,7 +86555,7 @@ paths:
           description: ok
       summary: 'Shows one machine: its accounts, usage and live sessions.'
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86494,7 +86592,7 @@ paths:
           description: ok
       summary: Logs out every account on one machine and stops its sessions.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86525,7 +86623,7 @@ paths:
           description: ok
       summary: Gets the failover order across your linked accounts.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86581,7 +86679,7 @@ paths:
           description: ok
       summary: Shows one provider account's own usage dashboard.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86620,7 +86718,7 @@ paths:
           description: accepted
       summary: Reports usage samples from the device collector.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86646,7 +86744,7 @@ paths:
           description: ok
       summary: Breaks down what the gateway routed through each of your accounts.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86686,7 +86784,7 @@ paths:
           description: ok
       summary: Shows plan consumption and Hanzo spend side by side.
       tags:
-      - links
+      - link
       x-app: link
       x-public: true
       x-tool: true
@@ -86699,7 +86797,7 @@ paths:
       operationId: get_logs_health
       summary: How many log records this deployment holds for your org
       tags:
-      - logs
+      - metrics
       x-app: metrics
       x-public: true
   /v1/logs/query:
@@ -86713,7 +86811,7 @@ paths:
       operationId: get_logs_query
       summary: Search your org's logs by label, time and substring
       tags:
-      - logs
+      - metrics
       x-app: metrics
       x-public: true
   /v1/logs/write:
@@ -86727,7 +86825,7 @@ paths:
       operationId: post_logs_write
       summary: Append structured log records for your org
       tags:
-      - logs
+      - metrics
       x-app: metrics
       x-public: true
   /v1/machines:
@@ -86762,7 +86860,7 @@ paths:
         live DigitalOcean droplets and the DOKS worker nodes (deduped into one union),
         plus the BYO machines that dialed in via `hanzo link` (provider "byo").
       tags:
-      - machines
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -86774,7 +86872,7 @@ paths:
       operationId: post_machines
       summary: Launch a metered machine for your org, or price one first with dryRun
       tags:
-      - machines
+      - visor
       x-app: visor
       x-public: true
   /v1/machines/{id}:
@@ -86798,7 +86896,7 @@ paths:
           description: no content
       summary: Terminates one of the caller org's machines.
       tags:
-      - machines
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -86834,7 +86932,7 @@ paths:
           description: ok
       summary: Returns one of the caller org's machines by its org-scoped name.
       tags:
-      - machines
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -86859,7 +86957,7 @@ paths:
           description: no content
       summary: Detaches the agent runtime from one of the caller org's machines.
       tags:
-      - machines
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -86892,7 +86990,7 @@ paths:
       summary: Returns the agent binding of one of the caller org's machines, or 404
         when the machine runs no bot runtime.
       tags:
-      - machines
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -86932,7 +87030,7 @@ paths:
       summary: 'Binds a cloud Agent to one of the caller org''s machines: the machine
         is recorded as running that Agent''s @hanzo/bot runtime.'
       tags:
-      - machines
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -86958,7 +87056,7 @@ paths:
       summary: Returns every agent↔machine binding in the caller's org — which machines
         are running which cloud Agent, with vm's own reconciled status.
       tags:
-      - machines
+      - visor
       x-app: visor
       x-public: true
       x-tool: true
@@ -88342,7 +88440,7 @@ paths:
           description: Success
       summary: 'The agent door: every subsystem''s operations as MCP tools'
       tags:
-      - mcp
+      - openapi
       x-app: openapi
       x-public: true
   /v1/mcp/servers:
@@ -88362,7 +88460,7 @@ paths:
           description: ok
       summary: Lists the external MCP servers the caller's org has registered.
       tags:
-      - mcp
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -88405,7 +88503,7 @@ paths:
       summary: Gives the caller's org one more external MCP server, so its tools join
         the org's tool plane and the fleet's MCP door.
       tags:
-      - mcp
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -88430,7 +88528,7 @@ paths:
       summary: Deregisters one of the caller org's external MCP servers, so its tools
         leave the registry.
       tags:
-      - mcp
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -88506,7 +88604,7 @@ paths:
       operationId: post_memory_delete
       summary: Delete one of the authenticated user's memories
       tags:
-      - memory
+      - ai
       x-app: ai
       x-public: true
   /v1/memory/facts:
@@ -88515,7 +88613,7 @@ paths:
       operationId: get_memory_facts
       summary: List the authenticated user's stored facts
       tags:
-      - memory
+      - ai
       x-app: ai
       x-public: true
   /v1/memory/list:
@@ -88524,7 +88622,7 @@ paths:
       operationId: get_memory_list
       summary: List the authenticated user's memories, newest first
       tags:
-      - memory
+      - ai
       x-app: ai
       x-public: true
   /v1/memory/recall:
@@ -88535,7 +88633,7 @@ paths:
       operationId: get_memory_recall
       summary: Recall recent/relevant memories for context injection; with q it
       tags:
-      - memory
+      - ai
       x-app: ai
       x-public: true
   /v1/memory/remember:
@@ -88544,7 +88642,7 @@ paths:
       operationId: post_memory_remember
       summary: Store a memory for the authenticated user
       tags:
-      - memory
+      - ai
       x-app: ai
       x-public: true
   /v1/memory/search:
@@ -88553,7 +88651,7 @@ paths:
       operationId: get_memory_search
       summary: Search the authenticated user's memories (semantic, text fallback)
       tags:
-      - memory
+      - ai
       x-app: ai
       x-public: true
   /v1/memory/update:
@@ -88562,7 +88660,7 @@ paths:
       operationId: post_memory_update
       summary: Update one of the authenticated user's memories
       tags:
-      - memory
+      - ai
       x-app: ai
       x-public: true
   /v1/mesh/services:
@@ -88590,7 +88688,7 @@ paths:
           description: ok
       summary: Returns the Zero Trust edge services the caller's org owns.
       tags:
-      - mesh
+      - zt
       x-app: zt
       x-public: true
       x-tool: true
@@ -88600,7 +88698,7 @@ paths:
       operationId: post_messages
       summary: Implements the Anthropic Messages API.
       tags:
-      - messages
+      - ai
       x-app: ai
       x-public: true
   /v1/messages/count_tokens:
@@ -88612,7 +88710,7 @@ paths:
       operationId: post_messages_count_tokens
       summary: Implements POST /v1/messages/count_tokens.
       tags:
-      - messages
+      - ai
       x-app: ai
       x-public: true
   /v1/metrics/batch:
@@ -88847,7 +88945,7 @@ paths:
       operationId: get_models
       summary: Returns the list of available models from the routing table.
       tags:
-      - models
+      - ai
       x-app: ai
       x-public: true
   /v1/models/{model}/access:
@@ -88865,7 +88963,7 @@ paths:
       summary: 'Returns the caller''s own standing for a gated model: "granted", "requested",
         or empty when they have never asked.'
       tags:
-      - models
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -88883,7 +88981,7 @@ paths:
       summary: Records the caller's waitlist request for a gated model and answers
         their new standing.
       tags:
-      - models
+      - ai
       x-app: ai
       x-public: true
   /v1/models/providers:
@@ -88897,7 +88995,7 @@ paths:
       summary: Public, secret-free list of the providers serving the models that GET
         /v1/models lists — the same source, projected.
       tags:
-      - models
+      - ai
       x-app: ai
       x-public: true
   /v1/mq/health:
@@ -89356,7 +89454,7 @@ paths:
           description: ok
       summary: Returns the caller's org overlay network on the Zero Trust fabric.
       tags:
-      - networks
+      - zt
       x-app: zt
       x-public: true
       x-tool: true
@@ -89389,7 +89487,7 @@ paths:
           description: ok
       summary: Returns one overlay network by id, scoped to the caller's org.
       tags:
-      - networks
+      - zt
       x-app: zt
       x-public: true
       x-tool: true
@@ -89416,7 +89514,7 @@ paths:
           description: ok
       summary: Returns the Zero Trust routers the caller's org owns.
       tags:
-      - networks
+      - zt
       x-app: zt
       x-public: true
       x-tool: true
@@ -101263,6 +101361,8 @@ paths:
       operationId: get_openapi.json
       security: []
       summary: The API description this SDK was generated from
+      tags:
+      - openapi
       x-app: openapi
       x-public: true
   /v1/oracles:
@@ -101283,7 +101383,7 @@ paths:
       summary: Reports the on-chain price/data oracles from the graph's O-Chain PriceFeed
         registry.
       tags:
-      - oracles
+      - explorer
       x-app: explorer
       x-public: true
       x-tool: true
@@ -101317,7 +101417,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
     get:
@@ -101349,7 +101449,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
     patch:
@@ -101381,7 +101481,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -101413,7 +101513,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
     put:
@@ -101445,7 +101545,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
   /v1/org/settings/list:
@@ -101478,7 +101578,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
     get:
@@ -101510,7 +101610,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
     patch:
@@ -101542,7 +101642,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -101574,7 +101674,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
     put:
@@ -101606,7 +101706,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - org
+      - ai
       x-app: ai
       x-public: true
   /v1/orgs:
@@ -101641,7 +101741,7 @@ paths:
           description: ok
       summary: Onboard creates the caller's organization.
       tags:
-      - orgs
+      - account
       x-app: account
       x-public: true
       x-tool: true
@@ -101670,7 +101770,7 @@ paths:
       summary: Get lists the products an org has ENABLED — its own intent, which the
         console's paid-product sidebar reads to decide what to show.
       tags:
-      - orgs
+      - entitlements
       x-app: entitlements
       x-public: true
       x-tool: true
@@ -101712,7 +101812,7 @@ paths:
       summary: Post turns products on or off for an org and returns the enabled set
         afterwards.
       tags:
-      - orgs
+      - entitlements
       x-app: entitlements
       x-public: true
       x-tool: true
@@ -101765,7 +101865,7 @@ paths:
           description: created
       summary: Take a card payment and credit the org's balance
       tags:
-      - payments
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -101797,7 +101897,7 @@ paths:
           description: ok
       summary: Read one settled payment by its id
       tags:
-      - payments
+      - commerce
       x-app: commerce
       x-public: true
       x-tool: true
@@ -101821,7 +101921,7 @@ paths:
           description: ok
       summary: Returns one build-and-deploy pipeline per app, with its latest run.
       tags:
-      - pipelines
+      - platform
       x-app: platform
       x-public: true
       x-tool: true
@@ -101843,7 +101943,7 @@ paths:
       summary: 'Returns the Hanzo cloud plan catalog: every cloud tier with its price,
         included capacity, limits and feature list, scoped to the caller''s catalog.'
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -101865,7 +101965,7 @@ paths:
       summary: 'Returns the blockchain RPC plan catalog: the tiers metered in monthly
         compute units, with their prices, limits and overage terms.'
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -101885,7 +101985,7 @@ paths:
           description: ok
       summary: Returns the cloud plan catalog.
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -101906,7 +102006,7 @@ paths:
       summary: 'ListDNSPlans returns the DNS plan catalog: the tiers priced on zones,
         records per zone and queries per day.'
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -101940,7 +102040,7 @@ paths:
         namespaced entitlement block and the flat license-feature list derived from
         it.'
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -101953,7 +102053,7 @@ paths:
       operationId: get_plans_entries
       summary: The raw plan authority rows
       tags:
-      - plans
+      - commerce
       x-app: commerce
       x-public: true
     post:
@@ -101966,7 +102066,7 @@ paths:
       operationId: post_plans_entries
       summary: Add a subscription plan
       tags:
-      - plans
+      - commerce
       x-app: commerce
       x-public: true
   /v1/plans/entries/{slug}:
@@ -101984,7 +102084,7 @@ paths:
           type: string
       summary: Remove a plan from the authority
       tags:
-      - plans
+      - commerce
       x-app: commerce
       x-public: true
     put:
@@ -102004,7 +102104,7 @@ paths:
           type: string
       summary: Edit a plan, leaving the fields you omit alone
       tags:
-      - plans
+      - commerce
       x-app: commerce
       x-public: true
   /v1/plans/gpu:
@@ -102023,7 +102123,7 @@ paths:
       summary: ListGPUTiers returns the rentable GPU configurations, each with its
         accelerator count and model, VRAM, vCPUs, host memory and hourly price.
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -102046,7 +102146,7 @@ paths:
           description: ok
       summary: Health reports that the plans subsystem is mounted and serving.
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -102069,7 +102169,7 @@ paths:
         the revenue-sharing terms (idle compute resale and the open-source share)
         and the principles the catalog is priced by.'
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -102089,7 +102189,7 @@ paths:
       summary: Returns the regions cloud capacity is offered in, each with its display
         name and physical location.
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -102124,7 +102224,7 @@ paths:
         once: its canonical entitlement block, the flat license-feature list a signed
         license carries, its billing reference, and the catalog it came from.'
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -102146,7 +102246,7 @@ paths:
         which declares every entitlement key with its type, unit and enum, and plan.schema.json,
         which a catalog plan record conforms to.'
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -102162,7 +102262,7 @@ paths:
       summary: Seed the embedded plan catalog, without overwriting administrative
         edits
       tags:
-      - plans
+      - commerce
       x-app: commerce
       x-public: true
   /v1/plans/storage:
@@ -102182,7 +102282,7 @@ paths:
       summary: 'Returns the block-storage price block: the price per GB per month
         and the volume size bounds a cloud plan may attach.'
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -102204,7 +102304,7 @@ paths:
         buys to use the cloud, each with its monthly and annual price, seat rules,
         limits and billing reference.
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -102225,7 +102325,7 @@ paths:
       summary: Returns the per-use price of every metered tool — web search, code
         interpreter, image generation, speech — each with the unit it is billed in.
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -102248,7 +102348,7 @@ paths:
         JSON type, nullability, unit, enum and title, the list of namespaces, and
         the engine features a license can grant.'
       tags:
-      - plans
+      - plan
       x-app: plan
       x-public: true
       x-tool: true
@@ -103450,7 +103550,7 @@ paths:
           description: ok
       summary: Returns every project your org owns.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103495,7 +103595,7 @@ paths:
       summary: Creates a project — the handle a site is deployed and served under
         — and answers 201 with it in `draft`.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103532,7 +103632,7 @@ paths:
           description: no content
       summary: Deletes a project and takes its site off the internet.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103564,7 +103664,7 @@ paths:
       summary: Returns one project of yours by slug — its settings, its live URL and
         the deployment currently serving it.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103612,7 +103712,7 @@ paths:
           description: ok
       summary: Changes a project's settings, and only the settings you send.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103648,7 +103748,7 @@ paths:
           description: Success
       summary: Upload a built site as one archive and serve it
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
   /v1/platform/sites/{slug}/deployments:
@@ -103685,7 +103785,7 @@ paths:
           description: ok
       summary: Returns a project's deploy history, newest version first.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103746,7 +103846,7 @@ paths:
       summary: Opens a deployment and hands back a short-lived, prefix-scoped grant
         to write its bytes straight to object storage.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103787,7 +103887,7 @@ paths:
           description: ok
       summary: Returns one deployment of a project by id.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103843,7 +103943,7 @@ paths:
       summary: CompleteDeployment is the CI completion hook that flips a queued git
         deployment to live (or error) once CI has synced the built site to S3.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103879,7 +103979,7 @@ paths:
       summary: 'Returns every custom hostname this site holds: the live ones, plus
         any pending claim with the DNS records it still owes.'
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103930,7 +104030,7 @@ paths:
           description: ok
       summary: Attaches one or more CUSTOM public hostnames to this org's site.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -103971,7 +104071,7 @@ paths:
           description: no content
       summary: Gives a custom hostname back, so the name is free to reuse.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -104018,7 +104118,7 @@ paths:
       summary: Checks the DNS challenge for a pending custom hostname and, when it
         passes, promotes the host so it begins routing at the edge.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -104061,7 +104161,7 @@ paths:
       summary: Promotes a build output into a new release AND goes live with it —
         create+activate in one call, which is the 99% path.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -104098,7 +104198,7 @@ paths:
           description: ok
       summary: Flushes the site's edge cache without redeploying anything.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -104137,7 +104237,7 @@ paths:
       summary: Returns a site's releases newest-first, marking the active one — the
         rollback menu.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -104190,7 +104290,7 @@ paths:
         it — the staged half of publishing, for when you want to check a release before
         it goes live.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -104240,7 +104340,7 @@ paths:
       summary: Points the site at an existing release — the go-live, and equally the
         ROLLBACK.
       tags:
-      - platform
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -104275,7 +104375,7 @@ paths:
       summary: 'Reports what this deployment actually mounted: every subsystem the
         composition root declared and whether it is switched on.'
       tags:
-      - plugins
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -104299,7 +104399,7 @@ paths:
       summary: Lists the plugins the caller's org BUILT, newest first, each with the
         TypeScript as authored.
       tags:
-      - plugins
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -104327,7 +104427,7 @@ paths:
       summary: Removes one of the caller org's built plugins, so the runtime can no
         longer load it.
       tags:
-      - plugins
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -104357,7 +104457,7 @@ paths:
       summary: Build a plugin for your org from TypeScript, or from an API spec a
         model writes it from
       tags:
-      - plugins
+      - tools
       x-app: tools
       x-public: true
   /v1/prefs:
@@ -106098,7 +106198,7 @@ paths:
       operationId: post_query
       summary: Handles POST /v1/query — {file_id,query,k}.
       tags:
-      - query
+      - ai
       x-app: ai
       x-public: true
   /v1/query_multiple:
@@ -106107,7 +106207,7 @@ paths:
       operationId: post_query_multiple
       summary: Handles POST /v1/query_multiple — {file_ids,query,k}.
       tags:
-      - query_multiple
+      - ai
       x-app: ai
       x-public: true
   /v1/rag/context:
@@ -106118,7 +106218,7 @@ paths:
       operationId: get_rag_context
       summary: Return every stored chunk of one file_id (full document context).
       tags:
-      - rag
+      - ai
       x-app: ai
       x-public: true
   /v1/rag/delete:
@@ -106131,7 +106231,7 @@ paths:
       summary: Delete all chunks of one or more uploaded files (by file_id) from the
         owner's Search+Vector index.
       tags:
-      - rag
+      - ai
       x-app: ai
       x-public: true
   /v1/rag/embed:
@@ -106146,7 +106246,7 @@ paths:
       summary: Parse, chunk, and embed one uploaded file under its file_id into the
         unified Search+Vector index, scoped to the authenticated owner.
       tags:
-      - rag
+      - ai
       x-app: ai
       x-public: true
   /v1/rag/query:
@@ -106159,7 +106259,7 @@ paths:
       summary: Retrieve the top-K chunks relevant to a query, scoped to a single uploaded
         file (`file_id`).
       tags:
-      - rag
+      - ai
       x-app: ai
       x-public: true
   /v1/rag/query-multiple:
@@ -106172,7 +106272,7 @@ paths:
       summary: Retrieve the top-K chunks relevant to a query, scoped to a SET of uploaded
         files (`file_ids`).
       tags:
-      - rag
+      - ai
       x-app: ai
       x-public: true
   /v1/referrals:
@@ -106424,7 +106524,7 @@ paths:
           description: ok
       summary: Returns the versions that actually reached the cluster.
       tags:
-      - releases
+      - platform
       x-app: platform
       x-public: true
       x-tool: true
@@ -106455,7 +106555,7 @@ paths:
           description: Success
       summary: Record a session-replay snapshot batch
       tags:
-      - replay
+      - analytics
       x-app: analytics
       x-public: true
   /v1/rerank:
@@ -106472,7 +106572,7 @@ paths:
       operationId: post_rerank
       summary: Implements POST /v1/rerank (Cohere/Jina-compatible).
       tags:
-      - rerank
+      - ai
       x-app: ai
       x-public: true
   /v1/research/artifacts:
@@ -106752,7 +106852,7 @@ paths:
       operationId: post_responses
       summary: Implements POST /v1/responses.
       tags:
-      - responses
+      - ai
       x-app: ai
       x-public: true
   /v1/risk/datasets:
@@ -106772,7 +106872,7 @@ paths:
           description: ok
       summary: List this org's datasets
       tags:
-      - risk
+      - dataset
       x-app: dataset
       x-public: true
       x-tool: true
@@ -106811,7 +106911,7 @@ paths:
           description: ok
       summary: Declare the next version of a dataset
       tags:
-      - risk
+      - dataset
       x-app: dataset
       x-public: true
       x-tool: true
@@ -106854,7 +106954,7 @@ paths:
           description: ok
       summary: Dispose of one dataset and every version of it
       tags:
-      - risk
+      - dataset
       x-app: dataset
       x-public: true
       x-tool: true
@@ -106884,7 +106984,7 @@ paths:
           description: ok
       summary: Describe every version of one dataset
       tags:
-      - risk
+      - dataset
       x-app: dataset
       x-public: true
       x-tool: true
@@ -106947,7 +107047,7 @@ paths:
           description: ok
       summary: Read a version's rows back, one page at a time
       tags:
-      - risk
+      - dataset
       x-app: dataset
       x-public: true
       x-tool: true
@@ -106997,7 +107097,7 @@ paths:
       summary: Show where a version's rows came from, and whether that can still be
         demonstrated
       tags:
-      - risk
+      - dataset
       x-app: dataset
       x-public: true
       x-tool: true
@@ -107037,7 +107137,7 @@ paths:
           description: accepted
       summary: Materialise the declared version into immutable rows
       tags:
-      - risk
+      - dataset
       x-app: dataset
       x-public: true
       x-tool: true
@@ -107153,7 +107253,7 @@ paths:
           description: ok
       summary: Read the assertions this tenant has recorded
       tags:
-      - risk
+      - label
       x-app: label
       x-public: true
       x-tool: true
@@ -107188,7 +107288,7 @@ paths:
           description: ok
       summary: Assert ground truth about events
       tags:
-      - risk
+      - label
       x-app: label
       x-public: true
       x-tool: true
@@ -107243,7 +107343,7 @@ paths:
           description: ok
       summary: How much of the window has matured, and how much of that is judged
       tags:
-      - risk
+      - label
       x-app: label
       x-public: true
       x-tool: true
@@ -107279,7 +107379,7 @@ paths:
           description: ok
       summary: Dispose of this tenant's expired assertions, whole records only
       tags:
-      - risk
+      - label
       x-app: label
       x-public: true
       x-tool: true
@@ -107316,7 +107416,7 @@ paths:
           description: ok
       summary: Place or release a litigation hold on named records
       tags:
-      - risk
+      - label
       x-app: label
       x-public: true
       x-tool: true
@@ -107352,7 +107452,7 @@ paths:
       summary: Resolve the label in force for named events, as of each event's own
         horizon
       tags:
-      - risk
+      - label
       x-app: label
       x-public: true
       x-tool: true
@@ -107376,7 +107476,7 @@ paths:
           description: ok
       summary: The closed vocabularies and the precedence rule that resolves a conflict
       tags:
-      - risk
+      - label
       x-app: label
       x-public: true
       x-tool: true
@@ -107545,7 +107645,7 @@ paths:
       summary: Lists every set this plane publishes, with its version and how fresh
         it is.
       tags:
-      - risk
+      - reference
       x-app: reference
       x-public: true
       x-tool: true
@@ -107580,7 +107680,7 @@ paths:
           description: ok
       summary: Removes one of your organisation's overrides.
       tags:
-      - risk
+      - reference
       x-app: reference
       x-public: true
       x-tool: true
@@ -107623,7 +107723,7 @@ paths:
           description: ok
       summary: Reference describes one set and lists your org's overrides in it.
       tags:
-      - risk
+      - reference
       x-app: reference
       x-public: true
       x-tool: true
@@ -107669,7 +107769,7 @@ paths:
           description: ok
       summary: Writes your organisation's own allow and deny entries over a set.
       tags:
-      - risk
+      - reference
       x-app: reference
       x-public: true
       x-tool: true
@@ -107707,7 +107807,7 @@ paths:
           description: ok
       summary: Takes a new version of one set.
       tags:
-      - risk
+      - reference
       x-app: reference
       x-public: true
       x-tool: true
@@ -107748,7 +107848,7 @@ paths:
           description: ok
       summary: Looks keys up against the reference plane.
       tags:
-      - risk
+      - reference
       x-app: reference
       x-public: true
       x-tool: true
@@ -108006,7 +108106,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     get:
@@ -108038,7 +108138,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     patch:
@@ -108070,7 +108170,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -108102,7 +108202,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     put:
@@ -108134,7 +108234,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
   /v1/router/data:
@@ -108142,14 +108242,14 @@ paths:
       operationId: delete_router_data
       summary: Data
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     get:
       operationId: get_router_data
       summary: Data
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
   /v1/router/defaults:
@@ -108182,7 +108282,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     get:
@@ -108214,7 +108314,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     patch:
@@ -108246,7 +108346,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -108278,7 +108378,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     put:
@@ -108310,7 +108410,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
   /v1/router/history:
@@ -108329,7 +108429,7 @@ paths:
       operationId: get_router_history
       summary: Returns the router-improvement time-series.
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
   /v1/router/judge-panel:
@@ -108349,7 +108449,7 @@ paths:
         row, the live in-process per-judge calibration (weight/mean/n), and the static
         published benchmark.'
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
   /v1/router/ledger:
@@ -108382,7 +108482,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     get:
@@ -108414,7 +108514,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     patch:
@@ -108446,7 +108546,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -108478,7 +108578,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     put:
@@ -108510,7 +108610,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
   /v1/router/policy:
@@ -108543,7 +108643,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     get:
@@ -108575,7 +108675,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     patch:
@@ -108607,7 +108707,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -108639,7 +108739,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     put:
@@ -108671,7 +108771,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
   /v1/router/rewards:
@@ -108704,7 +108804,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     get:
@@ -108736,7 +108836,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     patch:
@@ -108768,7 +108868,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -108800,7 +108900,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
     put:
@@ -108832,7 +108932,7 @@ paths:
       summary: The HTTP transport binding for the RESTful router-config nouns (/v1/router/{policy,defaults,ledger,rewards,artifact-meta}
         and /v1/org/settings[/list]).
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
   /v1/router/stats:
@@ -108853,7 +108953,7 @@ paths:
       operationId: get_router_stats
       summary: Returns the router observability aggregate.
       tags:
-      - router
+      - ai
       x-app: ai
       x-public: true
   /v1/rpc/{chain}:
@@ -108886,7 +108986,7 @@ paths:
       summary: Forwards a JSON-RPC call to the named chain and returns its answer
         unchanged.
       tags:
-      - rpc
+      - web3
       x-app: web3
       x-public: true
       x-tool: true
@@ -108936,7 +109036,7 @@ paths:
           description: accepted
       summary: Runs a container image and gives back a URL.
       tags:
-      - run
+      - platform
       x-app: platform
       x-public: true
       x-tool: true
@@ -108986,7 +109086,7 @@ paths:
           description: accepted
       summary: Triggers a native build — an image, or the binaries a repo declares.
       tags:
-      - runner
+      - platform
       x-app: platform
       x-public: true
       x-tool: true
@@ -109001,7 +109101,7 @@ paths:
       operationId: get_s3_buckets
       summary: List your org's buckets
       tags:
-      - s3
+      - storage
       x-app: storage
       x-public: true
     post:
@@ -109014,7 +109114,7 @@ paths:
       operationId: post_s3_buckets
       summary: Create a bucket in your org
       tags:
-      - s3
+      - storage
       x-app: storage
       x-public: true
   /v1/s3/buckets/{bucket}:
@@ -109034,7 +109134,7 @@ paths:
           type: string
       summary: Delete an empty bucket
       tags:
-      - s3
+      - storage
       x-app: storage
       x-public: true
   /v1/s3/buckets/{bucket}/objects:
@@ -109056,7 +109156,7 @@ paths:
           type: string
       summary: Browse one level of a bucket
       tags:
-      - s3
+      - storage
       x-app: storage
       x-public: true
     post:
@@ -109075,7 +109175,7 @@ paths:
           type: string
       summary: Get a URL to upload one object directly
       tags:
-      - s3
+      - storage
       x-app: storage
       x-public: true
   /v1/s3/buckets/{bucket}/objects/{wildcard1}:
@@ -109100,7 +109200,7 @@ paths:
           type: string
       summary: Delete one object
       tags:
-      - s3
+      - storage
       x-app: storage
     get:
       description: |-
@@ -109123,7 +109223,7 @@ paths:
           type: string
       summary: Get a URL to download one object directly
       tags:
-      - s3
+      - storage
       x-app: storage
   /v1/s3/health:
     get:
@@ -109134,7 +109234,7 @@ paths:
       operationId: get_s3_health
       summary: Whether object storage is usable here
       tags:
-      - s3
+      - storage
       x-app: storage
       x-public: true
   /v1/sandboxes:
@@ -109620,7 +109720,7 @@ paths:
       operationId: post_scrape
       summary: Fetch one page and get its extracted markdown, in the firecrawl envelope.
       tags:
-      - scrape
+      - websearch
       x-app: websearch
       x-public: true
   /v1/search:
@@ -109682,7 +109782,7 @@ paths:
           description: ok
       summary: Lists the search indexes with their document counts and timestamps.
       tags:
-      - search
+      - product
       x-app: product
       x-public: true
       x-tool: true
@@ -109718,7 +109818,7 @@ paths:
           description: ok
       summary: Totals the documents across every search index.
       tags:
-      - search
+      - product
       x-app: product
       x-public: true
       x-tool: true
@@ -109963,7 +110063,7 @@ paths:
           type: string
       summary: Delete a Sentry project
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
     get:
       description: |-
@@ -109981,7 +110081,7 @@ paths:
           type: string
       summary: Read the caller org's errors on the Sentry surface
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
     patch:
       description: |-
@@ -109997,7 +110097,7 @@ paths:
           type: string
       summary: Not served — the Sentry surface has no partial update
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
     post:
       description: |-
@@ -110015,7 +110115,7 @@ paths:
           type: string
       summary: Send events to the Sentry surface, or write on it
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
     put:
       description: |-
@@ -110033,7 +110133,7 @@ paths:
           type: string
       summary: Move an error issue through its lifecycle
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
   /v1/sentinel/discover:
     post:
@@ -110063,7 +110163,7 @@ paths:
         the filters, the groupings and the aggregations, and gets back the columns
         and rows they asked for.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110096,7 +110196,7 @@ paths:
           description: ok
       summary: Returns one captured error event of a project, by its id.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110183,7 +110283,7 @@ paths:
         to one project and one time window, and filtered by status, level, environment,
         service, a free-text query and a sort.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110212,7 +110312,7 @@ paths:
       summary: Returns one grouped issue of the caller's org with its latest occurrence
         sample.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110246,7 +110346,7 @@ paths:
       summary: Changes an issue's lifecycle — resolve, ignore, reopen or assign —
         and returns the updated issue.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110290,7 +110390,7 @@ paths:
         is an isolation unit, so the caller declares which project's occurrences to
         read.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110336,7 +110436,7 @@ paths:
       summary: Lists a project's captured error events, newest first, optionally narrowed
         to those whose message or exception text contains a search string.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110358,7 +110458,7 @@ paths:
       summary: Lists the caller's org's Sentry projects, each with its freshly-derived
         DSN.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110386,7 +110486,7 @@ paths:
       summary: Creates a Sentry project under the caller's org and returns it, DSN
         included.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110411,7 +110511,7 @@ paths:
           description: no content
       summary: Deletes one Sentry project of the caller's org.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110437,7 +110537,7 @@ paths:
           description: ok
       summary: Returns one Sentry project of the caller's org, DSN included.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110467,7 +110567,7 @@ paths:
       summary: Rotates a project's DSN key — bumping its rotation watermark so keys
         below it stop verifying — and returns the project with its new DSN.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110507,7 +110607,7 @@ paths:
       summary: 'Returns a project''s event-rate timeseries: one bucket per interval
         over the requested period, counting the events in it.'
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110549,7 +110649,7 @@ paths:
         many errors landed on it, when they started and stopped, and the latest message
         seen — the entry point for "which requests are failing".
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110582,7 +110682,7 @@ paths:
       summary: Returns one trace's captured errors for a project — every error event
         that carried the trace id, in the order the events plane holds them.
       tags:
-      - sentinel
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -110969,7 +111069,7 @@ paths:
           description: ok
       summary: Returns the org's deployed sites at the pretty URLs they serve at.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111017,7 +111117,7 @@ paths:
       summary: Generates a self-contained, mobile-responsive static site from a natural-language
         brief and deploys it live in one call.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111054,7 +111154,7 @@ paths:
           description: no content
       summary: Deletes a project and takes its site off the internet.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111096,7 +111196,7 @@ paths:
           description: ok
       summary: Returns one site — the same row ListSites carries, for one slug.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111144,7 +111244,7 @@ paths:
           description: ok
       summary: Changes a project's settings, and only the settings you send.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111180,7 +111280,7 @@ paths:
           description: Success
       summary: Upload a built site as one archive and serve it
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
   /v1/sites/{slug}/deployments:
@@ -111217,7 +111317,7 @@ paths:
           description: ok
       summary: Returns a project's deploy history, newest version first.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111278,7 +111378,7 @@ paths:
       summary: Opens a deployment and hands back a short-lived, prefix-scoped grant
         to write its bytes straight to object storage.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111319,7 +111419,7 @@ paths:
           description: ok
       summary: Returns one deployment of a project by id.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111375,7 +111475,7 @@ paths:
       summary: CompleteDeployment is the CI completion hook that flips a queued git
         deployment to live (or error) once CI has synced the built site to S3.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111411,7 +111511,7 @@ paths:
       summary: 'Returns every custom hostname this site holds: the live ones, plus
         any pending claim with the DNS records it still owes.'
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111462,7 +111562,7 @@ paths:
           description: ok
       summary: Attaches one or more CUSTOM public hostnames to this org's site.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111503,7 +111603,7 @@ paths:
           description: no content
       summary: Gives a custom hostname back, so the name is free to reuse.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111550,7 +111650,7 @@ paths:
       summary: Checks the DNS challenge for a pending custom hostname and, when it
         passes, promotes the host so it begins routing at the edge.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111593,7 +111693,7 @@ paths:
       summary: Promotes a build output into a new release AND goes live with it —
         create+activate in one call, which is the 99% path.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111630,7 +111730,7 @@ paths:
           description: ok
       summary: Flushes the site's edge cache without redeploying anything.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111669,7 +111769,7 @@ paths:
       summary: Returns a site's releases newest-first, marking the active one — the
         rollback menu.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111722,7 +111822,7 @@ paths:
         it — the staged half of publishing, for when you want to check a release before
         it goes live.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111772,7 +111872,7 @@ paths:
       summary: Points the site at an existing release — the go-live, and equally the
         ROLLBACK.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111814,7 +111914,7 @@ paths:
       summary: Deploys a caller-supplied file manifest — the deploy_site capability
         an agent calls — and answers with where it went live.
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111867,7 +111967,7 @@ paths:
         platform (an example a seeded creator published, or another org's app serving
         at <slug>.hanzo.app).
       tags:
-      - sites
+      - projects
       x-app: projects
       x-public: true
       x-tool: true
@@ -111900,7 +112000,7 @@ paths:
       summary: Lists the skills the caller's org can reach — the brand's embedded
         catalogue plus the org's own authored ones — with each one's activation flag.
       tags:
-      - skills
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -111936,7 +112036,7 @@ paths:
       summary: Adds or revises one of the caller org's own skills, and answers 201
         with the stored record.
       tags:
-      - skills
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -111963,7 +112063,7 @@ paths:
           description: ok
       summary: Removes one of the caller org's authored skills.
       tags:
-      - skills
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -111984,7 +112084,7 @@ paths:
           description: ok
       summary: Lists the caller org's OWN skills with their SKILL.md bodies.
       tags:
-      - skills
+      - tools
       x-app: tools
       x-public: true
       x-tool: true
@@ -112216,7 +112316,7 @@ paths:
       operationId: get_store
       summary: List your org's storefronts as a page
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
     post:
@@ -112228,7 +112328,7 @@ paths:
       operationId: post_store
       summary: Create a storefront
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}:
@@ -112248,7 +112348,7 @@ paths:
           type: string
       summary: Delete a storefront, keeping a recoverable copy
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
     get:
@@ -112267,7 +112367,7 @@ paths:
           type: string
       summary: Fetch one storefront
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
     patch:
@@ -112286,7 +112386,7 @@ paths:
           type: string
       summary: Change part of a storefront
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
     post:
@@ -112306,7 +112406,7 @@ paths:
           type: string
       summary: Method-override tunnel for clients that cannot send PUT, PATCH or DELETE
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
     put:
@@ -112325,7 +112425,7 @@ paths:
           type: string
       summary: Replace a storefront outright
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/authorize:
@@ -112350,7 +112450,7 @@ paths:
       summary: Authorize a new order against a storefront, holding the funds without
         settling them
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/authorize/{orderid}:
@@ -112378,7 +112478,7 @@ paths:
       summary: Authorize an order that already exists, holding the funds without settling
         them
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/bundle/{key}:
@@ -112404,7 +112504,7 @@ paths:
           type: string
       summary: Fetch a bundle as this storefront sells it
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/capture/{orderid}:
@@ -112431,7 +112531,7 @@ paths:
           type: string
       summary: Capture a previously authorized order and settle the payment
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/charge:
@@ -112454,7 +112554,7 @@ paths:
           type: string
       summary: Authorize and capture a new order in one call
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/checkout/authorize:
@@ -112477,7 +112577,7 @@ paths:
       summary: Authorize a new order against a storefront, holding the funds — the
         checkout spelling
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/checkout/authorize/{orderid}:
@@ -112503,7 +112603,7 @@ paths:
           type: string
       summary: Authorize an existing order, holding the funds — the checkout spelling
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/checkout/capture/{orderid}:
@@ -112530,7 +112630,7 @@ paths:
       summary: Capture a previously authorized order and settle it — the checkout
         spelling
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/checkout/charge:
@@ -112551,7 +112651,7 @@ paths:
           type: string
       summary: Authorize and capture a new order in one call — the checkout spelling
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/checkout/paypal/cancel/{payKey}:
@@ -112578,7 +112678,7 @@ paths:
       summary: PayPal cancel by pay key — refuses, exactly as the unprefixed address
         does
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/checkout/paypal/confirm/{payKey}:
@@ -112606,7 +112706,7 @@ paths:
       summary: PayPal confirm by pay key — refuses, exactly as the unprefixed address
         does
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/checkout/paypal/pay:
@@ -112627,7 +112727,7 @@ paths:
           type: string
       summary: Start a PayPal authorization for a new order — the checkout spelling
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/listing:
@@ -112648,7 +112748,7 @@ paths:
           type: string
       summary: The storefront's whole listing override map
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/listing/{key}:
@@ -112672,7 +112772,7 @@ paths:
           type: string
       summary: Remove a listing override
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
     get:
@@ -112697,7 +112797,7 @@ paths:
           type: string
       summary: Fetch one listing override, by item id or by its slug or SKU
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
     patch:
@@ -112723,7 +112823,7 @@ paths:
           type: string
       summary: Confirm a listing override exists and re-save the store
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
     post:
@@ -112748,7 +112848,7 @@ paths:
           type: string
       summary: Add a listing override under a new key
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
     put:
@@ -112773,7 +112873,7 @@ paths:
           type: string
       summary: Upsert a listing override
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/paypal/cancel/{payKey}:
@@ -112801,7 +112901,7 @@ paths:
       summary: PayPal cancel by pay key — refuses, because a pay key alone does not
         identify the order
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/paypal/confirm/{payKey}:
@@ -112830,7 +112930,7 @@ paths:
       summary: PayPal confirm by pay key — refuses, because a pay key alone does not
         identify the order
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/paypal/pay:
@@ -112853,7 +112953,7 @@ paths:
           type: string
       summary: Start a PayPal authorization for a new order
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/product/{key}:
@@ -112879,7 +112979,7 @@ paths:
           type: string
       summary: Fetch a product as this storefront sells it
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/trial:
@@ -112903,7 +113003,7 @@ paths:
           type: string
       summary: Start this store's no-card trial on the entry plan
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/{storeid}/variant/{key}:
@@ -112928,7 +113028,7 @@ paths:
           type: string
       summary: Fetch a variant as this storefront sells it
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/access:
@@ -112946,7 +113046,7 @@ paths:
       operationId: get_store_access
       summary: Whether a store is entitled to trade, and why
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/current:
@@ -112964,7 +113064,7 @@ paths:
       operationId: get_store_current
       summary: Resolve your org's active storefront without naming an id
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/store/token:
@@ -112981,7 +113081,7 @@ paths:
       operationId: post_store_token
       summary: Mint your org's least-privilege storefront read key
       tags:
-      - store
+      - commerce
       x-app: commerce
       x-public: true
   /v1/summary:
@@ -113007,7 +113107,7 @@ paths:
           description: ok
       summary: Reports whether the platform is up.
       tags:
-      - summary
+      - o11y
       x-app: o11y
       x-public: true
       x-tool: true
@@ -113209,7 +113309,7 @@ paths:
       summary: The site's browser tag set for the hosted tag — which pixels to inject,
         by publishable key
       tags:
-      - tags
+      - projects
       x-app: projects
       x-public: true
   /v1/tasks:
@@ -114969,7 +115069,7 @@ paths:
           description: ok
       summary: Reads an address's native balance on a chain.
       tags:
-      - tokens
+      - web3
       x-app: web3
       x-public: true
       x-tool: true
@@ -115297,7 +115397,7 @@ paths:
       operationId: get_traces_health
       summary: How many spans this deployment holds for your org
       tags:
-      - traces
+      - metrics
       x-app: metrics
       x-public: true
   /v1/traces/query:
@@ -115309,7 +115409,7 @@ paths:
       operationId: get_traces_query
       summary: Recent spans for your org over a time range
       tags:
-      - traces
+      - metrics
       x-app: metrics
       x-public: true
   /v1/traces/trace:
@@ -115321,7 +115421,7 @@ paths:
       operationId: get_traces_trace
       summary: Every span of one trace — the waterfall
       tags:
-      - traces
+      - metrics
       x-app: metrics
       x-public: true
   /v1/traces/write:
@@ -115335,7 +115435,7 @@ paths:
       operationId: post_traces_write
       summary: Append spans for your org
       tags:
-      - traces
+      - metrics
       x-app: metrics
       x-public: true
   /v1/traffic/globe:
@@ -115360,7 +115460,7 @@ paths:
         "Hanzo mode" globe: WHERE requests to api.hanzo.ai are coming from, as country/region
         points with per-service-class counts, plus headline throughput rates.'
       tags:
-      - traffic
+      - ai
       x-app: ai
       x-public: true
   /v1/translate:
@@ -115476,7 +115576,7 @@ paths:
       operationId: post_upload
       summary: Upload a file into an execution session
       tags:
-      - upload
+      - exec
       x-app: exec
       x-public: true
   /v1/usage:
@@ -115577,7 +115677,7 @@ paths:
         — the points a contribution heatmap and a timeline are drawn from, gap-filled
         so every day in the range is present.
       tags:
-      - usage
+      - leaderboard
       x-app: leaderboard
       x-public: true
       x-tool: true
@@ -115737,7 +115837,7 @@ paths:
         own org or organizations against each other, and always reports the caller's
         own standing even when it falls outside the returned page.
       tags:
-      - usage
+      - leaderboard
       x-app: leaderboard
       x-public: true
       x-tool: true
@@ -115758,7 +115858,7 @@ paths:
       summary: Returns the caller's own public-listing preference and their org's,
         each with whether the caller may change it.
       tags:
-      - usage
+      - leaderboard
       x-app: leaderboard
       x-public: true
       x-tool: true
@@ -115788,7 +115888,7 @@ paths:
           description: ok
       summary: Sets the CALLER's own public-listing preference on the leaderboard.
       tags:
-      - usage
+      - leaderboard
       x-app: leaderboard
       x-public: true
       x-tool: true
@@ -115819,7 +115919,7 @@ paths:
           description: ok
       summary: Sets the ORG's listing on the cross-org global board.
       tags:
-      - usage
+      - leaderboard
       x-app: leaderboard
       x-public: true
       x-tool: true
@@ -115850,7 +115950,7 @@ paths:
       summary: Backfill seeds the derived usage rollup from ledger history — the rows
         written before the incremental view existed, which that view can never capture.
       tags:
-      - usage
+      - leaderboard
       x-app: leaderboard
       x-public: true
       x-tool: true
@@ -116154,7 +116254,7 @@ paths:
           description: ok
       summary: Lists the vector collections with their size and geometry.
       tags:
-      - vector
+      - product
       x-app: product
       x-public: true
       x-tool: true
@@ -116188,7 +116288,7 @@ paths:
           description: ok
       summary: Totals the collections, vectors and storage across the vector store.
       tags:
-      - vector
+      - product
       x-app: product
       x-public: true
       x-tool: true
@@ -116211,7 +116311,7 @@ paths:
           type: string
       summary: Implements GET /v1/videos/{id} — poll a job's status.
       tags:
-      - videos
+      - ai
       x-app: ai
       x-public: true
   /v1/videos/{id}/content:
@@ -116233,7 +116333,7 @@ paths:
           type: string
       summary: Implements GET /v1/videos/{id}/content — download the finished MP4.
       tags:
-      - videos
+      - ai
       x-app: ai
       x-public: true
   /v1/videos/generations:
@@ -116253,7 +116353,7 @@ paths:
       operationId: post_videos_generations
       summary: Implements POST /v1/videos/generations — the ASYNC create.
       tags:
-      - videos
+      - ai
       x-app: ai
       x-public: true
   /v1/wallets:
@@ -116943,7 +117043,7 @@ paths:
           type: string
       summary: Verify WeChat work bot callback URL
       tags:
-      - wecom-bot
+      - ai
       x-app: ai
       x-public: true
     post:
@@ -116957,7 +117057,7 @@ paths:
           type: string
       summary: Process WeChat work bot messages
       tags:
-      - wecom-bot
+      - ai
       x-app: ai
       x-public: true
   /v1/world:
@@ -117170,24 +117270,29 @@ paths:
         A validated, org-scoped principal is required.
       operationId: get_ws_query_progress
       summary: Watch one running query's progress over a websocket
+      tags:
+      - o11y
       x-app: o11y
 security:
 - bearer: []
 servers:
 - url: https://api.hanzo.ai
 tags:
+- description: 'Package account is your own account: API keys you mint and revoke,
+    and org onboarding.'
+  name: account
 - description: 'Package admin is the operator''s view of the fleet: orgs, users, roles,
     spend and system health.'
   name: admin
+- description: Package admission is the launch-control GATE for Hanzo's hosted services
+    — the COMPLETE waitlist feature, COMPOSING the ONE flag engine (apps/flags) one-way.
+  name: admission
 - description: Package ads is your paid ad campaigns, launched and paused from one
     place.
   name: ads
 - description: Package affiliates is a partner program that pays commission on what
     your referrals spend.
   name: affiliates
-- description: 'Package agents is autonomous agents for your org: define them, run
-    them, keep every run.'
-  name: agent
 - description: 'Package agents is autonomous agents for your org: define them, run
     them, keep every run.'
   name: agents
@@ -117202,17 +117307,9 @@ tags:
 - description: 'Package analytics is product analytics: send an event, read back who
     did what.'
   name: analytics
-- description: 'Package account is your own account: API keys you mint and revoke,
-    and org onboarding.'
-  name: appearance
 - description: Package ask is a plain-language question about your business, answered
     with real numbers.
   name: ask
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: audio
 - description: 'Package auditlog is your org''s tamper-evident audit trail: every
     security-relevant event, hash-chained and readable.'
   name: audit
@@ -117222,10 +117319,7 @@ tags:
 - name: authz
 - description: Package automations is workflows that run themselves, on a schedule
     or a webhook.
-  name: auto
-- description: 'Package account is your own account: API keys you mint and revoke,
-    and org onboarding.'
-  name: avatar
+  name: automations
 - description: 'Package base is managed Hanzo Base: a hosted backend for your app
     — collections, records, access rules and sign-in.'
   name: base
@@ -117246,66 +117340,33 @@ tags:
 - description: Package bots is a bot doing your work on a real desktop, live, while
     you watch.
   name: bots
-- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
-    namespace — builds, releases, environments, logs, custom domains.'
-  name: builds
 - description: Package campaign is one go-to-market push across paid, organic and
     email at once.
   name: campaign
 - description: 'Package captable is your cap table: stakeholders, share classes, grants,
     SAFEs, rounds, and who owns what.'
   name: captable
-- description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
-    alerts, payment webhooks and the storefront catalog.'
-  name: cart
 - description: Package catalog is one place to browse every project, app and site
     built here.
   name: catalog
-- description: 'Package web3 is the chain-access surface: which chains this deployment
-    can reach, a JSON-RPC door onto each, and the two token reads every wallet UI
-    needs.'
-  name: chains
 - description: Package channels is one inbox for the chat apps you connect — Discord,
     Slack, Teams, Telegram.
   name: channels
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: chat
 - description: 'Package cloudflare is your Cloudflare account, managed from Hanzo:
     zones, Pages, Workers, Workers AI, R2, KV and D1.'
   name: cloudflare
-- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
-    clusters — launch one, resize it, tear it down.'
-  name: clusters
 - description: Package code is search and symbols across your repos, for you and your
     agents.
   name: code
-- description: 'Package agents is autonomous agents for your org: define them, run
-    them, keep every run.'
-  name: coding
-- name: commands
 - description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
     alerts, payment webhooks and the storefront catalog.'
   name: commerce
 - description: 'Package company is incorporation end to end: pick a structure, add
     founders, pay, file, and e-sign.'
   name: company
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: completions
 - description: Package compliance is your KYC/KYB onboarding, accreditation records,
     and the evidence trail behind them.
   name: compliance
-- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
-    clusters — launch one, resize it, tear it down.'
-  name: compute
-- description: Package integrations is how your org connects third-party accounts
-    like Slack, and revokes them.
-  name: connectors
 - description: Package content is marketing content from draft to published, on every
     channel.
   name: content
@@ -117315,103 +117376,49 @@ tags:
 - description: 'Package crm is your sales pipeline: the companies, the people, the
     deals in play.'
   name: crm
-- description: 'Package account is your own account: API keys you mint and revoke,
-    and org onboarding.'
-  name: csrf
 - description: Package dataroom is a secure document room you share by link and watch
     page by page.
   name: dataroom
+- description: 'Package dataset is the per-org dataset plane of /v1/risk: a dataset
+    is a VERSIONED, IMMUTABLE snapshot of one tenant''s own event surface, and this
+    is where it is declared, materialised, described, exported and disposed of.'
+  name: dataset
 - description: 'Package deploy is Hanzo CD: see what each app is running, sync it,
     and roll back a bad release.'
   name: deploy
 - description: Package destinations is your events forwarded to the ad and analytics
     tools you use.
   name: destinations
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: dev-bridge
 - description: 'Package dns is your DNS records: the zones and records behind every
     name you point at Hanzo.'
   name: dns
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: docs
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: documents
 - description: 'Package domain is Hanzo Domains: search a name, see the price, buy
     it from your prepaid wallet.'
   name: domain
-- description: 'Package exec is the code interpreter: run a snippet in a sandbox,
-    and move files in and out of the session that sandbox IS.'
-  name: download
-- description: 'Package projects is where your sites live: create one, deploy a build,
-    roll back to any release.'
-  name: edge
-- description: 'Package account is your own account: API keys you mint and revoke,
-    and org onboarding.'
-  name: embed
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: embeddings
-- description: 'Package pricing is the price list: what every model, provider, GPU
-    tier, tool and hosting plan costs.'
-  name: enablement
 - description: 'Package engine is Hanzo Engine: which models the serving runtime has
     loaded, and the GPUs under it.'
   name: engine
 - description: 'Package entitlements is what your org may run: what the plan grants,
     and which of those products are switched on.'
   name: entitlements
-- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
-    namespace — builds, releases, environments, logs, custom domains.'
-  name: environments
-- description: 'Package analytics is product analytics: send an event, read back who
-    did what.'
-  name: errors
 - description: Package esign is a document out for signature, signed and filed with
     an audit trail.
   name: esign
 - description: Package eval is scoring a model on your own data, with a judge you
     choose.
   name: evals
-- description: 'Package analytics is product analytics: send an event, read back who
-    did what.'
-  name: event
 - description: 'Package exec is the code interpreter: run a snippet in a sandbox,
     and move files in and out of the session that sandbox IS.'
   name: exec
 - description: 'Package experiments is A/B testing anything: a flag, an ad, a subject
     line, a model.'
   name: experiments
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: feedback
-- description: 'Package exec is the code interpreter: run a snippet in a sandbox,
-    and move files in and out of the session that sandbox IS.'
-  name: files
-- name: finance
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: finetune
+- description: 'Package explorer is chain data: your block indexers and how far each
+    has caught up, plus the on-chain price feeds.'
+  name: explorer
 - description: 'Package flags is feature flags: ship it dark, then turn it on for
     who you pick.'
   name: flags
-- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
-    clusters — launch one, resize it, tear it down.'
-  name: fleet
 - description: 'Package flow is Hanzo Flow: build an agent workflow on a visual canvas,
     run it, and read every run.'
   name: flow
@@ -117428,12 +117435,6 @@ tags:
 - description: 'Package git is Git hosting for your org: create repos, clone, push,
     and see what they cost.'
   name: git
-- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
-    namespace — builds, releases, environments, logs, custom domains.'
-  name: git-webhook
-- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
-    clusters — launch one, resize it, tear it down.'
-  name: gpus
 - description: Package guide is a step-by-step checklist that gets your business running
     on AI.
   name: guide
@@ -117443,45 +117444,26 @@ tags:
 - description: 'Package iam is Hanzo''s identity provider: users, organizations, applications,
     and the OIDC/OAuth2 endpoints every Hanzo service authenticates against.'
   name: iam
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: images
 - description: Package index is fast full-text search over your own data, typos forgiven.
   name: index
-- description: 'Package explorer is chain data: your block indexers and how far each
-    has caught up, plus the on-chain price feeds.'
-  name: indexers
 - description: 'Package ingress is your front door: automatic TLS certificates and
     hostname routing to any backend, changed live.'
   name: ingress
-- description: 'Package analytics is product analytics: send an event, read back who
-    did what.'
-  name: insights
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: install-patch
-- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
-    document, vector, search or object store, wired straight into your app.'
-  name: instances
 - description: Package integrations is how your org connects third-party accounts
     like Slack, and revokes them.
   name: integrations
-- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
-    clusters — launch one, resize it, tear it down.'
-  name: k8s
-- description: Package knowledge is your team's wiki and your agents' memory, searchable
-    by meaning.
-  name: kb
-- description: 'Package account is your own account: API keys you mint and revoke,
-    and org onboarding.'
-  name: keys
 - description: 'Package kms is secret custody: your org''s secrets sealed at rest,
     plus threshold signing.'
   name: kms
+- description: Package knowledge is your team's wiki and your agents' memory, searchable
+    by meaning.
+  name: knowledge
+- description: 'Package label is the ground-truth plane: what actually turned out
+    to be fraud, who said so, and when they could first have said it.'
+  name: label
+- description: Package leaderboard is the ranking of who uses AI most, in your org
+    and globally.
+  name: leaderboard
 - description: Package legal is the paperwork your company needs, drafted, signed
     and filed.
   name: legal
@@ -117490,79 +117472,37 @@ tags:
     record of WHICH provider accounts (Claude Max, ChatGPT Plus, a Hanzo API key,
     a raw provider key) a developer has signed into, ON WHICH MACHINES, with each
     account''s latest usage snapshot.'
-  name: links
-- name: logs
-- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
-    clusters — launch one, resize it, tear it down.'
-  name: machines
+  name: link
+- description: Package lsp is live semantic code intelligence — definitions, references,
+    types, hover, outline and diagnostics — over a repository AND its resolved dependencies,
+    with no toolchain on the caller's machine.
+  name: lsp
 - description: 'Package marketing is lifecycle email: drip sequences that reach the
     right people.'
   name: marketing
 - description: 'Package marketplace is the shop for tools and agents: browse, install
     into your project, publish your own free or priced.'
   name: marketplace
-- name: mcp
 - description: 'Package meet is the virtual office: it decides who may join a room
     and mints the short-lived token that lets them in.'
   name: meet
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: memory
-- description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
-    Hanzo Zero Trust footprint — overlay networks, their routers and mesh services
-    — served as clean, org-scoped REST off the unified cloud binary and fronting the
-    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
-  name: mesh
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: messages
 - name: metrics
 - description: 'Package ml is model serving: deploy a model behind an endpoint and
     call it.'
   name: ml
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: models
 - description: 'Package mq is queue and stream admin for your org: create them, watch
     them drain, ack what you pulled.'
   name: mq
-- description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
-    Hanzo Zero Trust footprint — overlay networks, their routers and mesh services
-    — served as clean, org-scoped REST off the unified cloud binary and fronting the
-    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
-  name: networks
 - description: Package notify is transactional email and SMS, sent through your org's
     own provider credential.
   name: notify
 - description: 'Package o11y is your logs, metrics and traces: ship them in, query
     them, chart them.'
   name: o11y
-- description: 'Package explorer is chain data: your block indexers and how far each
-    has caught up, plus the on-chain price feeds.'
-  name: oracles
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: org
-- description: 'Package account is your own account: API keys you mint and revoke,
-    and org onboarding.'
-  name: orgs
-- description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
-    alerts, payment webhooks and the storefront catalog.'
-  name: payments
-- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
-    namespace — builds, releases, environments, logs, custom domains.'
-  name: pipelines
+- name: openapi
 - description: 'Package plan is the plan catalog: every tier you can buy, what it
     costs, and what it grants.'
-  name: plans
+  name: plan
 - description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
     namespace — builds, releases, environments, logs, custom domains.'
   name: platform
@@ -117575,93 +117515,51 @@ tags:
 - description: 'Package pricing is the price list: what every model, provider, GPU
     tier, tool and hosting plan costs.'
   name: pricing
+- description: 'Package product is the read-only inventory of the search and vector
+    backends: /v1/search/{indexes,stats} read from Meilisearch and /v1/vector/{collections,stats}
+    from Qdrant, reshaped into the rows the console renders.'
+  name: product
 - description: 'Package projects is where your sites live: create one, deploy a build,
     roll back to any release.'
   name: projects
 - description: Package prompts is your prompt library, versioned, so nothing changes
     silently.
   name: prompts
+- description: 'Package provisioning is one-click data add-ons: a SQL, key-value,
+    document, vector, search or object store, wired straight into your app.'
+  name: provisioning
 - description: 'Package pubsub is your message bus: publish, subscribe, and durable
     streams your apps read at their own pace.'
   name: pubsub
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: query
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: query_multiple
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: rag
+- description: 'Package reference is the lookup data a risk decision needs but cannot
+    derive: which email domains hand out throwaway inboxes, which addresses belong
+    to a datacentre or a Tor exit, which card scheme an issuer prefix belongs to,
+    which browsers the fleet sees everywhere, and how current the designation lists
+    the screening engine holds actually are.'
+  name: reference
 - description: 'Package referrals is referral ATTRIBUTION: who referred whom, and
     whether that referee ever became a real customer.'
   name: referrals
 - description: 'Package registry is your container and package registry: push images,
     pull them back, see what you store.'
   name: registry
-- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
-    namespace — builds, releases, environments, logs, custom domains.'
-  name: releases
-- description: 'Package analytics is product analytics: send an event, read back who
-    did what.'
-  name: replay
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: rerank
 - description: Package research is every experiment you have ever run, kept and comparable.
   name: research
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: responses
 - description: 'Package risk is HANZO RISK''s model plane: the per-organisation feature
     surface and the per-organisation models trained on it.'
   name: risk
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: router
-- description: 'Package web3 is the chain-access surface: which chains this deployment
-    can reach, a JSON-RPC door onto each, and the two token reads every wallet UI
-    needs.'
-  name: rpc
-- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
-    namespace — builds, releases, environments, logs, custom domains.'
-  name: run
-- description: 'Package platform is Hanzo PaaS: deploy containers to your own tenant
-    namespace — builds, releases, environments, logs, custom domains.'
-  name: runner
-- description: 'Package storage is object storage: your buckets and the files in them,
-    with signed URLs for upload and download.'
-  name: s3
 - description: 'Package sandbox is the ONE compute primitive: a sandbox is a gVisor
     pod that runs somebody else''s code, and every lifetime is the same object.'
   name: sandboxes
 - description: 'Package sbom is what is inside a container image: every component,
     resolvable by digest or image ref.'
   name: sbom
-- description: Package websearch is a web search and a page fetch your agents can
-    call.
-  name: scrape
 - description: Package search is one ranked result set over everything your org has
     stored.
   name: search
 - description: 'Package security is secret scanning for your code: submit sources,
     get findings, masked never raw.'
   name: security
-- description: 'Package o11y is your logs, metrics and traces: ship them in, query
-    them, chart them.'
-  name: sentinel
 - description: 'Package seo is search visibility as data: what a phrase is worth,
     what a site already places for, who places beside it, who links to it, and what
     one page gets wrong.'
@@ -117672,27 +117570,18 @@ tags:
 - description: Package share is a public URL for a service on your own machine, and
     a list of what you have open.
   name: share
-- description: 'Package projects is where your sites live: create one, deploy a build,
-    roll back to any release.'
-  name: sites
 - description: Package skills is the skill catalogue an AI client reads to learn what
     it can do.
   name: skills
 - description: Package social is posting to every social account you own, now or on
     a schedule.
   name: social
-- description: 'Package commerce is selling: checkout, subscriptions, invoices, spend
-    alerts, payment webhooks and the storefront catalog.'
-  name: store
-- description: 'Package o11y is your logs, metrics and traces: ship them in, query
-    them, chart them.'
-  name: summary
+- description: 'Package storage is object storage: your buckets and the files in them,
+    with signed URLs for upload and download.'
+  name: storage
 - description: 'Package sync is data sync: link two endpoints and keep them in step,
     on a webhook, on a schedule, or on demand.'
   name: sync
-- description: 'Package projects is where your sites live: create one, deploy a build,
-    roll back to any release.'
-  name: tags
 - description: 'Package tasks is Hanzo Tasks: durable workflows that survive a crash,
     with every run visible and replayable.'
   name: tasks
@@ -117712,57 +117601,45 @@ tags:
 - description: 'Package todo is Hanzo Todo: boards, the work items on them, and the
     filters that make a board.'
   name: todo
-- description: 'Package web3 is the chain-access surface: which chains this deployment
-    can reach, a JSON-RPC door onto each, and the two token reads every wallet UI
-    needs.'
-  name: tokens
 - description: 'Package tools is everything your org can call, in one list: connector
     actions, functions, agents, skills and your own MCP servers.'
   name: tools
-- name: traces
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: traffic
 - description: Package translate is text in, the same text out in the language you
     asked for.
   name: translate
-- description: 'Package exec is the code interpreter: run a snippet in a sandbox,
-    and move files in and out of the session that sandbox IS.'
-  name: upload
+- description: 'Package treasury is the reserve fund behind every payout: real capital,
+    held and accounted for.'
+  name: treasury
 - description: Package usage is what your org ran and what it cost, broken down per
     account.
   name: usage
 - description: 'Package validators is one-click validator onboarding: prove your Genesis
     NFT, get a node provisioned, queue its registration.'
   name: validators
-- description: 'Package product is the read-only inventory of the search and vector
-    backends: /v1/search/{indexes,stats} read from Meilisearch and /v1/vector/{collections,stats}
-    from Qdrant, reshaped into the rows the console renders.'
-  name: vector
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: videos
+- description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
+    clusters — launch one, resize it, tear it down.'
+  name: visor
 - description: 'Package wallets is blockchain key custody: create wallets, rotate
     their keys, and sign with them.'
   name: wallets
+- description: 'Package web3 is the chain-access surface: which chains this deployment
+    can reach, a JSON-RPC door onto each, and the two token reads every wallet UI
+    needs.'
+  name: web3
 - description: 'Package webhooks is how your app hears about events: register an endpoint,
     pick the events, get each one delivered and signed.'
   name: webhooks
 - description: Package websearch is a web search and a page fetch your agents can
     call.
   name: websearch
-- description: Package ai is Hanzo AI — the model API on /v1 (/v1/chat/completions,
-    /v1/messages, /v1/models and the rest of hanzoai/ai's surface) — mounted into
-    a cloud binary with the money, ingest and telemetry callbacks cloud BUILDS but
-    cannot INSTALL.
-  name: wecom-bot
 - description: Package world is a live news feed filtered to what your project cares
     about.
   name: world
 - description: 'Package x402 is pay-per-request over HTTP 402: quote a price, take
     the payment, serve the resource.'
   name: x402
+- description: 'Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant''s
+    Hanzo Zero Trust footprint — overlay networks, their routers and mesh services
+    — served as clean, org-scoped REST off the unified cloud binary and fronting the
+    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
+  name: zt
