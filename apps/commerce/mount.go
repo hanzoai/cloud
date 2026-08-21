@@ -37,6 +37,7 @@ import (
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	catalogapi "github.com/hanzoai/commerce/api/catalog"
 	planapi "github.com/hanzoai/commerce/api/plan"
+	rateapi "github.com/hanzoai/commerce/api/rate"
 	commerceresources "github.com/hanzoai/commerce/api/resources"
 	commercestore "github.com/hanzoai/commerce/api/store"
 	"github.com/hanzoai/commerce/billing/paywall"
@@ -393,6 +394,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The bundle binds the module's own route table, so no route in it is
 	// typed yet — module work, per the module-handler note.
 	planapi.AdminRoute(commerceV1, commercebilling.SeedRows)
+
+	// The RATE authority's CRUD — what one unit of anything costs, edited at
+	// admin.hanzo.ai. Same shape and gate as the plan CRUD beside it: a rate is
+	// cross-tenant money, so every handler asks IsSuperAdmin itself rather than
+	// trusting the bundle's token gate.
+	//
+	// It takes NO seed source, deliberately. Plans carry an embed the boot seed
+	// reconciles against; rates do not, because the document that fills them is
+	// 506 published prices and compiling it in is what made a price change wait
+	// for a build. POST /v1/rates/import loads it instead, reconciling rather
+	// than replacing, so an operator's edit is never overwritten by an import.
+	rateapi.AdminRoute(commerceV1)
 
 	// Reconcile the plan authority to the catalog this binary ships, the way the
 	// standalone does at its own boot. GET /v1/billing/plans reads the authority
