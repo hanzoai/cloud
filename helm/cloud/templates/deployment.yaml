@@ -4,20 +4,57 @@ metadata:
   name: {{ include "cloud.fullname" . }}
   labels: {{- include "cloud.labels" . | nindent 4 }}
 spec:
-  # Embedded IAM (apps/iam) keeps a per-pod SQLite identity store, so a
-  # horizontally scaled app tier would give each replica its own divergent store.
-  # Whenever IAM is enabled the Deployment is PINNED to a single replica; cloud's
-  # Config.Validate also refuses to boot iam-enabled above CLOUD_REPLICAS=1
-  # (defence in depth). Point IAM at a shared store to lift this.
+  # WHAT MAY RUN AT MORE THAN ONE REPLICA, ASKED HERE AND ANSWERED THE SAME WAY
+  # THE BINARY ANSWERS IT.
+  #
+  # replicaCount used to be CLAMPED to 1 whenever IAM was enabled — asked for
+  # three, given one, told nothing. A chart that ignores the value it was handed
+  # is worse than one that refuses it: the operator reads their own values file
+  # and believes it. So the two conditions that genuinely forbid a second replica
+  # are checked, and each one that holds REFUSES TO RENDER, naming itself and its
+  # remedy. Everything else honours the count as given.
   #
   # This predicate MIRRORS Config.Enabled: iam is not staged, so an EMPTY enable
   # list ("mount everything") enables it just as naming it does. Testing only for
-  # the name would leave an empty-list deployment unpinned, and Validate would
-  # then refuse to boot it.
+  # the name would leave an empty-list deployment unchecked, and the binary would
+  # then refuse to boot it — a chart that renders a pod that cannot start.
   {{- $enable := splitList "," .Values.hanzo.enable }}
   {{- $iamEnabled := or (empty (compact $enable)) (has "iam" $enable) }}
-  {{- $replicas := ternary 1 (int .Values.replicaCount) $iamEnabled }}
+  {{- $iamStore := .Values.hanzo.iamStore | default "" | trim }}
+  {{- $iamShared := and (ne $iamStore "") (ne $iamStore "sqlite") }}
+  {{- $replicas := int .Values.replicaCount }}
+  {{- $max := int (default $replicas .Values.autoscaling.maxReplicas) }}
+  {{- $peak := max $replicas $max }}
+  {{- $rwo := and .Values.persistence.enabled (has "ReadWriteOnce" .Values.persistence.accessModes) }}
+  {{- if and (gt $peak 1) $iamEnabled (not $iamShared) }}
+    {{- fail (printf "cloud: %d replicas with embedded IAM on the per-pod store. hanzo.enable names iam and hanzo.iamStore is %q, so each replica opens its own %s/iam/iam.db and a user created on one cannot sign in on the next. Set hanzo.iamStore to a shared backend (\"sql\"), or drop iam from hanzo.enable and point CLOUD_IAM_ADDR at an instance that runs it, or keep replicaCount (and autoscaling.maxReplicas) at 1." $peak $iamStore .Values.hanzo.dataDir) }}
+  {{- end }}
+  {{- if and (gt $peak 1) $rwo }}
+    {{- fail (printf "cloud: %d replicas on a ReadWriteOnce volume. A block volume attaches to ONE node, so the second pod never leaves ContainerCreating on Multi-Attach and a rolling update deadlocks against itself. Declare persistence.accessModes as ReadWriteMany on a filesystem that supports it, or set persistence.enabled=false and let the durable plane ship per-org state to object storage, or keep replicaCount (and autoscaling.maxReplicas) at 1." $peak) }}
+  {{- end }}
   replicas: {{ $replicas }}
+  # An RWO volume and a rolling update cannot coexist even at one replica: the
+  # surge pod claims the same volume the pod it replaces still holds, so it waits
+  # on Multi-Attach until the deadline. Recreate takes the outage instead of
+  # hanging. Without that volume there is nothing to contend for, so the pods roll
+  # — which is the whole point of the count above being honoured.
+  #
+  # This is the rule apps/platform already enforces on a customer app that
+  # declares storage (apps/platform/k8s.go); cloud's own chart obeys it rather
+  # than keeping a second opinion about the same physics.
+  strategy:
+    {{- if $rwo }}
+    type: Recreate
+    {{- else }}
+    type: RollingUpdate
+    rollingUpdate:
+      # Never fewer than the declared count while rolling: a drained pod's orgs
+      # are re-elected onto a READY peer, and at maxUnavailable>0 with one replica
+      # there is no peer to elect. Surge one at a time so a bad image meets its
+      # readiness probe before a second pod is spent on it.
+      maxUnavailable: 0
+      maxSurge: 1
+    {{- end }}
   selector:
     matchLabels: {{- include "cloud.selectorLabels" . | nindent 6 }}
   template:
@@ -60,10 +97,41 @@ spec:
             # stamp would race it (see version.go).
             - name: CLOUD_VERSION
               value: "{{ .Values.image.tag | default .Chart.AppVersion }}"
-            # Mirrors the resolved replica count so Config.Validate can enforce the
-            # single-replica contract embedded IAM requires (memory session store).
+            # The count this Deployment declares, so Config.Validate checks the same
+            # contract the template checked above and the two cannot drift. It is the
+            # DECLARED count and not the live pod set: a `kubectl scale` past it leaves
+            # this value behind, which the template's refusal cannot see either.
             - name: CLOUD_REPLICAS
               value: {{ $replicas | quote }}
+            # Which backend holds embedded IAM's identity records — users, orgs, apps,
+            # certs, and the session revocation rows. Empty or "sqlite" is the per-pod
+            # file; anything else is a server every replica reaches alike, which is the
+            # whole condition for running more than one of these pods.
+            {{- if $iamStore }}
+            - name: IAM_STORE_BACKEND
+              value: {{ $iamStore | quote }}
+            {{- end }}
+            # THE MEMORY RESERVATION, HANDED TO THE PROCESS THAT MUST SIZE ITSELF BY IT.
+            #
+            # This host holds N lazily-started plugin children and bounds N so their
+            # total fits what the pod RESERVED — the request, not the limit, because the
+            # kubelet scores eviction candidacy against the reservation and a pod
+            # comfortably inside its limit is still first to go once past its request
+            # (which is how this one was evicted and took the API down). manifest.Warm
+            # was that bound as a CONSTANT, sized by hand against 6Gi, so raising the
+            # request bought capacity the host would not use and lowering it left the
+            # host over a reservation nobody had told it about.
+            #
+            # A process cannot read its own request — the cgroup carries the LIMIT — so
+            # the downward API is the only thing that can say it, and it says it in MiB.
+            # Vertical scaling is now ONE number: change requests.memory and the ceiling
+            # follows.
+            - name: CLOUD_MEMORY_REQUEST_MIB
+              valueFrom:
+                resourceFieldRef:
+                  containerName: cloud
+                  resource: requests.memory
+                  divisor: 1Mi
             # Stable pod identity (HRW weight) + namespace for the live membership source.
             - name: POD_NAME
               valueFrom:
