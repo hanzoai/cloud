@@ -1,7 +1,12 @@
-// Package guide is a step-by-step checklist that gets your business running on AI.
+// Package guide is the AI that builds an agentic company with you, one measured
+// step at a time.
 //
-// The Business AI Guide: an interactive launch checklist every org completes
-// on-site.
+// Hanzo OS is the operating system an autonomous company runs on, and guide is
+// how an org gets there: a launch journey where every step names a real
+// capability, the agent can carry the step out through the same tool plane the
+// caller would, and a step is done when a SIGNAL says so rather than when
+// somebody ticked a box. That last property is what makes the journey science
+// instead of a checklist — progress here is measured, never asserted.
 //
 // It is three orthogonal things composed:
 //
