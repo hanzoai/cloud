@@ -57,8 +57,8 @@ func seed(ctx context.Context, store *Store) (int, error) {
 		if c.ID == "" || c.Label == "" {
 			return 0, fmt.Errorf("seed category %q: id and label are required", c.ID)
 		}
-		if c.Owner != platformOrg {
-			return 0, fmt.Errorf("seed category %q is owned by %q; the seed is the PLATFORM catalogue and every row belongs to %q", c.ID, c.Owner, platformOrg)
+		if c.Owner != hanzo {
+			return 0, fmt.Errorf("seed category %q is owned by %q; the seed is the PLATFORM catalogue and every row belongs to %q", c.ID, c.Owner, hanzo)
 		}
 		known[c.ID] = true
 	}
@@ -66,8 +66,8 @@ func seed(ctx context.Context, store *Store) (int, error) {
 		if e.ID == "" || e.Name == "" {
 			return 0, fmt.Errorf("seed taxon %q: id and name are required", e.ID)
 		}
-		if e.Owner != platformOrg {
-			return 0, fmt.Errorf("seed taxon %q is owned by %q; the seed is the PLATFORM catalogue and every row belongs to %q", e.ID, e.Owner, platformOrg)
+		if e.Owner != hanzo {
+			return 0, fmt.Errorf("seed taxon %q is owned by %q; the seed is the PLATFORM catalogue and every row belongs to %q", e.ID, e.Owner, hanzo)
 		}
 		if !known[e.Category] {
 			return 0, fmt.Errorf("seed taxon %q names category %q, which the seed does not define", e.ID, e.Category)

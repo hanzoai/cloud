@@ -60,6 +60,23 @@ func MustOrgNamespace(org, project string) namespace.Namespace {
 	return namespace.MustOrgProject(org, project)
 }
 
+// Reserved names the database the DEPLOYMENT's own records live in, and it goes
+// in BOTH slots above — OrgNamespace(Reserved, Reserved). The platform switches
+// (apps/flags) and the launch registry (apps/admission) open there; no tenant's
+// records ever do, because no tenant can name it: an org string is folded
+// through namespace.Sanitize on the way in and "platform" is already taken by
+// this one.
+//
+// It is a REAL org namespace rather than namespace.System(). The system name is
+// the better name for the deployment's own partition, but it renders to a
+// different file, and moving a live store is a migration rather than a rename.
+// Left as it is deliberately, so the move is a decision somebody makes.
+//
+// It is NOT a company: nothing here says "Hanzo". The org that OWNS the rows
+// every tenant sees is an ordinary IAM org id, and apps/taxonomy spells it out
+// as the value it is.
+const Reserved = "platform"
+
 // nsOnDisk reads a namespace back out of the directory name OrgNamespace wrote.
 //
 // It is the inverse of the door above, not a second one: the segment it is
