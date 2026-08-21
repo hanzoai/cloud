@@ -6,7 +6,7 @@ description: "Read legal health: Reports that the legal subsystem is serving and
 
 # Lux · LEGAL · health
 
-Read-only Lux capability derived from the `legal` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `legal` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

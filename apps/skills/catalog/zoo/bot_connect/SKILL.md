@@ -6,7 +6,7 @@ description: "Read bot connect: The socket a bot node dials and holds open to be
 
 # Zoo · BOT · connect
 
-Read-only Zoo capability derived from the `bot` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `bot` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/bot/connect` → JSON body.
+- `/v1/bot/connect` → JSON object.
 
 ## Example
 

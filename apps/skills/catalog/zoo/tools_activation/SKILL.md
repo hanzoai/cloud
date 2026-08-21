@@ -6,7 +6,7 @@ description: "Read tools activation: Reports which tools are switched on for the
 
 # Zoo · TOOLS · activation
 
-Read-only Zoo capability derived from the `tools` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `tools` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

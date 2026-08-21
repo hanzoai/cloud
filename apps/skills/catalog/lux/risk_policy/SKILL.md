@@ -6,7 +6,7 @@ description: "Read risk policy: Your organisation's decision-regime history, and
 
 # Lux · RISK · policy
 
-Read-only Lux capability derived from the `risk` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `risk` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

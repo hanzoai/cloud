@@ -6,7 +6,7 @@ description: "Read framework roles: Returns every (user, role) assignment in the
 
 # Zoo · FRAMEWORK · roles
 
-Read-only Zoo capability derived from the `framework` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `framework` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

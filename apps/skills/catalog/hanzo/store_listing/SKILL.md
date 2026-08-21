@@ -6,7 +6,7 @@ description: "Read store listing: The storefront's whole listing override map, F
 
 # Hanzo · STORE · listing
 
-Read-only Hanzo capability derived from the `store` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `store` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -26,8 +26,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/store/{storeid}/listing` → JSON body.
-- `/v1/store/{storeid}/listing/{key}` → JSON body.
+- `/v1/store/{storeid}/listing` → JSON object.
+- `/v1/store/{storeid}/listing/{key}` → JSON object.
 
 ## Example
 

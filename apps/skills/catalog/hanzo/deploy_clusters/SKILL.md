@@ -6,7 +6,7 @@ description: "Read deploy clusters: Returns the argocd ClusterList of the destin
 
 # Hanzo · DEPLOY · clusters
 
-Read-only Hanzo capability derived from the `deploy` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `deploy` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read dataroom health: Liveness of the dataroom subsystem."
 
 # Hanzo · DATAROOM · health
 
-Read-only Hanzo capability derived from the `dataroom` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `dataroom` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/dataroom/health` → JSON body.
+- `/v1/dataroom/health` → JSON object.
 
 ## Example
 

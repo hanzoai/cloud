@@ -6,7 +6,7 @@ description: "Read sbom health: Health is a pure liveness probe: the service is 
 
 # Lux · SBOM · health
 
-Read-only Lux capability derived from the `sbom` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `sbom` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

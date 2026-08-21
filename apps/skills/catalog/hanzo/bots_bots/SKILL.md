@@ -6,7 +6,7 @@ description: "Read bots bots: List returns the caller org's live bot runs, read 
 
 # Hanzo · BOTS · bots
 
-Read-only Hanzo capability derived from the `bots` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `bots` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

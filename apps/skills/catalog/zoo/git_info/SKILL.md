@@ -1,12 +1,12 @@
 ---
 name: git_info
 version: "8.0.0"
-description: "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client, Advertise a repository's refs to a git client."
+description: "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client."
 ---
 
 # Zoo · GIT · info
 
-Read-only Zoo capability derived from the `git` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `git` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -16,8 +16,6 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 - `GET https://api.zoo.ngo/v1/git/{org}/{project}/{repo}/info/refs` — Advertise a repository's refs to a git client
 - `GET https://api.zoo.ngo/v1/git/{org}/{repo}/info/refs` — Advertise a repository's refs to a git client
-- `GET https://api.zoo.ngo/{org}/{project}/{repo}/info/refs` — Advertise a repository's refs to a git client
-- `GET https://api.zoo.ngo/{org}/{repo}/info/refs` — Advertise a repository's refs to a git client
 
 ## Parameters
 
@@ -29,10 +27,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/git/{org}/{project}/{repo}/info/refs` → JSON body.
-- `/v1/git/{org}/{repo}/info/refs` → JSON body.
-- `/{org}/{project}/{repo}/info/refs` → JSON body.
-- `/{org}/{repo}/info/refs` → JSON body.
+- `/v1/git/{org}/{project}/{repo}/info/refs` → JSON object.
+- `/v1/git/{org}/{repo}/info/refs` → JSON object.
 
 ## Example
 

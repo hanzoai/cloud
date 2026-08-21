@@ -6,7 +6,7 @@ description: "Read campaign summary: Returns the org's go-to-market roll-up: how
 
 # Zoo · CAMPAIGN · summary
 
-Read-only Zoo capability derived from the `campaign` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `campaign` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

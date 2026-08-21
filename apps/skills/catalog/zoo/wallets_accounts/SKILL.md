@@ -6,7 +6,7 @@ description: "Read wallets accounts: Returns the caller org's wallet accounts, n
 
 # Zoo · WALLETS · accounts
 
-Read-only Zoo capability derived from the `wallets` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `wallets` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

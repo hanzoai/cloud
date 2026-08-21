@@ -6,7 +6,7 @@ description: "Read dataroom documents: Returns every document in the caller org'
 
 # Hanzo · DATAROOM · documents
 
-Read-only Hanzo capability derived from the `dataroom` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `dataroom` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -22,13 +22,13 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the document to read. It is the path segment: the URL is the |
+| `id` | path | yes | string | ID is the document to read. It is the path segment: the URL is the addressing authority, and the org it is resolved in comes from the caller's principal, so an id from another tenant is simply not found. |
 
 ## Response
 
 - `/v1/dataroom/documents` → `dataroomDocuments` object with fields: `documents`.
 - `/v1/dataroom/documents/{id}` → `dataroomDocumentOne` object with fields: `document`.
-- `/v1/dataroom/documents/{id}/file` → JSON body.
+- `/v1/dataroom/documents/{id}/file` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read mq health: Reports whether the message plane behind this surf
 
 # Hanzo · MQ · health
 
-Read-only Hanzo capability derived from the `mq` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `mq` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

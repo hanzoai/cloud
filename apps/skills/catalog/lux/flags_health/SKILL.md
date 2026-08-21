@@ -6,7 +6,7 @@ description: "Read flags health: Health reports that the flag engine is serving.
 
 # Lux · FLAGS · health
 
-Read-only Lux capability derived from the `flags` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `flags` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

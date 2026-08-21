@@ -6,7 +6,7 @@ description: "Read dns dns: Read your org's DNS zones and records."
 
 # Zoo · DNS · dns
 
-Read-only Zoo capability derived from the `dns` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `dns` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/dns/{wildcard1}` → JSON body.
+- `/v1/dns/{wildcard1}` → JSON object.
 
 ## Example
 

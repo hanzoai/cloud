@@ -6,7 +6,7 @@ description: "Read notify health: Reports that the notify send surface is mounte
 
 # Hanzo · NOTIFY · health
 
-Read-only Hanzo capability derived from the `notify` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `notify` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

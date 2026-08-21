@@ -6,7 +6,7 @@ description: "Read captable stakeholders: Returns the caller org's stakeholders,
 
 # Zoo · CAPTABLE · stakeholders
 
-Read-only Zoo capability derived from the `captable` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `captable` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

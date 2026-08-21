@@ -6,7 +6,7 @@ description: "Read compliance status: Status is the org's honest posture read: t
 
 # Zoo · COMPLIANCE · status
 
-Read-only Zoo capability derived from the `compliance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `compliance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

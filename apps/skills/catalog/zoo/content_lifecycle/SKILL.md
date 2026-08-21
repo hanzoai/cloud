@@ -6,7 +6,7 @@ description: "Read content lifecycle: Returns the ONE marketing-content state ma
 
 # Zoo · CONTENT · lifecycle
 
-Read-only Zoo capability derived from the `content` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `content` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

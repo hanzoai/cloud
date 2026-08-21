@@ -6,7 +6,7 @@ description: "Read blueprint sbom: A blueprint's bill of images and what running
 
 # Lux · BLUEPRINT · sbom
 
-Read-only Lux capability derived from the `blueprint` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `blueprint` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/blueprint/sbom` → JSON body.
+- `/v1/blueprint/sbom` → JSON object.
 
 ## Example
 

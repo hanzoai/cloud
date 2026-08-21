@@ -6,7 +6,7 @@ description: "Read risk policy: Your organisation's decision-regime history, and
 
 # Zoo · RISK · policy
 
-Read-only Zoo capability derived from the `risk` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `risk` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read store bundle: Fetch a bundle as this storefront sells it."
 
 # Hanzo · STORE · bundle
 
-Read-only Hanzo capability derived from the `store` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `store` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,7 +25,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/store/{storeid}/bundle/{key}` → JSON body.
+- `/v1/store/{storeid}/bundle/{key}` → JSON object.
 
 ## Example
 

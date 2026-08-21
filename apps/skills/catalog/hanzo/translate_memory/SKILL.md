@@ -6,7 +6,7 @@ description: "Read translate memory: List returns the org's own translation-memo
 
 # Hanzo · TRANSLATE · memory
 
-Read-only Hanzo capability derived from the `translate` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `translate` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,8 +20,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `limit` | query | no | integer | Limit caps the rows returned. Non-positive or unparseable means the server |
-| `state` | query | no | string | State narrows to one position on the review ladder: machine, suggested, |
+| `limit` | query | no | integer | Limit caps the rows returned. Non-positive or unparseable means the server default (200); the ceiling is 1000. |
+| `state` | query | no | string | State narrows to one position on the review ladder: machine, suggested, approved or published. |
 | `target` | query | no | string | Target narrows to one target language tag (BCP-47, e.g. "es" or "pt-BR"). |
 
 ## Response

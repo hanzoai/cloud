@@ -6,7 +6,7 @@ description: "Read cloudflare kv: KVNamespaceList lists the Workers KV namespace
 
 # Hanzo · CLOUDFLARE · kv
 
-Read-only Hanzo capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -31,7 +31,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/cloudflare/kv/namespaces` → JSON object.
-- `/v1/cloudflare/kv/namespaces/{namespace}/values/{key}` → JSON body.
+- `/v1/cloudflare/kv/namespaces/{namespace}/values/{key}` → JSON object.
 
 ## Example
 

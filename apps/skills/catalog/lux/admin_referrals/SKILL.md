@@ -6,7 +6,7 @@ description: "Read admin referrals: Answers the referral board: the top referrer
 
 # Lux · ADMIN · referrals
 
-Read-only Lux capability derived from the `admin` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `admin` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `limit` | query | no | string | Limit is how many referrals to return, as a decimal string in the `?limit=` |
+| `limit` | query | no | string | Limit is how many referrals to return, as a decimal string in the `?limit=` query. Absent, unparseable or non-positive means 500; over 1000 is clamped to 1000. It is a string rather than a number because the parse that has always served this route trims surrounding whitespace, and one parse rule is better than two. |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read git usage: Returns per-repo and total storage bytes for the c
 
 # Hanzo · GIT · usage
 
-Read-only Hanzo capability derived from the `git` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `git` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read cloudflare d1: Lists the D1 databases on the org's Cloudflare
 
 # Lux · CLOUDFLARE · d1
 
-Read-only Lux capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

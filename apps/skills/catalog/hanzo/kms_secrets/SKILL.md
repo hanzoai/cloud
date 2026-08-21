@@ -6,7 +6,7 @@ description: "Read kms secrets: List the secrets your org holds, without their v
 
 # Hanzo · KMS · secrets
 
-Read-only Hanzo capability derived from the `kms` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `kms` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/kms/secrets` → JSON body.
-- `/v1/kms/secrets/{wildcard1}` → JSON body.
+- `/v1/kms/secrets` → JSON object.
+- `/v1/kms/secrets/{wildcard1}` → JSON object.
 
 ## Example
 

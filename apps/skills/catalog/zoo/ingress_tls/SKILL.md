@@ -6,7 +6,7 @@ description: "Read ingress tls: GetTLS returns the caller org's ACME intent toge
 
 # Zoo · INGRESS · tls
 
-Read-only Zoo capability derived from the `ingress` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ingress` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read prompts metrics: Metrics returns real per-prompt statistics f
 
 # Lux · PROMPTS · metrics
 
-Read-only Lux capability derived from the `prompts` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `prompts` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

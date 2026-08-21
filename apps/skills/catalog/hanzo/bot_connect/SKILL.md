@@ -6,7 +6,7 @@ description: "Read bot connect: The socket a bot node dials and holds open to be
 
 # Hanzo · BOT · connect
 
-Read-only Hanzo capability derived from the `bot` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `bot` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/bot/connect` → JSON body.
+- `/v1/bot/connect` → JSON object.
 
 ## Example
 

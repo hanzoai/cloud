@@ -6,7 +6,7 @@ description: "Read commerce collection: List your org's collections, as a page, 
 
 # Zoo · COMMERCE · collection
 
-Read-only Zoo capability derived from the `commerce` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `commerce` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/commerce/collection/` → JSON body.
-- `/v1/commerce/collection/{collectionid}` → JSON body.
+- `/v1/commerce/collection/` → JSON object.
+- `/v1/commerce/collection/{collectionid}` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read legal templates: Returns the org's effective template catalog
 
 # Lux · LEGAL · templates
 
-Read-only Lux capability derived from the `legal` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `legal` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

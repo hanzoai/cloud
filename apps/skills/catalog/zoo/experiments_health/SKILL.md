@@ -6,7 +6,7 @@ description: "Read experiments health: Is whether the experiments subsystem is m
 
 # Zoo · EXPERIMENTS · health
 
-Read-only Zoo capability derived from the `experiments` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `experiments` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

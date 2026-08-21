@@ -6,7 +6,7 @@ description: "Read billing accounts: The billing account you are signed in to, W
 
 # Lux · BILLING · accounts
 
-Read-only Lux capability derived from the `billing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `billing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/billing/accounts` → JSON body.
-- `/v1/billing/accounts/{id}/members` → JSON body.
+- `/v1/billing/accounts` → JSON object.
+- `/v1/billing/accounts/{id}/members` → JSON object.
 
 ## Example
 

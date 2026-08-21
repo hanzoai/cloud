@@ -6,7 +6,7 @@ description: "Read websearch search: Keyless web meta-search, in the SearXNG JSO
 
 # Lux · WEBSEARCH · search
 
-Read-only Lux capability derived from the `websearch` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `websearch` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/websearch/search` → JSON body.
+- `/v1/websearch/search` → JSON object.
 
 ## Example
 

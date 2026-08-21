@@ -6,7 +6,7 @@ description: "Read ml health: Whether model serving can actually work right now.
 
 # Zoo · ML · health
 
-Read-only Zoo capability derived from the `ml` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ml` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/ml/health` → JSON body.
+- `/v1/ml/health` → JSON object.
 
 ## Example
 

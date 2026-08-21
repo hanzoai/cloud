@@ -6,7 +6,7 @@ description: "Read integrations callback: OAuth return for any connector."
 
 # Zoo · INTEGRATIONS · callback
 
-Read-only Zoo capability derived from the `integrations` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `integrations` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/integrations/{provider}/callback` → JSON body.
+- `/v1/integrations/{provider}/callback` → JSON object.
 
 ## Example
 

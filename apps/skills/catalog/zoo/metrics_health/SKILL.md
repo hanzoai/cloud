@@ -6,7 +6,7 @@ description: "Read metrics health: How many metric series this deployment holds 
 
 # Zoo · METRICS · health
 
-Read-only Zoo capability derived from the `metrics` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `metrics` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/metrics/health` → JSON body.
+- `/v1/metrics/health` → JSON object.
 
 ## Example
 

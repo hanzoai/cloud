@@ -6,7 +6,7 @@ description: "Read captable company: Returns the caller org's cap-table company 
 
 # Lux · CAPTABLE · company
 
-Read-only Lux capability derived from the `captable` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `captable` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

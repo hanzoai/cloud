@@ -6,7 +6,7 @@ description: "Read traces trace: Every span of one trace — the waterfall."
 
 # Lux · TRACES · trace
 
-Read-only Lux capability derived from the `traces` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `traces` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/traces/trace` → JSON body.
+- `/v1/traces/trace` → JSON object.
 
 ## Example
 

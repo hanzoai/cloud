@@ -6,7 +6,7 @@ description: "Read marketing summary: Rolls up the caller org's campaigns: how m
 
 # Zoo · MARKETING · summary
 
-Read-only Zoo capability derived from the `marketing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `marketing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read tools activation: Reports which tools are switched on for the
 
 # Lux · TOOLS · activation
 
-Read-only Lux capability derived from the `tools` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `tools` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read domain domains: Is the domains your org has bought here, newe
 
 # Zoo · DOMAIN · domains
 
-Read-only Zoo capability derived from the `domain` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `domain` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

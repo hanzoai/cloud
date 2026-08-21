@@ -6,7 +6,7 @@ description: "Read risk search: Read back one exhaustive search."
 
 # Lux · RISK · search
 
-Read-only Lux capability derived from the `risk` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `risk` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the run, taken from the path. A run another organisation started is |
+| `id` | path | yes | string | ID is the run, taken from the path. A run another organisation started is simply not there — the same answer an unknown id gives. |
 
 ## Response
 

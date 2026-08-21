@@ -6,7 +6,7 @@ description: "Read licensing releases: Lists the signed binary releases this dep
 
 # Hanzo · LICENSING · releases
 
-Read-only Hanzo capability derived from the `licensing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `licensing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

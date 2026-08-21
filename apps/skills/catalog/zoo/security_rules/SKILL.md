@@ -6,7 +6,7 @@ description: "Read security rules: Is the secret-detection catalog the engine sc
 
 # Zoo · SECURITY · rules
 
-Read-only Zoo capability derived from the `security` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `security` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

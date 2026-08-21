@@ -6,7 +6,7 @@ description: "Read benchmark compare: Is the ONLY valid arm-vs-arm test: it pair
 
 # Zoo · BENCHMARK · compare
 
-Read-only Zoo capability derived from the `benchmark` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `benchmark` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

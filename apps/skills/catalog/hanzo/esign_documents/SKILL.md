@@ -6,7 +6,7 @@ description: "Read esign documents: Your org's documents, newest first, One docu
 
 # Hanzo · ESIGN · documents
 
-Read-only Hanzo capability derived from the `esign` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `esign` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -27,10 +27,10 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/esign/documents` → JSON body.
-- `/v1/esign/documents/{id}` → JSON body.
-- `/v1/esign/documents/{id}/audit` → JSON body.
-- `/v1/esign/documents/{id}/download` → JSON body.
+- `/v1/esign/documents` → JSON object.
+- `/v1/esign/documents/{id}` → JSON object.
+- `/v1/esign/documents/{id}/audit` → JSON object.
+- `/v1/esign/documents/{id}/download` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read team transactor: Statistics returns the transactor's live ses
 
 # Zoo · TEAM · transactor
 
-Read-only Zoo capability derived from the `team` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `team` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -29,7 +29,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 - `/v1/team/transactor/api/v1/statistics` → `statsOut` object with fields: `admin`, `metrics`, `statistics`.
 - `/v1/team/transactor/statistics` → `statsOut` object with fields: `admin`, `metrics`, `statistics`.
-- `/v1/team/transactor/{token}` → JSON body.
+- `/v1/team/transactor/{token}` → JSON object.
 
 ## Example
 

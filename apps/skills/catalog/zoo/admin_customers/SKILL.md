@@ -6,7 +6,7 @@ description: "Read admin customers: Lists every customer org at a glance, sorted
 
 # Zoo · ADMIN · customers
 
-Read-only Zoo capability derived from the `admin` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `admin` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

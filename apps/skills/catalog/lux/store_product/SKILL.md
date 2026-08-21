@@ -6,7 +6,7 @@ description: "Read store product: Fetch a product as this storefront sells it."
 
 # Lux · STORE · product
 
-Read-only Lux capability derived from the `store` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `store` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,7 +25,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/store/{storeid}/product/{key}` → JSON body.
+- `/v1/store/{storeid}/product/{key}` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read pricing health: Health reports that the pricing subsystem is 
 
 # Hanzo · PRICING · health
 
-Read-only Hanzo capability derived from the `pricing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `pricing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read metrics health: How many metric series this deployment holds 
 
 # Hanzo · METRICS · health
 
-Read-only Hanzo capability derived from the `metrics` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `metrics` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/metrics/health` → JSON body.
+- `/v1/metrics/health` → JSON object.
 
 ## Example
 

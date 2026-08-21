@@ -6,7 +6,7 @@ description: "Read world news: Returns the caller's merged world-news feed: ever
 
 # Lux · WORLD · news
 
-Read-only Lux capability derived from the `world` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `world` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

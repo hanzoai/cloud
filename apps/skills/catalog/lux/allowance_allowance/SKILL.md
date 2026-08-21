@@ -6,7 +6,7 @@ description: "Read allowance allowance: Answers what the CALLER has left of thei
 
 # Lux · ALLOWANCE · allowance
 
-Read-only Lux capability derived from the `allowance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `allowance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read o11y llm: Lists human annotations on traces and observations,
 
 # Hanzo · O11Y · llm
 
-Read-only Hanzo capability derived from the `o11y` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `o11y` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -36,7 +36,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | `queue` | query | no | string | Queue narrows to one review queue. |
 | `sessionId` | query | no | string | SessionID narrows the view to one conversation. |
 | `source` | query | no | string | Source narrows to scores from one source, e.g. API, EVAL. |
-| `start` | query | no | integer | Start is the start of the window as a unix-millisecond epoch. Zero means |
+| `start` | query | no | integer | Start is the start of the window as a unix-millisecond epoch. Zero means 24h before the end. |
 | `status` | query | no | string | Status narrows to one review status, e.g. PENDING. |
 | `traceId` | query | no | string | TraceID narrows to annotations on one trace. |
 | `userId` | query | no | string | UserID narrows the view to one end user. |

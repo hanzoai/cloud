@@ -1,12 +1,12 @@
 ---
 name: git_explore
 version: "8.0.0"
-description: "Read git explore: Discover public repositories across every org, Discover public repositories across every org."
+description: "Read git explore: Discover public repositories across every org."
 ---
 
 # Zoo · GIT · explore
 
-Read-only Zoo capability derived from the `git` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `git` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,18 +14,16 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/explore` — Discover public repositories across every org
-- `GET https://api.zoo.ngo/git/explore` — Discover public repositories across every org
+- `GET https://api.zoo.ngo/v1/git/explore` — Discover public repositories across every org
 
 ## Response
 
-- `/explore` → JSON body.
-- `/git/explore` → JSON body.
+- `/v1/git/explore` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/explore" \
+curl -sS "https://api.zoo.ngo/v1/git/explore" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

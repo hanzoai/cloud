@@ -6,7 +6,7 @@ description: "Read validators validators: Returns the validator slots the caller
 
 # Zoo · VALIDATORS · validators
 
-Read-only Zoo capability derived from the `validators` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `validators` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -21,8 +21,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `tokenId` | path | yes | string | TokenID is the slot's GenesisNFT token id, from the path, as a decimal |
-| `limit` | query | no | string | Limit is how many slots to return, as a decimal string in the `?limit=` |
+| `tokenId` | path | yes | string | TokenID is the slot's GenesisNFT token id, from the path, as a decimal string. A value that is not a positive integer is 400. It is a string rather than a number because the parse that has always served this route trims surrounding whitespace, and one parse rule is better than two. |
+| `limit` | query | no | string | Limit is how many slots to return, as a decimal string in the `?limit=` query. Absent, unparseable or non-positive means 200; over 1000 is clamped to 1000. It is a string rather than a number because the parse that has always served this route trims surrounding whitespace, and one parse rule is better than two. |
 
 ## Response
 

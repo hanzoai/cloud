@@ -6,7 +6,7 @@ description: "Read ads summary: Rolls the caller org's ad campaigns up into four
 
 # Zoo · ADS · summary
 
-Read-only Zoo capability derived from the `ads` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ads` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

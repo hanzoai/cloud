@@ -6,7 +6,7 @@ description: "Read platform ci: Continuous integration (not wired)."
 
 # Lux · PLATFORM · ci
 
-Read-only Lux capability derived from the `platform` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `platform` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/platform/ci` → JSON body.
+- `/v1/platform/ci` → JSON object.
 
 ## Example
 

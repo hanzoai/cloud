@@ -1,12 +1,12 @@
 ---
 name: admin_audit
 version: "8.0.0"
-description: "Read admin audit: Reads cloud's tamper-evident audit trail, newest first, with the chain's live integrity attached so a listing can be badged as verified., Walks the WHOLE hash chain and reports whether it is intact: how many records were checked, the head hash to pin externally "
+description: "Read admin audit: Reads one chain of cloud's tamper-evident audit trail, newest first, with that chain's live integrity attached so a listing can be badged as verified., Walks EVERY hash chain this deployment keeps and reports each one: which chains were checked, how many records"
 ---
 
 # Lux · ADMIN · audit
 
-Read-only Lux capability derived from the `admin` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `admin` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,8 +14,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/admin/audit` — Reads cloud's tamper-evident audit trail, newest first, with the chain's live integrity attached so a listing can be badged as verified.
-- `GET https://api.lux.network/v1/admin/audit/verify` — Walks the WHOLE hash chain and reports whether it is intact: how many records were checked, the head hash to pin externally against tail-truncation, and — when the chain is broken — the seq of the first bad record and why.
+- `GET https://api.lux.network/v1/admin/audit` — Reads one chain of cloud's tamper-evident audit trail, newest first, with that chain's live integrity attached so a listing can be badged as verified.
+- `GET https://api.lux.network/v1/admin/audit/verify` — Walks EVERY hash chain this deployment keeps and reports each one: which chains were checked, how many records each holds, the head hash to pin externally against tail-truncation, and — when a chain is broken — the seq of the first bad record and why.
 
 ## Parameters
 
@@ -28,7 +28,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | `resource` | query | no | string | Resource restricts it to one resource kind, e.g. "credit-grant". |
 | `resourceId` | query | no | string | ResourceID restricts it to one resource instance. |
 | `result` | query | no | string | Result restricts it to "success" or "error". |
-| `since` | query | no | string | Since is the inclusive lower time bound, RFC3339. An unparseable value is |
+| `since` | query | no | string | Since is the inclusive lower time bound, RFC3339. An unparseable value is ignored rather than refused — one malformed filter must not hide the trail. |
 | `sub` | query | no | string | Sub restricts it to one actor (the validated subject that made the request). |
 | `until` | query | no | string | Until is the upper time bound, RFC3339, with the same tolerance. |
 

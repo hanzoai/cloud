@@ -6,7 +6,7 @@ description: "Read agent conversations: List the agent threads in your org, Read
 
 # Hanzo · AGENT · conversations
 
-Read-only Hanzo capability derived from the `agent` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `agent` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/agent/conversations` → JSON body.
-- `/v1/agent/conversations/{id}` → JSON body.
+- `/v1/agent/conversations` → JSON object.
+- `/v1/agent/conversations/{id}` → JSON object.
 
 ## Example
 

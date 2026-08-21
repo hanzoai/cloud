@@ -6,7 +6,7 @@ description: "Read flags defs: Returns every flag definition in the caller's (or
 
 # Zoo · FLAGS · defs
 
-Read-only Zoo capability derived from the `flags` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `flags` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

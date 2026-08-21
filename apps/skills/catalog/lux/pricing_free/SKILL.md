@@ -6,7 +6,7 @@ description: "Read pricing free: Returns the models that cost nothing to call, f
 
 # Lux · PRICING · free
 
-Read-only Lux capability derived from the `pricing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `pricing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

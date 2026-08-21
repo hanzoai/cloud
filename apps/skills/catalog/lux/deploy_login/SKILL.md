@@ -6,7 +6,7 @@ description: "Read deploy login: Start the sign-in round trip for this console."
 
 # Lux · DEPLOY · login
 
-Read-only Lux capability derived from the `deploy` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `deploy` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/deploy/login` → JSON body.
+- `/v1/deploy/login` → JSON object.
 
 ## Example
 

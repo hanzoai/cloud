@@ -6,7 +6,7 @@ description: "Read prompts catalog: Catalog returns the read-only starter prompt
 
 # Zoo · PROMPTS · catalog
 
-Read-only Zoo capability derived from the `prompts` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `prompts` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

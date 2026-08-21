@@ -6,7 +6,7 @@ description: "Read agents targets: Returns every machine registered to the calle
 
 # Lux · AGENTS · targets
 
-Read-only Lux capability derived from the `agents` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `agents` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

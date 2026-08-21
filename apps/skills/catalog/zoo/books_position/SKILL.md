@@ -6,7 +6,7 @@ description: "Read books position: Returns the org's Balance Sheet as of `to` (e
 
 # Zoo · BOOKS · position
 
-Read-only Zoo capability derived from the `books` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `books` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read iam permissions: Returns the permissions in one organization,
 
 # Hanzo · IAM · permissions
 
-Read-only Hanzo capability derived from the `iam` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `iam` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read licensing pubkey: Pubkey publishes the Ed25519 PUBLIC verific
 
 # Zoo · LICENSING · pubkey
 
-Read-only Zoo capability derived from the `licensing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `licensing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read deploy callback: Finish the sign-in round trip and mint the c
 
 # Lux · DEPLOY · callback
 
-Read-only Lux capability derived from the `deploy` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `deploy` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/deploy/callback` → JSON body.
+- `/v1/deploy/callback` → JSON object.
 
 ## Example
 

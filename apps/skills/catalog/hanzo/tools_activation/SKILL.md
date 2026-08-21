@@ -6,7 +6,7 @@ description: "Read tools activation: Reports which tools are switched on for the
 
 # Hanzo · TOOLS · activation
 
-Read-only Hanzo capability derived from the `tools` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `tools` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

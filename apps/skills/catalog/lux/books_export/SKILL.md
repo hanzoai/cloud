@@ -1,12 +1,12 @@
 ---
 name: books_export
 version: "8.0.0"
-description: "Read books export: Returns the complete financial package for the caller's org over (from, to]: the trial balance, the P&L, the balance sheet, and the GL detail behind them — the four statements a tax preparer or an investor asks for, assembled from the one ledger in a single rea"
+description: "Read books export: Returns the complete financial package for the caller's org over (from, to]: the trial balance, the P\u0026L, the balance sheet, and the GL detail behind them — the four statements a tax preparer or an investor asks for, assembled from the one ledger in a single rea"
 ---
 
 # Lux · BOOKS · export
 
-Read-only Lux capability derived from the `books` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `books` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -22,7 +22,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 |---|---|---|---|---|
 | `format` | query | no | string | Format is the export encoding. Only "json" is supported; empty means json. |
 | `from` | query | no | string | From is the RFC3339 start of the window, exclusive. Empty means all time. |
-| `limit` | query | no | integer | Limit caps the GL detail rows included as the audit trail; 5000 when absent |
+| `limit` | query | no | integer | Limit caps the GL detail rows included as the audit trail; 5000 when absent or not positive. |
 | `sandbox` | query | no | string | Sandbox reads the org's SANDBOX ledger when it is exactly "true". |
 | `to` | query | no | string | To is the RFC3339 end of the window, inclusive. Empty means up to now. |
 

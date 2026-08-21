@@ -6,7 +6,7 @@ description: "Read channels channels: Reports every chat channel this org can se
 
 # Zoo · CHANNELS · channels
 
-Read-only Zoo capability derived from the `channels` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `channels` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

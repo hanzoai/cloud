@@ -6,7 +6,7 @@ description: "Read cloudflare kv: KVNamespaceList lists the Workers KV namespace
 
 # Zoo · CLOUDFLARE · kv
 
-Read-only Zoo capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -31,7 +31,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Response
 
 - `/v1/cloudflare/kv/namespaces` → JSON object.
-- `/v1/cloudflare/kv/namespaces/{namespace}/values/{key}` → JSON body.
+- `/v1/cloudflare/kv/namespaces/{namespace}/values/{key}` → JSON object.
 
 ## Example
 

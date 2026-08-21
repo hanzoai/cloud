@@ -6,7 +6,7 @@ description: "Read licensing pubkey: Pubkey publishes the Ed25519 PUBLIC verific
 
 # Hanzo · LICENSING · pubkey
 
-Read-only Hanzo capability derived from the `licensing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `licensing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

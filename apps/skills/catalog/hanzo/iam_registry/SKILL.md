@@ -6,7 +6,7 @@ description: "Read iam registry: Publishes the public key your registry uses to 
 
 # Hanzo · IAM · registry
 
-Read-only Hanzo capability derived from the `iam` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `iam` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -19,8 +19,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/iam/registry/jwks` → JSON body.
-- `/v1/iam/registry/token` → JSON body.
+- `/v1/iam/registry/jwks` → JSON object.
+- `/v1/iam/registry/token` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read ads campaigns: Returns the caller org's ad campaigns, most re
 
 # Zoo · ADS · campaigns
 
-Read-only Zoo capability derived from the `ads` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ads` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -22,8 +22,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `id` | path | yes | string |  |
-| `limit` | query | no | integer | Limit caps how many campaigns come back: default 200, maximum 1000. A |
-| `status` | query | no | string | Status filters to one lifecycle state (draft, active, paused, completed). |
+| `limit` | query | no | integer | Limit caps how many campaigns come back: default 200, maximum 1000. A value that is not a positive integer reads as the default. |
+| `status` | query | no | string | Status filters to one lifecycle state (draft, active, paused, completed). Empty returns every campaign the org has. |
 
 ## Response
 

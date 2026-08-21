@@ -6,7 +6,7 @@ description: "Read git usage: Returns per-repo and total storage bytes for the c
 
 # Lux · GIT · usage
 
-Read-only Lux capability derived from the `git` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `git` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

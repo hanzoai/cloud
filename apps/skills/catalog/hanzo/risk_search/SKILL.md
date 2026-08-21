@@ -6,7 +6,7 @@ description: "Read risk search: Read back one exhaustive search."
 
 # Hanzo · RISK · search
 
-Read-only Hanzo capability derived from the `risk` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `risk` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the run, taken from the path. A run another organisation started is |
+| `id` | path | yes | string | ID is the run, taken from the path. A run another organisation started is simply not there — the same answer an unknown id gives. |
 
 ## Response
 

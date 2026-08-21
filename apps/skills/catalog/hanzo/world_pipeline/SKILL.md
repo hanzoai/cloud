@@ -6,7 +6,7 @@ description: "Read world pipeline: Returns the caller project's news pipeline: w
 
 # Hanzo · WORLD · pipeline
 
-Read-only Hanzo capability derived from the `world` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `world` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

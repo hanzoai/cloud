@@ -6,7 +6,7 @@ description: "Read sandboxes fs: Read a file, or list a directory."
 
 # Zoo · SANDBOXES · fs
 
-Read-only Zoo capability derived from the `sandboxes` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `sandboxes` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/sandboxes/{id}/fs` → JSON body.
+- `/v1/sandboxes/{id}/fs` → JSON object.
 
 ## Example
 

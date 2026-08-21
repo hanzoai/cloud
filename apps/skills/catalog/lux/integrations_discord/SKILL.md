@@ -6,7 +6,7 @@ description: "Read integrations discord: Begin linking a Lux account from Discor
 
 # Lux · INTEGRATIONS · discord
 
-Read-only Lux capability derived from the `integrations` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `integrations` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,9 +20,9 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/integrations/discord/link` → JSON body.
-- `/v1/integrations/discord/link/callback` → JSON body.
-- `/v1/integrations/discord/link/discord` → JSON body.
+- `/v1/integrations/discord/link` → JSON object.
+- `/v1/integrations/discord/link/callback` → JSON object.
+- `/v1/integrations/discord/link/discord` → JSON object.
 
 ## Example
 

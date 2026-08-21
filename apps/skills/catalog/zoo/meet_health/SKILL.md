@@ -6,7 +6,7 @@ description: "Read meet health: Health reports whether the office can mint join 
 
 # Zoo · MEET · health
 
-Read-only Zoo capability derived from the `meet` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `meet` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

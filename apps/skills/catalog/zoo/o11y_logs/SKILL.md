@@ -6,7 +6,7 @@ description: "Read o11y logs: Returns the most recent log records in the query w
 
 # Zoo · O11Y · logs
 
-Read-only Zoo capability derived from the `o11y` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `o11y` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -27,15 +27,15 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 |---|---|---|---|---|
 | `version` | path | yes | string | Version is the config version to read — a positive number, or "latest". |
 | `limit` | query | no | integer | Limit caps how many records come back. Zero means the default of 100. |
-| `timestampEnd` | query | no | integer | TimestampEnd is the end of the window as a nanosecond epoch. Zero means |
-| `timestampStart` | query | no | integer | TimestampStart is the start of the window as a nanosecond epoch. Zero |
+| `timestampEnd` | query | no | integer | TimestampEnd is the end of the window as a nanosecond epoch. Zero means now. |
+| `timestampStart` | query | no | integer | TimestampStart is the start of the window as a nanosecond epoch. Zero means fifteen minutes before the end. |
 
 ## Response
 
 - `/v1/o11y/logs` → `o11y.O11yLogRecordsOut` object with fields: `results`.
 - `/v1/o11y/logs/aggregate` → `o11y.O11yLogAggregateOut` object with fields: `items`.
 - `/v1/o11y/logs/fields` → `o11y.O11yFieldCatalogOut` object with fields: `interesting`, `selected`.
-- `/v1/o11y/logs/livetail` → JSON body.
+- `/v1/o11y/logs/livetail` → JSON object.
 - `/v1/o11y/logs/pipelines/{version}` → `o11y.O11yLogPipelinesOut` object with fields: `data`, `status`.
 - `/v1/o11y/logs/promote_paths` → `o11y.O11yLogPromotedOut` object with fields: `data`, `status`.
 

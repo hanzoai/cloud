@@ -6,7 +6,7 @@ description: "Read flags health: Health reports that the flag engine is serving.
 
 # Hanzo · FLAGS · health
 
-Read-only Hanzo capability derived from the `flags` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `flags` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

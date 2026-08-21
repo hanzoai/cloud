@@ -6,7 +6,7 @@ description: "Read tel summary: Counts what this org holds on the telephony plan
 
 # Zoo · TEL · summary
 
-Read-only Zoo capability derived from the `tel` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `tel` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

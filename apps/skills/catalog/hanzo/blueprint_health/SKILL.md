@@ -6,7 +6,7 @@ description: "Read blueprint health: Reports blueprint liveness and echoes the c
 
 # Hanzo · BLUEPRINT · health
 
-Read-only Hanzo capability derived from the `blueprint` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `blueprint` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

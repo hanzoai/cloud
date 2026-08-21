@@ -6,7 +6,7 @@ description: "Read validators challenge: Issues the single-use nonce and the exa
 
 # Hanzo · VALIDATORS · challenge
 
-Read-only Hanzo capability derived from the `validators` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `validators` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `tokenId` | query | no | string | TokenID is the Validator-tier GenesisNFT token id, as a decimal string in |
+| `tokenId` | query | no | string | TokenID is the Validator-tier GenesisNFT token id, as a decimal string in the `?tokenId=` query. A value that is not a positive integer is 400. It is a string rather than a number because the parse that has always served this route trims surrounding whitespace, and one parse rule is better than two. |
 
 ## Response
 

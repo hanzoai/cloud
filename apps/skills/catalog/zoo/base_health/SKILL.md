@@ -6,7 +6,7 @@ description: "Read base health: Reports that the base subsystem is serving.."
 
 # Zoo · BASE · health
 
-Read-only Zoo capability derived from the `base` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `base` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

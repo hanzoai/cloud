@@ -1,12 +1,12 @@
 ---
 name: registry_packages
 version: "8.0.0"
-description: "Read registry packages: Packages lists the org's npm packages — `<org>` and `@<org>/…` — from the npm registry's search index, optionally narrowed by a query within that scope.."
+description: "Read registry packages: Packages lists the org's npm packages — `\u003corg\u003e` and `@\u003corg\u003e/…` — from the npm registry's search index, optionally narrowed by a query within that scope.."
 ---
 
 # Zoo · REGISTRY · packages
 
-Read-only Zoo capability derived from the `registry` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `registry` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `query` | query | no | string | Query narrows the listing within the org's scope when present; the org |
+| `query` | query | no | string | Query narrows the listing within the org's scope when present; the org boundary itself is never widened by it. It rides the query string. |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read flow status: Status reports whether the flow service is reach
 
 # Lux · FLOW · status
 
-Read-only Lux capability derived from the `flow` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `flow` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

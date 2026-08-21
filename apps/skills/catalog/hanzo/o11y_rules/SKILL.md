@@ -6,7 +6,7 @@ description: "Read o11y rules: Lists all alert rules with their current evaluati
 
 # Hanzo · O11Y · rules
 
-Read-only Hanzo capability derived from the `o11y` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `o11y` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

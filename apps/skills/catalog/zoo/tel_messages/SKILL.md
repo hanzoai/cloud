@@ -6,7 +6,7 @@ description: "Read tel messages: Lists the messages this org has sent or receive
 
 # Zoo · TEL · messages
 
-Read-only Zoo capability derived from the `tel` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `tel` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

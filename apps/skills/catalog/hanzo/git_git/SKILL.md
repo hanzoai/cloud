@@ -1,12 +1,12 @@
 ---
 name: git_git
 version: "8.0.0"
-description: "Read git git: Browse your org's repositories, Browse your org's repositories, Open a repository's home page."
+description: "Read git git: Browse your org's repositories, Open a repository's home page."
 ---
 
 # Hanzo · GIT · git
 
-Read-only Hanzo capability derived from the `git` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `git` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -14,10 +14,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/` — Browse your org's repositories
-- `GET https://api.hanzo.ai/git` — Browse your org's repositories
-- `GET https://api.hanzo.ai/git/{org}/{repo}` — Open a repository's home page
-- `GET https://api.hanzo.ai/{org}/{repo}` — Open a repository's home page
+- `GET https://api.hanzo.ai/v1/git` — Browse your org's repositories
+- `GET https://api.hanzo.ai/v1/git/{org}/{repo}` — Open a repository's home page
 
 ## Parameters
 
@@ -28,15 +26,13 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/` → JSON body.
-- `/git` → JSON body.
-- `/git/{org}/{repo}` → JSON body.
-- `/{org}/{repo}` → JSON body.
+- `/v1/git` → JSON object.
+- `/v1/git/{org}/{repo}` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.hanzo.ai/" \
+curl -sS "https://api.hanzo.ai/v1/git" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

@@ -6,7 +6,7 @@ description: "Read o11y rules: Lists all alert rules with their current evaluati
 
 # Lux · O11Y · rules
 
-Read-only Lux capability derived from the `o11y` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `o11y` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

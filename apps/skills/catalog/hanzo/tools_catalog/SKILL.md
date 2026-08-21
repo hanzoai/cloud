@@ -6,7 +6,7 @@ description: "Read tools catalog: Lists the MCP servers the public registries pu
 
 # Hanzo · TOOLS · catalog
 
-Read-only Hanzo capability derived from the `tools` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `tools` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,10 +21,10 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the listing, from the path. It is the publisher's reverse-DNS name |
-| `featured` | query | no | string | Featured keeps only the listings we put on the front of the shelf, and only |
-| `limit` | query | no | integer | Limit bounds the page: default 50, maximum 200. A value that is not a |
-| `official` | query | no | string | Official keeps only the vendors' OWN servers — not third-party copies of |
+| `id` | path | yes | string | ID is the listing, from the path. It is the publisher's reverse-DNS name with its one slash written as an underscore — "com.stripe_mcp". |
+| `featured` | query | no | string | Featured keeps only the listings we put on the front of the shelf, and only when it is exactly the string "true". |
+| `limit` | query | no | integer | Limit bounds the page: default 50, maximum 200. A value that is not a positive integer reads as the default. |
+| `official` | query | no | string | Official keeps only the vendors' OWN servers — not third-party copies of them — and only when it is exactly the string "true". |
 | `offset` | query | no | integer | Offset skips that many listings. |
 | `q` | query | no | string | Q matches the name, title or description, case-insensitively. |
 

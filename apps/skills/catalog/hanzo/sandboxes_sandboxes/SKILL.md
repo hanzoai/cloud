@@ -6,7 +6,7 @@ description: "Read sandboxes sandboxes: The sandboxes this org holds, One sandbo
 
 # Hanzo · SANDBOXES · sandboxes
 
-Read-only Hanzo capability derived from the `sandboxes` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `sandboxes` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/sandboxes` → JSON body.
-- `/v1/sandboxes/{id}` → JSON body.
+- `/v1/sandboxes` → JSON object.
+- `/v1/sandboxes/{id}` → JSON object.
 
 ## Example
 

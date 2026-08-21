@@ -6,7 +6,7 @@ description: "Read captable plans: Returns the caller org's equity plans, newest
 
 # Hanzo · CAPTABLE · plans
 
-Read-only Hanzo capability derived from the `captable` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `captable` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

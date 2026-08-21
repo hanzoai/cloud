@@ -6,7 +6,7 @@ description: "Read marketplace listings: Returns the listings the caller's own o
 
 # Lux · MARKETPLACE · listings
 
-Read-only Lux capability derived from the `marketplace` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `marketplace` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

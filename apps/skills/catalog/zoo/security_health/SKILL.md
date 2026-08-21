@@ -6,7 +6,7 @@ description: "Read security health: Reports that the scanning subsystem is servi
 
 # Zoo · SECURITY · health
 
-Read-only Zoo capability derived from the `security` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `security` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

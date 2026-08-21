@@ -6,7 +6,7 @@ description: "Read finance payment methods: Answers the masked card descriptors 
 
 # Lux · FINANCE · payment methods
 
-Read-only Lux capability derived from the `finance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `finance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

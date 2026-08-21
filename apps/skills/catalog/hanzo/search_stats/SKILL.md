@@ -6,7 +6,7 @@ description: "Read search stats: Totals the documents across every search index.
 
 # Hanzo · SEARCH · stats
 
-Read-only Hanzo capability derived from the `search` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `search` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `Authorization` | header | no | string | Authorization carries the surface's bearer key (`Bearer <key>`); the bare |
+| `Authorization` | header | no | string | Authorization carries the surface's bearer key (`Bearer <key>`); the bare key is accepted too. It is not `validate:"required"` on purpose: requireKey answers absence itself, so an unconfigured surface 503s and a missing bearer 401s — a validation refusal would rewrite both statuses. |
 
 ## Response
 

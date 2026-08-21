@@ -6,7 +6,7 @@ description: "Read benchmark catalog: Is the canonical public benchmarks this ar
 
 # Hanzo · BENCHMARK · catalog
 
-Read-only Hanzo capability derived from the `benchmark` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `benchmark` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

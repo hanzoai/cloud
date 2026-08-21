@@ -1,12 +1,12 @@
 ---
 name: git_tree
 version: "8.0.0"
-description: "Read git tree: Browse a directory inside a repository, Browse a directory inside a repository."
+description: "Read git tree: Browse a directory inside a repository."
 ---
 
 # Lux · GIT · tree
 
-Read-only Lux capability derived from the `git` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `git` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,8 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/git/{org}/{repo}/tree/{wildcard1}` — Browse a directory inside a repository
-- `GET https://api.lux.network/{org}/{repo}/tree/{wildcard1}` — Browse a directory inside a repository
+- `GET https://api.lux.network/v1/git/{org}/{repo}/tree/{wildcard1}` — Browse a directory inside a repository
 
 ## Parameters
 
@@ -27,13 +26,12 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/git/{org}/{repo}/tree/{wildcard1}` → JSON body.
-- `/{org}/{repo}/tree/{wildcard1}` → JSON body.
+- `/v1/git/{org}/{repo}/tree/{wildcard1}` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/git/{org}/{repo}/tree/{wildcard1}" \
+curl -sS "https://api.lux.network/v1/git/{org}/{repo}/tree/{wildcard1}" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

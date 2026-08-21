@@ -6,7 +6,7 @@ description: "Read webhooks deliveries: Returns one endpoint's per-attempt deliv
 
 # Hanzo · WEBHOOKS · deliveries
 
-Read-only Hanzo capability derived from the `webhooks` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `webhooks` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,8 +21,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `id` | path | yes | string |  |
-| `limit` | query | no | integer | Limit caps how many attempts come back: default 50, maximum 200. A value |
-| `status` | query | no | string | Status narrows the log to one outcome: "ok", "retrying" or "failed". |
+| `limit` | query | no | integer | Limit caps how many attempts come back: default 50, maximum 200. A value that is not a positive integer reads as the default. |
+| `status` | query | no | string | Status narrows the log to one outcome: "ok", "retrying" or "failed". Empty returns every attempt. |
 
 ## Response
 

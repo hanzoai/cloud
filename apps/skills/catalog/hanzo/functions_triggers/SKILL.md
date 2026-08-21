@@ -6,7 +6,7 @@ description: "Read functions triggers: Is what calls the caller org's functions 
 
 # Hanzo · FUNCTIONS · triggers
 
-Read-only Hanzo capability derived from the `functions` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `functions` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

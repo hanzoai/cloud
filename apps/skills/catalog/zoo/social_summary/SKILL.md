@@ -6,7 +6,7 @@ description: "Read social summary: Counts across your org's social presence."
 
 # Zoo · SOCIAL · summary
 
-Read-only Zoo capability derived from the `social` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `social` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/social/summary` → JSON body.
+- `/v1/social/summary` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read registry images: Images lists the org's container repositorie
 
 # Hanzo · REGISTRY · images
 
-Read-only Hanzo capability derived from the `registry` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `registry` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

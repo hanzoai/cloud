@@ -6,7 +6,7 @@ description: "Read sandboxes screen: The screen, as a page, The screen, as a soc
 
 # Lux · SANDBOXES · screen
 
-Read-only Lux capability derived from the `sandboxes` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `sandboxes` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/sandboxes/{id}/screen` → JSON body.
-- `/v1/sandboxes/{id}/screen/ws` → JSON body.
+- `/v1/sandboxes/{id}/screen` → JSON object.
+- `/v1/sandboxes/{id}/screen/ws` → JSON object.
 
 ## Example
 

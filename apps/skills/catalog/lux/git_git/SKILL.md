@@ -1,12 +1,12 @@
 ---
 name: git_git
 version: "8.0.0"
-description: "Read git git: Browse your org's repositories, Browse your org's repositories, Open a repository's home page."
+description: "Read git git: Browse your org's repositories, Open a repository's home page."
 ---
 
 # Lux · GIT · git
 
-Read-only Lux capability derived from the `git` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `git` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,10 +14,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/` — Browse your org's repositories
-- `GET https://api.lux.network/git` — Browse your org's repositories
-- `GET https://api.lux.network/git/{org}/{repo}` — Open a repository's home page
-- `GET https://api.lux.network/{org}/{repo}` — Open a repository's home page
+- `GET https://api.lux.network/v1/git` — Browse your org's repositories
+- `GET https://api.lux.network/v1/git/{org}/{repo}` — Open a repository's home page
 
 ## Parameters
 
@@ -28,15 +26,13 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/` → JSON body.
-- `/git` → JSON body.
-- `/git/{org}/{repo}` → JSON body.
-- `/{org}/{repo}` → JSON body.
+- `/v1/git` → JSON object.
+- `/v1/git/{org}/{repo}` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/" \
+curl -sS "https://api.lux.network/v1/git" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

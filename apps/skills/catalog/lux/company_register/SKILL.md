@@ -6,7 +6,7 @@ description: "Read company register: Returns the platform's whole formation regi
 
 # Lux · COMPANY · register
 
-Read-only Lux capability derived from the `company` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `company` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

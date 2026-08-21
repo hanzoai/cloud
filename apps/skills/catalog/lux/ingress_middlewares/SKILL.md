@@ -6,7 +6,7 @@ description: "Read ingress middlewares: Returns every edge transform the caller'
 
 # Lux · INGRESS · middlewares
 
-Read-only Lux capability derived from the `ingress` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `ingress` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

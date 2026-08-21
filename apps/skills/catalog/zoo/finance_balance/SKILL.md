@@ -6,7 +6,7 @@ description: "Read finance balance: Answers the org's spendable prepaid balance 
 
 # Zoo · FINANCE · balance
 
-Read-only Zoo capability derived from the `finance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `finance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

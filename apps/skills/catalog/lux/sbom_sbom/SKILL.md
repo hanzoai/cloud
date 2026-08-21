@@ -6,7 +6,7 @@ description: "Read sbom sbom: Resolve everything inside a container image."
 
 # Lux · SBOM · sbom
 
-Read-only Lux capability derived from the `sbom` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `sbom` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/sbom/{wildcard1}` → JSON body.
+- `/v1/sbom/{wildcard1}` → JSON object.
 
 ## Example
 

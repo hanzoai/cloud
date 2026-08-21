@@ -6,7 +6,7 @@ description: "Read sbom health: Health is a pure liveness probe: the service is 
 
 # Zoo · SBOM · health
 
-Read-only Zoo capability derived from the `sbom` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `sbom` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

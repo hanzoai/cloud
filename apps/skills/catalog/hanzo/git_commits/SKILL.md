@@ -1,12 +1,12 @@
 ---
 name: git_commits
 version: "8.0.0"
-description: "Read git commits: Read a repository's commit log, Read a repository's commit log."
+description: "Read git commits: Read a repository's commit log."
 ---
 
 # Hanzo · GIT · commits
 
-Read-only Hanzo capability derived from the `git` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `git` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -14,8 +14,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/git/{org}/{repo}/commits` — Read a repository's commit log
-- `GET https://api.hanzo.ai/{org}/{repo}/commits` — Read a repository's commit log
+- `GET https://api.hanzo.ai/v1/git/{org}/{repo}/commits` — Read a repository's commit log
 
 ## Parameters
 
@@ -26,13 +25,12 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/git/{org}/{repo}/commits` → JSON body.
-- `/{org}/{repo}/commits` → JSON body.
+- `/v1/git/{org}/{repo}/commits` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.hanzo.ai/git/{org}/{repo}/commits" \
+curl -sS "https://api.hanzo.ai/v1/git/{org}/{repo}/commits" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

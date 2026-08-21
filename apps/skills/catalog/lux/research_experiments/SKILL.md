@@ -6,7 +6,7 @@ description: "Read research experiments: Returns the caller org's CANONICAL expe
 
 # Lux · RESEARCH · experiments
 
-Read-only Lux capability derived from the `research` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `research` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

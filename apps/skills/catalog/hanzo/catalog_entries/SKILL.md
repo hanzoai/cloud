@@ -6,7 +6,7 @@ description: "Read catalog entries: The raw catalog entries, including the unpub
 
 # Hanzo · CATALOG · entries
 
-Read-only Hanzo capability derived from the `catalog` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `catalog` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/catalog/entries` → JSON body.
+- `/v1/catalog/entries` → JSON object.
 
 ## Example
 

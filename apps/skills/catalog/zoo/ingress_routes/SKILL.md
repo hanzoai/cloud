@@ -6,7 +6,7 @@ description: "Read ingress routes: Returns every routing rule the caller's org h
 
 # Zoo · INGRESS · routes
 
-Read-only Zoo capability derived from the `ingress` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ingress` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

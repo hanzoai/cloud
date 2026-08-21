@@ -6,7 +6,7 @@ description: "Read tel summary: Counts what this org holds on the telephony plan
 
 # Lux · TEL · summary
 
-Read-only Lux capability derived from the `tel` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `tel` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

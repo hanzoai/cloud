@@ -6,7 +6,7 @@ description: "Read ai files: List files, Active (file), List files across tenant
 
 # Zoo · AI · files
 
-Read-only Zoo capability derived from the `ai` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ai` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -23,13 +23,13 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Resource name, unique within the owner. |
-| `owner` | path | yes | string | Owning organization. |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 
 ## Response
 
 - `/v1/ai/files` → JSON object.
-- `/v1/ai/files/active` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
+- `/v1/ai/files/active` → JSON object.
 - `/v1/ai/files/global` → JSON object.
 - `/v1/ai/files/{owner}/{name}` → JSON object.
 

@@ -6,7 +6,7 @@ description: "Read analytics health: Health reports whether the event plane can 
 
 # Hanzo · ANALYTICS · health
 
-Read-only Hanzo capability derived from the `analytics` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `analytics` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read experiments experiments: Is every experiment in the caller's 
 
 # Lux · EXPERIMENTS · experiments
 
-Read-only Lux capability derived from the `experiments` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `experiments` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

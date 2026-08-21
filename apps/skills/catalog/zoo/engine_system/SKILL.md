@@ -6,7 +6,7 @@ description: "Read engine system: The serving host's own inventory: devices, mem
 
 # Zoo · ENGINE · system
 
-Read-only Zoo capability derived from the `engine` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `engine` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

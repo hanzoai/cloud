@@ -6,7 +6,7 @@ description: "Read metrics query: Read your org's series back over a time range.
 
 # Hanzo · METRICS · query
 
-Read-only Hanzo capability derived from the `metrics` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `metrics` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/metrics/query` → JSON body.
+- `/v1/metrics/query` → JSON object.
 
 ## Example
 

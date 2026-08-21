@@ -6,7 +6,7 @@ description: "Read guide guide: Overview returns the caller org's launch journey
 
 # Hanzo · GUIDE · guide
 
-Read-only Hanzo capability derived from the `guide` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `guide` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

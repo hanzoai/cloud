@@ -6,7 +6,7 @@ description: "Read crm summary: Summary counts the caller org's CRM records: com
 
 # Lux · CRM · summary
 
-Read-only Lux capability derived from the `crm` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `crm` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

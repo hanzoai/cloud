@@ -6,7 +6,7 @@ description: "Read marketing audiences: Returns the org's saved audiences, most 
 
 # Hanzo · MARKETING · audiences
 
-Read-only Hanzo capability derived from the `marketing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `marketing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read x402 settlements: Settlement reads one x402 payment receipt b
 
 # Hanzo · X402 · settlements
 
-Read-only Hanzo capability derived from the `x402` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `x402` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the settlement id from the URL — the deterministic keccak(from\|nonce) |
+| `id` | path | yes | string | ID is the settlement id from the URL — the deterministic keccak(from\|nonce) key an x402 receipt is issued under (the `id` field of a Receipt, and the `transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid request answers with). |
 
 ## Response
 

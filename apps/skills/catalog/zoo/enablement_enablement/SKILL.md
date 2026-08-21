@@ -6,7 +6,7 @@ description: "Read enablement enablement: Returns what the caller's org can actu
 
 # Zoo · ENABLEMENT · enablement
 
-Read-only Zoo capability derived from the `enablement` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `enablement` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

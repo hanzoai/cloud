@@ -6,7 +6,7 @@ description: "Read cloudflare r2: Lists the R2 buckets on the org's Cloudflare a
 
 # Zoo · CLOUDFLARE · r2
 
-Read-only Zoo capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

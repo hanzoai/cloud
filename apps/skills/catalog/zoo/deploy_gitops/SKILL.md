@@ -6,7 +6,7 @@ description: "Read deploy gitops: Lists every Zoo CD Application in the cluster:
 
 # Zoo · DEPLOY · gitops
 
-Read-only Zoo capability derived from the `deploy` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `deploy` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

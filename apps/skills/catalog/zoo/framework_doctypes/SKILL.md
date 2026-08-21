@@ -6,7 +6,7 @@ description: "Read framework doctypes: Returns every DocType defined in the call
 
 # Zoo · FRAMEWORK · doctypes
 
-Read-only Zoo capability derived from the `framework` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `framework` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Name is the DocType's name, from the path. A name containing a space |
+| `name` | path | yes | string | Name is the DocType's name, from the path. A name containing a space ("Sales Invoice") arrives percent-encoded and is decoded before it is matched against the stored one. |
 
 ## Response
 

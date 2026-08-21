@@ -6,7 +6,7 @@ description: "Read referrals referrals: Returns the caller's referral code, shar
 
 # Lux · REFERRALS · referrals
 
-Read-only Lux capability derived from the `referrals` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `referrals` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

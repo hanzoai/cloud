@@ -6,7 +6,7 @@ description: "Read prompts catalog: Catalog returns the read-only starter prompt
 
 # Hanzo · PROMPTS · catalog
 
-Read-only Hanzo capability derived from the `prompts` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `prompts` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

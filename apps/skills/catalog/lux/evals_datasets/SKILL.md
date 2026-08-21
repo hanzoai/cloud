@@ -6,7 +6,7 @@ description: "Read evals datasets: Is the datasets your org has, each with its n
 
 # Lux · EVALS · datasets
 
-Read-only Lux capability derived from the `evals` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `evals` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `name` | path | yes | string | Name is the dataset the URL names. |
-| `limit` | query | no | integer | Limit caps the rows returned. It defaults to 100 and is capped at 500; a |
+| `limit` | query | no | integer | Limit caps the rows returned. It defaults to 100 and is capped at 500; a non-positive or unparseable value falls back to the default rather than failing, because a typo about paging is not a reason to refuse a read. |
 
 ## Response
 

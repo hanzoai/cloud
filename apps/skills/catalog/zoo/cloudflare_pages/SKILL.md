@@ -6,7 +6,7 @@ description: "Read cloudflare pages: Lists the org's Cloudflare Pages projects.,
 
 # Zoo · CLOUDFLARE · pages
 
-Read-only Zoo capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

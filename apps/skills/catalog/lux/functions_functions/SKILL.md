@@ -6,7 +6,7 @@ description: "Read functions functions: Is every serverless function the caller'
 
 # Lux · FUNCTIONS · functions
 
-Read-only Lux capability derived from the `functions` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `functions` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read iam users: Returns a page of the people in your organization,
 
 # Zoo · IAM · users
 
-Read-only Zoo capability derived from the `iam` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `iam` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

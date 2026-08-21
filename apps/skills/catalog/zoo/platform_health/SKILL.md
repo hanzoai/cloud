@@ -6,7 +6,7 @@ description: "Read platform health: Reports whether this control plane can actua
 
 # Zoo · PLATFORM · health
 
-Read-only Zoo capability derived from the `platform` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `platform` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

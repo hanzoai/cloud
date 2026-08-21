@@ -6,7 +6,7 @@ description: "Read pricing free: Returns the models that cost nothing to call, f
 
 # Zoo · PRICING · free
 
-Read-only Zoo capability derived from the `pricing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `pricing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

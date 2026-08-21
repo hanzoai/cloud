@@ -6,7 +6,7 @@ description: "Read pricing featured: Returns the models the catalog highlights, 
 
 # Hanzo · PRICING · featured
 
-Read-only Hanzo capability derived from the `pricing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `pricing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

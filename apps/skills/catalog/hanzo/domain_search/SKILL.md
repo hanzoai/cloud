@@ -6,7 +6,7 @@ description: "Read domain search: Finds names built from the keyword q, plus the
 
 # Hanzo · DOMAIN · search
 
-Read-only Hanzo capability derived from the `domain` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `domain` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

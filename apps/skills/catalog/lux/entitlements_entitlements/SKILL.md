@@ -6,7 +6,7 @@ description: "Read entitlements entitlements: Projection reports which console a
 
 # Lux · ENTITLEMENTS · entitlements
 
-Read-only Lux capability derived from the `entitlements` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `entitlements` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

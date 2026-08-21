@@ -6,7 +6,7 @@ description: "Read platform apps: What this organization has declared, and what 
 
 # Zoo · PLATFORM · apps
 
-Read-only Zoo capability derived from the `platform` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `platform` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -26,9 +26,9 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/platform/apps` → JSON body.
-- `/v1/platform/apps/{app}` → JSON body.
-- `/v1/platform/apps/{app}/cd` → JSON body.
+- `/v1/platform/apps` → JSON object.
+- `/v1/platform/apps/{app}` → JSON object.
+- `/v1/platform/apps/{app}/cd` → JSON object.
 
 ## Example
 

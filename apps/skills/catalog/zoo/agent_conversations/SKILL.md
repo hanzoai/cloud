@@ -6,7 +6,7 @@ description: "Read agent conversations: List the agent threads in your org, Read
 
 # Zoo · AGENT · conversations
 
-Read-only Zoo capability derived from the `agent` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `agent` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/agent/conversations` → JSON body.
-- `/v1/agent/conversations/{id}` → JSON body.
+- `/v1/agent/conversations` → JSON object.
+- `/v1/agent/conversations/{id}` → JSON object.
 
 ## Example
 

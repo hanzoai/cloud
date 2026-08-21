@@ -6,7 +6,7 @@ description: "Read admin aimetrics: Is the fleet AI board: LLM generations over 
 
 # Lux · ADMIN · aimetrics
 
-Read-only Lux capability derived from the `admin` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `admin` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `range` | query | no | string | Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the |
+| `range` | query | no | string | Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the board's own default. |
 
 ## Response
 

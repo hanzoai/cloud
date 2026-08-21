@@ -6,7 +6,7 @@ description: "Read licensing healthz: Health reports which signer this deploymen
 
 # Hanzo · LICENSING · healthz
 
-Read-only Hanzo capability derived from the `licensing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `licensing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

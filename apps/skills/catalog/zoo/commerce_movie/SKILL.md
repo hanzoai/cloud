@@ -6,7 +6,7 @@ description: "Read commerce movie: List your org's movies, as a page, Fetch one 
 
 # Zoo · COMMERCE · movie
 
-Read-only Zoo capability derived from the `commerce` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `commerce` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/commerce/movie/` → JSON body.
-- `/v1/commerce/movie/{movieid}` → JSON body.
+- `/v1/commerce/movie/` → JSON object.
+- `/v1/commerce/movie/{movieid}` → JSON object.
 
 ## Example
 

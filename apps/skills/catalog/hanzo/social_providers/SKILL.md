@@ -6,7 +6,7 @@ description: "Read social providers: Which networks this deployment can actually
 
 # Hanzo · SOCIAL · providers
 
-Read-only Hanzo capability derived from the `social` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `social` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/social/providers` → JSON body.
+- `/v1/social/providers` → JSON object.
 
 ## Example
 

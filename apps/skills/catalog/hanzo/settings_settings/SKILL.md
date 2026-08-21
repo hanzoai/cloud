@@ -6,7 +6,7 @@ description: "Read settings settings: Reads the caller org's configuration for o
 
 # Hanzo · SETTINGS · settings
 
-Read-only Hanzo capability derived from the `settings` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `settings` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -1,12 +1,12 @@
 ---
 name: auto_pieces
 version: "8.0.0"
-description: "Read auto pieces: Pieces lists the product's built-in piece catalog: the trigger and action types a flow's nodes can use (webhook, schedule, http, set, branch), each with its input descriptors.."
+description: "Read auto pieces: Pieces is the retired-name alias of the connector catalogue.."
 ---
 
 # Hanzo · AUTO · pieces
 
-Read-only Hanzo capability derived from the `auto` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `auto` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -14,11 +14,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/auto/pieces` — Pieces lists the product's built-in piece catalog: the trigger and action types a flow's nodes can use (webhook, schedule, http, set, branch), each with its input descriptors.
+- `GET https://api.hanzo.ai/v1/auto/pieces` — Pieces is the retired-name alias of the connector catalogue.
 
 ## Response
 
-- `/v1/auto/pieces` → JSON object.
+- `/v1/auto/pieces` → `Catalog` object with fields: `connectorCount`, `connectors`.
 
 ## Example
 

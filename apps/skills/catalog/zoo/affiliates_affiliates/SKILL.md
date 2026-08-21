@@ -6,7 +6,7 @@ description: "Read affiliates affiliates: Answers the caller org's OWN affiliate
 
 # Zoo · AFFILIATES · affiliates
 
-Read-only Zoo capability derived from the `affiliates` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `affiliates` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

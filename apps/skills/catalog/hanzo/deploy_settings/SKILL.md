@@ -6,7 +6,7 @@ description: "Read deploy settings: Returns the argocd AuthSettings object the d
 
 # Hanzo · DEPLOY · settings
 
-Read-only Hanzo capability derived from the `deploy` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `deploy` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

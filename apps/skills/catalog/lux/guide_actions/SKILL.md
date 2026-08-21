@@ -6,7 +6,7 @@ description: "Read guide actions: Returns the caller org's Business AI action le
 
 # Lux · GUIDE · actions
 
-Read-only Lux capability derived from the `guide` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `guide` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read pubsub kv: Get returns one key's current value and revision.,
 
 # Hanzo · PUBSUB · kv
 
-Read-only Hanzo capability derived from the `pubsub` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `pubsub` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

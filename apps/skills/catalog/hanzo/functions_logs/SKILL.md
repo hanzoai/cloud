@@ -6,7 +6,7 @@ description: "Read functions logs: Is the output of a function's most recent run
 
 # Hanzo · FUNCTIONS · logs
 
-Read-only Hanzo capability derived from the `functions` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `functions` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

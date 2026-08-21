@@ -6,7 +6,7 @@ description: "Read flags activity: Returns the caller's flag change log newest-f
 
 # Zoo · FLAGS · activity
 
-Read-only Zoo capability derived from the `flags` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `flags` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

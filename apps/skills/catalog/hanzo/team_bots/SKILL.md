@@ -6,7 +6,7 @@ description: "Read team bots: Returns the caller org's bot members — the org's
 
 # Hanzo · TEAM · bots
 
-Read-only Hanzo capability derived from the `team` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `team` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

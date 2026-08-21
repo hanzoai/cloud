@@ -6,7 +6,7 @@ description: "Read engine status: Whether the serving runtime is reachable, and 
 
 # Hanzo · ENGINE · status
 
-Read-only Hanzo capability derived from the `engine` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `engine` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

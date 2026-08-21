@@ -1,12 +1,12 @@
 ---
 name: benchmark_presets
 version: "8.0.0"
-description: "Read benchmark presets: Are the router blends available to compose from — a named set of model arms, the rank they escalate through and the panel width that bounds fan-out — each served by the model layer as enso-<name>.."
+description: "Read benchmark presets: Are the router blends available to compose from — a named set of model arms, the rank they escalate through and the panel width that bounds fan-out — each served by the model layer as enso-\u003cname\u003e.."
 ---
 
 # Lux · BENCHMARK · presets
 
-Read-only Lux capability derived from the `benchmark` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `benchmark` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

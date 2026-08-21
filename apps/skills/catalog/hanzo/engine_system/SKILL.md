@@ -6,7 +6,7 @@ description: "Read engine system: The serving host's own inventory: devices, mem
 
 # Hanzo · ENGINE · system
 
-Read-only Hanzo capability derived from the `engine` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `engine` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

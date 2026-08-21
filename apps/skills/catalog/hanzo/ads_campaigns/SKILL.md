@@ -6,7 +6,7 @@ description: "Read ads campaigns: Returns the caller org's ad campaigns, most re
 
 # Hanzo · ADS · campaigns
 
-Read-only Hanzo capability derived from the `ads` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `ads` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -22,8 +22,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `id` | path | yes | string |  |
-| `limit` | query | no | integer | Limit caps how many campaigns come back: default 200, maximum 1000. A |
-| `status` | query | no | string | Status filters to one lifecycle state (draft, active, paused, completed). |
+| `limit` | query | no | integer | Limit caps how many campaigns come back: default 200, maximum 1000. A value that is not a positive integer reads as the default. |
+| `status` | query | no | string | Status filters to one lifecycle state (draft, active, paused, completed). Empty returns every campaign the org has. |
 
 ## Response
 

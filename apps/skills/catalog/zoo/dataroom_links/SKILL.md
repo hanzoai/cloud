@@ -6,7 +6,7 @@ description: "Read dataroom links: Returns every live share link in the caller o
 
 # Zoo · DATAROOM · links
 
-Read-only Zoo capability derived from the `dataroom` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `dataroom` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

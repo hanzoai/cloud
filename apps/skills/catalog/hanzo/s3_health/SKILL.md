@@ -6,7 +6,7 @@ description: "Read s3 health: Whether object storage is usable here."
 
 # Hanzo · S3 · health
 
-Read-only Hanzo capability derived from the `s3` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `s3` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/s3/health` → JSON body.
+- `/v1/s3/health` → JSON object.
 
 ## Example
 

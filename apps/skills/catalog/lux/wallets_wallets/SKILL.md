@@ -6,7 +6,7 @@ description: "Read wallets wallets: Returns the caller org's wallets, newest fir
 
 # Lux · WALLETS · wallets
 
-Read-only Lux capability derived from the `wallets` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `wallets` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read cloudflare r2: Lists the R2 buckets on the org's Cloudflare a
 
 # Lux · CLOUDFLARE · r2
 
-Read-only Lux capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

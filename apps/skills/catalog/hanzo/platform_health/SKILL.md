@@ -6,7 +6,7 @@ description: "Read platform health: Reports whether this control plane can actua
 
 # Hanzo · PLATFORM · health
 
-Read-only Hanzo capability derived from the `platform` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `platform` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

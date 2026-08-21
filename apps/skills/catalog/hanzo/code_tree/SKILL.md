@@ -6,7 +6,7 @@ description: "Read code tree: Returns one repository's file structure with a per
 
 # Hanzo · CODE · tree
 
-Read-only Hanzo capability derived from the `code` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `code` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

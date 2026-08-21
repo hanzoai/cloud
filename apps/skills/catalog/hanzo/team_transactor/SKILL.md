@@ -6,7 +6,7 @@ description: "Read team transactor: Statistics returns the transactor's live ses
 
 # Hanzo · TEAM · transactor
 
-Read-only Hanzo capability derived from the `team` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `team` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -29,7 +29,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 - `/v1/team/transactor/api/v1/statistics` → `statsOut` object with fields: `admin`, `metrics`, `statistics`.
 - `/v1/team/transactor/statistics` → `statsOut` object with fields: `admin`, `metrics`, `statistics`.
-- `/v1/team/transactor/{token}` → JSON body.
+- `/v1/team/transactor/{token}` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read affiliates leaderboard: Answers the top affiliates by lifetim
 
 # Hanzo · AFFILIATES · leaderboard
 
-Read-only Hanzo capability derived from the `affiliates` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `affiliates` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

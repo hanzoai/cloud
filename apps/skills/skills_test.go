@@ -128,8 +128,9 @@ func TestServeSkillDigest(t *testing.T) {
 func TestWhiteLabelByHost(t *testing.T) {
 	app := newApp(t, "hanzo")
 
-	// The brands with an embedded catalogue — the registry holds more (pars,
-	// bootnode) than skills.py generates for.
+	// The brands with an embedded catalogue — cloud/brand holds more (pars,
+	// bootnode) than the generator emits for, and a brand with none falls back
+	// at serve time rather than being handed an empty document.
 	sub, err := fs.Sub(catalogFS, "catalog")
 	if err != nil {
 		t.Fatal(err)
@@ -270,18 +271,22 @@ func TestCatalogIntegrity(t *testing.T) {
 // together every surviving entry still names a readable file with a matching
 // digest and the whole suite stays green. The only lower bound was "not empty".
 //
-// What makes that reachable rather than theoretical: the catalogue is generated
-// in ANOTHER REPO. `make skills` runs hanzoai/openapi's skills.py, which reads
-// THAT repo's per-service openapi.yaml files — not cloud's openapi.yaml — so the
-// output is a function of a checkout this repo does not pin. Measured against a
-// local checkout sitting on a feature branch: 357 skills per brand against the
-// 542 committed here, a 185-skill deletion that would have arrived looking
-// exactly like a routine regeneration.
+// It was 542 while the catalogue came from hanzoai/openapi's skills.py, and that
+// number is the reason this ratchet exists: the generator read ANOTHER repo's
+// specs, so the output was a function of a checkout this one does not pin, and a
+// run against a branched one emitted 357 per brand — a deletion that arrived
+// looking exactly like a routine regeneration.
+//
+// It is 696 now because plugin/gen-skills reads THIS repo's own per-app specs.
+// The number went UP rather than down: the old input was a hand-kept spec tree
+// that had drifted both ways, advertising skills for /v1/balancers and
+// /v1/builds (which production 404s) while missing products this fleet serves.
+// Every one of the 127 products carrying a GET now has at least one skill.
 //
 // A deliberate deletion lowers this by hand in the same commit, where a reviewer
 // sees the number go down next to the reason — the same rule openapi/floor.json
 // carries for the document.
-const floorSkills = 542
+const floorSkills = 696
 
 func TestTheCatalogMayNotQuietlyShrink(t *testing.T) {
 	sub, err := fs.Sub(catalogFS, "catalog")
@@ -306,10 +311,10 @@ func TestTheCatalogMayNotQuietlyShrink(t *testing.T) {
 		}
 		if len(doc.Skills) < floorSkills {
 			t.Errorf("%s publishes %d skills, below the floor of %d. A regeneration "+
-				"run against a stale or branched hanzoai/openapi checkout deletes "+
+				"that loses products deletes "+
 				"skills silently, because the index and the files shrink together and "+
-				"every integrity check still passes. If this deletion is deliberate, "+
-				"lower floorSkills in this commit and say why.",
+				"every integrity check still passes. Regenerate with `make skills` and, "+
+				"if the deletion is deliberate, lower floorSkills in this commit and say why.",
 				b.Name(), len(doc.Skills), floorSkills)
 		}
 	}

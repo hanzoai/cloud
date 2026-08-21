@@ -6,7 +6,7 @@ description: "Read benchmark leaderboard: Answers one row per model for the benc
 
 # Hanzo · BENCHMARK · leaderboard
 
-Read-only Hanzo capability derived from the `benchmark` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `benchmark` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

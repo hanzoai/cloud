@@ -1,12 +1,12 @@
 ---
 name: git_explore
 version: "8.0.0"
-description: "Read git explore: Discover public repositories across every org, Discover public repositories across every org."
+description: "Read git explore: Discover public repositories across every org."
 ---
 
 # Hanzo · GIT · explore
 
-Read-only Hanzo capability derived from the `git` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `git` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -14,18 +14,16 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/explore` — Discover public repositories across every org
-- `GET https://api.hanzo.ai/git/explore` — Discover public repositories across every org
+- `GET https://api.hanzo.ai/v1/git/explore` — Discover public repositories across every org
 
 ## Response
 
-- `/explore` → JSON body.
-- `/git/explore` → JSON body.
+- `/v1/git/explore` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.hanzo.ai/explore" \
+curl -sS "https://api.hanzo.ai/v1/git/explore" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

@@ -6,7 +6,7 @@ description: "Read deploy session: Answers \"is this browser signed in, and if n
 
 # Zoo · DEPLOY · session
 
-Read-only Zoo capability derived from the `deploy` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `deploy` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

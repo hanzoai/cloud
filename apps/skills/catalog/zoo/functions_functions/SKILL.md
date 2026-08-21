@@ -6,7 +6,7 @@ description: "Read functions functions: Is every serverless function the caller'
 
 # Zoo · FUNCTIONS · functions
 
-Read-only Zoo capability derived from the `functions` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `functions` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

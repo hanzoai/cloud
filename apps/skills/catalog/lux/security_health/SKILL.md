@@ -6,7 +6,7 @@ description: "Read security health: Reports that the scanning subsystem is servi
 
 # Lux · SECURITY · health
 
-Read-only Lux capability derived from the `security` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `security` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

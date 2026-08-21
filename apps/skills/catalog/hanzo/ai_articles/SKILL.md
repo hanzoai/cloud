@@ -6,7 +6,7 @@ description: "Read ai articles: List articles, List articles across tenants, Ret
 
 # Hanzo · AI · articles
 
-Read-only Hanzo capability derived from the `ai` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `ai` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -22,8 +22,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Resource name, unique within the owner. |
-| `owner` | path | yes | string | Owning organization. |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 
 ## Response
 

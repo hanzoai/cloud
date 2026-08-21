@@ -6,7 +6,7 @@ description: "Read domain domains: Is the domains your org has bought here, newe
 
 # Hanzo · DOMAIN · domains
 
-Read-only Hanzo capability derived from the `domain` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `domain` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

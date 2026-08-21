@@ -6,7 +6,7 @@ description: "Read agents builds: Returns the public index of every published bu
 
 # Lux · AGENTS · builds
 
-Read-only Lux capability derived from the `agents` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `agents` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

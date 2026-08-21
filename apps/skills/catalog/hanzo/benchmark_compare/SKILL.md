@@ -6,7 +6,7 @@ description: "Read benchmark compare: Is the ONLY valid arm-vs-arm test: it pair
 
 # Hanzo · BENCHMARK · compare
 
-Read-only Hanzo capability derived from the `benchmark` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `benchmark` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read code file: Returns the INDEXED content of one file — read_f
 
 # Lux · CODE · file
 
-Read-only Lux capability derived from the `code` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `code` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

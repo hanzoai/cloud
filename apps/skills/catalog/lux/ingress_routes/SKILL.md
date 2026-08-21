@@ -6,7 +6,7 @@ description: "Read ingress routes: Returns every routing rule the caller's org h
 
 # Lux · INGRESS · routes
 
-Read-only Lux capability derived from the `ingress` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `ingress` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

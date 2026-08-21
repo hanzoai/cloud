@@ -6,7 +6,7 @@ description: "Read destinations destinations: Reports every destination this dep
 
 # Zoo · DESTINATIONS · destinations
 
-Read-only Zoo capability derived from the `destinations` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `destinations` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `platform` | path | yes | string | Platform is the destination to act on, from the path: ga4 \| meta \| tiktok \| |
+| `platform` | path | yes | string | Platform is the destination to act on, from the path: ga4 \| meta \| tiktok \| linkedin \| x \| reddit \| posthog \| umami. |
 
 ## Response
 

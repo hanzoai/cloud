@@ -6,7 +6,7 @@ description: "Read payments payments: Read one settled payment by its id."
 
 # Zoo · PAYMENTS · payments
 
-Read-only Zoo capability derived from the `payments` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `payments` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

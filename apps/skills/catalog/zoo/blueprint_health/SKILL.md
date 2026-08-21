@@ -6,7 +6,7 @@ description: "Read blueprint health: Reports blueprint liveness and echoes the c
 
 # Zoo · BLUEPRINT · health
 
-Read-only Zoo capability derived from the `blueprint` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `blueprint` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

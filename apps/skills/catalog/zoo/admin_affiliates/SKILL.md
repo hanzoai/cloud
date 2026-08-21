@@ -6,7 +6,7 @@ description: "Read admin affiliates: Lists every affiliate across the fleet with
 
 # Zoo · ADMIN · affiliates
 
-Read-only Zoo capability derived from the `admin` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `admin` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `limit` | query | no | integer | Limit caps the rows returned. Absent or non-positive means the default of |
+| `limit` | query | no | integer | Limit caps the rows returned. Absent or non-positive means the default of 500; anything above 1000 is clamped to 1000. |
 
 ## Response
 

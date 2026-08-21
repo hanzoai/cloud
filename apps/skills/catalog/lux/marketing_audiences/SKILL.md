@@ -6,7 +6,7 @@ description: "Read marketing audiences: Returns the org's saved audiences, most 
 
 # Lux · MARKETING · audiences
 
-Read-only Lux capability derived from the `marketing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `marketing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

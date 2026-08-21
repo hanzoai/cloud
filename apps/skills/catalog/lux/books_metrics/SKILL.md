@@ -6,7 +6,7 @@ description: "Read books metrics: Metrics returns the org's deterministic SaaS-m
 
 # Lux · BOOKS · metrics
 
-Read-only Lux capability derived from the `books` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `books` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

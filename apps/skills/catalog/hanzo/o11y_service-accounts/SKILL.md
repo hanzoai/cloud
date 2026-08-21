@@ -6,7 +6,7 @@ description: "Read o11y service accounts: Lists the caller's org's service accou
 
 # Hanzo · O11Y · service accounts
 
-Read-only Hanzo capability derived from the `o11y` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `o11y` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

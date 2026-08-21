@@ -6,7 +6,7 @@ description: "Read agent presets: List the agent presets available to a caller."
 
 # Zoo · AGENT · presets
 
-Read-only Zoo capability derived from the `agent` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `agent` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/agent/presets` → JSON body.
+- `/v1/agent/presets` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read agents sessions: Returns the caller org's live sessions, newe
 
 # Zoo · AGENTS · sessions
 
-Read-only Zoo capability derived from the `agents` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `agents` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,9 +25,9 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the session to act on, from the path. |
-| `after` | query | no | integer | After is the last seq this poller applied; only commands newer than it come |
+| `after` | query | no | integer | After is the last seq this poller applied; only commands newer than it come back. Absent or negative reads as 0, which drains from the beginning. |
 | `limit` | query | no | integer | Limit caps the page. Absent, zero or over 500 reads as 100. |
-| `parent` | query | no | string | Parent scopes the page to the direct children of one session. Ignored when |
+| `parent` | query | no | string | Parent scopes the page to the direct children of one session. Ignored when root is set; with neither, only ROOT sessions come back. |
 | `project` | query | no | string | Project filters to the sessions tagged with one product slug. |
 | `root` | query | no | string | Root scopes the page to one subagent tree (its root session id). |
 | `status` | query | no | string | Status filters to running, paused, done or error. |
@@ -35,7 +35,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Response
 
 - `/v1/agents/sessions` → `sessionList` object with fields: `sessions`.
-- `/v1/agents/sessions/stream` → JSON body.
+- `/v1/agents/sessions/stream` → JSON object.
 - `/v1/agents/sessions/{id}` → `sessionDetail` object with fields: `account`, `actor`, `agent`, `childSessions`, `children`, `createdAt`, `cwd`, `endedAt`, `events`, `host`, `id`, `lastEvent`.
 - `/v1/agents/sessions/{id}/control` → `controlDrain` object with fields: `commands`, `cursor`.
 - `/v1/agents/sessions/{id}/tree` → `treeNode` object with fields: `children`, `session`.

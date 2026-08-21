@@ -6,7 +6,7 @@ description: "Read catalog entries: The raw catalog entries, including the unpub
 
 # Lux · CATALOG · entries
 
-Read-only Lux capability derived from the `catalog` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `catalog` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/catalog/entries` → JSON body.
+- `/v1/catalog/entries` → JSON object.
 
 ## Example
 
