@@ -2964,6 +2964,26 @@ migration silently strips request shapes from every generated CLI and SDK.
   1467 operations / 1064 paths / 167 products against a doc still claiming
   983/692/109. Every number in this file is tagged with how to re-measure it;
   keep it that way.
+- **DELETING AN APP ROTS THREE HAND-KEPT LEDGERS, and each one stops the release
+  train.** They are keyed by app or by file, so removing the package leaves an
+  entry describing nothing, and all three are `go-unit`:
+
+      allowedRequestUses      typed_request_gate_test.go   (by FILE)
+      allowedTokenPrimitives  token_gate_test.go           (by FILE)
+      meteredApps             spend.go                     (by APP)
+
+  Measured twice in one week. `apps/venue` was deleted whole and left
+  `apps/venue/venue.go` and `apps/venue/aws_sigv4.go` in the two pins;
+  `apps/auto` went days later and left `apps/auto/billing.go` in the request pin
+  AND `"auto"` in `meteredApps`. Neither deletion was wrong — both were the right
+  call, thoroughly done on the code and the artifacts — and that is the point: a
+  ledger in a file nobody greps when removing a directory is exactly what a
+  careful author misses.
+  **`meteredApps` is the one that is not merely untidy.** A name there demands
+  STANDING, so an app that no longer exists 402s a customer for work nobody
+  charges for — which is the failure its own comment already records for a
+  previous dead name, `"agent"`. The pins only refuse; this one bills.
+  Grep all three for the app's name in the SAME commit that removes it.
 
 ## Lifecycle defense: ONE scorer seam, ONE fail policy, a sensor at the edge
 
