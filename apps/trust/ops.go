@@ -34,7 +34,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
 	"github.com/hanzoai/cloud/apps/principal"
-	htrust "github.com/hanzoai/trust"
 	"github.com/zap-proto/zip"
 )
 
@@ -124,16 +123,6 @@ type sectionWrite struct {
 }
 
 // ---- host-computed shapes ----
-
-// probe is the liveness answer.
-type probe struct {
-	// Service names the subsystem answering, always "trust".
-	Service string `json:"service"`
-	// Status is "ok" when the bundle is compiled and dispatching.
-	Status string `json:"status"`
-	// Version is the embedded inventory's version — which inventory is running.
-	Version string `json:"version"`
-}
 
 // trustTally is how the controls themselves stand, independent of any framework.
 type trustTally struct {
@@ -429,13 +418,6 @@ type dropped struct {
 }
 
 // ---- the ops ----
-
-// Health reports that the trust subsystem is mounted and which inventory it is
-// running. Open: a liveness probe that needs a credential cannot answer the
-// question it is asked.
-func (o ops) health(context.Context, *noInput) (*probe, error) {
-	return &probe{Service: "trust", Status: "ok", Version: htrust.Version}, nil
-}
 
 // Reads a published trust centre — the whole thing in one answer: the
 // organization's profile, its control inventory, coverage computed against each

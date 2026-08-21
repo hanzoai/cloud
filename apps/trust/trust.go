@@ -275,9 +275,11 @@ func routes(zapp *zip.App, s *cloud.Service[state]) {
 	o := ops{s: s}
 	g := zapp.Group(prefix)
 
-	// Reads. The health probe is native and answers while the bundle is fine or
-	// not; everything else relays one bundle route.
-	zip.Get(g, "/health", o.health)
+	// No /health here. The composer registers GET /v1/<name>/health for every app
+	// that does not own its own (serve.go), and a second declaration of one
+	// address is not a shadowing risk but a REFUSAL — zip will not compose the
+	// program at all, so the plugin binary panics at startup. Nothing is lost:
+	// which inventory is running rides on every substantive answer as `version`.
 	zip.Get(g, "/published/:org", o.published)
 	zip.Get(g, "/profile", o.profile)
 	zip.Get(g, "/controls", o.listControls)
@@ -306,12 +308,11 @@ func routes(zapp *zip.App, s *cloud.Service[state]) {
 
 }
 
-// The two OPEN routes render `security: []`. A published trust centre is a
+// The published door renders `security: []`. A published trust centre is a
 // public document, and requiring a bearer to read one would defeat the point of
-// publishing it; a liveness probe that needs a credential cannot answer the
-// question it is asked. They can reach nothing else — the bundle refuses every
-// other route without the validated tenant, and the published door refuses an
-// organization that has not published.
+// publishing it. It reaches nothing else: the bundle refuses every other route
+// without the validated tenant, and this one refuses an organization that has
+// not published.
 //
 // Declared in init() and not in routes(): openapi.Open registers into a
 // PROCESS-WIDE table and panics on a duplicate, so a second Mount in one process
@@ -319,7 +320,6 @@ func routes(zapp *zip.App, s *cloud.Service[state]) {
 // would take the program down on a declaration that has not changed.
 func init() {
 	openapi.Open(prefix+"/published/{org}", "GET")
-	openapi.Open(prefix+"/health", "GET")
 }
 
 // Shutdown closes the per-tenant stores + the goja engine. Idempotent.
