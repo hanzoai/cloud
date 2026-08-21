@@ -288,6 +288,33 @@ func run(addr, zapAddr string) error {
 	// reaching through the root package for one function pulls eight of them in.
 	app.Use(zip.H(clientip.StampClientIP))
 
+	// THE CANONICAL SPELLING, before anything reads the path.
+	//
+	// A capability has one name, and English gives its name two spellings. The
+	// fleet publishes one of them and accepts both: the plural of a singular
+	// capability, and the singular of a plural one, are rewritten HERE to the name
+	// manifest.Apps carries (manifest.Normalize, HIP-0139 §2.2).
+	//
+	// It is a rewrite and not a route. Registering the second spelling would put
+	// two addresses in the table for one thing, and every table it flows into
+	// after — the index, the woven document, each generated SDK, the tool list —
+	// would carry both and a reader would have to be told which is real. One
+	// string comparison at the door instead, and everything downstream sees the
+	// one name it already knows.
+	//
+	// AT THE DOOR, ahead of the mounts, for the same reason clientip is: zip
+	// visits an included App with the stack as it stood at inclusion, and a child
+	// must never be handed a spelling it does not serve. Fiber recomputes its
+	// route bucket on the override, so the scan that follows matches the new path.
+	app.Use(zip.H(func(c *zip.Ctx) error {
+		if p := c.Path(); p != "" {
+			if canonical := manifest.Normalize(p); canonical != p {
+				c.Fiber().Path(canonical)
+			}
+		}
+		return c.Next()
+	}))
+
 	// THE API'S OWN INDEX, and the links every /v1 answer carries — here, for the
 	// same one reason clientip is: middleware reaches only what is composed after
 	// it, and both halves are about requests the subsystems below would otherwise
