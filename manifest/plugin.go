@@ -122,7 +122,35 @@ type App struct {
 	// THROUGH to `ai` showed it. A health check that returns 200 while the entire
 	// product API is absent is not a health check.
 	Vital bool
+
+	// Stage is whether a customer is shown this capability: [Beta], [Alpha], or
+	// empty for ga (HIP-0139 §8). It is a fact about the PRODUCT, not about the
+	// specification — a HIP's status says whether the text is settled.
+	//
+	// It is here, in the row, because every reader of it is downstream of the row
+	// and none of them may decide for themselves: the weave stamps x-stage from it
+	// and the public rule drops anything that is not ga, so a beta capability is in
+	// no generated client, no tool list and no public page; and the refusal
+	// installed at Serve answers 404 on its prefixes for an org that does not hold
+	// the flag named for it (cloud.Stage). Promotion is one edit here.
+	//
+	// The zero value is ga, which is the direction that fails safe in the one way
+	// that matters: a row nobody thought about is PUBLISHED and reachable, which is
+	// visible the day it lands, rather than hidden and reachable by nobody, which
+	// is not visible at all.
+	Stage string
 }
+
+// The stages a row may declare. There is no `ga` constant because ga is the
+// ABSENCE of one: a third spelling of the default is a second way to say the
+// same thing, and every reader would then have to accept both.
+const (
+	Beta  = "beta"
+	Alpha = "alpha"
+)
+
+// GA reports whether a customer is shown this capability without a flag.
+func (a App) GA() bool { return a.Stage == "" }
 
 // Names is every app, in mount order — which is the fleet's routing order and
 // therefore the order its document is woven in, so a conflict is reported as the

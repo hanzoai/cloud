@@ -133,6 +133,7 @@ func TestNoPlaneInputCanNameAnOrg(t *testing.T) {
 	inputs := []any{
 		plane.AuthorizeIn{}, plane.RecordIn{}, plane.BalanceIn{},
 		plane.SecretIn{}, plane.FilesIn{}, plane.Visibility{}, plane.ReserveIn{},
+		plane.FlagIn{},
 	}
 	for _, in := range inputs {
 		typ := reflect.TypeOf(in)
