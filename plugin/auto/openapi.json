@@ -490,30 +490,6 @@
         "x-public": true
       }
     },
-    "/v1/auto/pieces": {
-      "get": {
-        "operationId": "get_auto_pieces",
-        "summary": "Pieces is the retired-name alias of the connector catalogue.",
-        "description": "Pieces is the retired-name alias of the connector catalogue. It serves exactly\nwhat GET /v1/auto/connectors serves, under the name this surface used\nbefore \"piece\" (the ActivePieces term) became \"connector\", and stays valid for\nclients pinned to the old path. Prefer /connectors.",
-        "tags": [
-          "auto"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Catalog"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
     "/v1/auto/runs": {
       "get": {
         "operationId": "get_auto_runs",
