@@ -60,6 +60,12 @@ type registration struct {
 	description string
 	described   bool // the prose half is present (Describe ran)
 
+	// id overrides the operation id derived from method+path. Empty for almost
+	// every route, because a derived id is the right one: it is the address, and
+	// two routes cannot share an address. The exception is an address the
+	// derivation cannot name at all — see [identify].
+	id string
+
 }
 
 // opKey addresses a registration the same way the router addresses a route:
@@ -200,6 +206,28 @@ func Describe(path, method, summary, description string) {
 	registry[key] = reg
 }
 
+// identify states an operation's id instead of letting it be derived.
+//
+// Every other id comes from [zip.ID] on method+path, and that single rule is what
+// lets an agent call the name it just read in the document. The rule drops the
+// leading version segment, because a segment every address carries tells no two
+// operations apart — which leaves the ROOT with nothing: /v1 is that segment and
+// no more, so the derived id is the bare "get", a method called get() in every
+// generated SDK and a name the next address to derive it would collide with. Its
+// index one segment down derives "get_by_name", which states the shape of the
+// address rather than the thing.
+//
+// Unexported, and openapi/index.go holds the only two calls: naming an operation
+// is a rule the derivation cannot express, never a preference about a name.
+func identify(path, method, id string) {
+	key := opKey{method: strings.ToUpper(method), path: path}
+	regMu.Lock()
+	defer regMu.Unlock()
+	reg := registry[key]
+	reg.id = id
+	registry[key] = reg
+}
+
 // DescribeRest declares prose for every method at path that nothing has described
 // yet, and is how an address bound with All() is covered WITHOUT a hand-copied list
 // of methods.
@@ -278,6 +306,9 @@ func newComponents() *components {
 func (r *registration) apply(op *Operation, c *components) error {
 	if r.described {
 		op.Summary, op.Description = r.summary, r.description
+	}
+	if r.id != "" {
+		op.OperationID = r.id
 	}
 	switch {
 	case r.req == binaryReq:

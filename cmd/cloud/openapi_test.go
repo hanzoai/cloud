@@ -61,6 +61,9 @@ func host(t *testing.T) *zip.App {
 
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
 	absent := map[string]string{}
+	// Before the mounts, exactly as run() composes it: middleware reaches only
+	// what is composed after it, and the index answers addresses the mounts claim.
+	index(app, manifest.Names())
 	for _, a := range manifest.Apps {
 		t.Setenv("CLOUD_"+strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))+"_ADDR", "oracle://"+a.Name)
 		if err := mount(app, a, false, absent); err != nil {
