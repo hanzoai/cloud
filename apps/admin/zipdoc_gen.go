@@ -139,7 +139,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"range":"30d","interval":"day","generatedAt":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
 	})
 	zip.Describe("GET /v1/admin/applications", zip.Doc{
-		Description: "Lists IAM applications for one owner org, forwarded VERBATIM from IAM's\nget-applications. These are the platform's OIDC clients — the console reads clientId\noff each row.",
+		Description: "Lists IAM applications for one owner org, forwarded VERBATIM from IAM's\napplication list. These are the platform's OIDC clients — the console reads clientId\noff each row.",
 		Fields: map[string]string{
 			"iamPageIn.owner":    "Owner is the org whose rows to read. Defaults to the admin org, which owns the\nplatform's roles and applications.",
 			"iamPageIn.p":        "Page is the 1-based page number. Forwarded only when set — IAM applies its own\ndefault otherwise.",
@@ -368,7 +368,7 @@ func init() {
 			"orgRow.tokens":       "Tokens is the tokens served for this tenant over that same 30-day window.",
 			"orgRow.users":        "Users is the tenant's member count, from IAM's own total.",
 			"orgsIn.p":            "Page is the 1-based page number. Defaults to \"1\".",
-			"orgsIn.pageSize":     "PageSize is rows per page. Defaults to \"200\", the shared admin page size.\nIt bounds the fan-out: the page decides how many per-org reads happen, so\nthe directory costs the same at eighty tenants and at eight thousand.",
+			"orgsIn.pageSize":     "PageSize is rows per page: 20 by default, 100 at most. It is deliberately\nbelow the 200 the rest of the admin surface uses, because a row here is not\na row of text — each one still costs its own wallet read. The page size IS\nthe fan-out width, so the directory costs the same at eighty tenants and at\neight thousand.",
 			"orgsOut.data":        "Data is one row per tenant, sorted by slug. Null when the read failed, [] when\nthe caller's window is genuinely empty.",
 			"orgsOut.msg":         "Msg is the failure reason when Status is \"error\", empty otherwise.",
 			"orgsOut.status":      "Status is \"ok\" or \"error\", at HTTP 200 either way.",
@@ -441,7 +441,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z","end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"total":0}`),
 	})
 	zip.Describe("GET /v1/admin/roles", zip.Doc{
-		Description: "Lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.",
+		Description: "Lists IAM roles for one owner org, forwarded VERBATIM from IAM's role list.",
 		Fields: map[string]string{
 			"iamPageIn.owner":    "Owner is the org whose rows to read. Defaults to the admin org, which owns the\nplatform's roles and applications.",
 			"iamPageIn.p":        "Page is the 1-based page number. Forwarded only when set — IAM applies its own\ndefault otherwise.",
