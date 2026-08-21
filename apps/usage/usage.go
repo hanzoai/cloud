@@ -2,9 +2,9 @@
 //
 // It serves /v1/usage over one window grammar, and absorbed the account-usage board
 // from apps/link, which owns links and nothing usage. It is NOT the only usage
-// address — billing serves the wallet's own /v1/billing/usage{,/accounts} and
-// /v1/finance/usage off the ledger — and the two answer different questions: this one
-// composes the categorized roll-up, billing reports the raw drain on the wallet.
+// address — billing serves the wallet's own /v1/billing/usage{,/accounts} — and the
+// two answer different questions: this one composes the categorized roll-up, billing
+// reports the raw drain on the wallet.
 //
 // The surface:
 //

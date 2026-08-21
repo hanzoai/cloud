@@ -195,10 +195,10 @@ func Live(app *zip.App) []Route {
 // after /v1/ IS the product (/v1/kms/* → kms, /v1/billing/* → billing). No
 // judgment, no table to maintain, nothing to keep in sync.
 //
-// It is deliberately NOT the subsystem name: clients/billing serves both
-// /v1/billing/* and /v1/finance/* (finance.go:57), so the mount that owns a
-// route and the product a caller names are different values. The CLI wants the
-// one in the URL.
+// It is deliberately NOT the subsystem name: commerce serves the merchant half
+// of /v1/billing/* while apps/billing serves the customer's own reads there, so
+// the mount that owns a route and the product a caller names are different
+// values. The CLI wants the one in the URL.
 //
 // Returns "" when the first segment is not a product name — a parameter (:org),
 // a wildcard (*), or a file (openapi.json) — and for anything outside /v1
