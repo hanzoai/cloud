@@ -21,12 +21,16 @@ import (
 	"strings"
 )
 
-// ours are the registry hosts whose pull credential we supply. An image on one
-// of these is fetched with OUR secret, which is exactly why the namespace has to
-// be checked. Hosts not listed here are pulled anonymously or not at all.
-var ours = []string{"oci.hanzo.ai", "registry.hanzo.ai"}
+// ours is the registry host whose pull credential we supply. An image on it is
+// fetched with OUR secret, which is exactly why the namespace has to be checked.
+// Any other host is pulled anonymously or not at all.
+//
+// One host, so a second name for this registry is unwritable rather than merely
+// discouraged — the shape is what keeps a host that resolves elsewhere from
+// being handed our credential.
+const ours = "oci.hanzo.ai"
 
-// hanzoai is the namespace on those hosts that holds the images WE publish (the
+// hanzoai is the namespace on that host that holds the images WE publish (the
 // sandbox classes themselves). Any caller may name one: they are the same bytes
 // `imageFor` would have chosen, and refusing them would mean a caller could not
 // pin the class image they are already running.
@@ -65,14 +69,7 @@ func checkImage(org, image string) error {
 		image, ns, hanzoai)
 }
 
-func isOurs(host string) bool {
-	for _, h := range ours {
-		if strings.EqualFold(host, h) {
-			return true
-		}
-	}
-	return false
-}
+func isOurs(host string) bool { return strings.EqualFold(host, ours) }
 
 // The runtime a caller may ask for is checked in runtime.go, beside the table
 // that says what each runtime can do — see runtimeFor. It used to be a second
