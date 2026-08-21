@@ -235,6 +235,29 @@ func init() {
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
 		},
 	})
+	zip.Describe("POST /v1/company/ein", zip.Doc{
+		Description: "Opens the EIN application and answers what it owes.\n\nThe answer states whether it can be filed ONLINE, because that is the fact\ndeciding whether the customer waits a sitting or several weeks — and it names\neach form with what that form is for, so nobody has to already know what an\nSS-4 is to understand why they are signing one.",
+		Fields: map[string]string{
+			"EIN.expedited":       "Expedited reports that prioritised handling was asked for.",
+			"EIN.forms":           "Forms are the forms this application owes, with what each is for.",
+			"EIN.naics":           "NAICS is the six-digit code for what the business does. The SS-4 asks it\nand the IRS will not process an application without one.",
+			"EIN.number":          "Number is the issued EIN, absent until the IRS issues it.",
+			"EIN.online":          "Online reports that this application can be filed with the IRS online and\nissued in a sitting, rather than signed and posted. It is the single fact\nthat decides how long a customer waits, so it is answered rather than\nimplied by the absence of forms.",
+			"EIN.responsible":     "Responsible is the person the IRS holds answerable.",
+			"EIN.status":          "Status is how far it has got.",
+			"Form.code":           "Code is the IRS designation, e.g. \"SS-4\".",
+			"Form.name":           "Name is the form's own title, so a reader need not already know the code.",
+			"Form.signed":         "Signed reports whether we hold the signature.",
+			"Form.why":            "Why states what this form is for in this application — the same form is\nowed for different reasons on different paths.",
+			"Responsible.country": "Country is where they reside, ISO 3166-1 alpha-2.",
+			"Responsible.email":   "Email reaches them for signature.",
+			"Responsible.name":    "Name is their full legal name as the IRS will hold it.",
+			"Responsible.usTaxId": "USTaxID reports that they hold an SSN or ITIN. It is a BOOLEAN on purpose:\nthe number itself is never needed here and a field that could hold it is a\nfield that will eventually be logged.",
+			"einIn.expedited":     "Expedited asks for prioritised handling. Only meaningful when the\nresponsible party cannot file online.",
+			"einIn.naics":         "NAICS is the six-digit code for what the business does.",
+			"einIn.responsible":   "Responsible is the person the IRS holds answerable for the entity.",
+		},
+	})
 	zip.Describe("POST /v1/company/esign", zip.Doc{
 		Description: "Sends the generated formation documents for signature by every\nfounder and records the provider's reference on the formation. Available only\nat the esign stage.",
 		Fields: map[string]string{

@@ -202,6 +202,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// The platform's own book — SuperAdmin operations, cross-tenant, read-only.
 	// Registered before the tenant edges so the static paths are unambiguous.
 	zip.Post(g, "/tariff", o.tariff)
+	zip.Post(g, "/ein", o.ein)
 	zip.Get(g, "/register", o.registerList)
 	zip.Get(g, "/register/summary", o.registerSummary)
 	zip.Get(g, "/review", o.registerReview)
