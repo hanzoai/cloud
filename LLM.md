@@ -255,8 +255,9 @@ There is NO fused binary. The mega link that once dominated a release — one
 binary that imported `apps` and linked every subsystem graph into a ~3108-package
 monolith — is GONE (deleted at 22f4fc64 with `apps.Wire()`). `cmd/cloud` IS the
 light host now, and the ENTRYPOINT the image ships: it links `zip`, the generated
-`manifest`, and the light `webui` console embed and stops (**406 packages**,
-~28 MB, sub-second link), mounts each app as a `zip.Plugin`, and starts a child
+`manifest`, and the light `webui` console embed and stops (**408 packages**,
+17 MB stripped, sub-second link — `go list -deps ./cmd/cloud | wc -l`, and the
+size is what `make cloud`'s own `CGO_ENABLED=0 -ldflags "-s -w"` produces), mounts each app as a `zip.Plugin`, and starts a child
 on the FIRST REQUEST that reaches its prefix. An app nobody calls costs a route
 entry, not a process. The apps that own a listener or a background loop
 (`manifest.App.Eager`) start WITH the host instead.
@@ -1356,11 +1357,12 @@ can now reach.
   (`grep -c '^  /' <doc>` for paths, `grep -c '^      operationId:' <doc>` for
   operations — both agree with a YAML parse, the six-space indent being what
   separates an operation from the `Op` schema's own `operationId` property — and
-  `grep -c x-stage <doc>` for the mark). The stage is now the SMALLEST of the four
-  terms: of the 129 paths / 155 operations the public document drops, `/v1/admin`
+  `grep -c x-stage <doc>` for the mark). The stage is the second-smallest of the FIVE terms
+  `audience` refuses on — `stamp` names them: address, product, door, compat and
+  stage. Of the 129 paths / 155 operations the public document drops, `/v1/admin`
   is 83 paths, IAM's `compat`-tagged verb spellings 20, the `{wildcardN}` relay
-  doors 13, the non-`/v1` well-known addresses 6, and the two alpha rows 7 paths /
-  9 operations.
+  doors 13, the two alpha rows 7 paths / 9 operations, and the non-`/v1`
+  well-known addresses 6 — which is smaller than stage on both axes.
 - **`openapi/floor.json` guards the INTERNAL document and only it**, and it agrees
   with that document to the operation: floor reads 1774 paths / 2404 operations,
   which is `private.yaml` exactly, and its per-product rows carry `admission: 1`
@@ -1388,7 +1390,7 @@ can now reach.
   so 123 of the 125 rows cost nothing. Not 403, which is an existence oracle; the
   body is zip's ordinary not-found, asserted byte-for-byte against an unrouted
   path. A flags outage and a caller with no validated org both fail CLOSED.
-  `cmd/cloud` learns nothing and stays light — 406 packages against a bound of 450
+  `cmd/cloud` learns nothing and stays light — 408 packages against a bound of 450
   (`CGO_ENABLED=0 GOWORK=off go list -deps ./cmd/cloud | wc -l`, which is
   hanzo.yml's `host-is-light` step).
 
@@ -3812,7 +3814,8 @@ semantic is identical — fail closed once armed, allow before.
   (`authz catalogsync dns esign index kafka kms metrics rollingcap skills social
   storage tasks zen`) — of which `index` and `kms` then published 14 and 5, so the
   list was 12 and the catalog 1048 operations. It has since grown back past the
-  size it shrank FROM: **1443 operations over 125 keys, 15 of them empty**
+  size it shrank TO — 1443 is above that 1048 and below both 1554 and the
+  original 2499: **1443 operations over 125 keys, 15 of them empty**
   (`admin admission amqp authz catalogsync dns kafka metrics plugins research
   rollingcap s3 skills tasks zen` — `jq 'length' fleet/catalog.json`,
   `jq '[.[]|length]|add' fleet/catalog.json`,
