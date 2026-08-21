@@ -13,7 +13,7 @@ func init() {
 		Description: "Forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin.",
 		Fields: map[string]string{
 			"destinationDisconnected.disconnected": "Disconnected is true when the credentials and the row are gone.",
-			"destinationRef.platform":              "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
+			"destinationRef.platform":              "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | insights | analytics.",
 		},
 		Example: json.RawMessage(`{"platform":"ga4"}`),
 	})
@@ -30,7 +30,7 @@ func init() {
 			"DestinationStatus.connected":  "Connected is true when this org has a stored row for the platform — it has\nbeen configured here at least once. It says nothing about whether a\ncredential still resolves; that is Live.",
 			"DestinationStatus.enabled":    "Enabled is whether the fan-out forwards to this destination. False on a\ndestination that is connected but paused, and on one never connected.",
 			"DestinationStatus.fields":     "Fields are the non-secret inputs this platform needs, which the console card\nrenders and the connect body fills.",
-			"DestinationStatus.live":       "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Umami). False on a\nconnected destination whose secret has gone missing — Connected && !Live is\nexactly the \"reconnect me\" state.",
+			"DestinationStatus.live":       "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Analytics). False on a\nconnected destination whose secret has gone missing — Connected && !Live is\nexactly the \"reconnect me\" state.",
 			"DestinationStatus.name":       "the platform's display name (\"Google Analytics 4\")",
 			"DestinationStatus.platform":   "the platform slug, and the path segment every route addresses it by",
 			"DestinationStatus.secrets":    "Secrets are the KMS secret NAMES this platform custodies for the org — names\nonly, never values. The connect body accepts each under its camelCase form.",
@@ -50,11 +50,11 @@ func init() {
 			"DestinationStatus.connected": "Connected is true when this org has a stored row for the platform — it has\nbeen configured here at least once. It says nothing about whether a\ncredential still resolves; that is Live.",
 			"DestinationStatus.enabled":   "Enabled is whether the fan-out forwards to this destination. False on a\ndestination that is connected but paused, and on one never connected.",
 			"DestinationStatus.fields":    "Fields are the non-secret inputs this platform needs, which the console card\nrenders and the connect body fills.",
-			"DestinationStatus.live":      "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Umami). False on a\nconnected destination whose secret has gone missing — Connected && !Live is\nexactly the \"reconnect me\" state.",
+			"DestinationStatus.live":      "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Analytics). False on a\nconnected destination whose secret has gone missing — Connected && !Live is\nexactly the \"reconnect me\" state.",
 			"DestinationStatus.name":      "the platform's display name (\"Google Analytics 4\")",
 			"DestinationStatus.platform":  "the platform slug, and the path segment every route addresses it by",
 			"DestinationStatus.secrets":   "Secrets are the KMS secret NAMES this platform custodies for the org — names\nonly, never values. The connect body accepts each under its camelCase form.",
-			"destinationRef.platform":     "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
+			"destinationRef.platform":     "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | insights | analytics.",
 		},
 		Example: json.RawMessage(`{"platform":"ga4"}`),
 	})
@@ -64,7 +64,7 @@ func init() {
 	zip.Describe("POST /v1/destinations/:platform/test", zip.Doc{
 		Description: "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin.",
 		Fields: map[string]string{
-			"destinationRef.platform": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
+			"destinationRef.platform": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | insights | analytics.",
 			"destinationTest.error":   "Error is the platform's rejection, present only on a failed send.",
 			"destinationTest.message": "Message is the platform's own note about the send, present only on success.",
 			"destinationTest.ok":      "OK is true when the platform accepted the synthetic event.",
