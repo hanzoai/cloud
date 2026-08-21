@@ -1437,15 +1437,19 @@
             "type": "string"
           },
           "cluster": {
+            "description": "always \"hanzo-k8s\"; cross-cluster federation is a follow-up phase",
             "type": "string"
           },
           "declaredTag": {
+            "description": "spec.image.tag — the tag the CR SAYS to run; anything but vX.Y.Z is red drift",
             "type": "string"
           },
           "drift": {
-            "$ref": "#/components/schemas/Verdict"
+            "$ref": "#/components/schemas/Verdict",
+            "description": "declared vs running vs latest as flags, plus their rolled-up severity"
           },
           "endpoints": {
+            "description": "status.endpoints the operator published for this service; empty until it reconciles",
             "items": {
               "type": "string"
             },
@@ -1464,9 +1468,11 @@
             "type": "string"
           },
           "latestTag": {
+            "description": "newest released tag; \"\" until the GH release reader lands, so \"stale\" cannot fire yet",
             "type": "string"
           },
           "namespace": {
+            "description": "namespace the row was scanned from: a platform one (hanzo, hanzo-testnet, …) or a tenant-\u003corg\u003e",
             "type": "string"
           },
           "org": {
@@ -1478,6 +1484,7 @@
             "type": "string"
           },
           "registry": {
+            "description": "spec.image.repository verbatim (ghcr.io/hanzoai/iam); Org and Repo are read off it",
             "type": "string"
           },
           "repo": {
@@ -1489,6 +1496,7 @@
             "type": "string"
           },
           "runningTag": {
+            "description": "the tag the live Deployment actually runs; \"\" when unreadable — unknown, not a guess",
             "type": "string"
           }
         },
@@ -1497,12 +1505,15 @@
       "DriftFlag": {
         "properties": {
           "kind": {
+            "description": "Kind is which finding this is, one of stale, un-rolled, floating-declared,\nfloating-running, no-release or zero-assets. It is what code matches on, and\nthe kinds are independent — one row can carry several at once.",
             "type": "string"
           },
           "message": {
+            "description": "Message is the finding in words, naming the tags that produced it (\"running\nv1.2.3 has not rolled to declared v1.2.4\"). For display: match on Kind.",
             "type": "string"
           },
           "severity": {
+            "description": "Severity is this ONE finding's weight — yellow for stale and un-rolled, red\nfor the other four. It is a constant of the kind (severityOf), never a\njudgement about the row, so the same kind always weighs the same.",
             "type": "string"
           }
         },
@@ -1511,12 +1522,15 @@
       "EnvVarJSON": {
         "properties": {
           "key": {
+            "description": "Key is the variable's name in the container, which must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. For a sealed value it is also the last segment\nof the KMS ref, so it is what identifies the value across a round trip.",
             "type": "string"
           },
           "secret": {
+            "description": "Secret says the value lives in KMS and never in the database. A caller may\nonly ADD secrecy: the server seals a value whose key or shape looks like a\ncredential anyway (secretshape.go), so an entry can come back secret that\nwas not sent that way.",
             "type": "boolean"
           },
           "value": {
+            "description": "Value is the plaintext, and it is WRITE-ONLY once the entry is secret: a\nsealed value reads back as \"\", and sending \"\" again KEEPS what is sealed\nrather than wiping it. Only a non-empty value seals a new one.",
             "type": "string"
           }
         },
@@ -1542,12 +1556,14 @@
       "Verdict": {
         "properties": {
           "flags": {
+            "description": "Flags are the findings behind the severity, in detection order:\nfloating-declared, floating-running, stale, un-rolled, then the\nrelease-artifact ones. Always present — `[]` for a row that runs what it\ndeclares, never null.",
             "items": {
               "$ref": "#/components/schemas/DriftFlag"
             },
             "type": "array"
           },
           "severity": {
+            "description": "Severity is the roll-up over Flags — red if any flag is red, else yellow if\nany is yellow, else ok. It is the column a board sorts and filters on, and\n\"ok\" is exactly what no flags means.",
             "type": "string"
           }
         },
@@ -1573,90 +1589,113 @@
       "appView": {
         "properties": {
           "buildType": {
+            "description": "BuildType is how a git app builds: `pack`, the zero-config default that\ndetects the project, or `dockerfile`. An image app carries `image`, which\nmeans it never builds.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the app was created, unix seconds.",
             "type": "integer"
           },
           "currentDeploymentId": {
+            "description": "CurrentDeploymentID is the deployment that is live — the pointer a deploy\nadvances monotonically by version, so it never regresses to an older one.\nEmpty until the first deploy reaches the cluster.",
             "type": "string"
           },
           "description": {
+            "description": "Description is free text about what the app is. Nothing derives from it.",
             "type": "string"
           },
           "dockerfile": {
+            "description": "Dockerfile is the path inside the repo to build from, for buildType\n`dockerfile`. The build path keys off its presence, and it is validated at\ncreate against the same allowlist the privileged build enforces.",
             "type": "string"
           },
           "domains": {
+            "description": "Domains are the ingress hosts rendered into the app's CR, its own\n`\u003cslug\u003e.\u003corg\u003e.\u003csites host\u003e` first. That one is seeded at create and cannot be\nremoved; a custom host joins only after add-domain and DNS verification.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "env": {
+            "description": "Env is the app's environment variables, with every SECRET value masked to \"\"\n— the plaintext is in KMS and this surface never echoes it. That masking is\nwhy an empty secret value means \"keep what is sealed\" when posted back.",
             "items": {
               "$ref": "#/components/schemas/EnvVarJSON"
             },
             "type": "array"
           },
           "environment": {
+            "description": "Environment is the deploy target this app names, `production` when none was\ngiven. It is a LABEL: /v1/platform/environments derives the environment list\nfrom the apps that name one, so an environment exists as long as an app\npoints at it and no route creates or deletes one.",
             "type": "string"
           },
           "health": {
+            "description": "Health rolls ready-vs-desired replicas up to a colour: green (all ready),\nyellow (some ready, or deliberately scaled to zero), red (none), or \"\" when\nthe cluster reports no replica counts at all — unknown, never a guessed green.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the server-minted application id (`app_…`). Routes address an app by\nproject and slug; this is the key its deployments and builds carry.",
             "type": "string"
           },
           "image": {
-            "$ref": "#/components/schemas/imageView"
+            "$ref": "#/components/schemas/imageView",
+            "description": "Image is the image a source `image` app runs. For a git app only the tag is\nfilled, stamped by the deploy that went live; the built ref is on the\ndeployment."
           },
           "name": {
+            "description": "Name is the display name. It is not an address — the slug is.",
             "type": "string"
           },
           "namespace": {
+            "description": "Namespace is where the app's cluster objects live, `tenant-\u003corg\u003e`. It is\nderived from the validated org and is never accepted from a request.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant that owns the app. It comes from the validated identity,\nnever from the request, and it is the boundary every route is scoped to.",
             "type": "string"
           },
           "phase": {
+            "description": "Phase is the operator's own `status.phase` for the app's Service CR, read\nfrom the cluster on this request. Empty when there is no CR yet or the\ncluster could not be read.",
             "type": "string"
           },
           "port": {
+            "description": "Port is the container port traffic is sent to. 8080 when the create asked\nfor none, or for one outside 1–65535.",
             "type": "integer"
           },
           "projectId": {
+            "description": "ProjectID is the IAM project the app lives under, and it is that project's\nNAME — the (org,name) key IAM identifies it by, which is also what the\n`:project` path segment carries. There is no platform-minted project id.",
             "type": "string"
           },
           "replicas": {
+            "description": "Replicas is how many copies the CR declares. It is CLAMPED to the\ndeployment's ceiling rather than refused, so it can be below what was asked.",
             "type": "integer"
           },
           "repo": {
-            "$ref": "#/components/schemas/gitSource"
+            "$ref": "#/components/schemas/gitSource",
+            "description": "Repo is the git origin a source `git` app builds from, and the repo+branch a\nlanded push has to match to build it."
           },
           "secretSync": {
-            "description": "\"\"|pending|syncing|ready|failed (secrets.go)",
+            "description": "SecretSync is how far the app's secret env has got into the cluster:\n\"\"|pending|syncing|ready|failed (secrets.go). It is best-effort and never\nfails a deploy, so `pending` is ordinary right after one.",
             "type": "string"
           },
           "secretSyncDetail": {
-            "description": "honest reason when not ready",
+            "description": "SecretSyncDetail is the honest reason when the sync is not ready — a missing\nCRD, an RBAC grant, a per-tenant credential. Empty when it is.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the app's identity in the cluster: the operator CR's name, the first\nlabel of its default host, and the `:app` path segment. Unique per project.",
             "type": "string"
           },
           "source": {
+            "description": "Source is what the app deploys FROM: `git`, which builds Repo, or `image`,\nwhich runs Image as it is. It decides whether a deploy builds at all.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the lifecycle THIS store records: draft (created, nothing in the\ncluster yet), building, deploying, live, stopped or error. What the cluster\nitself says is Phase and Health.",
             "type": "string"
           },
           "storageGb": {
-            "description": "GiB; absent means stateless",
+            "description": "StorageGB is the persistent volume size in GiB. Absent means stateless —\nno volume at all — and it is clamped like Replicas.",
             "type": "integer"
           },
           "updatedAt": {
+            "description": "UpdatedAt is when it last changed, unix seconds. Every lifecycle transition\nmoves it, so it tracks deploys as well as edits.",
             "type": "integer"
           }
         },
@@ -1665,27 +1704,34 @@
       "binarySpec": {
         "properties": {
           "image": {
+            "description": "Image is the toolchain image the recipe runs in, a Go bookworm image by\ndefault. It is the one field the GitHub lane ignores: there the runner IS\nthe toolchain, and a cluster has to be told what a runner already is.",
             "type": "string"
           },
           "ldflags": {
+            "description": "Ldflags are the Go linker flags, `-s -w` when the recipe names none, on one\nline. Go lane only.",
             "type": "string"
           },
           "main": {
+            "description": "Main is the Go package to build, repo-relative (`.` or `./cmd/x`), and it\nselects the GO LANE. Defaults to `.` when neither lane is named; declaring\nit together with `run` is refused.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the artifact's base name: the prefix of every file published for\nthis entry, and the name a host later asks for. It must match\n`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, which is what makes it safe as both a\nfilename and a URL path segment.",
             "type": "string"
           },
           "out": {
+            "description": "Out is the glob of files `run` produced, relative to the repo root; matching\nnothing FAILS the build rather than publishing an empty entry. It expands\nunquoted, so it is bounded to path and glob characters. The Go lane names\nits own files and ignores this.",
             "type": "string"
           },
           "platforms": {
+            "description": "Platforms are the `\u003cos\u003e/\u003carch\u003e` pairs the Go lane cross-compiles, [linux/amd64]\nby default. Each one publishes as `\u003cname\u003e-\u003cos\u003e-\u003carch\u003e`, which is the shape a\nhost resolves a binary BY — so the list is what a caller can ask for later.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "run": {
+            "description": "Run is any other toolchain's build command, run by `sh -c` in this entry's\nimage, and it selects the OTHER LANE. Arbitrary shell is the point — it is\nthe same trust as a Dockerfile RUN — which is why it executes with no\nobject-store credential and no service-account token. It requires `out`.",
             "type": "string"
           }
         },
@@ -1844,39 +1890,51 @@
       "deploymentView": {
         "properties": {
           "applicationId": {
+            "description": "ApplicationID is the app this deployed — the app's `id`, not its slug.",
             "type": "string"
           },
           "buildId": {
+            "description": "BuildID is the build record behind a git deploy, whose logs and status live\nat /v1/platform/builds. Empty for an image deploy.",
             "type": "string"
           },
           "commit": {
+            "description": "Commit is the git ref this built — the commit a deploy or a push named,\nelse the app's branch. Empty for an image deploy, which builds nothing.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the attempt was recorded, unix seconds.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the deployment's id (`dep_…`), minted when the attempt is recorded.\nThe app's currentDeploymentId points at one of these.",
             "type": "string"
           },
           "image": {
+            "description": "Image is the full `repo:tag` this deployment put in the CR. For a git deploy\nit is the ref the in-cluster build pushes to, known before the build runs.",
             "type": "string"
           },
           "message": {
+            "description": "Message is why this attempt is not live: the failure, or the note that a\nnewer deployment went live before this build finished. Empty while it is fine.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant the deployment belongs to, from the validated identity.",
             "type": "string"
           },
           "source": {
+            "description": "Source is which lane produced it: `git` (built from the repo) or `image`\n(an already-built ref deployed as-is, including promote and rollback).",
             "type": "string"
           },
           "status": {
+            "description": "Status is where the attempt got to: `building` while its image is being\nbuilt, `deploying` once its CR reached the cluster — which is the terminal\nsuccess state, the app's own status is what turns `live` — `error` with the\nreason in Message, or `superseded` when a newer version went live first.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is its last transition, unix seconds — so for a terminal\ndeployment it is when it reached that state.",
             "type": "integer"
           },
           "version": {
+            "description": "Version counts this app's deployments, from 1 and monotonically. It is what\nORDERS them: a deploy only goes live if no higher version already is, so a\nbuild that finishes late is superseded instead of overwriting a newer one.",
             "type": "integer"
           }
         },
@@ -2032,12 +2090,15 @@
       "gitSource": {
         "properties": {
           "branch": {
+            "description": "Branch is the branch a push-to-deploy build tracks, `main` when the create\nnamed none — a push to any other branch, and every tag push, builds nothing\nhere. A deploy may name a commit instead, for that deploy alone.",
             "type": "string"
           },
           "provider": {
+            "description": "Provider is derived from the URL — github, gitlab, bitbucket, or `git` for\nanything else. It is a label for display; no behaviour keys on it.",
             "type": "string"
           },
           "url": {
+            "description": "URL is the clone URL a git app builds from, stored as sent once the build\npath's allowlist accepted it (validateRepoURL). It is also what a landed\npush is MATCHED against, so a push to any other repo never builds this app.",
             "type": "string"
           }
         },
@@ -2059,9 +2120,11 @@
       "imageView": {
         "properties": {
           "repository": {
+            "description": "Repository is the image path without a tag (ghcr.io/acme/api). Required for\nsource `image`, which runs it as-is. A git app's built image is NOT this: the\nbuild pushes to a path derived from the org and slug, and the deployment\nrecords that full ref.",
             "type": "string"
           },
           "tag": {
+            "description": "Tag is the tag to run: what the create declared, then RE-STAMPED on every\ntransition to live with the tag that actually went live. So after a deploy\nit names what is running, not what was asked for.",
             "type": "string"
           }
         },
@@ -2153,21 +2216,27 @@
       "projectView": {
         "properties": {
           "applications": {
+            "description": "Applications is how many platform apps this org has under the project,\ncounted per request. It is the one fact IAM cannot answer about a project.",
             "type": "integer"
           },
           "createdAt": {
+            "description": "CreatedAt is IAM's creation time as unix seconds. 0 when IAM's timestamp is\nabsent or unparseable — never a fabricated time.",
             "type": "integer"
           },
           "description": {
+            "description": "Description is IAM's free text about the project. Nothing derives from it.",
             "type": "string"
           },
           "name": {
+            "description": "Name is IAM's display name, falling back to the slug when the project has\nnone, so this is never empty.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the project's IAM owner, and the tenant every app under it deploys\ninto. It comes from the validated identity, never from the request.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the project's IAM name — half of the (org,name) identity, the\n`:project` path segment, and the scope key an app is filed under. It is the\nproject's address; Name is not.",
             "type": "string"
           }
         },
