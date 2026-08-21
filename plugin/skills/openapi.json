@@ -19,7 +19,7 @@
     "/.well-known/agent-skills/index.json": {
       "get": {
         "operationId": "get_.well-known_agent-skills_index.json",
-        "summary": "The brand's master catalogue of agent skills",
+        "summary": "The brand's catalogue of agent skills",
         "description": "The Agent Skills Discovery catalogue an AI client reads to learn what this deployment can do: every skill, with the sha256 of the SKILL.md that is actually served for it, so a client can verify the document it then fetches.\n\nThe catalogue is GENERATED from the per-service OpenAPI specs and embedded in the binary; this route serves those bytes verbatim and never re-derives them, which is what makes the digests hold. Which brand's catalogue you get is decided per request from the Host — api.hanzo.ai answers the Hanzo catalogue, api.lux.network the Lux one, api.zoo.ngo the Zoo one — never one brand's skills on another's surface; a Host whose brand has no embedded catalogue falls back to the deployment brand, then to hanzo.\n\nPublic by design: the discovery surface carries no secrets, so there is no bearer and no tenant scope. Answers `Cache-Control: public, max-age=300`, and a catalogue that is not embedded is `{\"error\":…}` at 404."
       }
     },
