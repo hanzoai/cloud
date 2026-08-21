@@ -59028,7 +59028,7 @@ paths:
       tags:
       - admission
       x-app: admission
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/ads/campaigns:
     get:
@@ -116391,7 +116391,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
     post:
       description: |-
@@ -116425,7 +116425,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/research/artifacts/{sha256}:
     get:
@@ -116450,7 +116450,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
   /v1/research/experiments:
     get:
       description: |-
@@ -116487,7 +116487,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
     post:
       description: |-
@@ -116528,7 +116528,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/research/grants:
     post:
@@ -116564,7 +116564,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/research/projects:
     get:
@@ -116586,7 +116586,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/research/totals:
     get:
@@ -116615,7 +116615,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-public: true
+      x-stage: alpha
       x-tool: true
   /v1/responses:
     post:
