@@ -95,11 +95,23 @@ func TestEveryBoundMerchantLeafIsRoutedToCommerce(t *testing.T) {
 		t.Fatal(`manifest.PrefixesFor("commerce") is empty — commerce is not a routed app at all`)
 	}
 
+	// A leaf is routed when SOME claim covers it, not when it is named. The row
+	// states one root — the merchant nouns are leaves under /v1/commerce (HIP-1220
+	// §1) — so an exact-name check here would demand the enumeration the fold
+	// removed, and would go red for a bundle that is perfectly routed.
+	covered := func(path string) bool {
+		for p := range claimed {
+			if path == p || strings.HasPrefix(path, p+"/") {
+				return true
+			}
+		}
+		return false
+	}
 	for _, leaf := range boundLeaves(t) {
-		if path := "/v1/commerce/" + leaf; !claimed[path] {
-			t.Errorf("%s is bound by the merchant bundle and NOT named on commerce's manifest row — "+
-				"the host gives it to ai's bare \"/v1\" and the caller gets ai's 404. "+
-				"Add it to the commerce row in manifest/apps.go.", path)
+		if path := "/v1/commerce/" + leaf; !covered(path) {
+			t.Errorf("%s is bound by the merchant bundle and NO prefix on commerce's manifest row "+
+				"covers it — the host gives it to ai's bare \"/v1\" and the caller gets ai's 404. "+
+				"Widen the commerce row in manifest/apps.go.", path)
 		}
 	}
 }
@@ -136,11 +148,25 @@ func TestEveryClaimedMerchantLeafIsServed(t *testing.T) {
 
 	checked := 0
 	for _, p := range manifest.PrefixesFor("commerce") {
-		leaf, ok := strings.CutPrefix(p, "/v1/commerce/")
-		if !ok || leaf == "" || strings.Contains(leaf, "/") {
-			continue // the stem itself, or a deeper address this leaf does not own
+		if !strings.HasPrefix(p, "/v1/commerce") {
+			t.Errorf("commerce claims %q, which is not under its own root — a capability "+
+				"answers at its own name (HIP-0139 §3), and a claim elsewhere routes an "+
+				"address here that this app does not serve", p)
+			continue
 		}
 		checked++
+		leaf, ok := strings.CutPrefix(p, "/v1/commerce/")
+		if !ok || leaf == "" {
+			// The ROOT itself, which this app plainly serves — health, the cart, the
+			// typed payment door, the processor callback and the deposit read all
+			// answer under it. One root claiming the family is the shape the fold
+			// left, and it is why the per-leaf staleness this guard was written for
+			// is no longer representable: there are no leaf claims to go stale.
+			continue
+		}
+		if strings.Contains(leaf, "/") {
+			continue // a deeper address this leaf does not own
+		}
 		if bound[leaf] || servedElsewhere[leaf] {
 			continue
 		}
@@ -154,7 +180,7 @@ func TestEveryClaimedMerchantLeafIsServed(t *testing.T) {
 	// shape — which is how the first version of the sibling guard reported
 	// fourteen routes checked while skipping the one it was written for.
 	if checked == 0 {
-		t.Fatal("no /v1/commerce/<leaf> prefixes were checked — this guard measured nothing")
+		t.Fatal("no /v1/commerce prefixes were checked — this guard measured nothing")
 	}
 }
 
