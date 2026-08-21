@@ -99,6 +99,25 @@ func IsSuperAdmin(c *zip.Ctx) bool { return c.IsAdmin() }
 // SuperAdmin is not implied. A validated but NON-admin member of an org is not one.
 func IsOrgAdmin(c *zip.Ctx) bool { return c.Header("X-User-IsOrgAdmin") == "true" }
 
+// IsApp reports that the caller is an APPLICATION acting as itself — an
+// organization's own machine identity, minted by the client_credentials grant and
+// stamped X-User-IsApp by the identity boundary from validated claims alone.
+//
+// IT IS A KIND, NOT A THIRD ADMIN SCOPE, and it must never be read as one. An
+// application holds neither of the two above: platform sudo needs a membership set
+// no app has, and the org self-service surface is refused to every machine by
+// construction, because an app is issued for a PURPOSE rather than handed an org's
+// admin panel. Reading this as authority would be exactly the conflation the two
+// scopes above are separated to prevent.
+//
+// What it does carry is an organization the credential cannot choose: IAM mints an
+// app token no membership set, so the org-switch admits nothing and Org is always
+// the application's own owner. A surface whose act IS a purpose — publishing an
+// artifact into the namespace its own org owns — AND-s this with that org to admit
+// an organization's own machine credential and confine it there. That is what lets
+// such a call carry the org it acts for instead of a shared secret naming none.
+func IsApp(c *zip.Ctx) bool { return c.Header("X-User-IsApp") == "true" }
+
 // Org resolves the caller's org — the org-isolation KEY — for the common
 // verbatim case (crm, prompts, agents, functions, git, eval). It returns
 // ("", false), and the caller MUST answer 403, unless BOTH hold:
