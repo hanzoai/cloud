@@ -3888,6 +3888,39 @@ components:
           description: 'Replay is the replay pacing: instant (default) or original.'
           type: string
       type: object
+    EIN:
+      properties:
+        expedited:
+          description: Expedited reports that prioritised handling was asked for.
+          type: boolean
+        forms:
+          description: Forms are the forms this application owes, with what each is
+            for.
+          items:
+            $ref: '#/components/schemas/Form'
+          type: array
+        naics:
+          description: |-
+            NAICS is the six-digit code for what the business does. The SS-4 asks it
+            and the IRS will not process an application without one.
+          type: string
+        number:
+          description: Number is the issued EIN, absent until the IRS issues it.
+          type: string
+        online:
+          description: |-
+            Online reports that this application can be filed with the IRS online and
+            issued in a sitting, rather than signed and posted. It is the single fact
+            that decides how long a customer waits, so it is answered rather than
+            implied by the absence of forms.
+          type: boolean
+        responsible:
+          $ref: '#/components/schemas/Responsible'
+          description: Responsible is the person the IRS holds answerable.
+        status:
+          description: Status is how far it has got.
+          type: string
+      type: object
     EndIn:
       properties:
         id:
@@ -4805,6 +4838,24 @@ components:
           type: integer
         valid:
           type: boolean
+      type: object
+    Form:
+      properties:
+        code:
+          description: Code is the IRS designation, e.g. "SS-4".
+          type: string
+        name:
+          description: Name is the form's own title, so a reader need not already
+            know the code.
+          type: string
+        signed:
+          description: Signed reports whether we hold the signature.
+          type: boolean
+        why:
+          description: |-
+            Why states what this form is for in this application — the same form is
+            owed for different reasons on different paths.
+          type: string
       type: object
     Formation:
       properties:
@@ -9713,6 +9764,24 @@ components:
             consulted, plus fusion and paging. Each leg's own share is in
             Backends[].TookMS; the legs run in sequence, so this is at least their sum.
           type: integer
+      type: object
+    Responsible:
+      properties:
+        country:
+          description: Country is where they reside, ISO 3166-1 alpha-2.
+          type: string
+        email:
+          description: Email reaches them for signature.
+          type: string
+        name:
+          description: Name is their full legal name as the IRS will hold it.
+          type: string
+        usTaxId:
+          description: |-
+            USTaxID reports that they hold an SSN or ITIN. It is a BOOLEAN on purpose:
+            the number itself is never needed here and a field that could hold it is a
+            field that will eventually be logged.
+          type: boolean
       type: object
     Result:
       properties:
@@ -21952,6 +22021,21 @@ components:
           description: Status is "ok" when a publish reaches readers immediately,
             else "degraded".
           type: string
+      type: object
+    einIn:
+      properties:
+        expedited:
+          description: |-
+            Expedited asks for prioritised handling. Only meaningful when the
+            responsible party cannot file online.
+          type: boolean
+        naics:
+          description: NAICS is the six-digit code for what the business does.
+          type: string
+        responsible:
+          $ref: '#/components/schemas/Responsible'
+          description: Responsible is the person the IRS holds answerable for the
+            entity.
       type: object
     embedStatusResp:
       properties:
@@ -76856,6 +76940,35 @@ paths:
       summary: Renders the formation documents for the chosen structure and jurisdiction,
         ingests each into the org's data room, and submits the state filing through
         the filing seam.
+      tags:
+      - company
+      x-app: company
+      x-public: true
+      x-tool: true
+  /v1/company/ein:
+    post:
+      description: |-
+        Opens the EIN application and answers what it owes.
+
+        The answer states whether it can be filed ONLINE, because that is the fact
+        deciding whether the customer waits a sitting or several weeks — and it names
+        each form with what that form is for, so nobody has to already know what an
+        SS-4 is to understand why they are signing one.
+      operationId: post_company_ein
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/einIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EIN'
+          description: ok
+      summary: Opens the EIN application and answers what it owes.
       tags:
       - company
       x-app: company
