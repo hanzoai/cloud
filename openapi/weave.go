@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -70,100 +71,23 @@ type Conflict struct {
 // give every undescribed product the same sentence, which reads as a description
 // and is not one.
 //
-// # A tag is a path prefix, an app is a mount, and they are only sometimes one word
+// # The tag is the app, so the tag's sentence is the app's own
 //
-// Keying by app name ALONE described /v1/kms — kms serves it and is named for it
-// — and left /v1/kb blank, though knowledge serves every kb route and carries a
-// perfectly good sentence about it. That is not a rare shape: 59 of 150 products
-// were empty, and ~50 of them were served by exactly one app that had already said
-// what they are. So a product inherits from the app that SERVES it, read off the
-// operations in that app's own subset — the same op tags the document's own tag
-// list is a function of, so this cannot name a product the document lacks.
-//
-// THE OWNER IS THE APP THAT ANSWERS THE PRODUCT'S ROOT — the shallowest path
-// under /v1/<product> anyone serves — and not merely the app that serves some of
-// it. Sharing a product is the ordinary case, not the broken one: /v1/plans is the
-// plan catalog with two of its rows kept by commerce, /v1/s3 is a provisioned
-// add-on whose bucket data plane is storage, /v1/search and /v1/vector the same
-// shape. Reading "two claimants" as ambiguity silenced four products that were
-// never ambiguous, because depth already says which app the product IS and which
-// merely has routes inside it. Where nobody is alone at the root the answer is
-// still SILENCE: /v1/finance is billing at /v1/finance/balance and treasury at
-// /v1/finance/accounts, neither above the other, and picking one would publish a
-// coin flip as a fact.
-//
-// The second rule is unchanged and also resolves to silence: the owner's own
-// sentence, or nothing. A root owner with no package doc (metrics, authz,
-// licensing — each mounting a subsystem that lives in another module, so there is
-// no package here to read) leaves its products blank. The cure is a doc comment in
-// that service; synthesizing a line from the product name here would make an
-// undescribed product indistinguishable from a described one.
-//
-// A tag NAMED for an app keeps that app's own sentence regardless. That is the
-// pre-existing answer and it stays the stronger evidence: /v1/admin is served by
-// seven apps and would go silent under ownership alone, while `admin` the app has
-// already said exactly what admin is.
+// Every operation is tagged with the app that serves it (HIP-0139 §4), so a
+// tag's description is what that app says about itself and nothing else. An app
+// with no package doc (metrics, authz, licensing — each mounting a subsystem that
+// lives in another module, so there is no package here to read) leaves its tag
+// blank. The cure is a doc comment in that service; synthesizing a line from the
+// name here would make an undescribed capability indistinguishable from a
+// described one.
 func prose(parts []Part) map[string]string {
-	said := make(map[string]string, len(parts)) // app → what it says about itself
-	// product → who answers its ROOT: the shallowest depth any app serves under
-	// it, and every app tied there. One app at that depth is the owner; two is a
-	// product no app defines.
-	type claim struct {
-		depth int
-		apps  map[string]bool
-	}
-	root := map[string]*claim{}
+	said := make(map[string]string, len(parts))
 	for _, p := range parts {
 		if d := p.Doc.Info.Description; d != "" && d != fleetInfo.Description {
 			said[p.App] = d
 		}
-		for path, item := range p.Doc.Paths {
-			d := segments(path)
-			for _, op := range item {
-				for _, t := range Products(op.Tags) {
-					switch c := root[t]; {
-					case c == nil:
-						root[t] = &claim{depth: d, apps: map[string]bool{p.App: true}}
-					case d < c.depth:
-						c.depth, c.apps = d, map[string]bool{p.App: true}
-					case d == c.depth:
-						c.apps[p.App] = true
-					}
-				}
-			}
-		}
 	}
-
-	out := make(map[string]string, len(root))
-	for product, c := range root {
-		if len(c.apps) != 1 {
-			continue
-		}
-		for app := range c.apps {
-			if d := said[app]; d != "" {
-				out[product] = d
-			}
-		}
-	}
-	for app, d := range said {
-		if _, isProduct := root[app]; isProduct {
-			out[app] = d
-		}
-	}
-	return out
-}
-
-// segments is a path's depth in segments: how deep under the product root an
-// operation sits. /v1/plans is 2 and /v1/plans/entries is 3, so the app holding
-// the bare product noun outranks one holding a resource inside it.
-func segments(path string) int {
-	n := 0
-	for s := range strings.SplitSeq(path, "/") {
-		if s != "" {
-			n++
-		}
-	}
-	return n
+	return said
 }
 
 func (c *Conflict) Error() string {
@@ -283,6 +207,16 @@ func Weave(parts []Part) (*Document, error) {
 				relayed := op.App != "" && op.App != p.App
 				if op.App == "" {
 					op.App = p.App
+				}
+				// The tag is the owner (HIP-0139 §4): one axis, read off the value
+				// every projection already carries. The path's first segment stays
+				// the ADDRESS axis — public.go and misfiled.go read it — and the
+				// misfiled ratchet drives the two into agreement. Compat survives
+				// beside it: a fact the router cannot know and the public rule reads.
+				legacy := slices.Contains(op.Tags, Compat)
+				op.Tags = []string{op.App}
+				if legacy {
+					op.Tags = append(op.Tags, Compat)
 				}
 				if prev, dup := opOwner[at]; dup {
 					// A DOOR YIELDS TO A SPECIFIC ROUTE, because that is what the

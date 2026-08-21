@@ -251,54 +251,37 @@ func TestCompleteRefusesToJudgeWithoutTheRoutingTable(t *testing.T) {
 	}
 }
 
-// A product's sentence comes from the app that answers its ROOT. Sharing a
-// product is ordinary — /v1/plans is the plan catalog with two rows kept by
-// commerce — and depth is what says which app the product IS.
-func TestProseComesFromTheAppThatAnswersTheProductRoot(t *testing.T) {
+// A tag is the app that serves the operation (HIP-0139 §4), so its sentence is
+// the app's own — never a sibling's that happens to hold a deeper route.
+func TestProseIsTheAppsOwnSentence(t *testing.T) {
 	parts := []Part{
 		{App: "commerce", Doc: &Document{
 			Info:  Info{Description: "Package commerce is selling: checkout, subscriptions, invoices."},
-			Paths: map[string]PathItem{"/v1/plans/entries": {"get": {Tags: []string{"plans"}}}},
+			Paths: map[string]PathItem{"/v1/plans/entries": {"get": {Tags: []string{"commerce"}}}},
 		}},
 		{App: "plan", Doc: &Document{
 			Info:  Info{Description: "Package plan is the plan catalog: every tier you can buy."},
-			Paths: map[string]PathItem{"/v1/plans": {"get": {Tags: []string{"plans"}}}},
+			Paths: map[string]PathItem{"/v1/plans": {"get": {Tags: []string{"plan"}}}},
 		}},
 	}
-	got := prose(parts)["plans"]
-	if !strings.HasPrefix(got, "Package plan is the plan catalog") {
-		t.Fatalf("plans took the wrong app's sentence: %q", got)
+	said := prose(parts)
+	if !strings.HasPrefix(said["plan"], "Package plan is the plan catalog") {
+		t.Fatalf("plan took the wrong sentence: %q", said["plan"])
+	}
+	if !strings.HasPrefix(said["commerce"], "Package commerce is selling") {
+		t.Fatalf("commerce took the wrong sentence: %q", said["commerce"])
 	}
 }
 
-// Where nobody is alone at the root the answer is SILENCE. /v1/finance is billing
-// at /v1/finance/balance and treasury at /v1/finance/accounts, neither above the
-// other; picking one would publish a coin flip as a fact.
-func TestProseIsSilentWhenNoAppAnswersTheProductRootAlone(t *testing.T) {
-	parts := []Part{
-		{App: "billing", Doc: &Document{
-			Info:  Info{Description: "Package billing is your org's balance."},
-			Paths: map[string]PathItem{"/v1/finance/balance": {"get": {Tags: []string{"finance"}}}},
-		}},
-		{App: "treasury", Doc: &Document{
-			Info:  Info{Description: "Package treasury is the reserve fund behind every payout."},
-			Paths: map[string]PathItem{"/v1/finance/accounts": {"get": {Tags: []string{"finance"}}}},
-		}},
-	}
-	if got, said := prose(parts)["finance"]; said {
-		t.Fatalf("an unowned product was described anyway: %q", got)
-	}
-}
-
-// A root owner with no package doc leaves its products blank rather than taking
-// the fleet's own sentence — an undescribed product must stay distinguishable
-// from a described one.
-func TestProseIsSilentWhenTheRootOwnerSaysNothingAboutItself(t *testing.T) {
+// An app with no package doc leaves its tag blank rather than taking the fleet's
+// own sentence — an undescribed capability must stay distinguishable from a
+// described one.
+func TestProseIsSilentWhenTheAppSaysNothingAboutItself(t *testing.T) {
 	parts := []Part{{App: "metrics", Doc: &Document{
 		Info:  fleetInfo,
 		Paths: map[string]PathItem{"/v1/metrics/query": {"get": {Tags: []string{"metrics"}}}},
 	}}}
 	if got, said := prose(parts)["metrics"]; said {
-		t.Fatalf("the fleet's own sentence was published as a product description: %q", got)
+		t.Fatalf("the fleet's own sentence was published as a capability's description: %q", got)
 	}
 }

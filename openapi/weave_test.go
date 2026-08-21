@@ -462,4 +462,3 @@ func TestThePublicContractDropsWhatIsOutsideTheRule(t *testing.T) {
 		}
 	}
 }
-
