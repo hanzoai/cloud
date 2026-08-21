@@ -37,9 +37,11 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/hanzoai/cloud/brand"
+	fiber "github.com/zap-proto/fiber/v3"
 	zapmcp "github.com/zap-proto/mcp"
 	"github.com/zap-proto/zip"
 )
@@ -94,7 +96,7 @@ func consoleTitle(host string) string {
 // door lives (see mcp.go). Nothing is configured and nothing is duplicated; the
 // console is simply handed the door the app already has.
 func Mount(app *zip.App, fsys fs.FS) error {
-	h, err := Handler(fsys, app.MCP)
+	h, err := Handler(fsys, app.MCP, routerAllow(app))
 	if err != nil {
 		return err
 	}
@@ -102,12 +104,70 @@ func Mount(app *zip.App, fsys fs.FS) error {
 	return nil
 }
 
+// Allow answers which methods this process serves at a path. An empty answer
+// means the address itself is unserved.
+//
+// It exists because the terminal catch-all DESTROYS fiber's own 405. fiber
+// computes that answer already (router.go `next`: when no route matches the
+// request's method it re-walks the other method trees, appends each match to
+// `Allow`, and returns ErrMethodNotAllowed instead of ErrNotFound) — but that
+// code runs only when NOTHING matched, and `All("/*")` matches everything at
+// every method. So the honest answer is computed and then thrown away, on every
+// request that reaches here.
+type Allow func(path string) []string
+
+// routerAllow is that answer read off the ROUTER, which is the only thing that
+// knows it. Nothing here re-implements matching: `fiber.RoutePatternMatch` is the
+// router's own matcher, exported for exactly this ("checking potential matches
+// without registering a route"), under the zero Config the router runs with —
+// case-insensitive, non-strict. A second matcher written here would disagree with
+// the router about a `:param` or a trailing slash, and disagree silently.
+//
+// `GetRoutes(true)` drops Use() middleware, so only endpoints are considered.
+// The terminal catch-all is skipped BY ITS PATTERN, and that exclusion is what
+// makes the whole thing work rather than being a tidy-up: `All("/*")` matches
+// every method at every path, so leaving it in answers "every method is allowed"
+// for every address in the fleet.
+//
+// It reads the table per call rather than caching, because a plugin may be
+// mounted after Listen and a snapshot taken at Mount would answer for a router
+// that no longer exists. The cost is paid only on a request already being
+// refused.
+func routerAllow(app *zip.App) Allow {
+	return func(upath string) []string {
+		var out []string
+		for _, r := range app.Fiber().GetRoutes(true) {
+			if r.Path == terminal || slices.Contains(out, r.Method) {
+				continue
+			}
+			if fiber.RoutePatternMatch(upath, r.Path) {
+				out = append(out, r.Method)
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+}
+
+// terminal is the catch-all's pattern, spelled once: Mount registers it and
+// routerAllow excludes it, and the two must name the same route.
+const terminal = "/*"
+
 // Handler is the console as a stdlib http.Handler (correct Content-Type,
 // conditional GET, precompressed negotiation, SPA fallback) plus this process's
 // agent door — the form Mount adapts onto the zip router via zip.AdaptNetHTTP,
 // and the form a test drives directly.
-func Handler(fsys fs.FS, door zapmcp.Handler) (http.Handler, error) {
-	return newConsoleHandler(fsys, door)
+//
+// allow may be nil, which means this handler cannot tell an unserved address from
+// an unserved METHOD and answers 404 for both. That is the old behaviour, kept
+// only for a caller with no router to ask.
+func Handler(fsys fs.FS, door zapmcp.Handler, allow Allow) (http.Handler, error) {
+	h, err := newConsoleHandler(fsys, door)
+	if err != nil {
+		return nil, err
+	}
+	h.allow = allow
+	return h, nil
 }
 
 // consoleHandler serves a single-page app out of fsys: exact-file when it exists,
@@ -126,6 +186,10 @@ type consoleHandler struct {
 	// not implement MCP and holds no tool list; it holds the one address a machine
 	// door has and the value that answers there.
 	door zapmcp.Handler
+	// allow is the router's answer to "what methods serve this path". nil means
+	// nobody can be asked, and then an unserved METHOD is indistinguishable from an
+	// unserved ADDRESS — which is the whole defect this field exists to close.
+	allow Allow
 }
 
 // newConsoleHandler proves the source is a console before anything serves from
@@ -149,6 +213,16 @@ func newConsoleHandler(fsys fs.FS, door zapmcp.Handler) (*consoleHandler, error)
 		return nil, fmt.Errorf("webui: console source has no index.html: %w", err)
 	}
 	return &consoleHandler{fsys: fsys, door: door}, nil
+}
+
+// methods is the guarded read of allow: no router to ask means no claim about the
+// address, which is 404 — the honest answer when nothing can be established, and
+// the behaviour every caller had before this existed.
+func (h *consoleHandler) methods(upath string) []string {
+	if h.allow == nil {
+		return nil
+	}
+	return h.allow(upath)
 }
 
 func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -179,10 +253,24 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// the endpoint EXISTS and it used the wrong verb, when in fact nothing serves
 	// that address at all. 405 is a claim about a door; only a door may make it.
 	for _, p := range apiPrefixes {
-		if upath == strings.TrimSuffix(p, "/") || strings.HasPrefix(upath, p) {
-			http.Error(w, "not found", http.StatusNotFound)
+		if upath != strings.TrimSuffix(p, "/") && !strings.HasPrefix(upath, p) {
+			continue
+		}
+		// 405 WHEN THE ADDRESS EXISTS. Answering 404 to `GET /v1/chat/completions`
+		// — a POST-only route that is registered, served and working — says the API
+		// does not have that endpoint. It is the most expensive kind of wrong
+		// answer, because the caller's next move is to go looking for a routing
+		// bug that is not there: this exact 404 was reported twice as a missing
+		// route on the fleet's largest product, and the model plane was fine both
+		// times. RFC 9110 requires the Allow header on a 405, so the answer carries
+		// what the address DOES take and the caller is one probe from done.
+		if methods := h.methods(upath); len(methods) > 0 {
+			w.Header().Set("Allow", strings.Join(methods, ", "))
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		http.Error(w, "not found", http.StatusNotFound)
+		return
 	}
 
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
