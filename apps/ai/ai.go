@@ -359,8 +359,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//
 	// In the cloud process the snapshot is safe by construction: wireFinance runs in
 	// BuildDeps, which completes before MountAll — the ordering its own doc comment
-	// guarantees. (RollingCapReader below is a genuine trampoline because clients/
-	// rollingcap installs it from Mount, after this package, in some binaries.)
+	// guarantees. The tier read below is the exception that is NOT a snapshot: cap.go
+	// resolves it per call, because a ceiling that cannot read the plan is uncapped
+	// and benign, so there is nothing to shadow by asking late.
 	if f := cloud.TierReader(); f != nil {
 		aiobject.SetTierReader(aiobject.TierReaderFunc(f))
 	}
@@ -435,17 +436,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if d := cloud.IngestDialer(); d != nil {
 		aiobject.SetIngestDialer(d)
 	}
-	// A TRAMPOLINE, not a snapshot like the four above: clients/rollingcap installs
-	// its reader from Mount, and apps.Wire() mounts rollingcap AFTER this package in
-	// some binaries. Resolving cloud.RollingCapReader() per request instead of once
-	// at wire time takes mount order out of the equation entirely.
-	aiobject.SetRollingCapReader(func(ctx context.Context, subject, namespace string) (bool, error) {
-		f := cloud.RollingCapReader()
-		if f == nil {
-			return false, nil // no cap installed → uncapped, the same semantics a nil hook had
-		}
-		return f(ctx, subject, namespace)
-	})
+	// The paid lane's ceiling, and it is composed HERE rather than handed over.
+	//
+	// It used to be a trampoline through cloud.RollingCapReader, so a separate
+	// rollingcap app could install the verdict from its own Mount. That hook was
+	// a package global and every app is its own process, so a verdict written in
+	// rollingcap's child was never readable in this one and the cap never applied
+	// to a completion. cap.go composes it from the tier reader above and
+	// commerce's windowed sum, in the process that asks the question.
+	aiobject.SetRollingCapReader(overCap)
 	// The free lane's ceiling. It crosses the plane for the reason the balance does
 	// — the counter has ONE writer and it is another process — and it is the only
 	// bound on a route priced at zero, where the wallet has nothing to refuse.
