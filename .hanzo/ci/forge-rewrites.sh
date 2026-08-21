@@ -31,24 +31,34 @@
 # must hash to the line already committed, or the build fails loudly.
 set -euo pipefail
 
-# WITHOUT A TOKEN, ASK THE IDENTITY PROVIDER FOR ONE. The forge signs people in
-# through Hanzo IAM and accepts the same identity as a git credential, so a run that
-# already holds a client credential does not need a second, longer-lived secret kept
-# somewhere for this. The token is minted per run, scoped by RFC 8707 `resource` to
-# this forge alone, and never stored: a token naming another application is not a
-# credential here, and this one is not a credential anywhere else.
-if [ -z "${GIT_TOKEN:-}" ] && [ -n "${IAM_CLIENT_ID:-}" ] && [ -n "${IAM_CLIENT_SECRET:-}" ]; then
+# ASK THE IDENTITY PROVIDER, AND ASK IT FIRST. The forge signs people in through Hanzo
+# IAM and reads that same identity as a git credential, so a run already holding a client
+# credential needs no second, longer-lived secret kept somewhere for this.
+#
+# First rather than as a fallback, because the per-job token is not the narrower choice
+# here — it is the one that cannot see the repositories. Measured on run 95627: asking as
+# the per-job token, twenty-six private modules answer 404 (account, ai, commerce, orm,
+# namespace, types, zen and the rest), every one falls through to GitHub, and a hundred
+# and eight packages resolve to no source. A private repository and a missing one deny
+# identically, so that 404 is the token and not the address.
+#
+# Minted per run, scoped by RFC 8707 `resource` to this forge alone, masked, and never
+# stored: it names hanzo-git, the forge reads only tokens that do, and it is a credential
+# nowhere else. The per-job token stays behind it, so a deployment issuing a useful one is
+# unaffected.
+if [ -n "${IAM_CLIENT_ID:-}" ] && [ -n "${IAM_CLIENT_SECRET:-}" ]; then
   # client_secret_basic, per HIP-0111, the same exchange the reviewer already makes.
-  GIT_TOKEN=$(curl -sS --max-time 20 "${IAM_ISSUER:-https://hanzo.id}/v1/iam/oauth/token" \
+  IAM_TOKEN=$(curl -sS --max-time 20 "${IAM_ISSUER:-https://hanzo.id}/v1/iam/oauth/token" \
     -u "${IAM_CLIENT_ID}:${IAM_CLIENT_SECRET}" \
     -d 'grant_type=client_credentials' \
     -d "resource=${FORGE_AUDIENCE:-hanzo-git}" 2>/dev/null \
     | jq -r '.access_token // empty' 2>/dev/null || true)
-  if [ -n "${GIT_TOKEN:-}" ]; then
-    echo "::add-mask::${GIT_TOKEN}"
-    echo "forge-rewrites: minted a forge-scoped IAM token for ${FORGE_AUDIENCE:-hanzo-git}"
+  if [ -n "${IAM_TOKEN:-}" ]; then
+    echo "::add-mask::${IAM_TOKEN}"
+    GIT_TOKEN=$IAM_TOKEN
+    echo "forge-rewrites: asking as the IAM identity, scoped to ${FORGE_AUDIENCE:-hanzo-git}"
   else
-    echo "forge-rewrites: IAM minted no token — modules stay on GitHub"
+    echo "forge-rewrites: IAM minted no token — asking as the per-job token instead"
   fi
 fi
 
