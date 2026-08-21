@@ -101,7 +101,7 @@ func project(name, ns, visibility string) map[string]any {
 	return map[string]any{
 		"name": name, "path": name, "path_with_namespace": ns, "visibility": visibility,
 		"description": "a project", "last_activity_at": "2026-07-01T10:00:00Z",
-		"default_branch": "main",
+		"default_branch":   "main",
 		"http_url_to_repo": "https://gitlab.com/" + ns + ".git",
 		"web_url":          "https://gitlab.com/" + ns,
 	}
