@@ -24253,6 +24253,14 @@ components:
           description: Relation is the relation the question named, echoed for the
             same reason.
           type: string
+        truncated:
+          description: |-
+            Truncated says this pair holds more assertions than one read returns, so
+            the winner was decided from the most recent ceiling-full of them. It is
+            reported because a provenance plane that trims silently is a plane that
+            answers confidently and wrongly; narrow the question with as_of to see
+            what it dropped.
+          type: boolean
         winner:
           $ref: '#/components/schemas/wireFact'
           description: |-
@@ -114627,6 +114635,27 @@ paths:
       x-app: projects
       x-public: true
       x-tool: true
+  /v1/projects/{slug}/shot:
+    get:
+      description: 'Returns a screenshot of what this project currently serves, as
+        image/png. The capture is keyed by the deployment, so a redeploy invalidates
+        it by construction rather than by anyone remembering to clear a cache. A project
+        with nothing deployed answers 404 — that is a 404 about the PICTURE and not
+        about the project, which is still right there in the list. Scoped to the caller''s
+        org: a validated principal is required, and a slug belonging to another org
+        is not found rather than forbidden.'
+      operationId: get_projects_by_slug_shot
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      summary: Get a PNG of the project's live site
+      tags:
+      - projects
+      x-app: projects
+      x-public: true
   /v1/projects/edge:
     get:
       description: |-
