@@ -1,6 +1,6 @@
 {
-  "paths": 1771,
-  "operations": 2415,
+  "paths": 1767,
+  "operations": 2395,
   "products": {
     "account": 10,
     "admin": 56,
@@ -70,7 +70,7 @@
     "lsp": 5,
     "marketing": 35,
     "marketplace": 6,
-    "meet": 13,
+    "meet": 3,
     "metrics": 11,
     "ml": 7,
     "mq": 15,
@@ -103,7 +103,7 @@
     "skills": 2,
     "social": 13,
     "sync": 6,
-    "tasks": 20,
+    "tasks": 10,
     "taxonomy": 5,
     "team": 19,
     "tel": 10,

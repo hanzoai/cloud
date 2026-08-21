@@ -15,7 +15,7 @@
 // one way. The engine is created after MountAll, so the surface resolves it
 // LAZILY per request (503 until it is live).
 //
-// Surface (all under /v1/tasks/*, plus the embedded React UI at /tasks/*):
+// Surface (all under /v1/tasks/*; the studio is its own image on tasks.hanzo.ai):
 //
 //	/v1/tasks/health                    generic liveness (cloud's per-subsystem contract)
 //	/v1/tasks/settings                  capability flags (open bootstrap)
@@ -23,7 +23,6 @@
 //	/v1/tasks/namespaces|nexus|...      engine JSON API (identity-gated)
 //	/v1/tasks/mcp                       MCP tool surface (identity-gated)
 //	/v1/tasks/events                    SSE realtime stream (identity-gated)
-//	/tasks/*                            embedded React UI (console.hanzo.ai/tasks)
 //
 // Identity: cloud's gateway validates the IAM JWT and mints X-Org-Id / X-User-Id
 // (HIP-0026). gate resolves those two through apps/principal — the ONE place the
@@ -43,7 +42,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/cron"
 	"github.com/hanzoai/cloud/apps/principal"
-	tasksui "github.com/hanzoai/cloud/apps/tasks/ui"
 	"github.com/hanzoai/cloud/openapi"
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
@@ -130,13 +128,6 @@ func init() {
 			"the operations that change a running workflow — signal, cancel, terminate, reset — "+
 			"are all POST."+engine)
 
-	// The two UI addresses, declared by the ONE helper every embedded SPA uses —
-	// see openapi.DescribeSPA. Written out here it was the same forty lines meet
-	// and todo would each need, and the copy in this file had already drifted:
-	// it promised that a missing asset answers "200 with HTML rather than 404"
-	// after spa.Handler had begun answering 404 under assets/.
-	openapi.DescribeSPA("/tasks", "tasks console")
-
 	// The methods left over on the ENGINE's addresses. Bound with All(), so they
 	// publish every method this generator knows and the ones above are only the
 	// ones that DO something. DescribeRest covers the remainder from the
@@ -186,11 +177,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// where zip's carry `status`. TestOneWildcardCarriesFourContentTypes,
 	// TestCancelIgnoresAMalformedBody, TestEngineErrorEnvelopeIsNotZips.
 	//
-	// /tasks and /tasks/* are the SPA: HTML and hashed assets under their own
-	// content types and cache hints, index.html for every unknown path. A typed op
-	// publishes JSON. ui/embed_test.go's TestHandlerServesIndexAndAssets pins the
-	// bytes.
-	//
 	// The place these operations CAN become typed is hanzoai/tasks, which OWNS the
 	// surface. Typing them here would put a second copy of that module's route
 	// table in cloud, free to drift from the one that answers the requests — and
@@ -200,15 +186,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	app.All("/v1/tasks", h)
 	app.All("/v1/tasks/*", h)
 
-	// The UI is a static asset bundle embedded in THIS binary
-	// (apps/tasks/ui) — engine-independent, mount directly. Serving it
-	// here is what lets cloud front tasks.hanzo.ai + console.hanzo.ai/tasks
-	// and retire the standalone tasks-ui pod. Mounted at /tasks (no /_/):
-	// subsystem routes register before the console SPA catch-all, so this
-	// wins the path; the SPA fallback keeps every other console route.
-	ui := zip.AdaptNetHTTP(http.StripPrefix("/tasks", tasksui.Handler()))
-	app.All("/tasks", ui)
-	app.All("/tasks/*", ui)
+	// THE STUDIO IS NOT HERE. It is its own image (ghcr.io/hanzoai/admin-tasks, built
+	// from hanzoai/admin apps/tasks at base '/') on its own host, tasks.hanzo.ai,
+	// like todo and meet before it. It used to be //go:embed'd here and served at
+	// /tasks/*, which put every UI change behind a full Go release and put a
+	// browser app on the API origin.
+	//
+	// ONE ORIGIN SURVIVES THE MOVE, and that is why the studio could go. It reads
+	// this surface with same-origin credentials and carries no bearer, so a bundle
+	// on one host and an API on another would send no credential at all. The edge
+	// splits tasks.hanzo.ai instead: the bundle from its own pods, /v1/tasks to
+	// this binary (universe infra/k8s/ingress/routes.yaml), which is the same
+	// split console.hanzo.ai runs. The browser sees one origin either way, so
+	// nothing about the requests that arrive here changes.
 
 	luxlog.Default().New("subsystem", "tasks").Info("tasks HTTP+UI surface mounted (shared in-process engine)", "brand", deps.Brand)
 
