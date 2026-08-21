@@ -188,7 +188,18 @@ jobs:
         env:
           KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
-          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          # THE STORE IS A NEIGHBOUR, NOT AN INTERNET HOST. kms.hanzo.ai resolves to
+          # svc/cloud:8000 in ns hanzo, and the git-runner fleet is a StatefulSet in
+          # that same namespace — so the public name sent every login out to
+          # Cloudflare and back to the pod next door. Under a burst of concurrent
+          # runs the edge answered `error code: 502` in plain text, every review
+          # failed to get an identity, and `image` (needs: review) was SKIPPED, so
+          # the train stopped with nothing red to point at. Measured both ways from
+          # inside the cluster: /v1/health 200 and POST /v1/kms/auth/login 400 — the
+          # same answers the public host gives, one hop away and with no CDN in it.
+          # This is the split-horizon rule cloud.IAMBaseURL already states for the
+          # issuer. A runner OUTSIDE the cluster sets vars.KMS_ENDPOINT.
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'http://cloud.hanzo.svc.cluster.local:8000' }}
           KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
           REVIEW_CLIENT: ${{ vars.REVIEW_CLIENT || 'hanzo-review' }}
           IAM_ENDPOINT: ${{ vars.IAM_ENDPOINT || 'https://iam.hanzo.ai' }}
@@ -1310,7 +1321,7 @@ jobs:
         env:
           KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
-          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'http://cloud.hanzo.svc.cluster.local:8000' }}
           KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
           # pin.sh probes the registry before it moves anything; these let it read
           # a private manifest instead of falling back to anonymous.
@@ -1459,7 +1470,7 @@ jobs:
         env:
           KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
-          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'http://cloud.hanzo.svc.cluster.local:8000' }}
           KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
           CLOUD_API: ${{ vars.CLOUD_API || 'https://api.hanzo.ai' }}
         run: |
