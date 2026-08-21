@@ -1,7 +1,7 @@
 ---
 name: commerce_catalog
 version: "8.0.0"
-description: "Read commerce catalog: The public product catalog projection for a brand."
+description: "Read commerce catalog: The public product catalog projection for a brand, The raw catalog entries, including the unpublished ones."
 ---
 
 # Zoo · COMMERCE · catalog
@@ -15,10 +15,12 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.zoo.ngo/v1/commerce/catalog` — The public product catalog projection for a brand
+- `GET https://api.zoo.ngo/v1/commerce/catalog/entries` — The raw catalog entries, including the unpublished ones
 
 ## Response
 
 - `/v1/commerce/catalog` → JSON object.
+- `/v1/commerce/catalog/entries` → JSON object.
 
 ## Example
 

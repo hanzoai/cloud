@@ -1,7 +1,7 @@
 ---
 name: admin_referrals
 version: "8.0.0"
-description: "Read admin referrals: Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level., Returns"
+description: "Read admin referrals: Returns every referral edge in the directory with a fleet summary.."
 ---
 
 # Lux · ADMIN · referrals
@@ -14,7 +14,6 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/admin/referrals` — Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level.
 - `GET https://api.lux.network/v1/admin/referrals/bonuses` — Returns every referral edge in the directory with a fleet summary.
 
 ## Parameters
@@ -25,13 +24,12 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/admin/referrals` → `referralsOut` object with fields: `data`, `msg`, `status`.
 - `/v1/admin/referrals/bonuses` → `adminBonusesEnvelope` object with fields: `data`, `msg`, `status`.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/v1/admin/referrals" \
+curl -sS "https://api.lux.network/v1/admin/referrals/bonuses" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

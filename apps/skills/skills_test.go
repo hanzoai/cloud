@@ -277,16 +277,23 @@ func TestCatalogIntegrity(t *testing.T) {
 // run against a branched one emitted 357 per brand — a deletion that arrived
 // looking exactly like a routine regeneration.
 //
-// It is 696 now because plugin/gen-skills reads THIS repo's own per-app specs.
+// It is 675, and it was 696 one rebase earlier. Both numbers come from
+// plugin/gen-skills reading THIS repo's own per-app specs; the drop is 92 sibling
+// commits folding prefixes (HIP-0139 §7, one capability one prefix), which took
+// the product count 127 -> 115. Coverage is the invariant, not the total, and it
+// held across the fold: every product carrying a GET has at least one skill,
+// before and after.
 // The number went UP rather than down: the old input was a hand-kept spec tree
 // that had drifted both ways, advertising skills for /v1/balancers and
 // /v1/builds (which production 404s) while missing products this fleet serves.
-// Every one of the 127 products carrying a GET now has at least one skill.
+// The old input was a hand-kept spec tree that had drifted both ways,
+// advertising skills for /v1/balancers and /v1/builds (which production 404s)
+// while missing products this fleet serves.
 //
 // A deliberate deletion lowers this by hand in the same commit, where a reviewer
 // sees the number go down next to the reason — the same rule openapi/floor.json
 // carries for the document.
-const floorSkills = 696
+const floorSkills = 675
 
 func TestTheCatalogMayNotQuietlyShrink(t *testing.T) {
 	sub, err := fs.Sub(catalogFS, "catalog")

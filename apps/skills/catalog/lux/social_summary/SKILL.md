@@ -1,7 +1,7 @@
 ---
 name: social_summary
 version: "8.0.0"
-description: "Read social summary: Counts across your org's social presence."
+description: "Read social summary: Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected.."
 ---
 
 # Lux · SOCIAL · summary
@@ -14,11 +14,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/social/summary` — Counts across your org's social presence
+- `GET https://api.lux.network/v1/social/summary` — Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected.
 
 ## Response
 
-- `/v1/social/summary` → JSON object.
+- `/v1/social/summary` → `socialSummary` object with fields: `accounts`, `posts`, `published`, `scheduled`.
 
 ## Example
 
