@@ -254,7 +254,7 @@ func (o ops) orgs(ctx context.Context, in *orgsIn) (*orgsOut, error) {
 	// eighty-one; a directory that costs O(orgs) round-trips gets slower every signup.
 	// A tenant with no rows in the window is absent from the map and reads a true zero.
 	ledger, _ := foldLedgerByOrg(ctx, ledgerScope{Since: computeSince(usageRange)})
-	members := foldUsersByOrg(o.s, ctx, cr)
+	members := foldUsersByOrg(o.s, ctx, cr, orgs)
 	money := core.Delegate(ctx)
 
 	// FAN OUT, for the reason the overview already does: each row costs two independent
@@ -323,26 +323,23 @@ func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
 	} else if owner := strings.TrimSpace(in.Org); owner != "" {
 		q.Set("owner", owner)
 	}
-	// Default pagination when the client omits it. IAM's user list returns ZERO
-	// rows AND total 0 when p/pageSize are unset — which surfaced as the admin
-	// directory showing "0 of 222". Default to the first page at the shared admin
-	// page size so the directory populates and the REAL total is reported; an
-	// explicit client p/pageSize still wins (the UI paginates from there).
-	if p := strings.TrimSpace(in.Page); p != "" {
-		q.Set("p", p)
-	} else {
-		q.Set("p", "1")
+	// The page the client asked for, in the terms the user list takes: a row
+	// LIMIT and an OFFSET into the org, with the real unpaged count answered
+	// alongside so the console can page through it. A 1-based page number is the
+	// console's spelling and the offset is derived from it here, at the one place
+	// that talks to IAM.
+	term := strings.TrimSpace(in.Query)
+	size := pageSizeOf(in.PageSize, 200)
+	if term == "" {
+		q.Set("limit", strconv.Itoa(size))
+		if off := (pageOf(in.Page) - 1) * size; off > 0 {
+			q.Set("offset", strconv.Itoa(off))
+		}
 	}
-	if ps := strings.TrimSpace(in.PageSize); ps != "" {
-		q.Set("pageSize", ps)
-	} else {
-		q.Set("pageSize", "200")
-	}
-	if term := strings.TrimSpace(in.Query); term != "" {
-		// IAM's list uses field/value contains-matching for the free-text filter.
-		q.Set("field", "name")
-		q.Set("value", term)
-	}
+	// A free-text search reads the org WHOLE and matches here, because the user
+	// list filters by owner and by nothing else. Matching a single page instead
+	// would answer "no such user" for anyone who happened to sit on page two —
+	// a search that is wrong exactly when it is used.
 	res, err := o.s.State.IAM.Users(ctx, cr, q)
 	if err != nil {
 		return &usersOut{Status: core.Err, Msg: err.Error()}, nil
@@ -352,6 +349,10 @@ func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
 		if err := json.Unmarshal(res.Rows, &raw); err != nil {
 			return &usersOut{Status: core.Err, Msg: "users decode: " + err.Error()}, nil
 		}
+	}
+	if term != "" {
+		raw = matchUsers(raw, term)
+		res.Total = len(raw)
 	}
 	rows := make([]operatorUser, 0, len(raw))
 	for _, u := range raw {
@@ -374,22 +375,22 @@ func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
 
 // ── /v1/admin/roles and /applications — verbatim IAM passthrough ─────────────
 
-// roles lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.
+// roles lists IAM roles for one owner org, forwarded VERBATIM from IAM's role list.
 //
 // Example: {"owner":"admin","p":"1","pageSize":"50"}
 // Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"total":1}
 func (o ops) roles(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
-	return o.iamPassthrough(ctx, in, "/v1/iam/get-roles")
+	return o.iamPassthrough(ctx, in, "/v1/iam/roles", "roles")
 }
 
 // applications lists IAM applications for one owner org, forwarded VERBATIM from IAM's
-// get-applications. These are the platform's OIDC clients — the console reads clientId
+// application list. These are the platform's OIDC clients — the console reads clientId
 // off each row.
 //
 // Example: {"owner":"admin","p":"1","pageSize":"50"}
 // Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"total":1}
 func (o ops) applications(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
-	return o.iamPassthrough(ctx, in, "/v1/iam/get-applications")
+	return o.iamPassthrough(ctx, in, "/v1/iam/applications", "applications")
 }
 
 // iamPassthrough forwards a paginated IAM read verbatim — the ONE body both IAM reads
@@ -398,7 +399,10 @@ func (o ops) applications(ctx context.Context, in *iamPageIn) (*iamRowsOut, erro
 // The rows are NOT re-decoded: they reach the operator as the exact bytes IAM sent, so
 // this layer never becomes a second, drifting copy of IAM's Role/Application schema.
 // That is also why the response is declared opaque rather than typed.
-func (o ops) iamPassthrough(ctx context.Context, in *iamPageIn, path string) (*iamRowsOut, error) {
+// Both reads answer their owner's WHOLE set, so the page fields of the shared
+// input are not forwarded: neither route reads them, and sending a selector the
+// far end ignores invites the reader to believe a page was asked for.
+func (o ops) iamPassthrough(ctx context.Context, in *iamPageIn, path, rows string) (*iamRowsOut, error) {
 	c, err := core.Admit(ctx)
 	if err != nil {
 		return nil, err
@@ -409,21 +413,15 @@ func (o ops) iamPassthrough(ctx context.Context, in *iamPageIn, path string) (*i
 		owner = o.s.State.AdminOrg
 	}
 	q.Set("owner", owner)
-	if p := strings.TrimSpace(in.Page); p != "" {
-		q.Set("p", p)
-	}
-	if ps := strings.TrimSpace(in.PageSize); ps != "" {
-		q.Set("pageSize", ps)
-	}
-	res, err := o.s.State.IAM.List(ctx, core.CallerCreds(c), path, q)
+	res, err := o.s.State.IAM.List(ctx, core.CallerCreds(c), path, rows, q)
 	if err != nil {
 		return &iamRowsOut{Status: core.Err, Msg: err.Error()}, nil
 	}
-	rows := res.Rows
-	if len(rows) == 0 {
-		rows = json.RawMessage("[]") // an absent page is an empty list, never a null
+	page := res.Rows
+	if len(page) == 0 {
+		page = json.RawMessage("[]") // an absent page is an empty list, never a null
 	}
-	return &iamRowsOut{Status: core.OK, Data: rows, Total: core.Total(res.Total)}, nil
+	return &iamRowsOut{Status: core.OK, Data: page, Total: core.Total(res.Total)}, nil
 }
 
 // ── /v1/admin/usage — fleet usage roll-up (UsageData) ────────────────────────
@@ -566,7 +564,7 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 		// ONE delegation for the whole fan-out (core.Delegate) — building it per
 		// goroutine would have every one of them reading the same request.
 		money := core.Delegate(ctx)
-		members := foldUsersByOrg(o.s, ctx, cr)
+		members := foldUsersByOrg(o.s, ctx, cr, orgs)
 		const maxParallelOrgReads = 12
 		var (
 			mu  sync.Mutex
@@ -674,17 +672,45 @@ const (
 	maxOrgPage     = 100
 )
 
+// pageOf reads a 1-based page number off the wire. Anything unreadable is the
+// first page — a client that mistypes a page gets the directory, not an error.
+func pageOf(s string) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && n > 0 {
+		return n
+	}
+	return 1
+}
+
+// pageSizeOf reads a row count off the wire, falling back to fallback.
+func pageSizeOf(s string, fallback int) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && n > 0 {
+		return n
+	}
+	return fallback
+}
+
+// matchUsers keeps the rows whose name, display name or email contains term,
+// case-insensitively — the three handles an operator types a person's name into.
+func matchUsers(all []iam.User, term string) []iam.User {
+	term = strings.ToLower(term)
+	kept := make([]iam.User, 0, len(all))
+	for _, u := range all {
+		if strings.Contains(strings.ToLower(u.Name), term) ||
+			strings.Contains(strings.ToLower(u.DisplayName), term) ||
+			strings.Contains(strings.ToLower(u.Email), term) {
+			kept = append(kept, u)
+		}
+	}
+	return kept
+}
+
 // pageOrgs narrows the directory to one page. An out-of-range page is an empty
 // page, not an error: a client that walks past the end gets a clean stop.
 func pageOrgs(all []iam.Org, in *orgsIn) []iam.Org {
 	page, size := 1, defaultOrgPage
 	if in != nil {
-		if n, err := strconv.Atoi(strings.TrimSpace(in.Page)); err == nil && n > 0 {
-			page = n
-		}
-		if n, err := strconv.Atoi(strings.TrimSpace(in.PageSize)); err == nil && n > 0 {
-			size = n
-		}
+		page = pageOf(in.Page)
+		size = pageSizeOf(in.PageSize, defaultOrgPage)
 	}
 	// A ceiling, not a suggestion. Without it a caller asking for ten thousand
 	// rows reinstates the unbounded directory this paging exists to remove, and
@@ -704,40 +730,45 @@ func pageOrgs(all []iam.Org, in *orgsIn) []iam.Org {
 	return all[start:end]
 }
 
-// foldUsersByOrg counts the members of every org in ONE read, keyed by org.
+// foldUsersByOrg counts the members of each named org, keyed by org.
 //
-// A count per tenant is a round trip whose entire answer is one integer, and the
-// directory needs one for every row it renders. Paging bounds how many rows that is;
-// this removes the question. The fleet is 1,311 members across 683 orgs, so the fold
-// costs two reads whatever the page size — and it grows with PEOPLE rather than with
-// tenants, which is the number a signup adds.
+// It ASKS EACH ORG, because the user list is owner-scoped and answers no other
+// way: the org IS the tenancy boundary IAM enforces, so "every user, then group
+// them" is not a read this surface has. What it costs is one round trip per row
+// the directory is about to render, and the answer to each is a single integer —
+// `limit=1` so the count travels without the roster behind it.
 //
-// Best-effort, as the per-org count was: a read that fails leaves those orgs out of the
-// map, and an absent org reads a true zero rather than failing the directory. IAM
-// authorizes the list as the caller, so a non-super caller counts only what they can
-// already see.
-func foldUsersByOrg(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) map[string]int {
-	const page = 1000
+// The reads do not depend on each other, so they run concurrently under the same
+// fixed ceiling the customer fan-out uses: bounded so a large fleet cannot
+// stampede the IAM store, and the callers page BEFORE calling this, so the work
+// is bounded by the page and not by the fleet.
+//
+// Best-effort, as the per-org count was: a read that fails leaves that org out of
+// the map, and an absent org reads a true zero rather than failing the directory.
+// IAM authorizes each list as the caller, so a non-super caller counts only what
+// they can already see.
+func foldUsersByOrg(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds, orgs []iam.Org) map[string]int {
 	counts := map[string]int{}
-	for p := 1; ; p++ {
-		q := url.Values{}
-		q.Set("p", strconv.Itoa(p))
-		q.Set("pageSize", strconv.Itoa(page))
-		res, err := s.State.IAM.Users(ctx, cr, q)
-		if err != nil {
-			return counts
-		}
-		var users []iam.User
-		if err := json.Unmarshal(res.Rows, &users); err != nil {
-			return counts
-		}
-		for _, u := range users {
-			counts[u.Owner]++
-		}
-		if len(users) < page || p*page >= res.Total {
-			return counts
-		}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, core.MaxCustomerConcurrency)
+	for _, org := range orgs {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			res, err := s.State.IAM.Users(ctx, cr, url.Values{"owner": {name}, "limit": {"1"}})
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			counts[name] = res.Total
+			mu.Unlock()
+		}(org.Name)
 	}
+	wg.Wait()
+	return counts
 }
 
 // ── config resolution ────────────────────────────────────────────────────────

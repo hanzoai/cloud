@@ -16,13 +16,13 @@ package iam
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -149,42 +149,28 @@ func (c *Client) User(ctx context.Context, cr Creds, owner, name string) (map[st
 	return user, nil
 }
 
-// SetUser writes a full user object back (POST /v1/iam/update-user?id=owner/name).
-// The caller's replayed credential is a VALIDATED SuperAdmin, whom IAM's
-// CheckPermissionForUpdateUser admits to set privileged fields (isForbidden) on any
-// user — a tenant/org-admin is refused by IAM itself, so this can never be abused to
-// suspend across a boundary the caller couldn't already cross. admin adds no service
-// credential of its own; IAM re-checks IsSuperAdmin.
-func (c *Client) SetUser(ctx context.Context, cr Creds, id string, user map[string]any) error {
-	q := url.Values{"id": {id}}
-	body, err := json.Marshal(user)
+// SetUser writes a full user object back (POST /v1/iam/users/update).
+//
+// The row travels NESTED under `user`, and which row is written comes from that
+// object's own owner/name — there is no id parameter to address it by, so the
+// object read is the object written and the two cannot name different people.
+// The caller's replayed credential is a VALIDATED SuperAdmin, whom IAM admits to
+// set privileged fields (isForbidden) on any user — a tenant/org-admin is refused
+// by IAM itself, so this can never be abused to suspend across a boundary the
+// caller couldn't already cross. admin adds no service credential of its own.
+func (c *Client) SetUser(ctx context.Context, cr Creds, user map[string]any) error {
+	body, err := json.Marshal(map[string]any{"user": user})
 	if err != nil {
 		return err
 	}
-	_, err = c.post(ctx, cr, "/v1/iam/update-user", q, body)
+	_, err = c.post(ctx, cr, "/v1/iam/users/update", nil, body)
 	return err
 }
 
-// envelope is what hanzoai/iam ANSWERS WITH — a decoder for a foreign wire, not
-// cloud's own shape. Cloud writes { status, msg, data, total } (see cloud's
-// envelope.go); IAM still writes Casdoor's { status, msg, data, data2 }, so the
-// tag here says data2 and the field says Total. One adapter, at the boundary,
-// naming both truths at once.
-//
-// It converges when IAM ships the same rename. Until then a "fix" that spells
-// this field total on the wire silently reads nothing: the total becomes zero
-// and every paginated admin list quietly reports its own page size.
-type envelope struct {
-	Status string          `json:"status"`
-	Msg    string          `json:"msg"`
-	Data   json.RawMessage `json:"data"`
-	Total  json.RawMessage `json:"data2"`
-}
-
-// get performs one authenticated GET and decodes the /v1 envelope.
-func (c *Client) get(ctx context.Context, cr Creds, path string, q url.Values) (envelope, error) {
+// get performs one authenticated GET and returns the resource IAM answered with.
+func (c *Client) get(ctx context.Context, cr Creds, path string, q url.Values) (json.RawMessage, error) {
 	if !c.Ready() {
-		return envelope{}, fmt.Errorf("iam endpoint not configured")
+		return nil, fmt.Errorf("iam endpoint not configured")
 	}
 	u := c.base + path
 	if enc := q.Encode(); enc != "" {
@@ -192,7 +178,7 @@ func (c *Client) get(ctx context.Context, cr Creds, path string, q url.Values) (
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return envelope{}, err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	if cr.Cookie != "" {
@@ -203,36 +189,46 @@ func (c *Client) get(ctx context.Context, cr Creds, path string, q url.Values) (
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return envelope{}, fmt.Errorf("iam unreachable: %w", err)
+		return nil, fmt.Errorf("iam unreachable: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
-		return envelope{}, err
+		return nil, err
 	}
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return envelope{}, fmt.Errorf("iam denied (%d)", resp.StatusCode)
+	return answer(resp.StatusCode, body)
+}
+
+// answer is what a typed IAM route ANSWERS WITH: the resource itself, under the
+// HTTP status. There is no envelope left to unwrap — the operation's outcome IS
+// the status and the body IS the value — so success returns the bytes and a
+// refusal is rendered in IAM's own words.
+//
+// A body that is not JSON is NOT an error here: only a refusal reads it, and a
+// proxy's HTML error page is more useful in the message than the status alone.
+func answer(status int, body []byte) (json.RawMessage, error) {
+	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+		return nil, fmt.Errorf("iam denied (%d)", status)
 	}
-	var env envelope
-	if err := json.Unmarshal(body, &env); err != nil {
-		return envelope{}, fmt.Errorf("iam non-envelope response (%d)", resp.StatusCode)
-	}
-	if env.Status != "ok" {
-		msg := env.Msg
-		if msg == "" {
-			msg = fmt.Sprintf("iam status %d", resp.StatusCode)
+	if status < 200 || status >= 300 {
+		var refusal struct {
+			Error string `json:"error"`
+			Msg   string `json:"msg"`
 		}
-		return envelope{}, fmt.Errorf("iam: %s", msg)
+		_ = json.Unmarshal(body, &refusal)
+		return nil, fmt.Errorf("iam: %s", cmp.Or(refusal.Error, refusal.Msg,
+			fmt.Sprintf("iam status %d", status)))
 	}
-	return env, nil
+	return json.RawMessage(body), nil
 }
 
 // post performs one authenticated POST (JSON body) replaying the caller's cookie +
-// bearer, and decodes the /v1 envelope. A non-ok envelope (or an IAM 401/403) is
-// an error the mutation surfaces honestly + records as a failed audited attempt.
-func (c *Client) post(ctx context.Context, cr Creds, path string, q url.Values, body []byte) (envelope, error) {
+// bearer, and returns the resource IAM answered with. A refusal (or an IAM
+// 401/403) is an error the mutation surfaces honestly + records as a failed
+// audited attempt.
+func (c *Client) post(ctx context.Context, cr Creds, path string, q url.Values, body []byte) (json.RawMessage, error) {
 	if !c.Ready() {
-		return envelope{}, fmt.Errorf("iam endpoint not configured")
+		return nil, fmt.Errorf("iam endpoint not configured")
 	}
 	u := c.base + path
 	if enc := q.Encode(); enc != "" {
@@ -240,7 +236,7 @@ func (c *Client) post(ctx context.Context, cr Creds, path string, q url.Values, 
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
 	if err != nil {
-		return envelope{}, err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -252,54 +248,50 @@ func (c *Client) post(ctx context.Context, cr Creds, path string, q url.Values, 
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return envelope{}, fmt.Errorf("iam unreachable: %w", err)
+		return nil, fmt.Errorf("iam unreachable: %w", err)
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
-		return envelope{}, err
+		return nil, err
 	}
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return envelope{}, fmt.Errorf("iam denied (%d)", resp.StatusCode)
+	return answer(resp.StatusCode, respBody)
+}
+
+// decodeList reads one collection answer: the array IAM names for its entity,
+// plus how many rows there are in total.
+//
+// The size is spelled two ways and both are read HERE, once, rather than taught
+// to every caller — users, roles and audit logs answer `total` (a real unpaged
+// count), organizations answer `count`, and applications answer neither, where
+// the rows themselves are the whole set. An absent rows key is an ERROR: IAM
+// always writes it, so a body without it is a different shape than the one asked
+// for, and reporting that as an empty page is how a full directory renders blank.
+func decodeList(body json.RawMessage, rows string) (List, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return List{}, fmt.Errorf("iam %s decode: %w", rows, err)
 	}
-	var env envelope
-	if err := json.Unmarshal(respBody, &env); err != nil {
-		return envelope{}, fmt.Errorf("iam non-envelope response (%d)", resp.StatusCode)
+	raw, ok := fields[rows]
+	if !ok {
+		return List{}, fmt.Errorf("iam %s: answer carries no %q", rows, rows)
 	}
-	if env.Status != "ok" {
-		msg := env.Msg
-		if msg == "" {
-			msg = fmt.Sprintf("iam status %d", resp.StatusCode)
+	var page []json.RawMessage
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return List{}, fmt.Errorf("iam %s decode: %w", rows, err)
+	}
+	// An empty collection is the JSON `null` of a nil slice; the operator's own
+	// envelope promises a list, so it is normalized once here.
+	if page == nil {
+		raw = json.RawMessage("[]")
+	}
+	total := len(page)
+	for _, key := range []string{"total", "count"} {
+		var n int
+		if v, ok := fields[key]; ok && json.Unmarshal(v, &n) == nil {
+			total = n
+			break
 		}
-		return envelope{}, fmt.Errorf("iam: %s", msg)
 	}
-	return env, nil
-}
-
-// envTotal reads data2 as the list total when present, else counts data rows.
-func envTotal(data2, data json.RawMessage) int {
-	if n, ok := asInt(data2); ok {
-		return n
-	}
-	var rows []json.RawMessage
-	if json.Unmarshal(data, &rows) == nil {
-		return len(rows)
-	}
-	return 0
-}
-
-// asInt decodes a JSON number (data2 may arrive as a bare int).
-func asInt(raw json.RawMessage) (int, bool) {
-	t := strings.TrimSpace(string(raw))
-	if t == "" || t == "null" {
-		return 0, false
-	}
-	if n, err := strconv.Atoi(t); err == nil {
-		return n, true
-	}
-	var f float64
-	if json.Unmarshal(raw, &f) == nil {
-		return int(f), true
-	}
-	return 0, false
+	return List{Rows: raw, Total: total}, nil
 }

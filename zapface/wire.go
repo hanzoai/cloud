@@ -21,8 +21,9 @@
 //     reply is decoded there.
 //   - The INNER request payload (rpc.Call.Payload) is console's ZapRequest
 //     struct: { method @0 :Text, payload @8 :Text } (fixed size 16). `method`
-//     is the /v1 endpoint name (e.g. "get-providers"); `payload` is a
-//     SuperJSON string of the call arguments (” for none).
+//     is a /v1 request line, "<VERB> <path>" (e.g. "GET ai/providers") — see
+//     splitMethod, which REFUSES a bare name rather than guessing its verb;
+//     `payload` is a SuperJSON string of the call arguments (” for none).
 //   - The INNER reply body is console's ZapReply struct:
 //     { ok @0 :Bool, status @4 :UInt32, result @8 :Text, errorJson @16 :Text }
 //     (fixed size 24). `result` is a SuperJSON string of the /v1 `data`;

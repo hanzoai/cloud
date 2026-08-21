@@ -377,14 +377,13 @@ func (o ops) setForbidden(ctx context.Context, want string, forbidden bool) (*Ac
 
 	var affected, failed []string
 	for _, u := range users {
-		id := u.Owner + "/" + u.Name
-		full, gerr := s.State.IAM.User(ctx, cr, id)
+		full, gerr := s.State.IAM.User(ctx, cr, u.Owner, u.Name)
 		if gerr != nil {
 			failed = append(failed, u.Name)
 			continue
 		}
 		full["isForbidden"] = forbidden
-		if uerr := s.State.IAM.SetUser(ctx, cr, id, full); uerr != nil {
+		if uerr := s.State.IAM.SetUser(ctx, cr, full); uerr != nil {
 			failed = append(failed, u.Name)
 			continue
 		}
