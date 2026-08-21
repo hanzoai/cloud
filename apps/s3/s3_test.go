@@ -93,6 +93,11 @@ func newApp(t *testing.T, creds bool) *zip.App {
 	deps := cloud.BuildDeps(cfg)
 	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
+	// What Serve installs for the whole binary: the request parked on the context,
+	// which is where a typed op reads the org guard resolved. No package's own
+	// harness runs Serve, so without this every typed op here answers 403 for a
+	// reason that has nothing to do with the gate under test.
+	app.Use(cloud.Bridge())
 	specs := []cloud.Plugin{
 		{Name: "s3", Mount: s3.Mount, OwnsHealth: true},
 		{Name: "provisioning", Mount: provisioning.Mount},

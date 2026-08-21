@@ -1,7 +1,7 @@
 ---
 name: s3_buckets
 version: "8.0.0"
-description: "Read s3 buckets: List your org's buckets, Browse one level of a bucket, Get a URL to download one object directly."
+description: "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Get a URL to download one object directly."
 ---
 
 # Lux · S3 · buckets
@@ -14,21 +14,23 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/s3/buckets` — List your org's buckets
-- `GET https://api.lux.network/v1/s3/buckets/{bucket}/objects` — Browse one level of a bucket
+- `GET https://api.lux.network/v1/s3/buckets` — Lists the caller org's own buckets.
+- `GET https://api.lux.network/v1/s3/buckets/{bucket}/objects` — Lists one folder level of a bucket.
 - `GET https://api.lux.network/v1/s3/buckets/{bucket}/objects/{wildcard1}` — Get a URL to download one object directly
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `bucket` | path | yes | string |  |
+| `bucket` | path | yes | string | Bucket is the bucket to list, from the path. |
 | `wildcard1` | path | yes | string |  |
+| `prefix` | query | no | string |  |
+| `recursive` | query | no | string |  |
 
 ## Response
 
-- `/v1/s3/buckets` → JSON object.
-- `/v1/s3/buckets/{bucket}/objects` → JSON object.
+- `/v1/s3/buckets` → `bucketList` object with fields: `buckets`, `total`.
+- `/v1/s3/buckets/{bucket}/objects` → `objectList` object with fields: `bucket`, `objects`, `prefix`, `total`.
 - `/v1/s3/buckets/{bucket}/objects/{wildcard1}` → JSON object.
 
 ## Example
