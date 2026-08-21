@@ -11,6 +11,10 @@ image:
 
 imagePullSecrets: []
 
+# replicaCount is HONOURED, and above 1 the chart checks the two things that
+# genuinely forbid a second pod (see templates/deployment.yaml): embedded IAM on
+# its per-pod store, and a ReadWriteOnce volume. Each refuses to render and says
+# how to lift it, rather than quietly rendering 1.
 replicaCount: 1
 
 # rbac grants the pod's ServiceAccount pods:list,watch so the LIVE membership source
@@ -63,6 +67,20 @@ hanzo:
   # kms plane (kms listed) and meters via deps.Metering (HTTP to commerce, or a
   # no-op when unset — commerce need NOT be co-resident); git needs none.
   enable: "iam,base,kms,gateway,o11y,platform,git"
+  # Which backend holds embedded IAM's identity records — users, orgs, applications,
+  # signing certs, and the session revocation rows (apps/iam.openStore).
+  #
+  #   ""/"sqlite"  the encrypted per-pod file at {dataDir}/iam/iam.db
+  #   "sql"        hanzoai/sql over ZAP — no path, no per-file key, reached
+  #                identically from every replica
+  #
+  # It is the ONE condition on running more than one of these pods with iam
+  # enabled. Sessions themselves are already replica-correct: a session is a
+  # signed cookie whose MAC key comes from the platform signing cert — chosen
+  # deterministically from the referenced cert set precisely so every replica
+  # picks the same one — plus a revocation row in this store. What does not
+  # survive a second pod is the STORE, when it is a file on one pod's volume.
+  iamStore: ""
 
 service:
   type: ClusterIP
@@ -73,13 +91,66 @@ service:
 persistence:
   # Per-tenant SQLite (HIP-0302) lives under dataDir. Set to an
   # appropriate PVC for production; emptyDir is fine for dev.
+  #
+  # ReadWriteOnce is a block volume and attaches to ONE node, so it is the second
+  # thing that forbids a second replica — the chart refuses to render that
+  # combination rather than emitting pods that deadlock on Multi-Attach. It also
+  # forces strategy: Recreate at one replica, because a surge pod would contend
+  # with the pod it replaces for the same volume.
+  #
+  # The way OUT of that is not a bigger volume: it is needing less on it. The
+  # durable plane (internal/org + hanzoai/ha + hanzoai/vfs/replica) already elects
+  # one writer per org and ships that org's SQLite to object storage, so per-org
+  # state does not require the shared disk. What still does is whatever is not on
+  # that plane.
   enabled: false
   size: 20Gi
   storageClass: ""
   accessModes:
     - ReadWriteOnce
 
-resources: {}
+# MEASURED ON THE RUNNING POD, not chosen. An empty resources block gives the
+# scheduler no signal and leaves the HPA below nothing to compute a utilization
+# against, so it can neither place this pod nor scale it.
+#
+# The request is what binds, twice over. The kubelet scores eviction candidacy
+# against the RESERVATION, so a pod inside its limit is still first to go once
+# past its request — measured, in the kubelet's own words when it killed this one:
+# "was using 11406568Ki, request is 6Gi, has larger consumption of memory", and at
+# one replica each such reclaim was a full API outage. And the HPA computes
+# utilization as usage/request, so the request is the denominator of every scaling
+# decision.
+#
+# 6Gi is the plugin catalog, not the traffic: this host holds up to
+# manifest.Warm() lazily-started children at a measured mean of 167MiB each, plus
+# ~200MiB of host. That is why memory is not an autoscaling signal below, and why
+# raising this number is what gives the host room rather than raising a constant.
+resources:
+  requests:
+    cpu: "1"
+    memory: 6Gi
+  limits:
+    cpu: "4"
+    memory: 11Gi
+
+# HORIZONTAL AUTOSCALING — ON CPU, AND DELIBERATELY NOT ON MEMORY.
+#
+# Memory here tracks how much of the CATALOG is warm, not how much work is
+# arriving: each subsystem is a child process started by the first request to its
+# prefix and reaped after 15 idle minutes, bounded by manifest.Warm(). So resident
+# memory climbs to roughly that bound and stays there whatever the load. Measured
+# on the production pod an hour apart: CPU 439m → 761m (+73%) while memory went
+# 1824Mi → 1843Mi (+1%). A memory target would sit flat through a real surge and
+# then latch a scale-up that never comes back down.
+#
+# maxReplicas participates in the render-time checks above, because a ceiling of 6
+# is a claim that six of these may run — if that is not true the chart says so
+# now, rather than at 3am when the HPA acts on it.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 65
 nodeSelector: {}
 tolerations: []
 affinity: {}
