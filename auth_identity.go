@@ -315,8 +315,15 @@ func (c *idClaims) homeOrg() string {
 // PlatformSudo refuses every machine, so nothing can be both. Recognising the shape
 // alone would leave the two merely unlikely to coincide, which is a property that
 // holds until some issuer mints a token nobody anticipated.
+// IAM SAYS SO, AND ONLY THEN IS THE SHAPE CONSULTED. `type: application` is a
+// signed claim IAM stamps in one place — the client_credentials grant — and
+// leaves empty for every person, so it is the issuer stating the kind rather
+// than this file inferring it. The shape clauses below stay as corroboration,
+// not as the proof: a token that cannot produce the claim is refused here
+// whatever it looks like, which is what makes a person unable to arrive as a
+// machine by carrying no memberships.
 func appPrincipal(c *idClaims) bool {
-	if c == nil || c.subjectOrg != "" || !c.Machine() {
+	if c == nil || c.subjectOrg != "" || !c.Program() {
 		return false
 	}
 	return isKMSMachinePrincipal(c) || isClientCredentialsPrincipal(c)

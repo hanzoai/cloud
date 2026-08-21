@@ -689,7 +689,7 @@ require (
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.6
 	github.com/hanzoai/ai v1.833.111
-	github.com/hanzoai/authz v1.10.33
+	github.com/hanzoai/authz v1.10.34
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.16
 	github.com/hanzoai/o11y v1.5.67

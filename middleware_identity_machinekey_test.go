@@ -18,6 +18,8 @@ import (
 	"crypto/rsa"
 	"net/http"
 	"net/http/httptest"
+
+	"github.com/hanzoai/authz"
 	"testing"
 	"time"
 
@@ -150,6 +152,10 @@ func TestMachineJWTResolvesItsAppOrg(t *testing.T) {
 
 	m := tokenClaims("gotham-labs-platform-kms", "gotham-labs", "svc@example.test", false, time.Now().Add(time.Hour))
 	m.Orgs = nil
+	// What separates this from the token in the test below, which must be refused:
+	// IAM signs the kind on a client_credentials grant. Without it the two are the
+	// same shape, which is the ambiguity that made an absent claim load-bearing.
+	m.Type = authz.Program
 	tok := signWith(t, key, m)
 
 	status, org := orgScopedProbe(t, v, func(r *http.Request) {
