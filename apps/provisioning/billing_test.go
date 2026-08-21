@@ -79,10 +79,21 @@ func newBilledService(t *testing.T, commerceURL string, kinds ...string) (*cloud
 	return s, mp
 }
 
+// mountCreate mounts one kind's create the way the binary mounts it: what Serve
+// installs (Bridge parks the request the typed op resolves its tenant from,
+// DenyEnvelope turns a returned cloud.Denied back into the money wire's own
+// bytes), then the typed op. No package's harness runs Serve, so a create tested
+// without DenyEnvelope would refuse in zip's shape and assert the wrong body.
+func mountCreate(app *zip.App, s *cloud.Service[state], kind string) {
+	app.Use(cloud.Bridge())
+	app.Use(cloud.DenyEnvelope())
+	zip.Post(app, "/v1/"+kind, ops{s: s}.createFor(kind), zip.WithStatus(http.StatusCreated))
+}
+
 func postCreate(t *testing.T, s *cloud.Service[state], kind, org, name string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/"+kind, create(s, kind))
+	mountCreate(app, s, kind)
 	req, _ := http.NewRequest("POST", "/v1/"+kind, strings.NewReader(`{"name":"`+name+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {

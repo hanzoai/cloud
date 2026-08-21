@@ -57,19 +57,20 @@ func mountDelete[In, Out any](path string, h zip.TypedHandler[In, Out]) func(*zi
 // through openapi.Register (provisioning.go's init), so a generated SDK can
 // construct the call. What staying untyped costs is exactly the three things
 // zip's registry supplies — prose, an MCP tool and a CLI command.
+// untypedByDesign is the CLOSED list of provisioning operations that are NOT
+// typed ops. IT IS EMPTY, and the gate still runs: an entry added here owes the
+// wire fact that keeps a route raw, re-read against the PINNED zip rather than
+// inherited as prose, plus a test pinning the wire it protects.
+//
+// The seven creates filled it, for a reason that had stopped being true: it said
+// the pre-provision balance gate answers 402/503 through cloud.DenyResource with
+// the fleet's NESTED {"error":{"code","message"}} body, and a typed op's error
+// can only leave as zip's flat {status,code,error}. cloud.Denied carries that
+// nested body off a RETURNED error and serve.go installs DenyEnvelope app-wide,
+// so the capability was already there. The half of the reason that WAS right is
+// kept in createOf: the gate runs last, after the decode, so an unfunded org
+// sending an invalid name is still told 400 rather than 402.
 var untypedByDesign = map[string]string{}
-
-const denyReason = "the pre-provision balance gate answers 402/503 through cloud.DenyResource, " +
-	"whose body is the fleet's NESTED {\"error\":{code,message}}. A typed op's error can only leave " +
-	"through zip's errorHandler as a FLAT {status,code,error}, and writing the nested body from " +
-	"inside the op does not escape it (a nil Out makes zip stamp cmp.Or(op.Status, 204) over the " +
-	"402). Gating in middleware would move the 400-on-a-bad-name to a 402."
-
-func init() {
-	for _, kind := range kinds {
-		untypedByDesign["POST /v1/provisioning/"+kind] = denyReason
-	}
-}
 
 // surfaceApp mounts the WHOLE provisioning surface through the REAL routes(), so
 // the assertions below read the router the document is generated from rather than
@@ -80,6 +81,7 @@ func surfaceApp(t *testing.T) *zip.App {
 	s, _ := newTestService(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
+	app.Use(cloud.DenyEnvelope())
 	routes(app, s)
 	return app
 }
@@ -157,8 +159,8 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	_, typed := provisioningOps(t)
 	// 7 kinds × list/get/delete, plus the operator's two whole-backend reads of
 	// the vector store this app allocates into (inventory.go).
-	if len(typed) != 23 {
-		t.Errorf("typed ops = %d, want 23 (7 kinds × list/get/delete, + 2 operator reads)", len(typed))
+	if len(typed) != 30 {
+		t.Errorf("typed ops = %d, want 30 (7 kinds × create/list/get/delete, + 2 operator reads)", len(typed))
 	}
 	for key, desc := range typed {
 		if strings.TrimSpace(desc) == "" {
@@ -245,10 +247,10 @@ func TestTypedReadsRefuseOffTheHTTPPath(t *testing.T) {
 }
 
 // TestTheCreatesStillDeclareTheirBodies: the seven refusals must not publish
-// NOTHING. openapi.Register (provisioning.go's init) gives each create the body
-// it reads and the shape it answers, so a generated SDK has somewhere to put the
-// name — the one thing a route can lose by staying untyped that is NOT one of
-// zip's three registry projections.
+// NOTHING. Fold gives each create the body it reads and the shape it answers
+// from the op's own In/Out types, so a generated SDK has somewhere to put the
+// name. This used to be openapi.Register's job and is the generator's now; the
+// property is the same and worth a gate either way.
 func TestTheCreatesStillDeclareTheirBodies(t *testing.T) {
 	app := surfaceApp(t)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "provisioning", Version: "v1"})
@@ -261,15 +263,22 @@ func TestTheCreatesStillDeclareTheirBodies(t *testing.T) {
 			t.Fatalf("POST /v1/provisioning/%s is not in the document at all", kind)
 		}
 		// RequestBody is `any` on the shared Operation — the untyped seam and the
-		// typed fold produce different (JSON-identical) shapes — so assert on the
-		// one Register builds.
-		rb, ok := op.RequestBody.(*openapi.RequestBody)
-		if !ok {
-			t.Errorf("POST /v1/provisioning/%s publishes no request body (%T) — an SDK caller has nowhere to put the name", kind, op.RequestBody)
-			continue
+		// typed fold build different (JSON-identical) shapes — so read it the way
+		// every consumer does, through the marshalled document.
+		raw, err := json.Marshal(op.RequestBody)
+		if err != nil {
+			t.Fatalf("marshal request body for %s: %v", kind, err)
 		}
-		if _, ok := rb.Content["application/json"]; !ok {
-			t.Errorf("POST /v1/provisioning/%s request body is not application/json", kind)
+		var rb struct {
+			Content map[string]struct {
+				Schema struct {
+					Ref string `json:"$ref"`
+				} `json:"schema"`
+			} `json:"content"`
+		}
+		if err := json.Unmarshal(raw, &rb); err != nil || rb.Content["application/json"].Schema.Ref == "" {
+			t.Errorf("POST /v1/provisioning/%s publishes no application/json request body (%s) — "+
+				"an SDK caller has nowhere to put the name", kind, raw)
 		}
 	}
 	for _, name := range []string{"provisionRequest", "provisionResult"} {
@@ -301,20 +310,16 @@ func TestTheCreatesStillDeclareTheirBodies(t *testing.T) {
 // Exact in BOTH directions: a bare property anywhere else goes red, and an entry
 // here that starts publishing prose goes red too, which is the day the seam
 // learns and this ledger must shrink rather than outlive the gap.
-var proseless = map[string]bool{
-	"provisionRequest.instance":        true,
-	"provisionRequest.name":            true,
-	"provisionResult.connectionString": true,
-	"provisionResult.database":         true,
-	"provisionResult.host":             true,
-	"provisionResult.id":               true,
-	"provisionResult.kind":             true,
-	"provisionResult.name":             true,
-	"provisionResult.password":         true,
-	"provisionResult.port":             true,
-	"provisionResult.status":           true,
-	"provisionResult.username":         true,
-}
+// proseless WAS the cost of openapi.Register: it derives a schema by REFLECTION
+// and Go drops comments, so the twelve properties of provisionRequest and
+// provisionResult reached openapi.yaml, every generated SDK and every MCP
+// inputSchema bare. It held them, shrink-only, so the day the gap closed the
+// ledger would go red rather than outlive it.
+//
+// IT IS EMPTY. The creates are typed ops, zipdoc lifts each field's doc comment,
+// and all twelve publish their prose — which is what `password` most needed:
+// nothing said it comes back exactly once and is stored nowhere.
+var proseless = map[string]bool{}
 
 // TestEveryPublishedFieldIsDescribed closes the half of the surface the gates
 // above cannot see. Typing a route documents its ADDRESS and its SHAPE; the

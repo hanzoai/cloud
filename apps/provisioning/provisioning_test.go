@@ -399,7 +399,7 @@ func TestGenToken(t *testing.T) {
 func TestCreateOrgGate(t *testing.T) {
 	s, mp := newTestService(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/sql", create(s, "sql"))
+	mountCreate(app, s, "sql")
 
 	req, _ := http.NewRequest("POST", "/v1/sql", strings.NewReader(`{"name":"orders"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -426,12 +426,10 @@ func TestCreateOrgGate(t *testing.T) {
 func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
 	s, mp := newTestService(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	// The whole surface for one kind, mounted the way the binary mounts it: Bridge
-	// first (it parks the request the typed ops resolve their tenant from), then
-	// the untyped create beside its typed reads and delete. Both halves gate on
-	// the same tenant(), and this asserts it for both at once.
-	app.Use(cloud.Bridge())
-	app.Post("/v1/sql", create(s, "sql"))
+	// The whole surface for one kind, mounted the way the binary mounts it. Every
+	// verb resolves its tenant through the same tenantOf, and this asserts it for
+	// all three at once.
+	mountCreate(app, s, "sql")
 	o := ops{s}
 	zip.Delete(app, "/v1/sql/:name", o.dropSQL)
 	zip.Get(app, "/v1/sql", o.listSQL)
