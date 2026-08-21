@@ -128,15 +128,42 @@ func (s Standing) String() string {
 // the ledger. A caller with no subscription always does — that is the pay-as-you-go
 // path, and it is the common case for a prepaid customer.
 func Stand(ctx context.Context, lic Licence, w principal.Wallet) Standing {
-	if lic == LicenceActive {
+	return StandWithin(ctx, lic, AllowanceUnknown, w)
+}
+
+// StandWithin is Stand with the ALLOWANCE leg supplied — what the subscription's
+// own usage windows say. Stand is this with the leg unknown, which admits every
+// subscriber exactly as it always did.
+//
+// A plan INCLUDES usage, bounded by nested windows, and prepaid credit is money
+// bought separately. So a subscriber who has spent their included usage does not
+// simply stop: they fall through to the credit leg and pay as they go, and are
+// refused only if they have neither. That is the whole difference this leg makes
+// — allowance first, then credit — and it is why a spent allowance does not
+// return Unpaid directly.
+//
+// IT CAN ONLY EVER REMOVE AN ADMISSION, so every uncertainty admits. An absent
+// reader, a plan that declares no windows, a ledger that did not answer: all
+// AllowanceUnknown, all still Subscribed. Refusing a paying customer because a
+// counter was unreadable is a worse failure than serving one request past a
+// bound, and this codebase already takes that side everywhere else — "a balance
+// that cannot be read is unknown, never zero".
+func StandWithin(ctx context.Context, lic Licence, allow Allowance, w principal.Wallet) Standing {
+	if lic == LicenceActive && allow != AllowanceSpent {
 		return Subscribed
 	}
 	creditOK, funded := creditIn(ctx, w)
 	if creditOK && funded {
 		return Funded
 	}
-	if lic == LicenceNone && creditOK {
+	if creditOK && (lic == LicenceNone || allow == AllowanceSpent) {
 		// Both authorities answered; both said no. This — and only this — is proof.
+		//
+		// A spent allowance counts as the subscription leg saying no, because it
+		// IS the subscription answering: the plan includes usage, and that usage
+		// is gone. Without this clause such a caller fell through to Unknown, and
+		// Unknown ADMITS — so the windows would have been enforced only against
+		// customers who had no subscription at all, which is nobody.
 		return Unpaid
 	}
 	return Unknown
@@ -467,4 +494,50 @@ var reachableTrees = []string{
 	"/v1/waitlist/",     // admission's join API — an un-admitted user must still reach it.
 	"/v1/flags/",        // the guard's public mode read; also how the kill switch is observed.
 	"/v1/entitlements/", // per-org enablement reads/writes that sit beside the projection.
+}
+
+// ── the allowance leg ───────────────────────────────────────────────────────────
+
+// Allowance is what a subscription's own usage windows say about one caller,
+// already resolved. The zero value is AllowanceUnknown, which is the honest
+// default and the one that matters most here: this leg can only ever REMOVE a
+// subscriber's admission, so a question that could not be asked must never be
+// read as an answer.
+type Allowance uint8
+
+const (
+	// AllowanceUnknown — nothing could be determined: the reader is absent, the
+	// plan declares no windows, the ledger did not answer. NOT a statement about
+	// the caller, and admits.
+	AllowanceUnknown Allowance = iota
+	// AllowanceWithin — the authority answered: usage is inside every window.
+	AllowanceWithin
+	// AllowanceSpent — the authority answered: at least one window is exhausted.
+	AllowanceSpent
+)
+
+// AllowanceChecker reports whether a subscriber is still inside the usage their
+// plan includes. It is an OPTIONAL capability resolved by type assertion, the way
+// PlanChecker is: a deployment whose commerce cannot answer simply does not
+// implement it, and the gate behaves exactly as it did before this existed.
+type AllowanceChecker interface {
+	// WithinAllowance reports (spent, ok). ok=false means the question could not
+	// be answered and the caller must not read spent.
+	WithinAllowance(ctx context.Context, org, account string) (spent bool, ok bool)
+}
+
+// allowanceIn resolves the allowance leg. Every failure is AllowanceUnknown —
+// absent reader, empty address, a reader that could not answer.
+func allowanceIn(ctx context.Context, a AllowanceChecker, w principal.Wallet) Allowance {
+	if a == nil || w.Ledger == "" {
+		return AllowanceUnknown
+	}
+	spent, ok := a.WithinAllowance(ctx, w.Ledger, w.Account)
+	if !ok {
+		return AllowanceUnknown
+	}
+	if spent {
+		return AllowanceSpent
+	}
+	return AllowanceWithin
 }

@@ -455,3 +455,68 @@ func TestStandSubscribedNeverReadsTheLedger(t *testing.T) {
 		t.Fatalf("a subscribed caller read the ledger %d times; the legs are ordered to avoid that", led.reads)
 	}
 }
+
+// THE ALLOWANCE LEG CAN ONLY EVER REMOVE AN ADMISSION, so every uncertainty must
+// still admit. Refusing a paying customer because a counter was unreadable is a
+// worse failure than serving one request past a bound, and this ladder already
+// takes that side everywhere else.
+//
+// The shape being pinned is "allowance first, then credit": a plan INCLUDES
+// usage, prepaid credit is money bought separately, so a subscriber who has spent
+// their included usage falls through to the credit leg and pays as they go. They
+// are refused only when they have neither.
+func TestAllowanceOnlyEverRemovesAnAdmission(t *testing.T) {
+	w := principal.Wallet{Ledger: "hanzo", Account: "hanzo/subscriber"}
+
+	cases := []struct {
+		name   string
+		lic    Licence
+		allow  Allowance
+		ledger *spendLedger
+		want   Standing
+	}{
+		// Uncertainty admits. All three are reachable today: no reader wired, a
+		// plan that declares no windows, a ledger that did not answer.
+		{"allowance unknown → the subscriber is admitted, as before", LicenceActive, AllowanceUnknown, nil, Subscribed},
+		{"inside the windows → admitted without touching the ledger", LicenceActive, AllowanceWithin, nil, Subscribed},
+
+		// Spent allowance falls THROUGH to credit rather than refusing outright.
+		{"spent, but funded → pays as they go", LicenceActive, AllowanceSpent, &spendLedger{credit: atto(1)}, Funded},
+		{"spent and no credit → the only proven refusal", LicenceActive, AllowanceSpent, &spendLedger{credit: atto(0)}, Unpaid},
+
+		// A spent allowance must never turn an UNREADABLE ledger into a refusal:
+		// that would refuse a subscriber on the strength of one broken read.
+		{"spent, ledger unreadable → UNKNOWN, never unpaid", LicenceActive, AllowanceSpent, &spendLedger{err: errors.New("down")}, Unknown},
+		{"spent, no ledger published → UNKNOWN", LicenceActive, AllowanceSpent, nil, Unknown},
+
+		// The leg says nothing about a caller who has no subscription at all.
+		{"no licence, allowance irrelevant → unchanged", LicenceNone, AllowanceSpent, &spendLedger{credit: atto(0)}, Unpaid},
+		{"no licence but funded → unchanged", LicenceNone, AllowanceSpent, &spendLedger{credit: atto(1)}, Funded},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			publishLedger(t, tc.ledger)
+			if got := StandWithin(context.Background(), tc.lic, tc.allow, w); got != tc.want {
+				t.Fatalf("StandWithin(%v, %v) = %v, want %v", tc.lic, tc.allow, got, tc.want)
+			}
+		})
+	}
+}
+
+// Stand is StandWithin with the leg unknown, so every caller that predates the
+// allowance leg behaves EXACTLY as it did. Without this the change would be a
+// silent behavioural edit to every existing seam rather than an added capability.
+func TestStandIsStandWithinAnUnknownAllowance(t *testing.T) {
+	w := principal.Wallet{Ledger: "hanzo", Account: "hanzo/stranger"}
+	for _, lic := range []Licence{LicenceUnknown, LicenceNone, LicenceActive} {
+		for _, l := range []*spendLedger{nil, {credit: atto(0)}, {credit: atto(1)}, {err: errors.New("down")}} {
+			publishLedger(t, l)
+			old := Stand(context.Background(), lic, w)
+			neu := StandWithin(context.Background(), lic, AllowanceUnknown, w)
+			if old != neu {
+				t.Fatalf("Stand=%v but StandWithin(unknown)=%v for licence %v", old, neu, lic)
+			}
+		}
+	}
+}
