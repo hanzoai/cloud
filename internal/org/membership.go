@@ -2,9 +2,7 @@ package org
 
 import (
 	"context"
-	"os"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -125,33 +123,18 @@ func normalize(ms []Member) *[]Member {
 	return &out
 }
 
-// StaticSource yields a fixed set — single-node / local dev. With no explicit
-// members it reads CLOUD_REPLICAS ("id@addr,id2@addr2", or bare "id" with
-// addr==id).
+// StaticSource yields a fixed set — single-node / local dev, and the fallback
+// when no live in-cluster source is configured. No members means no members,
+// which elects nobody (fail-closed).
+//
+// It used to read CLOUD_REPLICAS as "id@addr,id2@addr2" when called with none.
+// That variable is an integer replica COUNT everywhere else in this binary
+// (cloud.Config.Replicas, and the contract Validate checks against it), so the
+// same name carried two meanings and "3" would have parsed here as one member
+// named "3". The peer LIST has its own name — CLOUD_PEERS, parsed once in
+// cloud.parsePeers and handed in by build.go, which always passes at least self.
+// One name, one meaning.
 func StaticSource(members ...Member) Source {
-	if len(members) == 0 {
-		members = parseReplicasEnv(os.Getenv("CLOUD_REPLICAS"))
-	}
 	fixed := *normalize(members)
 	return func(context.Context) ([]Member, error) { return fixed, nil }
-}
-
-func parseReplicasEnv(v string) []Member {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return nil
-	}
-	var out []Member
-	for part := range strings.SplitSeq(v, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		id, addr, ok := strings.Cut(part, "@")
-		if !ok {
-			id, addr = part, part
-		}
-		out = append(out, Member{ID: strings.TrimSpace(id), Addr: strings.TrimSpace(addr)})
-	}
-	return out
 }
