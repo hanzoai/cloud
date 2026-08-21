@@ -357,7 +357,10 @@ var Apps = []App{
 	// so plugin/network states no Prefixes at all.
 	{Name: "network", Prefixes: []string{"/v1/network"}},
 	{Name: "share", Prefixes: []string{"/v1/share"}},
-	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}},
+	// Two subtrees. The trust centre a data room backs is a PRODUCT any org runs,
+	// so its platform roster — the one cross-tenant read, refused to anyone who is
+	// not a SuperAdmin — answers at the operator's depth beside the tenant surface.
+	{Name: "dataroom", Prefixes: []string{"/v1/dataroom", "/v1/admin/dataroom"}},
 	{Name: "explorer", Prefixes: []string{"/v1/explorer"}},
 	{Name: "security", Prefixes: []string{"/v1/security"}},
 	{Name: "integrations", Prefixes: []string{"/v1/integrations"}},
