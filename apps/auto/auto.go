@@ -19,7 +19,6 @@
 // nothing else, and each names the wire fact that keeps it there at its handler:
 //
 //	✓ GET    /v1/auto/connectors             the connector catalogue (org-gated)
-//	✓ GET    /v1/auto/pieces                 back-compat alias of /connectors
 //	✓ POST   /v1/auto/connectors/:id/run     execute ONE connector action (apps/connectorruntime,
 //	                                                sub-mounted below — typed there, and the reason this
 //	                                                prefix serves NINETEEN routes while routes() registers 18)
@@ -102,7 +101,7 @@ const (
 var orgRunLimiter = newConcurrencyLimiter(maxConcurrentPerOrg)
 
 // catalogJSON is the go:embed'd connector catalogue served at
-// /v1/auto/connectors (and its /pieces back-compat alias). The Catalog
+// /v1/auto/connectors. The Catalog
 // unmarshal here is the wire contract — a schema mismatch is a build-time fault.
 //
 //go:embed catalog/catalog.json
@@ -221,10 +220,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 	o := ops{s: s}
 	zip.Get(g, "/connectors", o.connectors)
-	// Back-compat alias: the pre-rename /pieces path stays valid (same body, same
-	// status) so live clients pinned to it keep working. "pieces" is the retired
-	// ActivePieces term; "connectors" is the ONE Hanzo name (HIP-0126).
-	zip.Get(g, "/pieces", o.pieces)
 
 	zip.Get(g, "/flows", o.listFlows)
 	zip.Post(g, "/flows", o.createFlow, zip.WithStatus(http.StatusCreated))
@@ -293,14 +288,6 @@ func (o ops) connectors(ctx context.Context, _ *struct{}) (*Catalog, error) {
 		return nil, err
 	}
 	return &o.s.State.catalog, nil
-}
-
-// Pieces is the retired-name alias of the connector catalogue. It serves exactly
-// what GET /v1/auto/connectors serves, under the name this surface used
-// before "piece" (the ActivePieces term) became "connector", and stays valid for
-// clients pinned to the old path. Prefer /connectors.
-func (o ops) pieces(ctx context.Context, in *struct{}) (*Catalog, error) {
-	return o.connectors(ctx, in)
 }
 
 // ── flows ─────────────────────────────────────────────────────────────────────
