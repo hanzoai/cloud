@@ -31,6 +31,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
 // service is the client used to reach the crawl SERVICE, and it deliberately does
@@ -173,10 +175,21 @@ func reachable(ctx context.Context, raw string) error {
 
 // browse asks the browser for one URL. An error here is never fatal to a crawl —
 // every caller falls back to the static Page.
+//
+// It is also where the render is paid for. This one function is the whole of the
+// escalation: both callers reach the browser through it and neither can reach
+// the browser any other way, so gating and debiting here cannot drift from what
+// was actually rendered. See meter.go.
 func browse(ctx context.Context, raw string) (*Page, error) {
 	if err := reachable(ctx, raw); err != nil {
 		return nil, err
 	}
+	ch, err := afford(ctx, cloud.PayerOf(ctx))
+	if err != nil {
+		return nil, err
+	}
+	// Give the hold back on every exit; settling takes it, this covers the rest.
+	defer ch.Release()
 	body, err := json.Marshal(map[string]any{
 		"urls":           []string{raw},
 		"browser_config": map[string]any{"headless": true},
@@ -236,6 +249,8 @@ func browse(ctx context.Context, raw string) (*Page, error) {
 	if md == "" {
 		return nil, fmt.Errorf("crawl: browser rendered %s to nothing", raw)
 	}
+
+	charge(ch)
 
 	meta := map[string]any{}
 	maps.Copy(meta, r.Metadata)

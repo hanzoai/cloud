@@ -268,7 +268,13 @@ func enabledEngines() []engine {
 // below them. Which engine is listed first is a configuration fact and was never
 // evidence about a result.
 func metaSearch(ctx context.Context, query, lang string) webSearchResults {
-	engs := enabledEngines()
+	// Two of these engines are bought, and this is the one line every door into
+	// search passes through — so it is where the money is authorized and, below,
+	// where it is debited. A caller who cannot cover the paid engines is served
+	// by the free ones instead of being refused; see meter.go.
+	engs, ch := afford(ctx, enabledEngines())
+	// Give the hold back on every exit. Settling takes it; this covers the rest.
+	defer ch.Release()
 	answers := make([]answer, len(engs))
 
 	var wg sync.WaitGroup
@@ -286,6 +292,10 @@ func metaSearch(ctx context.Context, query, lang string) webSearchResults {
 	// caller of metaSearch passes — is what stops a broken engine from being
 	// visible only as a slightly shorter page. See outcome.go.
 	report(ctx, query, answers)
+
+	// Then bill for what was bought. After the answers, because the amount is a
+	// fact about which paid engines actually answered — see meter.go's charge.
+	charge(ch, answers)
 
 	perEngine := make([][]webResult, len(answers))
 	engines := make([]webEngine, len(answers))

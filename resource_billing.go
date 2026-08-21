@@ -36,6 +36,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/metering"
@@ -57,6 +58,11 @@ const DefaultResourceFeeCents int64 = 100
 // allow and Meter a no-op — so an unconfigured deployment is never blocked,
 // exactly like BillingGate.
 type ResourceMeter struct {
+	// inflight is what this pod's authorized-but-unsettled calls have COMMITTED,
+	// so a second caller weighs the balance against the first one's commitment
+	// rather than against money that is already being spent. See Allow.
+	inflight commitments
+
 	m        *metering.Client
 	provider string // commerce "provider" label for attribution (e.g. "provisioning", "compute").
 	env      string // deployment env (mainnet|testnet|devnet); attribution only — never a billing bypass.
@@ -275,13 +281,52 @@ func (rm *ResourceMeter) meterUsage(org, kind string, u metering.Usage, posted f
 		u.Currency = "usd"
 	}
 	m, log, env := rm.m, rm.log, rm.env
-	go func() {
-		defer posted() // the hold ends where the money lands, not where the call returned.
-		if _, err := m.Record(context.Background(), u); err != nil && log != nil {
+	settle(posted, log, org, kind, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), ledgerCallTimeout)
+		defer cancel()
+		if _, err := m.Record(ctx, u); err != nil && log != nil {
 			log.Error("resource debit failed (resource created, not billed)",
 				"org", org, "kind", kind, "provider", u.Provider,
 				"cents", u.AmountCents, "env", env, "err", err)
 		}
+	})
+}
+
+// settle runs a debit and gives the commitment back on whichever happens first:
+// the ledger answering, or the bound expiring.
+//
+// A TIMER, NOT A CONTEXT, and that is the whole point of this function. The
+// crossing to the money plane does not honour a context: zip.Call checks ctx.Err
+// once before it starts and then issues a plain client Do with no deadline, so a
+// ledger that ACCEPTS and answers slowly — apps/finance is per-org SQLite with one
+// writer, so lock contention looks exactly like that — is uninterruptible from
+// here. Passing a shorter context does not bound it; it only looks like it does.
+//
+// That mattered the moment the debit took ownership of the hold. An uninterruptible
+// call holding a commitment strands it: reserve.go adds it to every later weigh-in
+// for that wallet, so the customer is refused with a balance they can see and
+// cannot spend, until the pod restarts. Bounding it here trades that for a small
+// window in which a debit is still in flight while its commitment has already been
+// returned — the pre-existing behaviour, and the right way round. Losing a charge
+// is recoverable; taking a customer's balance away is not.
+//
+// posted is [hold.release], which is once-only, so the late arrival is harmless.
+func settle(posted func(), log luxlog.Logger, org, kind string, record func()) {
+	go func() {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			record()
+		}()
+		select {
+		case <-done:
+		case <-time.After(ledgerCallTimeout):
+			if log != nil {
+				log.Warn("ledger slow: commitment released before the debit landed",
+					"org", org, "kind", kind, "after", ledgerCallTimeout.String())
+			}
+		}
+		posted() // the hold ends where the money lands, or where we stop waiting for it.
 	}()
 }
 
@@ -407,24 +452,39 @@ func DenyEnvelope() zip.Handler {
 	}
 }
 
-// ResourceFeeCents resolves the flat create fee (in cents) for kind from
-// operator config, most specific first:
+// FeeCents resolves the flat fee (in cents) for kind from operator config, most
+// specific first:
 //
 //	<envPrefix>_<KIND>   e.g. CLOUD_PROVISION_FEE_CENTS_SQL=500
 //	<envPrefix>          e.g. CLOUD_PROVISION_FEE_CENTS=100  (all kinds)
-//	DefaultResourceFeeCents                                   ($1.00)
+//	def                  the surface's own default
 //
 // A clearly-named, configurable policy knob — never a fabricated price. A value
 // of 0 makes the kind free (and un-gated). Negative/invalid values are ignored
 // (fall through), so a typo can never make a paid resource free by accident.
-func ResourceFeeCents(envPrefix, kind string) int64 {
+//
+// THE DEFAULT IS A PARAMETER because the resolution ORDER is fleet-wide and the
+// number is not. $1.00 is right for provisioning a database and absurd for one
+// web search, so two surfaces had already copied this three-line rule to change
+// only its last line — sandbox.ResourceFee and answer.feeCents, both carrying a
+// comment explaining that they exist to escape DefaultResourceFeeCents. A rule
+// worth stating once with a value worth stating per surface is a function with
+// an argument, not a third copy.
+func FeeCents(envPrefix, kind string, def int64) int64 {
 	if v, ok := parseNonNegCents(os.Getenv(envPrefix + "_" + strings.ToUpper(kind))); ok {
 		return v
 	}
 	if v, ok := parseNonNegCents(os.Getenv(envPrefix)); ok {
 		return v
 	}
-	return DefaultResourceFeeCents
+	return def
+}
+
+// ResourceFeeCents is FeeCents at the platform's provision-fee default
+// (DefaultResourceFeeCents, $1.00) — the fee for creating a resource, which is
+// what the great majority of metered surfaces charge for.
+func ResourceFeeCents(envPrefix, kind string) int64 {
+	return FeeCents(envPrefix, kind, DefaultResourceFeeCents)
 }
 
 func parseNonNegCents(s string) (int64, bool) {
