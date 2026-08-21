@@ -2,8 +2,8 @@ package main
 
 // The o11y app is the ONE app binary that composes its own root instead of going
 // through cloud.Listen, and the host in front of it installs no middleware. That
-// combination is how its three prefixes — /v1/o11y, /v1/sentinel and, the one a
-// browser reads, /v1/o11y/summary — became the only public surface answering 200 with
+// combination is how its surface — /v1/o11y, and the one a browser reads,
+// /v1/o11y/summary — became the only public surface answering 200 with
 // no Access-Control-Allow-Origin: the browser received the status document and
 // then threw it away. These pin the edge policy onto THIS app's chain, over the
 // same allowlist every other app answers with.
