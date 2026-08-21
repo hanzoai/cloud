@@ -186,7 +186,7 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	zip.Get(open, "/csrf", o.issueCSRFToken)
 	// The caller's own API keys. ONE noun, the methods carry the operations, and the
 	// key TYPE (publishable | secret) is a FIELD — the concept had four names
-	// (/v1/iam/mint-user-keys, /v1/iam/revoke-user-keys, /v1/iam/keys,
+	// (/v1/iam/keys/mint, /v1/iam/keys/revoke, /v1/iam/keys,
 	// /v1/ingest/keys) and the only honest one 404'd.
 	//
 	// It lives OUTSIDE /v1/iam on purpose, and that is not cosmetic: api.hanzo.ai
