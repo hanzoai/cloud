@@ -22,10 +22,15 @@ import (
 // a Load registers All(prefix), fiber merges byte-identical patterns into one
 // route with both handlers chained, and the host's GET would sit BEHIND the
 // proxy handler and never run. Same trap, same shape, as the MCP door.
+//
+// It asks openapi.Routed rather than openapi.Door because the trap needs a route
+// to spring: the two INDEX doors are answered ahead of the router precisely
+// because a row already claims where they sit — ai's "/v1" remainder is one of
+// them — so a claim there merges with nothing. See openapi.Routed.
 func TestNoAppClaimsAHostDoor(t *testing.T) {
 	for _, a := range Apps {
 		for _, p := range a.Prefixes {
-			if openapi.Door(p) {
+			if openapi.Routed(p) {
 				t.Fatalf("app %q claims %q, one of the host's own doors (openapi.Door). A Load "+
 					"there registers All(%q), which fiber merges with the host's GET into one "+
 					"route — the door would sit behind the proxy handler and never run, and the "+

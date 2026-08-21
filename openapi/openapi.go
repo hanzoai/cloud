@@ -942,21 +942,53 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 }
 
 // Door reports whether path is the host's — one [serve] registers (the document
-// and its command projection) or the agent door (openapi/mcp.go).
+// and its command projection), the agent door (openapi/mcp.go), or the index a
+// client follows from the API root (openapi/index.go).
 //
 // The doors are the host's, and they are the only operations that belong to NO
 // app: they are declared in this package rather than beside any subsystem, no
 // manifest row names them, and EVERY deployment serves them whatever subset of
-// the fleet it runs. Three gates need exactly that fact and each had written it
+// the fleet it runs. Four gates need exactly that fact and each had written it
 // as the one literal that was true when it was written:
 //
 //	Complete                     skips a description no app can own
+//	misfiled.go                  files them where the protocol puts them
 //	cmd/cloud/openapi_test.go    exempts them from a scoped deployment's surface
-//	manifest/openapi_test.go     refuses an app row that claims one
+//	manifest/openapi_test.go     refuses an app row that claims one — [Routed]
 //
 // So it is stated once, beside the code that makes it true. The second door
 // arrived and all three were wrong the same afternoon — the cost of a literal is
 // that it is right until it isn't and says nothing when it stops.
+//
+// Whether the host REGISTERS a route at a door is a narrower question, and the
+// last gate is the one that asks it: see [Routed].
 func Door(path string) bool {
-	return path == Path || path == WellKnown || path == CommandPath || path == door.Path
+	// Either spelling answers, because the callers hold different ones: a prose
+	// declaration is keyed by the ROUTER's pattern (/v1/:name) and the document by
+	// the rendered template (/v1/{name}). translate is what already maps one onto
+	// the other, so this asks it rather than listing both.
+	at, _ := translate(path)
+	switch at {
+	case Path, WellKnown, CommandPath, door.Path, RootPath, IndexPath:
+		return true
+	}
+	return false
+}
+
+// Routed reports whether the host registers a ROUTE at this door, rather than
+// answering it ahead of the router.
+//
+// Both index doors sit inside a subtree a manifest row already claims — /v1 is
+// ai's REMAINDER and /v1/{name} is each capability's own root — so a route at
+// either is two definitions claiming one address and zip refuses the composition
+// outright. [MountIndex] answers them from middleware composed before the mounts
+// instead, which no Load can sit in front of.
+//
+// That distinction is the whole content of manifest.TestNoAppClaimsAHostDoor: a
+// row may not claim an address the host ROUTES, because fiber would merge the two
+// patterns and leave the host's handler behind the proxy; it may claim one the
+// host answers ahead of the router, because there is nothing there to merge with.
+func Routed(path string) bool {
+	at, _ := translate(path)
+	return Door(at) && at != RootPath && at != IndexPath
 }

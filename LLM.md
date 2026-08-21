@@ -56,6 +56,24 @@ source for the generated per-language SDKs.
   path whose `manifest.OwnerOf` names a sibling — the routing table's own
   longest-prefix answer — so a module that registers a sibling's address (ai's
   /v1/crawl) can neither re-publish it nor collide with its owner (describe.go)
+- `openapi/index.go` — the same document as HYPERMEDIA. `GET /v1` lists every
+  capability with the address to follow; `GET /v1/<capability>` lists that
+  capability's operations; every /v1 answer carries RFC 8288 `Link:` headers
+  (`self`, `describedby` → /v1/openapi.json, `index` → /v1). All of it is
+  projected from the woven document and filtered by the SAME `x-public` audience
+  rule public.yaml is, so a beta capability is absent from the root and 404s one
+  segment down — one fact, not two. **They are MIDDLEWARE on the front door, not
+  routes**: ai's row is the bare `/v1` remainder and zip mounts a prefix as
+  `All(prefix)` too, so a host route at `/v1` is two definitions claiming one
+  address and the composition is refused outright — same one segment down for
+  every capability that claims its own root. `openapi.Routed` is the predicate
+  that separates a door the host REGISTERS from one it answers ahead of the
+  router (manifest.TestNoAppClaimsAHostDoor asks the first). The index yields
+  wherever the document already carries an operation at that address, so
+  `GET /v1/agents` is the agents collection and never an index of it — read off
+  the document, so it self-heals the day a capability starts serving its own
+  root. The doors are still DESCRIBED, through `core()`'s stub router, exactly
+  as the agent door is
 - `manifest/apps.go` — hand-authored source of truth; what `cmd/cloud` knows about the fleet
 
 ---

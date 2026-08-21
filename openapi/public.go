@@ -77,7 +77,10 @@ const Operator = "admin"
 
 // audience is the rule, asked of one operation at its published address.
 func audience(path string, op *Operation) bool {
-	if !strings.HasPrefix(path, "/v1/") {
+	// The root IS the contract's namespace, not a path outside it: /v1 is where a
+	// client that knows nothing else starts, so a public projection that dropped it
+	// would generate clients unable to reach the index of their own API.
+	if path != RootPath && !strings.HasPrefix(path, "/v1/") {
 		return false
 	}
 	if Product(path) == Operator {
