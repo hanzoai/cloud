@@ -5,7 +5,7 @@ package cloud
 // aud=<owner>-platform-kms. Validation no longer gates on the audience at all (trust
 // is signature + issuer + expiry), so a machine token clears validate() like any
 // other. The owner-bound machine aud survives only to IDENTIFY such a principal
-// (isKMSMachinePrincipal) so SanitizeIdentity can DENY it SuperAdmin even in the admin
+// as a NAME only; the signed kind is what denies it SuperAdmin even in the admin
 // org — a client_credentials machine identity must never wield platform-admin. These
 // are white-box unit tests of that identification; the end-to-end proof through
 // SanitizeIdentity + the real guard lives in clients/kms (v6_aud_e2e_test.go). Reuses

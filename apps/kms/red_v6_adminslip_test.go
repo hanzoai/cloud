@@ -1,8 +1,16 @@
 package kms_test
 
+// THE MECHANISM MOVED; THE QUESTION AND THE ANSWER DID NOT. This file was written
+// when a machine was RECOGNISED by an owner-bound audience and had admin subtracted
+// afterwards, so it asks whether a multi-value audience could slip past that
+// recognition. IAM now signs the kind (`type: application`) and Sudo refuses every
+// machine, so the audience decides nothing and there is nothing for an audience to
+// slip past. The assertions below still hold, for that reason rather than the old
+// one; the reasoning quoted in the comments describes the mechanism they replaced.
+//
 // RED RE-VERIFY (2nd cycle) of the fix commit 829b6ed5 — decouple V6 machine-aud
 // from SuperAdmin. This file FOCUS-FIRES the one surface the fix newly introduces:
-// the interaction of isKMSMachinePrincipal (deny-admin gate) with go-jose's
+// the interaction of the machine kind (deny-admin gate) with go-jose's
 // AnyAudience OR-match. If a MULTI-VALUE aud carrying BOTH a static-allowlist member
 // AND the owner's machine aud could "slip" back to SuperAdmin (because the static
 // member is what let it validate), the fix would have a hole.
@@ -73,7 +81,7 @@ func slipValue(t *testing.T, resp *http.Response) any {
 // TestRed_MultiValueAud_AdminSlip is the focus-fire: owner==adminOrg, isAdmin=true,
 // aud = [ <static allowlist member>, <owner machine aud> ]. The token VALIDATES via
 // the static member (AnyAudience OR), so the fix cannot rely on validation rejecting
-// it — it must rely on isKMSMachinePrincipal firing on the machine aud's PRESENCE and
+// it — it must rely on the machine kind firing on the machine aud's PRESENCE and
 // stripping admin. Proven by contrast with a real admin (no machine aud) that KEEPS
 // its cross-org switch.
 func TestRed_MultiValueAud_AdminSlip(t *testing.T) {
@@ -81,7 +89,7 @@ func TestRed_MultiValueAud_AdminSlip(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 
 	// ── BASELINE: a REAL SuperAdmin — isAdmin=true, aud=[hanzo-console] ONLY (no
-	//    machine aud). isKMSMachinePrincipal("admin")=false → SuperAdmin GRANTED →
+	//    machine aud). the machine kind("admin")=false → SuperAdmin GRANTED →
 	//    the org-switch is honored → the VICTIM'S value comes back. This pins the
 	//    oracle: the victim's plaintext here means "SuperAdmin reaches a foreign
 	//    org", so the same plaintext on the attack tokens below would be the SLIP,
@@ -98,7 +106,7 @@ func TestRed_MultiValueAud_AdminSlip(t *testing.T) {
 	//    (STATIC allowlist), admin-platform-kms (the OWNER machine aud) ]. AnyAudience
 	//    OR-matches "hanzo-console" so the token VALIDATES (the machine widening was not
 	//    even needed). The presence of the owner machine aud MUST still trip
-	//    isKMSMachinePrincipal → deny SuperAdmin → org-pinned to "admin" → the switch is
+	//    the machine kind → deny SuperAdmin → org-pinned to "admin" → the switch is
 	//    inert and the ADMIN'S OWN value comes back. The victim's value would mean the
 	//    static co-member let it slip back to admin: the fix would be BYPASSED.
 	slip := mintRed(t, key, "admin", []string{slipStaticAud, slipOwnMachAud}, true, future)
@@ -117,7 +125,7 @@ func TestRed_MultiValueAud_AdminSlip(t *testing.T) {
 	}
 
 	// Order-independence: reverse the aud so the machine aud is FIRST.
-	// isKMSMachinePrincipal scans the whole set, so the deny must not depend on ordering.
+	// the machine kind scans the whole set, so the deny must not depend on ordering.
 	slipRev := mintRed(t, key, "admin", []string{slipOwnMachAud, slipStaticAud}, true, future)
 	if got := slipValue(t, getBearerHdr(t, app, path, slipRev, switchToVictim)); got != slipAdminValue {
 		t.Fatalf("ADMIN-SLIP (reversed aud order [%s, %s]) read %v, want %q",
@@ -136,7 +144,7 @@ func TestRed_MultiValueAud_AdminSlip(t *testing.T) {
 // a real admin whose aud carries a FOREIGN tenant's machine aud (NOT its own) must
 // KEEP SuperAdmin. kmsMachineAudience(owner="admin")="admin-platform-kms"; the set
 // carries "maxpower-platform-kms", which is NOT the owner's machine aud, so
-// isKMSMachinePrincipal returns false and admin is retained. This is CORRECT: the
+// the machine kind returns false and admin is retained. This is CORRECT: the
 // admin-deny gate is OWNER-BOUND — it fires only on the owner's own machine aud, so a
 // foreign machine aud in the set never strips a bona-fide admin. Denying it would be
 // an over-block that breaks multi-aud admin tokens.
@@ -145,7 +153,7 @@ func TestRed_ForeignMachineAudInSet_RealAdminKept(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 
 	// owner=admin, isAdmin=true, aud=[hanzo-console (static), maxpower-platform-kms (FOREIGN
-	// machine aud)]. Not the owner's machine aud → isKMSMachinePrincipal(admin)=false →
+	// machine aud)]. Not the owner's machine aud → the machine kind(admin)=false →
 	// real SuperAdmin → the switch is honored → the victim's value.
 	fa := mintRed(t, key, "admin", []string{slipStaticAud, paasOrgA + "-platform-kms"}, true, future)
 	if got := slipValue(t, getBearerHdr(t, app, path, fa, switchToVictim)); got != slipVictimValue {
@@ -155,7 +163,7 @@ func TestRed_ForeignMachineAudInSet_RealAdminKept(t *testing.T) {
 
 	// Contrast — the DISCRIMINATOR is the owner's OWN machine aud, not any machine aud:
 	// swap the foreign maxpower-platform-kms for admin's OWN admin-platform-kms and the
-	// SAME shape becomes a machine principal → isKMSMachinePrincipal fires → admin
+	// SAME shape becomes a machine principal → the machine kind fires → admin
 	// stripped → the switch is inert and the ADMIN'S own value comes back. So a FOREIGN
 	// machine aud keeps admin (fa above); the OWN machine aud strips it — owner-bound.
 	ownMach := mintRed(t, key, "admin", []string{slipStaticAud, slipOwnMachAud}, true, future)
