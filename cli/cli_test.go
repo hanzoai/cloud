@@ -172,12 +172,31 @@ func TestBuildTokenPrecedence(t *testing.T) {
 	if got := e.buildToken(""); got != "creds" {
 		t.Fatalf("creds build token: %q", got)
 	}
-	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "cb")
-	if got := e.buildToken(""); got != "cb" {
-		t.Fatalf("callback env: %q", got)
+	t.Setenv("HANZO_BUILD_TOKEN", "env")
+	if got := e.buildToken(""); got != "env" {
+		t.Fatalf("build-token env beats the credential store: %q", got)
 	}
 	if got := e.buildToken("flag"); got != "flag" {
 		t.Fatalf("flag wins: %q", got)
+	}
+}
+
+// A build is attributed to the organization its credential carries, so the CLI
+// presents one that names an organization. A deployment's shared service secret
+// names none, and an environment holding it does not make it this caller's
+// identity — the IAM login is what `hanzo build` sends.
+func TestBuildTokenIgnoresDeploymentSecret(t *testing.T) {
+	sandbox(t)
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "shared-machine-token")
+	e := resolve(&Config{}, &Credentials{AccessToken: "iam-jwt"}, globalFlags{})
+	if got := e.buildToken(""); got != "iam-jwt" {
+		t.Fatalf("build must present the IAM identity, got %q", got)
+	}
+	// With no identity at all it resolves empty, so the caller surfaces
+	// "run `hanzo login`" rather than sending a credential that names no org.
+	e = resolve(&Config{}, &Credentials{}, globalFlags{})
+	if got := e.buildToken(""); got != "" {
+		t.Fatalf("no login should resolve empty, got %q", got)
 	}
 }
 

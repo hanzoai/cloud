@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -237,10 +238,19 @@ func TestBuildCommand(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer bt" {
 			t.Errorf("build auth = %q", got)
 		}
+		// --org selects what the CLI reads and renders; it does not travel on a
+		// build. A build belongs to the organization its credential carries, so
+		// the body names none even when the caller has an org selected.
+		body, _ := io.ReadAll(r.Body)
+		var wire map[string]any
+		_ = json.Unmarshal(body, &wire)
+		if _, ok := wire["organizationId"]; ok {
+			t.Errorf("build body must name no organization: %s", body)
+		}
 		w.WriteHeader(202)
 		_ = json.NewEncoder(w).Encode(BuildJob{BuildJobID: "bj-9", Status: "queued", Image: "ghcr.io/hanzoai/pricing:t"})
 	})
-	out, err := runRoot(t, "", "build", "hanzoai/pricing", "--sha", "abc", "--image", "ghcr.io/hanzoai/pricing:t", "--build-token", "bt")
+	out, err := runRoot(t, "", "--org", "acme", "build", "hanzoai/pricing", "--sha", "abc", "--image", "ghcr.io/hanzoai/pricing:t", "--build-token", "bt")
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
