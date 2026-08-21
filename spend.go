@@ -280,12 +280,12 @@ var meteredApps = []string{
 	// is 402'd for free work. Removed rather than given a Price, because there
 	// is no surface to price.
 	//
-	// "auto" was the same mistake wearing a path. The manifest routes automations
-	// at /v1/auto, so that prefix is an app's ADDRESS, and this list is names —
-	// which is the whole reason it stopped being a list of paths. The durable-flow
-	// runs it was added to charge for were already billed by `automations`, which
-	// declares Metered and answers exactly that tree. So the entry priced nothing
-	// and only gated, under a name no app answers to.
+	// "auto" OUTLIVED ITS APP, which is the same failure arriving by a different
+	// road. apps/auto was deleted when the native backend replaced the proxy it
+	// duplicated, and the manifest routes /v1/auto to automations now — so this
+	// name pointed at nothing, while `automations` below declares Metered and was
+	// already billing that exact tree. An entry that prices no surface still gates
+	// one, so it cost nobody a charge and cost somebody a 402.
 	"agents",       // per-run agent fee.
 	"ai",           // LLM token costs (ai self-meters).
 	"ask",          // the answer engine's per-question fee.
