@@ -2,7 +2,7 @@
 // seats, and agents as teammates.
 //
 // It is Hanzo Team: IAM sign-in and workspace selection, the transactor WebSocket a
-// workspace's documents ride, collaborative editing on /collaborator, per-workspace
+// workspace's documents ride, collaborative editing on /v1/team/collaborator, per-workspace
 // files, the wallet page with its plan + seats, and the org's agents projected in as
 // bot members.
 //

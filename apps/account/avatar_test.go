@@ -3,7 +3,7 @@ package account
 // The profile-photo surface, end to end on a real mounted app.
 //
 // The bug these cover is an ABSENCE — there was no way to set a photo at all, and
-// production said so (/v1/avatar 404 while /v1/keys 403). So the first test is
+// production said so (/v1/account/avatar 404 while /v1/account/keys 403). So the first test is
 // simply that a user can now set one and get it back, and the rest hold the two
 // properties that make it safe to serve an uploaded file back from an API origin
 // with no credentials: the format is decided by the BYTES, and the address is the
@@ -163,7 +163,7 @@ func upload(t *testing.T, app *zip.App, user, org, filename string, data []byte)
 	}
 	_ = mw.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/avatar", &body)
+	req := httptest.NewRequest(http.MethodPost, "/v1/account/avatar", &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	if user != "" {
 		req.Header.Set("X-User-Id", user)
@@ -173,7 +173,7 @@ func upload(t *testing.T, app *zip.App, user, org, filename string, data []byte)
 	}
 	resp, err := app.Test(req)
 	if err != nil {
-		t.Fatalf("Test POST /v1/avatar: %v", err)
+		t.Fatalf("Test POST /v1/account/avatar: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
@@ -232,7 +232,7 @@ func TestSetAndFetchProfilePhoto(t *testing.T) {
 	// by an <img> on console.hanzo.ai, where a relative path would resolve against
 	// the wrong origin.
 	sum := sha256.Sum256(png)
-	want := "https://api.hanzo.ai/v1/avatar/hanzo/u-antje/" + hex.EncodeToString(sum[:])
+	want := "https://api.hanzo.ai/v1/account/avatar/hanzo/u-antje/" + hex.EncodeToString(sum[:])
 	if url != want {
 		t.Fatalf("url = %q, want %q", url, want)
 	}
@@ -352,7 +352,7 @@ func TestReadNeverServesNonImageBytes(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	resp, _ := fetch(t, app, "/v1/avatar/hanzo/u-antje/"+dg)
+	resp, _ := fetch(t, app, "/v1/account/avatar/hanzo/u-antje/"+dg)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("fetch = %d, want 404 — a stored non-image must never be served", resp.StatusCode)
 	}
@@ -365,11 +365,11 @@ func TestReadRefusesAnythingThatIsNotAPhotoAddress(t *testing.T) {
 	good := hex.EncodeToString(func() []byte { s := sha256.Sum256(onePNG()); return s[:] }())
 
 	for name, p := range map[string]string{
-		"digest is not hex":        "/v1/avatar/hanzo/u-antje/" + strings.Repeat("z", 64),
-		"digest is the wrong size": "/v1/avatar/hanzo/u-antje/abcd",
-		"traversal in the org":     "/v1/avatar/..%2f..%2fetc/u-antje/" + good,
-		"traversal in the user":    "/v1/avatar/hanzo/..%2f..%2fpasswd/" + good,
-		"never uploaded":           "/v1/avatar/hanzo/u-nobody/" + good,
+		"digest is not hex":        "/v1/account/avatar/hanzo/u-antje/" + strings.Repeat("z", 64),
+		"digest is the wrong size": "/v1/account/avatar/hanzo/u-antje/abcd",
+		"traversal in the org":     "/v1/account/avatar/..%2f..%2fetc/u-antje/" + good,
+		"traversal in the user":    "/v1/account/avatar/hanzo/..%2f..%2fpasswd/" + good,
+		"never uploaded":           "/v1/account/avatar/hanzo/u-nobody/" + good,
 	} {
 		t.Run(name, func(t *testing.T) {
 			resp, _ := fetch(t, app, p)

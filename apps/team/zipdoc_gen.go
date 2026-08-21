@@ -97,20 +97,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"token":"eyJhbGciOiJIUzI1NiJ9…"}`),
 	})
-	zip.Describe("POST /collaborator/rpc/:documentId", zip.Doc{
-		Description: "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists.",
-		Fields: map[string]string{
-			"collabPayload.content":    "Content maps a document field to its ProseMirror markup JSON.",
-			"collabPayload.source":     "Source is the blob ref a getContent reads the snapshot from. Absent means\nthere is no snapshot to read, which answers empty content.",
-			"collabPayload.updates":    "Updates carries, per field, a base64 Y.js state update encoding the SAME\nmarkup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a\ncreateContent seeds the live-editing lane's update log, not just the\nsnapshot blob. Without it a dialog-created description is invisible in the\ncollaborative editor, which replays the ydoc log, never the snapshot.",
-			"collabRequest.documentId": "DocumentID addresses the document field, as\n\"<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
-			"collabRequest.method":     "Method is the verb: createContent, updateContent or getContent.",
-			"collabRequest.payload":    "Payload is the verb's argument.",
-			"collabResult.content":     "Content maps each document field to its value for the verb: the new blob\nref after a createContent, the stored markup after a getContent.",
-			"collabResult.error":       "Error carries a SEMANTIC refusal, which this RPC reports under 200 because\nthe client throws on result.error — auth and tenancy failures are HTTP\nstatuses instead.",
-		},
-		Example: json.RawMessage(`{"documentId":"6579…|tracker:class:Issue|issue-1|description","method":"getContent","payload":{"source":"issue-1-description-1730000000000"}}`),
-	})
 	zip.Describe("POST /team/member", zip.Doc{
 		Fields: map[string]string{
 			"Member.account":     "Account is the team AccountUuid the subject resolved to — the identity the\nasking process attributes the person by, so it never derives one itself.",
@@ -137,6 +123,20 @@ func init() {
 			"botSync.projected": "Projected is how many roster entries the reconcile touched.",
 			"botSync.synced":    "Synced is true when the reconcile ran.",
 		},
+	})
+	zip.Describe("POST /v1/team/collaborator/rpc/:documentId", zip.Doc{
+		Description: "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists.",
+		Fields: map[string]string{
+			"collabPayload.content":    "Content maps a document field to its ProseMirror markup JSON.",
+			"collabPayload.source":     "Source is the blob ref a getContent reads the snapshot from. Absent means\nthere is no snapshot to read, which answers empty content.",
+			"collabPayload.updates":    "Updates carries, per field, a base64 Y.js state update encoding the SAME\nmarkup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a\ncreateContent seeds the live-editing lane's update log, not just the\nsnapshot blob. Without it a dialog-created description is invisible in the\ncollaborative editor, which replays the ydoc log, never the snapshot.",
+			"collabRequest.documentId": "DocumentID addresses the document field, as\n\"<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
+			"collabRequest.method":     "Method is the verb: createContent, updateContent or getContent.",
+			"collabRequest.payload":    "Payload is the verb's argument.",
+			"collabResult.content":     "Content maps each document field to its value for the verb: the new blob\nref after a createContent, the stored markup after a getContent.",
+			"collabResult.error":       "Error carries a SEMANTIC refusal, which this RPC reports under 200 because\nthe client throws on result.error — auth and tenancy failures are HTTP\nstatuses instead.",
+		},
+		Example: json.RawMessage(`{"documentId":"6579…|tracker:class:Issue|issue-1|description","method":"getContent","payload":{"source":"issue-1-description-1730000000000"}}`),
 	})
 	zip.Describe("POST /v1/team/files/:workspace", zip.Doc{
 		Description: "Stores the uploaded bytes under the CLIENT-supplied blob uuid (the\nmultipart file's filename). The server does NOT mint the id — the front owns it\n(front.ts: formData.append('file', file, uuid)). Response body is irrelevant\n(uploadFile discards it); we echo the id for curl/debug.",

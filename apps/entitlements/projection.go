@@ -44,7 +44,7 @@ type projectionView struct {
 // Projection reports which console apps the CALLER's org may open, and the plan slug
 // that decides it. It is the READ side of the unified paywall: the org's plan tier
 // resolved from commerce, which is a different authority from the enablement store
-// behind GET /v1/orgs/{org}/entitlements (that one is the org's own on/off intent).
+// behind GET /v1/entitlements/orgs/{org} (that one is the org's own on/off intent).
 //
 // It fails SAFE-TO-LOCKED, never 500: an unvalidated principal is a 403, but a
 // commerce outage reports every app locked at 200 rather than breaking the shell.

@@ -519,7 +519,7 @@ var (
 	grantMutations = []string{
 		"/v1/admin/",
 		"/v1/iam/",
-		"/v1/orgs/",
+		"/v1/account/orgs",
 	}
 )
 
