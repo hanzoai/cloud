@@ -14,7 +14,7 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.3.3
-	github.com/hanzoai/amqp v0.4.1
+	github.com/hanzoai/amqp v0.4.2
 	github.com/hanzoai/cek v0.2.7
 	github.com/hanzoai/commerce v1.50.72
 	github.com/hanzoai/dataroom v1.1.7
