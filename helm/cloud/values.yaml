@@ -81,6 +81,22 @@ hanzo:
   # picks the same one — plus a revocation row in this store. What does not
   # survive a second pod is the STORE, when it is a file on one pod's volume.
   iamStore: ""
+  # The ceiling in BYTES on the bare repositories git materializes under
+  # {dataDir}/git. Empty is UNBOUNDED, and unbounded is what every deployment
+  # keeps until an operator has looked at their volume: this reclaims disk by
+  # DELETING repositories, and a chart default that starts doing that on a
+  # rollout would be the worst kind of surprise.
+  #
+  # It is bytes and not a repository count because the constraint is a volume.
+  # Measured on the production claim: 3,160 repositories ranging from 36KB to
+  # 10.4GB, so a count bounds nothing.
+  #
+  # ONLY A REPOSITORY THAT CAN BE FETCHED AGAIN IS EVER RELEASED — one imported
+  # by a mirror, whose source answered, and which has not been pushed to since.
+  # Everything else is pinned, so setting this can cost a refetch and cannot
+  # cost a repository. A store held above the ceiling with nothing releasable
+  # says so in the log rather than reclaiming something it cannot restore.
+  gitCacheBytes: ""
 
 service:
   type: ClusterIP
