@@ -27,35 +27,35 @@
 // the subject-pinning those native routes apply themselves (billing_coresident.go's
 // PinBillingSubject) and the S2S token check they gate on (billing.go's IsServiceToken).
 //
-// SURFACE — each route on its REAL domain (every one requires a VALIDATED principal — a
-// gateway-minted, IAM-verified X-User-Id; a client-forged X-Org-Id on the bearer-less
-// path is refused):
+// SURFACE — one prefix, /v1/account, and the segment after it names the thing (every
+// route requires a VALIDATED principal — a gateway-minted, IAM-verified X-User-Id; a
+// client-forged X-Org-Id on the bearer-less path is refused):
 //
-//	GET    /v1/keys                  — the caller's keys: { keys: [{ type, prefix, createdAt }] }; no secret.
-//	POST   /v1/keys                  — create/rotate a key of { type: publishable | secret }; returns it ONCE.
-//	DELETE /v1/keys                  — revoke the key of that type.
-//	POST   /v1/orgs                  — create the caller's org (+ move them in on first run).
-//	GET    /v1/csrf                  — mint the anti-CSRF token the SPA echoes on money writes (csrf.go).
-//	GET    /v1/embed                 — brand-app embed entitlement + reachability probe (embed.go).
+//	GET    /v1/account/keys          — the caller's keys: { keys: [{ type, prefix, createdAt }] }; no secret.
+//	POST   /v1/account/keys          — create/rotate a key of { type: publishable | secret }; returns it ONCE.
+//	DELETE /v1/account/keys          — revoke the key of that type.
+//	POST   /v1/account/orgs          — create the caller's org (+ move them in on first run).
+//	GET    /v1/account/csrf          — mint the anti-CSRF token the SPA echoes on money writes (csrf.go).
+//	GET    /v1/account/embed         — brand-app embed entitlement + reachability probe (embed.go).
 //
 // ONE SUBSYSTEM REGISTRATION, at order 48. The order is a convention, not the
 // protection: the fiber fork inserts endpoint routes MOST-SPECIFIC-FIRST regardless of
 // when they were registered (zap-proto/fiber router_precedence.go — ServeMux semantics,
-// a static literal beats a param beats a greedy wildcard), so /v1/keys and
-// /v1/commerce/topup/wallet win over clients/iam's /v1/iam/* and the commerce embed
-// because they are DEEPER, not because they mount earlier. Specificity is also why the
-// retired bridge's two bare stems could never have shadowed anything — and why nothing
-// needed to replace them when they went.
+// a static literal beats a param beats a greedy wildcard), so /v1/account/* wins over
+// clients/iam's /v1/iam/* and the commerce embed because it is DEEPER, not because it
+// mounts earlier. Specificity is also why the retired bridge's two bare stems could
+// never have shadowed anything — and why nothing needed to replace them when they went.
 //
 // TYPED OPS. Every ADDRESSABLE route here is a typed op (zip.Get/Post/Delete with
-// real In/Out types) — eleven of them — so each is ONE registry entry the REST
-// route, the OpenAPI operation's schema and prose, the MCP tool, the CLI command
-// and every generated SDK method all derive from. That is now ALL of them: the
-// seven exceptions were the bridge's seven wildcard methods, and they went with it.
-// typed_wire_test.go holds the exception list as a CLOSED (and now EMPTY) set and
-// fails on any account operation that is neither a typed op nor named there — so the
-// next route added here is typed by default, and dropping one out of the registry
-// takes a deliberate edit with a reason.
+// real In/Out types), so each is ONE registry entry the REST route, the OpenAPI
+// operation's schema and prose, the MCP tool, the CLI command and every generated
+// SDK method all derive from. Two are not, and cannot be: the profile-photo pair
+// takes a multipart form in and answers raw image bytes out (avatar.go). The
+// bridge's seven wildcard forwarders were the other exceptions and they went with
+// it. typed_wire_test.go holds the list as a CLOSED set and fails on any account
+// operation that is neither a typed op nor named there — so the next route added
+// here is typed by default, and dropping one out of the registry takes a
+// deliberate edit with a reason.
 //
 // TENANCY. The caller is resolved from the VALIDATED identity headers ONLY
 // (principal.Validated / c.Org() / c.User()), the same trust boundary every mutating
@@ -81,6 +81,15 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// prefix is THE path this capability answers under. HIP-0139 §3: every route a
+// capability serves is under /v1/<name>, and a second top-level address is a
+// second capability, never an alias. Six of these routes used to answer at the
+// bare root — /v1/keys, /v1/orgs, /v1/appearance, /v1/avatar, /v1/csrf,
+// /v1/embed — which is what put six lines in openapi/misfiled.txt. One
+// constant, so the three groups below cannot drift apart, and because cmd/zipdoc
+// resolves a typed op's prefix from the CONSTANT VALUE of the Group argument.
+const prefix = "/v1/account"
+
 // adminOrg is THE SuperAdmin / IAM-system org that owns every customer org row —
 // standardized as "admin" across the whole stack (IAM, commerce, ai, gateway all
 // gate cross-tenant on owner=="admin"). A created customer org is owned by it.
@@ -95,8 +104,8 @@ var errNotConfigured = errors.New("iam confidential client not configured")
 var errNotFound = errors.New("not found")
 
 // state is account's own data; shared deps live in the embedded cloud.Base. The
-// CSRF key is the process-wide singleton (csrf.go), so a token minted at /v1/csrf
-// verifies on whatever money write echoes it — including the co-resident commerce
+// CSRF key is the process-wide singleton (csrf.go), so a token minted at the csrf
+// route verifies on whatever money write echoes it — including the co-resident commerce
 // writes mounted from another package.
 type state struct {
 	iam      *iamClient
@@ -168,12 +177,12 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// The trailing Group is the path prefix these routes share, and each op's
 	// identity is that prefix composed with its leaf.
 	limit, csrf := rateLimit(s.State.writesRL), requireCSRF(s)
-	open := app.Group("/v1")                     // reads: no gate
-	write := zapp.With(limit, csrf).Group("/v1") // money writes
-	guard := zapp.With(csrf).Group("/v1")        // a write that is not rate-limited
+	open := app.Group(prefix)                     // reads: no gate
+	write := zapp.With(limit, csrf).Group(prefix) // money writes
+	guard := zapp.With(csrf).Group(prefix)        // a write that is not rate-limited
 
-	// GET /v1/csrf issues the anti-CSRF token the embedded SPA echoes as X-CSRF-Token on
-	// every money write (csrf.go). Safe (read-only), same-origin.
+	// The anti-CSRF token the embedded SPA echoes as X-CSRF-Token on every money
+	// write (csrf.go). Safe (read-only), same-origin.
 	zip.Get(open, "/csrf", o.issueCSRFToken)
 	// The caller's own API keys. ONE noun, the methods carry the operations, and the
 	// key TYPE (publishable | secret) is a FIELD — the concept had four names
@@ -350,7 +359,7 @@ func resolveCaller(c *zip.Ctx, requireOwner bool) (caller, bool) {
 	return caller{id: id, owner: owner, name: name, username: username}, true
 }
 
-// ── keys (/v1/keys — the caller's own API keys) ───────────────────────────────
+// ── keys (the caller's own API keys) ─────────────────────────────────────────
 
 // The key TYPES, as the product names them. A key's type says what the key may
 // DO, so it is a field on the one resource, never a path segment and never a
@@ -525,7 +534,7 @@ func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
 // both classes with a pk- AccessKey and puts the secret key's sk- in AccessSecret,
 // which the listing masks (keys.MintUserKey: `access, secret := Mint("pk"), Mint("sk")`).
 // So the prefix read the same on every row and this returned true for all of them.
-// Measured on production: a freshly minted SECRET key came back from GET /v1/keys
+// Measured on production: a freshly minted SECRET key came back from the key read
 // typed "publishable", with its pk- half printed as though it were a browser
 // credential — and the console, which looks for the secret row, offered "create
 // your Cloud API key" to a user who already held a working one.

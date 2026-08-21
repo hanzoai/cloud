@@ -302,7 +302,7 @@ func TestPayPathStaysReachable(t *testing.T) {
 		"/v1/entitlements",              // the shell's own upgrade projection
 		"/v1/iam/login",                 // signing in to pay at all
 		"/v1/signin", "/v1/get-account", // session bootstrap + the read AuthGate needs
-		"/v1/orgs/acme/entitlements",   // which org am I buying for
+		"/v1/entitlements/orgs/acme",   // which org am I buying for
 		"/v1/admin/flags",              // the cockpit holding this gate's kill switch
 		"/v1/waitlist",                 // admission's join API
 		"/v1/probe/health", "/healthz", // liveness must never be hidden by a paywall

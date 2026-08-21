@@ -190,30 +190,31 @@ func TestGroupUseOutsideThePrefixesFailsTheMount(t *testing.T) {
 
 // TestBareGroupOutsideThePrefixesIsAllowed keeps the refusal from overreaching.
 // A PREFIX IS JUST A PATH: scope bounds middleware and has never bounded route
-// registration, so a subsystem grouping routes under someone else's tree is
-// ordinary (account registers under /v1/commerce/topup, entitlements under
-// /v1/orgs). Refusing the bare group would fail those mounts for building a
-// router the way routers are built.
+// registration, so a subsystem grouping routes under someone else's tree composes
+// a router the way routers are built, and refusing the bare group would fail that
+// mount. Every app answering under its own name (HIP-0139 §3) is the goal, not
+// something this seam is entitled to enforce — the misfiled ratchet does that, in
+// one place, against the served document.
 //
 // It is the Use that is the escape, which is exactly why the two tests are
 // separate.
 func TestBareGroupOutsideThePrefixesIsAllowed(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "entitlements", Mount: func(r cloud.Router, _ cloud.Deps) error {
-			orgs := r.Group("/v1/orgs") // outside /v1/entitlements, and fine
-			orgs.Get("/:org/entitlements", pong)
-			r.Get("/v1/entitlements", pong)
+		{Name: "thing", Mount: func(r cloud.Router, _ cloud.Deps) error {
+			elsewhere := r.Group("/v1/somewhere") // outside /v1/thing, and fine
+			elsewhere.Get("/:id/thing", pong)
+			r.Get("/v1/thing", pong)
 			return nil
 		}},
 	})
 	if err != nil {
 		t.Fatalf("MountAll: %v — a bare group outside the prefixes is a path, not middleware", err)
 	}
-	if got := patterns(t, app); len(got) != 2 || got[0] != "GET /v1/entitlements" || got[1] != "GET /v1/orgs/:org/entitlements" {
+	if got := patterns(t, app); len(got) != 2 || got[0] != "GET /v1/somewhere/:id/thing" || got[1] != "GET /v1/thing" {
 		t.Errorf("routes = %v, want the two the subsystem registered", got)
 	}
-	if got := get(t, app, "/v1/orgs/acme/entitlements"); got != http.StatusOK {
-		t.Errorf("/v1/orgs/acme/entitlements = %d, want 200", got)
+	if got := get(t, app, "/v1/somewhere/acme/thing"); got != http.StatusOK {
+		t.Errorf("/v1/somewhere/acme/thing = %d, want 200", got)
 	}
 }

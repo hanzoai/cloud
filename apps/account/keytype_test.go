@@ -14,7 +14,7 @@ import "testing"
 // "prefix first" was true for every production row alike.
 //
 // Measured before the fix: a freshly minted SECRET key came back from
-// GET /v1/keys typed "publishable" with its pk- half printed, and the console —
+// GET /v1/account/keys typed "publishable" with its pk- half printed, and the console —
 // which looks for the secret row — offered "create your Cloud API key" to a user
 // who already held a working one.
 func TestKeyTypeIsTheScope(t *testing.T) {

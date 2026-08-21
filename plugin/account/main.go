@@ -6,7 +6,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the account app.
@@ -21,19 +20,6 @@ func main() {
 		Name:  "account",
 		Price: cloud.Free,
 		Mount: account.MountAccount,
-		// DECLARED, because undeclared is not "no prefixes" — MountPrefixes falls
-		// back to the /v1/<name> convention, and account answers at NONE of it:
-		// its routes are /v1/keys, /v1/csrf, /v1/avatar, /v1/orgs, /v1/embed and
-		// /v1/commerce/topup/*. The scope then installed this subsystem's
-		// middleware on /v1/account, a path with no routes beneath it, and zip
-		// refuses to compose a program whose middleware can never run — so the
-		// plugin panicked at mount and every account route answered 503:
-		//
-		//   panic: the group "/v1/account" declares middleware at scope.go:134
-		//          and no routes anywhere beneath it
-		//
-		// The same fallback bit analytics and entitlements before this.
-		Prefixes: manifest.PrefixesFor("account"),
 	}}, []string{"account"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

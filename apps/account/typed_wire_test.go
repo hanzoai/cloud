@@ -9,24 +9,24 @@ import (
 )
 
 // This file is the GATE on the typed/raw partition of the account surface. The
-// package doc names eleven typed ops and no refusals; prose alone cannot keep that
-// true, because the next route added here would be untyped and nothing would go red.
-// So the refusals are a CLOSED list, each carrying the wire fact that keeps it raw,
-// and an operation that is neither a typed op nor on that list fails the suite — the
-// next account route is typed by default, and dropping one out of the registry takes a
-// deliberate edit with a reason. Same shape as apps/team/typed_wire_test.go and
-// apps/pricing/typed_wire_test.go.
+// package doc says every addressable route is typed but two; prose alone cannot keep
+// that true, because the next route added here would be untyped and nothing would go
+// red. So the refusals are a CLOSED list, each carrying the wire fact that keeps it
+// raw, and an operation that is neither a typed op nor on that list fails the suite —
+// the next account route is typed by default, and dropping one out of the registry
+// takes a deliberate edit with a reason. Same shape as apps/team/typed_wire_test.go
+// and apps/pricing/typed_wire_test.go.
 //
-// The list is EMPTY, and that is the current state of the package rather than a
-// simplification of the gate. It held seven entries — GET|POST /v1/billing/{wildcard1}
-// and the five methods of /v1/commerce/{wildcard1} — the wildcard forwarders of the
-// retired account-bridge subsystem. They could not be typed and the reasons were real:
-// the answer carried commerce's own status and bytes (a 402 spend cap, a PDF invoice)
-// where a typed dispatch ends in c.JSON under one declared 2xx; the request body was
-// never JSON-validated where op.invoke unmarshals before the handler runs; and the
-// address was a wildcard remainder bounded by an allowlist rather than by a type. All
-// three are properties of FORWARDING, so removing the forwarders removed them — every
-// route this package serves now has a name, a schema and an SDK method.
+// The list holds the profile-photo pair and nothing else. It also held seven —
+// GET|POST /v1/billing/{wildcard1} and the five methods of /v1/commerce/{wildcard1},
+// the wildcard forwarders of the retired account-bridge subsystem. They could not be
+// typed and the reasons were real: the answer carried commerce's own status and bytes
+// (a 402 spend cap, a PDF invoice) where a typed dispatch ends in c.JSON under one
+// declared 2xx; the request body was never JSON-validated where op.invoke unmarshals
+// before the handler runs; and the address was a wildcard remainder bounded by an
+// allowlist rather than by a type. All three are properties of FORWARDING, so removing
+// the forwarders removed them — and what is left raw is raw because of the WIRE, which
+// is a reason a route cannot outgrow.
 
 // untypedByDesign is the CLOSED list of account operations that are NOT typed ops,
 // each with the reason it cannot be one. A typed op is a route PLUS a registry entry —
@@ -40,17 +40,17 @@ var untypedByDesign = map[string]string{
 	// unmarshals JSON before the handler runs; and the read's response is the image's
 	// BYTES under a Content-Type derived from those bytes, where a typed dispatch ends
 	// in c.JSON under one declared 2xx. Neither is a shape an In/Out can carry.
-	"POST /v1/avatar":                      "multipart upload: the request body is a form, not JSON",
-	"GET /v1/avatar/{org}/{user}/{digest}": "raw image bytes under a byte-derived Content-Type, not a JSON envelope",
+	"POST /v1/account/avatar":                      "multipart upload: the request body is a form, not JSON",
+	"GET /v1/account/avatar/{org}/{user}/{digest}": "raw image bytes under a byte-derived Content-Type, not a JSON envelope",
 }
 
 // accountOps reads BOTH projections of the live router at their one shared address
 // form: what the document says is served, and which of those carry a typed
 // registry entry. There is no prefix filter and there must not be one — the app
-// holds this package's routes and nothing else, and account's surface is spread
-// across five top-level nouns (/v1/keys, /v1/iam, /v1/csrf, /v1/embed,
-// /v1/commerce/topup), so any filter would be a second list to keep in sync
-// with the mount and would hide exactly the route that escaped it.
+// holds this package's routes and nothing else, so a filter would be a second
+// list to keep in sync with the mount and would hide exactly the route that
+// escaped it. It reads whatever is mounted, which is how it still fires on a
+// route registered outside /v1/account.
 func accountOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	t.Helper()
 	app := mount(t, "hanzo")
