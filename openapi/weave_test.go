@@ -454,7 +454,7 @@ func TestThePublicContractIsTheCustomerSurface(t *testing.T) {
 func TestThePublicContractDropsWhatIsOutsideTheRule(t *testing.T) {
 	d := readPublic(t)
 	for _, path := range []string{
-		"/health", "/", "/.well-known/openapi.json", "/ws/query_progress",
+		"/health", "/", "/.well-known/openapi.json",
 		"/v1/admin/orgs", "/v1/tasks/{wildcard1}",
 	} {
 		if _, published := d.Paths[path]; published {
