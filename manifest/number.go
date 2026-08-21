@@ -160,6 +160,7 @@ var noNumber = map[string]bool{
 	"dns":   true, // initialism ending in s
 	"iam":   true, // initialism
 	"kms":   true, // initialism ending in s
+	"kv":    true, // initialism
 	"lsp":   true, // initialism
 	"ml":    true, // initialism
 	"mq":    true, // initialism
