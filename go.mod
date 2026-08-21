@@ -498,7 +498,7 @@ require (
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
 	github.com/luxfi/geth v1.20.2
 	github.com/luxfi/ids v1.3.2
-	github.com/luxfi/kms v1.12.23
+	github.com/luxfi/kms v1.12.24
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
 	github.com/luxfi/lens v0.2.1 // indirect
 	github.com/luxfi/magnetar v1.2.3 // indirect
