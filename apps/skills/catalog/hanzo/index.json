@@ -1051,25 +1051,25 @@
       "sha256": "26dbce230f232e581c23953e313a796c257616a52503d607a164000dbaad6756"
     },
     {
-      "description": "Read campaign campaign: Returns the org's campaigns, newest first, optionally narrowed to one status., Returns one campaign of the caller's org — its name, audience, creatives, channels with their per-channel launch state, schedule, budget and status..",
-      "name": "campaign_campaign",
-      "path": "campaign_campaign/SKILL.md",
-      "service": "campaign",
-      "sha256": "a83fdbb88695016927ffa12d2120f54617ea108fd1fc0ee5edb596e74e196b31"
+      "description": "Read campaigns campaigns: Returns the org's campaigns, newest first, optionally narrowed to one status., Returns one campaign of the caller's org — its name, audience, creatives, channels with their per-channel launch state, schedule, budget and status..",
+      "name": "campaigns_campaigns",
+      "path": "campaigns_campaigns/SKILL.md",
+      "service": "campaigns",
+      "sha256": "0910b950c40b9baeb2172b923dd14f7e228a4182274192aa53557dbde12ed5e9"
     },
     {
-      "description": "Read campaign metrics: Returns a campaign's results over a window: the analytics funnel (impressions, clicks, conversions, revenue, visitors), the spend each channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS..",
-      "name": "campaign_metrics",
-      "path": "campaign_metrics/SKILL.md",
-      "service": "campaign",
-      "sha256": "b4163aac3f2497f663a6baa6d04b57ef2f907dc092bc2bc2068a5c46a5e6286d"
+      "description": "Read campaigns metrics: Returns a campaign's results over a window: the analytics funnel (impressions, clicks, conversions, revenue, visitors), the spend each channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS..",
+      "name": "campaigns_metrics",
+      "path": "campaigns_metrics/SKILL.md",
+      "service": "campaigns",
+      "sha256": "336d52695cff1b1b19b68917e8177f28a997d8fa8b4c2835cc36f4cf29d851a2"
     },
     {
-      "description": "Read campaign summary: Returns the org's go-to-market roll-up: how many campaigns exist, how many are live, their total budget in cents, and which channel executors this deployment can actually reach..",
-      "name": "campaign_summary",
-      "path": "campaign_summary/SKILL.md",
-      "service": "campaign",
-      "sha256": "ce379ef27c0f8806b3b16d59ced60b5fa91e35ba63c44ac8c9d9bb2f87a37fa3"
+      "description": "Read campaigns summary: Returns the org's go-to-market roll-up: how many campaigns exist, how many are live, their total budget in cents, and which channel executors this deployment can actually reach..",
+      "name": "campaigns_summary",
+      "path": "campaigns_summary/SKILL.md",
+      "service": "campaigns",
+      "sha256": "ac58590806c76c52a1ff542f5396259921dd48ddb644d72eabf7153267191c26"
     },
     {
       "description": "Read captable classes: Returns the caller org's share classes, in creation order..",
@@ -1618,25 +1618,25 @@
       "sha256": "404e839317e2d35ae8d62095814c6a190e020b942df43e70747736f7298b183a"
     },
     {
-      "description": "Read dataset dataset: List this org's datasets, Describe every version of one dataset.",
-      "name": "dataset_dataset",
-      "path": "dataset_dataset/SKILL.md",
-      "service": "dataset",
-      "sha256": "adf7c918166bf1d00a3da0b70b963bf46a7c4c18f89232efa0231d2d7b398303"
+      "description": "Read datasets datasets: List this org's datasets, Describe every version of one dataset.",
+      "name": "datasets_datasets",
+      "path": "datasets_datasets/SKILL.md",
+      "service": "datasets",
+      "sha256": "7ff447a849287ae013b139f71f19b840337978ca2b9cfaf5ff7a410a295732b4"
     },
     {
-      "description": "Read dataset export: Read a version's rows back, one page at a time.",
-      "name": "dataset_export",
-      "path": "dataset_export/SKILL.md",
-      "service": "dataset",
-      "sha256": "486d53a5f3e27bc3ef943d17b47af47b5af961507f9f8bbcb2920bf9392fa115"
+      "description": "Read datasets export: Read a version's rows back, one page at a time.",
+      "name": "datasets_export",
+      "path": "datasets_export/SKILL.md",
+      "service": "datasets",
+      "sha256": "ff45bd91714ffda60c24f28cf911baa2807416d6e52f3a75494644a1c848d88a"
     },
     {
-      "description": "Read dataset lineage: Show where a version's rows came from, and whether that can still be demonstrated.",
-      "name": "dataset_lineage",
-      "path": "dataset_lineage/SKILL.md",
-      "service": "dataset",
-      "sha256": "25ad5f5cbc4418bb1c8df78a0c02e644f2b943491b3768562c6d0a5ab4c4248c"
+      "description": "Read datasets lineage: Show where a version's rows came from, and whether that can still be demonstrated.",
+      "name": "datasets_lineage",
+      "path": "datasets_lineage/SKILL.md",
+      "service": "datasets",
+      "sha256": "315e82bedfb8f6b794320652c4915c126e5f480062e6a72ac099ff2dcfb1703c"
     },
     {
       "description": "Read deploy account: Compatibility answer the console UI asks before enabling its buttons.",
@@ -2906,32 +2906,32 @@
       "sha256": "67dd1ecde420cdb2e35ca3e9dd2b3050829bb652d1fd0984978fb54d096d76bf"
     },
     {
-      "description": "Read link devices: Shows one machine: its accounts, usage and live sessions..",
-      "name": "link_devices",
-      "path": "link_devices/SKILL.md",
-      "service": "link",
-      "sha256": "4082880303ee564571298517ccd716c946e0e69471b3ba1a64ba346e1731f03d"
+      "description": "Read links devices: Shows one machine: its accounts, usage and live sessions..",
+      "name": "links_devices",
+      "path": "links_devices/SKILL.md",
+      "service": "links",
+      "sha256": "4676301c576c6ebff9dc3c610918f33d9ffa31acf74321fefa3d32d3cffd1050"
     },
     {
-      "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
-      "name": "link_link",
-      "path": "link_link/SKILL.md",
-      "service": "link",
-      "sha256": "051bdec8214bbefa0c54e3d2bf67341ff95613d48bb6a6576b36e94b27000324"
+      "description": "Read links links: Lists your linked accounts and the devices they sit on., Reads one linked account..",
+      "name": "links_links",
+      "path": "links_links/SKILL.md",
+      "service": "links",
+      "sha256": "af67bd5d7cfde0d67559d962fa0771f6638a4652b65be540093404dd5fc00f6d"
     },
     {
-      "description": "Read link route: Gets the failover order across your linked accounts..",
-      "name": "link_route",
-      "path": "link_route/SKILL.md",
-      "service": "link",
-      "sha256": "21553a4bdaf6486a90ee899ce3310380e231afac5e548d96f252946c22b8fdcb"
+      "description": "Read links route: Gets the failover order across your linked accounts..",
+      "name": "links_route",
+      "path": "links_route/SKILL.md",
+      "service": "links",
+      "sha256": "8d372a790195fa29e68a7bed1ce74846a7c18074d06aa7f78636b3c8443c4e9b"
     },
     {
-      "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Hanzo spend side by side..",
-      "name": "link_usage",
-      "path": "link_usage/SKILL.md",
-      "service": "link",
-      "sha256": "0c818e6a68990e6d5cda7d0c738454fbade751dc401782c165b56a19d1df17b3"
+      "description": "Read links usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Hanzo spend side by side..",
+      "name": "links_usage",
+      "path": "links_usage/SKILL.md",
+      "service": "links",
+      "sha256": "4193aa2f293160166c3d4db3ce9ebaf355234cfeebdc0e19c9b5007152c9a04b"
     },
     {
       "description": "Read marketing audiences: Returns the org's saved audiences, most recently updated first., Returns one of the caller org's saved audiences., Evaluates the cohort LIVE — the same resolution an enrollment would run — and reports how big it is and how many real mailboxes it reaches.",
@@ -3102,25 +3102,25 @@
       "sha256": "e5880e2c2cca01383b16bfc2ee58ecf6f0393269b85468b99555312d80d5bb5d"
     },
     {
-      "description": "Read network network: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
-      "name": "network_network",
-      "path": "network_network/SKILL.md",
-      "service": "network",
-      "sha256": "8eb20a13cbdc07b9551a77555b6a431ba05e10a199d11bbb3ff3ac956f914180"
+      "description": "Read networks networks: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
+      "name": "networks_networks",
+      "path": "networks_networks/SKILL.md",
+      "service": "networks",
+      "sha256": "1ba89c874c31eac0a017e8c32be476e850d92d6538ee7741054ddb65bae51d95"
     },
     {
-      "description": "Read network routers: Returns the Zero Trust routers the caller's org owns..",
-      "name": "network_routers",
-      "path": "network_routers/SKILL.md",
-      "service": "network",
-      "sha256": "19110d7cdc48087c75e8fe8b3ce65205def72614dc9d43e1bfb7ceae17d07f41"
+      "description": "Read networks routers: Returns the Zero Trust routers the caller's org owns..",
+      "name": "networks_routers",
+      "path": "networks_routers/SKILL.md",
+      "service": "networks",
+      "sha256": "a5a1d06644163e56ec4de68e9070cfb92fde4c2fc2d52b734a3d69e4f688703a"
     },
     {
-      "description": "Read network services: Returns the Zero Trust edge services the caller's org owns..",
-      "name": "network_services",
-      "path": "network_services/SKILL.md",
-      "service": "network",
-      "sha256": "3743717a963a919712706d6452f86625d0c0f7db290c478c6d29c6d4427739e7"
+      "description": "Read networks services: Returns the Zero Trust edge services the caller's org owns..",
+      "name": "networks_services",
+      "path": "networks_services/SKILL.md",
+      "service": "networks",
+      "sha256": "893dc71cae06c92bdddf24aa7b805db9332b9e6a8c865b4ffc994fcdcdeb9a33"
     },
     {
       "description": "Read nodes connect: The socket a bot node dials and holds open to become invokable..",
