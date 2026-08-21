@@ -43,7 +43,7 @@ func inviteIAM(t *testing.T, org, inviteeSub string) *httptest.Server {
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": map[string]string{
 				"owner": org, "name": "eve", "id": inviteeSub, "email": r.URL.Query().Get("email"), "displayName": "Eve",
 			}})
-		case "/v1/iam/add-membership":
+		case "/v1/iam/memberships":
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": true})
 		default:
 			w.WriteHeader(http.StatusNotFound)

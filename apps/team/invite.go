@@ -7,7 +7,7 @@ package team
 //   - IAM's Membership(User × Org × Role) — the source of truth the `orgs` claim
 //     is minted from, so the invitee's NEXT token (and a mid-session
 //     get-memberships refresh) carries the workspace's org and they can act in it
-//     with no re-provisioning. Written via POST /v1/iam/add-membership as the
+//     with no re-provisioning. Written via POST /v1/iam/memberships as the
 //     confidential hanzo-team app (the app allow-listed under
 //     IAM_MEMBERSHIP_ADMIN_APPS / CapMembershipAdmin — the SAME credential
 //     establishSession's confidential code-exchange uses, so no new secret).
@@ -145,7 +145,7 @@ func (g *api) iamAddMembership(ctx context.Context, user, org, role string) erro
 	if err != nil {
 		return err
 	}
-	_, err = g.iamDo(ctx, http.MethodPost, "/add-membership", nil, body)
+	_, err = g.iamDo(ctx, http.MethodPost, "/memberships", nil, body)
 	return err
 }
 
@@ -153,7 +153,7 @@ func (g *api) iamAddMembership(ctx context.Context, user, org, role string) erro
 // straight from IAM — the mid-session refresh a client uses to pick up an org it
 // was invited into without re-logging-in. Same shape as the `orgs` claim.
 func (g *api) iamGetMemberships(ctx context.Context, user string) ([]model.OrgRef, error) {
-	data, err := g.iamDo(ctx, http.MethodGet, "/get-memberships", url.Values{"user": {user}}, nil)
+	data, err := g.iamDo(ctx, http.MethodGet, "/memberships", url.Values{"user": {user}}, nil)
 	if err != nil {
 		return nil, err
 	}
