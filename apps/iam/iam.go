@@ -264,6 +264,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		}
 	}
 
+	// A store full of certificates is still not a store that can SIGN, and the
+	// difference is invisible to the check above. A Cert ROW carries the key's
+	// identity — owner, name, algorithm, and the public certificate the JWKS
+	// publishes — while the private half is supplied by the deployment and held in
+	// memory. So the keyset can be complete, every kid can look right, and every
+	// mint still fail: the JWKS would advertise a `kid` that nothing here can
+	// produce a token for, which a relying party reads as a bad token rather than
+	// as a fault on this side.
+	//
+	// RequireSigning asks the question the endpoints ask, at boot instead of on
+	// someone's first sign-in: every published kid, and every cert a reserved-owner
+	// application names, must resolve to key material that matches the certificate
+	// being published. Its error names the certs it wants and where they are read
+	// from, so the answer is one line rather than a 500 to chase.
+	if db != nil {
+		if serr := iamserver.RequireSigning(context.Background(), db); serr != nil {
+			log.Error("iam holds no usable signing key — identity answers 503 rather than publishing a keyset it cannot sign for (cloud stays up)",
+				"err", serr)
+			db = nil
+			embeddedDB = nil
+		}
+	}
+
 	// ONE registration. An App is a Component, so composing IAM is the same verb as
 	// adding middleware, and cloud's router learns IAM's route patterns and its op
 	// registry — every one of the typed operations a wildcard used to swallow.
