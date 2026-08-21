@@ -3,6 +3,24 @@
 cloud embeds the o11y subsystem in-process against the shared Datastore
 `datastore` (cluster `insights`). Three planes, one datastore.
 
+## An untenanted row is `anon`, and that value CHANGED
+
+A span, log or trace carrying no tenant of its own is stamped `cloud.Anon`
+(`"anon"`), declared once in `tally.go` and imported here. It used to be stamped
+`"hanzo"`.
+
+That was not a spelling problem, which is why it moved: **`hanzo` is also a real
+tenant.** Fleet infrastructure telemetry and that tenant's own telemetry landed in
+one bucket, and no query could tell them apart — the org label answered two
+different questions with one word.
+
+**Before this reaches a cluster**, grep the dashboards and alert rules for
+`org="hanzo"`. Any panel or rule filtering on it silently changes meaning at
+deploy: it stops seeing untenanted fleet rows and starts seeing only that
+tenant's, which is what it should have meant all along but is not what it meant
+yesterday. Rows written before the deploy keep the old value, so a query spanning
+the cutover needs both.
+
 ## ONE registration, one public concept (decomplected)
 
 The whole plane is registered as a SINGLE subsystem — one
