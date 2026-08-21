@@ -40,6 +40,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/commerce/models/catalogentry"
 	"sigs.k8s.io/yaml"
 )
@@ -126,16 +127,30 @@ func TestCatalogAddressesAreServed(t *testing.T) {
 		callable, len(rows), served)
 }
 
-// resolves reports whether the fleet publishes anything at or beneath addr.
+// resolves reports whether the fleet delivers anything at or beneath addr.
 //
 // An address must name a product, so it has to reach PAST /v1. Without that,
 // "/v1" and "/" both resolve — every published path lies beneath them — and a row
 // addressed either one passes while telling a customer to call api.hanzo.ai/v1
 // and hope. A prefix is a real answer only when it is a prefix of something.
+//
+// The address is read through manifest.Normalize first, because that is the rule
+// the ROUTER reads it by. A capability answers at both spellings of its name and
+// publishes one, so a spelling absent from the document is still delivered — and
+// without this line the check asks a narrower question than the law above it
+// states. Number alone answered it: /v1/bot, /v1/network and /v1/network/services
+// each reach a live app today and none of the three is a published path, so the
+// day four collections took the plural this test failed on three rows that had
+// never stopped working. Correcting them cost an edit, a release and a pin in a
+// second repository to say a thing that was true throughout, and the singular
+// sweep now in flight would have cost the same again in the other direction.
+// Normalize is identity on every canonical path, so this changes no verdict on a
+// catalogue that already spells the address the way the document does.
 func resolves(published map[string]json.RawMessage, addr string) bool {
 	if !strings.HasPrefix(addr, "/v1/") || len(addr) <= len("/v1/") {
 		return false
 	}
+	addr = manifest.Normalize(addr)
 	if _, ok := published[addr]; ok {
 		return true
 	}
