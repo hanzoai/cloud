@@ -10,19 +10,19 @@
 // new zone to hanzoai/dns and points the registrar's nameservers at it — the two
 // products compose (buy here, manage records there).
 //
-// Wholesale is resold from a registrar behind the Registrar interface (name.com Core
-// API v4 today, apps/domain/namecom). The core here is transport-free: it
-// orchestrates availability → price → authorize → register → provision-zone →
-// capture → record over four interfaces (Registrar, Biller, Zones, Store), so the
-// policy is unit-testable with no HTTP/registrar/billing backend. mount.go is the thin
-// cloud adapter that binds the real backends and exposes /v1/domain/*.
+// Wholesale is resold from a registrar behind the Registrar interface, which names no
+// vendor: the vocabulary it is asked in and the registry of registrars that answer are
+// registrar.go, and each registrar is one file (namecom.go is the worked example). The
+// core here is transport-free: it orchestrates availability → price → authorize →
+// register → provision-zone → capture → record over four interfaces (Registrar,
+// Biller, Zones, Store), so the policy is unit-testable with no HTTP/registrar/billing
+// backend. mount.go is the thin cloud adapter that binds the real backends and exposes
+// /v1/domain/*.
 package domain
 
 import (
 	"context"
 	"errors"
-
-	"github.com/hanzoai/cloud/apps/domain/namecom"
 )
 
 // Sentinels the orchestration returns; the HTTP adapter maps them to status codes.
@@ -38,18 +38,6 @@ var (
 	// ErrNotConfigured — the registrar has no credentials. → 503.
 	ErrNotConfigured = errors.New("domain: registrar not configured")
 )
-
-// Registrar is the wholesale registrar Hanzo resells. *namecom.Client satisfies it.
-type Registrar interface {
-	CheckAvailability(ctx context.Context, names ...string) (*namecom.SearchResponse, error)
-	Search(ctx context.Context, keyword string, tldFilter ...string) (*namecom.SearchResponse, error)
-	CreateDomain(ctx context.Context, req namecom.CreateDomainRequest) (*namecom.CreateDomainResponse, error)
-	RenewDomain(ctx context.Context, domainName string, req namecom.RenewDomainRequest) (*namecom.RenewDomainResponse, error)
-	SetNameservers(ctx context.Context, domainName string, nameservers []string) (*namecom.Domain, error)
-	CreateTransfer(ctx context.Context, req namecom.TransferRequest) (*namecom.TransferResponse, error)
-	Hello(ctx context.Context) (*namecom.HelloResponse, error)
-	Configured() bool
-}
 
 // Biller is the two-phase deposit→charge a purchase bills through. Authorize refuses
 // when the org's prepaid balance cannot cover the marked-up price (BEFORE the
@@ -93,11 +81,11 @@ type Store interface {
 	ListByOrg(org string) ([]Holding, error)
 }
 
-// Config tunes pricing and the DNS handoff.
+// Config tunes pricing and the DNS handoff. Which registrar answers, and which of its
+// environments, is the registrar's own (registrar.go) — not a field here.
 type Config struct {
 	Markup      Markup   // wholesale → sell
 	Nameservers []string // Hanzo authoritative NS to point purchased domains at (fallback when Zones returns none)
-	Env         string   // registrar env label (test/prod) — attribution only
 }
 
 // Service is the transport-free orchestrator.
@@ -115,8 +103,9 @@ func NewService(reg Registrar, bill Biller, zones Zones, store Store, cfg Config
 	return &Service{reg: reg, bill: bill, zones: zones, store: store, cfg: cfg}
 }
 
-// Env reports the registrar environment label (test/prod).
-func (s *Service) Env() string { return s.cfg.Env }
+// Registrar is the wholesale registrar this service resells — the health probe reads
+// its id, environment and credential names from it rather than restating any of them.
+func (s *Service) Registrar() Registrar { return s.reg }
 
 // Configured reports whether the registrar has credentials.
 func (s *Service) Configured() bool { return s.reg.Configured() }

@@ -12,10 +12,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/domain/namecom"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -31,9 +29,10 @@ import (
 //	POST /v1/domain/transfer {domain,authCode,years}    transfer-in (billed)
 //
 // Every mutating route is org-scoped: a validated principal's org owns the purchase
-// and is the ledger the charge lands on. The registrar's wholesale credentials come
-// from the platform secret store (KMS) via the operator-injected env NAMECOM_USER /
-// NAMECOM_TOKEN — never hard-coded, exactly as clients/sites reads CF_API_TOKEN.
+// and is the ledger the charge lands on. WHICH registrar answers is configuration:
+// DOMAIN_REGISTRAR names one of the registrars registrar.go holds, defaulting to
+// name.com. Its wholesale credentials come from the platform secret store (KMS) via
+// operator-injected env, named by the registrar itself — never hard-coded here.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "domain", buildState, routes)
 }
@@ -48,11 +47,10 @@ type state struct {
 
 func buildState(b cloud.Base) (state, error) {
 	cfg := configFromEnv()
-	reg := namecom.New(
-		strings.TrimSpace(os.Getenv("NAMECOM_USER")),
-		strings.TrimSpace(os.Getenv("NAMECOM_TOKEN")),
-		cfg.Env, nil,
-	)
+	reg, err := registrarFromEnv()
+	if err != nil {
+		return state{}, err
+	}
 	biller := &meterBiller{rm: b.Bill}
 	zones := &hanzodnsZones{
 		base: strings.TrimRight(strings.TrimSpace(os.Getenv("HANZO_DNS_URL")), "/"),
@@ -62,8 +60,8 @@ func buildState(b cloud.Base) (state, error) {
 	}
 	svc := NewService(reg, biller, zones, NewMemStore(), cfg)
 	b.Log.Info("hanzo domains ready",
-		"registrar", "name.com",
-		"env", cfg.Env,
+		"registrar", reg.ID(),
+		"env", reg.Env(),
 		"configured", reg.Configured(),
 		"nameservers", strings.Join(cfg.Nameservers, ","),
 		"markup", cfg.Markup.Multiplier,
@@ -111,9 +109,6 @@ func configFromEnv() Config {
 			MinMarginCents: intEnv("DOMAIN_MIN_MARGIN_CENTS", 300),
 		},
 		Nameservers: nsEnv("HANZO_NAMESERVERS", []string{"ns1.hanzo.ai", "ns2.hanzo.ai"}),
-		// The registrar env is EXPLICIT and fail-safe: only "prod" hits the live,
-		// billable registrar; anything else (incl. unset) is the sandbox.
-		Env: environ.Or("NAMECOM_ENV", "test"),
 	}
 }
 
@@ -243,14 +238,14 @@ func statusErr(err error) error {
 	case errors.Is(err, ErrNotOwned):
 		return zip.ErrNotFound("your org does not own that domain")
 	}
-	if apiErr, ok := errors.AsType[*namecom.APIError](err); ok {
+	if refused, ok := errors.AsType[*Refusal](err); ok {
 		// Surface the registrar's own message; a 4xx from the registrar is a client
 		// problem, a 5xx a bad-gateway.
 		status := http.StatusBadGateway
-		if apiErr.Status >= 400 && apiErr.Status < 500 {
-			status = apiErr.Status
+		if refused.Status >= 400 && refused.Status < 500 {
+			status = refused.Status
 		}
-		return zip.Errorf(status, "registrar: %s", apiErr.Message)
+		return zip.Errorf(status, "registrar: %s", refused.Message)
 	}
 	return zip.Errorf(http.StatusInternalServerError, "%v", err)
 }
@@ -299,15 +294,16 @@ func (r *reachability) StatusCode() int {
 // it. It takes no principal, like every subsystem health probe.
 func (o ops) health(ctx context.Context, _ *noIn) (*reachability, error) {
 	s := o.s
-	res := &reachability{Service: "domain", Registrar: "name.com", Env: s.State.svc.Env(), Status: "degraded"}
-	if !s.State.reg.Configured() {
-		res.Error = "registrar credentials not set (NAMECOM_USER/NAMECOM_TOKEN)"
+	reg := s.State.reg
+	res := &reachability{Service: "domain", Registrar: reg.ID(), Env: reg.Env(), Status: "degraded"}
+	if !reg.Configured() {
+		res.Error = "registrar credentials not set (" + strings.Join(reg.Needs(), "/") + ")"
 		return res, nil
 	}
 	res.Configured = true
 	probeCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	if _, err := s.State.reg.Hello(probeCtx); err != nil {
+	if err := reg.Reach(probeCtx); err != nil {
 		res.Error = err.Error()
 		return res, nil
 	}
@@ -436,7 +432,7 @@ type order struct {
 	Years int `json:"years"`
 	// Contacts is the WHOIS contact set. Omit it and the registrar uses the
 	// reseller account's default contacts.
-	Contacts *namecom.Contacts `json:"contacts,omitempty"`
+	Contacts *Contacts `json:"contacts,omitempty"`
 }
 
 // register buys a domain for your org and answers the ownership record together
