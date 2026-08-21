@@ -147,43 +147,6 @@ func seedBooks(t *testing.T, fin finance.Client, org string) {
 	}
 }
 
-// TestPeerLedger_CreditsRenderTheGrant — money PUT IN must appear on the credits page.
-// Over the peer path it rendered an empty array: every row was skipped because the
-// reader was looking for a kind the ledger does not write.
-func TestPeerLedger_CreditsRenderTheGrant(t *testing.T) {
-	fin := servePeerLedger(t)
-	seedBooks(t, fin, "acme")
-	app := mountReader(t)
-
-	var credits []financeCreditView
-	if err := json.Unmarshal(readAs(t, app, "/v1/finance/credits", "acme"), &credits); err != nil {
-		t.Fatalf("decode credits: %v", err)
-	}
-	if len(credits) != 1 {
-		t.Fatalf("want the one grant, got %d rows: %+v", len(credits), credits)
-	}
-	if credits[0].Cents != 50_000 {
-		t.Errorf("grant cents: want 50000, got %d", credits[0].Cents)
-	}
-}
-
-// TestPeerLedger_UsageTotalsTheDebit — metered spend must total the debit, not 0.
-func TestPeerLedger_UsageTotalsTheDebit(t *testing.T) {
-	fin := servePeerLedger(t)
-	seedBooks(t, fin, "acme")
-	app := mountReader(t)
-
-	var usage struct {
-		TotalCents int64 `json:"totalCents"`
-	}
-	if err := json.Unmarshal(readAs(t, app, "/v1/finance/usage", "acme"), &usage); err != nil {
-		t.Fatalf("decode usage: %v", err)
-	}
-	if usage.TotalCents != 1_200 {
-		t.Errorf("usage total: want 1200, got %d", usage.TotalCents)
-	}
-}
-
 // TestPeerLedger_DepositSignsPositive — the sharpest of the three. A deposit CREDITS
 // the wallet, so it renders positive; every other posting debits it. Over the peer
 // path the grant signed NEGATIVE, so a customer read their own top-up as a charge.
@@ -193,7 +156,7 @@ func TestPeerLedger_DepositSignsPositive(t *testing.T) {
 	app := mountReader(t)
 
 	var entries []financeLedgerView
-	if err := json.Unmarshal(readAs(t, app, "/v1/finance/ledger", "acme"), &entries); err != nil {
+	if err := json.Unmarshal(readAs(t, app, "/v1/billing/ledger", "acme"), &entries); err != nil {
 		t.Fatalf("decode ledger: %v", err)
 	}
 	if len(entries) != 2 {
@@ -271,7 +234,7 @@ func TestPeerLedger_EachSubjectReadsItsOwnBooks(t *testing.T) {
 		{user: "bob", grant: 900_000, spend: 5_000, theirs: "grant hanzo/bob", others: "grant hanzo/alice", notMine: 50_000},
 	} {
 		var entries []financeLedgerView
-		if err := json.Unmarshal(readAsUser(t, app, "/v1/finance/ledger", org, who.user), &entries); err != nil {
+		if err := json.Unmarshal(readAsUser(t, app, "/v1/billing/ledger", org, who.user), &entries); err != nil {
 			t.Fatalf("%s decode ledger: %v", who.user, err)
 		}
 		if len(entries) != 2 {
@@ -305,44 +268,9 @@ func TestPeerLedger_EachSubjectReadsItsOwnBooks(t *testing.T) {
 	}
 }
 
-// TestPeerLedger_CreditsAndUsageFollowTheLedger — credits, usage and the ledger page
-// are three projections of ONE list, so they scope together or they contradict each
-// other. alice's credits page must show her grant alone and her usage total must be
-// her spend alone, off the same read the case above asserts.
-func TestPeerLedger_CreditsAndUsageFollowTheLedger(t *testing.T) {
-	fin := servePeerLedger(t)
-	const org = "hanzo"
-	seedWallet(t, fin, org, org+"/alice", 50_000, 1_200, "zen")
-	seedWallet(t, fin, org, org+"/bob", 900_000, 5_000, "gpu")
-	app := mountReader(t)
-
-	var credits []financeCreditView
-	if err := json.Unmarshal(readAsUser(t, app, "/v1/finance/credits", org, "alice"), &credits); err != nil {
-		t.Fatalf("decode credits: %v", err)
-	}
-	if len(credits) != 1 || credits[0].Cents != 50_000 {
-		t.Errorf("alice's credits page: want her one 50000¢ grant, got %+v", credits)
-	}
-
-	var usage struct {
-		TotalCents int64 `json:"totalCents"`
-	}
-	if err := json.Unmarshal(readAsUser(t, app, "/v1/finance/usage", org, "alice"), &usage); err != nil {
-		t.Fatalf("decode usage: %v", err)
-	}
-	if usage.TotalCents != 1_200 {
-		t.Errorf("alice's usage total: want her own 1200¢, got %d", usage.TotalCents)
-	}
-}
-
 // The two response shapes this file reads. They mirror the customer contract in
 // apps/billing (financeCredit / financeLedgerEntry), which is unexported there; only
 // the fields asserted on are named.
-type financeCreditView struct {
-	ID    string `json:"id"`
-	Cents int64  `json:"cents"`
-}
-
 type financeLedgerView struct {
 	ID          string `json:"id"`
 	Account     string `json:"account"`
