@@ -1555,7 +1555,73 @@
    "doc": "Creates a person or updates them in place, so a deployment can\ndeclare the accounts it needs and re-run that declaration safely.\n\nPasswords are hashed before they are stored. Leave the password out and their\ncurrent one is kept, so a redeploy never locks somebody out."
   }
  ],
- "index": [],
+ "index": [
+  {
+   "id": "delete_index_indexes_by_uid",
+   "doc": "Deletes an index and everything in it.\n\nDrops the index and every document in it from the caller's own org, and\nanswers the dialect's EnqueuedTask. This is the only way to retire an index;\nwithout it a mistaken uid is permanent. Deleting an index that is not there\nsucceeds, so a cleanup pass is safe to re-run.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the documents are already gone when this answers."
+  },
+  {
+   "id": "delete_index_indexes_by_uid_documents_by_id",
+   "doc": "Deletes one document by its primary key.\n\nRemoves the document from the caller's own org and answers the dialect's\nEnqueuedTask. Deleting a key that is not there succeeds, so a client\nreconciling its own corpus can delete without checking first.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the document is already gone when this answers."
+  },
+  {
+   "id": "get_index_health",
+   "doc": "Reports whether the search plane can serve.\n\nAnswers the dialect's `{\"status\":\"available\"}` when the index store is\nreadable. It FAILS CLOSED — an unreadable store answers 503 with\n`{\"status\":\"unavailable\"}` rather than an empty result set, because a\nMeilisearch client probes this before it will use a server at all and a\ncheerful 200 over a broken volume turns \"search is down\" into \"nothing\nmatched\". It requires no principal and reads no tenant data.",
+   "read": true
+  },
+  {
+   "id": "get_index_indexes",
+   "doc": "Lists the indexes your org holds.\n\nAnswers every index in the caller's own org with its primary key and\ntimestamps. Without it an index whose uid a caller has forgotten is\nunreachable — there is no other way to enumerate what an org holds. The page\nis the whole set: an org's index count is small by construction, so `limit`\nand `total` both report it.\n\nThe tenant is the org minted from the VALIDATED bearer's owner claim, never a\nclient-supplied header, and two orgs may both hold an index named \"messages\"\nwithout either seeing the other. Without a validated principal the answer is\n403 carrying the dialect's `invalid_api_key` body.",
+   "read": true
+  },
+  {
+   "id": "get_index_indexes_by_uid",
+   "doc": "Reads one index's definition.\n\nAnswers the index's uid, primary key and timestamps. An index this org does\nnot hold answers 404 carrying the dialect's `index_not_found` — the code a\nMeilisearch client reads as permission to create it, which is why this is a\nrefusal rather than an empty object.\n\nThe uid is scoped to the caller's own org, so another tenant's index is\nindistinguishable from one that never existed: this surface is not an\nexistence oracle.",
+   "read": true
+  },
+  {
+   "id": "get_index_indexes_by_uid_documents",
+   "doc": "Pages through the documents in an index.\n\nAnswers the org's stored documents in insertion order, whole, with the page's\nbounds and the index's total. It is the enumeration surface — search ranks by\nrelevance and cannot walk a corpus — so a caller reconciling what it has\nwritten reads it here.\n\nAn index this org does not hold answers 404 carrying the dialect's\n`index_not_found`.",
+   "read": true
+  },
+  {
+   "id": "get_index_indexes_by_uid_documents_by_id",
+   "doc": "Reads one document by its primary key.\n\nAnswers the stored document exactly as it was written — this surface keeps\ndocuments whole rather than projecting them, so what comes back is what went\nin. A primary key this index does not hold answers 404 carrying the dialect's\n`document_not_found`; an index this org does not hold answers\n`index_not_found`, and the two are different facts a client acts on\ndifferently.",
+   "read": true
+  },
+  {
+   "id": "get_index_indexes_by_uid_settings",
+   "doc": "Reads an index's filterable attributes.\n\nAnswers the settings subset this surface implements: the attributes a search\n`filter` may constrain. An index this org does not hold answers 404 carrying\nthe dialect's `index_not_found`.",
+   "read": true
+  },
+  {
+   "id": "get_index_stats",
+   "doc": "Counts the documents in each of your indexes.\n\nReports every index the caller's own org holds with its document count, plus\nthe org's total. `isIndexing` is always false because writes here are applied\nbefore their response — there is never a background pass to wait on.\n\nThe tenant is the org minted from the VALIDATED bearer's owner claim, never a\nclient-supplied header, so this counts the caller's own documents and no\nother tenant's. Without a validated principal the answer is 403 carrying the\ndialect's `invalid_api_key` body.",
+   "read": true
+  },
+  {
+   "id": "get_index_tasks_by_uid",
+   "doc": "Checks a write task, which has already finished.\n\nAlways reports `succeeded`. Writes here are applied to SQLite before their\nEnqueuedTask is returned, so a client polling waitForTask resolves on its\nfirst call rather than waiting for a queue that was never there. The three\ntimestamps are the same instant for the same reason.\n\nIt requires a validated principal but reads no tenant data: the task id it\nechoes was minted by this process and names nothing about any org.",
+   "read": true
+  },
+  {
+   "id": "get_index_version",
+   "doc": "Identifies the search implementation answering.\n\nReports the dialect's version shape with `commitSha` naming this\nimplementation rather than a Meilisearch build, so a client that logs the\nversion records which server answered instead of implying a release of\nsoftware this is not. It requires no principal and reads no tenant data.",
+   "read": true
+  },
+  {
+   "id": "patch_index_indexes_by_uid_settings",
+   "doc": "Sets which attributes an index can be filtered on.\n\nReplaces the whole filterable set. An attribute not listed here cannot be\nused in a search `filter`, so this is what makes a per-user or per-tag\nnarrowing possible at all.\n\nIt CREATES the index when it is missing rather than answering 404, because a\nMeilisearch client configures settings on an index it has just asked for and\na refusal there leaves the client with no index at all.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the setting is already applied when this answers."
+  },
+  {
+   "id": "post_index_indexes",
+   "doc": "Creates an index.\n\nRegisters a named index in the caller's own org and answers the dialect's\nEnqueuedTask. It is idempotent: creating an index that already exists returns\nthe same receipt and changes nothing, which is what lets a client create on\nstartup without checking first.\n\n`primaryKey` is optional — the first write establishes one when it is omitted.\nAn index is a ROW here rather than a table, so an unusual uid is stored\nverbatim instead of being sanitised into a schema name.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the write is already applied when this answers. A client that\npolls waitForTask resolves immediately."
+  },
+  {
+   "id": "post_index_indexes_by_uid_search",
+   "doc": "Searches an index, forgiving typos.\n\nRanks the org's documents in one index against `q` and answers the matching\ndocuments whole, most relevant first. A prefix matches, so a partial word\nfinds the documents containing it, and `filter` narrows the result to\ndocuments whose filterable attributes match — which is how a caller scopes\nresults to one end user within its own org.\n\n`estimatedTotalHits` is the dialect's name for the count; every hit is\nmaterialised here, so for this page it is exact. An index this org does not\nhold answers 404 carrying the dialect's `index_not_found`."
+  }
+ ],
  "ingress": [
   {
    "id": "delete_ingress_middlewares_by_id",
@@ -1758,7 +1824,31 @@
   }
  ],
  "kafka": [],
- "kms": [],
+ "kms": [
+  {
+   "id": "get_kms_config",
+   "doc": "Returns the runtime configuration for the KMS console.\n\nWhat the console needs before anyone has signed in: the brand, the OIDC issuer\nit authenticates against, the API base for this subsystem and the path of the\nlogin exchange.\n\nPublic on purpose, and it holds nothing sensitive — it is deliberately kept\nunder this subsystem's own namespace rather than under an admin prefix, so a\ngateway that admin-gates the admin routes cannot break the console's\nlegitimate pre-login fetch.",
+   "read": true
+  },
+  {
+   "id": "get_kms_health",
+   "doc": "Reports whether this broker can actually serve secrets.\n\nA real readiness probe, not a liveness stub: 200 only when the store is open\nAND a master key is configured, with `signing` reporting whether signing keys\nare set up too. Anything less answers 503 with `ready:false` and the reason —\nno in-process store, or no master key — which are exactly the two states in\nwhich the secret operations refuse.\n\nNot token-gated, because the platform must be able to probe it without a\ncredential. It reports the broker's configuration state only; no secret, no\nkey material and no tenant name appears in it.",
+   "read": true
+  },
+  {
+   "id": "get_kms_secrets",
+   "doc": "Lists the secrets your org holds, without their values.\n\nReturns the METADATA of the caller's own secrets: each one's name, path,\nenvironment and sealing scheme. No value and no ciphertext is included — this\noperation exists to enumerate what is held, and reading a value is a separate,\nper-secret call.\n\nScoped to the caller's own org and nothing else, structurally: there is no org\nin the path, the store root is derived from the validated org claim, and a\ncaller therefore has no way to name another tenant's namespace. `path` narrows\nto a subpath and `env` selects the environment; both are also accepted under\nthe operator's spellings, `secretPath` and `environment`. An omitted `env`\nmeans every environment and an omitted `path` means the whole org, because a\ndefault here reported a populated store as empty.\n\nAdmission is fail-closed and in order: a validated member, an org that is a\nDNS-1123 label, and a store holding a master key — 403, 400 and 503\nrespectively, all decided before any record is touched.",
+   "read": true
+  },
+  {
+   "id": "post_kms_auth_login",
+   "doc": "Exchanges a machine credential for an IAM bearer token.\n\nTakes a tenant's machine credential — a client id and client secret — and\nreturns an owner-scoped IAM access token with its lifetime, which is the\nbearer the caller then carries on the org-scoped secret operations.\n\nIt is deliberately public and unauthenticated, because it IS the credential\nexchange and runs before any principal exists. That makes it the one route in\nthis subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather\nthan on any caller-supplied header, and body-capped at the same door.\n\nThe submitted secret is never logged and never echoed, and failures collapse\nto one clean status with no upstream detail: 401 when the credential does not\nauthenticate, 502 when the identity provider is unreachable, 503 when no\nissuer is configured. That is on purpose — a richer error would be a validity\noracle for guessed credentials."
+  },
+  {
+   "id": "post_kms_secrets",
+   "doc": "Stores or replaces one secret in your org.\n\nUpserts one secret under the caller's own org. The value is sealed before it\nis written — a fresh per-secret data key, itself wrapped by the master key —\nso plaintext never reaches disk. The receipt confirms the name and environment\nthat were written and does not echo the value.\n\n`env` is REQUIRED on a write and has no default, which is the rule most easily\ngot wrong here: reads and deletes still fall back to the default environment\nfor older callers, but a write must not, because the environment is part of\nthe storage key. A silently defaulted write lands in a bucket the readers that\nresolve project, environment and path never look in, and the stale value keeps\nbeing served — so the write fails loudly instead.\n\n`name` is required, `path` is an optional subpath beneath the org root, and\nthe org is taken from the validated claim rather than the body.\n\nRequires ADMIN authority over the org — a member reads, an admin writes. A\nmachine credential holds no membership and so is never an org admin: it can\nread the secrets it was issued for and cannot replace one. Fail-closed\nadmission, in order: admin of the org, well-formed org, master key present —\n403, 400 and 503, all decided before any record is touched."
+  }
+ ],
  "knowledge": [
   {
    "id": "delete_knowledge_connectors_by_provider",
