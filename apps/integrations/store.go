@@ -49,7 +49,7 @@ type Connection struct {
 }
 
 // Connection is a user's non-secret link to a provider account — the per-user
-// sibling of Connection (the /v1/connectors plane). The credential itself lives
+// sibling of Connection (the /v1/integrations/connectors plane). The credential itself lives
 
 // Grant is one in-flight device authorization. Code/UserCode come from the
 // provider; Interval (seconds) is raised by slow_down; LastPollAt gates the
@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS bridge_events (
 );
 CREATE INDEX IF NOT EXISTS ix_bridge_events_created ON bridge_events(created_at);
 
--- connectors are per-USER links to a provider account (the /v1/connectors
+-- connectors are per-USER links to a provider account (the /v1/integrations/connectors
 -- plane; sibling of the org-scoped connections table). The credential lives
 -- ONLY in KMS at /orgs/{org}/users/{user}/connectors/{provider}/{label}; this
 -- row is non-secret metadata. label allows multiple accounts per provider;

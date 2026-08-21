@@ -138,7 +138,7 @@ func run() error {
 // hand-written (see the package doc), and that is exactly why it has to install
 // it explicitly — nothing else in this process will.
 //
-// EdgeCORS in particular, because these prefixes include GET /v1/summary: the
+// EdgeCORS in particular, because these prefixes include GET /v1/o11y/summary: the
 // PUBLIC status document, read cross-origin by a browser on a brand host that the
 // CLOUD_CORS_ORIGINS allowlist already admits. Without this the o11y plugin was
 // the only public surface answering 200 with no Access-Control-Allow-Origin, and

@@ -124,20 +124,19 @@ var unreachable = []string{
 	// both addresses are published in the agent-skills catalog on three brands, and
 	// /v1/bot/connect is a socket already-deployed nodes hold open — so it is not a
 	// rename this ledger can make. The count is here to be argued down.
+	//
+	// git's eleven root-level lines are gone, and they are the first this ledger
+	// has lost to routes being DELETED. They were the bare-URL forms of the browse
+	// pages and the clone protocol — GET /, /:org/:repo/…, /:org/:repo/info/refs —
+	// answering only when the request Host was the dedicated git host, which is
+	// the standalone forge's in production. A prefix must start with a literal
+	// segment, so no manifest row could ever name /:org, which is exactly why they
+	// read "-> nothing" here for as long as they did: published, and deliverable
+	// by no host in the fleet. The browse pages moved to /v1/git and the clone
+	// address is /v1/git/<org>/<repo>.
 	"bots /v1/bot/connect -> bot",
 	"bots /v1/bot/nodes -> bot",
 	"bots /v1/bot/peer/invoke -> bot",
-	"git / -> nothing",
-	"git /{org}/{project}/{repo}/git-receive-pack -> nothing",
-	"git /{org}/{project}/{repo}/git-upload-pack -> nothing",
-	"git /{org}/{project}/{repo}/info/refs -> nothing",
-	"git /{org}/{repo} -> nothing",
-	"git /{org}/{repo}/blob/{wildcard1} -> nothing",
-	"git /{org}/{repo}/commits -> nothing",
-	"git /{org}/{repo}/git-receive-pack -> nothing",
-	"git /{org}/{repo}/git-upload-pack -> nothing",
-	"git /{org}/{repo}/info/refs -> nothing",
-	"git /{org}/{repo}/tree/{wildcard1} -> nothing",
 }
 
 // oracle is the transport the probe mounts every app on. A mounted app is

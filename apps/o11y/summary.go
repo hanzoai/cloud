@@ -1,6 +1,6 @@
 package o11y
 
-// summary.go — GET /v1/summary, the PUBLIC platform status document.
+// summary.go — GET /v1/o11y/summary, the PUBLIC platform status document.
 //
 // WHY IT LIVES HERE. o11y already owns the ONE availability signal this platform
 // has: mountProbes (probes.go) knocks on every fleetTarget every 30s and records
@@ -12,8 +12,11 @@ package o11y
 // cross-process hop for data this app already holds. o11y is also Eager in the
 // manifest, which matters more than it looks: a status endpoint is read exactly
 // when the platform is on fire, and a lazily-spawned plugin would pay a cold
-// start at that moment. The precedent for owning a top-level path outside
-// /v1/o11y is already here — o11y serves /v1/sentinel the same way.
+// start at that moment. It answers UNDER /v1/o11y, not beside it: it was a
+// top-level /v1/summary, and a capability's every address carries the
+// capability's name (HIP-0139 §3). Unauthenticated is not the same as
+// un-prefixed — the two facts are independent, and the next paragraph is the
+// one that matters for a reader during an outage.
 //
 // WHY IT IS UNAUTHENTICATED. A status endpoint that requires a login is useless
 // during an outage: IAM is one of the things that can be down, and the reader is
@@ -147,13 +150,13 @@ type noArgs struct{}
 // invisible to all three. The handler reaches for the request — to brand per Host
 // and to set Cache-Control — which cloud.Bridge parks on the context, but this
 // registers no Bridge of its own: the composer installs one at the root ahead of
-// every route, so a second copy on a /v1/summary node would gate a node that holds
+// every route, so a second copy on a /v1/o11y/summary node would gate a node that holds
 // no routes (the leaf below is registered through `a`) and zip refuses to compose
 // middleware that could never run. Without a request the handler still answers,
 // branded for the deployment rather than for the caller's Host — see handleSummary.
 func mountSummary(a *zip.App, deps cloud.Deps) {
 	deploymentBrand = deps.Brand
-	zip.Get(a, "/v1/summary", handleSummary)
+	zip.Get(a, "/v1/o11y/summary", handleSummary)
 }
 
 // GetSummary reports whether the platform is up. It returns the public status

@@ -60,7 +60,7 @@ func TestResolveOrgSubject(t *testing.T) {
 func TestActivity_CrossUserForbidden(t *testing.T) {
 	f := installFakeDS(t, nil)
 	app := mountApp(t)
-	code, _ := doGet(t, app, "/v1/usage/activity?subject=user&id=bob", principalHeaders("acme", "alice"))
+	code, _ := doGet(t, app, "/v1/leaderboard/activity?subject=user&id=bob", principalHeaders("acme", "alice"))
 	if code != http.StatusForbidden {
 		t.Fatalf("cross-user must be 403, got %d", code)
 	}
@@ -80,7 +80,7 @@ func TestActivity_AdminCrossUserBindsOrgAndUser(t *testing.T) {
 	})
 	app := mountApp(t)
 	h := withHeader(principalHeaders("acme", "alice"), "X-User-IsOrgAdmin", "true")
-	code, body := doGet(t, app, "/v1/usage/activity?subject=user&id=bob&from=2026-05-01&to=2026-06-30", h)
+	code, body := doGet(t, app, "/v1/leaderboard/activity?subject=user&id=bob&from=2026-05-01&to=2026-06-30", h)
 	if code != http.StatusOK {
 		t.Fatalf("admin cross-user must be 200, got %d body=%s", code, body)
 	}
@@ -110,7 +110,7 @@ func TestActivity_AdminCrossUserBindsOrgAndUser(t *testing.T) {
 func TestActivity_CrossOrgForbidden(t *testing.T) {
 	f := installFakeDS(t, nil)
 	app := mountApp(t)
-	code, _ := doGet(t, app, "/v1/usage/activity?subject=org&id=victim", principalHeaders("acme", "alice"))
+	code, _ := doGet(t, app, "/v1/leaderboard/activity?subject=org&id=victim", principalHeaders("acme", "alice"))
 	if code != http.StatusForbidden {
 		t.Fatalf("cross-org must be 403, got %d", code)
 	}
@@ -124,7 +124,7 @@ func TestActivity_CrossOrgForbidden(t *testing.T) {
 func TestActivity_ProjectHonestEmpty(t *testing.T) {
 	f := installFakeDS(t, nil)
 	app := mountApp(t)
-	code, body := doGet(t, app, "/v1/usage/activity?subject=project&id=proj-1", principalHeaders("acme", "alice"))
+	code, body := doGet(t, app, "/v1/leaderboard/activity?subject=project&id=proj-1", principalHeaders("acme", "alice"))
 	if code != http.StatusOK {
 		t.Fatalf("code=%d", code)
 	}
@@ -148,7 +148,7 @@ func TestActivity_SelfSeriesGapFilled(t *testing.T) {
 		return nil
 	})
 	app := mountApp(t)
-	code, body := doGet(t, app, "/v1/usage/activity?subject=user&from=2026-06-01&to=2026-06-03", principalHeaders("acme", "alice"))
+	code, body := doGet(t, app, "/v1/leaderboard/activity?subject=user&from=2026-06-01&to=2026-06-03", principalHeaders("acme", "alice"))
 	if code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", code, body)
 	}

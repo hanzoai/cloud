@@ -246,7 +246,7 @@ var tokenIsAQuantity = set(
 // They qualify only when they FOLLOW, and that asymmetry is the whole point.
 // Read on either side, `id` matched the parent identifier of a REST subresource:
 //
-//	GET /v1/connectors/{id}/token   →  get | connectors | by | id | token
+//	GET /v1/integrations/connectors/{id}/token   →  get | connectors | by | id | token
 //
 // The id there is the CONNECTOR's. The token is exactly what the word says, and
 // the gate whose one job is to withhold bearer secrets projected it to every

@@ -1,6 +1,6 @@
 package integrations
 
-// anthropic.go registers the Anthropic USER connector (/v1/connectors plane).
+// anthropic.go registers the Anthropic USER connector (/v1/integrations/connectors plane).
 // THREE credential flavours, ONE custody slot:
 //
 //	API key       (sk-ant-api…)  Verify → static, ExpiresAt 0

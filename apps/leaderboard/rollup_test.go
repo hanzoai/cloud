@@ -121,7 +121,7 @@ func TestBackfill_GuardIsScopedToTheSeedRange(t *testing.T) {
 	app := mountApp(t)
 	super := withHeader(principalHeaders("admin", "root"), "X-User-IsAdmin", "true")
 
-	code, body := doJSON(t, app, "POST", "/v1/usage/rollup/backfill?before="+viewLiveFrom+"T00:00:00Z", super, nil)
+	code, body := doJSON(t, app, "POST", "/v1/admin/leaderboard/rollup?before="+viewLiveFrom+"T00:00:00Z", super, nil)
 	if code != 200 {
 		t.Fatalf("seeding days the live view never captured must be allowed, got %d: %s", code, body)
 	}
@@ -139,7 +139,7 @@ func TestBackfill_GuardIsScopedToTheSeedRange(t *testing.T) {
 		t.Fatal("guard never ran")
 	}
 	// Re-seeding the same range still refuses — the double-count guard is intact.
-	code, _ = doJSON(t, app, "POST", "/v1/usage/rollup/backfill?before=2026-08-01T00:00:00Z", super, nil)
+	code, _ = doJSON(t, app, "POST", "/v1/admin/leaderboard/rollup?before=2026-08-01T00:00:00Z", super, nil)
 	if code != 409 {
 		t.Fatalf("re-seeding covered days must be 409, got %d", code)
 	}
@@ -157,12 +157,12 @@ func TestBackfill_GuardsAgainstDoubleRun(t *testing.T) {
 	})
 	app := mountApp(t)
 	// SuperAdmin, no force → 409 conflict (already seeded).
-	code, _ := doJSON(t, app, "POST", "/v1/usage/rollup/backfill", withHeader(principalHeaders("admin", "root"), "X-User-IsAdmin", "true"), nil)
+	code, _ := doJSON(t, app, "POST", "/v1/admin/leaderboard/rollup", withHeader(principalHeaders("admin", "root"), "X-User-IsAdmin", "true"), nil)
 	if code != 409 {
 		t.Fatalf("non-forced re-seed must be 409, got %d", code)
 	}
 	// Non-super → 403 regardless.
-	code, _ = doJSON(t, app, "POST", "/v1/usage/rollup/backfill", principalHeaders("acme", "alice"), nil)
+	code, _ = doJSON(t, app, "POST", "/v1/admin/leaderboard/rollup", principalHeaders("acme", "alice"), nil)
 	if code != 403 {
 		t.Fatalf("non-super backfill must be 403, got %d", code)
 	}

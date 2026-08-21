@@ -17,20 +17,61 @@
   ],
   "tags": [
     {
-      "name": "connectors"
-    },
-    {
       "name": "integrations"
     }
   ],
   "paths": {
-    "/v1/connectors": {
+    "/v1/integrations": {
       "get": {
-        "operationId": "get_connectors",
+        "operationId": "get_integrations",
+        "summary": "Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders.",
+        "description": "Returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/integrations/connectors\nsurface) are omitted; the two planes are disjoint.",
+        "tags": [
+          "integrations"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "providers": [
+                    {
+                      "available": true,
+                      "category": "Communication",
+                      "connected": true,
+                      "connection": {
+                        "account": "Acme",
+                        "connectedAt": "2026-07-01T10:00:00Z",
+                        "externalId": "T0231",
+                        "scopes": [
+                          "chat:write"
+                        ]
+                      },
+                      "description": "Connect your workspace.",
+                      "id": "slack",
+                      "name": "Slack"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/listOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/integrations/connectors": {
+      "get": {
+        "operationId": "get_integrations_connectors",
         "summary": "Lists the caller's OWN connectors across every provider — the set `hanzo connector ls` prints.",
         "description": "Lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
         "tags": [
-          "connectors"
+          "integrations"
         ],
         "responses": {
           "200": {
@@ -64,13 +105,13 @@
         "x-tool": true
       }
     },
-    "/v1/connectors/providers": {
+    "/v1/integrations/connectors/providers": {
       "get": {
-        "operationId": "get_connectors_providers",
+        "operationId": "get_integrations_connectors_providers",
         "summary": "Lists the user-scoped provider cards — the catalog of what a user can connect, and how.",
         "description": "Lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
         "tags": [
-          "connectors"
+          "integrations"
         ],
         "responses": {
           "200": {
@@ -105,13 +146,13 @@
         "x-tool": true
       }
     },
-    "/v1/connectors/{id}": {
+    "/v1/integrations/connectors/{id}": {
       "delete": {
-        "operationId": "delete_connectors_by_id",
+        "operationId": "delete_integrations_connectors_by_id",
         "summary": "Forgets a connector: every custodied secret, then the row.",
         "description": "Forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint.",
         "tags": [
-          "connectors"
+          "integrations"
         ],
         "parameters": [
           {
@@ -144,13 +185,13 @@
         "x-tool": true
       }
     },
-    "/v1/connectors/{id}/refresh": {
+    "/v1/integrations/connectors/{id}/refresh": {
       "post": {
-        "operationId": "post_connectors_by_id_refresh",
+        "operationId": "post_integrations_connectors_by_id_refresh",
         "summary": "Forces a token rotation for a connected connector, ahead of the automatic rotation a token read would do inside the expiry window.",
         "description": "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
         "tags": [
-          "connectors"
+          "integrations"
         ],
         "parameters": [
           {
@@ -195,13 +236,13 @@
         "x-tool": true
       }
     },
-    "/v1/connectors/{id}/token": {
+    "/v1/integrations/connectors/{id}/token": {
       "get": {
-        "operationId": "get_connectors_by_id_token",
+        "operationId": "get_integrations_connectors_by_id_token",
         "summary": "Hands the custodied access token to its owner — the ONE place custody exits.",
         "description": "Hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
         "tags": [
-          "connectors"
+          "integrations"
         ],
         "parameters": [
           {
@@ -237,13 +278,13 @@
         "x-tool": true
       }
     },
-    "/v1/connectors/{provider}/credential": {
+    "/v1/integrations/connectors/{provider}/credential": {
       "post": {
-        "operationId": "post_connectors_by_provider_credential",
+        "operationId": "post_integrations_connectors_by_provider_credential",
         "summary": "Is the direct intake path: a customer-held token/setup-token (Verify) or an externally obtained OAuth bundle from the CLI's local PKCE (Adopt).",
         "description": "Is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order).",
         "tags": [
-          "connectors"
+          "integrations"
         ],
         "parameters": [
           {
@@ -303,13 +344,13 @@
         "x-tool": true
       }
     },
-    "/v1/connectors/{provider}/device": {
+    "/v1/integrations/connectors/{provider}/device": {
       "post": {
-        "operationId": "post_connectors_by_provider_device",
+        "operationId": "post_integrations_connectors_by_provider_device",
         "summary": "Begins a device sign-in and returns the code to show the user plus how to poll for completion.",
         "description": "Begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned.",
         "tags": [
-          "connectors"
+          "integrations"
         ],
         "parameters": [
           {
@@ -360,13 +401,13 @@
         "x-tool": true
       }
     },
-    "/v1/connectors/{provider}/device/{flow}/poll": {
+    "/v1/integrations/connectors/{provider}/device/{flow}/poll": {
       "post": {
-        "operationId": "post_connectors_by_provider_device_by_flow_poll",
+        "operationId": "post_integrations_connectors_by_provider_device_by_flow_poll",
         "summary": "Advances a device sign-in.",
         "description": "Advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval.",
         "tags": [
-          "connectors"
+          "integrations"
         ],
         "parameters": [
           {
@@ -411,50 +452,6 @@
                 },
                 "schema": {
                   "$ref": "#/components/schemas/devicePollOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/integrations": {
-      "get": {
-        "operationId": "get_integrations",
-        "summary": "Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders.",
-        "description": "Returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/connectors\nsurface) are omitted; the two planes are disjoint.",
-        "tags": [
-          "integrations"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "providers": [
-                    {
-                      "available": true,
-                      "category": "Communication",
-                      "connected": true,
-                      "connection": {
-                        "account": "Acme",
-                        "connectedAt": "2026-07-01T10:00:00Z",
-                        "externalId": "T0231",
-                        "scopes": [
-                          "chat:write"
-                        ]
-                      },
-                      "description": "Connect your workspace.",
-                      "id": "slack",
-                      "name": "Slack"
-                    }
-                  ]
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/listOut"
                 }
               }
             },
@@ -1326,7 +1323,7 @@
             "name": "provider",
             "in": "path",
             "required": true,
-            "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
+            "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)\nproviders, which this surface never resolves.",
             "schema": {
               "type": "string"
             },
@@ -1449,7 +1446,7 @@
             "name": "provider",
             "in": "path",
             "required": true,
-            "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
+            "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)\nproviders, which this surface never resolves.",
             "schema": {
               "type": "string"
             },
@@ -1488,7 +1485,7 @@
             "name": "provider",
             "in": "path",
             "required": true,
-            "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
+            "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)\nproviders, which this surface never resolves.",
             "schema": {
               "type": "string"
             },

@@ -20,11 +20,11 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name: "integrations",
 		// The paths this app answers, read from the fleet's one list rather than
-		// restated here (manifest/one_source_test.go). Left unsaid it would fall back
-		// to the /v1/<name> convention, which is two thirds of this app's surface:
-		// /v1/connectors and the connector webhook would then sit outside what the
-		// app claims, so its own middleware would skip them while the host kept
-		// forwarding them — served, and served wrong.
+		// restated here (manifest/one_source_test.go). It reads as the /v1/<name>
+		// convention today because the whole surface is under that name now — the
+		// user-plane connectors were a second top-level prefix, and left unsaid
+		// they sat outside what the app claimed, so its own middleware skipped
+		// them while the host kept forwarding them: served, and served wrong.
 		Prefixes: manifest.PrefixesFor("integrations"),
 		Price:    cloud.Free,
 		Mount:    integrations.Mount,

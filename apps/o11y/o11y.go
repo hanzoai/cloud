@@ -673,7 +673,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// There was a Prometheus exposition on :9464 here until Prometheus was
 	// retired; a listener whose only caller was a scraper that no longer exists
 	// is not a way out, it is an open port.
-	// PUBLIC status face GET /v1/summary — the outward projection of the gauge the
+	// PUBLIC status face GET /v1/o11y/summary — the outward projection of the gauge the
 	// probes above record. After mountProbes because it reads what they write, and
 	// before the terminal wildcard like every other specific route. Unauthenticated
 	// and tenant-free by construction; see summary.go.
