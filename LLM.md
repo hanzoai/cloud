@@ -948,7 +948,7 @@ document pipeline" below.)
 - **The product axis is mechanical.** The first path segment after `/v1/` IS the
   product (`openapi.Product`), tagged onto each operation so a CLI can build
   `hanzo <product> <resource> <verb>` with no judgment. It is deliberately NOT the
-  subsystem name: `apps/billing` also serves `/v1/finance/*`.
+  subsystem name: `apps/commerce` serves the merchant half of `/v1/billing/*`.
   - **A tag's DESCRIPTION is the owning package's synopsis** (`openapi.Synopsis`,
     openapi/synopsis.go). The owner is read from the app's own composition root —
     `plugin/<app>/main.go` imports exactly the package it mounts — because four
@@ -976,11 +976,15 @@ document pipeline" below.)
     storage, `/v1/search` and `/v1/vector` the same shape. Reading "two claimants"
     as ambiguity silenced those four products though none was ambiguous — depth
     already says which app the product IS and which merely has routes inside it.
-    Where nobody is alone at the root the answer is still SILENCE: `/v1/finance`
-    is billing at `/v1/finance/balance` and treasury at `/v1/finance/accounts`,
-    neither above the other, so picking one would publish a coin flip as a fact.
-  - Still blank, measured, and each for a stated reason — **6 of 149 tags**:
-    `finance` (no app answers its root); `authz`, `licensing`, `metrics`, `logs`,
+    Where nobody is alone at the root the answer is still SILENCE: `/v1/risk` is
+    dataset at `/v1/risk/datasets`, label at `/v1/risk/labels` and reference at
+    `/v1/risk/features`, none above the others, so picking one would publish a
+    coin flip as a fact. `/v1/finance` used to be the example — billing at
+    `/v1/finance/balance`, treasury at `/v1/finance/accounts` — and it is gone:
+    HIP-0139 §7 closed it, treasury came home to `/v1/treasury` and billing's
+    projections folded into `/v1/billing`.
+  - Still blank, measured, and each for a stated reason — **5 of 149 tags**:
+    `authz`, `licensing`, `metrics`, `logs`,
     `traces` (root owner mounts a subsystem in ANOTHER MODULE, so there is no
     package here to read). The upstream modules do carry package docs, but
     maintainer-voiced ones ("the native, prometheus-free time-series store"), and

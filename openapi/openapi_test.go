@@ -19,7 +19,7 @@ func TestProduct(t *testing.T) {
 	for _, tc := range []struct{ path, want string }{
 		{"/v1/kms/orgs/:org/secrets", "kms"},
 		{"/v1/billing/usage", "billing"},
-		{"/v1/finance/balance", "finance"}, // clients/billing serves it: product != subsystem
+		{"/v1/billing/ledger", "billing"}, // apps/billing serves it beside commerce's merchant half
 		{"/v1/billing", "billing"},
 		{"/v1/billing/*", "billing"}, // a catch-all still names its product
 		{"/v1/openapi.json", ""},     // a file, not a product

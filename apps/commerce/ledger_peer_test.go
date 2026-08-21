@@ -2,21 +2,24 @@
 
 package commerce
 
-// ledger_peer_test.go drives the REAL peer path a customer's finance pages take when
+// ledger_peer_test.go drives the REAL peer path a customer's money page takes when
 // the ledger lives in another process: a real per-org finance ledger, the real
-// /finance/txns op published on a real socket, and the real /v1/finance/* reader in
-// apps/billing on the other end of it.
+// /finance/txns op published on a real socket, and the real GET /v1/billing/ledger
+// reader in apps/billing on the other end of it.
 //
 // It exists because the reader classified entries on strings the writer never emits —
 // the ledger writes `finance.deposit` / `finance.usage`, the reader matched commerce's
-// `deposit` / `withdraw` — so credits rendered EMPTY, usage totalled 0, and a deposit
-// signed NEGATIVE on a customer's own balance page. The existing finance_test.go stays
-// green through all of it because it only ever answers from the S2S HTTP mock, which
-// speaks the vocabulary the reader expected. A test that cannot see the wire it ships
-// on is not a weaker test, it is the reason a broken wire ships.
+// `deposit` / `withdraw` — so a deposit signed NEGATIVE and a customer read their own
+// top-up as a charge. apps/billing's own tests stayed green through all of it because
+// they answer from a mock that speaks the vocabulary the reader expected. A test that
+// cannot see the wire it ships on is not a weaker test, it is the reason a broken wire
+// ships.
 //
 // So this one holds no strings of its own. It writes through the ledger's own API,
-// reads through the customer's own route, and asserts on MONEY.
+// reads through the customer's own route, and asserts on MONEY. The signed ledger is
+// the sharpest reading of that wire and now the only one billing serves: the credits
+// and usage projections that read the same list were second spellings of addresses
+// commerce already answers, and HIP-0139 §7 closed them.
 
 import (
 	"context"
@@ -138,53 +141,16 @@ func seedBooks(t *testing.T, fin finance.Client, org string) {
 	}
 }
 
-// TestPeerLedger_CreditsRenderTheGrant — money PUT IN must appear on the credits page.
-// Over the peer path it rendered an empty array: every row was skipped because the
-// reader was looking for a kind the ledger does not write.
-func TestPeerLedger_CreditsRenderTheGrant(t *testing.T) {
-	fin := servePeerLedger(t)
-	seedBooks(t, fin, "acme")
-	app := mountReader(t)
-
-	var credits []financeCreditView
-	if err := json.Unmarshal(readAs(t, app, "/v1/finance/credits", "acme"), &credits); err != nil {
-		t.Fatalf("decode credits: %v", err)
-	}
-	if len(credits) != 1 {
-		t.Fatalf("want the one grant, got %d rows: %+v", len(credits), credits)
-	}
-	if credits[0].Cents != 50_000 {
-		t.Errorf("grant cents: want 50000, got %d", credits[0].Cents)
-	}
-}
-
-// TestPeerLedger_UsageTotalsTheDebit — metered spend must total the debit, not 0.
-func TestPeerLedger_UsageTotalsTheDebit(t *testing.T) {
-	fin := servePeerLedger(t)
-	seedBooks(t, fin, "acme")
-	app := mountReader(t)
-
-	var usage struct {
-		TotalCents int64 `json:"totalCents"`
-	}
-	if err := json.Unmarshal(readAs(t, app, "/v1/finance/usage", "acme"), &usage); err != nil {
-		t.Fatalf("decode usage: %v", err)
-	}
-	if usage.TotalCents != 1_200 {
-		t.Errorf("usage total: want 1200, got %d", usage.TotalCents)
-	}
-}
-
-// TestPeerLedger_DepositSignsPositive — the sharpest of the three. A deposit CREDITS
-// the wallet, so it renders positive; every other posting debits it. Over the peer
-// path the grant signed NEGATIVE, so a customer read their own top-up as a charge.
+// TestPeerLedger_DepositSignsPositive — a deposit CREDITS the wallet, so it renders
+// positive; every other posting debits it. Over the peer path the grant signed
+// NEGATIVE, so a customer read their own top-up as a charge.
 func TestPeerLedger_DepositSignsPositive(t *testing.T) {
 	fin := servePeerLedger(t)
 	seedBooks(t, fin, "acme")
 	app := mountReader(t)
 
 	var entries []financeLedgerView
-	if err := json.Unmarshal(readAs(t, app, "/v1/finance/ledger", "acme"), &entries); err != nil {
+	if err := json.Unmarshal(readAs(t, app, "/v1/billing/ledger", "acme"), &entries); err != nil {
 		t.Fatalf("decode ledger: %v", err)
 	}
 	if len(entries) != 2 {
@@ -206,14 +172,9 @@ func TestPeerLedger_DepositSignsPositive(t *testing.T) {
 	}
 }
 
-// The two response shapes this file reads. They mirror the customer contract in
-// apps/billing (financeCredit / financeLedgerEntry), which is unexported there; only
-// the fields asserted on are named.
-type financeCreditView struct {
-	ID    string `json:"id"`
-	Cents int64  `json:"cents"`
-}
-
+// The response shape this file reads. It mirrors the customer contract in
+// apps/billing (financeLedgerEntry), which is unexported there; only the fields
+// asserted on are named.
 type financeLedgerView struct {
 	ID      string `json:"id"`
 	Account string `json:"account"`

@@ -139,7 +139,7 @@ var Apps = []App{
 	// prefix is the operator's whole-backend view of the vector store it allocates
 	// into (apps/provisioning/inventory.go).
 	{Name: "provisioning", Prefixes: []string{"/v1/admin/provisioning", "/v1/provisioning"}},
-	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
+	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/ledger", "/v1/billing/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	// The free lane's ceiling, beside the priced lane's. rollingcap bounds how fast
 	// a caller may burn their OWN money; allowance bounds how much of OUR compute a
