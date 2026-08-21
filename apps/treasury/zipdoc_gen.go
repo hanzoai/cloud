@@ -39,7 +39,18 @@ func init() {
 			"journalIn.limit":                 "Limit caps the journal entries returned. Out of range or unparseable takes the default.",
 		},
 	})
-	zip.Describe("GET /v1/finance/accounts", zip.Doc{
+	zip.Describe("GET /v1/treasury", zip.Doc{
+		Description: "Returns the reserve fund's health and the current revenue-share\npolicy for any validated caller. It is a TRANSPARENCY view — a partner or\nauthor can see that the pool backing their payouts is solvent — and NOT per-org\nmoney, which is the customer's own commerce balance at /v1/billing/balance. The\npolicy is read-only here; only a SuperAdmin sets it.",
+		Fields: map[string]string{
+			"TreasuryReport.accruedCents":     "lifetime revenue-share into the fund",
+			"TreasuryReport.byProgramCents":   "program → lifetime paid",
+			"TreasuryReport.paidCents":        "lifetime backed payouts out of the fund",
+			"TreasuryReport.policy":           "current revenue-share policy",
+			"TreasuryReport.reserveCents":     "fund:reserve balance (available now)",
+			"TreasuryReport.solventForPayout": "reserve > 0: at least some payout is backable",
+		},
+	})
+	zip.Describe("GET /v1/treasury/accounts", zip.Doc{
 		Description: "Returns the ledger accounts the caller may see, with their\nbalances. It is tenant-isolated SERVER-SIDE: an ordinary caller sees ONLY\naccounts under its own \"org:<tenant>:\" prefix, never house accounts and never\nanother tenant's. A SuperAdmin may widen with ?scope=house (the reserve,\nrevenue and payout house accounts) or ?org=<tenant> — the only way to cross the\ntenant boundary, and only for platform sudo. The answer is honestly empty until\na tenant has ledger postings.",
 		Fields: map[string]string{
 			"accountView.address":      "Address is the ledger account address (\"org:acme:wallet\", \"fund:reserve\", …).",
@@ -49,17 +60,6 @@ func init() {
 			"accountsOut.accounts":     "Accounts are the ledger accounts in scope with their balances.",
 			"accountsOut.scope":        "Scope is the scope actually served: \"org\" or \"house\".",
 			"accountsOut.tenant":       "Tenant is the org whose accounts these are (empty for the house scope's own rows).",
-		},
-	})
-	zip.Describe("GET /v1/finance/treasury", zip.Doc{
-		Description: "Returns the reserve fund's health and the current revenue-share\npolicy for any validated caller. It is a TRANSPARENCY view — a partner or\nauthor can see that the pool backing their payouts is solvent — and NOT per-org\nmoney, which is the customer's own commerce balance at /v1/billing/balance. The\npolicy is read-only here; only a SuperAdmin sets it.",
-		Fields: map[string]string{
-			"TreasuryReport.accruedCents":     "lifetime revenue-share into the fund",
-			"TreasuryReport.byProgramCents":   "program → lifetime paid",
-			"TreasuryReport.paidCents":        "lifetime backed payouts out of the fund",
-			"TreasuryReport.policy":           "current revenue-share policy",
-			"TreasuryReport.reserveCents":     "fund:reserve balance (available now)",
-			"TreasuryReport.solventForPayout": "reserve > 0: at least some payout is backable",
 		},
 	})
 	zip.Describe("POST /treasury/reserve", zip.Doc{

@@ -48,8 +48,8 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
 	// the leaves — fiber runs middleware in registration order.
 	app.Use(cloud.Bridge())
 	o := ops{s: s}
-	zip.Get(app, "/v1/finance/treasury", o.myTreasury)
-	zip.Get(app, "/v1/finance/accounts", o.myAccounts)
+	zip.Get(app, "/v1/treasury", o.myTreasury)
+	zip.Get(app, "/v1/treasury/accounts", o.myAccounts)
 	zip.Get(app, "/v1/admin/treasury", o.adminReport)
 	zip.Post(app, "/v1/admin/treasury/policy", o.adminSetPolicy)
 	zip.Post(app, "/v1/admin/treasury/sweep", o.adminSweep)
@@ -107,11 +107,11 @@ func unwrap(t *testing.T, body []byte) map[string]any {
 
 func TestTreasury_RequiresAuth(t *testing.T) {
 	app, _ := mount(t)
-	if code, _ := req(t, app, http.MethodGet, "/v1/finance/treasury", "", false, nil); code != http.StatusForbidden {
-		t.Fatalf("GET /v1/finance/treasury unauth = %d, want 403", code)
+	if code, _ := req(t, app, http.MethodGet, "/v1/treasury", "", false, nil); code != http.StatusForbidden {
+		t.Fatalf("GET /v1/treasury unauth = %d, want 403", code)
 	}
-	if code, _ := req(t, app, http.MethodGet, "/v1/finance/treasury", "acme", false, nil); code != http.StatusOK {
-		t.Fatalf("GET /v1/finance/treasury as org = %d, want 200", code)
+	if code, _ := req(t, app, http.MethodGet, "/v1/treasury", "acme", false, nil); code != http.StatusOK {
+		t.Fatalf("GET /v1/treasury as org = %d, want 200", code)
 	}
 }
 
@@ -142,7 +142,7 @@ func TestPolicy_SetAndRead(t *testing.T) {
 		t.Fatalf("set policy = %d (%s)", code, body)
 	}
 	// customer read reflects the policy
-	_, cb := req(t, app, http.MethodGet, "/v1/finance/treasury", "acme", true, nil)
+	_, cb := req(t, app, http.MethodGet, "/v1/treasury", "acme", true, nil)
 	var rep ledger.TreasuryReport
 	if err := json.Unmarshal(cb, &rep); err != nil {
 		t.Fatalf("decode report: %v", err)
@@ -219,7 +219,7 @@ func TestAccounts_ScopeIsolation(t *testing.T) {
 
 	// A per-org caller sees ONLY its own tenant prefix (empty here — honest) and
 	// NEVER the house fund:reserve account.
-	_, body := req(t, app, http.MethodGet, "/v1/finance/accounts", "acme", false, nil)
+	_, body := req(t, app, http.MethodGet, "/v1/treasury/accounts", "acme", false, nil)
 	var org struct {
 		Scope    string        `json:"scope"`
 		Tenant   string        `json:"tenant"`
@@ -237,11 +237,11 @@ func TestAccounts_ScopeIsolation(t *testing.T) {
 		}
 	}
 	// Unauth → 403.
-	if code, _ := req(t, app, http.MethodGet, "/v1/finance/accounts", "", false, nil); code != http.StatusForbidden {
+	if code, _ := req(t, app, http.MethodGet, "/v1/treasury/accounts", "", false, nil); code != http.StatusForbidden {
 		t.Fatalf("unauth accounts = %d, want 403", code)
 	}
 	// SuperAdmin ?scope=house sees the seeded reserve.
-	_, hb := req(t, app, http.MethodGet, "/v1/finance/accounts?scope=house", "root", true, nil)
+	_, hb := req(t, app, http.MethodGet, "/v1/treasury/accounts?scope=house", "root", true, nil)
 	var house struct {
 		Scope    string        `json:"scope"`
 		Accounts []accountView `json:"accounts"`
