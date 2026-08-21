@@ -172,8 +172,17 @@ func (e Engine) Serve(c *zip.Ctx, in Request, q string) error {
 
 	if wantsStream(c, in) {
 		setStreamHeaders(c)
+		// The caller, resolved while the request still exists. The callback below
+		// runs after this handler returns and the Ctx is recycled, so anything read
+		// off it there is another request's bytes — which is why the detach is
+		// correct. But a detached context carries no identity, and the loop inside
+		// spends real money: it searches (paid engines) and renders pages (a browser
+		// pod). Without this the streaming answer bought both for free while the
+		// identical non-streaming request paid, which is money as a property of the
+		// transport. See cloud.Detach.
+		caller := cloud.Detach(context.Background(), c)
 		return c.SendStreamWriter(func(w *bufio.Writer) {
-			ctx, cancel := context.WithTimeout(context.Background(), p.deadline)
+			ctx, cancel := context.WithTimeout(caller, p.deadline)
 			defer cancel()
 			_, _ = w.WriteString(": ask stream open\n\n")
 			_ = w.Flush()

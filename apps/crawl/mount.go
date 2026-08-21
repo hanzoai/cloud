@@ -156,6 +156,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Bind the corpus to the ONE object seam the binary already has. A deployment
 	// with no object store keeps crawling and keeps nothing — see Bind.
 	Bind(deps.VFS)
+	// And the meter that pays for a render, bound the same way and for the same
+	// reason: escalation is reached from Read, which the answer engine calls
+	// in-process with no deps to thread. See meter.go.
+	bindMeter(cloud.NewResourceMeter(deps, "crawl"))
 
 	// The two request facts a typed op cannot reach, checked where a request is.
 	//

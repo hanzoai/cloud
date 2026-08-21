@@ -387,7 +387,19 @@ func (o validatorOps) provision(ctx context.Context, body *validatorClaim) (*slo
 	}
 
 	// 6) Materialize the node CR (best-effort — honest "pending" if no cluster).
+	//
+	// This is the act that costs money: a node with storage, running until it is
+	// deleted. Authorized before the CR is applied; billed only if one actually
+	// was. See meter.go.
+	ch, err := afford(s, ctx)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
 	nodeStatus, crName := materialize(s, ctx, slot)
+	if nodeStatus != "node_pending" {
+		charge(ch)
+	}
 
 	// 7) ENQUEUE the owner-gated registration. NEVER auto-submitted to any
 	// P-Chain — the owner co-signs the AddPermissionlessValidatorTx out of band.
