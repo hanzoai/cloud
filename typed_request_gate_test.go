@@ -84,6 +84,14 @@ var allowedRequestUses = map[string]string{
 	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
 		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
+	"apps/kms/typed.go": "admit — the secret broker's one admission door, and an identity gate reading " +
+		"strictly more than the org. A member READS a secret and an admin WRITES one (cloud.Scope, the " +
+		"estate's split, not this subsystem's invention), and admin-ness is platform sudo or org-admin: " +
+		"two facts the identity middleware parks in headers and principal.OrgFrom does not carry. " +
+		"Neither may become an In field for the obvious reason — a caller that could name itself an " +
+		"admin would be one. The TENANT still comes from principal.OrgFrom, so the org key and the " +
+		"authority arrive by their own proper doors. ONE function, which every typed op here asks, and " +
+		"it fails closed off the HTTP path, where there is no principal to be an admin of anything.",
 	"apps/admin/core/typed.go": "Admit / AdmitScoped — the SuperAdmin and white-label tenant gates. " +
 		"Both read validated identity beyond the org (IsAdmin, the WL allowlist), which principal.OrgFrom does not carry.",
 	"apps/taxonomy/ops.go": "writable — the product catalogue's authority, and an identity gate reading " +
