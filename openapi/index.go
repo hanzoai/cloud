@@ -174,6 +174,11 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 			"self":        {Href: RootPath},
 			"describedby": {Href: Path},
 			"mcp":         {Href: door.Path},
+			// Where to knock, beside where to knock ON. The door 401s with a
+			// WWW-Authenticate naming this same document (RFC 9728), which is how a
+			// spec-following MCP client discovers it — but only AFTER being refused.
+			// A caller reading the index learns both in the one call it already makes.
+			"auth": {Href: door.Metadata},
 		},
 	}
 	per := make(map[string]*Index, len(ops))

@@ -110,6 +110,10 @@ func TestTheRootListsTheCustomerSurfaceAndNothingBeside(t *testing.T) {
 			t.Errorf("the root offers no %q link", rel)
 		}
 	}
+	if root.Links["auth"].Href != door.Metadata {
+		t.Errorf("the root links auth to %q, want the protected-resource metadata at %q",
+			root.Links["auth"].Href, door.Metadata)
+	}
 	if root.Links["describedby"].Href != Path || root.Links["mcp"].Href != door.Path {
 		t.Errorf("the root's links name %v, not the document and the agent door", root.Links)
 	}
