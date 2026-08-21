@@ -54260,7 +54260,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
     get:
       description: |-
         Serves the application shell on GET, which is the entry point a browser loads before it calls anything under /v1/meet/.
@@ -54271,7 +54270,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
     patch:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
@@ -54280,7 +54278,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
     post:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
@@ -54289,7 +54286,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
     put:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
@@ -54298,7 +54294,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
   /meet/{wildcard1}:
     delete:
       description: 'Published because this address accepts every method, but a static
@@ -54314,7 +54309,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
     get:
       description: |-
         Serves the static assets on GET, and returns the application shell for any path that is not a file — client-side routing means a deep link is a shell load, not a 404.
@@ -54335,7 +54329,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
     patch:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
@@ -54350,7 +54343,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
     post:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
@@ -54365,7 +54357,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
     put:
       description: 'Published because this address accepts every method, but a static
         bundle has no writes: the request is refused 405 and nothing is read or changed.'
@@ -54380,7 +54371,6 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
   /tasks:
     delete:
       description: 'Published because this address accepts every method, but a static
@@ -54836,7 +54826,6 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
       x-tool: true
   /v1/admin/affiliates/{id}/approve:
     post:
@@ -54880,7 +54869,6 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
       x-tool: true
   /v1/admin/affiliates/{id}/payout:
     post:
@@ -54928,7 +54916,6 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
       x-tool: true
   /v1/admin/affiliates/{id}/rate:
     post:
@@ -54975,7 +54962,6 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
       x-tool: true
   /v1/admin/affiliates/{id}/suspend:
     post:
@@ -55006,7 +54992,6 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
       x-tool: true
   /v1/admin/affiliates/referrals:
     get:
@@ -55038,7 +55023,6 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
       x-tool: true
   /v1/admin/affiliates/sweep:
     post:
@@ -55077,7 +55061,6 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
       x-tool: true
   /v1/admin/aimetrics:
     get:
@@ -55420,7 +55403,6 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
       x-tool: true
   /v1/admin/authors/{id}/approve:
     post:
@@ -55463,7 +55445,6 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
       x-tool: true
   /v1/admin/authors/{id}/basis:
     get:
@@ -55511,7 +55492,6 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
       x-tool: true
   /v1/admin/authors/{id}/payout:
     post:
@@ -55558,7 +55538,6 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
       x-tool: true
   /v1/admin/authors/{id}/suspend:
     post:
@@ -55587,7 +55566,6 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
       x-tool: true
   /v1/admin/authors/sweep:
     post:
@@ -55616,7 +55594,6 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
       x-tool: true
   /v1/admin/bases:
     get:
@@ -57673,7 +57650,6 @@ paths:
       tags:
       - referrals
       x-app: referrals
-      x-stage: beta
       x-tool: true
   /v1/admin/referrals/sweep:
     post:
@@ -57704,7 +57680,6 @@ paths:
       tags:
       - referrals
       x-app: referrals
-      x-stage: beta
       x-tool: true
   /v1/admin/revenue:
     get:
@@ -58612,7 +58587,7 @@ paths:
       tags:
       - ads
       x-app: ads
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -58645,7 +58620,7 @@ paths:
       tags:
       - ads
       x-app: ads
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/ads/campaigns/{id}:
     delete:
@@ -58669,7 +58644,7 @@ paths:
       tags:
       - ads
       x-app: ads
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -58694,7 +58669,7 @@ paths:
       tags:
       - ads
       x-app: ads
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -58735,7 +58710,7 @@ paths:
       tags:
       - ads
       x-app: ads
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/ads/campaigns/{id}/launch:
     post:
@@ -58762,7 +58737,7 @@ paths:
       tags:
       - ads
       x-app: ads
-      x-stage: beta
+      x-public: true
   /v1/ads/summary:
     get:
       description: |-
@@ -58784,7 +58759,7 @@ paths:
       tags:
       - ads
       x-app: ads
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/affiliates:
     get:
@@ -58817,7 +58792,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/affiliates/apply:
     post:
@@ -58862,7 +58837,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/affiliates/attribute:
     post:
@@ -58911,7 +58886,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/affiliates/click:
     post:
@@ -58950,7 +58925,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/affiliates/leaderboard:
     get:
@@ -58981,7 +58956,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/affiliates/me:
     get:
@@ -59015,7 +58990,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/affiliates/me/earnings:
     get:
@@ -59045,7 +59020,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/affiliates/me/handle:
     post:
@@ -59080,7 +59055,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/affiliates/me/links:
     get:
@@ -59111,7 +59086,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -59147,7 +59122,7 @@ paths:
       tags:
       - affiliates
       x-app: affiliates
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/agents:
     get:
@@ -65069,7 +65044,7 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/authors/basis:
     get:
@@ -65117,7 +65092,7 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/authors/connect:
     post:
@@ -65154,7 +65129,7 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/authors/deploys/record:
     post:
@@ -65196,7 +65171,7 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/authors/repos/verify:
     post:
@@ -65236,7 +65211,7 @@ paths:
       tags:
       - authors
       x-app: authors
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/authz/check:
     post:
@@ -65792,7 +65767,7 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/benchmark/claims:
     get:
@@ -65857,7 +65832,7 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -65889,7 +65864,7 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/benchmark/compare:
     get:
@@ -65935,7 +65910,7 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/benchmark/history:
     get:
@@ -65977,7 +65952,7 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/benchmark/leaderboard:
     get:
@@ -66014,7 +65989,7 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/benchmark/presets:
     get:
@@ -66042,7 +66017,7 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -66079,7 +66054,7 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/benchmark/runs:
     post:
@@ -66117,7 +66092,7 @@ paths:
       tags:
       - benchmark
       x-app: benchmark
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/billing/accounts:
     get:
@@ -67134,7 +67109,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/ask:
     post:
@@ -67168,7 +67143,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/bank/exchange:
     post:
@@ -67183,7 +67158,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
   /v1/books/bank/import:
     post:
       description: |-
@@ -67210,7 +67185,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
   /v1/books/bank/sync:
     post:
       description: |-
@@ -67236,7 +67211,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/bank/token:
     post:
@@ -67251,7 +67226,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
   /v1/books/bank/transactions:
     get:
       description: |-
@@ -67288,7 +67263,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/bank/unreconciled:
     get:
@@ -67320,7 +67295,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/export:
     get:
@@ -67384,7 +67359,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/gl:
     get:
@@ -67420,7 +67395,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/inbox:
     get:
@@ -67452,7 +67427,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -67479,7 +67454,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
   /v1/books/metrics:
     get:
       description: |-
@@ -67526,7 +67501,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/pnl:
     get:
@@ -67570,7 +67545,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/position:
     get:
@@ -67605,7 +67580,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/questions:
     get:
@@ -67638,7 +67613,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/rules:
     get:
@@ -67669,7 +67644,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -67702,7 +67677,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/scan:
     post:
@@ -67730,7 +67705,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
   /v1/books/scan/book:
     post:
       description: |-
@@ -67768,7 +67743,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/sync:
     post:
@@ -67791,7 +67766,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/transactions:
     get:
@@ -67858,7 +67833,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/trial:
     get:
@@ -67903,7 +67878,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/books/vendors:
     get:
@@ -67935,7 +67910,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -67971,7 +67946,7 @@ paths:
       tags:
       - books
       x-app: books
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/bot/connect:
     get:
@@ -67988,7 +67963,7 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
+      x-public: true
   /v1/bot/nodes:
     get:
       description: |-
@@ -68016,7 +67991,7 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/bot/nodes/{id}/invoke:
     post:
@@ -68042,7 +68017,7 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
+      x-public: true
   /v1/bot/peer/invoke:
     post:
       description: |-
@@ -68059,7 +68034,7 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
+      x-public: true
   /v1/bot/runs:
     get:
       description: |-
@@ -68085,7 +68060,7 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -68100,7 +68075,7 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
+      x-public: true
   /v1/bot/runs/{runId}/stop:
     post:
       description: |-
@@ -68133,7 +68108,7 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/bot/runtime/{wildcard1}:
     delete:
@@ -68156,7 +68131,6 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
     get:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it as /health.
@@ -68177,7 +68151,6 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
     patch:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it as /health.
@@ -68198,7 +68171,6 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
     post:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it as /health.
@@ -68219,7 +68191,6 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
     put:
       description: |-
         Forwards a request to the bot runtime — the service that executes channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it as /health.
@@ -68240,7 +68211,6 @@ paths:
       tags:
       - bot
       x-app: bot
-      x-stage: beta
   /v1/campaign:
     get:
       description: |-
@@ -68282,7 +68252,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -68319,7 +68289,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/campaign/{id}:
     delete:
@@ -68345,7 +68315,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -68372,7 +68342,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -68412,7 +68382,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/campaign/{id}/channels:
     post:
@@ -68456,7 +68426,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/campaign/{id}/channels/{kind}:
     delete:
@@ -68492,7 +68462,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/campaign/{id}/launch:
     post:
@@ -68513,7 +68483,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
   /v1/campaign/{id}/metrics:
     get:
       description: |-
@@ -68573,7 +68543,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/campaign/{id}/pause:
     post:
@@ -68594,7 +68564,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
   /v1/campaign/summary:
     get:
       description: |-
@@ -68619,7 +68589,7 @@ paths:
       tags:
       - campaign
       x-app: campaign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/classes:
     get:
@@ -68641,7 +68611,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -68655,7 +68625,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/classes/{id}:
     patch:
       description: |-
@@ -68675,7 +68645,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/company:
     get:
       description: |-
@@ -68694,7 +68664,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -68721,7 +68691,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/convertibles:
     get:
@@ -68741,7 +68711,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -68755,7 +68725,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/convertibles/{id}:
     delete:
       description: |-
@@ -68782,7 +68752,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/investments:
     get:
@@ -68802,7 +68772,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/options:
     get:
@@ -68822,7 +68792,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -68836,7 +68806,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/options/{id}:
     delete:
       description: |-
@@ -68863,7 +68833,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/plans:
     get:
@@ -68883,7 +68853,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -68897,7 +68867,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/rounds:
     get:
       description: |-
@@ -68916,7 +68886,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -68930,7 +68900,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/rounds/{id}:
     get:
       description: |-
@@ -68961,7 +68931,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/rounds/{id}/close:
     post:
@@ -68999,7 +68969,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/rounds/{id}/investments:
     post:
@@ -69022,7 +68992,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/safes:
     get:
       description: |-
@@ -69041,7 +69011,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -69055,7 +69025,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/safes/{id}:
     delete:
       description: |-
@@ -69082,7 +69052,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/shares:
     get:
@@ -69102,7 +69072,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -69116,7 +69086,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/shares/{id}:
     delete:
       description: |-
@@ -69143,7 +69113,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/shares/transfer:
     post:
@@ -69158,7 +69128,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/stakeholders:
     get:
       description: |-
@@ -69179,7 +69149,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -69193,7 +69163,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
   /v1/captable/stakeholders/{id}:
     delete:
       description: |-
@@ -69220,7 +69190,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
     patch:
       description: |-
@@ -69260,7 +69230,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/captable/summary:
     get:
@@ -69284,7 +69254,7 @@ paths:
       tags:
       - captable
       x-app: captable
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/catalog:
     get:
@@ -75534,7 +75504,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -75564,7 +75534,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/advance:
     post:
@@ -75596,7 +75566,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/documents:
     post:
@@ -75621,7 +75591,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/esign:
     post:
@@ -75642,7 +75612,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/esign/complete:
     post:
@@ -75673,7 +75643,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/founders:
     post:
@@ -75704,7 +75674,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/fundraise/deck:
     post:
@@ -75730,7 +75700,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
   /v1/company/fundraise/round:
     post:
       description: |-
@@ -75759,7 +75729,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/fundraise/safe:
     post:
@@ -75792,7 +75762,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/genesis:
     post:
@@ -75819,7 +75789,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/import/captable:
     post:
@@ -75853,7 +75823,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/import/documents:
     post:
@@ -75882,7 +75852,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/kyc:
     post:
@@ -75907,7 +75877,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/kyc/decision:
     post:
@@ -75943,7 +75913,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/kyc/refresh:
     post:
@@ -75969,7 +75939,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/payment:
     post:
@@ -75991,7 +75961,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
   /v1/company/register:
     get:
       description: |-
@@ -76042,7 +76012,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/register/summary:
     get:
@@ -76065,7 +76035,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/review:
     get:
@@ -76098,7 +76068,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/skip:
     post:
@@ -76120,7 +76090,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/company/structure:
     put:
@@ -76150,7 +76120,7 @@ paths:
       tags:
       - company
       x-app: company
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/completions:
     post:
@@ -76186,7 +76156,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -76219,7 +76189,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/accreditation/{id}:
     get:
@@ -76244,7 +76214,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/accreditation/{id}/decision:
     post:
@@ -76287,7 +76257,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/audit:
     get:
@@ -76319,7 +76289,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/health:
     get:
@@ -76339,7 +76309,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/records:
     get:
@@ -76369,7 +76339,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/status:
     get:
@@ -76390,7 +76360,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/subjects:
     get:
@@ -76418,7 +76388,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -76449,7 +76419,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/subjects/{id}:
     get:
@@ -76478,7 +76448,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/verifications:
     get:
@@ -76505,7 +76475,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -76535,7 +76505,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/verifications/{id}:
     get:
@@ -76563,7 +76533,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/verifications/{id}/decision:
     post:
@@ -76606,7 +76576,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/verifications/{id}/refresh:
     post:
@@ -76636,7 +76606,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/compliance/verifications/webhook:
     post:
@@ -76651,7 +76621,7 @@ paths:
       tags:
       - compliance
       x-app: compliance
-      x-stage: beta
+      x-public: true
   /v1/content/{doctype}/{name}/transition:
     post:
       description: |-
@@ -76699,7 +76669,7 @@ paths:
       tags:
       - content
       x-app: content
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/content/board:
     get:
@@ -76756,7 +76726,7 @@ paths:
       tags:
       - content
       x-app: content
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/content/channels:
     get:
@@ -76777,7 +76747,7 @@ paths:
       tags:
       - content
       x-app: content
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/content/generate:
     post:
@@ -76840,7 +76810,7 @@ paths:
       tags:
       - content
       x-app: content
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/content/lifecycle:
     get:
@@ -76864,7 +76834,7 @@ paths:
       tags:
       - content
       x-app: content
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/content/publish:
     post:
@@ -76897,7 +76867,7 @@ paths:
       tags:
       - content
       x-app: content
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/crawl:
     post:
@@ -76991,7 +76961,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -77007,7 +76977,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
   /v1/crm/applications/{id}:
     get:
       description: |-
@@ -77034,7 +77004,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     patch:
       description: |-
@@ -77074,7 +77044,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/crm/companies:
     get:
@@ -77098,7 +77068,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -77127,7 +77097,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/crm/companies/{id}:
     delete:
@@ -77151,7 +77121,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -77177,7 +77147,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -77216,7 +77186,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/crm/contacts:
     get:
@@ -77248,7 +77218,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -77277,7 +77247,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/crm/contacts/{id}:
     delete:
@@ -77301,7 +77271,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -77327,7 +77297,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -77366,7 +77336,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/crm/opportunities:
     get:
@@ -77400,7 +77370,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -77429,7 +77399,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/crm/opportunities/{id}:
     delete:
@@ -77450,7 +77420,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -77476,7 +77446,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -77516,7 +77486,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/crm/summary:
     get:
@@ -77535,7 +77505,7 @@ paths:
       tags:
       - crm
       x-app: crm
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataroom/analytics/dataroom/{dataroomId}:
     get:
@@ -77569,7 +77539,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataroom/analytics/link/{linkId}:
     get:
@@ -77604,7 +77574,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataroom/datarooms:
     get:
@@ -77627,7 +77597,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -77658,7 +77628,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataroom/datarooms/{id}:
     get:
@@ -77693,7 +77663,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataroom/datarooms/{id}/documents:
     post:
@@ -77735,7 +77705,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataroom/documents:
     get:
@@ -77760,7 +77730,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -77774,7 +77744,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
   /v1/dataroom/documents/{id}:
     get:
       description: |-
@@ -77807,7 +77777,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataroom/documents/{id}/file:
     get:
@@ -77826,7 +77796,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
   /v1/dataroom/health:
     get:
       description: 'Answers {service, status} unconditionally — no principal, no tenant.
@@ -77839,7 +77809,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
   /v1/dataroom/links:
     get:
       description: |-
@@ -77865,7 +77835,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -77909,7 +77879,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataroom/view/{linkId}:
     get:
@@ -77930,7 +77900,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
   /v1/dataroom/view/{linkId}/authenticate:
     post:
       description: |-
@@ -77950,7 +77920,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
   /v1/dataroom/view/{linkId}/document/{documentId}/file:
     get:
       description: |-
@@ -77975,7 +77945,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
   /v1/dataroom/view/{linkId}/pageview:
     post:
       description: |-
@@ -77995,7 +77965,7 @@ paths:
       tags:
       - dataroom
       x-app: dataroom
-      x-stage: beta
+      x-public: true
   /v1/dataset:
     get:
       description: |-
@@ -78015,7 +77985,7 @@ paths:
       tags:
       - dataset
       x-app: dataset
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -78054,7 +78024,7 @@ paths:
       tags:
       - dataset
       x-app: dataset
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataset/{name}:
     delete:
@@ -78097,7 +78067,7 @@ paths:
       tags:
       - dataset
       x-app: dataset
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -78127,7 +78097,7 @@ paths:
       tags:
       - dataset
       x-app: dataset
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataset/{name}/export:
     get:
@@ -78190,7 +78160,7 @@ paths:
       tags:
       - dataset
       x-app: dataset
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataset/{name}/lineage:
     get:
@@ -78240,7 +78210,7 @@ paths:
       tags:
       - dataset
       x-app: dataset
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/dataset/{name}/materialize:
     post:
@@ -78280,7 +78250,7 @@ paths:
       tags:
       - dataset
       x-app: dataset
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/deploy/account/can-i/{wildcard1}:
     get:
@@ -79530,7 +79500,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -79568,7 +79538,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/documents/{id}:
     get:
@@ -79602,7 +79572,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/documents/{id}/audit:
     get:
@@ -79639,7 +79609,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/documents/{id}/download:
     get:
@@ -79676,7 +79646,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/documents/{id}/fields:
     post:
@@ -79721,7 +79691,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/documents/{id}/recipients:
     post:
@@ -79764,7 +79734,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/documents/{id}/send:
     post:
@@ -79800,7 +79770,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/health:
     get:
@@ -79824,7 +79794,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/o/{org}/sign/{token}:
     get:
@@ -79865,7 +79835,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/o/{org}/sign/{token}/complete:
     post:
@@ -79910,7 +79880,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/o/{org}/sign/{token}/fields/{fieldId}:
     post:
@@ -79967,7 +79937,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/esign/o/{org}/sign/{token}/reject:
     post:
@@ -80014,7 +79984,7 @@ paths:
       tags:
       - esign
       x-app: esign
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/evals/datasets:
     get:
@@ -81250,7 +81220,7 @@ paths:
       tags:
       - experiments
       x-app: experiments
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -81291,7 +81261,7 @@ paths:
       tags:
       - experiments
       x-app: experiments
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/experiments/{id}:
     get:
@@ -81327,7 +81297,7 @@ paths:
       tags:
       - experiments
       x-app: experiments
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/experiments/{id}/analyze:
     post:
@@ -81386,7 +81356,7 @@ paths:
       tags:
       - experiments
       x-app: experiments
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/experiments/{id}/assign:
     get:
@@ -81441,7 +81411,7 @@ paths:
       tags:
       - experiments
       x-app: experiments
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/experiments/{id}/decide:
     post:
@@ -81493,7 +81463,7 @@ paths:
       tags:
       - experiments
       x-app: experiments
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/experiments/health:
     get:
@@ -81524,7 +81494,7 @@ paths:
       tags:
       - experiments
       x-app: experiments
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/explorer/indexers:
     get:
@@ -81547,7 +81517,7 @@ paths:
       tags:
       - explorer
       x-app: explorer
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/explorer/oracles:
     get:
@@ -81569,7 +81539,7 @@ paths:
       tags:
       - explorer
       x-app: explorer
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/flags:
     post:
@@ -82106,7 +82076,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -82130,7 +82100,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
   /v1/framework/{doctype}/{name}:
     delete:
       description: |-
@@ -82162,7 +82132,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: Returns one document by name, with Password fields redacted.
@@ -82198,7 +82168,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -82225,7 +82195,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
   /v1/framework/{doctype}/{name}/cancel:
     post:
       description: |-
@@ -82265,7 +82235,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/framework/{doctype}/{name}/submit:
     post:
@@ -82307,7 +82277,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/framework/doctypes:
     get:
@@ -82326,7 +82296,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -82362,7 +82332,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/framework/doctypes/{name}:
     delete:
@@ -82389,7 +82359,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -82420,7 +82390,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -82459,7 +82429,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/framework/modules:
     get:
@@ -82480,7 +82450,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/framework/modules/{module}:
     get:
@@ -82510,7 +82480,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/framework/modules/{module}/install:
     post:
@@ -82540,7 +82510,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/framework/roles:
     get:
@@ -82560,7 +82530,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -82589,7 +82559,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/framework/roles/{user}/{role}:
     delete:
@@ -82622,7 +82592,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/framework/summary:
     get:
@@ -82642,7 +82612,7 @@ paths:
       tags:
       - framework
       x-app: framework
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/functions:
     get:
@@ -84788,7 +84758,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/guide/actions:
     get:
@@ -84811,7 +84781,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/guide/analytics:
     get:
@@ -84834,7 +84804,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/guide/blueprint:
     get:
@@ -84861,7 +84831,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -84877,7 +84847,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
   /v1/guide/blueprint/{collection}/{id}:
     patch:
       description: |-
@@ -84904,7 +84874,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
   /v1/guide/blueprint/versions:
     get:
       description: |-
@@ -84928,7 +84898,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/guide/chat:
     post:
@@ -84963,7 +84933,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/guide/curriculum:
     delete:
@@ -84984,7 +84954,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -85005,7 +84975,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -85019,7 +84989,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
   /v1/guide/profile:
     get:
       description: |-
@@ -85044,7 +85014,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/guide/steps/{id}/do:
     post:
@@ -85065,7 +85035,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
   /v1/guide/steps/{id}/done:
     post:
       description: |-
@@ -85085,7 +85055,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
   /v1/guide/steps/{id}/reset:
     post:
       description: |-
@@ -85113,7 +85083,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/guide/steps/{id}/skip:
     post:
@@ -85143,7 +85113,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/guide/steps/{id}/start:
     post:
@@ -85164,7 +85134,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
   /v1/guide/strategies:
     get:
       description: |-
@@ -85214,7 +85184,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/guide/suggest:
     get:
@@ -85242,7 +85212,7 @@ paths:
       tags:
       - guide
       x-app: guide
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/help/articles:
     get:
@@ -93708,7 +93678,7 @@ paths:
       tags:
       - label
       x-app: label
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -93743,7 +93713,7 @@ paths:
       tags:
       - label
       x-app: label
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/label/coverage:
     get:
@@ -93798,7 +93768,7 @@ paths:
       tags:
       - label
       x-app: label
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/label/dispose:
     post:
@@ -93834,7 +93804,7 @@ paths:
       tags:
       - label
       x-app: label
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/label/hold:
     post:
@@ -93871,7 +93841,7 @@ paths:
       tags:
       - label
       x-app: label
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/label/resolve:
     post:
@@ -93907,7 +93877,7 @@ paths:
       tags:
       - label
       x-app: label
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/label/vocabulary:
     get:
@@ -93931,7 +93901,7 @@ paths:
       tags:
       - label
       x-app: label
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/leaderboard:
     get:
@@ -94166,7 +94136,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -94206,7 +94176,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/legal/documents/{id}:
     get:
@@ -94236,7 +94206,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/legal/documents/{id}/sign:
     post:
@@ -94279,7 +94249,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/legal/documents/{id}/sign/complete:
     post:
@@ -94300,7 +94270,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
   /v1/legal/filings:
     get:
       description: |-
@@ -94327,7 +94297,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -94364,7 +94334,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/legal/health:
     get:
@@ -94385,7 +94355,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/legal/templates:
     get:
@@ -94411,7 +94381,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/legal/templates/{id}:
     get:
@@ -94440,7 +94410,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -94492,7 +94462,7 @@ paths:
       tags:
       - legal
       x-app: legal
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/download/{release}:
     get:
@@ -94537,7 +94507,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/fingerprint:
     post:
@@ -94576,7 +94546,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/healthz:
     get:
@@ -94601,7 +94571,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/issue:
     post:
@@ -94642,7 +94612,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/jwks:
     get:
@@ -94669,7 +94639,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/pubkey:
     get:
@@ -94696,7 +94666,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/releases:
     get:
@@ -94719,7 +94689,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -94754,7 +94724,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/releases/{release}:
     get:
@@ -94783,7 +94753,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/revoke:
     post:
@@ -94821,7 +94791,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/licensing/verify:
     post:
@@ -94857,7 +94827,7 @@ paths:
       tags:
       - licensing
       x-app: licensing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/link:
     get:
@@ -94883,7 +94853,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -94915,7 +94885,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/link/{id}:
     delete:
@@ -94952,7 +94922,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -94987,7 +94957,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/link/devices/{machine}:
     get:
@@ -95023,7 +94993,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/link/devices/{machine}/revoke:
     post:
@@ -95060,7 +95030,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/link/route:
     get:
@@ -95091,7 +95061,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/link/usage:
     get:
@@ -95147,7 +95117,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -95186,7 +95156,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/link/usage/accounts:
     get:
@@ -95212,7 +95182,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/link/usage/summary:
     get:
@@ -95252,7 +95222,7 @@ paths:
       tags:
       - link
       x-app: link
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/lsp/complete:
     post:
@@ -95443,7 +95413,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -95473,7 +95443,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/audiences/{id}:
     delete:
@@ -95496,7 +95466,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -95522,7 +95492,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/audiences/{id}/preview:
     get:
@@ -95561,7 +95531,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/calendar:
     get:
@@ -95599,7 +95569,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -95630,7 +95600,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/calendar/{id}:
     delete:
@@ -95654,7 +95624,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -95682,7 +95652,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -95720,7 +95690,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/calendar/{id}/publish:
     post:
@@ -95749,7 +95719,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/campaigns:
     get:
@@ -95787,7 +95757,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -95820,7 +95790,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/campaigns/{id}:
     delete:
@@ -95843,7 +95813,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -95869,7 +95839,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -95909,7 +95879,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/campaigns/{id}/schedule:
     post:
@@ -95945,7 +95915,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/promos:
     get:
@@ -95975,7 +95945,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/promos/{code}/eligibility:
     get:
@@ -96031,7 +96001,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/promos/{code}/redeem:
     post:
@@ -96081,7 +96051,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/promos/{code}/redemption:
     get:
@@ -96110,7 +96080,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/sequences:
     get:
@@ -96136,7 +96106,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -96165,7 +96135,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/sequences/{id}:
     get:
@@ -96193,7 +96163,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/sequences/{id}/enroll:
     post:
@@ -96241,7 +96211,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/sequences/{id}/enrollments:
     get:
@@ -96277,7 +96247,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/sequences/{id}/enrollments/{eid}/cancel:
     post:
@@ -96312,7 +96282,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/sequences/{id}/status:
     post:
@@ -96350,7 +96320,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/sequences/{id}/steps:
     get:
@@ -96375,7 +96345,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -96413,7 +96383,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/summary:
     get:
@@ -96438,7 +96408,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/suppressions:
     delete:
@@ -96486,7 +96456,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -96514,7 +96484,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -96544,7 +96514,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketing/unsubscribe:
     get:
@@ -96603,7 +96573,7 @@ paths:
       tags:
       - marketing
       x-app: marketing
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketplace:
     get:
@@ -96626,7 +96596,7 @@ paths:
       tags:
       - marketplace
       x-app: marketplace
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketplace/install:
     post:
@@ -96656,7 +96626,7 @@ paths:
       tags:
       - marketplace
       x-app: marketplace
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketplace/listings:
     get:
@@ -96676,7 +96646,7 @@ paths:
       tags:
       - marketplace
       x-app: marketplace
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -96711,7 +96681,7 @@ paths:
       tags:
       - marketplace
       x-app: marketplace
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketplace/listings/{id}:
     delete:
@@ -96738,7 +96708,7 @@ paths:
       tags:
       - marketplace
       x-app: marketplace
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/marketplace/uninstall:
     post:
@@ -96769,7 +96739,7 @@ paths:
       tags:
       - marketplace
       x-app: marketplace
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/mcp:
     post:
@@ -96817,7 +96787,7 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
+      x-public: true
   /v1/meet/health:
     get:
       description: |-
@@ -96850,7 +96820,7 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/meet/session:
     get:
@@ -96867,7 +96837,7 @@ paths:
       tags:
       - meet
       x-app: meet
-      x-stage: beta
+      x-public: true
   /v1/messages:
     post:
       description: Implements the Anthropic Messages API.
@@ -97048,7 +97018,7 @@ paths:
       tags:
       - ml
       x-app: ml
-      x-stage: beta
+      x-public: true
   /v1/ml/models:
     get:
       description: |-
@@ -97068,7 +97038,7 @@ paths:
       tags:
       - ml
       x-app: ml
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -97082,7 +97052,7 @@ paths:
       tags:
       - ml
       x-app: ml
-      x-stage: beta
+      x-public: true
   /v1/ml/models/{name}:
     delete:
       description: |-
@@ -97108,7 +97078,7 @@ paths:
       tags:
       - ml
       x-app: ml
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -97138,7 +97108,7 @@ paths:
       tags:
       - ml
       x-app: ml
-      x-stage: beta
+      x-public: true
       x-tool: true
     patch:
       description: |-
@@ -97158,7 +97128,7 @@ paths:
       tags:
       - ml
       x-app: ml
-      x-stage: beta
+      x-public: true
   /v1/ml/models/{name}/predict:
     post:
       description: |-
@@ -97178,7 +97148,7 @@ paths:
       tags:
       - ml
       x-app: ml
-      x-stage: beta
+      x-public: true
   /v1/models:
     get:
       description: |-
@@ -115006,7 +114976,7 @@ paths:
       tags:
       - reference
       x-app: reference
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/reference/{set}:
     delete:
@@ -115041,7 +115011,7 @@ paths:
       tags:
       - reference
       x-app: reference
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -115084,7 +115054,7 @@ paths:
       tags:
       - reference
       x-app: reference
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -115130,7 +115100,7 @@ paths:
       tags:
       - reference
       x-app: reference
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/reference/refresh:
     post:
@@ -115168,7 +115138,7 @@ paths:
       tags:
       - reference
       x-app: reference
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/reference/resolve:
     post:
@@ -115209,7 +115179,7 @@ paths:
       tags:
       - reference
       x-app: reference
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/referrals:
     get:
@@ -115239,7 +115209,7 @@ paths:
       tags:
       - referrals
       x-app: referrals
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/referrals/claim:
     post:
@@ -115278,7 +115248,7 @@ paths:
       tags:
       - referrals
       x-app: referrals
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/registry/images:
     get:
@@ -115499,7 +115469,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -115533,7 +115503,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/research/artifacts/{sha256}:
     get:
@@ -115558,7 +115528,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-stage: beta
+      x-public: true
   /v1/research/experiments:
     get:
       description: |-
@@ -115595,7 +115565,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -115636,7 +115606,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/research/grants:
     post:
@@ -115672,7 +115642,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/research/projects:
     get:
@@ -115694,7 +115664,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/research/totals:
     get:
@@ -115723,7 +115693,7 @@ paths:
       tags:
       - research
       x-app: research
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/responses:
     post:
@@ -115774,7 +115744,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/risk/health:
     get:
@@ -115793,7 +115763,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
   /v1/risk/learn:
     post:
       description: |-
@@ -115847,7 +115817,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/risk/policy:
     get:
@@ -115879,7 +115849,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -115936,7 +115906,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/risk/score:
     post:
@@ -115974,7 +115944,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/risk/search:
     post:
@@ -116012,7 +115982,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/risk/search/{id}:
     get:
@@ -116044,7 +116014,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/risk/state:
     get:
@@ -116070,7 +116040,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/risk/state/model:
     post:
@@ -116110,7 +116080,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -116160,7 +116130,7 @@ paths:
       tags:
       - risk
       x-app: risk
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/s3/buckets:
     get:
@@ -116735,7 +116705,7 @@ paths:
       tags:
       - sbom
       x-app: sbom
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/sbom/{wildcard1}:
     get:
@@ -116756,7 +116726,6 @@ paths:
       tags:
       - sbom
       x-app: sbom
-      x-stage: beta
   /v1/sbom/health:
     get:
       description: |-
@@ -116776,7 +116745,7 @@ paths:
       tags:
       - sbom
       x-app: sbom
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/search:
     post:
@@ -116919,7 +116888,7 @@ paths:
       tags:
       - security
       x-app: security
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/security/findings/{id}:
     get:
@@ -116951,7 +116920,7 @@ paths:
       tags:
       - security
       x-app: security
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/security/health:
     get:
@@ -116975,7 +116944,7 @@ paths:
       tags:
       - security
       x-app: security
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/security/rules:
     get:
@@ -116998,7 +116967,7 @@ paths:
       tags:
       - security
       x-app: security
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/security/scans:
     get:
@@ -117028,7 +116997,7 @@ paths:
       tags:
       - security
       x-app: security
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -117067,7 +117036,7 @@ paths:
       tags:
       - security
       x-app: security
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/security/scans/{id}:
     get:
@@ -117099,7 +117068,7 @@ paths:
       tags:
       - security
       x-app: security
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/seo/audit:
     post:
@@ -117136,7 +117105,7 @@ paths:
       tags:
       - seo
       x-app: seo
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/seo/backlinks:
     post:
@@ -117170,7 +117139,7 @@ paths:
       tags:
       - seo
       x-app: seo
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/seo/competitors:
     post:
@@ -117203,7 +117172,7 @@ paths:
       tags:
       - seo
       x-app: seo
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/seo/ideas:
     post:
@@ -117236,7 +117205,7 @@ paths:
       tags:
       - seo
       x-app: seo
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/seo/keywords:
     post:
@@ -117272,7 +117241,7 @@ paths:
       tags:
       - seo
       x-app: seo
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/seo/rankings:
     post:
@@ -117310,7 +117279,7 @@ paths:
       tags:
       - seo
       x-app: seo
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/seo/rates:
     get:
@@ -117343,7 +117312,7 @@ paths:
       tags:
       - seo
       x-app: seo
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/settings/{product}:
     get:
@@ -117435,7 +117404,7 @@ paths:
       tags:
       - share
       x-app: share
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/share/enable:
     post:
@@ -117459,7 +117428,7 @@ paths:
       tags:
       - share
       x-app: share
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/social/accounts:
     get:
@@ -117504,7 +117473,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -117529,7 +117498,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/social/accounts/{id}:
     delete:
@@ -117556,7 +117525,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -117583,7 +117552,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -117620,7 +117589,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/social/posts:
     get:
@@ -117658,7 +117627,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -117688,7 +117657,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/social/posts/{id}:
     delete:
@@ -117714,7 +117683,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
     get:
       description: |-
@@ -117742,7 +117711,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -117779,7 +117748,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/social/posts/{id}/publish:
     post:
@@ -117817,7 +117786,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/social/providers:
     get:
@@ -117844,7 +117813,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/social/summary:
     get:
@@ -117865,7 +117834,7 @@ paths:
       tags:
       - social
       x-app: social
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/sync:
     get:
@@ -118256,7 +118225,7 @@ paths:
       tags:
       - taxonomy
       x-app: taxonomy
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/taxonomy/categories/{id}:
     delete:
@@ -118285,7 +118254,7 @@ paths:
       tags:
       - taxonomy
       x-app: taxonomy
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -118325,7 +118294,7 @@ paths:
       tags:
       - taxonomy
       x-app: taxonomy
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/taxonomy/taxa/{id}:
     delete:
@@ -118352,7 +118321,7 @@ paths:
       tags:
       - taxonomy
       x-app: taxonomy
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -118400,7 +118369,7 @@ paths:
       tags:
       - taxonomy
       x-app: taxonomy
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/team/account:
     post:
@@ -120501,7 +120470,7 @@ paths:
       tags:
       - translate
       x-app: translate
-      x-stage: beta
+      x-public: true
   /v1/translate/memory:
     get:
       description: |-
@@ -120549,7 +120518,7 @@ paths:
       tags:
       - translate
       x-app: translate
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -120584,7 +120553,7 @@ paths:
       tags:
       - translate
       x-app: translate
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/treasury:
     get:
@@ -120938,7 +120907,7 @@ paths:
       tags:
       - validators
       x-app: validators
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -120983,7 +120952,7 @@ paths:
       tags:
       - validators
       x-app: validators
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/validators/{tokenId}:
     get:
@@ -121015,7 +120984,7 @@ paths:
       tags:
       - validators
       x-app: validators
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/validators/challenge:
     get:
@@ -121054,7 +121023,7 @@ paths:
       tags:
       - validators
       x-app: validators
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/videos/{id}:
     get:
@@ -122301,7 +122270,7 @@ paths:
       tags:
       - wallets
       x-app: wallets
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -122339,7 +122308,7 @@ paths:
       tags:
       - wallets
       x-app: wallets
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/wallets/{id}:
     get:
@@ -122368,7 +122337,7 @@ paths:
       tags:
       - wallets
       x-app: wallets
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/wallets/{id}/keys:
     post:
@@ -122400,7 +122369,7 @@ paths:
       tags:
       - wallets
       x-app: wallets
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/wallets/{id}/sign:
     post:
@@ -122441,7 +122410,7 @@ paths:
       tags:
       - wallets
       x-app: wallets
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/wallets/{id}/transactions:
     post:
@@ -122486,7 +122455,7 @@ paths:
       tags:
       - wallets
       x-app: wallets
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/wallets/accounts:
     get:
@@ -122505,7 +122474,7 @@ paths:
       tags:
       - wallets
       x-app: wallets
-      x-stage: beta
+      x-public: true
       x-tool: true
     post:
       description: |-
@@ -122533,7 +122502,7 @@ paths:
       tags:
       - wallets
       x-app: wallets
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/web3/chains:
     get:
@@ -122553,7 +122522,7 @@ paths:
       tags:
       - web3
       x-app: web3
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/web3/chains/{chain}:
     get:
@@ -122581,7 +122550,7 @@ paths:
       tags:
       - web3
       x-app: web3
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/web3/rpc/{chain}:
     post:
@@ -122615,7 +122584,7 @@ paths:
       tags:
       - web3
       x-app: web3
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/web3/tokens/{chain}/{address}:
     get:
@@ -122652,7 +122621,7 @@ paths:
       tags:
       - web3
       x-app: web3
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/webhooks:
     get:
@@ -123101,7 +123070,7 @@ paths:
       tags:
       - world
       x-app: world
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/world/limits:
     get:
@@ -123137,7 +123106,7 @@ paths:
       tags:
       - world
       x-app: world
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/world/news:
     get:
@@ -123167,7 +123136,7 @@ paths:
       tags:
       - world
       x-app: world
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/world/pipeline:
     get:
@@ -123189,7 +123158,7 @@ paths:
       tags:
       - world
       x-app: world
-      x-stage: beta
+      x-public: true
       x-tool: true
     put:
       description: |-
@@ -123219,7 +123188,7 @@ paths:
       tags:
       - world
       x-app: world
-      x-stage: beta
+      x-public: true
       x-tool: true
   /v1/world/stream:
     get:
@@ -123235,7 +123204,7 @@ paths:
       tags:
       - world
       x-app: world
-      x-stage: beta
+      x-public: true
   /v1/x402/settlements/{id}:
     get:
       description: |-
@@ -123268,7 +123237,7 @@ paths:
       tags:
       - x402
       x-app: x402
-      x-stage: beta
+      x-public: true
       x-tool: true
 security:
 - bearer: []
