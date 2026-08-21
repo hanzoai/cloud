@@ -415,13 +415,22 @@ type projectsComplete struct {
 	// Slug is the project the deployment belongs to, from the path.
 	Slug string `json:"slug"`
 	// ID is the queued deployment to complete, from the path.
-	ID      string `json:"id"`
-	Status  string `json:"status"` // live | error
-	Commit  string `json:"commit"`
+	ID string `json:"id"`
+	// Status is how the build ended: `live` if it succeeded, `error` if it did not.
+	// Nothing else is accepted.
+	Status string `json:"status"`
+	// Commit is the revision that was built, recorded on the deployment.
+	Commit string `json:"commit"`
+	// LiveURL is a HINT at the address the site should serve at. The public host is
+	// claimed by cloud first, so this can refine the URL a deployment reports but
+	// can never assert a subdomain another tenant holds.
 	LiveURL string `json:"liveUrl"`
+	// Message is what happened, in words — on an error completion, why it failed.
 	Message string `json:"message"`
-	Files   int    `json:"files"`
-	Bytes   int64  `json:"bytes"`
+	// Files is how many objects CI published.
+	Files int `json:"files"`
+	// Bytes is their total size in bytes.
+	Bytes int64 `json:"bytes"`
 	// Keys is the manifest CI just uploaded, RELATIVE to the deployment prefix. It
 	// is what replaces `aws s3 sync --delete`: an upload grant authorizes writes
 	// only, so CI cannot remove a file, and cloud reconciles the prefix against

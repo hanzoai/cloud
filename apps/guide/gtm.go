@@ -23,13 +23,30 @@ import (
 // org has emitted nothing (honest-empty), so the caller renders "turn on analytics"
 // rather than a misleading row of zeros.
 type Funnel struct {
-	Available  bool    `json:"available"`
-	WindowDays int     `json:"windowDays"`
-	Pageviews  int64   `json:"pageviews"`
-	Visitors   int64   `json:"visitors"`
-	Signups    int64   `json:"signups"`
-	Orders     int64   `json:"orders"`
-	Revenue    float64 `json:"revenue"`
+	// Available separates "this org has no traffic" from "we could not ask". False
+	// means the warehouse was unreachable or the org has emitted nothing at all, and
+	// every count below is then a placeholder zero rather than a measurement — a
+	// caller must read this before reading any of them.
+	Available bool `json:"available"`
+	// WindowDays is the length of the trailing window every count covers, so a
+	// reader knows whether 40 signups is a month or a day.
+	WindowDays int `json:"windowDays"`
+	// Pageviews counts page events in the window, one per view rather than per
+	// person, so a single visitor reading ten pages counts ten.
+	Pageviews int64 `json:"pageviews"`
+	// Visitors is the number of DISTINCT people seen in the window, counted by the
+	// beacon's distinct id — so it is unique visitors, not sessions and not views.
+	Visitors int64 `json:"visitors"`
+	// Signups counts completed signups in the window, the step where an anonymous
+	// visitor becomes somebody with an account.
+	Signups int64 `json:"signups"`
+	// Orders counts completed orders in the window — purchases, not carts started.
+	Orders int64 `json:"orders"`
+	// Revenue is the sum of the amounts those orders reported, in whatever currency
+	// the beacon stamped on them (major units, e.g. 49.5 for $49.50) — NOT cents,
+	// and not converted to a single currency. Contrast revenueCents on the profile,
+	// which is the money of record.
+	Revenue float64 `json:"revenue"`
 }
 
 // funnelWindowDays is the trailing window the lens summarizes.

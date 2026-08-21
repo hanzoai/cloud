@@ -308,15 +308,31 @@ func counterAccounts(legs []Leg) map[string]string {
 
 // GLRow is one persisted GL Entry, as the read API surfaces it.
 type GLRow struct {
-	ID         int64  `json:"id"`
-	PostingAt  string `json:"postingAt"`
-	Account    string `json:"account"`
-	Debit      int64  `json:"debit"`
-	Credit     int64  `json:"credit"`
-	Against    string `json:"against,omitempty"`
+	// ID is the entry's position in the ledger. The ledger is append-only, so ids
+	// ascend with posting order and a higher id is a later entry.
+	ID int64 `json:"id"`
+	// PostingAt is the accounting date this entry belongs to — what the reports
+	// window on, which need not be when the row was written.
+	PostingAt string `json:"postingAt"`
+	// Account is the chart-of-accounts number this leg posts to.
+	Account string `json:"account"`
+	// Debit is the amount debited to that account, in whole cents. Exactly one of
+	// debit and credit is non-zero on a leg; a negative amount is never used to mean
+	// the other side.
+	Debit int64 `json:"debit"`
+	// Credit is the amount credited to that account, in whole cents.
+	Credit int64 `json:"credit"`
+	// Against names the OTHER accounts in the same voucher — the contra side of this
+	// leg — so a single row reads as an entry rather than as half of one.
+	Against string `json:"against,omitempty"`
+	// SourceKind is what caused the posting: a bank line, a scanned document, a
+	// commerce sale. With sourceId it traces the entry back to the thing that
+	// produced it.
 	SourceKind string `json:"sourceKind"`
-	SourceID   string `json:"sourceId"`
-	Remarks    string `json:"remarks,omitempty"`
+	// SourceID identifies that originating record within its kind.
+	SourceID string `json:"sourceId"`
+	// Remarks is the memo carried onto the entry, for a human reading the ledger.
+	Remarks string `json:"remarks,omitempty"`
 }
 
 // listGL returns the most recent GL Entry rows (newest first), capped at limit.

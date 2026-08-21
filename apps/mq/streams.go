@@ -1,6 +1,6 @@
 package mq
 
-// /v1/mq/streams — durable JetStream streams inside the caller's org
+// /v1/mq/stream — durable JetStream streams inside the caller's org
 // namespace: list, create, inspect, update, delete, purge, and direct message
 // access. Every op resolves the org from the validated principal and touches
 // only streams whose broker name carries that org's prefix (mq.go, TENANCY).
