@@ -110721,6 +110721,7 @@ paths:
       tags:
       - seo
       x-app: seo
+      x-public: true
       x-tool: true
   /v1/seo/backlinks:
     post:
@@ -110754,6 +110755,7 @@ paths:
       tags:
       - seo
       x-app: seo
+      x-public: true
       x-tool: true
   /v1/seo/competitors:
     post:
@@ -110786,6 +110788,7 @@ paths:
       tags:
       - seo
       x-app: seo
+      x-public: true
       x-tool: true
   /v1/seo/ideas:
     post:
@@ -110818,6 +110821,7 @@ paths:
       tags:
       - seo
       x-app: seo
+      x-public: true
       x-tool: true
   /v1/seo/keywords:
     post:
@@ -110853,6 +110857,7 @@ paths:
       tags:
       - seo
       x-app: seo
+      x-public: true
       x-tool: true
   /v1/seo/rankings:
     post:
@@ -110890,6 +110895,7 @@ paths:
       tags:
       - seo
       x-app: seo
+      x-public: true
       x-tool: true
   /v1/seo/rates:
     get:
@@ -110922,6 +110928,7 @@ paths:
       tags:
       - seo
       x-app: seo
+      x-public: true
       x-tool: true
   /v1/settings/{product}:
     get:
