@@ -77,7 +77,7 @@ GPU inventory, serve-endpoint CRUD — which this product has never been.
 `intentRefused` in typed_wire_test.go is the closed ledger, measured (each
 family 404s on the live router and is absent from the document):
 
-- clusters — the cluster plane: /v1/clusters (apps/visor) merges managed
+- clusters — the cluster plane: /v1/visor/clusters (apps/visor) merges managed
   clusters with the BYO fleet registry (apps/fleet).
 - jobs — /v1/finetune/jobs (the hanzoai/ai broker); the engine runs no job queue.
 - ray — no Ray operator backs the fleet; the engine is a single process.

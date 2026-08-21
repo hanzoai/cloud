@@ -7,7 +7,7 @@ package cli
 // worker loop that CLAIMS jobs from the org's `gpu-jobs` namespace — the NAT-safe
 // primitive (the worker dials out; nothing dials in). The registered node then shows
 // up on console.hanzo.ai's Machines + GPUs pages (provider="byo") via cloud's
-// /v1/fleet union.
+// /v1/visor/fleet union.
 //
 // One identity, one way: the same IAM token `hanzo login` mints (org in its `owner`
 // claim) authorizes every cloud call; the server derives the tenant from the token,
@@ -172,7 +172,7 @@ type gpuInfo struct {
 // registration is the fleet presence activity's Input — the shape cloud's
 // apps/visor/fleet.go fleetRegistration decodes. Capabilities + Engine are
 // additive (omitempty): an older cloud that does not read them still renders the
-// GPU; a newer one advertises the engine endpoint on GET /v1/fleet/workers.
+// GPU; a newer one advertises the engine endpoint on GET /v1/visor/fleet/workers.
 type registration struct {
 	Hostname string `json:"hostname"`
 	Os       string `json:"os"`
@@ -908,7 +908,7 @@ func (w *worker) sampleGPUs(ctx context.Context) sampleReport {
 }
 
 // reportSample posts this machine's live utilization to the org's fleet series
-// (POST /v1/fleet/samples) so the console board shows THIS GPU's load beside its
+// (POST /v1/visor/fleet/samples) so the console board shows THIS GPU's load beside its
 // inventory. DETACHED + bounded: the probe and POST run on their OWN goroutine under
 // a hard timeout, so a hung nvidia-smi (GPU/driver pressure) or a slow POST can NEVER
 // block the worker's select loop — heartbeats and claims keep flowing. At most one
@@ -920,7 +920,7 @@ func (w *worker) reportSample(parent context.Context) {
 		ctx, cancel := context.WithTimeout(parent, sampleReportTimeout)
 		defer cancel()
 		r := w.sampleGPUs(ctx)
-		_, _ = w.call(ctx, http.MethodPost, "/v1/fleet/samples", map[string]any{
+		_, _ = w.call(ctx, http.MethodPost, "/v1/visor/fleet/samples", map[string]any{
 			"unit":     w.identity,
 			"host":     w.hostname,
 			"gpuUtil":  r.GPUUtil,
@@ -1409,7 +1409,7 @@ type claimedActivity struct {
 // disconnect.
 // ---------------------------------------------------------------------------
 
-// fleetWorker is one row of GET /v1/fleet/workers — what the org's fleet reports
+// fleetWorker is one row of GET /v1/visor/fleet/workers — what the org's fleet reports
 // back about a machine that linked in. Rendering it is the fabric CLI's `status`;
 // here it is the shape this binary's registration must round-trip to.
 type fleetWorker struct {

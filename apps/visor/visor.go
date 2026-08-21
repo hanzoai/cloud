@@ -21,8 +21,8 @@
 // ONE declaration projected into REST, /.well-known/openapi.json, the /mcp tool
 // list and the CLI. There is deliberately no route table in this comment: a
 // hand-kept list is a second copy, and the one that used to live here had already
-// drifted — it was missing the whole /v1/fleet and /v1/k8s surface. Read
-// Mount, or ask the running deployment.
+// drifted — it was missing the whole /v1/visor/fleet and /v1/visor/k8s
+// surface. Read Mount, or ask the running deployment.
 //
 // Five routes stay raw, each because it has no shape to state rather than because
 // nobody got to it: the two launches are polymorphic on the wire (a dryRun quote
@@ -61,7 +61,7 @@ type state struct {
 	cl *client
 	// fleet is the shared per-org BYO-cluster registry (KMS-sealed kubeconfigs);
 	// bill meters the nominal management fee. BYO clusters are MERGED into the
-	// managed clusters on /v1/clusters — one fleet surface, two sources.
+	// managed clusters on /v1/visor/clusters — one fleet surface, two sources.
 	fleet *fleet.Registry
 	bill  *cloud.ResourceMeter
 }
@@ -140,89 +140,90 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// Static routes register before their :param siblings so Fiber's
 	// registration-order match never lets a machine/cluster id capture a literal.
-	zip.Get(reg, "/v1/machines", o.listMachines,
+	zip.Get(reg, "/v1/visor/machines", o.listMachines,
 		zip.WithOperationID("listMachines"), zip.WithTags("compute"))
 	// RAW: launch is polymorphic on the wire — a dryRun answers 200 with Visor's
 	// price quote verbatim, a real launch answers 201 with a machineView. One typed
 	// Out cannot state both, and re-shaping either is a wire break.
-	app.Post("/v1/machines", cloud.Handle(s, launchMachine))
-	zip.Get(reg, "/v1/machines/:id", o.getMachine,
+	app.Post("/v1/visor/machines", cloud.Handle(s, launchMachine))
+	zip.Get(reg, "/v1/visor/machines/:id", o.getMachine,
 		zip.WithOperationID("getMachine"), zip.WithTags("compute"))
-	zip.Delete(reg, "/v1/machines/:id", o.deleteMachine,
+	zip.Delete(reg, "/v1/visor/machines/:id", o.deleteMachine,
 		zip.WithOperationID("deleteMachine"), zip.WithTags("compute"))
 
-	zip.Get(reg, "/v1/gpus/alerts", o.gpuAlerts,
+	zip.Get(reg, "/v1/visor/gpus/alerts", o.gpuAlerts,
 		zip.WithOperationID("listGpuAlerts"), zip.WithTags("compute"))
-	zip.Get(reg, "/v1/gpus", o.listGPUs,
+	zip.Get(reg, "/v1/visor/gpus", o.listGPUs,
 		zip.WithOperationID("listGpus"), zip.WithTags("compute"))
 
 	// BYO fleet: the org's bring-your-own machines that dialed in via
 	// `hanzo link`. Raw list here; the same workers are folded into
-	// /v1/machines and /v1/gpus above (provider="byo") so the console's existing
-	// pages show them alongside Visor-provisioned compute.
-	zip.Get(reg, "/v1/fleet/workers", o.listFleetWorkers,
+	// /v1/visor/machines and /v1/visor/gpus above (provider="byo") so the
+	// console's existing pages show them alongside Visor-provisioned compute.
+	zip.Get(reg, "/v1/visor/fleet/workers", o.listFleetWorkers,
 		zip.WithOperationID("listFleetWorkers"), zip.WithTags("fleet"))
 	// The org's gpu-jobs render queue: per-GPU depth + running workflow (GET), and a
 	// manage verb — cancel a queued/running render (POST). Deeper literals register
-	// before bare /v1/fleet so neither shadows the other.
-	zip.Get(reg, "/v1/fleet/jobs", o.listFleetJobs,
+	// before bare /v1/visor/fleet so neither shadows the other.
+	zip.Get(reg, "/v1/visor/fleet/jobs", o.listFleetJobs,
 		zip.WithOperationID("listFleetJobs"), zip.WithTags("fleet"))
-	zip.Post(reg, "/v1/fleet/jobs/:id/cancel", o.cancelFleetJob,
+	zip.Post(reg, "/v1/visor/fleet/jobs/:id/cancel", o.cancelFleetJob,
 		zip.WithOperationID("cancelFleetJob"), zip.WithTags("fleet"))
 	// BYO workers self-report GPU utilization here (POST); the GET on the same path
 	// (listFleetSamples, below) reads the org's series back.
-	zip.Post(reg, "/v1/fleet/samples", o.ingestSample,
+	zip.Post(reg, "/v1/visor/fleet/samples", o.ingestSample,
 		zip.WithOperationID("recordFleetSample"), zip.WithTags("fleet"))
 	// The unified board: every compute source the org has, each with its latest
 	// utilization, plus the series behind it (board.go). The deeper literals
-	// register before the bare /v1/fleet so neither can shadow the other.
-	zip.Get(reg, "/v1/fleet/samples", o.listFleetSamples,
+	// register before the bare /v1/visor/fleet so neither can shadow the other.
+	zip.Get(reg, "/v1/visor/fleet/samples", o.listFleetSamples,
 		zip.WithOperationID("listFleetSamples"), zip.WithTags("fleet"))
-	zip.Get(reg, "/v1/fleet", o.listFleet,
+	zip.Get(reg, "/v1/visor/fleet", o.listFleet,
 		zip.WithOperationID("listFleet"), zip.WithTags("fleet"))
 
-	zip.Get(reg, "/v1/clusters", o.listClusters,
+	zip.Get(reg, "/v1/visor/clusters", o.listClusters,
 		zip.WithOperationID("listClusters"), zip.WithTags("compute"))
-	// BYO: attach an existing cluster (kubeconfig) or detach one. Managed clusters
-	// (Visor-provisioned DOKS/AWS/…) + BYO ones surface together on GET /v1/clusters.
-	zip.Post(reg, "/v1/clusters", o.attachCluster,
+	// BYO: attach an existing cluster (kubeconfig) or detach one. Managed
+	// clusters (Visor-provisioned DOKS/AWS/…) + BYO ones surface together on
+	// GET /v1/visor/clusters.
+	zip.Post(reg, "/v1/visor/clusters", o.attachCluster,
 		zip.WithOperationID("attachCluster"), zip.WithTags("compute"))
-	zip.Delete(reg, "/v1/clusters/:id", o.detachCluster,
+	zip.Delete(reg, "/v1/visor/clusters/:id", o.detachCluster,
 		zip.WithOperationID("detachCluster"), zip.WithTags("compute"))
-	zip.Post(reg, "/v1/clusters/:clusterId/pools", o.createPool,
+	zip.Post(reg, "/v1/visor/clusters/:clusterId/pools", o.createPool,
 		zip.WithOperationID("createNodePool"), zip.WithTags("compute"))
-	zip.Post(reg, "/v1/clusters/:clusterId/pools/:poolId/scale", o.scalePool,
+	zip.Post(reg, "/v1/visor/clusters/:clusterId/pools/:poolId/scale", o.scalePool,
 		zip.WithOperationID("scaleNodePool"), zip.WithTags("compute"))
-	zip.Delete(reg, "/v1/clusters/:clusterId/pools/:poolId", o.deletePool,
+	zip.Delete(reg, "/v1/visor/clusters/:clusterId/pools/:poolId", o.deletePool,
 		zip.WithOperationID("deleteNodePool"), zip.WithTags("compute"))
 
-	// Unified /v1/k8s — the ONE Kubernetes noun (k8s.go): DOKS cluster lifecycle
+	// Unified /v1/visor/k8s — the ONE Kubernetes noun (k8s.go): DOKS cluster lifecycle
 	// (list / detail+nodes / create / delete) plus the fleet-wide worker NODES,
 	// proxied to Visor. Reads are org-scoped; create/delete are admin-gated (real
 	// house-account infra spend). Static /clusters registers before its :id sibling
 	// so a cluster id never captures the literal.
-	zip.Get(reg, "/v1/k8s/clusters", o.listK8sClusters,
+	zip.Get(reg, "/v1/visor/k8s/clusters", o.listK8sClusters,
 		zip.WithOperationID("listKubernetesClusters"), zip.WithTags("kubernetes"))
-	zip.Post(reg, "/v1/k8s/clusters", o.createK8sCluster,
+	zip.Post(reg, "/v1/visor/k8s/clusters", o.createK8sCluster,
 		zip.WithOperationID("createKubernetesCluster"), zip.WithTags("kubernetes"))
-	zip.Get(reg, "/v1/k8s/clusters/:id", o.getK8sCluster,
+	zip.Get(reg, "/v1/visor/k8s/clusters/:id", o.getK8sCluster,
 		zip.WithOperationID("getKubernetesCluster"), zip.WithTags("kubernetes"))
-	zip.Delete(reg, "/v1/k8s/clusters/:id", o.deleteK8sCluster,
+	zip.Delete(reg, "/v1/visor/k8s/clusters/:id", o.deleteK8sCluster,
 		zip.WithOperationID("deleteKubernetesCluster"), zip.WithTags("kubernetes"))
-	zip.Get(reg, "/v1/k8s/nodes", o.listK8sNodes,
+	zip.Get(reg, "/v1/visor/k8s/nodes", o.listK8sNodes,
 		zip.WithOperationID("listKubernetesNodes"), zip.WithTags("kubernetes"))
 
 	// Compute catalog: the global region + size lists that back the Machines/GPUs
-	// launch drawer. Namespaced under /v1/compute (visor's domain) — "sizes"/"regions"
-	// are catalog dimensions shared by machines AND gpus, not owned nouns, so they
-	// nest under compute rather than sitting bare at top level. Org-gated but not
+	// launch drawer. Namespaced under /v1/visor/compute — "sizes"/"regions" are
+	// catalog dimensions shared by machines AND gpus, not owned nouns, so they
+	// nest under compute rather than sitting beside them. Org-gated but not
 	// org-scoped — the catalog is identical for every tenant.
 	//
 	// RAW: both pass Visor's catalog payload through VERBATIM, so the shape is
 	// Visor's and this package does not know it. A typed Out would have to invent
 	// one — the opposite of what the passthrough is for.
-	app.Get("/v1/compute/regions", cloud.Handle(s, listRegions))
-	app.Get("/v1/compute/sizes", cloud.Handle(s, listSizes))
+	app.Get("/v1/visor/compute/regions", cloud.Handle(s, listRegions))
+	app.Get("/v1/visor/compute/sizes", cloud.Handle(s, listSizes))
 
 	// A machine's AGENT — thin proxy over vm's binding surface (mark a machine as
 	// running the @hanzo/bot runtime for a cloud Agent).
@@ -240,34 +241,34 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//
 	// vm now answers on these SAME four addresses, so the translation bots.go used
 	// to keep is gone rather than moved — one spelling end to end.
-	zip.Get(reg, "/v1/machines/agents", o.listAgents,
+	zip.Get(reg, "/v1/visor/machines/agents", o.listAgents,
 		zip.WithOperationID("listMachineAgents"), zip.WithTags("compute"))
-	zip.Put(reg, "/v1/machines/:id/agent", o.bindAgent,
+	zip.Put(reg, "/v1/visor/machines/:id/agent", o.bindAgent,
 		zip.WithOperationID("bindMachineAgent"), zip.WithTags("compute"))
-	zip.Get(reg, "/v1/machines/:id/agent", o.getAgent,
+	zip.Get(reg, "/v1/visor/machines/:id/agent", o.getAgent,
 		zip.WithOperationID("getMachineAgent"), zip.WithTags("compute"))
-	zip.Delete(reg, "/v1/machines/:id/agent", o.unbindAgent,
+	zip.Delete(reg, "/v1/visor/machines/:id/agent", o.unbindAgent,
 		zip.WithOperationID("unbindMachineAgent"), zip.WithTags("compute"))
 
 	// Bot machines — a kind=bot machine + an agent binding, composed from the vm
 	// compute + binding surface (bots.go). The value is a MACHINE that hosts a bot
 	// runtime, not the bot itself: /v1/bots is the bot RUN (clients/bots), a
-	// different noun. It nests under /v1/compute (visor's domain) so the two never
-	// share a route namespace. launch is an explicit literal, registered before :id
-	// so it never binds as an id.
-	zip.Get(reg, "/v1/compute/bots", o.listBots,
+	// different noun, and it belongs to bots. This one nests under
+	// /v1/visor/compute, so the two never share a route namespace. launch is an
+	// explicit literal, registered before :id so it never binds as an id.
+	zip.Get(reg, "/v1/visor/compute/bots", o.listBots,
 		zip.WithOperationID("listBots"), zip.WithTags("bots"))
 	// RAW: launch is polymorphic exactly like the machine launch above — 200 + the
 	// quote for a dryRun, 201 + the botView for a real launch.
-	app.Post("/v1/compute/bots/launch", cloud.Handle(s, launchBot))
-	zip.Get(reg, "/v1/compute/bots/:id", o.getBot,
+	app.Post("/v1/visor/compute/bots/launch", cloud.Handle(s, launchBot))
+	zip.Get(reg, "/v1/visor/compute/bots/:id", o.getBot,
 		zip.WithOperationID("getBot"), zip.WithTags("bots"))
-	zip.Delete(reg, "/v1/compute/bots/:id", o.deleteBot,
+	zip.Delete(reg, "/v1/visor/compute/bots/:id", o.deleteBot,
 		zip.WithOperationID("deleteBot"), zip.WithTags("bots"))
 	// RAW: /:action is a verb dispatch, not a resource, and `message` streams the
 	// bound agent's answer back VERBATIM — the upstream body, its Content-Type and
 	// its status. There is no Out to state, and stating one would buffer a stream.
-	app.Post("/v1/compute/bots/:id/:action", cloud.Handle(s, botAction))
+	app.Post("/v1/visor/compute/bots/:id/:action", cloud.Handle(s, botAction))
 
 	s.Log.Info("visor compute surface mounted", "target", s.State.cl.target,
 		"serviceAuth", serviceClientID() != "", "brand", deps.Brand)
@@ -463,7 +464,7 @@ func (o ops) getMachine(ctx context.Context, in *machineRef) (*machineView, erro
 
 // listRegions and listSizes expose the global compute catalog that backs the launch
 // drawer. Both delegate to catalog: DRY, one org-gated passthrough of Visor's
-// authoritative list. GET /v1/compute/regions, GET /v1/compute/sizes.
+// authoritative list. GET /v1/visor/compute/regions, GET /v1/visor/compute/sizes.
 func listRegions(s *cloud.Service[state], c *zip.Ctx) error { return catalog(s, c, "/v1/regions") }
 func listSizes(s *cloud.Service[state], c *zip.Ctx) error   { return catalog(s, c, "/v1/sizes") }
 
@@ -501,7 +502,7 @@ type launchReq struct {
 // through the same registry Register uses, so a description renders only while the
 // router actually serves the route.
 func init() {
-	openapi.Describe("/v1/machines", http.MethodPost,
+	openapi.Describe("/v1/visor/machines", http.MethodPost,
 		"Launch a metered machine for your org, or price one first with dryRun",
 		"Provisions a machine owned by the caller's org and answers 201 with the machine. "+
 			"Send `dryRun: true` to get a PRICE QUOTE instead: 200 with the upstream quote passed "+
@@ -513,21 +514,21 @@ func init() {
 			"body, so a launch always lands in the caller's OWN tenant and the machine it creates "+
 			"is only ever visible to that tenant. Fails closed: a validated principal is required "+
 			"(403 without one) and `size` (or its `instanceType` alias) is required (400).")
-	openapi.Describe("/v1/compute/regions", http.MethodGet,
+	openapi.Describe("/v1/visor/compute/regions", http.MethodGet,
 		"The regions a machine or GPU can be launched into",
 		"Lists the launch regions the compute catalog offers, passed through verbatim from the "+
 			"provider so the shape stays the provider's single source of truth. The catalog is "+
 			"GLOBAL, not per-tenant: no owner is forwarded and every org sees the same list. It "+
 			"is still gated — a validated principal is required, 403 without one — because the "+
 			"catalog is what backs the launch drawer, not public marketing copy.")
-	openapi.Describe("/v1/compute/sizes", http.MethodGet,
+	openapi.Describe("/v1/visor/compute/sizes", http.MethodGet,
 		"The machine and GPU sizes that can be launched",
 		"Lists the instance sizes the compute catalog offers, passed through verbatim from the "+
 			"provider so the shape stays the provider's single source of truth. These are the "+
 			"values `size` accepts on a launch. The catalog is GLOBAL, not per-tenant: no owner "+
 			"is forwarded and every org sees the same list. It is still gated — a validated "+
 			"principal is required, 403 without one.")
-	openapi.Describe("/v1/compute/bots/launch", http.MethodPost,
+	openapi.Describe("/v1/visor/compute/bots/launch", http.MethodPost,
 		"Launch a bot machine — an agent plus the machine that runs it — or price one",
 		"Creates BOTH halves of a bot in one call and answers 201 with the bot: the cloud agent "+
 			"it runs, then a bot-kind machine bootstrapped with the bot runtime, then the binding "+
@@ -543,7 +544,7 @@ func init() {
 			"Org-scoped and fails closed: a validated principal is required (403 without one), the "+
 			"owning org is that principal's and never a body field, `size` is required (400), and "+
 			"`name` is required for a real launch though not for a quote.")
-	openapi.Describe("/v1/compute/bots/:id/:action", http.MethodPost,
+	openapi.Describe("/v1/visor/compute/bots/:id/:action", http.MethodPost,
 		"Message a bot, or stop it, by naming the action in the path",
 		"Dispatches one verb against a bot the caller's org owns. `message` runs the bot's bound "+
 			"agent with the request body as the message and streams the agent's answer back "+

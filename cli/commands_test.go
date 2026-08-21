@@ -184,11 +184,11 @@ func TestDeployNotOK(t *testing.T) {
 	}
 }
 
-// clusters list hits the LIVE /v1/clusters (org from identity, not the path).
+// clusters list hits the LIVE /v1/visor/clusters (org from identity, not the path).
 func TestClustersListCommand(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/clusters" {
-			t.Errorf("path = %s, want /v1/clusters", r.URL.Path)
+		if r.URL.Path != "/v1/visor/clusters" {
+			t.Errorf("path = %s, want /v1/visor/clusters", r.URL.Path)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"clusters": []Cluster{
 			{DoksClusterID: "c1", Name: "hanzo-acme", Region: "sfo3", Status: "running", Kind: "managed", NodeCount: 3, NodeSize: "s-2vcpu-4gb", NvidiaGPU: 2},

@@ -3,7 +3,7 @@ package visor
 // fleet_engine_test.go — the engine.serve contract between the CLI and this reader.
 // The CLI stores a `registration` JSON as the presence activity's Input; this file
 // decodes it as `fleetRegistration` and emits it as `byoWorker` on GET
-// /v1/fleet/workers. These structs are mirrors — the test guards the round-trip so
+// /v1/visor/fleet/workers. These structs are mirrors — the test guards the round-trip so
 // the engine endpoint survives decode (server reads CLI Input) and encode (server
 // emits to the console/CLI).
 
@@ -68,7 +68,7 @@ func TestByoWorkerEmitsEngine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal byoWorker: %v", err)
 	}
-	// GET /v1/fleet/workers must expose the endpoint so the gateway/CLI can route.
+	// GET /v1/visor/fleet/workers must expose the endpoint so the gateway/CLI can route.
 	for _, want := range []string{`"engine.serve"`, `"http://node.example:1234"`, `"anthropic"`, `"status":"ready"`} {
 		if !strings.Contains(string(raw), want) {
 			t.Fatalf("byoWorker JSON missing %s:\n%s", want, raw)

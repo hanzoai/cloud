@@ -20,8 +20,8 @@ import (
 // SAME agents.db (one store, one tenancy column) as sessions/events — NOT a rival
 // device registry. It composes with the compute fleet rather than duplicating it: a
 // session records the target id it runs on (agent_sessions.target), and the org's
-// unified board (GET /v1/fleet, apps/visor/board.go) unions these registered
-// targets with its BYO workers (GET /v1/fleet/workers), BYO clusters and Visor
+// unified board (GET /v1/visor/fleet, apps/visor/board.go) unions these registered
+// targets with its BYO workers (GET /v1/visor/fleet/workers), BYO clusters and Visor
 // machines — reading this registry through the in-process seam below rather than
 // copying it.
 //
@@ -303,7 +303,7 @@ func (s *Store) GetTargetByHost(ctx context.Context, org, host string) (Target, 
 // ---- the in-process seam (org-scoped, fail-closed) ----
 //
 // TargetsForOrg / LoadOn are the exported twins of the list + detail reads above:
-// the ONE way another in-process subsystem (the /v1/fleet board in clients/visor)
+// the ONE way another in-process subsystem (the /v1/visor/fleet board in clients/visor)
 // reads this registry WITHOUT an HTTP hop back through the gateway — the same
 // shape ListForOrg gives the agent registry. They are two ORTHOGONAL values on
 // purpose: a target is what the machine IS, its load is what is running on it, and
