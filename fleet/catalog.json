@@ -1059,6 +1059,10 @@
    "doc": "Renders the formation documents for the chosen structure and\njurisdiction, ingests each into the org's data room, and submits the state\nfiling through the filing seam.\n\nWith no filing partner wired the filing is recorded honestly as \"manual\" — no\nfiling id is fabricated. Available only at the documents stage."
   },
   {
+   "id": "post_company_ein",
+   "doc": "Opens the EIN application and answers what it owes.\n\nThe answer states whether it can be filed ONLINE, because that is the fact\ndeciding whether the customer waits a sitting or several weeks — and it names\neach form with what that form is for, so nobody has to already know what an\nSS-4 is to understand why they are signing one."
+  },
+  {
    "id": "post_company_esign",
    "doc": "Sends the generated formation documents for signature by every\nfounder and records the provider's reference on the formation. Available only\nat the esign stage."
   },
@@ -6138,6 +6142,12 @@
   {
    "id": "put_social_posts_by_id",
    "doc": "Replaces the post's content, channel, status, scheduled time and media\nwith what the body carries, and answers with the stored row.\n\nA REPLACEMENT, not a merge: an omitted field is written as its default, so\nomitting media clears it and omitting the status resets the post to draft.\n`content` is required on every update. Unlike create, this never triggers a\npublish — moving a post's scheduled time into the past here leaves it for the\nscheduler; publish now is its own operation."
+  }
+ ],
+ "standing": [
+  {
+   "id": "post_standing_upkeep",
+   "doc": "Reports what keeping this entity costs every year, itemised.\n\nThis is the figure that decides where to incorporate, and the one a formation\nprice cannot show: Delaware is cheaper to form than Wyoming for a corporation\nand dearer to keep, so a founder shown only the formation fee is shown the half\nthat reverses. Each state line carries the authority that publishes it and the\ndate it was checked, and a franchise tax that scales is marked a minimum rather\nthan quoted as final."
   }
  ],
  "sync": [
