@@ -34,7 +34,7 @@ import (
 // application's own organization in `owner` and no membership set.
 func appToken(t *testing.T, key *rsa.PrivateKey, app, owner string) string {
 	t.Helper()
-	c := idClaims{Claims: authz.Claims{Owner: owner, Organization: owner, Azp: app}}
+	c := idClaims{Claims: authz.Claims{Owner: owner, Organization: owner, Azp: app, Type: authz.Program}}
 	c.Issuer = testIssuer
 	c.Subject = owner + "/" + app
 	c.Audience = jwt.ClaimStrings{app}
