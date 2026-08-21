@@ -7432,6 +7432,48 @@ components:
             It decides both price and what a carrier will let it originate.
           type: string
       type: object
+    Obligation:
+      properties:
+        amountCents:
+          description: AmountCents is what it costs each period.
+          type: integer
+        asOf:
+          description: AsOf is when that amount was last checked against its source,
+            RFC 3339 date.
+          type: string
+        code:
+          description: Code names the obligation so a caller can branch without reading
+            prose.
+          type: string
+        every:
+          description: Every is how often it falls due — "yearly" for every obligation
+            known here.
+          type: string
+        label:
+          description: Label is what the payer sees.
+          type: string
+        minimum:
+          description: |-
+            Minimum marks a floor rather than a fixed price — a franchise tax that
+            scales with shares or assets is quoted at its minimum, and an entity past
+            the threshold owes more. Saying so is the difference between a quote and a
+            number someone later disputes.
+          type: boolean
+        passThrough:
+          description: PassThrough marks money we collect and remit to the state rather
+            than keep.
+          type: boolean
+        source:
+          description: |-
+            Source names the authority that publishes a pass-through amount, so the
+            figure can be checked without first working out who would know.
+          type: string
+        stale:
+          description: |-
+            Stale reports that AsOf is older than the review window. It tells; it does
+            not block.
+          type: boolean
+      type: object
     Offer:
       properties:
         available:
@@ -12806,6 +12848,33 @@ components:
             click on the same link confirms the same thing rather than reporting
             nothing changed. A refused token never reaches this shape — it is a 403.
           type: boolean
+      type: object
+    Upkeep:
+      properties:
+        atLeast:
+          description: |-
+            AtLeast reports that some obligation is a minimum, so YearlyCents is a floor
+            rather than a final figure.
+          type: boolean
+        currency:
+          description: Currency is the ISO code every amount here is denominated in.
+          type: string
+        jurisdiction:
+          description: Jurisdiction is the state whose obligations these are.
+          type: string
+        obligations:
+          description: Obligations are the recurring charges, in the order a reader
+            should see them.
+          items:
+            $ref: '#/components/schemas/Obligation'
+          type: array
+        structure:
+          description: Structure is the entity this prices.
+          type: string
+        yearlyCents:
+          description: YearlyCents is what the entity owes every year, all obligations
+            summed.
+          type: integer
       type: object
     Upstream:
       properties:
@@ -54079,6 +54148,19 @@ components:
           description: |-
             URL is the https:// address each matching event is POSTed to. Required,
             max 2048 bytes; http:// and every other scheme is refused.
+          type: string
+      type: object
+    upkeepIn:
+      properties:
+        agentOfRecord:
+          description: AgentOfRecord includes our agent fee, which most entities owe
+            someone.
+          type: boolean
+        jurisdiction:
+          description: Jurisdiction is the state the entity stands in.
+          type: string
+        structure:
+          description: 'Structure is the entity kind: c-corp, llc or dao-llc.'
           type: string
       type: object
     usage:
@@ -119209,6 +119291,37 @@ paths:
       x-app: social
       x-public: true
       x-tool: true
+  /v1/standing/upkeep:
+    post:
+      description: |-
+        Reports what keeping this entity costs every year, itemised.
+
+        This is the figure that decides where to incorporate, and the one a formation
+        price cannot show: Delaware is cheaper to form than Wyoming for a corporation
+        and dearer to keep, so a founder shown only the formation fee is shown the half
+        that reverses. Each state line carries the authority that publishes it and the
+        date it was checked, and a franchise tax that scales is marked a minimum rather
+        than quoted as final.
+      operationId: post_standing_upkeep
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/upkeepIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upkeep'
+          description: ok
+      summary: Reports what keeping this entity costs every year, itemised.
+      tags:
+      - standing
+      x-app: standing
+      x-public: true
+      x-tool: true
   /v1/sync:
     get:
       description: |-
@@ -124953,6 +125066,9 @@ tags:
 - description: Package social is posting to every social account you own, now or on
     a schedule.
   name: social
+- description: Package standing prices and tracks what it costs to KEEP a company,
+    as distinct from what it cost to form one.
+  name: standing
 - description: 'Package sync is data sync: link two endpoints and keep them in step,
     on a webhook, on a schedule, or on demand.'
   name: sync
