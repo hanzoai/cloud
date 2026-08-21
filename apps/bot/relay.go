@@ -1,19 +1,19 @@
-// relay.go mounts /v1/bot/* — @hanzo/bot's OWN operational paths (health, and the
+// relay.go mounts /v1/bot/runtime/* — @hanzo/bot's OWN operational paths (health, and the
 // surfaces the console Bot module links out to), relayed verbatim. It is the
 // executor's ops face, not a control plane: a liveness probe is not a
 // tenant-scoped resource, so it stays a relay rather than being reimplemented in
-// Go. Everything a tenant can ACT on is native and typed beside it — /v1/bots is
-// the run control plane (bots.go).
+// Go. Everything a tenant can ACT on is native and typed beside it — /v1/bot/runs is
+// the run control plane (run.go).
 //
 // Path mapping: the executor serves bare paths (/health, /v1/chat/completions),
-// NOT the /v1/bot/* prefix — the edge strips it. So this face strips /v1/bot too:
-// /v1/bot/<rest> → {executor}/<rest> (e.g. /v1/bot/health → /health).
+// NOT the /v1/bot/runtime/* prefix — the edge strips it. So this face strips /v1/bot/runtime too:
+// /v1/bot/runtime/<rest> → {executor}/<rest> (e.g. /v1/bot/runtime/health → /health).
 //
-// Order 143 — binds /v1/bot/* before the AI subsystem's /v1/* catch-all (150).
+// Order 143 — binds /v1/bot/runtime/* before the AI subsystem's /v1/* catch-all (150).
 //
-// The package doc lives once, in bots.go.
+// The package doc lives once, in node.go.
 
-package bots
+package bot
 
 import (
 	"bytes"
@@ -41,12 +41,12 @@ import (
 func init() {
 	const summary = "Relay one of the bot runtime's own operational paths"
 	const description = "Forwards a request to the bot runtime — the service that executes " +
-		"channels and skills — and hands back its answer unchanged. `/v1/bot` is stripped " +
-		"before forwarding, because the runtime serves bare paths: /v1/bot/health reaches it " +
+		"channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped " +
+		"before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it " +
 		"as /health.\n\n" +
 		"This is the runtime's OPS face, not a control plane. A liveness probe is not a " +
 		"tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; " +
-		"everything a tenant can ACT on is native and typed at /v1/bots.\n\n" +
+		"everything a tenant can ACT on is native and typed at /v1/bot/runs.\n\n" +
 		"A validated principal is required and the request is refused with 403 before " +
 		"anything is forwarded — the runtime trusts the identity headers it receives as " +
 		"gateway-minted, so an unauthenticated call must never be allowed to hand it a victim " +
@@ -57,7 +57,7 @@ func init() {
 		"One registration owns this address for every method, so which methods actually " +
 		"answer is the runtime's decision, not this edge's."
 	for _, m := range openapi.Methods() {
-		openapi.Describe("/v1/bot/*", m, summary, description)
+		openapi.Describe("/v1/bot/runtime/*", m, summary, description)
 	}
 }
 
@@ -75,15 +75,23 @@ type relay struct {
 	cc     *http.Client
 }
 
-// mountRelay registers the /v1/bot/* surface on app per HIP-0106. Mount (bots.go)
-// calls it: one product, one entry point, two faces.
+// mountRelay registers the /v1/bot/runtime/* surface on app per HIP-0106. Mount
+// (node.go) calls it last: one capability, one entry point, three families.
+//
+// IT HAS ITS OWN SEGMENT, and that is what made the merge safe. The relay was
+// app.All("/v1/bot/*") in a separate app while the node plane served
+// /v1/bot/connect, /v1/bot/nodes and /v1/bot/peer/invoke from another — one greedy
+// wildcard over the whole of a sibling's subtree, kept apart only by two manifest
+// rows and the router's specificity rule. In one app the wildcard would sit beside
+// the routes it can swallow, so it does not: it forwards from under
+// /v1/bot/runtime and cannot reach a sibling at all.
 func mountRelay(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("bots.mountRelay: nil app")
+		return fmt.Errorf("bot.mountRelay: nil app")
 	}
 	s := &relay{
 		target: executorURL(""),
-		log:    luxlog.Default().New("subsystem", "bots"),
+		log:    luxlog.Default().New("subsystem", "bot"),
 		cc:     &http.Client{Timeout: 60 * time.Second},
 	}
 	// UNTYPED BY DESIGN — and it is the only route here, so this whole subsystem
@@ -102,10 +110,10 @@ func mountRelay(app cloud.Router, deps cloud.Deps) error {
 	//     frequently not JSON at all. A typed op answers its DECLARED status and
 	//     serialises its Out as JSON, so both move.
 	//
-	// The tenant-actionable surface is native and typed elsewhere: /v1/bots is the
-	// run control plane (bots.go). This face is ops, and it stays a relay.
-	app.All("/v1/bot/*", s.proxy)
-	s.log.Info("bots relay surface mounted", "target", s.target, "brand", deps.Brand)
+	// The tenant-actionable surface is native and typed elsewhere: /v1/bot/runs is the
+	// run control plane (run.go). This face is ops, and it stays a relay.
+	app.All("/v1/bot/runtime/*", s.proxy)
+	s.log.Info("bot relay surface mounted", "target", s.target, "brand", deps.Brand)
 	return nil
 }
 
@@ -118,7 +126,7 @@ func (s *relay) proxy(c *zip.Ctx) error {
 	if !principal.Validated(c) {
 		return zip.ErrForbidden("no validated principal")
 	}
-	// Strip the /v1/bot prefix — the runtime serves bare paths.
+	// Strip the /v1/bot/runtime prefix — the runtime serves bare paths.
 	rest := strings.TrimPrefix(c.Fiber().Params("*"), "/")
 	target := s.target + "/" + rest
 	if q := c.Fiber().Request().URI().QueryString(); len(q) > 0 {

@@ -40,7 +40,7 @@ func mountBot(t *testing.T, reg *Registry) *zip.App {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	compose(app)
-	routes(app, s, deps)
+	mountNodes(app, s, deps)
 	return app
 }
 

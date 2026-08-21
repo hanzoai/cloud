@@ -1,9 +1,14 @@
-// typed_wire_test.go — the projection gate. ONE of this package's four operations
-// is a TYPED op; the other three are not, and each of those has a WIRE FACT that
-// keeps it out. Both halves are MEASURED here rather than asserted in prose, because
-// prose cannot go red: a route added untyped goes red without anyone remembering to
-// name it, a reason naming a route this package no longer serves goes red too, and
-// the two ledgers must sum to the surface the live router actually serves.
+// typed_wire_test.go — the projection gate, over the WHOLE capability. Three of
+// this package's operations are TYPED ops; the rest are not, and each of those has
+// a WIRE FACT that keeps it out. Both halves are MEASURED here rather than asserted
+// in prose, because prose cannot go red: a route added untyped goes red without
+// anyone remembering to name it, a reason naming a route this package no longer
+// serves goes red too, and the two ledgers must sum to the surface the live router
+// actually serves.
+//
+// ONE gate, because there is one capability. The node plane and the run plane each
+// carried their own copy of this file while they were two apps, which meant each
+// measured half a surface and neither could see a route that landed in the gap.
 package bot
 
 import (
@@ -44,6 +49,40 @@ var untypedByDesign = map[string]string{
 		"body with http.MaxBytesReader, a bound a typed op cannot see; and its ORG arrives in the body, " +
 		"which is correct for a hop authenticated by a shared token and is exactly what an In field must " +
 		"never be on a caller-facing route.",
+
+	// The launch stub. Two facts, either one sufficient, and both re-read against
+	// the PINNED zip (v1.18.12) rather than inherited as prose.
+	//
+	//  1. IT HAS NO SUCCESS. zip publishes a response schema for every typed op
+	//     (typed.go registerTyped → responses keyed on cmp.Or(op.Status, 200)), so
+	//     typing this would declare a 200 body it can never send AND mint an MCP
+	//     tool plus a CLI command for an operation that cannot succeed — a model
+	//     reading the tool list would call it. apps/books/bank_api.go declines its
+	//     two 501 stubs on exactly this ground.
+	//  2. IT IS BODY-TOLERANT. The handler never reads the body, so ANY bytes —
+	//     malformed JSON included — answer 501 today; op.invoke decodes the body
+	//     before the handler runs and returns ErrBadRequest on any failure, so
+	//     typing it turns those 501s into 400s. TestRunToleratesAMalformedBody
+	//     (run_wire_test.go) is that measurement.
+	//
+	// It gets typed in the same change that gives the bot runtime a launch
+	// operation, and not before.
+	"POST /v1/bot/runs": "answers 501 unconditionally — a typed op publishes a SUCCESS response it can " +
+		"never send, and mints an MCP tool and CLI command for an operation that cannot succeed; it is also " +
+		"body-tolerant, which op.invoke's unconditional 400 on an unparseable body cannot express.",
+
+	// The relay face. All five ARE one registration —
+	// app.All("/v1/bot/runtime/*", s.proxy) in relay.go — so they share one reason.
+	//
+	// FIVE, not seven: the document publishes what was DECLARED, and OPTIONS and
+	// TRACE were never declared — they were methods the router happened to bind
+	// under All(). They left the document in ceff43ac, which is the change that
+	// drew that line, so they leave the ledger with it.
+	"DELETE /v1/bot/runtime/{wildcard1}": reasonProxy,
+	"GET /v1/bot/runtime/{wildcard1}":    reasonProxy,
+	"PATCH /v1/bot/runtime/{wildcard1}":  reasonProxy,
+	"POST /v1/bot/runtime/{wildcard1}":   reasonProxy,
+	"PUT /v1/bot/runtime/{wildcard1}":    reasonProxy,
 }
 
 // botOps reads BOTH projections of the live router at their one shared address form:
@@ -52,7 +91,7 @@ var untypedByDesign = map[string]string{
 // this a gate rather than prose.
 func botOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	t.Helper()
-	app := mountBot(t, gated())
+	app := mountAll(t)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "bot", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
@@ -131,7 +170,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // inputSchema without one too — `caps` as a bare string list nowhere documented as
 // the node's own self-report rather than as what it is permitted to do.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	app := mountBot(t, gated())
+	app := mountAll(t)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "bot", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)

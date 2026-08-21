@@ -35,7 +35,7 @@ var frozen = []string{
 	"sbom", "team", "meet", "settings", "prefs", "notify",
 	"channels", "gateway", "entitlements", "exec", "sandboxes", "websearch", "crawl", "seo",
 	"index", "catalog", "taxonomy", "world", "web3", "bot", "authors",
-	"bots", "audit", "affiliates", "esign", "search", "evals",
+	"audit", "affiliates", "esign", "search", "evals",
 	"benchmark", "research", "experiments", "books", "treasury", "admin",
 	"admission", "tasks", "tel", "auto", "flow", "engine", "registry", "tools", "marketplace", "referrals",
 	// `agent` is GONE from this sequence on purpose: it was a second app beside

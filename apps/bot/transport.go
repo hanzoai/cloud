@@ -15,9 +15,9 @@
 // HTTP; per HIP-0106/HIP-0120 they should move over ZAP, and that swap is meant
 // to be a change to THIS FILE plus each caller's one stub, not a rewrite.
 //
-// The package doc lives once, in bots.go.
+// The package doc lives once, in node.go.
 
-package bots
+package bot
 
 import (
 	"bufio"

@@ -12,16 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package bot is your own machines, connected and ready to take a command.
+// Package bot is a bot: your own machines connected and ready to take a command,
+// and a run doing your work on a surface while you watch.
 //
-// The node control plane at /v1/bot: bot nodes on user machines dial in and
-// hold a socket, and an org lists its connected nodes and invokes commands on
-// one, authorized once at the socket.
+// ONE CAPABILITY, and it used to be two packages. `bot` served the node control
+// plane and `bots` served the run control plane plus the executor's relay — names
+// that differ only in number, which HIP-0139 §2.4 says are one capability and §1
+// says is one package with one plugin. The values stay distinct; the name does
+// not multiply.
+//
+// Three route families, all under /v1/bot:
 //
 //	GET  /v1/bot/connect            the socket a node dials and holds open
 //	GET  /v1/bot/nodes              this org's connected nodes
 //	POST /v1/bot/nodes/{id}/invoke  ask one of them to run a command
 //	POST /v1/bot/peer/invoke        replica-to-replica forward (machine hop)
+//
+//	GET  /v1/bot/runs               this org's live bot runs        (run.go)
+//	POST /v1/bot/runs               launch one — 501 until the executor can
+//	POST /v1/bot/runs/{id}/stop     stop one
+//
+//	ALL  /v1/bot/runtime/*          @hanzo/bot's own ops paths, relayed (relay.go)
+//
+// node.go is the node plane and the package's one Mount; run.go is the run plane;
+// relay.go is the executor's ops face. A bot NODE is a machine you already own; a
+// bot RUN is a task on a surface the executor drives; a bot MACHINE is visor's
+// /v1/compute/bots, which you rent. Three values, one name, three addresses under
+// it.
 //
 // # The org is the gateway's verdict, never the caller's
 //
@@ -121,8 +138,22 @@ var running struct {
 	done   chan struct{}
 }
 
-// Mount registers the /v1/bot surface per HIP-0106.
+// Mount registers the whole /v1/bot surface per HIP-0106 — three families, one
+// capability, in the order specificity does not decide for us: the node plane and
+// the run plane are static leaves, and the relay is a greedy wildcard that must
+// never be able to shadow either, so it goes last and under its own segment.
 func Mount(app cloud.Router, deps cloud.Deps) error {
+	if err := mountNodePlane(app, deps); err != nil {
+		return err
+	}
+	if err := mountRunPlane(app, deps); err != nil {
+		return err
+	}
+	return mountRelay(app, deps)
+}
+
+// mountNodePlane brings up the registry and registers /v1/bot/{connect,nodes,peer}.
+func mountNodePlane(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return errors.New("bot.Mount: nil app")
 	}
@@ -143,7 +174,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	reg := NewRegistry(opts...)
 
 	s := &cloud.Service[state]{Base: base, State: state{reg: reg}}
-	routes(app, s, deps)
+	mountNodes(app, s, deps)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -183,7 +214,7 @@ func Shutdown(ctx context.Context) error {
 
 // ops binds the mounted Service so each op can be a method value — the only bound
 // form cmd/zipdoc can lift prose from. It carries STATE and no logic.
-type ops struct{ s *cloud.Service[state] }
+type nodeOps struct{ s *cloud.Service[state] }
 
 // routes registers the surface. The untyped handlers are wrapped in cloud.Terminal
 // because this subsystem mounts AFTER the commerce embed, whose /v1 error filter
@@ -194,7 +225,7 @@ type ops struct{ s *cloud.Service[state] }
 // THREE OF THE FOUR ROUTES STAY UNTYPED, each for a wire reason named at its
 // registration below. A typed op answers ONE marshalled value at ONE declared
 // success status, and these three do not.
-func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
+func mountNodes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 	// cloud.Bridge is not installed here. Whoever composes the program installs it
 	// once at the root — after the identity check that mints the validated org and
 	// before any subsystem registers a route (serve.go) — because that order is a
@@ -219,7 +250,7 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 		return ws(c)
 	})))
 
-	o := ops{s: s}
+	o := nodeOps{s: s}
 	zip.Get(app.Group("/v1/bot"), "/nodes", o.listNodes)
 
 	// UNTYPED BY DESIGN: a policy refusal here is a 403 carrying a DOMAIN body —
@@ -395,7 +426,7 @@ type nodesQuery struct{}
 // node's own self-report: useful to show, never load-bearing, because what a node
 // may actually be asked to do is decided at the socket against the deployment's
 // allowlist.
-func (o ops) listNodes(ctx context.Context, _ *nodesQuery) (*nodesView, error) {
+func (o nodeOps) listNodes(ctx context.Context, _ *nodesQuery) (*nodesView, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

@@ -11,7 +11,6 @@
 /meet meet
 /tasks tasks
 /v1/billing commerce
-/v1/bot bots
 /v1/logs metrics
 /v1/sentinel o11y
 /v1/traces metrics
