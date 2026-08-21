@@ -11,8 +11,11 @@
 // grant-credit primitive). Each read is total: an unwired or unreachable commerce
 // degrades to an honest zero, never a fabricated number.
 //
-// Commerce runs as its own deployment; these are HTTP calls authenticated with the
-// admin-scoped COMMERCE_SERVICE_TOKEN (a KMS-sourced secret already on the cloud
+// Commerce is a PLUGIN in this binary, not a deployment of its own. Plan reads it
+// over the internal plane — a call by name on commerce's own socket, which cannot
+// reach the public edge by accident. The reads still on HTTP below are the ones
+// whose plane ops do not exist yet; each is a service-token call authenticated with
+// the admin-scoped COMMERCE_SERVICE_TOKEN (a KMS-sourced secret already on the cloud
 // env — never hard-coded). A per-subject read resolves the org's billing namespace
 // from the TRUSTED X-Org-Id header (commerce's EdgeAuth trusts it only when the
 // bearer is the service token) AND keys the wallet under the bare slug — one value,
@@ -34,8 +37,11 @@ import (
 
 	"github.com/hanzoai/commerce/models/subscription"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/money"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
+	"github.com/hanzoai/cloud/plane"
+	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 )
 
 // errUnconfigured marks a write (Deposit) attempted against an unwired commerce.
@@ -84,24 +90,6 @@ type Plan struct {
 	Active bool
 }
 
-// subscriptionsWire is the /v1/billing/subscriptions list shape Plan folds over.
-//
-// MRRCents is commerce's own figure for what the subscription contributes per
-// month — interval-normalized and multiplied by its seats. This surface used to
-// re-derive it here from Price and Interval, with its own copy of commerce's
-// normalization and no knowledge of the seat count at all, so a 10-seat plan
-// read as one seat. Commerce bills Price x quantity; it is the authority on
-// what that subscription is worth, and this is a display surface.
-type subscriptionsWire struct {
-	Subscriptions []struct {
-		Status   string      `json:"status"`
-		MRRCents money.Cents `json:"mrrCents"`
-		Plan     struct {
-			Name string `json:"name"`
-		} `json:"plan"`
-	} `json:"subscriptions"`
-}
-
 // Plan reads a subject's subscription tier + MRR in ONE decode (GET
 // /v1/billing/subscriptions), so the customer + revenue surfaces share a single
 // upstream read. MRR counts what commerce says counts; "active"/"trialing" both
@@ -112,15 +100,27 @@ func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 	if !c.Ready() {
 		return out, nil
 	}
-	body, err := c.get(ctx, "/v1/billing/subscriptions", url.Values{"user": {subject}}, subject)
+	// The org is the tenant, and the tenant IS the scope: commerce reads this list
+	// out of that org's own namespace, so every row already belongs to the subject.
+	//
+	// No UserID filter, deliberately. The HTTP call this replaces sent `?user=`,
+	// and the door reads `?userId=` — so the filter never applied and this has
+	// always folded over the org's whole list. Passing one now would silently
+	// narrow a number the cockpit has been showing for as long as it has shown it.
+	reply, err := commercepeer.FinanceSubs(cloud.For(ctx, subject), &plane.SubsIn{})
 	if err != nil {
-		return out, err
+		if errors.Is(err, cloud.ErrNoPeer) {
+			// The router answered from the manifest it owns: this deployment runs
+			// no commerce. Honest pay-as-you-go, which is what an unwired commerce
+			// has always read as here.
+			return out, nil
+		}
+		return out, fmt.Errorf("commerce plan read: %w", err)
 	}
-	var w subscriptionsWire
-	if err := json.Unmarshal(body, &w); err != nil {
-		return out, fmt.Errorf("commerce plan decode: %w", err)
+	if reply == nil {
+		return out, nil
 	}
-	for _, s := range w.Subscriptions {
+	for _, s := range reply.Rows {
 		// Revenue and entitlement are two questions, and this loop answers
 		// both. commerce owns the revenue one — Status.CountsTowardMRR — so
 		// this surface and commerce's own rollup can no longer report a
@@ -131,12 +131,12 @@ func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 		// A trial is not revenue, but it IS a live plan, so it still names the
 		// plan and marks the subject subscribed.
 		if subscription.Status(s.Status).CountsTowardMRR() {
-			out.MRR += s.MRRCents
+			out.MRR += money.Cents(s.MRRCents)
 		}
 		switch strings.ToLower(strings.TrimSpace(s.Status)) {
 		case "active", "trialing":
 			out.Active = true
-			if name := strings.TrimSpace(s.Plan.Name); name != "" && out.Name == "pay-as-you-go" {
+			if name := strings.TrimSpace(s.PlanName); name != "" && out.Name == "pay-as-you-go" {
 				out.Name = name
 			}
 		}
