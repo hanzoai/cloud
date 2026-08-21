@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/risk/datasets/:name", zip.Doc{
+	zip.Describe("DELETE /v1/dataset/:name", zip.Doc{
 		Description: "Disposes of one dataset and every version of it: the rows are\ndropped and the register is marked with what went.\n\nThis is the ONLY expiry in this plane. Neither table carries a TTL, deliberately:\na table TTL is a fleet-wide clock no tenant can hold longer or shorten, which is\nthe opposite of a retention decision belonging to the tenant whose records they\nare. The drop is a partition drop on (org, dataset), so the tenant is the first\ncomponent of the thing being dropped and a disposal cannot be spelled across one.\n\nThe BYTES are what goes. The register keeps one `disposed` row per version — the\nname, the number, the spec, the digest and who disposed of it when — for two\nreasons: a retention obligation is answered by a record of the deletion, not by\nsilence; and version numbers must stay monotone, so that after `orders` is\ndisposed of and declared again the next version is 4 and not 1. A number that\ncould be reused would make every citation of `orders v3` ambiguous forever.\n\nIt is not reversible and there is no soft state in between. A version a model\ncited has no rows once this returns, and every read of it says so.",
 		Fields: map[string]string{
 			"riskDatasetDisposal.versions": "Versions is how many versions went, and Rows how many rows they held between\nthem, as the register recorded them.",
@@ -17,7 +17,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"signups"}`),
 	})
-	zip.Describe("GET /v1/risk/datasets", zip.Doc{
+	zip.Describe("GET /v1/dataset", zip.Doc{
 		Description: "Datasets lists this org's datasets, each with its newest version. An org that\nhas declared none gets an empty list; a store that cannot be reached gets a\nrefusal, never an empty list, because the two read identically and only one of\nthem is true.",
 		Fields: map[string]string{
 			"riskDataset.at":             "At is when this version last changed state, and By who.",
@@ -45,7 +45,7 @@ func init() {
 			"riskSplitCounts.subjects":   "Subjects is how many distinct subjects the rows belong to. Every row of one\nsubject is in ONE split, so this is the real sample size — the row count\nflatters it whenever a subject is active.",
 		},
 	})
-	zip.Describe("GET /v1/risk/datasets/:name", zip.Doc{
+	zip.Describe("GET /v1/dataset/:name", zip.Doc{
 		Description: "Dataset describes every version of one dataset, newest first — the whole\nhistory, because the point of a version is that the older ones are still there\nand a model fitted last quarter cites one of them.\n\nA name this org does not own answers 404, exactly as an unknown name does, so a\nprobe learns nothing about another tenant's datasets.",
 		Fields: map[string]string{
 			"riskDataset.at":             "At is when this version last changed state, and By who.",
@@ -74,7 +74,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"signups"}`),
 	})
-	zip.Describe("GET /v1/risk/datasets/:name/export", zip.Doc{
+	zip.Describe("GET /v1/dataset/:name/export", zip.Doc{
 		Description: "Reads a published version's rows back, one bounded page at a\ntime, in the version's own stable row order.\n\nOnly a published version can be exported. Rows written by an attempt that never\ncompleted are inert — no register row names them — and they are disposed of with\nthe dataset.",
 		Fields: map[string]string{
 			"riskDatasetRow.at":      "At is the row's instant.",
@@ -94,7 +94,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"signups","version":1,"split":"train","limit":500}`),
 	})
-	zip.Describe("GET /v1/risk/datasets/:name/lineage", zip.Doc{
+	zip.Describe("GET /v1/dataset/:name/lineage", zip.Doc{
 		Description: "Shows where a version's rows came from and whether that can\nstill be demonstrated.\n\nThe answer is MEASURED, not recalled: the plane asks the source the same\nbounded question again and compares it to the fingerprint taken when the\nversion was built. Anything but exact agreement is reported as drift — the\nsource is fed by a rollup that runs behind the events, so \"it holds more now\"\nis the ordinary case and it means re-running the spec would not reproduce this\nversion. An admitted gap is actionable; an unfalsifiable claim is not.\n\nIT IS A PRICED, BOUNDED READ, because it is the same statement a\nmaterialisation is charged for: an exact distinct-count over up to 400 days of\nthis org's feature surface. It takes the org's ONE source-scan slot, so a\ntenant looping it spends one scan and not a thousand; it counts against the\nplane's ceiling, so the fleet's warehouse is bounded too; and it runs under\nthis plane's own deadline rather than the caller's patience.",
 		Fields: map[string]string{
 			"riskLineage.digest":       "Digest is the version's fingerprint, repeated here so a lineage answer is\nself-contained.",
@@ -111,7 +111,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"signups","version":1}`),
 	})
-	zip.Describe("POST /v1/risk/datasets", zip.Doc{
+	zip.Describe("POST /v1/dataset", zip.Doc{
 		Description: "Declares the next version of a dataset from a bound query over\nthis org's own feature surface.\n\nIt mints a VERSION and writes no rows: a version is declared, then materialised\nonce, then never rewritten. Version numbers are monotone and never reused, so\n\"version 3 of signups\" means one thing forever — which is the whole reason a\nmodel can cite one.\n\nThe window is bounded by the source's retention, the horizon by a year, the\nrows by the plane's cap, and the number of datasets and versions per org by\ntheir own limits. Every refusal names which bound it hit.",
 		Fields: map[string]string{
 			"riskDataset.at":             "At is when this version last changed state, and By who.",
@@ -139,7 +139,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"signups","kind":"person","from":"2026-01-01T00:00:00Z","to":"2026-04-01T00:00:00Z","horizon":14}`),
 	})
-	zip.Describe("POST /v1/risk/datasets/:name/materialize", zip.Doc{
+	zip.Describe("POST /v1/dataset/:name/materialize", zip.Doc{
 		Description: "Builds the declared version into immutable rows and answers\n202 as soon as the attempt is on record.\n\nIt never holds the request open for the work: a materialisation is a bounded\nwarehouse scan, and letting an HTTP client's timeout be a data plane's timeout\nis how one tenant's retry loop becomes everyone's outage. ONE materialisation\nruns per org at a time; a second is refused rather than queued, because a queue\nadmits the same work later and the honest answer to \"again\" while one is\nrunning is that one is running.\n\nOnly a DECLARED version is admitted. A published version is immutable, and a\nversion whose earlier attempt did not complete is never re-attempted — that\nwould union two runs' rows under one number and make the digest a lie. In both\ncases the answer is to declare a new version, which is what a second run over a\nmoving source honestly is.",
 		Fields: map[string]string{
 			"riskDataset.at":             "At is when this version last changed state, and By who.",

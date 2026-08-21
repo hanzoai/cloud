@@ -2,28 +2,32 @@ package dataset
 
 // address_test.go pins WHERE this plane publishes, which is not a routing detail.
 //
-// THE ADDRESS IS THE PRODUCT. openapi.Fold takes an operation's product tag from
-// the first /v1 segment of its path and nothing else (openapi.Product) — a per-op
-// zip.WithTags names a different axis and cannot override it, because Fold assigns
-// op.Tags = shape.Tags from the router projection. So an address is a published
-// product membership: the fleet's tag list, the floor ratchet, the doc site's
-// headings, every generated SDK's namespace and the CLI's command tree are all
-// projections of that one segment.
+// EVERY ROUTE A CAPABILITY SERVES IS UNDER /v1/<its own name> (HIP-0139 §3.1). A
+// second top-level address is a second capability or a misfiled route, never an
+// alias, and the fleet ratchet that measures it (openapi/misfiled.txt) reads the
+// woven document — so it can only speak after every app has been described. This
+// gate asks the same question one plane earlier, of this plane's own projection,
+// where the answer is cheap and names the route that moved.
 //
-// The first cut of this plane addressed /v1/ml/datasets — five paths, seven
+// It used to assert the opposite rule, and the rule is what changed: openapi.Fold
+// took an operation's product from the FIRST /v1 SEGMENT, so membership of the
+// risk product had to be spelled into the address, and these seven operations
+// answered under /v1/risk to be counted as risk. HIP-0139 §4.1 retires that — the
+// tag is the app that serves the operation — so grouping no longer rides the
+// address, and the address is free to name the capability that owns the store.
+//
+// The hazard is unchanged, and the new rule guards it from the other side. The
+// first cut of this plane addressed /v1/ml/datasets — five paths, seven
 // operations — beside the KServe model-SERVING plane's own four paths under
 // /v1/ml, which is live and has customers on it. One prefix, two products. Nothing
 // in the fleet said so: the floor ratchet read `ml: 7 -> 14` as growth, because it
-// refuses a shrink and only a shrink. It is the same mistake apps/label and
-// apps/reference each record having made and corrected once, and the third time it
-// stops being a recollection and becomes this gate.
+// refuses a shrink and only a shrink.
 //
 // wire_test.go freezes the exact seven ADDRESSES, which catches a move. This
-// catches the thing a frozen list of strings cannot: the DERIVED product. Editing
-// the freeze and the manifest row together is enough to re-file the whole plane
-// under somebody else's product with every other gate green — so the invariant is
-// asserted where it actually lives, on openapi.Product's reading of the published
-// document.
+// catches the thing a frozen list of strings cannot: editing the freeze and the
+// manifest row together is enough to move the whole plane under somebody else's
+// name with every other gate green, so the invariant is asserted against the
+// published document rather than against the list.
 
 import (
 	"strings"
@@ -35,10 +39,17 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// product is the one this plane belongs to: a dataset is a versioned snapshot the
-// risk model is fitted on, so it is part of Risk. It is stated once here and read
-// by every assertion below AND by wire_test.go's operation-id check, so the two
-// files cannot half-agree with each other.
+// app is this capability's one name — the package, the plugin, the tag, the
+// address prefix. Stated once here and read by every assertion below, so the test
+// cannot half-agree with itself.
+const app = "dataset"
+
+// product is the OPERATION-ID prefix these seven ids still carry, read by
+// wire_test.go's id check. It is not the capability and no longer decides anything
+// about the address; the ids and the schema names below them (riskDatasetSpec,
+// riskDatasetRow) are the risk vocabulary this plane was cut out of, and renaming
+// them is a separate change to that vocabulary rather than a consequence of the
+// address moving.
 const product = "risk"
 
 // published is the document this plane projects of itself — the same call
@@ -59,30 +70,26 @@ func published(t *testing.T) *openapi.Document {
 	return doc
 }
 
-// TestEveryAddressFilesIntoOneProductAndItIsRisk walks the live projection.
-func TestEveryAddressFilesIntoOneProductAndItIsRisk(t *testing.T) {
+// TestEveryAddressIsUnderThisCapabilitysName walks the live projection.
+func TestEveryAddressIsUnderThisCapabilitysName(t *testing.T) {
 	doc := published(t)
 
-	products := map[string]int{}
+	roots := map[string]int{}
 	paths, ops := 0, 0
 	for path, item := range doc.Paths {
 		if !strings.HasPrefix(path, "/v1/") {
 			// Every address this plane owns is under /v1. Anything else is a
-			// liveness route the host owns, and it carries no product at all.
+			// liveness route the host owns, and it belongs to no capability.
 			continue
 		}
 		paths++
 		ops += len(item)
-		p := openapi.Product(path)
-		products[p] += len(item)
-		if p != product {
-			t.Errorf("ADDRESS: %s files into product %q, not %q. openapi.Product reads the first /v1 "+
-				"segment, so this path publishes these operations as part of somebody else's product — "+
-				"its tag list, its SDK namespace and its floor. Address it under /v1/%s.", path, p, product, product)
-		}
-		if !strings.HasPrefix(path, "/v1/"+product+"/datasets") {
-			t.Errorf("ADDRESS: %s is not under /v1/%s/datasets, which is the ONE prefix manifest.Apps "+
-				"grants this app; a path outside it is delivered to whichever sibling owns it.", path, product)
+		roots[openapi.Product(path)] += len(item)
+		if path != "/v1/"+app && !strings.HasPrefix(path, "/v1/"+app+"/") {
+			t.Errorf("ADDRESS: %s is not under /v1/%s. A capability answers at its own name and "+
+				"nowhere else (HIP-0139 §3.1): an address under another name publishes these "+
+				"operations as part of that capability — its tag list, its SDK namespace and its "+
+				"floor — and is routed to whichever sibling owns the root.", path, app)
 		}
 	}
 
@@ -92,15 +99,15 @@ func TestEveryAddressFilesIntoOneProductAndItIsRisk(t *testing.T) {
 	if paths == 0 || ops == 0 {
 		t.Fatal("the projection published no /v1 address — this gate proved nothing")
 	}
-	if len(products) != 1 {
-		t.Errorf("this plane publishes into %d products (%v); one subsystem, one product", len(products), products)
+	if len(roots) != 1 {
+		t.Errorf("this plane answers at %d top-level addresses (%v); one capability, one address", len(roots), roots)
 	}
-	t.Logf("%d paths, %d operations, all under /v1/%s/datasets", paths, ops, product)
+	t.Logf("%d paths, %d operations, all under /v1/%s", paths, ops, app)
 }
 
 // TestTheOperationIDsCarryTheProduct. An operation id is the SDK method name and
 // the CLI command, so an id prefixed for the wrong product survives the address
-// being right — `client.MlDatasets()` against /v1/risk/datasets is a generated
+// being right — `client.MlDatasets()` against /v1/dataset is a generated
 // method that tells its caller the wrong thing about which product it is buying.
 //
 // wire_test.go asserts the same prefix off zip's TYPED registry. This asserts it

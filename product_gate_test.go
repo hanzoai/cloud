@@ -63,7 +63,7 @@ var unextracted = []string{
 	"help", "index", "integrations", "k8s", "knowledge", "label",
 	"leaderboard", "legal", "link", "lsp", "marketplace", "meet", "membership",
 	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
-	"product", "projects", "prompts", "provisioning", "reference",
+	"projects", "prompts", "provisioning", "reference",
 	"referrals", "registry", "risk", "rollingcap", "s3admin",
 	"samples", "sandbox", "sbom", "search", "security",
 	// seo is the search-visibility surface: a typed proxy onto a measurement

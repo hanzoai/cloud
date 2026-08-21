@@ -12,12 +12,12 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// usage.go mounts the ACCOUNT-USAGE surface under /v1/links/usage — the three views
+// usage.go mounts the ACCOUNT-USAGE surface under /v1/link/usage — the three views
 // a developer who connected their own AI accounts asks for:
 //
-//	POST /v1/links/usage          report samples (the collector) -> {accepted, links}
-//	GET  /v1/links/usage          ONE provider account's own dash -> {current, windows}
-//	GET  /v1/links/usage/summary  the GLOBAL view: every account + Hanzo-routed
+//	POST /v1/link/usage          report samples (the collector) -> {accepted, links}
+//	GET  /v1/link/usage          ONE provider account's own dash -> {current, windows}
+//	GET  /v1/link/usage/summary  the GLOBAL view: every account + Hanzo-routed
 //
 // The third view is the point of the plane: "my Claude Max plan" and "what I spend
 // through Hanzo" on one board. They come from different ledgers with different

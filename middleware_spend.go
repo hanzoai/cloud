@@ -206,7 +206,7 @@ const (
 // The cure paths are RELATIVE and same-origin, deliberately: a hard-coded
 // cloud.hanzo.ai would brand a Lux / Zoo / Pars deployment as Hanzo, and this binary
 // white-labels by host. They point at the two API surfaces the shell already reads and
-// that Reachable guarantees are never gated — /v1/plans (what to buy, with prices) and
+// that Reachable guarantees are never gated — /v1/plan (what to buy, with prices) and
 // /v1/billing (where to pay, subscribe or top up).
 type Refusal struct {
 	Error   string `json:"error"`             // stable machine code: always "payment_required"
@@ -227,7 +227,7 @@ type Cure struct {
 // the order to offer them (a subscription is the steady state; prepay is the
 // no-commitment path).
 var cures = []Cure{
-	{Kind: "subscribe", URL: "/v1/plans"},
+	{Kind: "subscribe", URL: "/v1/plan"},
 	{Kind: "credit", URL: "/v1/billing"},
 }
 

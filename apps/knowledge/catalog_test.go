@@ -14,7 +14,7 @@ import (
 // from one list and does not care which is Go and which is JS.
 func TestCatalog_ListsNativeAndPiece(t *testing.T) {
 	app := mountKB(t)
-	code, body := req(t, app, http.MethodGet, "/v1/kb/connectors/catalog", "acme", nil)
+	code, body := req(t, app, http.MethodGet, "/v1/knowledge/connectors/catalog", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("catalog: %d %s", code, body)
 	}
@@ -51,7 +51,7 @@ func TestCatalog_ListsNativeAndPiece(t *testing.T) {
 // principal (no X-User-Id) — an anonymous caller gets 403, not the catalog.
 func TestCatalog_RequiresPrincipal(t *testing.T) {
 	app := mountKB(t)
-	hr := httptest.NewRequest(http.MethodGet, "/v1/kb/connectors/catalog", strings.NewReader(""))
+	hr := httptest.NewRequest(http.MethodGet, "/v1/knowledge/connectors/catalog", strings.NewReader(""))
 	hr.Header.Set("X-Org-Id", "acme") // forged org, no principal (no X-User-Id)
 	resp, err := app.Test(hr)
 	if err != nil {

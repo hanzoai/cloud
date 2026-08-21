@@ -8,7 +8,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 )
 
-// graph.go serves GET /v1/kb/graph: the org's knowledge as a node/edge graph shaped
+// graph.go serves GET /v1/knowledge/graph: the org's knowledge as a node/edge graph shaped
 // for a force-directed renderer. Nodes are kb-page / kb-memory / kb-source
 // documents (plus the connector and dangling-link endpoints edges reach); edges are
 // the parent tree (kb-page.parent), the wikilinks (kb-link edges resolved to a page

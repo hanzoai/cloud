@@ -243,7 +243,7 @@ func served(t *testing.T, path string) []string {
 //
 // The second half asks the FLEET's routing table which health address belongs to
 // this app rather than assuming /v1/<name>/health, because two apps are not
-// named for the surface they serve: plan answers /v1/plans and storage answers
+// named for the surface they serve: plan answers /v1/plan and storage answers
 // /v1/s3. Assuming the convention would report both as broken when both are
 // correct.
 func TestHealthOwnershipMatchesWhatIsRegistered(t *testing.T) {

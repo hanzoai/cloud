@@ -12,7 +12,7 @@ import (
 )
 
 // reqRaw posts a raw body (an export archive/file) with a validated principal, the
-// contract POST /v1/kb/import accepts alongside multipart.
+// contract POST /v1/knowledge/import accepts alongside multipart.
 func reqRaw(t *testing.T, app *zip.App, path, org string, body []byte) (int, []byte) {
 	t.Helper()
 	hr := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
@@ -77,7 +77,7 @@ const (
 	runID = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
-// TestImport_AllFormats drives POST /v1/kb/import end-to-end for every format and
+// TestImport_AllFormats drives POST /v1/knowledge/import end-to-end for every format and
 // asserts the pages land AND the link structure survives into the graph — the
 // SAME after_save hook that indexes a page extracts its wikilinks, so the importer
 // needs no link path of its own.
@@ -93,7 +93,7 @@ func TestImport_AllFormats(t *testing.T) {
 			"Q3 Roadmap.md":              "# Q3 Roadmap\n\nSee the [[Incident Runbook]].\n",
 			"people/Incident Runbook.md": "# Incident Runbook\n\nSteps here.\n",
 		})
-		n := doImport(t, app, "/v1/kb/import?format=obsidian", org, zipData)
+		n := doImport(t, app, "/v1/knowledge/import?format=obsidian", org, zipData)
 		if n != 2 {
 			t.Fatalf("obsidian imported %d, want 2", n)
 		}
@@ -115,7 +115,7 @@ func TestImport_AllFormats(t *testing.T) {
 			parent: "# Engineering\n\nStart with the [Runbook](Engineering%20" + engID + "/Runbook%20" + runID + ".md).\n",
 			child:  "# Runbook\n\nBack to [Engineering](../Engineering%20" + engID + ".md).\n",
 		})
-		n := doImport(t, app, "/v1/kb/import?format=notion", org, zipData)
+		n := doImport(t, app, "/v1/knowledge/import?format=notion", org, zipData)
 		if n != 2 {
 			t.Fatalf("notion imported %d, want 2", n)
 		}
@@ -136,7 +136,7 @@ func TestImport_AllFormats(t *testing.T) {
 		org := "roam"
 		installKB(t, app, org)
 		body := []byte(`[{"title":"Project Atlas","children":[{"string":"needs [[Design System]]"}]},{"title":"Design System","children":[{"string":"tokens"}]}]`)
-		n := doImport(t, app, "/v1/kb/import?format=roam", org, body)
+		n := doImport(t, app, "/v1/knowledge/import?format=roam", org, body)
 		if n != 2 {
 			t.Fatalf("roam imported %d, want 2", n)
 		}
@@ -150,7 +150,7 @@ func TestImport_AllFormats(t *testing.T) {
 		org := "ever"
 		installKB(t, app, org)
 		body := []byte(`<?xml version="1.0"?><en-export><note><title>Meeting</title><content><![CDATA[<en-note><div>Discussed [[Roadmap]]</div></en-note>]]></content></note></en-export>`)
-		n := doImport(t, app, "/v1/kb/import?format=evernote", org, body)
+		n := doImport(t, app, "/v1/knowledge/import?format=evernote", org, body)
 		if n != 1 {
 			t.Fatalf("evernote imported %d, want 1", n)
 		}
@@ -168,7 +168,7 @@ func TestImport_AllFormats(t *testing.T) {
 		org := "scoped"
 		installKB(t, app, org)
 		zipData := makeZip(t, map[string]string{"Note.md": "# Note\n\nbody\n"})
-		n := doImport(t, app, "/v1/kb/import?format=obsidian&project=teamx", org, zipData)
+		n := doImport(t, app, "/v1/knowledge/import?format=obsidian&project=teamx", org, zipData)
 		if n != 1 {
 			t.Fatalf("scoped import %d, want 1", n)
 		}
@@ -188,7 +188,7 @@ func TestImport_AllFormats(t *testing.T) {
 	t.Run("unknown format", func(t *testing.T) {
 		org := "bad"
 		installKB(t, app, org)
-		code, _ := reqRaw(t, app, "/v1/kb/import?format=bogus", org, []byte("x"))
+		code, _ := reqRaw(t, app, "/v1/knowledge/import?format=bogus", org, []byte("x"))
 		if code != http.StatusBadRequest {
 			t.Fatalf("unknown format must be 400, got %d", code)
 		}

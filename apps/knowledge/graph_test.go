@@ -85,7 +85,7 @@ type graphResp struct {
 }
 
 // TestGraphEndpoint_EndToEnd drives the REAL HTTP surface: creating pages fires the
-// after_save hook that extracts wikilinks into kb-link edges, and GET /v1/kb/graph
+// after_save hook that extracts wikilinks into kb-link edges, and GET /v1/knowledge/graph
 // returns the resolved graph. Cross-org isolation is asserted too.
 func TestGraphEndpoint_EndToEnd(t *testing.T) {
 	fv := newFakeVector(t)
@@ -109,7 +109,7 @@ func TestGraphEndpoint_EndToEnd(t *testing.T) {
 		t.Fatalf("create runbook: %d %s", code, b)
 	}
 
-	code, b := req(t, app, http.MethodGet, "/v1/kb/graph", "A", nil)
+	code, b := req(t, app, http.MethodGet, "/v1/knowledge/graph", "A", nil)
 	if code != http.StatusOK {
 		t.Fatalf("graph: %d %s", code, b)
 	}
@@ -152,7 +152,7 @@ func TestGraphEndpoint_EndToEnd(t *testing.T) {
 	if code, b := req(t, app, http.MethodPost, "/v1/framework/modules/kb/install", "B", nil); code != http.StatusOK {
 		t.Fatalf("install B: %d %s", code, b)
 	}
-	code, b = req(t, app, http.MethodGet, "/v1/kb/graph", "B", nil)
+	code, b = req(t, app, http.MethodGet, "/v1/knowledge/graph", "B", nil)
 	if code != http.StatusOK {
 		t.Fatalf("graph B: %d %s", code, b)
 	}
@@ -170,7 +170,7 @@ func TestGraphRefusesWithoutPrincipal(t *testing.T) {
 	resetIndexer(t, fv.server.URL)
 	app := mountKB(t)
 
-	hr := httptest.NewRequest(http.MethodGet, "/v1/kb/graph", nil)
+	hr := httptest.NewRequest(http.MethodGet, "/v1/knowledge/graph", nil)
 	hr.Header.Set("X-Org-Id", "victim") // forged org, no validated principal
 	resp, err := app.Test(hr)
 	if err != nil {

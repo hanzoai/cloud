@@ -17,17 +17,17 @@
   ],
   "tags": [
     {
-      "name": "links"
+      "name": "link"
     }
   ],
   "paths": {
-    "/v1/links": {
+    "/v1/link": {
       "get": {
-        "operationId": "get_links",
+        "operationId": "get_link",
         "summary": "Lists your linked accounts and the devices they sit on.",
         "description": "Lists your linked accounts and the devices they sit on.\n\nIt answers the caller's own links plus a devices projection of the same rows\nfolded per machine — the cross-machine \"AI Providers / Accounts\" view. A\ndevice is a projection, not a stored entity: its labels come from its\nmost-recently-seen account, so there is no device to create and none to\ngarbage-collect. Revoked links are INCLUDED rather than dropped, because a\nlogged-out account keeps its usage history and audit trail. Scoped to the\ncaller: a validated principal and a non-empty org, else 403.",
         "tags": [
-          "links"
+          "link"
         ],
         "responses": {
           "200": {
@@ -45,11 +45,11 @@
         "x-tool": true
       },
       "post": {
-        "operationId": "post_links",
+        "operationId": "post_link",
         "summary": "Registers a signed-in AI provider account on a machine.",
         "description": "Registers a signed-in AI provider account on a machine.\n\nIt records that a developer has signed into one provider account on one\nmachine — a Claude Max or ChatGPT Plus subscription, a Hanzo key, a raw\nprovider key — and answers 201 with the stored link. Re-reporting the same\n(machine, provider, account) UPDATES that link rather than creating a second,\nso a collector may call this on every heartbeat. machine and provider are\nrequired (400 otherwise), as is a valid kind, and every field is\nlength-bounded. Scoped to the caller: a validated principal and a non-empty\norg, else 403, so a caller writes only their OWN accounts within their own org.",
         "tags": [
-          "links"
+          "link"
         ],
         "requestBody": {
           "content": {
@@ -77,13 +77,13 @@
         "x-tool": true
       }
     },
-    "/v1/links/devices/{machine}": {
+    "/v1/link/devices/{machine}": {
       "get": {
-        "operationId": "get_links_devices_by_machine",
+        "operationId": "get_link_devices_by_machine",
         "summary": "Shows one machine: its accounts, usage and live sessions.",
         "description": "Shows one machine: its accounts, usage and live sessions.\n\nIt answers one device — its host and OS labels, every account the caller has\nsigned in on that machine with its latest usage, and how many agent sessions\nthe caller currently has running on it. The device labels come from the\nmost-recently-seen account, since a device is a projection of its links rather\nthan a row of its own. A machine with none of the caller's accounts is 404,\nwhich is also the answer when the machine belongs to someone else — the scope\nmakes the two indistinguishable, deliberately. The session count reports 0\nwhere the agent plane is not mounted rather than failing the read.",
         "tags": [
-          "links"
+          "link"
         ],
         "parameters": [
           {
@@ -112,13 +112,13 @@
         "x-tool": true
       }
     },
-    "/v1/links/devices/{machine}/revoke": {
+    "/v1/link/devices/{machine}/revoke": {
       "post": {
-        "operationId": "post_links_devices_by_machine_revoke",
+        "operationId": "post_link_devices_by_machine_revoke",
         "summary": "Logs out every account on one machine and stops its sessions.",
         "description": "Logs out every account on one machine and stops its sessions.\n\nIt revokes every one of the caller's accounts on one machine and stops the\nagent sessions they were running, answering with how many of each. This is the\n\"I lost that laptop\" button. Revoked links are RETAINED, not deleted, so usage\nhistory and the audit trail survive a log-out — the rows come back in the\nresponse with their new status. The session stop reaches only the REVOKING\nuser's own sessions, so a shared machine name can never be used to stop a\nco-tenant's work, and a stop that fails does not fail the revoke: the revoked\nrow is the durable truth and the count then honestly reports fewer. A machine\nwith nothing left to revoke is 404.",
         "tags": [
-          "links"
+          "link"
         ],
         "parameters": [
           {
@@ -147,13 +147,13 @@
         "x-tool": true
       }
     },
-    "/v1/links/route": {
+    "/v1/link/route": {
       "get": {
-        "operationId": "get_links_route",
+        "operationId": "get_link_route",
         "summary": "Gets the failover order across your linked accounts.",
         "description": "Gets the failover order across your linked accounts.\n\nIt answers an ordered redundancy plan over the caller's LINKED (not revoked)\naccounts: each candidate with its remaining rate-limit headroom, whether it is\nroutable right now, how it BILLS (plan or commerce), and a reason when it is\nnot — plus the primary to try first. It is what lets a router fail over from\none subscription to another and fall back to the metered API as the\nalways-available backstop, knowing the cost consequence before it dials.\n\nIt is POLICY, not execution: the plan is computed purely from the usage\nsnapshots already in the registry, never by probing a provider, so it is a\ntotal function of the links and costs nothing to ask for. Actually dialing,\ndetecting a live 429 and advancing to the next candidate belongs to the\ncaller. A link with no snapshot counts as full headroom.",
         "tags": [
-          "links"
+          "link"
         ],
         "responses": {
           "200": {
@@ -171,13 +171,13 @@
         "x-tool": true
       }
     },
-    "/v1/links/usage": {
+    "/v1/link/usage": {
       "get": {
-        "operationId": "get_links_usage",
+        "operationId": "get_link_usage",
         "summary": "Shows one provider account's own usage dashboard.",
         "description": "Shows one provider account's own usage dashboard.\n\nIt answers the time series for a SINGLE provider account — the windows in\nrange plus the currently-open ones — as that provider's own meter reported it:\n\"my plan is 47% through its 6h window, resets at 14:20\". current is the newest\ninstance of each lane (the headline); windows is the history behind it, both\ncomputed from ONE deduped read. provider is required; an unknown window class\nor range is 400, never a quiet fallback to a different one. When no series is\navailable the response is a 200 with available:false and empty lists — an\nhonest \"we have no data\", which is a different claim from zero usage.",
         "tags": [
-          "links"
+          "link"
         ],
         "parameters": [
           {
@@ -233,11 +233,11 @@
         "x-tool": true
       },
       "post": {
-        "operationId": "post_links_usage",
+        "operationId": "post_link_usage",
         "summary": "Reports usage samples from the device collector.",
         "description": "Reports usage samples from the device collector.\n\nIt ingests a batch of usage samples and answers with how many were accepted,\nwhether history was durably stored, and the links they refreshed. A report\nalso REFRESHES one link per distinct (machine, provider, account) it names, so\na running collector keeps the accounts overview current without a separate\nregistration call.\n\nA caller can only ever report for THEMSELVES: org and subject come from the\nvalidated bearer, never from the body, so no sample can be attributed to\nanother user or tenant. History is FAIL-SOFT and stored says which happened —\na warehouse outage still accepts the report and refreshes the links rather\nthan failing the device, and answers 202 either way. Send either one sample\ninline or up to 256 in samples; an empty batch or an over-long one is 400, as\nis a provider, window class or kind outside the closed vocabulary — an\nunrecognized window is refused rather than rewritten, because a silently\nreclassified sample would fill a dashboard with a class nobody reported.",
         "tags": [
-          "links"
+          "link"
         ],
         "requestBody": {
           "content": {
@@ -265,13 +265,13 @@
         "x-tool": true
       }
     },
-    "/v1/links/usage/accounts": {
+    "/v1/link/usage/accounts": {
       "get": {
-        "operationId": "get_links_usage_accounts",
+        "operationId": "get_link_usage_accounts",
         "summary": "Breaks down what the gateway routed through each of your accounts.",
         "description": "Breaks down what the gateway routed through each of your accounts.\n\nIt answers one row per linked account the GATEWAY actually routed through,\nplus their total — requests, prompt and completion tokens, and cost. This is\nthe routed ledger, the read twin of the counter the router writes, and it is\ndistinct from both of its neighbours: not the device collector's plan\nsnapshots, and not the org money ledger. The source and scope fields on the\nresponse say so on every payload. The same shape answers in the billing\nnamespace, from one shaping function, so the two mounts cannot drift.",
         "tags": [
-          "links"
+          "link"
         ],
         "responses": {
           "200": {
@@ -289,13 +289,13 @@
         "x-tool": true
       }
     },
-    "/v1/links/usage/summary": {
+    "/v1/link/usage/summary": {
       "get": {
-        "operationId": "get_links_usage_summary",
+        "operationId": "get_link_usage_summary",
         "summary": "Shows plan consumption and Hanzo spend side by side.",
         "description": "Shows plan consumption and Hanzo spend side by side.\n\nIt answers the global usage board over one window: the caller's own linked\naccounts, metered from each provider's own login, alongside their org's\nHanzo-routed inference. These come from different ledgers and mean different\nthings, so every row is LABELLED by source, by scope and by availability, and\nTHE TWO ARE NEVER SUMMED — a plan's percentage is not money, and a provider's\nown spend is not a Hanzo charge. The rows sit side by side and say what they\nare.\n\nOne resolver fixes the window for both halves, so the two sets always cover\nthe same period. range is one of 1h, 24h, 7d or 30d and defaults to 24h;\nanything else is 400 rather than a silent substitution. A ledger that cannot\nanswer reports available:false instead of a zero that would read as \"no usage\".",
         "tags": [
-          "links"
+          "link"
         ],
         "parameters": [
           {
@@ -324,13 +324,13 @@
         "x-tool": true
       }
     },
-    "/v1/links/{id}": {
+    "/v1/link/{id}": {
       "delete": {
-        "operationId": "delete_links_by_id",
+        "operationId": "delete_link_by_id",
         "summary": "Logs out one account and stops the sessions it was running.",
         "description": "Logs out one account and stops the sessions it was running.\n\nIt revokes a single linked account and stops the agent sessions that ran under\nit, answering with the revoked row and how many sessions stopped. The link is\nRETAINED with a revoked status rather than deleted, so its usage history and\nthe audit trail survive the log-out — which also means a revoked account still\nappears in the list, and is excluded from the route plan rather than absent\nfrom it. The session stop is narrowed to the revoking user's own sessions on\nthat device, provider and account, and a stop that fails does not fail the\nrevoke: the revoked row is the durable truth. An id that does not exist, or\nbelongs to another user or org, is the same 404.",
         "tags": [
-          "links"
+          "link"
         ],
         "parameters": [
           {
@@ -359,11 +359,11 @@
         "x-tool": true
       },
       "get": {
-        "operationId": "get_links_by_id",
+        "operationId": "get_link_by_id",
         "summary": "Reads one linked account.",
         "description": "Reads one linked account.\n\nIt answers a single link — its device, provider, account, plan, how it bills,\nits status and its latest usage snapshot. An id that does not exist, or\nbelongs to another user or org, is the same 404: the scope is a bound\npredicate on the read, so a wrong id and a foreign id are indistinguishable\nand neither confirms the other's existence. The static paths on this\ncollection — route, usage, devices — register before this one and win\nfirst-match, so a link whose id collided with one of those words could not be\naddressed here.",
         "tags": [
-          "links"
+          "link"
         ],
         "parameters": [
           {

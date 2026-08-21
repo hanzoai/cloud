@@ -14,10 +14,10 @@
 // a second prefix would be two implementations of one noun, which is the exact
 // sprawl this move exists to end. web3 owns only what nothing else does:
 //
-//	GET  /v1/chains          the chains this deployment can reach
-//	GET  /v1/chains/:chain   one chain, with liveness
-//	POST /v1/rpc/:chain      JSON-RPC, proxied to that chain
-//	GET  /v1/tokens/:chain/:address    native + ERC-20 balances for an address
+//	GET  /v1/web3/chains          the chains this deployment can reach
+//	GET  /v1/web3/chains/:chain   one chain, with liveness
+//	POST /v1/web3/rpc/:chain      JSON-RPC, proxied to that chain
+//	GET  /v1/web3/tokens/:chain/:address    native + ERC-20 balances for an address
 //
 // NFTs are not here. They need an indexer to answer at all — ownership and
 // metadata are not one eth_call — and explorer already owns the indexer
@@ -26,7 +26,7 @@
 //
 // THE REGISTRY IS DECLARED, NEVER GUESSED. Chains come from WEB3_CHAINS, a JSON
 // object of id -> {name, chainId, rpc}. A deployment with none configured
-// serves an empty list and refuses /v1/rpc with 404 — it does not fall back to
+// serves an empty list and refuses /v1/web3/rpc with 404 — it does not fall back to
 // a public endpoint, because a silent fallback means someone's traffic quietly
 // leaves the estate.
 //
@@ -57,7 +57,7 @@ const envChains = "WEB3_CHAINS"
 
 // Chain is one reachable chain. RPC is never serialized: it is the deployment's
 // upstream, frequently carrying a provider key in the path, and this struct is
-// what /v1/chains returns to a browser.
+// what /v1/web3/chains returns to a browser.
 type Chain struct {
 	// ID is the URL name: the value of :chain.
 	ID string `json:"id"`
@@ -148,10 +148,10 @@ func parseChains(raw string) (map[string]Chain, error) {
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 	zapp := cloud.ZipApp(app)
-	zip.Get(zapp, "/v1/chains", o.listChains)
-	zip.Get(zapp, "/v1/chains/:chain", o.getChain)
-	zip.Post(zapp, "/v1/rpc/:chain", o.rpc)
-	zip.Get(zapp, "/v1/tokens/:chain/:address", o.tokens)
+	zip.Get(zapp, "/v1/web3/chains", o.listChains)
+	zip.Get(zapp, "/v1/web3/chains/:chain", o.getChain)
+	zip.Post(zapp, "/v1/web3/rpc/:chain", o.rpc)
+	zip.Get(zapp, "/v1/web3/tokens/:chain/:address", o.tokens)
 }
 
 // ops is the receiver the chain ops hang off. A method value is the only bound
@@ -183,7 +183,7 @@ func (o ops) resolve(id string) (Chain, error) {
 
 // chainRef addresses one chain.
 type chainRef struct {
-	// Chain is the registry id, as in /v1/chains/lux.
+	// Chain is the registry id, as in /v1/web3/chains/lux.
 	Chain string `json:"chain"`
 }
 
@@ -195,7 +195,7 @@ type chainList struct {
 }
 
 // ListChains reports the chains this deployment can reach. The list is the
-// declared registry, so it is exactly what /v1/rpc will accept — a chain that
+// declared registry, so it is exactly what /v1/web3/rpc will accept — a chain that
 // appears here is one this deployment actually has an upstream for.
 func (o ops) listChains(ctx context.Context, _ *noInput) (*chainList, error) {
 	if err := gate(ctx); err != nil {
