@@ -195,9 +195,19 @@ func Shutdown(_ context.Context) error {
 // public listing's shop metadata + whether the caller has it installed (activated).
 type marketItem struct {
 	tools.Tool
-	Title     string `json:"title,omitempty"`
-	Category  string `json:"category,omitempty"`
-	Installed bool   `json:"installed"`
+	// Title is the shop-window name, painted over the registry Name from the
+	// CHEAPEST public listing for this tool — several orgs may list the same one,
+	// and the row shown is the one a buyer would pay. Absent when no org has listed
+	// the tool publicly: that row is a plain capability, not an offer.
+	Title string `json:"title,omitempty"`
+	// Category is that same listing's grouping. Free text chosen by the publisher,
+	// absent when there is no public listing or the publisher left it blank.
+	Category string `json:"category,omitempty"`
+	// Installed is whether the tool is activated for THIS caller's (org, project):
+	// the same bit as Activated, under the shop's name for it, which install and
+	// uninstall are the writes for. It is per caller, so one listing reads
+	// installed for one org and not for another.
+	Installed bool `json:"installed"`
 }
 
 // marketCatalog is one discovery read.
