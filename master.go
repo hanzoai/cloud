@@ -30,12 +30,32 @@ import (
 	"strings"
 	"sync"
 
+	"context"
 	"github.com/hanzoai/cek"
+	"github.com/luxfi/kms/pkg/store/mpcrek"
+	"time"
 )
 
 // MasterEnv carries the base64 32-byte data-plane master. It is NOT scrubbed:
 // inheritance is how a child process is given the key.
+//
+// It is also the weakest way to hold a root. A key in the environment is a key in
+// a Secret, so whatever reads Secrets — a cloud API token, a shell in the pod, a
+// snapshot of the volume — holds the one value that opens every store. Sealing
+// under a root that sits beside the ciphertext protects nothing from the reader
+// who has both.
 const MasterEnv = "CLOUD_KMS_MASTER_KEY_REF"
+
+// The ring. It holds shares: no single holder can produce the root, and the
+// sealed form travels as ordinary configuration because ciphertext is safe to
+// leave lying about. When these are set the ring is the only source — there is no
+// falling back to the environment, because a root that can be reached the weak way
+// is only ever as strong as the weak way.
+const (
+	RingEndpointEnv = "CLOUD_KMS_MPC_ENDPOINT"
+	RingSealedEnv   = "CLOUD_KMS_MPC_SEALED_B64"
+	RingKeyIDEnv    = "CLOUD_KMS_MPC_KEY_ID"
+)
 
 var (
 	masterOnce sync.Once
@@ -68,6 +88,22 @@ func MasterErr() error { return masterErr }
 func MasterFrom() string { return masterFrom }
 
 func resolveMaster(dataDir string) error {
+	if endpoint := strings.TrimSpace(os.Getenv(RingEndpointEnv)); endpoint != "" {
+		k, err := ringMaster(endpoint)
+		if err != nil {
+			// Fail closed. A deployment that asked for the ring and did not get it
+			// must not come up on a key the pod could read — that is the weakness
+			// the ring was chosen to remove, and reaching for it here would make
+			// the choice cosmetic.
+			return err
+		}
+		if err := cek.SetMaster(k); err != nil {
+			return fmt.Errorf("master: %w", err)
+		}
+		master, masterFrom = k, "ring"
+		return nil
+	}
+
 	if k, ok := decodeMaster(os.Getenv(MasterEnv)); ok {
 		if err := cek.SetMaster(k); err != nil {
 			return fmt.Errorf("master: %w", err)
@@ -128,4 +164,35 @@ func decodeMaster(s string) ([]byte, bool) {
 		return nil, false
 	}
 	return k, true
+}
+
+// ringMaster opens the sealed root with a quorum of the ring. The endpoint and
+// the ciphertext are ordinary configuration; the shares are not, and no share
+// lives here.
+func ringMaster(endpoint string) ([]byte, error) {
+	if raw := strings.TrimSpace(os.Getenv(MasterEnv)); raw != "" {
+		return nil, fmt.Errorf("master: %s and %s are both set — a root reachable from the environment is only as strong as the environment, so the ring is not a second opinion; unset %s",
+			RingEndpointEnv, MasterEnv, MasterEnv)
+	}
+	sealedB64 := strings.TrimSpace(os.Getenv(RingSealedEnv))
+	if sealedB64 == "" {
+		return nil, fmt.Errorf("master: %s is set but %s is not — the ring holds shares, not ciphertexts", RingEndpointEnv, RingSealedEnv)
+	}
+	sealed, err := base64.StdEncoding.DecodeString(sealedB64)
+	if err != nil {
+		return nil, fmt.Errorf("master: %s is not base64: %w", RingSealedEnv, err)
+	}
+	keyID := strings.TrimSpace(os.Getenv(RingKeyIDEnv))
+	if keyID == "" {
+		keyID = "kms/rek/v1"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return mpcrek.Bootstrap(ctx, mpcrek.Config{
+		Endpoint: endpoint,
+		KeyID:    keyID,
+		NodeID:   "cloud-rek-bootstrap",
+		Timeout:  10 * time.Second,
+		Sealed:   sealed,
+	})
 }
