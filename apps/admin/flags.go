@@ -41,9 +41,14 @@ func flagsBoard(ctx context.Context, _ *core.None) (*flagsOut, error) {
 // flagsOut is the envelope of both flag ops: the read board, and the board as it stands
 // AFTER a write — so a caller sees the effect of its own flip without a second read.
 type flagsOut struct {
-	Status string           `json:"status"`
-	Msg    string           `json:"msg"`
-	Data   *flags.BoardView `json:"data"`
+	// Status is "ok" or "error", at HTTP 200 either way.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error", empty otherwise.
+	Msg string `json:"msg"`
+	// Data is the whole control-plane board — after the write, on a write, so a
+	// caller sees the effect of its own flip without a second read. Null when the
+	// op failed.
+	Data *flags.BoardView `json:"data"`
 }
 
 // setFlagIn is the PUT /v1/admin/flags/:key input: the switch from the path, its

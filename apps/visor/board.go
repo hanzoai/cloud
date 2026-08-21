@@ -47,22 +47,45 @@ import (
 // the same way. Full per-accelerator detail stays on each source's own face
 // (/v1/agents/targets, /v1/visor/fleet/workers); the board summarizes.
 type fleetSpec struct {
-	OS       string `json:"os,omitempty"`
-	Arch     string `json:"arch,omitempty"`
-	CPUs     int    `json:"cpus,omitempty"`
-	Memory   int64  `json:"memory,omitempty"`
-	GPUs     int    `json:"gpus,omitempty"`
+	// OS is the operating system the unit runs: linux, darwin or windows. Empty
+	// when the source does not report one — a cluster row does not.
+	OS string `json:"os,omitempty"`
+	// Arch is the CPU architecture, amd64 or arm64, and it is what decides whether
+	// a binary built for the fleet will run here. Only the sources that report one
+	// carry it (a linked run-target, a BYO worker).
+	Arch string `json:"arch,omitempty"`
+	// CPUs is logical cores on the unit.
+	CPUs int `json:"cpus,omitempty"`
+	// Memory is total system RAM in BYTES — not GB, and not what is free right now
+	// (fleetMetrics carries that). Absent when the source reports no RAM figure.
+	Memory int64 `json:"memory,omitempty"`
+	// GPUs is how many accelerators the unit has. For a cluster it is the vendor
+	// totals summed across every node, so it counts cards, not machines.
+	GPUs int `json:"gpus,omitempty"`
+	// GPUModel names the FIRST accelerator ("NVIDIA GB10") as the representative of
+	// the set; GPUs carries how many. Empty for a cluster, whose cards are counted
+	// rather than modelled, and for a unit with none.
 	GPUModel string `json:"gpuModel,omitempty"`
 }
 
 // fleetMetrics is a unit's live utilization. `at` is when it was measured — the
 // console renders staleness from it rather than the board guessing liveness.
 type fleetMetrics struct {
-	Load1   float64 `json:"load1,omitempty"`
-	MemUsed int64   `json:"memUsed,omitempty"`
-	MemFree int64   `json:"memFree,omitempty"`
+	// Load1 is the host's 1-minute load average — runnable processes, not a
+	// percentage, so it is read against the unit's core count and can exceed 1.
+	Load1 float64 `json:"load1,omitempty"`
+	// MemUsed is host memory in use, in BYTES.
+	MemUsed int64 `json:"memUsed,omitempty"`
+	// MemFree is host memory still available, in BYTES. It is what the source
+	// reported, not fleetSpec.Memory minus MemUsed.
+	MemFree int64 `json:"memFree,omitempty"`
+	// GPUUtil is aggregate accelerator utilization as a FRACTION of 1 — 0.42 is
+	// 42% busy, never 42. Across all of the unit's cards, not one of them.
 	GPUUtil float64 `json:"gpuUtil,omitempty"`
-	At      string  `json:"at,omitempty"`
+	// At is when this reading was MEASURED, RFC 3339 in UTC — not when the board
+	// was built. A console decides staleness by comparing it to now; the board
+	// deliberately does not decide that for it.
+	At string `json:"at,omitempty"`
 }
 
 // fleetUnit is one compute unit on the board. (source, unit) is its identity:
@@ -70,41 +93,94 @@ type fleetMetrics struct {
 // owns it. sessions/running are the agent session load — 0 for a source that
 // cannot host agent sessions, which is a fact, not a gap.
 type fleetUnit struct {
-	Source   string        `json:"source"`
-	Unit     string        `json:"unit"`
-	Kind     string        `json:"kind"`
-	Label    string        `json:"label,omitempty"`
-	Host     string        `json:"host,omitempty"`
-	Status   string        `json:"status,omitempty"`
-	Spec     *fleetSpec    `json:"spec,omitempty"`
-	Metrics  *fleetMetrics `json:"metrics,omitempty"`
-	Sessions int           `json:"sessions"`
-	// Running is what the unit is actively executing: agent sessions for a run-target,
-	// in-flight renders for a BYO GPU. Queued is the gpu-jobs backlog on this GPU's
-	// lane (BYO units only; an agent unit does not queue). Both come from the org's
-	// gpu-jobs queue for BYO units, overlaid in listFleet.
+	// Source is the plane this row came from: "agent" (a linked run-target), "byo"
+	// (a worker or cluster the org dialed in) or "visor" (a machine Hanzo
+	// provisioned). It is half the row's identity, and it says which face owns the
+	// unit — /v1/agents/targets, /v1/visor/fleet/workers, /v1/visor/machines.
+	Source string `json:"source"`
+	// Unit is the SOURCE's own id for this unit — a run-target id, a BYO worker id,
+	// a Visor machine name — so a row links straight back to the face that owns it.
+	// It is unique within a source, not across them: two planes may mint the same
+	// id, which is why (source, unit) together is the identity.
+	Unit string `json:"unit"`
+	// Kind is what the unit IS: laptop, cloud, gpu, cluster, machine or worker.
+	Kind string `json:"kind"`
+	// Label is the name to show a human — a target's label, a worker's hostname, a
+	// machine's display name. Empty when the source has none to give.
+	Label string `json:"label,omitempty"`
+	// Host is the unit's hostname. Empty for a unit that is not one host: a cluster
+	// row has no hostname to report.
+	Host string `json:"host,omitempty"`
+	// Status is liveness in the SOURCE's own vocabulary, because each plane decides
+	// it differently: a run-target's is derived from its heartbeat, a BYO worker's
+	// is online/offline on the 90s window, a BYO cluster's is "attached", and a
+	// Visor machine's is the provider's word for its lifecycle state.
+	Status string `json:"status,omitempty"`
+	// Spec is the unit's static capability. Absent when the source reported none —
+	// unknown capability, never a zeroed one.
+	Spec *fleetSpec `json:"spec,omitempty"`
+	// Metrics is the unit's latest utilization: its own live snapshot when it keeps
+	// one (a run-target's heartbeat wins), else the newest sample from the series
+	// for the SAME source. Absent means nothing is known about this unit's load —
+	// which is deliberately not the same as a reading of zero.
+	Metrics *fleetMetrics `json:"metrics,omitempty"`
+	// Sessions is how many agent sessions are open on this unit. Always present,
+	// and 0 for a source that cannot host agent sessions at all — a fact about that
+	// plane, not a gap in the reading.
+	Sessions int `json:"sessions"`
+	// Running is what the unit is executing right now: agent sessions in flight for
+	// a run-target, claimed renders for a BYO GPU.
 	Running int `json:"running"`
-	Queued  int `json:"queued,omitempty"`
+	// Queued is how many renders are waiting on THIS GPU's own lane in the org's
+	// gpu-jobs queue. BYO units only — an agent run-target dispatches, it does not
+	// queue — and omitted when nothing is waiting.
+	Queued int `json:"queued,omitempty"`
 }
 
 // sampleView is one row of the time series on the wire.
 type sampleView struct {
-	Source    string  `json:"source"`
-	Unit      string  `json:"unit"`
-	Kind      string  `json:"kind,omitempty"`
-	Host      string  `json:"host,omitempty"`
-	At        string  `json:"at"`
-	CPUs      int     `json:"cpus,omitempty"`
-	Memory    int64   `json:"memory,omitempty"`
-	MemUsed   int64   `json:"memUsed,omitempty"`
-	MemFree   int64   `json:"memFree,omitempty"`
-	Load1     float64 `json:"load1,omitempty"`
-	Load5     float64 `json:"load5,omitempty"`
-	Load15    float64 `json:"load15,omitempty"`
-	GPUUtil   float64 `json:"gpuUtil,omitempty"`
-	GPUs      int     `json:"gpus,omitempty"`
-	GPUModel  string  `json:"gpuModel,omitempty"`
-	CostCents int64   `json:"costCents,omitempty"`
+	// Source is the plane that reported the reading: "agent", "byo" or "visor" —
+	// the same vocabulary the board's rows carry, and what ?source= narrows on.
+	Source string `json:"source"`
+	// Unit is the source's own id for the measured unit. With Source it is the key
+	// the chart groups by, and the key the board joins a unit's latest reading on.
+	Unit string `json:"unit"`
+	// Kind is what the measured unit is: laptop, cloud, gpu, cluster, machine or
+	// worker.
+	Kind string `json:"kind,omitempty"`
+	// Host is the hostname the unit reported at the time of the reading.
+	Host string `json:"host,omitempty"`
+	// At is when the reading was MEASURED, RFC 3339 in UTC — the x-axis a chart
+	// plots against. The series is returned oldest first, so it only increases.
+	At string `json:"at"`
+	// CPUs is logical cores. The static capability rides every row on purpose: a
+	// chart can size load against cores without joining a registry whose row may
+	// since have been rewritten or the unit deregistered.
+	CPUs int `json:"cpus,omitempty"`
+	// Memory is total system RAM in BYTES at the time of the reading.
+	Memory int64 `json:"memory,omitempty"`
+	// MemUsed is host memory in use, in BYTES.
+	MemUsed int64 `json:"memUsed,omitempty"`
+	// MemFree is host memory available, in BYTES, as reported rather than derived.
+	MemFree int64 `json:"memFree,omitempty"`
+	// Load1 is the 1-minute load average — runnable processes, not a percentage.
+	Load1 float64 `json:"load1,omitempty"`
+	// Load5 is the 5-minute load average, the same units as Load1.
+	Load5 float64 `json:"load5,omitempty"`
+	// Load15 is the 15-minute load average, the same units as Load1.
+	Load15 float64 `json:"load15,omitempty"`
+	// GPUUtil is aggregate accelerator utilization as a FRACTION of 1 — 0.42 is
+	// 42% busy. Anything a reporter sends outside 0..1 is clamped into it on write.
+	GPUUtil float64 `json:"gpuUtil,omitempty"`
+	// GPUs is how many accelerators the reading covers.
+	GPUs int `json:"gpus,omitempty"`
+	// GPUModel names the representative accelerator ("GB10"); GPUs carries how many.
+	GPUModel string `json:"gpuModel,omitempty"`
+	// CostCents is what this unit resold for over the hour the reading falls in, in
+	// whole US cents. 0 means UNPRICED, not free: the operator's own machines — a
+	// linked run-target, a dialed-in BYO worker — are metered for utilization and
+	// never resold, so only a priced source ever fills it.
+	CostCents int64 `json:"costCents,omitempty"`
 }
 
 func toSampleView(s samples.Sample) sampleView {

@@ -576,7 +576,7 @@
             "type": "array"
           },
           "from": {
-            "description": "From and To are the resolved [from, to) window, RFC 3339 UTC.",
+            "description": "From is when the resolved window opens, RFC 3339 UTC.",
             "type": "string"
           },
           "provider": {
@@ -596,6 +596,7 @@
             "type": "string"
           },
           "to": {
+            "description": "To is where it closes, EXCLUSIVE, RFC 3339 UTC — the instant the read was\nserved, so the window walks forward with the clock and two reads a minute\napart do not cover the same period.",
             "type": "string"
           },
           "windows": {
@@ -1069,14 +1070,15 @@
         "properties": {
           "account": {
             "$ref": "#/components/schemas/sourceState",
-            "description": "Account and Hanzo report each ledger's own availability, so a partial\nwarehouse never fabricates the other half."
+            "description": "Account reports the linked-accounts ledger's own availability, so a partial\nanswer never fabricates this half. It is scoped to the CALLER: the accounts\nthey linked, metered from each provider's own login."
           },
           "from": {
-            "description": "From and To are the one [from, to) window BOTH halves resolved, RFC 3339 UTC.",
+            "description": "From is when the window opens, RFC 3339 UTC. ONE resolver fixes it for both\nledgers, so the account rows and the Hanzo rows always cover the same period\n— two resolvers could drift and turn the union into a lie.",
             "type": "string"
           },
           "hanzo": {
-            "$ref": "#/components/schemas/sourceState"
+            "$ref": "#/components/schemas/sourceState",
+            "description": "Hanzo reports the same for the Hanzo-routed ledger, which is scoped to the\nORG rather than the caller — a different question over the same window. The\ntwo are independent: either can be unavailable while the other answers, and\nRows then carries only the half that did."
           },
           "range": {
             "description": "Range is the resolved period label.",
@@ -1090,6 +1092,7 @@
             "type": "array"
           },
           "to": {
+            "description": "To is where the window closes, EXCLUSIVE, RFC 3339 UTC — the instant the read\nwas served. Shared by both ledgers, for the reason From gives.",
             "type": "string"
           }
         },

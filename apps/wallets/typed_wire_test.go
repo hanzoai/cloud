@@ -279,3 +279,86 @@ func TestFailsClosedWithoutAValidatedPrincipal(t *testing.T) {
 func sortedOps(m map[string]bool) string {
 	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }
+
+// proseless is the CLOSED list of published properties carrying NO description
+// because the SEAM they arrive through cannot carry one — not because nobody wrote
+// it. Every field named here HAS its doc comment in the source; the generator
+// cannot reach it from where the schema is built.
+//
+// It is exact in BOTH directions. A bare property anywhere else goes red, and an
+// entry here that starts publishing prose goes red too — that is the day zipdoc
+// learns, and the ledger must shrink then rather than outlive the gap.
+var proseless = map[string]bool{
+	// EMBEDDED STRUCT. Wallet embeds Scope, so zip's schema builder INLINES
+	// Org/Project/Agent/AccountID into the Wallet component (openapi.go wireFields)
+	// while zipdoc files a field's prose under the type that DECLARES it
+	// (internal/zipdoc extract.go structFields). The prose for these four is
+	// written on Scope's own fields and filed as Scope.org, Scope.project,
+	// Scope.agent and Scope.accountId; nothing can key it to the outer name. Both
+	// workarounds cost more than the gap: unrolling the embedding into copies would
+	// duplicate the one type that makes a wallet's key ref and its row addressable
+	// the same way at every layer, and a hand-written schema beside the struct
+	// replaces one true statement with two that can drift.
+	"Wallet.org":       true,
+	"Wallet.project":   true,
+	"Wallet.agent":     true,
+	"Wallet.accountId": true,
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the gates
+// above cannot see. They prove the ADDRESS and the SHAPES reach the document;
+// neither says anything about whether the shapes' FIELDS mean anything to a
+// reader, and those come from a different place — a doc comment on each field,
+// which zipdoc lifts one at a time.
+//
+// It matters here because this surface is key custody, where the unreadable field
+// is the dangerous one. `custody` is a closed vocabulary (kms, mpc, treasury,
+// safe) that decides WHERE the private key lives; `tier` is nine values the ring
+// keys its policy on; `chain` is CAIP-2 or a bare id, and EMPTY means
+// chain-agnostic rather than "no chain". `address` is the sharpest: for a Safe it
+// is a contract that holds no key, and rotating a kms wallet mints a NEW address
+// that funds at the old one do not follow. A caller who learns that from a
+// surprise has already moved money.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(typedApp(t), openapi.Info{Title: "wallets", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("wallets publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
+		}
+	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/wallets describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
+	}
+}

@@ -138,15 +138,19 @@
       "Wire": {
         "properties": {
           "action": {
+            "description": "Action is the verb that was performed. It is the event's name, not the HTTP\nmethod — a request-sourced record carries both, and the pair is what makes a\nrow readable (\"grant.create\" at POST /v1/admin/grants).",
             "type": "string"
           },
           "authMethod": {
+            "description": "Auth is the credential the actor presented: \"jwt\", \"api-key\", or \"none\".",
             "type": "string"
           },
           "email": {
+            "description": "Email is the actor's validated address, absent when the credential carried\nnone. It comes from the verified token, never from a client header.",
             "type": "string"
           },
           "hash": {
+            "description": "Hash is this record's SHA-256 over its own canonical JSON with both hash\nfields cleared, folded with prevHash. Recomputing it from the row's other\nfields is what proves the row has not been edited.",
             "type": "string"
           },
           "home": {
@@ -154,51 +158,67 @@
             "type": "string"
           },
           "isAdmin": {
+            "description": "IsAdmin is the VALIDATED platform-SuperAdmin bit at decision time (membership\nof the reserved admin org), never the client's own claim to be one.",
             "type": "boolean"
           },
           "method": {
+            "description": "Method is the HTTP verb, on a record a request produced. Absent on an event\nemitted from inside the binary with no request behind it.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant the action was taken IN — the effective org, which for\neveryone but an impersonating SuperAdmin is also the actor's own. Empty on an\nunauthenticated request.",
             "type": "string"
           },
           "path": {
+            "description": "Path is the request's route. Any segment shaped like a credential is replaced\nbefore the record is written, so a key that rides in a path is not preserved\nhere by the very control meant to watch it.",
             "type": "string"
           },
           "prevHash": {
+            "description": "PrevHash is the hash of record seq-1, which is what links the rows into a\nchain: a deleted or reordered record breaks the recomputation at that point.\nThe first record of a chain carries 64 zeros rather than an empty string, so\n\"start of chain\" and \"field missing\" cannot look alike.",
             "type": "string"
           },
           "reason": {
+            "description": "Reason is a short explanation for a deny or an error (\"SuperAdmin required\",\n\"insufficient_balance\"). It is never a secret and never a raw upstream error\nbody; absent on a success.",
             "type": "string"
           },
           "requestId": {
+            "description": "RequestID ties this row to the request-line log and any downstream trace — the\nX-Request-Id the pipeline minted for that request.",
             "type": "string"
           },
           "resource": {
+            "description": "Resource is the KIND of thing acted upon (\"org\", \"role\", \"secret\",\n\"provider-config\", \"credit\"). Where a mutation has no finer semantics than its\nroute, this is the route family and resourceId is empty — the action and the\npath already pin the object.",
             "type": "string"
           },
           "resourceId": {
+            "description": "ResourceID is the specific instance, absent when the kind alone identifies it.",
             "type": "string"
           },
           "result": {
+            "description": "Result is how the action ended: \"success\", \"deny\" or \"error\". A deny is a\ndecision this binary made and is as much evidence as a success.",
             "type": "string"
           },
           "seq": {
+            "description": "Seq is the record's position in the chain, 0-based and gapless. The Recorder\nassigns it under its own lock, so it is a true total order: seq n+1 was\nwritten after seq n, and a missing number is a missing record.",
             "type": "integer"
           },
           "sourceIp": {
+            "description": "SourceIP is the client address the edge resolved for the request, after the\nproxy chain — the address a responder would act on, not the socket peer.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the HTTP status the caller received. It is the outcome as the client\nsaw it, so a 200 carrying a domain refusal still reads 200 here.",
             "type": "integer"
           },
           "sub": {
+            "description": "Sub is the acting user (the IAM subject). Empty for a machine principal or an\nanonymous request, which is how a service action is told from a person's.",
             "type": "string"
           },
           "time": {
+            "description": "Time is when the action happened, RFC3339Nano in UTC. The stored column has\nthe same precision and sorts the same way, so a client can range and order on\nthis string verbatim.",
             "type": "string"
           },
           "userAgent": {
+            "description": "UserAgent is the client the request announced itself as. Client-supplied, so\nit is evidence about what claimed to act, not proof of it.",
             "type": "string"
           }
         },

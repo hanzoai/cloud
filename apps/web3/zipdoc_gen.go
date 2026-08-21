@@ -40,11 +40,17 @@ func init() {
 	zip.Describe("POST /v1/web3/rpc/:chain", zip.Doc{
 		Description: "Forwards a JSON-RPC call to the named chain and returns its answer\nunchanged. Only declared chains are reachable, and only to a caller with a\nvalidated principal — this is the deployment's upstream, not an open relay.",
 		Fields: map[string]string{
-			"rpcIn.chain":   "Chain is the registry id, from the URL.",
-			"rpcIn.id":      "ID is echoed back untouched.",
-			"rpcIn.jsonrpc": "JSONRPC must be \"2.0\" when present.",
-			"rpcIn.method":  "Method is the RPC method, e.g. eth_getBalance.",
-			"rpcIn.params":  "Params is the method's parameters, passed through unread.",
+			"rpcError.code":    "Code is the JSON-RPC error code the chain reported, passed through as it\ncame. -32603 (internal error) is the one value this deployment mints\nitself, for an upstream that could not be reached at all.",
+			"rpcError.message": "Message is the chain's own explanation, e.g. \"execution reverted\". It is\n\"upstream unavailable\" when the deployment minted the error rather than the\nchain — that is the one message this side writes.",
+			"rpcIn.chain":      "Chain is the registry id, from the URL.",
+			"rpcIn.id":         "ID is echoed back untouched.",
+			"rpcIn.jsonrpc":    "JSONRPC must be \"2.0\" when present.",
+			"rpcIn.method":     "Method is the RPC method, e.g. eth_getBalance.",
+			"rpcIn.params":     "Params is the method's parameters, passed through unread.",
+			"rpcOut.error":     "Error is the JSON-RPC error object, present instead of Result. Its presence\nis the ONLY way a failure shows up here: the HTTP status stays 200, because\nthat is what a standard JSON-RPC client parses.",
+			"rpcOut.id":        "ID is the request's id, echoed back untouched — any JSON value, because\nJSON-RPC lets the caller choose. A request with no id is sent upstream as 1.",
+			"rpcOut.jsonrpc":   "JSONRPC is always \"2.0\". An upstream that omits it has it filled in, so a\nclient never has to cope with a response that is missing the one field\ntelling it which protocol it is reading.",
+			"rpcOut.result":    "Result is the chain's answer, passed through unread: an eth_getBalance\nresult is a 0x-quantity string, a block is an object. Absent when Error is\npresent — JSON-RPC 2.0 requires exactly one of the two, and this is what the\nchain answered rather than something reassembled here.",
 		},
 	})
 }

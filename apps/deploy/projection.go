@@ -22,112 +22,264 @@ import (
 // ── ArgoCD v1alpha1 JSON (minimal, UI-render-complete) ───────────────────────
 
 type argoListMeta struct {
+	// ResourceVersion is the k8s list version a watch would resume from. Always
+	// empty: every list on this plane is COMPUTED per request rather than read from
+	// one etcd revision, so there is no point to resume from. The live view is the
+	// SSE stream, not a resumed watch.
 	ResourceVersion string `json:"resourceVersion"`
 }
 
 type argoMeta struct {
-	Name              string            `json:"name"`
-	Namespace         string            `json:"namespace"`
-	UID               string            `json:"uid,omitempty"`
-	CreationTimestamp string            `json:"creationTimestamp,omitempty"`
-	Labels            map[string]string `json:"labels,omitempty"`
+	// Name is the projected object's name: the App CR's metadata.name for an
+	// application, the CD Application's name for a CD row, and the IAM project name
+	// for a project.
+	Name string `json:"name"`
+	// Namespace is the namespace the source object was read from — the tenant or
+	// platform namespace for an App CR, CD's controller namespace for a CD row.
+	// Empty for a project synthesized here, which lives in no namespace.
+	Namespace string `json:"namespace"`
+	// UID is the k8s metadata.uid of the source object, which is what the SPA keys
+	// a row on across refreshes. Empty for a synthesized project — there is no
+	// object to take one from.
+	UID string `json:"uid,omitempty"`
+	// CreationTimestamp is when the source object was created, RFC 3339 to the
+	// second. Empty for a synthesized project.
+	CreationTimestamp string `json:"creationTimestamp,omitempty"`
+	// Labels are the labels this projection puts on the row, not the source
+	// object's full label set. An application projected from an App CR carries
+	// hanzo.ai/instance (its name), hanzo.ai/env (main, test or dev, from the
+	// namespace it was read from) and hanzo.ai/org when the CR declares a tenant. A
+	// Hanzo CD Application carries the CR's own labels verbatim. A project
+	// reflected from IAM carries hanzo.ai/org alone.
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 type argoSource struct {
-	RepoURL        string `json:"repoURL"`
-	Path           string `json:"path"`
+	// RepoURL is the git repository the desired state comes from. For an
+	// application projected from an App CR it is the fleet manifest repo and is
+	// DISPLAY ONLY — an App CR pins an image, and nothing is rendered from this
+	// repo to produce it. For a CD row it is the repo CD actually polls.
+	RepoURL string `json:"repoURL"`
+	// Path is the directory within RepoURL. Display-only alongside a display-only
+	// RepoURL; CD's own value for a CD row.
+	Path string `json:"path"`
+	// TargetRevision is the git ref tracked there — a branch such as "main".
+	// Display-only for a projected App CR; the ref CD tracks for a CD row.
 	TargetRevision string `json:"targetRevision"`
 }
 
 type argoDestination struct {
-	Server    string `json:"server"`
+	// Server is the cluster API URL the application reconciles into. Everything
+	// this plane projects lands in the cluster it runs in, so it is
+	// https://kubernetes.default.svc — except on a project's destination fence,
+	// where "*" means any cluster.
+	Server string `json:"server"`
+	// Namespace is where in that cluster the workload lands. "*" on a project's
+	// destination fence means any namespace.
 	Namespace string `json:"namespace"`
 	Name      string `json:"name,omitempty"` // ArgoCD allows a destination by cluster name; omitted for the in-cluster projection.
 }
 
 type argoSpec struct {
-	Source      argoSource      `json:"source"`
+	// Source is where the desired state is declared.
+	Source argoSource `json:"source"`
+	// Destination is which cluster and namespace it lands in. Zero-valued on a CD
+	// row: this projection reports CD's source, not its destination.
 	Destination argoDestination `json:"destination"`
-	Project     string          `json:"project"`
+	// Project is the AppProject this application is grouped and filtered under. For
+	// an App CR it is the app.kubernetes.io/part-of label — the IAM project name —
+	// falling back to "default" when the CR carries no such label.
+	Project string `json:"project"`
 }
 
 type argoHealth struct {
-	Status  string `json:"status"`
+	// Status is the ArgoCD health vocabulary, Capitalized: Healthy, Progressing,
+	// Degraded, Suspended, Missing or Unknown. For an App CR it is derived per
+	// object from what the operator reconciled (a workload with every replica ready
+	// is Healthy, one scaled to zero is Suspended, a crash-looping pod is
+	// Degraded); for a CD row it is the verdict CD wrote.
+	Status string `json:"status"`
+	// Message is why the status is what it is — "Running: no replicas ready",
+	// "iam: CrashLoopBackOff". A Healthy object carries one too ("Running: all
+	// replicas ready"), so this is not a failure signal. Always absent on a CD row,
+	// which reports no health message.
 	Message string `json:"message,omitempty"`
 }
 
 type argoSyncStatus struct {
-	Status   string `json:"status"`
+	// Status is the ArgoCD sync vocabulary, Capitalized: Synced, OutOfSync or
+	// Unknown. For an App CR it compares the tag the CR DECLARES against the tag
+	// the cluster's Deployment is RUNNING — equal is Synced, both known and
+	// different is OutOfSync, either unknown is Unknown. For a CD row it is CD's
+	// own git-versus-cluster verdict.
+	Status string `json:"status"`
+	// Revision is what Status was reached against. For an App CR that is the
+	// declared IMAGE TAG, not a commit — the CR is image-pinned. For a CD row it is
+	// the commit CD last applied.
 	Revision string `json:"revision,omitempty"`
 }
 
 type argoResourceStatus struct {
-	Group     string      `json:"group,omitempty"`
-	Version   string      `json:"version,omitempty"`
-	Kind      string      `json:"kind"`
-	Namespace string      `json:"namespace,omitempty"`
-	Name      string      `json:"name"`
-	Status    string      `json:"status,omitempty"`
-	Health    *argoHealth `json:"health,omitempty"`
+	// Group is the object's API group: empty for the core group (Pod, Service,
+	// ConfigMap), otherwise apps, networking.k8s.io, autoscaling or policy — and
+	// hanzo.ai for the App CR itself.
+	Group string `json:"group,omitempty"`
+	// Version is the object's API version as the live object reports it: v1 for
+	// every kind here except the HorizontalPodAutoscaler, which is autoscaling/v2.
+	Version string `json:"version,omitempty"`
+	// Kind is the object kind — App, Deployment, ReplicaSet, Pod, Service, Ingress,
+	// HorizontalPodAutoscaler, PodDisruptionBudget, ConfigMap. Never Secret: the
+	// walk that produces these does not visit them.
+	Kind string `json:"kind"`
+	// Namespace is the namespace the object was found in — the same one for every
+	// entry of an application, since the walk is confined to it.
+	Namespace string `json:"namespace,omitempty"`
+	// Name is the object's metadata.name.
+	Name string `json:"name"`
+	// Status is the APPLICATION's sync verdict repeated on every row, not a
+	// per-object one. The operator owns these children, so no child has a desired
+	// state of its own to compare against.
+	Status string `json:"status,omitempty"`
+	// Health is this object's own health, derived from its live state by the same
+	// rule the resource tree uses.
+	Health *argoHealth `json:"health,omitempty"`
 }
 
 type argoSummary struct {
+	// Images are the container images the application runs. One entry for an App
+	// CR, built from its spec.image as "repository:tag" — the bare repository when
+	// it declares no tag, and absent when it declares neither. Absent on a CD row,
+	// which tracks commits rather than images.
 	Images []string `json:"images,omitempty"`
 }
 
 type argoStatus struct {
-	Sync         argoSyncStatus       `json:"sync"`
-	Health       argoHealth           `json:"health"`
-	Resources    []argoResourceStatus `json:"resources"`
-	Summary      argoSummary          `json:"summary"`
-	ReconciledAt string               `json:"reconciledAt,omitempty"`
+	// Sync is the declared-versus-running verdict and what it was reached against.
+	Sync argoSyncStatus `json:"sync"`
+	// Health is the application's reconciled health.
+	Health argoHealth `json:"health"`
+	// Resources are the objects the application owns. EMPTY on the list — filling
+	// it would walk the cluster once per row — and populated only by the read of
+	// ONE application, which is what makes that the detail view.
+	Resources []argoResourceStatus `json:"resources"`
+	// Summary is the small aggregate the list column renders: the images.
+	Summary argoSummary `json:"summary"`
+	// ReconciledAt is when the desired state was last compared against the cluster,
+	// RFC 3339. Empty for an App CR — the projection derives its verdict at read
+	// time and nothing records a comparison — and CD's own status.reconciledAt for
+	// a CD row.
+	ReconciledAt string `json:"reconciledAt,omitempty"`
 }
 
 type argoApp struct {
-	APIVersion string     `json:"apiVersion"`
-	Kind       string     `json:"kind"`
-	Metadata   argoMeta   `json:"metadata"`
-	Spec       argoSpec   `json:"spec"`
-	Status     argoStatus `json:"status"`
+	// APIVersion is the constant "argoproj.io/v1alpha1" — the shape, not the source.
+	// These are projections of operator App CRs and Hanzo CD Applications; no
+	// argoproj.io object is stored anywhere behind this plane.
+	APIVersion string `json:"apiVersion"`
+	// Kind is the constant "Application".
+	Kind string `json:"kind"`
+	// Metadata is the projected object's identity.
+	Metadata argoMeta `json:"metadata"`
+	// Spec is the desired state: where it comes from, where it lands, what project
+	// it belongs to.
+	Spec argoSpec `json:"spec"`
+	// Status is what was observed: the sync verdict, the health, and the owned
+	// objects when this is a detail read.
+	Status argoStatus `json:"status"`
 }
 
 type argoAppList struct {
-	APIVersion string       `json:"apiVersion"`
-	Kind       string       `json:"kind"`
-	Metadata   argoListMeta `json:"metadata"`
-	Items      []argoApp    `json:"items"`
+	// APIVersion is the constant "argoproj.io/v1alpha1".
+	APIVersion string `json:"apiVersion"`
+	// Kind is the constant "ApplicationList".
+	Kind string `json:"kind"`
+	// Metadata is the list envelope the SPA expects; it carries no resume point.
+	Metadata argoListMeta `json:"metadata"`
+	// Items is one entry per operator App CR the caller may see — its own org's, or
+	// every platform namespace's for a SuperAdmin — followed, for a SuperAdmin
+	// only, by every Hanzo CD Application in the cluster. Empty (never null) rather
+	// than absent when the caller owns nothing.
+	Items []argoApp `json:"items"`
 }
 
 // ── resource tree (ArgoCD ApplicationTree) ───────────────────────────────────
 
+// argoResourceRef addresses ONE live object in the tree. It is also EMBEDDED in
+// argoNode, so each of these fields is a property of a node too.
 type argoResourceRef struct {
-	Group     string `json:"group,omitempty"`
-	Version   string `json:"version,omitempty"`
-	Kind      string `json:"kind"`
+	// Group is the object's API group: empty for the core group (Pod, Service,
+	// ConfigMap), otherwise apps, networking.k8s.io, autoscaling or policy — and
+	// hanzo.ai for the App CR at the root.
+	Group string `json:"group,omitempty"`
+	// Version is the object's API version as the live object reports it: v1 for
+	// every kind the walk reaches except the HorizontalPodAutoscaler, which is
+	// autoscaling/v2.
+	Version string `json:"version,omitempty"`
+	// Kind is the object kind. The root is the App CR; below it come Deployment,
+	// ReplicaSet, Pod, Service, Ingress, HorizontalPodAutoscaler,
+	// PodDisruptionBudget and ConfigMap. Never Secret — the walk does not visit
+	// them, so no materialized environment can reach the tree.
+	Kind string `json:"kind"`
+	// Namespace is the namespace the walk ran in, the same for every node of one
+	// tree.
 	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
-	UID       string `json:"uid,omitempty"`
+	// Name is the object's metadata.name.
+	Name string `json:"name"`
+	// UID is the object's metadata.uid. Absent on a PARENT reference, which
+	// addresses its target by kind and name rather than by identity.
+	UID string `json:"uid,omitempty"`
 }
 
+// argoInfoItem is one label/value chip the SPA renders on a node.
 type argoInfoItem struct {
-	Name  string `json:"name"`
+	// Name is the chip's label. The only one this projection produces is
+	// "Image Tag".
+	Name string `json:"name"`
+	// Value is the chip's value — for "Image Tag", the tag the node runs.
 	Value string `json:"value"`
 }
 
 type argoNode struct {
 	argoResourceRef
-	ParentRefs      []argoResourceRef `json:"parentRefs,omitempty"`
-	Info            []argoInfoItem    `json:"info,omitempty"`
-	Health          *argoHealth       `json:"health,omitempty"`
-	ResourceVersion string            `json:"resourceVersion,omitempty"`
-	CreatedAt       string            `json:"createdAt,omitempty"`
-	Images          []string          `json:"images,omitempty"`
+	// ParentRefs are the node's edges UPWARD, which is how the SPA draws the DAG
+	// from this flat list. Exactly one entry where present: a depth-1 object points
+	// at the App CR, a ReplicaSet at its Deployment, a Pod at its ReplicaSet (or at
+	// the Deployment whose selector matches it, when the ReplicaSet is gone).
+	// Absent on the root.
+	ParentRefs []argoResourceRef `json:"parentRefs,omitempty"`
+	// Info are the chips shown on the node. At most one: the image tag — the
+	// RUNNING tag on a Deployment, ReplicaSet or Pod, and the DECLARED tag on the
+	// App CR at the root. Absent on a node that carries no image at all.
+	Info []argoInfoItem `json:"info,omitempty"`
+	// Health is the node's own derived health. Always present on a node of this
+	// tree; a kind with no health signal of its own reports Healthy, since a
+	// ConfigMap existing IS its healthy state.
+	Health *argoHealth `json:"health,omitempty"`
+	// ResourceVersion is the k8s version a watch would resume from. Always empty:
+	// the tree is rebuilt from live reads on every request, including on every
+	// frame of the SSE stream, so there is no revision to resume from.
+	ResourceVersion string `json:"resourceVersion,omitempty"`
+	// CreatedAt is the object's creationTimestamp, RFC 3339 UTC to the second.
+	// Absent when the object carries none.
+	CreatedAt string `json:"createdAt,omitempty"`
+	// Images are the container images running on this node. Always absent — the tag
+	// travels as the "Image Tag" chip in Info instead, which is where the SPA reads
+	// it on a node.
+	Images []string `json:"images,omitempty"`
 }
 
 type argoTree struct {
-	Nodes         []argoNode `json:"nodes"`
+	// Nodes is the FLAT node list, root first: the App CR, then the objects the
+	// operator owns, then their ReplicaSets and Pods. The hierarchy is in
+	// ParentRefs, not in the ordering.
+	Nodes []argoNode `json:"nodes"`
+	// OrphanedNodes are objects in the namespace belonging to no application.
+	// Always empty: this walk reaches an object only THROUGH ownership from the App
+	// CR, so it can never hold one that is orphaned.
 	OrphanedNodes []argoNode `json:"orphanedNodes"`
-	Hosts         []any      `json:"hosts"`
+	// Hosts is ArgoCD's per-node machine inventory. Always empty: this plane
+	// projects applications and serves no cluster-node view.
+	Hosts []any `json:"hosts"`
 }
 
 // ── projection ───────────────────────────────────────────────────────────────
@@ -264,17 +416,32 @@ const (
 // argoConnectionState is v1alpha1.ConnectionState — status is what the UI reads;
 // message + attemptedAt are optional and omitted from the projection.
 type argoConnectionState struct {
-	Status      string `json:"status"`
-	Message     string `json:"message,omitempty"`
+	// Status is ArgoCD's ConnectionStatus — Successful, Failed or Unknown. Always
+	// Successful here: the destination is the cluster this process is already
+	// running in, so it is reachable by construction and there is no credential to
+	// probe.
+	Status string `json:"status"`
+	// Message is why a connection failed. Always absent, since none does.
+	Message string `json:"message,omitempty"`
+	// AttemptedAt is when the connection was last probed. Always absent: nothing is
+	// probed, and a fabricated timestamp would claim a check that never ran.
 	AttemptedAt string `json:"attemptedAt,omitempty"`
 }
 
 // argoClusterInfo is v1alpha1.ClusterInfo reduced to the connection + app count
 // the UI's Destination/Clusters view reads. It carries NO credentials.
 type argoClusterInfo struct {
-	ConnectionState   argoConnectionState `json:"connectionState"`
-	ApplicationsCount int                 `json:"applicationsCount"`
-	ServerVersion     string              `json:"serverVersion,omitempty"`
+	// ConnectionState repeats the cluster's own connection state, which is where
+	// ArgoCD's UI reads it from on this object.
+	ConnectionState argoConnectionState `json:"connectionState"`
+	// ApplicationsCount is how many of THE CALLER'S applications reconcile into
+	// this cluster, so a tenant sees its own count and a SuperAdmin the fleet's. It
+	// is zero for the in-cluster destination when the caller owns nothing, since
+	// that destination is listed whether or not anything targets it.
+	ApplicationsCount int `json:"applicationsCount"`
+	// ServerVersion is the kubernetes version of the destination. Always absent:
+	// nothing here queries the API server for it.
+	ServerVersion string `json:"serverVersion,omitempty"`
 }
 
 // argoCluster is v1alpha1.Cluster REDUCED to the projection-safe fields. There is
@@ -282,15 +449,27 @@ type argoClusterInfo struct {
 // surface, so the type physically cannot carry a bearer token, TLS key, or exec
 // provider. server + name + connectionState is what the Destination column reads.
 type argoCluster struct {
-	Server          string              `json:"server"`
-	Name            string              `json:"name"`
+	// Server is the destination's API URL, and the key the list is deduplicated by.
+	// https://kubernetes.default.svc is this cluster.
+	Server string `json:"server"`
+	// Name is what the Destination column shows: "in-cluster" for this cluster,
+	// otherwise whatever spec.destination.name declares, falling back to the server
+	// URL when it declares none.
+	Name string `json:"name"`
+	// ConnectionState is whether the destination is reachable.
 	ConnectionState argoConnectionState `json:"connectionState"`
-	Info            argoClusterInfo     `json:"info"`
+	// Info is the connection state again plus the count of applications targeting
+	// this destination.
+	Info argoClusterInfo `json:"info"`
 }
 
 type argoClusterList struct {
-	Metadata argoListMeta  `json:"metadata"`
-	Items    []argoCluster `json:"items"`
+	// Metadata is the list envelope the SPA expects; it carries no resume point.
+	Metadata argoListMeta `json:"metadata"`
+	// Items is one entry per distinct destination server, in first-seen order with
+	// the in-cluster destination first. Never empty: an empty fleet still has the
+	// one cluster it would deploy into.
+	Items []argoCluster `json:"items"`
 }
 
 // clusterOf is the (server, name) an App CR reconciles into. Operator App CRs
@@ -349,36 +528,64 @@ func projectClusters(crs []unstructured.Unstructured) argoClusterList {
 
 // argoGroupKind is metav1.GroupKind — a clusterResourceWhitelist entry.
 type argoGroupKind struct {
+	// Group is the API group a project admits, "*" for any. Empty names the core
+	// group.
 	Group string `json:"group"`
-	Kind  string `json:"kind"`
+	// Kind is the kind it admits, "*" for any.
+	Kind string `json:"kind"`
 }
 
 // argoProjectSpec is the subset of v1alpha1.AppProjectSpec the UI's project filter
 // + detail read. Only these fields are surfaced (never the whole CR spec) so a
 // real AppProject cannot leak roles/tokens or any field this plane didn't intend.
 type argoProjectSpec struct {
-	SourceRepos              []string          `json:"sourceRepos"`
-	Destinations             []argoDestination `json:"destinations"`
-	ClusterResourceWhitelist []argoGroupKind   `json:"clusterResourceWhitelist"`
-	Description              string            `json:"description,omitempty"`
+	// SourceRepos are the git repos applications in this project may pull from.
+	// ["*"] for every project this plane synthesizes or reflects from IAM: the
+	// boundary that actually holds on this platform is the IAM org, resolved before
+	// a row is ever projected, so the projected fence is deliberately permissive
+	// and is NOT an authorization statement.
+	SourceRepos []string `json:"sourceRepos"`
+	// Destinations are the cluster/namespace pairs it may write to — a single
+	// {server:"*", namespace:"*"} on a synthesized project, for the same reason.
+	Destinations []argoDestination `json:"destinations"`
+	// ClusterResourceWhitelist are the cluster-scoped kinds it may create —
+	// [{group:"*", kind:"*"}] on a synthesized project.
+	ClusterResourceWhitelist []argoGroupKind `json:"clusterResourceWhitelist"`
+	// Description is the project's human label: the IAM project's display name, or
+	// its description when it has no display name. Absent when IAM carries neither.
+	Description string `json:"description,omitempty"`
 }
 
 // argoProject is v1alpha1.AppProject (projected). Project scoping on this platform
 // is IAM/Org, not argocd RBAC, so a synthesized project is permissive.
 type argoProject struct {
-	APIVersion string          `json:"apiVersion"`
-	Kind       string          `json:"kind"`
-	Metadata   argoMeta        `json:"metadata"`
-	Spec       argoProjectSpec `json:"spec"`
-	Status     argoProjectStat `json:"status"`
+	// APIVersion is the constant "argoproj.io/v1alpha1". A project here is an IAM
+	// resource wearing that shape; no argoproj.io object is stored behind it.
+	APIVersion string `json:"apiVersion"`
+	// Kind is the constant "AppProject".
+	Kind string `json:"kind"`
+	// Metadata is the project's identity: its name is the key an application's
+	// spec.project matches, and is the same string an App CR carries in its
+	// app.kubernetes.io/part-of label.
+	Metadata argoMeta `json:"metadata"`
+	// Spec is the fence the SPA displays — repos, destinations, admitted kinds.
+	Spec argoProjectSpec `json:"spec"`
+	// Status is always the empty object. A project has no reconciled state here;
+	// the field exists because the SPA reads it.
+	Status argoProjectStat `json:"status"`
 }
 
 // argoProjectStat marshals as the empty status object the UI expects.
 type argoProjectStat struct{}
 
 type argoProjectList struct {
-	Metadata argoListMeta  `json:"metadata"`
-	Items    []argoProject `json:"items"`
+	// Metadata is the list envelope the SPA expects; it carries no resume point.
+	Metadata argoListMeta `json:"metadata"`
+	// Items is the projects visible to the caller — its own organization's, or
+	// every organization's for a SuperAdmin. A project named "default" is always
+	// present and is prepended when IAM does not carry one, because that is what an
+	// application with no project label groups under.
+	Items []argoProject `json:"items"`
 }
 
 // projectedProjectNames is the distinct set of App-CR spec.project values, with

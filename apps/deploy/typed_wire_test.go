@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 
@@ -31,6 +32,16 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// mount is the plane's whole route table on a real app, which is what the two
+// document tests below read their projection from.
+func mount(t *testing.T) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	routes(app, fakeService())
+	return app
+}
 
 // probe drives one request through the REAL router — group middleware included —
 // and returns the status and the raw body bytes.
@@ -247,9 +258,7 @@ func TestPostsStayRawBecauseZipDecodesTheBodyFirst(t *testing.T) {
 // address whose prose was declared beside its wire fact — and either way it
 // carries prose. Nothing on this plane publishes an operationId and nothing else.
 func TestEveryTypedOpIsInTheDocumentWithProse(t *testing.T) {
-	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	compose(app)
-	routes(app, fakeService())
+	app := mount(t)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "deploy", Version: "v1"})
 	if err != nil {
 		t.Fatalf("openapi.Spec: %v", err)
@@ -336,5 +345,106 @@ func TestEveryTypedOpIsInTheDocumentWithProse(t *testing.T) {
 	if got, want := len(served), len(typed)+len(raw); got != want {
 		t.Errorf("the plane serves %d operations, but this test accounts for %d — a route was added without "+
 			"being typed or recorded", got, want)
+	}
+}
+
+// proseless is the CLOSED list of published properties that carry NO description
+// because the SEAM they arrived through cannot carry one — not because nobody
+// wrote it. Both classes below already carry the doc comment in the Go source;
+// the pass that lifts prose files it under a name the published property does not
+// have. Line citations are against the pinned zip, v1.31.0.
+//
+// It is exact in BOTH directions. A bare property anywhere else goes red, and an
+// entry here that starts publishing prose goes red too — that is the day the
+// generator learns, and this list must shrink then rather than outlive the gap.
+var proseless = map[string]bool{
+	// EMBEDDED STRUCT. argoNode embeds argoResourceRef, so zip's schema builder
+	// PROMOTES those six fields into argoNode's own properties (wireFields,
+	// openapi.go:916) and looks each description up under the OUTER type's name
+	// (structSchema, openapi.go:724) — argoNode.group. zipdoc files a field's prose
+	// under the type that DECLARES it (extract.go:678), which is argoResourceRef,
+	// so the two never meet. The argoResourceRef component publishes all six, and
+	// so does every parentRefs entry, which $refs it; only the promoted copies on
+	// argoNode are bare. Unrolling the embedding into six copies would fill them in
+	// by turning one true statement into two that can drift.
+	"argoNode.group":     true,
+	"argoNode.kind":      true,
+	"argoNode.name":      true,
+	"argoNode.namespace": true,
+	"argoNode.uid":       true,
+	"argoNode.version":   true,
+
+	// ANONYMOUS STRUCT. consoleSettings declares dexConfig, googleAnalytics and
+	// help as inline struct literals, and an anonymous struct has no name for
+	// zipdoc to key its members under (extract.go:631). Each of the three objects
+	// IS described — the comment on its own field lands — but its members cannot
+	// be. Naming the three types would fix that and would also change the published
+	// document, turning an inline object into a $ref to a new component in every
+	// generated SDK: a shape change, decided on purpose, not a side effect of
+	// writing prose.
+	"consoleSettings.dexConfig.connectors":           true,
+	"consoleSettings.googleAnalytics.anonymizeUsers": true,
+	"consoleSettings.googleAnalytics.trackingID":     true,
+	"consoleSettings.help.binaryUrls":                true,
+	"consoleSettings.help.chatText":                  true,
+	"consoleSettings.help.chatUrl":                   true,
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the gate above
+// cannot see. Typing a route documents its ADDRESS and its SHAPE; the shape's
+// FIELDS come from a different place — a doc comment on each one, which zipdoc
+// lifts one at a time.
+//
+// It matters here because almost every value on this plane is a plain string drawn
+// from a CLOSED vocabulary, and three different ones share the surface: a sync
+// verdict is Synced|OutOfSync|Unknown, a health verdict is
+// Healthy|Progressing|Degraded|Suspended|Missing|Unknown, and an operation phase is
+// Running|Succeeded|Failed. `revision` is worse than any of them — it is a git
+// COMMIT on a row projected from a Hanzo CD Application and an IMAGE TAG on one
+// projected from an operator App CR, the same property under two referents. And a
+// whole family of fields is empty BY CONSTRUCTION rather than not-yet-known:
+// resourceVersion, orphanedNodes, hosts, attemptedAt, serverVersion, author and
+// signatureInfo are never populated, so a caller waiting for one waits forever.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(mount(t), openapi.Info{Title: "deploy", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("deploy publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
+		}
+	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/deploy describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
 	}
 }

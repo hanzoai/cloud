@@ -69,12 +69,28 @@ func (s *Store) DefsJSON() ([]byte, int, error) {
 	return []byte("[" + strings.Join(parts, ",") + "]"), len(parts), nil
 }
 
+// DefRow is one stored flag definition and its provenance.
 type DefRow struct {
-	Key        string          `json:"key"`
+	// Key is the flag's primary key in the caller's (org, project) store, and the
+	// name evaluation looks it up by. On a write it is taken from the URL, never
+	// from the body: the stored document's own "key" is forced to match.
+	Key string `json:"key"`
+	// Definition is the flag-definition document the evaluator consumes, kept
+	// BYTE-FOR-BYTE as it was written. It is the engine's format rather than this
+	// package's, so it carries fields no Go type here names — targeting groups,
+	// rollout percentages, variants, payloads — and a caller must round-trip it
+	// whole rather than rebuilding it from the parts it recognizes.
 	Definition json.RawMessage `json:"definition"`
-	Version    int             `json:"version"`
-	UpdatedAt  string          `json:"updated_at"`
-	UpdatedBy  string          `json:"updated_by"`
+	// Version is 1 when the key was created and rises by one on every overwrite.
+	// It counts writes, not content changes: re-storing an identical document
+	// bumps it.
+	Version int `json:"version"`
+	// UpdatedAt is when the definition was last written, RFC 3339 UTC.
+	UpdatedAt string `json:"updated_at"`
+	// UpdatedBy is the email of the principal who last wrote it. Empty when the
+	// write came from an in-process composer (an experiment registering its own
+	// assignment flag) rather than from a signed-in person.
+	UpdatedBy string `json:"updated_by"`
 }
 
 func (s *Store) List() ([]DefRow, error) {
@@ -172,12 +188,24 @@ func (s *Store) Delete(key, actor string) (bool, error) {
 	return true, err
 }
 
+// ActivityRow is one entry of a project's flag change log.
 type ActivityRow struct {
-	ID     int64  `json:"id"`
-	Key    string `json:"key"`
+	// ID is the log's own sequence number, rising with each entry. The log is
+	// served newest-first, which is this descending.
+	ID int64 `json:"id"`
+	// Key is the flag that changed. It survives a delete, so the log still names
+	// flags the definition store no longer holds.
+	Key string `json:"key"`
+	// Action is one of created, updated, deleted.
 	Action string `json:"action"`
-	Actor  string `json:"actor"`
-	At     string `json:"at"`
+	// Actor is the email of the principal who made the change. Empty for a write
+	// by an in-process composer; a project key can never appear here, because
+	// evaluating flags is all a key may do.
+	Actor string `json:"actor"`
+	// At is when the change was made, RFC 3339 UTC.
+	At string `json:"at"`
+	// Detail is free-form context about the change. Nothing writes it today, so
+	// it is absent from every row the store serves.
 	Detail string `json:"detail,omitempty"`
 }
 

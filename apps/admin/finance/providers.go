@@ -60,14 +60,37 @@ var providerGrantsCents = map[string]int64{}
 // is either present or absent, so exactly one of them is always true there). That
 // makes "we could not tell" readable on the wire without a sentinel amount.
 type ProviderCredit struct {
-	Provider       string   `json:"provider"`
-	GrantCents     int64    `json:"grant_cents"`
-	BurnCents      int64    `json:"burn_cents"`
+	// Provider is the upstream we buy from, by its warehouse name ("do-ai", "openai").
+	// The roster is the union of the seeded grants, DigitalOcean, and every provider the
+	// usage ledger has burn for — so a provider appears once it has cost us anything.
+	Provider string `json:"provider"`
+	// GrantCents is the promo credit that provider has issued us, in USD cents. For
+	// DigitalOcean it is DISCOVERED from their own invoices, never declared: the
+	// hand-entered number was wrong by ~$22k and nobody could check it. Zero means no
+	// grant — or, when Error is set, that we could not find out.
+	GrantCents int64 `json:"grant_cents"`
+	// BurnCents is what we have consumed against that grant, in USD cents. For
+	// DigitalOcean it is grant minus remaining, floored at zero — derived from their
+	// authoritative balance. For every other provider it is the all-time sum of
+	// cost_cents in the usage warehouse, which is not windowed.
+	BurnCents int64 `json:"burn_cents"`
+	// RemainingCents is the grant still available, in USD cents, never negative. For
+	// DigitalOcean it is the live negated account balance; for the rest it is grant minus
+	// burn. Zero on a provider with no grant, and zero on one whose grant is spent —
+	// HasCredit and IsPaidOnly separate those two.
 	RemainingCents int64    `json:"remaining_cents"`
 	RunwayDays     *float64 `json:"runway_days"` // nil when burn is 0 / unknown (never a fabricated infinity)
-	HasCredit      bool     `json:"has_credit"`
-	IsPaidOnly     bool     `json:"is_paid_only"`
-	Error          string   `json:"error,omitempty"`
+	// HasCredit reports that promo credit remains at this provider — so calls to it are
+	// still being paid for with someone else's money.
+	HasCredit bool `json:"has_credit"`
+	// IsPaidOnly reports the opposite: every call to this provider now costs real cash.
+	// Exactly one of HasCredit and IsPaidOnly is true on a healthy row. BOTH false is
+	// the deliberate "we could not tell" state, and it is reachable only with Error set.
+	IsPaidOnly bool `json:"is_paid_only"`
+	// Error names the read that did not answer — a revoked token passes the
+	// is-it-configured check and fails here. Omitted on a healthy row. When it is set,
+	// treat the classification as absent rather than as "no credit".
+	Error string `json:"error,omitempty"`
 }
 
 // computeProviderCredits builds the per-provider ledger: grant (seed) + burn
@@ -197,19 +220,31 @@ func (o ops) ProvidersCredit(ctx context.Context, _ *core.None) (*ProvidersCredi
 // ProvidersCreditOut is the GET /v1/admin/providers/credit envelope. This read carries no
 // total: it is a fixed roster of providers, not a page.
 type ProvidersCreditOut struct {
-	Status string           `json:"status"`
-	Msg    string           `json:"msg"`
-	Data   []ProviderCredit `json:"data"`
+	// Status is "ok" or "error". A provider whose upstream read failed does not fail this
+	// answer — it comes back as a row with `error` set, which is the whole reason that
+	// field exists.
+	Status string `json:"status"`
+	// Msg is the failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is one row per provider, sorted by provider name.
+	Data []ProviderCredit `json:"data"`
 }
 
 // UsageFundingRow is one (provider, model) usage roll-up tagged by funding class.
 type UsageFundingRow struct {
-	Provider  string `json:"provider"`
-	Model     string `json:"model"`
-	Funding   string `json:"funding"` // credit | paid | paid_only | unknown | byo
-	Tokens    int64  `json:"tokens"`
-	CostCents int64  `json:"cost_cents"`
-	Requests  int64  `json:"requests"`
+	// Provider is the upstream the calls went to, joining this row to the credit ledger.
+	Provider string `json:"provider"`
+	// Model is the model those calls named, as the usage ledger recorded it.
+	Model   string `json:"model"`
+	Funding string `json:"funding"` // credit | paid | paid_only | unknown | byo
+	// Tokens is total tokens across the window's calls — prompt and completion together,
+	// as the meter summed them.
+	Tokens int64 `json:"tokens"`
+	// CostCents is what those calls cost US at the provider, in USD cents. Upstream
+	// spend, not what a customer was billed. The rows are ordered by it, largest first.
+	CostCents int64 `json:"cost_cents"`
+	// Requests is how many calls the window recorded for this provider and model.
+	Requests int64 `json:"requests"`
 }
 
 // fundingClass classifies a provider's usage at the PROVIDER level from the ledger:
@@ -258,9 +293,15 @@ type UsageFundingIn struct {
 // UsageFundingOut is the GET /v1/admin/usage/funding envelope. No total: the split is one
 // row per (provider, model) over the window, unpaginated.
 type UsageFundingOut struct {
-	Status string            `json:"status"`
-	Msg    string            `json:"msg"`
-	Data   []UsageFundingRow `json:"data"`
+	// Status is "ok" or "error". A warehouse that is not connected still answers ok with
+	// an empty list — this is a dashboard read, and it degrades rather than refusing.
+	Status string `json:"status"`
+	// Msg is the failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is one row per (provider, model) over the window, most expensive first. Never
+	// null; empty also means the warehouse was unreachable, so read it beside the credit
+	// ledger before concluding nothing was spent.
+	Data []UsageFundingRow `json:"data"`
 }
 
 // UsageFunding splits our upstream AI usage by how it was FUNDED: one row per (provider,

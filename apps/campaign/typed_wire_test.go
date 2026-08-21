@@ -382,3 +382,89 @@ func TestEveryTypedCampaignOpIsDescribed(t *testing.T) {
 			"Run: go generate -run zipdoc ./apps/campaign/...", strings.Join(bare, ", "))
 	}
 }
+
+// proseless is the CLOSED list of published properties that carry NO description
+// because the SEAM they arrived through cannot carry one — not because nobody wrote
+// it.
+//
+// EMBEDDED STRUCT. campaignUpdate is `{ID string; campaignWrite}` (typed.go), and the
+// schema fold FLATTENS that embedding, so the six writable properties reach the
+// document on campaignUpdate itself. zipdoc files a field's prose under the type that
+// DECLARES it, which is campaignWrite — the six comments exist, are lifted, and are
+// published one component over as campaignWrite.name, campaignWrite.budget and the
+// rest. The lookup for campaignUpdate.name simply has nowhere to find them.
+//
+// The two workarounds available both trade one true statement for two that drift.
+// Unrolling the embedding into six copies duplicates the description of what a caller
+// may write, and the copies part company the first time a rule changes. Hand-writing
+// campaignUpdate's schema beside the struct does the same to the SHAPE. Both also
+// change the published document to dodge a missing description, which is a wire
+// decision taken for a prose reason. So the comments stay on campaignWrite, where the
+// fields are, and this names the gap until the fold learns to walk an embedding.
+var proseless = map[string]bool{
+	"campaignUpdate.name":       true,
+	"campaignUpdate.audience":   true,
+	"campaignUpdate.content":    true,
+	"campaignUpdate.channels":   true,
+	"campaignUpdate.scheduleAt": true,
+	"campaignUpdate.budget":     true,
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the two gates
+// above cannot see. They prove every route has an ADDRESS and a typed SHAPE; the
+// shape's FIELDS come from a different place — a doc comment on each one, which
+// zipdoc lifts one at a time.
+//
+// It matters here because this surface reports money in TWO units at once and the
+// names do not say which is which: budget and spendCents are CENTS, while revenue,
+// cac and roas are whole dollars, and ctr and cvr are fractions rather than
+// percentages (0.0123 is 1.23%). `status` is likewise two closed vocabularies — the
+// campaign's draft|live|paused|failed and each channel's
+// pending|live|paused|failed|unavailable — and a live CAMPAIGN means at least one
+// channel launched, not all of them, so the channel rows are where the truth is. And
+// scheduleAt is a unix time handed to each executor: nothing in this service wakes up
+// to launch a campaign for you.
+//
+// Presence is all a gate can check. A description restating the field's name is worse
+// than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	resetChannels()
+	doc, err := openapi.Spec(mountWire(t), openapi.Info{Title: "campaign", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("campaign publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
+		}
+	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/campaign describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
+	}
+}

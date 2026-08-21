@@ -269,15 +269,18 @@
       "ActionOut": {
         "properties": {
           "data": {
+            "description": "Data is one row per host TOUCHED, in the order applied. Hosts the rollout\nnever reached are absent, so these rows are exactly the hosts whose state\nmay have moved.",
             "items": {
               "$ref": "#/components/schemas/Result"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg names the outcome the way an operator would: \"billing -\u003e 9f2c…\" for a\npin, \"billing enabled\", \"billing disabled\", \"billing reloaded\", or\n\"billing halted at cloud-1: \u003creason\u003e\" when a host refused.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A halted rollout answers HTTP 200 with \"error\",\nbecause part of the fleet HAS changed and a transport failure would throw\nthat away; so does a deployment refusing to mutate without an audit store,\nwhere nothing changed at all. Data tells the two apart.",
             "type": "string"
           }
         },
@@ -286,21 +289,27 @@
       "Drift": {
         "properties": {
           "disabled": {
+            "description": "Disabled counts the hosts where it was stopped deliberately. Down and\nDisabled both answer 503 to a caller, which is exactly why they are counted\napart: one is an outage and one is a maintenance window.",
             "type": "integer"
           },
           "down": {
+            "description": "Down counts the hosts where it is loaded and not serving without anyone\nhaving asked for that: the child exited on its own, or a swap left nothing\nlistening.",
             "type": "integer"
           },
           "drifted": {
+            "description": "Drifted is true when more than one digest is running at once, meaning the\nrollout is incomplete or stuck. It is the one bit this view exists for.",
             "type": "boolean"
           },
           "name": {
+            "description": "Name is the app as the manifest declares it — the same string the host\nreports a plugin under and the same one the reload, enable and disable\nroutes take in their path.",
             "type": "string"
           },
           "running": {
+            "description": "Running counts the hosts serving it. A host that could not be reached is\ncounted nowhere — unknown is not down — so these three counts need not add\nup to the fleet size.",
             "type": "integer"
           },
           "versions": {
+            "description": "Versions is every distinct artifact SHA-256 seen RUNNING, sorted. Only a\nplugin installed from a URL carries a digest, so an empty list means\nnothing running is digest-pinned, not that the fleet agrees.",
             "items": {
               "type": "string"
             },
@@ -312,6 +321,7 @@
       "Host": {
         "properties": {
           "addr": {
+            "description": "Addr is the host:port this row was read over, from the live membership.\nEmpty on a host-scoped read, which consults no membership at all.",
             "type": "string"
           },
           "error": {
@@ -319,16 +329,18 @@
             "type": "string"
           },
           "host": {
-            "description": "Host is the pod's stable id, and Addr where it was reached. Self is true\nfor the host that answered the request.",
+            "description": "Host is the pod's stable id — the downward-API name for this host, the\nmembership id for a peer. Result names the same id when a change is\napplied, so the board and a rollout join on it.",
             "type": "string"
           },
           "plugins": {
+            "description": "Plugins is every plugin this host has loaded, running or not, ordered by\nname so two hosts diff cleanly. It carries nothing when Err is set, where\nthat means unknown rather than none.",
             "items": {
               "$ref": "#/components/schemas/Status"
             },
             "type": "array"
           },
           "self": {
+            "description": "Self is true on the one row the answering host produced from its own\nprocess instead of over the network. Every other row cost a hop.",
             "type": "boolean"
           }
         },
@@ -337,24 +349,29 @@
       "ListOut": {
         "properties": {
           "data": {
+            "description": "Data is one row per host, sorted by host id so two reads a minute apart\nline up line for line. A host-scoped read answers with this host's row alone.",
             "items": {
               "$ref": "#/components/schemas/Host"
             },
             "type": "array"
           },
           "drift": {
+            "description": "Drift folds Data into one row per plugin. Absent on a host-scoped read,\nwhere one host has nothing to disagree with.",
             "items": {
               "$ref": "#/components/schemas/Drift"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the envelope's operator note. This read has none to make, so it is\nalways empty; the mutations are where it says something.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\". This read refuses with an HTTP status rather than an error\nenvelope, so it takes no other value — an unreachable peer is a row in Data\ncarrying its own error, not a failed read.",
             "type": "string"
           },
           "total": {
+            "description": "Total counts the HOSTS in Data, not the plugins on them.",
             "type": "integer"
           }
         },
@@ -384,10 +401,11 @@
             "type": "string"
           },
           "sum": {
+            "description": "Sum is that artifact's hex SHA-256 and is REQUIRED with URL: zip verifies\nthe download against it before the file is made executable, and refuses an\nunverified one — so does this, one layer earlier. It is also the cache key,\nwhich is why re-pinning a digest this host has already run costs no network.",
             "type": "string"
           },
           "url": {
-            "description": "URL is the artifact directly, for an origin with no index. Sum is its hex\nSHA-256 and is REQUIRED with it: zip refuses an unverified download, and\nso does this.",
+            "description": "URL is the artifact directly, for an origin with no index.",
             "type": "string"
           },
           "version": {
@@ -400,15 +418,19 @@
       "Result": {
         "properties": {
           "host": {
+            "description": "Host is the pod the outcome belongs to, the same id the fleet board reports.",
             "type": "string"
           },
           "msg": {
+            "description": "Msg is why the change failed here, verbatim from the host that refused it.\nEmpty when OK.",
             "type": "string"
           },
           "ok": {
+            "description": "OK false is the halt. A fleet rollout stops at the first host that fails, so\nat most one row carries it and the hosts after it are missing entirely\nrather than reported as skipped.",
             "type": "boolean"
           },
           "version": {
+            "description": "Version is the artifact SHA-256 this host was moved to; on an ok row it is\nwhat the host now runs. Empty for enable, disable and a bare restart, none\nof which change the artifact.",
             "type": "string"
           }
         },

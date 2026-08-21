@@ -56,18 +56,32 @@ type ops struct{ s *cloud.Service[core.State] }
 
 // FinanceOut is the GET /v1/admin/finance envelope.
 type FinanceOut struct {
-	Status string       `json:"status"`
-	Msg    string       `json:"msg"`
-	Data   *FinanceData `json:"data"`
+	// Status is "ok" or "error". Every upstream on this board degrades in place — an
+	// unreachable commerce or an unset DO token answers ok with configured=false and a
+	// not-ok source — so an error here means admission itself failed, not the numbers.
+	Status string `json:"status"`
+	// Msg is the failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the board. Never null on an ok answer.
+	Data *FinanceData `json:"data"`
 }
 
 // FinanceData is the full /v1/admin/finance aggregate.
 type FinanceData struct {
-	Cost        FinanceCost         `json:"cost"`
-	Revenue     FinanceRevenue      `json:"revenue"`
-	Derived     FinanceDerived      `json:"derived"`
-	GeneratedAt string              `json:"generatedAt"`
-	Sources     []core.SourceStatus `json:"sources"`
+	// Cost is COGS: what the fleet pays its vendors, plus the DigitalOcean credit
+	// treasury view that only runway is derived from.
+	Cost FinanceCost `json:"cost"`
+	// Revenue is what the fleet earned — consumption and MRR, from commerce.
+	Revenue FinanceRevenue `json:"revenue"`
+	// Derived is the profitability math over the two above. A pure function of them, so
+	// it can be recomputed by hand and checked.
+	Derived FinanceDerived `json:"derived"`
+	// GeneratedAt is when the read ran, RFC3339. Nothing on this board is cached.
+	GeneratedAt string `json:"generatedAt"`
+	// Sources is the freshness strip: "commerce-costs", "digitalocean" and "commerce".
+	// A not-ok row is the ONLY thing separating a real zero from an upstream that was
+	// never read — the margin below is computed either way.
+	Sources []core.SourceStatus `json:"sources"`
 }
 
 // FinanceCost is the platform COGS view — what WE pay our vendors. Its authority is
@@ -78,51 +92,117 @@ type FinanceData struct {
 // DigitalOcean here is an ORTHOGONAL treasury view (promo-credit remaining + burn-down),
 // NOT part of COGS: it feeds only the runway projection.
 type FinanceCost struct {
-	Configured bool              `json:"configured"`
-	Error      string            `json:"error,omitempty"`
-	Period     string            `json:"period"`
-	TotalCents int64             `json:"totalCents"`
-	Vendors    []commerce.Vendor `json:"vendors"`
+	// Configured reports that commerce answered the COGS read. False makes every number
+	// below a zero that was never measured — the margin is still computed from it, so a
+	// board showing a healthy margin with configured=false is showing revenue minus
+	// nothing.
+	Configured bool `json:"configured"`
+	// Error is why the COGS read failed, or that commerce is not wired at all. Omitted
+	// when Configured is true.
+	Error string `json:"error,omitempty"`
+	// Period is the billing month the COGS covers, "2006-01". Commerce's own period where
+	// it gave one, otherwise the current month.
+	Period string `json:"period"`
+	// TotalCents is whole-platform COGS for the period, in USD cents — commerce's figure,
+	// not a sum of Vendors recomputed here. It is the number the margin subtracts.
+	TotalCents int64 `json:"totalCents"`
+	// Vendors is the per-vendor breakdown behind that total. Never null; empty when
+	// commerce is unreachable.
+	Vendors []commerce.Vendor `json:"vendors"`
 
+	// DigitalOcean is the promo-credit treasury view. It is deliberately NOT part of
+	// COGS and is never added to TotalCents — the DO spend it reports is already inside
+	// the vendor lines above. It feeds runway, and only runway.
 	DigitalOcean DoCost `json:"digitalocean"`
 }
 
 // DoCost is the DigitalOcean credit + spend view. When Configured is false every number
 // is zero and the console renders the honest "connect DO_API_TOKEN" state.
 type DoCost struct {
-	Configured            bool             `json:"configured"`
-	Error                 string           `json:"error,omitempty"`
-	CreditRemainingCents  int64            `json:"creditRemainingCents"`
-	MonthToDateSpendCents int64            `json:"monthToDateSpendCents"`
-	AvgDailyBurnCents     int64            `json:"avgDailyBurnCents"`
-	AccountBalanceCents   int64            `json:"accountBalanceCents"`
-	GeneratedAt           string           `json:"generatedAt,omitempty"`
-	History               []DoHistoryPoint `json:"history"`
+	// Configured reports that a DO_API_TOKEN is set and the balance read succeeded. False
+	// zeroes every number below and makes runwayDays null rather than infinite.
+	Configured bool `json:"configured"`
+	// Error is why the DO read failed, or that the token is unset. Omitted when
+	// Configured is true.
+	Error string `json:"error,omitempty"`
+	// CreditRemainingCents is the promo credit still held, in USD cents, POSITIVE. It is
+	// the negated account balance, clamped at zero: DigitalOcean carries an
+	// accounts-receivable sign, so credit we hold shows as a NEGATIVE balance and an
+	// amount we owe shows positive — an account we owe on has zero credit, not negative.
+	CreditRemainingCents int64 `json:"creditRemainingCents"`
+	// MonthToDateSpendCents is what DigitalOcean has charged this calendar month, in USD
+	// cents. It resets on the first, which is why the burn below divides by the day of
+	// the month and not by a fixed 30.
+	MonthToDateSpendCents int64 `json:"monthToDateSpendCents"`
+	// AvgDailyBurnCents is month-to-date spend divided by the elapsed days of the current
+	// month, at least one. A running average, so it is noisiest on the 1st and steadies
+	// through the month. It is the denominator of runwayDays.
+	AvgDailyBurnCents int64 `json:"avgDailyBurnCents"`
+	// AccountBalanceCents is DigitalOcean's raw account balance, sign INCLUDED: positive
+	// means we owe DO, negative means we hold credit. It is here so the sign convention
+	// is visible rather than only implied by CreditRemainingCents.
+	AccountBalanceCents int64 `json:"accountBalanceCents"`
+	// GeneratedAt is when DigitalOcean generated the balance, from their response — not
+	// when this board read it. Omitted when DO did not say.
+	GeneratedAt string `json:"generatedAt,omitempty"`
+	// History is the burn-down series, up to the last 60 billing entries. Best effort: a
+	// failed history read leaves it empty while the balance above still stands, so an
+	// empty series is not evidence of no spend. Never null.
+	History []DoHistoryPoint `json:"history"`
 }
 
 // DoHistoryPoint is one credit burn-down series point (usage charge over time).
 type DoHistoryPoint struct {
-	Date        string `json:"date"`
-	AmountCents int64  `json:"amountCents"`
-	Type        string `json:"type"`
+	// Date is when DigitalOcean recorded the entry, RFC3339 as they return it.
+	Date string `json:"date"`
+	// AmountCents is the entry in USD cents, converted once from DO's decimal-dollar
+	// string. It carries DO's own accounts-receivable sign: a usage charge is positive.
+	AmountCents int64 `json:"amountCents"`
+	// Type is DigitalOcean's entry type — "Invoice", "Payment", "Credit". Entries are not
+	// all charges, so summing the series without reading this mixes money in with money
+	// out.
+	Type string `json:"type"`
+	// Description is DigitalOcean's own line text for the entry.
 	Description string `json:"description"`
 }
 
 // FinanceRevenue is the commerce revenue view (all money in USD cents).
 type FinanceRevenue struct {
-	Configured           bool  `json:"configured"`
-	TotalRevenueCents    int64 `json:"totalRevenueCents"`
-	MRRCents             int64 `json:"mrrCents"`
+	// Configured reports that the org directory was read and at least the ledger
+	// answered. False means the numbers below are zeros nobody measured — and since the
+	// margin is revenue minus COGS, that zero reads as a loss rather than as unknown.
+	Configured bool `json:"configured"`
+	// TotalRevenueCents is fleet consumption over the trailing 30 days, in USD cents,
+	// summed across every org. Realized revenue: credit is revenue when it is SPENT, not
+	// when it is granted.
+	TotalRevenueCents int64 `json:"totalRevenueCents"`
+	// MRRCents is fleet monthly recurring revenue, in USD cents, summed over every org's
+	// revenue-counting subscriptions. Contract value, and a different question from
+	// TotalRevenueCents — it is not folded into the margin.
+	MRRCents int64 `json:"mrrCents"`
+	// CreditsConsumedCents is the same figure as TotalRevenueCents, named for the other
+	// side of the identity: what the fleet earned is exactly what its customers burned.
 	CreditsConsumedCents int64 `json:"creditsConsumedCents"`
 }
 
 // FinanceDerived is the pure profitability math. Runway is a pointer so it can be null
 // (no honest runway when burn is zero or DO is unconfigured).
 type FinanceDerived struct {
-	GrossMarginCents int64    `json:"grossMarginCents"`
-	GrossMarginPct   float64  `json:"grossMarginPct"`
-	RunwayDays       *float64 `json:"runwayDays"`
-	Profitable       bool     `json:"profitable"`
+	// GrossMarginCents is revenue.totalRevenueCents minus cost.totalCents, in USD cents.
+	// Negative means the fleet spent more on vendors than its customers consumed.
+	GrossMarginCents int64 `json:"grossMarginCents"`
+	// GrossMarginPct is that margin as a percentage of revenue — 42.5 means 42.5%, not
+	// 0.425. Zero when revenue is zero, which is arithmetic, not a claim of break-even.
+	GrossMarginPct float64 `json:"grossMarginPct"`
+	// RunwayDays is DigitalOcean promo credit divided by average daily burn — how long
+	// the credit lasts at today's rate, and nothing to do with the margin above. NULL,
+	// never a large number, when DO is unconfigured or burn is zero: no honest projection
+	// exists, and an infinity would read as safety.
+	RunwayDays *float64 `json:"runwayDays"`
+	// Profitable is revenue strictly greater than COGS — the sign of GrossMarginCents,
+	// stated so no consumer has to decide what zero means. It is GROSS margin only:
+	// salaries, tooling and anything outside vendor COGS are not in this.
+	Profitable bool `json:"profitable"`
 }
 
 // FinanceInput is the raw material ComputeFinance folds into FinanceData. The handler

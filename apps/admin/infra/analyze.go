@@ -195,56 +195,132 @@ type ClusterScan struct {
 
 // Snapshot is the whole board in one value.
 type Snapshot struct {
-	At               string              `json:"at"`
-	Complete         bool                `json:"complete"`
-	IncompleteReason string              `json:"incompleteReason"`
-	Sources          []core.SourceStatus `json:"sources"`
-	Totals           Totals              `json:"totals"`
-	Cost             Cost                `json:"cost"`
-	Clusters         []Cluster           `json:"clusters"`
-	Nodes            []Machine           `json:"nodes"`
-	Volumes          []Volume            `json:"volumes"`
-	LoadBalancers    []LoadBalancer      `json:"loadBalancers"`
-	Findings         []Finding           `json:"findings"`
+	// At is when the scan ran, RFC3339 in UTC. Analyze takes it as an argument instead of
+	// reading a clock, which is what makes the whole fold byte-reproducible in a test.
+	At string `json:"at"`
+	// Complete reports that EVERY cluster answered. It is the gate in front of every
+	// destructive verdict on this board: while it is false nothing is deletable,
+	// expandable or scalable, because the cluster that stayed silent is exactly the one
+	// that might be holding the volume.
+	Complete bool `json:"complete"`
+	// IncompleteReason names the clusters that did not answer and what their silence
+	// costs, in the operator's language. Empty exactly when Complete is true, and it is
+	// the same sentence every blocked row then repeats as its own BlockedReason.
+	IncompleteReason string `json:"incompleteReason"`
+	// Sources is one freshness row per upstream read: `do.clusters`, `do.droplets`,
+	// `do.volumes`, `do.loadBalancers`, and `k8s.<cluster name>` for each cluster scanned.
+	// A row with ok=false is usually why Complete is false.
+	Sources []core.SourceStatus `json:"sources"`
+	// Totals are the fleet counts — how many of each thing, and how much capacity.
+	Totals Totals `json:"totals"`
+	// Cost is what the fleet bills per month, in cents, plus what could be recovered.
+	Cost Cost `json:"cost"`
+	// Clusters is every DOKS cluster in the account, each with the rollup of its scan.
+	// A cluster DO reports appears here even when its Kubernetes never answered.
+	Clusters []Cluster `json:"clusters"`
+	// Nodes is EVERY droplet in the account, not only cluster members. A droplet no
+	// cluster claims has an empty cluster and is the only kind this board will delete.
+	Nodes []Machine `json:"nodes"`
+	// Volumes is every block-storage volume, each carrying the state machine's verdict
+	// on who owns it. It is the list the safety rule exists for.
+	Volumes []Volume `json:"volumes"`
+	// LoadBalancers is every DO load balancer, attributed to a cluster by the Service
+	// that claims it, or failing that by its member droplets.
+	LoadBalancers []LoadBalancer `json:"loadBalancers"`
+	// Findings is the audit pass over everything above, sorted worst first: severity,
+	// then money, then id. Empty means the fold found nothing worth a human's attention.
+	Findings []Finding `json:"findings"`
 }
 
 // Totals are fleet counts. LocalDiskGiB is broken out precisely so it can be shown
 // as NOT separately billed.
 type Totals struct {
-	Clusters            int `json:"clusters"`
-	Nodes               int `json:"nodes"`
-	Volumes             int `json:"volumes"`
-	LoadBalancers       int `json:"loadBalancers"`
-	VolumeGiB           int `json:"volumeGiB"`
-	AttachedVolumes     int `json:"attachedVolumes"`
-	AttachedGiB         int `json:"attachedGiB"`
-	DetachedVolumes     int `json:"detachedVolumes"`
-	DetachedGiB         int `json:"detachedGiB"`
+	// Clusters is how many DOKS clusters DigitalOcean reports, scanned or not. It is the
+	// denominator the completeness gate counts unanswered clusters against.
+	Clusters int `json:"clusters"`
+	// Nodes is every droplet in the account, cluster member or not — the same population
+	// as Snapshot.nodes, which is a superset of the machines Kubernetes knows about.
+	Nodes int `json:"nodes"`
+	// Volumes is every block-storage volume in the account.
+	Volumes int `json:"volumes"`
+	// LoadBalancers is every DO load balancer in the account.
+	LoadBalancers int `json:"loadBalancers"`
+	// VolumeGiB is the PROVISIONED block-storage capacity, in whole GiB — the number
+	// DigitalOcean bills for. It excludes droplet local disk entirely; see LocalDiskGiB.
+	VolumeGiB int `json:"volumeGiB"`
+	// AttachedVolumes counts the volumes DO reports attached to a droplet right now.
+	AttachedVolumes int `json:"attachedVolumes"`
+	// AttachedGiB is the provisioned capacity of the attached volumes, in GiB.
+	AttachedGiB int `json:"attachedGiB"`
+	// DetachedVolumes is the exact complement of AttachedVolumes — bound, released and
+	// unreferenced together, so the two always sum to Volumes. Detached is NOT idle and
+	// NOT garbage: most of these are live data between mounts.
+	DetachedVolumes int `json:"detachedVolumes"`
+	// DetachedGiB is the provisioned capacity of the detached volumes, in GiB. With
+	// AttachedGiB it sums to VolumeGiB.
+	DetachedGiB int `json:"detachedGiB"`
+	// UnreferencedVolumes counts the volumes no PV in any cluster names — the deletable
+	// set, and the only one. It is a count of CANDIDATES: whether the button is live
+	// still depends on Complete.
 	UnreferencedVolumes int `json:"unreferencedVolumes"`
-	UnreferencedGiB     int `json:"unreferencedGiB"`
-	IdlePVCs            int `json:"idlePVCs"`
-	LocalDiskGiB        int `json:"localDiskGiB"`
+	// UnreferencedGiB is the provisioned capacity of the unreferenced volumes, in GiB —
+	// the space a delete would hand back.
+	UnreferencedGiB int `json:"unreferencedGiB"`
+	// IdlePVCs counts volumes whose PVC is Bound but which no running pod mounts. A
+	// review queue, never a delete queue — the usual member is a stopped database — and
+	// deliberately excluded from ReclaimableMonthly.
+	IdlePVCs int `json:"idlePVCs"`
+	// LocalDiskGiB is the droplets' own disk, summed. Broken out precisely so it is never
+	// added to VolumeGiB: it is included in each droplet's own monthly price and DO does
+	// not bill it as block storage.
+	LocalDiskGiB int `json:"localDiskGiB"`
 
 	// Fill. MeasuredVolumes/UnmeasuredVolumes are the honesty denominator: UsedGiB and
 	// WastedGiB describe the measured set ONLY, so a board showing waste must show how
 	// much of the fleet the figure was computed from. Unmeasured capacity contributes
 	// nothing to either — it is not assumed empty, and it is not assumed full.
-	MeasuredVolumes   int `json:"measuredVolumes"`
-	MeasuredGiB       int `json:"measuredGiB"`
+	MeasuredVolumes int `json:"measuredVolumes"`
+	// MeasuredGiB is the PROVISIONED capacity of the measured volumes — how much of the
+	// fleet UsedGiB and WastedGiB were computed from, not how much of it is full.
+	MeasuredGiB int `json:"measuredGiB"`
+	// UnmeasuredVolumes counts volumes no kubelet reported a reading for. Not measured is
+	// a different fact from empty, so these contribute to neither UsedGiB nor WastedGiB.
 	UnmeasuredVolumes int `json:"unmeasuredVolumes"`
-	UnmeasuredGiB     int `json:"unmeasuredGiB"`
-	UsedGiB           int `json:"usedGiB"`
-	WastedGiB         int `json:"wastedGiB"`
+	// UnmeasuredGiB is the provisioned capacity of the unmeasured volumes, in GiB — the
+	// size of the blind spot behind UsedGiB and WastedGiB.
+	UnmeasuredGiB int `json:"unmeasuredGiB"`
+	// UsedGiB is what the measured filesystems actually hold. Summed in BYTES and
+	// converted once at the end, so hundreds of sub-GiB readings do not each round to
+	// zero on the way in.
+	UsedGiB int `json:"usedGiB"`
+	// WastedGiB is provisioned minus measured across the measured set, in billed GiB. A
+	// LOWER BOUND on fleet waste, and not the same money as ReclaimableMonthly: this
+	// space sits inside volumes holding live data. See Cost.wastedMonthly.
+	WastedGiB int `json:"wastedGiB"`
 }
 
 // Cost is monthly spend in cents. Reclaimable counts ONLY unreferenced volumes —
 // never idle ones, which are live data awaiting a human verdict.
 type Cost struct {
-	DropletsMonthly      money.Cents `json:"dropletsMonthly"`
-	VolumesMonthly       money.Cents `json:"volumesMonthly"`
+	// DropletsMonthly is DigitalOcean's list price for every droplet's size, summed.
+	// The droplet's local disk is part of that price and is never billed again.
+	DropletsMonthly money.Cents `json:"dropletsMonthly"`
+	// VolumesMonthly is block storage at DO's rate of 10 cents per provisioned GiB per
+	// month, summed over every volume — attached, idle and orphaned alike, because DO
+	// bills for capacity, not for use.
+	VolumesMonthly money.Cents `json:"volumesMonthly"`
+	// LoadBalancersMonthly is $12 per billed node per month, summed. DO's API does not
+	// price load balancers, so this is derived from the size_unit it does report.
 	LoadBalancersMonthly money.Cents `json:"loadBalancersMonthly"`
-	TotalMonthly         money.Cents `json:"totalMonthly"`
-	ReclaimableMonthly   money.Cents `json:"reclaimableMonthly"`
+	// TotalMonthly is droplets + volumes + load balancers. It is the fleet's recurring
+	// bill, not the DigitalOcean invoice: bandwidth, snapshots, spaces and registry are
+	// not inventory this board reads. WastedMonthly is already inside VolumesMonthly and
+	// is never added again.
+	TotalMonthly money.Cents `json:"totalMonthly"`
+	// ReclaimableMonthly is what deleting the unreferenced volumes would stop costing —
+	// the one figure on this board that a button here can actually collect. Zero while
+	// Complete is false, because an unproven orphan is not an orphan.
+	ReclaimableMonthly money.Cents `json:"reclaimableMonthly"`
 	// WastedMonthly is what the fleet pays every month for provisioned-but-empty space on
 	// the volumes a kubelet actually measured.
 	//
@@ -260,20 +336,51 @@ type Cost struct {
 
 // Cluster is one DOKS cluster with its scanned Kubernetes rollup.
 type Cluster struct {
-	ID           string      `json:"id"`
-	Name         string      `json:"name"`
-	Region       string      `json:"region"`
-	Version      string      `json:"version"`
-	Status       string      `json:"status"`
-	NodePools    int         `json:"nodePools"`
-	Pools        []NodePool  `json:"pools"`
-	Nodes        int         `json:"nodes"`
-	Pods         int         `json:"pods"`
-	PVs          int         `json:"pvs"`
-	PVCs         int         `json:"pvcs"`
-	IdlePVCs     int         `json:"idlePVCs"`
-	Scanned      bool        `json:"scanned"`
-	ScanError    string      `json:"scanError"`
+	// ID is the DOKS cluster UUID — the same UUID that appears in a resource's
+	// `k8s:<uuid>` tag, and the key every scan and every proven ownership joins on.
+	ID string `json:"id"`
+	// Name is the cluster's DO name ("hanzo-k8s"). It is what every human-facing message
+	// on this board names a cluster by, including the refusal reasons.
+	Name string `json:"name"`
+	// Region is DO's region slug ("nyc3"). A volume can only ever attach to a droplet in
+	// its own region, which is why the region rides along on the row.
+	Region string `json:"region"`
+	// Version is the DOKS Kubernetes version DO reports ("1.31.1-do.0").
+	Version string `json:"version"`
+	// Status is DOKS's own lifecycle state for the control plane ("running",
+	// "provisioning", "degraded", "error", "deleting"). It says nothing about whether
+	// this board reached the cluster — Scanned answers that.
+	Status string `json:"status"`
+	// NodePools is how many pools the cluster has, which is len(pools).
+	NodePools int `json:"nodePools"`
+	// Pools is the pools themselves, each carrying its own scale verdict.
+	Pools []NodePool `json:"pools"`
+	// Nodes is how many droplets carry this cluster's tag. It comes from the DO
+	// inventory, so it is populated even for a cluster that never answered.
+	Nodes int `json:"nodes"`
+	// Pods is how many pods the scan listed, all namespaces. Zero when Scanned is false —
+	// unknown, not empty.
+	Pods int `json:"pods"`
+	// PVs is how many PersistentVolumes the scan listed. These are the claims that make a
+	// DO volume live; zero here with Scanned false is what forces the whole board
+	// incomplete.
+	PVs int `json:"pvs"`
+	// PVCs is how many PersistentVolumeClaims the scan listed.
+	PVCs int `json:"pvcs"`
+	// IdlePVCs is how many of this cluster's volumes are Bound with no pod mounting them
+	// — its share of the review queue, not of the delete queue.
+	IdlePVCs int `json:"idlePVCs"`
+	// Scanned reports that this cluster's Kubernetes answered. False makes the whole
+	// board incomplete, not just this row: a cluster that did not answer might hold any
+	// volume on it.
+	Scanned bool `json:"scanned"`
+	// ScanError is why the scan failed, or "not scanned" when the cluster was never
+	// reached at all. Empty exactly when Scanned is true.
+	ScanError string `json:"scanError"`
+	// MonthlyCents is this cluster's share of the bill: its droplets plus the volumes
+	// PROVEN to belong to it. Load balancers are not included — a Service's load balancer
+	// is attributed on the load-balancer row, not folded in here, so cluster costs never
+	// double-count against Cost.totalMonthly.
 	MonthlyCents money.Cents `json:"monthlyCents"`
 }
 
@@ -281,15 +388,36 @@ type Cluster struct {
 // count. ClusterSchedulable is the whole cluster's schedulable-and-ready node count,
 // carried on the row so the shrink verdict is a pure method of it.
 type NodePool struct {
-	ID                 string `json:"id"`
-	Name               string `json:"name"`
-	Size               string `json:"size"`
-	Count              int    `json:"count"`
-	ClusterID          string `json:"clusterId"`
-	Cluster            string `json:"cluster"`
-	ClusterSchedulable int    `json:"clusterSchedulable"`
-	Scalable           bool   `json:"scalable"`
-	BlockedReason      string `json:"blockedReason"`
+	// ID is the DO node pool UUID. The scale route accepts it or Name interchangeably,
+	// since both are unique within a cluster.
+	ID string `json:"id"`
+	// Name is the pool's name ("workers") — what an operator reads off the board and
+	// what every message about a scale names.
+	Name string `json:"name"`
+	// Size is the DigitalOcean size slug every node in this pool is created at
+	// ("s-4vcpu-8gb"). One slug per pool: it is the pool, not the droplet, that declares
+	// what its machines are, which is why a hand-resized node gets reverted.
+	Size string `json:"size"`
+	// Count is how many nodes the pool is currently set to. It is the DECLARED count, so
+	// it can lead reality while DOKS creates or drains machines.
+	Count int `json:"count"`
+	// ClusterID is the DOKS cluster this pool belongs to.
+	ClusterID string `json:"clusterId"`
+	// Cluster is that cluster's name, carried on the row so a refusal can say which
+	// cluster a shrink would strand.
+	Cluster string `json:"cluster"`
+	// ClusterSchedulable is how many nodes in the WHOLE cluster are both Ready and
+	// schedulable — not just this pool's. Cordoned and NotReady nodes are excluded,
+	// because a shrink's evicted pods cannot land on them. It rides on the row so
+	// ScaleTo is a pure method of the row and needs no second lookup.
+	ClusterSchedulable int `json:"clusterSchedulable"`
+	// Scalable is the standing verdict: whether a scale may be attempted at all. It
+	// reflects the shared completeness gate ONLY. Whether a PARTICULAR count is allowed
+	// depends on the number asked for, which ScaleTo decides at request time.
+	Scalable bool `json:"scalable"`
+	// BlockedReason is why not, in the operator's language. Empty exactly when Scalable
+	// is true — allowed carries no reason, blocked always names one.
+	BlockedReason string `json:"blockedReason"`
 }
 
 // ScaleTo answers whether this pool may be set to count.
@@ -317,56 +445,129 @@ func (p NodePool) ScaleTo(count int) (bool, string) {
 
 // Machine is one droplet, joined to the Kubernetes node of the same name.
 type Machine struct {
-	ID           int         `json:"id"`
-	Name         string      `json:"name"`
-	Cluster      string      `json:"cluster"`
-	ClusterID    string      `json:"clusterId"`
-	Region       string      `json:"region"`
-	Status       string      `json:"status"`
-	SizeSlug     string      `json:"sizeSlug"`
-	VCPUs        int         `json:"vcpus"`
-	MemoryMiB    int         `json:"memoryMiB"`
-	LocalDiskGiB int         `json:"localDiskGiB"`
+	// ID is the DigitalOcean droplet id. Numeric, and the id every droplet route takes.
+	ID int `json:"id"`
+	// Name is the droplet name. For a DOKS node it is also the Kubernetes node name, and
+	// that equality is the join: it is how Ready, Schedulable and Pods below get filled.
+	Name string `json:"name"`
+	// Cluster is the DOKS cluster's name, or "" for a droplet no cluster owns — the only
+	// kind this board will ever delete.
+	Cluster string `json:"cluster"`
+	// ClusterID is that cluster's UUID, read from the droplet's own `k8s:<uuid>` tag. On
+	// a DROPLET the tag is authoritative, unlike on a volume: DOKS creates the droplet
+	// and destroys it with the pool, so the tag cannot outlive what it describes.
+	ClusterID string `json:"clusterId"`
+	// Region is DO's region slug ("nyc3").
+	Region string `json:"region"`
+	// Status is DO's droplet state ("new", "active", "off", "archive"). A powered-off
+	// droplet still bills, which is why "off" here and a cost row are not in tension.
+	Status string `json:"status"`
+	// SizeSlug is the DigitalOcean plan ("s-4vcpu-8gb"). It decides MonthlyCents and is
+	// what a resize sets.
+	SizeSlug string `json:"sizeSlug"`
+	// VCPUs is the plan's virtual CPU count.
+	VCPUs int `json:"vcpus"`
+	// MemoryMiB is the plan's RAM, in MiB as DO reports it.
+	MemoryMiB int `json:"memoryMiB"`
+	// LocalDiskGiB is the droplet's own disk, in GiB. Its price is already inside
+	// MonthlyCents — DO does not bill it as block storage, and adding it to the volume
+	// totals is how a fleet appears to hold terabytes it never pays for.
+	LocalDiskGiB int `json:"localDiskGiB"`
+	// MonthlyCents is DO's list price for SizeSlug, in cents per month. It is the plan's
+	// price, not a metered bill, so it does not move with how hard the machine works.
 	MonthlyCents money.Cents `json:"monthlyCents"`
-	CreatedAt    string      `json:"createdAt"`
-	PrivateIP    string      `json:"privateIp"`
-	PublicIP     string      `json:"publicIp"`
-	Tags         []string    `json:"tags"`
-	Ready        bool        `json:"ready"`
-	Schedulable  bool        `json:"schedulable"`
-	Pods         int         `json:"pods"`
-	Volumes      int         `json:"volumes"`
+	// CreatedAt is when DO created the droplet, RFC3339.
+	CreatedAt string `json:"createdAt"`
+	// PrivateIP is the droplet's VPC address, or "" when it has none.
+	PrivateIP string `json:"privateIp"`
+	// PublicIP is the droplet's internet-facing address, or "" when it has none.
+	PublicIP string `json:"publicIp"`
+	// Tags are DO's resource tags verbatim, including the DOKS stamps `k8s:<uuid>` and
+	// `k8s:worker`. Never null — an untagged droplet carries an empty list.
+	Tags []string `json:"tags"`
+	// Ready is the Kubernetes node's own Ready condition, joined by Name. False for a
+	// droplet that is not a node at all, and for a node in a cluster that did not answer
+	// — unknown reads as not-ready, which refuses more and is the safe direction.
+	Ready bool `json:"ready"`
+	// Schedulable is the same node's cordon state, inverted: false means unschedulable.
+	// It is what the cordon route sets, and only a Ready AND schedulable node counts
+	// toward NodePool.clusterSchedulable.
+	Schedulable bool `json:"schedulable"`
+	// Pods is how many pods the scan found scheduled on this node.
+	Pods int `json:"pods"`
+	// Volumes is how many block-storage volumes DO reports attached to this droplet.
+	Volumes int `json:"volumes"`
 	// Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.
 	// One predicate covers both because one fact decides both: a DOKS node belongs to a
 	// node pool, and the pool is the only thing allowed to change it.
-	Mutable       bool   `json:"mutable"`
+	Mutable bool `json:"mutable"`
+	// BlockedReason is why not, in the operator's language, and it names the lever that
+	// DOES work — scale or edit the node pool. Empty exactly when Mutable is true.
 	BlockedReason string `json:"blockedReason"`
 }
 
 // Volume is one block-storage volume with its PROVEN cluster ownership.
 type Volume struct {
-	ID           string      `json:"id"`
-	Name         string      `json:"name"`
-	Region       string      `json:"region"`
-	SizeGiB      int         `json:"sizeGiB"`
+	// ID is the DigitalOcean volume id. It is also the `spec.csi.volumeHandle` a
+	// PersistentVolume names, which is what makes the cross-cluster liveness test an
+	// exact match rather than a guess.
+	ID string `json:"id"`
+	// Name is the DO volume name. DOKS-provisioned volumes are named `pvc-<uuid>`, which
+	// is a naming convention and NOT evidence of ownership — only a PV reference is.
+	Name string `json:"name"`
+	// Region is DO's region slug ("nyc3"). A volume can only ever attach to a droplet in
+	// its own region, so this bounds where it could possibly be in use.
+	Region string `json:"region"`
+	// SizeGiB is the PROVISIONED size — what DigitalOcean bills. It is not the
+	// filesystem's capacity, which is a few percent smaller after format overhead.
+	SizeGiB int `json:"sizeGiB"`
+	// MonthlyCents is SizeGiB at DO's rate of 10 cents per GiB per month. It is charged
+	// on provisioned capacity, so an empty volume and a full one of the same size cost
+	// exactly the same.
 	MonthlyCents money.Cents `json:"monthlyCents"`
-	State        string      `json:"state"`
-	DropletIDs   []int       `json:"dropletIds"`
-	NodeName     string      `json:"nodeName"`
+	// State is the ownership verdict, one of `attached`, `bound`, `released`,
+	// `unreferenced`. The machine is total and ordered — attachment beats reference,
+	// reference beats absence — and `unreferenced` is the ONLY deletable state.
+	State string `json:"state"`
+	// DropletIDs are the droplets DO reports this volume attached to. Non-empty is hard
+	// kernel-level evidence the volume is in use right now. Never null.
+	DropletIDs []int `json:"dropletIds"`
+	// NodeName is the name of the first attached droplet, or "" when detached. Carried so
+	// a refusal can name the machine an operator would have to go look at.
+	NodeName string `json:"nodeName"`
 	// Cluster/ClusterID are the PROVEN owner — resolved through a PV that names this
 	// volume, never through the tag.
-	Cluster   string `json:"cluster"`
+	Cluster string `json:"cluster"`
+	// ClusterID is that cluster's UUID. Falls back to the cluster of the droplet the
+	// volume is physically attached to, which is evidence of the same quality: live
+	// kernel state, not a label someone wrote once.
 	ClusterID string `json:"clusterId"`
 	// TagCluster is the `k8s:<uuid>` tag. ADVISORY ONLY: it outlives the cluster that
 	// set it. Shown so the operator can see tag-vs-truth disagree, never acted on.
-	TagCluster   string   `json:"tagCluster"`
-	PV           string   `json:"pv"`
-	PVPhase      string   `json:"pvPhase"`
-	PVCNamespace string   `json:"pvcNamespace"`
-	PVCName      string   `json:"pvcName"`
-	MountedBy    []string `json:"mountedBy"`
-	Idle         bool     `json:"idle"`
-	CreatedAt    string   `json:"createdAt"`
+	TagCluster string `json:"tagCluster"`
+	// PV is the name of the PersistentVolume that claims this volume, or "" when no PV in
+	// any scanned cluster does. Non-empty is the proof that makes it undeletable.
+	PV string `json:"pv"`
+	// PVPhase is that PV's phase — `Bound`, `Released`, `Available` or `Failed`. Bound
+	// means live data; anything else means the claim is retired but the PV still exists,
+	// so a human retires the PV before the volume can go.
+	PVPhase string `json:"pvPhase"`
+	// PVCNamespace is the namespace of the claim the PV is bound to, or "" when unbound.
+	PVCNamespace string `json:"pvcNamespace"`
+	// PVCName is that claim's name. It plus the namespace is what the fill reading and
+	// the mounting pods are keyed by, so an empty PVCName means neither can exist.
+	PVCName string `json:"pvcName"`
+	// MountedBy lists the `namespace/name` of every running pod mounting this volume.
+	// Empty on a Bound volume means idle — a review signal, never a delete signal.
+	// Never null.
+	MountedBy []string `json:"mountedBy"`
+	// Idle is Bound with nothing mounting it: live data nobody is currently reading,
+	// typically a stopped database. It is a queue for a human and is deliberately kept
+	// out of Cost.reclaimableMonthly.
+	Idle bool `json:"idle"`
+	// CreatedAt is when DO created the volume, RFC3339. Age is corroboration for a human
+	// judging an orphan, never an input to the deletable verdict.
+	CreatedAt string `json:"createdAt"`
 	// Controller is the workload owning the pod that mounts this volume
 	// ("StatefulSet/luxd"), or "" when nothing mounts it. It names who has to act.
 	Controller string `json:"controller"`
@@ -387,15 +588,27 @@ type Volume struct {
 	// WastedGiB is provisioned minus measured, in the unit DigitalOcean BILLS: whole GiB
 	// of the volume's own size, never the filesystem's capacity — a 200 GiB volume carries
 	// a 196 GiB filesystem after format overhead, and the invoice says 200.
-	WastedGiB          int         `json:"wastedGiB"`
+	WastedGiB int `json:"wastedGiB"`
+	// WastedMonthlyCents is WastedGiB at the same 10 cents per GiB per month. Money the
+	// fleet pays for empty space inside a volume that is IN USE — so it is not
+	// collectable by any button here, only by the copy-and-swap migration the matching
+	// finding spells out. Zero when HasUsage is false, which means unknown, not none.
 	WastedMonthlyCents money.Cents `json:"wastedMonthlyCents"`
 
-	Deletable     bool   `json:"deletable"`
+	// Deletable is the standing verdict: this volume is unreferenced AND the scan was
+	// complete enough to prove it. It is the only thing the delete route consults, and it
+	// is recomputed from a fresh scan at the moment the button is pressed.
+	Deletable bool `json:"deletable"`
+	// BlockedReason is why not, in the operator's language — which cluster's PV holds it,
+	// or which clusters went unanswered. Empty exactly when Deletable is true.
 	BlockedReason string `json:"blockedReason"`
 	// Expandable/ExpandBlockedReason are the GROW verdict, kept separate from Deletable
 	// because the two ask opposite questions: a volume is deletable when nothing uses it,
 	// and expandable when something uses it in a way this board can grow completely.
-	Expandable          bool   `json:"expandable"`
+	Expandable bool `json:"expandable"`
+	// ExpandBlockedReason is why a grow is refused: a PV claims the volume but no PVC
+	// does, so growing the device would leave the PV declaring a capacity that is wrong.
+	// Empty exactly when Expandable is true.
 	ExpandBlockedReason string `json:"expandBlockedReason"`
 }
 
@@ -423,31 +636,75 @@ func (v Volume) ExpandTo(gib int) (bool, string) {
 // LoadBalancer is one DO load balancer, attributed to a cluster via the Service that
 // claims it, or failing that via its member droplets.
 type LoadBalancer struct {
-	ID           string      `json:"id"`
-	Name         string      `json:"name"`
-	Region       string      `json:"region"`
-	Status       string      `json:"status"`
-	IP           string      `json:"ip"`
-	SizeUnit     int         `json:"sizeUnit"`
+	// ID is the DO load balancer UUID. DOKS writes it into the Service's
+	// `kubernetes.digitalocean.com/load-balancer-id` annotation, which is one of the two
+	// identities the liveness index is keyed by.
+	ID string `json:"id"`
+	// Name is DigitalOcean's own name for it. A DOKS-provisioned load balancer is named
+	// after neither its Service nor its cluster, so this does not identify who uses it —
+	// Service does.
+	Name string `json:"name"`
+	// Region is DO's region slug ("nyc3").
+	Region string `json:"region"`
+	// Status is DO's own state for it ("new", "active", "errored").
+	Status string `json:"status"`
+	// IP is the public address it answers on — the address that black-holes if it is
+	// deleted while a Service still wants it. It is also the second identity the
+	// liveness index matches on, for a Service that carries no annotation.
+	IP string `json:"ip"`
+	// SizeUnit is the number of billed load-balancer nodes DO reports. Never below 1: DO
+	// omits the field on the legacy single-node size, which is one node, not zero.
+	SizeUnit int `json:"sizeUnit"`
+	// MonthlyCents is SizeUnit at $12 per node per month. Derived, because DO's API
+	// prices droplets but not load balancers.
 	MonthlyCents money.Cents `json:"monthlyCents"`
-	Droplets     int         `json:"droplets"`
-	Cluster      string      `json:"cluster"`
+	// Droplets is how many droplets it forwards to. NOT a liveness signal: a DOKS load
+	// balancer lists every node in its cluster, so a leaked one still looks busy.
+	Droplets int `json:"droplets"`
+	// Cluster is the owning cluster's name — from the claiming Service where there is
+	// one, otherwise from the cluster its member droplets belong to.
+	Cluster string `json:"cluster"`
 	// Service is the `namespace/name` of the live type=LoadBalancer Service that claims
 	// this load balancer, proven from the cluster scan. Non-empty means IN USE.
-	Service       string `json:"service"`
-	Deletable     bool   `json:"deletable"`
+	Service string `json:"service"`
+	// Deletable is the standing verdict: no live Service claims it, every member droplet
+	// belongs to a cluster this board scanned, and the scan was complete.
+	Deletable bool `json:"deletable"`
+	// BlockedReason is why not — which Service still wants it, or how many of its member
+	// droplets sit outside every cluster and so cannot be vouched for. Empty exactly when
+	// Deletable is true.
 	BlockedReason string `json:"blockedReason"`
 }
 
 // Finding is one audit result — the "is anything bad" surface.
 type Finding struct {
-	ID           string      `json:"id"`
-	Severity     string      `json:"severity"`
-	Kind         string      `json:"kind"`
-	Title        string      `json:"title"`
-	Detail       string      `json:"detail"`
-	Resource     string      `json:"resource"`
-	Cluster      string      `json:"cluster"`
+	// ID is stable across scans and unique within one: `unref/<volume>`,
+	// `oversized/<volume>`, `pod/<cluster>/<ns>/<name>`, `image/<repo>`,
+	// `cost/node/<name>`. A consumer can key a dismissal off it.
+	ID string `json:"id"`
+	// Severity is one of `critical`, `warn`, `info`, and is the primary sort. Only an
+	// incomplete scan is critical, because only that invalidates the board's other
+	// answers.
+	Severity string `json:"severity"`
+	// Kind is the machine-readable class: `scan-incomplete`, `unreferenced-volume`,
+	// `released-pv`, `idle-pvc`, `oversized-volume`, `pod-unhealthy`, `unknown-image`,
+	// `cost-outlier`. Group and filter on this; Title is for a human.
+	Kind string `json:"kind"`
+	// Title is the one-line summary, already carrying the numbers that matter.
+	Title string `json:"title"`
+	// Detail is the full explanation. For an oversized volume it is the entire
+	// copy-and-swap migration, written out as kubectl steps — this board prints the
+	// recipe and deliberately refuses to run it.
+	Detail string `json:"detail"`
+	// Resource is what the finding is about, in that kind's own addressing: a volume id,
+	// a `namespace/name` pod, an image repository. Empty on a fleet-wide finding.
+	Resource string `json:"resource"`
+	// Cluster is the cluster's name where the finding is scoped to one, "" otherwise.
+	Cluster string `json:"cluster"`
+	// MonthlyCents is the money at stake, and it is the secondary sort within a severity.
+	// It carries what acting would actually SAVE, not the raw waste — an oversized volume
+	// reports the saving after keeping headroom, since a list sorted by money has to be
+	// sorted by money you could really get back. Zero when nothing is at stake.
 	MonthlyCents money.Cents `json:"monthlyCents"`
 }
 

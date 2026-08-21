@@ -1970,6 +1970,26 @@
         "tags": [
           "admin"
         ],
+        "parameters": [
+          {
+            "name": "p",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page number. Defaults to \"1\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "description": "PageSize is rows per page. Defaults to \"200\", the shared admin page size.\nIt bounds the fan-out: the page decides how many per-org reads happen, so\nthe directory costs the same at eighty tenants and at eight thousand.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3048,12 +3068,15 @@
       "AccessOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/AccessChange"
+            "$ref": "#/components/schemas/AccessChange",
+            "description": "Data is the per-user breakdown of what changed. Null exactly when Status is\n\"error\", which means no user was touched."
           },
           "msg": {
+            "description": "Msg is why the action could not run at all: no org named, the org unknown (also\nHTTP 404), or IAM's member list unreadable. Empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", and it answers whether the action RAN, not whether every\nuser was updated. A partial failure is an ok answer with a non-empty data.failed —\nread that before treating the org as fully suspended.",
             "type": "string"
           }
         },
@@ -3071,12 +3094,15 @@
       "BackfillOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Backfilled"
+            "$ref": "#/components/schemas/Backfilled",
+            "description": "Data is the receipt. Null exactly when Status is \"error\". A retry is safe: the\ndeposit carries the fixed ref \"backfill:\u003corg\u003e\", so the wallet is credited at most\nonce however many times this runs."
           },
           "msg": {
+            "description": "Msg is why, and is empty on success. It names the half that failed: \"read commerce\nbalance: ...\" before any money moved, \"finance backfill: ...\" at the write.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". Error means NOTHING was carried — the commerce balance\nis read and must be readable before the wallet is written, so an unreadable source\nrefuses the cutover rather than migrating a phantom zero.",
             "type": "string"
           }
         },
@@ -3102,18 +3128,23 @@
       "BoardView": {
         "properties": {
           "auditUrl": {
+            "description": "AuditURL is where the change log for those writes lives: /v1/flags/activity.",
             "type": "string"
           },
           "configured": {
+            "description": "Configured is whether the definition stores opened. When false every switch\nbelow is resolving from env or its registered default — the values are still\nthe ones in force, but nothing stored can be reaching them and a write will\nfail. That is the fail-safe posture, not an outage.",
             "type": "boolean"
           },
           "engine": {
+            "description": "Engine names the evaluator serving these values: \"hanzo-flags\", running\nin-process in this pod.",
             "type": "string"
           },
           "manageUrl": {
+            "description": "ManageURL is where the definitions behind these switches are read and\nwritten: /v1/flags/defs.",
             "type": "string"
           },
           "switches": {
+            "description": "Switches is every registered switch with the value in force, in registration\norder — the seeded platform set first, then whatever each subsystem added at\ninit. The registry is open, so this is the deployment's switchboard rather\nthan a fixed list.",
             "items": {
               "$ref": "#/components/schemas/SwitchView"
             },
@@ -3125,51 +3156,66 @@
       "Cluster": {
         "properties": {
           "id": {
+            "description": "ID is the DOKS cluster UUID — the same UUID that appears in a resource's\n`k8s:\u003cuuid\u003e` tag, and the key every scan and every proven ownership joins on.",
             "type": "string"
           },
           "idlePVCs": {
+            "description": "IdlePVCs is how many of this cluster's volumes are Bound with no pod mounting them\n— its share of the review queue, not of the delete queue.",
             "type": "integer"
           },
           "monthlyCents": {
+            "description": "MonthlyCents is this cluster's share of the bill: its droplets plus the volumes\nPROVEN to belong to it. Load balancers are not included — a Service's load balancer\nis attributed on the load-balancer row, not folded in here, so cluster costs never\ndouble-count against Cost.totalMonthly.",
             "type": "integer"
           },
           "name": {
+            "description": "Name is the cluster's DO name (\"hanzo-k8s\"). It is what every human-facing message\non this board names a cluster by, including the refusal reasons.",
             "type": "string"
           },
           "nodePools": {
+            "description": "NodePools is how many pools the cluster has, which is len(pools).",
             "type": "integer"
           },
           "nodes": {
+            "description": "Nodes is how many droplets carry this cluster's tag. It comes from the DO\ninventory, so it is populated even for a cluster that never answered.",
             "type": "integer"
           },
           "pods": {
+            "description": "Pods is how many pods the scan listed, all namespaces. Zero when Scanned is false —\nunknown, not empty.",
             "type": "integer"
           },
           "pools": {
+            "description": "Pools is the pools themselves, each carrying its own scale verdict.",
             "items": {
               "$ref": "#/components/schemas/NodePool"
             },
             "type": "array"
           },
           "pvcs": {
+            "description": "PVCs is how many PersistentVolumeClaims the scan listed.",
             "type": "integer"
           },
           "pvs": {
+            "description": "PVs is how many PersistentVolumes the scan listed. These are the claims that make a\nDO volume live; zero here with Scanned false is what forces the whole board\nincomplete.",
             "type": "integer"
           },
           "region": {
+            "description": "Region is DO's region slug (\"nyc3\"). A volume can only ever attach to a droplet in\nits own region, which is why the region rides along on the row.",
             "type": "string"
           },
           "scanError": {
+            "description": "ScanError is why the scan failed, or \"not scanned\" when the cluster was never\nreached at all. Empty exactly when Scanned is true.",
             "type": "string"
           },
           "scanned": {
+            "description": "Scanned reports that this cluster's Kubernetes answered. False makes the whole\nboard incomplete, not just this row: a cluster that did not answer might hold any\nvolume on it.",
             "type": "boolean"
           },
           "status": {
+            "description": "Status is DOKS's own lifecycle state for the control plane (\"running\",\n\"provisioning\", \"degraded\", \"error\", \"deleting\"). It says nothing about whether\nthis board reached the cluster — Scanned answers that.",
             "type": "string"
           },
           "version": {
+            "description": "Version is the DOKS Kubernetes version DO reports (\"1.31.1-do.0\").",
             "type": "string"
           }
         },
@@ -3195,18 +3241,23 @@
       "Cost": {
         "properties": {
           "dropletsMonthly": {
+            "description": "DropletsMonthly is DigitalOcean's list price for every droplet's size, summed.\nThe droplet's local disk is part of that price and is never billed again.",
             "type": "integer"
           },
           "loadBalancersMonthly": {
+            "description": "LoadBalancersMonthly is $12 per billed node per month, summed. DO's API does not\nprice load balancers, so this is derived from the size_unit it does report.",
             "type": "integer"
           },
           "reclaimableMonthly": {
+            "description": "ReclaimableMonthly is what deleting the unreferenced volumes would stop costing —\nthe one figure on this board that a button here can actually collect. Zero while\nComplete is false, because an unproven orphan is not an orphan.",
             "type": "integer"
           },
           "totalMonthly": {
+            "description": "TotalMonthly is droplets + volumes + load balancers. It is the fleet's recurring\nbill, not the DigitalOcean invoice: bandwidth, snapshots, spaces and registry are\nnot inventory this board reads. WastedMonthly is already inside VolumesMonthly and\nis never added again.",
             "type": "integer"
           },
           "volumesMonthly": {
+            "description": "VolumesMonthly is block storage at DO's rate of 10 cents per provisioned GiB per\nmonth, summed over every volume — attached, idle and orphaned alike, because DO\nbills for capacity, not for use.",
             "type": "integer"
           },
           "wastedMonthly": {
@@ -3219,42 +3270,54 @@
       "CustomerDetailData": {
         "properties": {
           "apiKeys": {
+            "description": "APIKeys is how many members hold an access key — the org's programmatic reach,\ncounted from users[] and never the keys themselves.",
             "type": "integer"
           },
           "balanceCents": {
+            "description": "BalanceCents is the prepaid wallet still held, in USD cents.",
             "type": "integer"
           },
           "created": {
+            "description": "Created is when IAM created the org, RFC3339.",
             "type": "string"
           },
           "display": {
+            "description": "Display is the org's display name, falling back to the slug when it has none.",
             "type": "string"
           },
           "mrrCents": {
+            "description": "MRRCents is monthly recurring revenue, in USD cents, over the subscriptions\ncommerce counts as revenue. A trial contributes zero while still naming Plan.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the tenant slug, echoed from the path.",
             "type": "string"
           },
           "ownerEmail": {
+            "description": "OwnerEmail is the org admin's email, or the first member with one. Empty when no\nmember carries an email.",
             "type": "string"
           },
           "plan": {
+            "description": "Plan is the live subscription tier's name, or \"pay-as-you-go\" with no subscription.",
             "type": "string"
           },
           "spendCents": {
+            "description": "SpendCents is metered consumption over the trailing 30 days, in USD cents.",
             "type": "integer"
           },
           "status": {
+            "description": "Status is `active` or `suspended` — suspended only when the org has members and\nevery one of them is forbidden. The per-member truth is in users[].forbidden.",
             "type": "string"
           },
           "transactions": {
+            "description": "Transactions is the org's ledger, newest first, capped at the last 50 entries. A\nsample of the history, not the whole of it, so the balance above cannot be\nrecomputed by folding this.",
             "items": {
               "$ref": "#/components/schemas/CustomerTxn"
             },
             "type": "array"
           },
           "users": {
+            "description": "Users is the org's members, up to a 200-member page. Suspend and reactivate act on\nexactly this set.",
             "items": {
               "$ref": "#/components/schemas/CustomerUser"
             },
@@ -3266,12 +3329,15 @@
       "CustomerDetailOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/CustomerDetailData"
+            "$ref": "#/components/schemas/CustomerDetailData",
+            "description": "Data is the customer. Null exactly when Status is \"error\"."
           },
           "msg": {
+            "description": "Msg is the failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". An unknown org is an error and also carries HTTP 404 —\nthe status code is the addition, not a different contract.",
             "type": "string"
           }
         },
@@ -3280,37 +3346,47 @@
       "CustomerRow": {
         "properties": {
           "balanceCents": {
+            "description": "BalanceCents is the prepaid wallet the org still holds, in USD cents. What is left\nto spend, not what was granted.",
             "type": "integer"
           },
           "created": {
+            "description": "Created is when IAM created the org, RFC3339 — the signup date.",
             "type": "string"
           },
           "display": {
+            "description": "Display is the org's display name, falling back to the slug when it has none. For\nhumans; never key on it.",
             "type": "string"
           },
           "lastActive": {
+            "description": "LastActive is the most recent sign-in across every member, RFC3339. The best\nactivity signal IAM carries, so it tracks people logging in, not API traffic. Empty\nwhen no member has ever signed in.",
             "type": "string"
           },
           "mrrCents": {
+            "description": "MRRCents is the org's monthly recurring revenue, in USD cents: commerce's own\nper-subscription figure, already interval-normalized and multiplied by seats, summed\nover the subscriptions commerce counts as revenue. A trial contributes zero.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the tenant slug — the row's identity, and the value every per-customer route\ntakes in its path. The list is sorted by it.",
             "type": "string"
           },
           "ownerEmail": {
+            "description": "OwnerEmail is the org admin's email, or the first member with one. Empty when no\nmember carries an email at all — IAM does not require one.",
             "type": "string"
           },
           "plan": {
+            "description": "Plan is the name of the org's live subscription tier, or \"pay-as-you-go\" for a\nmetered customer with no subscription. A trial names its plan here even though it\ncontributes no MRR.",
             "type": "string"
           },
           "spendCents": {
+            "description": "SpendCents is metered consumption over the TRAILING 30 DAYS, in USD cents — the one\nwindow every fleet money surface means by \"spend\". Positive, and it does not reset\non the first of the month.",
             "type": "integer"
           },
           "status": {
-            "description": "\"active\" | \"suspended\"",
+            "description": "Status is `active` or `suspended`, derived from the members' IAM isForbidden flags.\nSuspended requires the org to have members and EVERY one of them to be forbidden —\na partly-forbidden org still reads active, because some of it can still sign in.",
             "type": "string"
           },
           "users": {
+            "description": "Users is how many members IAM lists for the org, up to the 200-member page this\nread takes. Every other IAM-derived field on the row is folded from that same page.",
             "type": "integer"
           }
         },
@@ -3319,22 +3395,27 @@
       "CustomerTxn": {
         "properties": {
           "cents": {
+            "description": "Cents is the entry's magnitude in minor units, and it is UNSIGNED — a withdraw\ndoes not arrive negative, so a running balance has to be folded by reading Type.",
             "type": "integer"
           },
           "currency": {
+            "description": "Currency is the entry's ISO code, lower-cased. \"usd\" throughout the fleet today.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the commerce ledger entry id — what reconciliation against commerce joins on.",
             "type": "string"
           },
           "notes": {
+            "description": "Notes is the free-text memo the entry was written with — for a staff grant, the\nreason an operator typed. Omitted when blank.",
             "type": "string"
           },
           "time": {
+            "description": "Time is when the entry was recorded, RFC3339. The history is newest first.",
             "type": "string"
           },
           "type": {
-            "description": "\"deposit\" (credit) | \"withdraw\" (usage)",
+            "description": "Type is `deposit` (money in: a top-up or a staff grant) or `withdraw` (money out:\nmetered usage). It is the only thing that gives Cents its direction.",
             "type": "string"
           }
         },
@@ -3343,24 +3424,31 @@
       "CustomerUser": {
         "properties": {
           "created": {
+            "description": "Created is when IAM created the member, RFC3339.",
             "type": "string"
           },
           "email": {
+            "description": "Email is the member's address, empty when IAM holds none.",
             "type": "string"
           },
           "forbidden": {
+            "description": "Forbidden is IAM's isForbidden. True means IAM refuses this user at login AND at\ntoken issuance, so they can neither sign in nor mint a fresh one. It is what\nsuspend sets and reactivate clears, per user — which is why an org can sit in a\nmixed state after a partial failure.",
             "type": "boolean"
           },
           "hasApiKey": {
+            "description": "HasAPIKey reports that the member holds an access key. PRESENCE only: the key\nitself is never read onto this surface.",
             "type": "boolean"
           },
           "isAdmin": {
+            "description": "IsAdmin is admin OF THIS ORG — the customer's own account owner, who manages their\nmembers and apps. It is NOT platform privilege: SuperAdmin is membership of the\nreserved `admin` org and never appears on a customer row.",
             "type": "boolean"
           },
           "lastSignin": {
+            "description": "LastSignin is the member's most recent sign-in, RFC3339. Empty means never signed\nin — which is different from signed in long ago.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the IAM username, unique within the org. `\u003corg\u003e/\u003cname\u003e` is the id the\nsuspend and reactivate actions address the user by.",
             "type": "string"
           }
         },
@@ -3369,18 +3457,22 @@
       "CustomersOut": {
         "properties": {
           "data": {
+            "description": "Data is every customer org, sorted by slug.",
             "items": {
               "$ref": "#/components/schemas/CustomerRow"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". An error here means the IAM org directory could not be\nread; a per-org money or plan failure does not fail the fleet, it degrades that\nrow's field to its zero.",
             "type": "string"
           },
           "total": {
+            "description": "Total is len(data). The list is unpaginated, so it is a convenience, never a\ncount of rows withheld. Omitted on an error.",
             "type": "integer"
           }
         },
@@ -3389,30 +3481,38 @@
       "DoCost": {
         "properties": {
           "accountBalanceCents": {
+            "description": "AccountBalanceCents is DigitalOcean's raw account balance, sign INCLUDED: positive\nmeans we owe DO, negative means we hold credit. It is here so the sign convention\nis visible rather than only implied by CreditRemainingCents.",
             "type": "integer"
           },
           "avgDailyBurnCents": {
+            "description": "AvgDailyBurnCents is month-to-date spend divided by the elapsed days of the current\nmonth, at least one. A running average, so it is noisiest on the 1st and steadies\nthrough the month. It is the denominator of runwayDays.",
             "type": "integer"
           },
           "configured": {
+            "description": "Configured reports that a DO_API_TOKEN is set and the balance read succeeded. False\nzeroes every number below and makes runwayDays null rather than infinite.",
             "type": "boolean"
           },
           "creditRemainingCents": {
+            "description": "CreditRemainingCents is the promo credit still held, in USD cents, POSITIVE. It is\nthe negated account balance, clamped at zero: DigitalOcean carries an\naccounts-receivable sign, so credit we hold shows as a NEGATIVE balance and an\namount we owe shows positive — an account we owe on has zero credit, not negative.",
             "type": "integer"
           },
           "error": {
+            "description": "Error is why the DO read failed, or that the token is unset. Omitted when\nConfigured is true.",
             "type": "string"
           },
           "generatedAt": {
+            "description": "GeneratedAt is when DigitalOcean generated the balance, from their response — not\nwhen this board read it. Omitted when DO did not say.",
             "type": "string"
           },
           "history": {
+            "description": "History is the burn-down series, up to the last 60 billing entries. Best effort: a\nfailed history read leaves it empty while the balance above still stands, so an\nempty series is not evidence of no spend. Never null.",
             "items": {
               "$ref": "#/components/schemas/DoHistoryPoint"
             },
             "type": "array"
           },
           "monthToDateSpendCents": {
+            "description": "MonthToDateSpendCents is what DigitalOcean has charged this calendar month, in USD\ncents. It resets on the first, which is why the burn below divides by the day of\nthe month and not by a fixed 30.",
             "type": "integer"
           }
         },
@@ -3421,15 +3521,19 @@
       "DoHistoryPoint": {
         "properties": {
           "amountCents": {
+            "description": "AmountCents is the entry in USD cents, converted once from DO's decimal-dollar\nstring. It carries DO's own accounts-receivable sign: a usage charge is positive.",
             "type": "integer"
           },
           "date": {
+            "description": "Date is when DigitalOcean recorded the entry, RFC3339 as they return it.",
             "type": "string"
           },
           "description": {
+            "description": "Description is DigitalOcean's own line text for the entry.",
             "type": "string"
           },
           "type": {
+            "description": "Type is DigitalOcean's entry type — \"Invoice\", \"Payment\", \"Credit\". Entries are not\nall charges, so summing the series without reading this mixes money in with money\nout.",
             "type": "string"
           }
         },
@@ -3455,21 +3559,27 @@
       "FinanceCost": {
         "properties": {
           "configured": {
+            "description": "Configured reports that commerce answered the COGS read. False makes every number\nbelow a zero that was never measured — the margin is still computed from it, so a\nboard showing a healthy margin with configured=false is showing revenue minus\nnothing.",
             "type": "boolean"
           },
           "digitalocean": {
-            "$ref": "#/components/schemas/DoCost"
+            "$ref": "#/components/schemas/DoCost",
+            "description": "DigitalOcean is the promo-credit treasury view. It is deliberately NOT part of\nCOGS and is never added to TotalCents — the DO spend it reports is already inside\nthe vendor lines above. It feeds runway, and only runway."
           },
           "error": {
+            "description": "Error is why the COGS read failed, or that commerce is not wired at all. Omitted\nwhen Configured is true.",
             "type": "string"
           },
           "period": {
+            "description": "Period is the billing month the COGS covers, \"2006-01\". Commerce's own period where\nit gave one, otherwise the current month.",
             "type": "string"
           },
           "totalCents": {
+            "description": "TotalCents is whole-platform COGS for the period, in USD cents — commerce's figure,\nnot a sum of Vendors recomputed here. It is the number the margin subtracts.",
             "type": "integer"
           },
           "vendors": {
+            "description": "Vendors is the per-vendor breakdown behind that total. Never null; empty when\ncommerce is unreachable.",
             "items": {
               "$ref": "#/components/schemas/Vendor"
             },
@@ -3481,18 +3591,23 @@
       "FinanceData": {
         "properties": {
           "cost": {
-            "$ref": "#/components/schemas/FinanceCost"
+            "$ref": "#/components/schemas/FinanceCost",
+            "description": "Cost is COGS: what the fleet pays its vendors, plus the DigitalOcean credit\ntreasury view that only runway is derived from."
           },
           "derived": {
-            "$ref": "#/components/schemas/FinanceDerived"
+            "$ref": "#/components/schemas/FinanceDerived",
+            "description": "Derived is the profitability math over the two above. A pure function of them, so\nit can be recomputed by hand and checked."
           },
           "generatedAt": {
+            "description": "GeneratedAt is when the read ran, RFC3339. Nothing on this board is cached.",
             "type": "string"
           },
           "revenue": {
-            "$ref": "#/components/schemas/FinanceRevenue"
+            "$ref": "#/components/schemas/FinanceRevenue",
+            "description": "Revenue is what the fleet earned — consumption and MRR, from commerce."
           },
           "sources": {
+            "description": "Sources is the freshness strip: \"commerce-costs\", \"digitalocean\" and \"commerce\".\nA not-ok row is the ONLY thing separating a real zero from an upstream that was\nnever read — the margin below is computed either way.",
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
@@ -3504,15 +3619,19 @@
       "FinanceDerived": {
         "properties": {
           "grossMarginCents": {
+            "description": "GrossMarginCents is revenue.totalRevenueCents minus cost.totalCents, in USD cents.\nNegative means the fleet spent more on vendors than its customers consumed.",
             "type": "integer"
           },
           "grossMarginPct": {
+            "description": "GrossMarginPct is that margin as a percentage of revenue — 42.5 means 42.5%, not\n0.425. Zero when revenue is zero, which is arithmetic, not a claim of break-even.",
             "type": "number"
           },
           "profitable": {
+            "description": "Profitable is revenue strictly greater than COGS — the sign of GrossMarginCents,\nstated so no consumer has to decide what zero means. It is GROSS margin only:\nsalaries, tooling and anything outside vendor COGS are not in this.",
             "type": "boolean"
           },
           "runwayDays": {
+            "description": "RunwayDays is DigitalOcean promo credit divided by average daily burn — how long\nthe credit lasts at today's rate, and nothing to do with the margin above. NULL,\nnever a large number, when DO is unconfigured or burn is zero: no honest projection\nexists, and an infinity would read as safety.",
             "type": "number"
           }
         },
@@ -3521,12 +3640,15 @@
       "FinanceOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/FinanceData"
+            "$ref": "#/components/schemas/FinanceData",
+            "description": "Data is the board. Never null on an ok answer."
           },
           "msg": {
+            "description": "Msg is the failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". Every upstream on this board degrades in place — an\nunreachable commerce or an unset DO token answers ok with configured=false and a\nnot-ok source — so an error here means admission itself failed, not the numbers.",
             "type": "string"
           }
         },
@@ -3535,15 +3657,19 @@
       "FinanceRevenue": {
         "properties": {
           "configured": {
+            "description": "Configured reports that the org directory was read and at least the ledger\nanswered. False means the numbers below are zeros nobody measured — and since the\nmargin is revenue minus COGS, that zero reads as a loss rather than as unknown.",
             "type": "boolean"
           },
           "creditsConsumedCents": {
+            "description": "CreditsConsumedCents is the same figure as TotalRevenueCents, named for the other\nside of the identity: what the fleet earned is exactly what its customers burned.",
             "type": "integer"
           },
           "mrrCents": {
+            "description": "MRRCents is fleet monthly recurring revenue, in USD cents, summed over every org's\nrevenue-counting subscriptions. Contract value, and a different question from\nTotalRevenueCents — it is not folded into the margin.",
             "type": "integer"
           },
           "totalRevenueCents": {
+            "description": "TotalRevenueCents is fleet consumption over the trailing 30 days, in USD cents,\nsummed across every org. Realized revenue: credit is revenue when it is SPENT, not\nwhen it is granted.",
             "type": "integer"
           }
         },
@@ -3552,27 +3678,35 @@
       "Finding": {
         "properties": {
           "cluster": {
+            "description": "Cluster is the cluster's name where the finding is scoped to one, \"\" otherwise.",
             "type": "string"
           },
           "detail": {
+            "description": "Detail is the full explanation. For an oversized volume it is the entire\ncopy-and-swap migration, written out as kubectl steps — this board prints the\nrecipe and deliberately refuses to run it.",
             "type": "string"
           },
           "id": {
+            "description": "ID is stable across scans and unique within one: `unref/\u003cvolume\u003e`,\n`oversized/\u003cvolume\u003e`, `pod/\u003ccluster\u003e/\u003cns\u003e/\u003cname\u003e`, `image/\u003crepo\u003e`,\n`cost/node/\u003cname\u003e`. A consumer can key a dismissal off it.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the machine-readable class: `scan-incomplete`, `unreferenced-volume`,\n`released-pv`, `idle-pvc`, `oversized-volume`, `pod-unhealthy`, `unknown-image`,\n`cost-outlier`. Group and filter on this; Title is for a human.",
             "type": "string"
           },
           "monthlyCents": {
+            "description": "MonthlyCents is the money at stake, and it is the secondary sort within a severity.\nIt carries what acting would actually SAVE, not the raw waste — an oversized volume\nreports the saving after keeping headroom, since a list sorted by money has to be\nsorted by money you could really get back. Zero when nothing is at stake.",
             "type": "integer"
           },
           "resource": {
+            "description": "Resource is what the finding is about, in that kind's own addressing: a volume id,\na `namespace/name` pod, an image repository. Empty on a fleet-wide finding.",
             "type": "string"
           },
           "severity": {
+            "description": "Severity is one of `critical`, `warn`, `info`, and is the primary sort. Only an\nincomplete scan is critical, because only that invalidates the board's other\nanswers.",
             "type": "string"
           },
           "title": {
+            "description": "Title is the one-line summary, already carrying the numbers that matter.",
             "type": "string"
           }
         },
@@ -3610,12 +3744,15 @@
       "GrantOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/GrantResult"
+            "$ref": "#/components/schemas/GrantResult",
+            "description": "Data is the receipt: the account credited, the amount, and the balance after.\nNull exactly when Status is \"error\"."
           },
           "msg": {
+            "description": "Msg is why the grant was refused, and is empty on success. Two refusals also carry\na non-200 HTTP status alongside this envelope: 404 for an unknown org, 503 when\nthere is nowhere durable to record the grant.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". Error means NO money moved: every refusal — a\nnon-positive amount, one over the per-grant cap, an unknown org, a deployment with\nno durable audit store — is decided before the ledger is written.",
             "type": "string"
           }
         },
@@ -3665,18 +3802,23 @@
             "type": "string"
           },
           "amountCents": {
+            "description": "AmountCents is the credit in USD cents, always positive. On a successful grant it\nis what was actually written to the ledger; on a REFUSED one it is what was asked\nfor and never moved, so summing this column without filtering on Result overstates\nwhat the fleet gave away.",
             "type": "integer"
           },
           "createdAt": {
+            "description": "CreatedAt is when the grant was attempted, RFC3339 in UTC. The list is newest first.",
             "type": "string"
           },
           "currency": {
+            "description": "Currency is the ISO code the grant was denominated in, lower-cased. Defaults to\n\"usd\" for a row that recorded none.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the TARGET tenant the credit landed on — the audit row's resource id, not\nthe actor's org. The `org` query filter matches the actor's, which is the one\nasymmetry on this surface.",
             "type": "string"
           },
           "reason": {
+            "description": "Reason is the justification the operator typed. Omitted when blank — older rows\npredate the field.",
             "type": "string"
           },
           "result": {
@@ -3688,6 +3830,7 @@
             "type": "string"
           },
           "transactionId": {
+            "description": "TransactionID is the commerce ledger entry the money landed in, for reconciliation.\nOmitted on a refused grant, which wrote no entry.",
             "type": "string"
           }
         },
@@ -3696,18 +3839,22 @@
       "GrantsOut": {
         "properties": {
           "data": {
+            "description": "Data is the matching grants, newest first, capped by the request's limit. Refused\ngrants are included — a refusal is as much a fact about who tried as a success is.",
             "items": {
               "$ref": "#/components/schemas/GrantRow"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg carries that \"no audit store\" note ALONGSIDE an ok status. Everywhere else on\nthis app a non-empty msg means failure; here it means the history is unavailable,\nwhich is why an empty list must not be read as \"no grants were ever made\".",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A deployment with no durable audit store has no history\nto project and still answers ok — with an empty list and a msg saying so.",
             "type": "string"
           },
           "total": {
+            "description": "Total is the store's count for the filter, which EXCEEDS len(data) when limit\ntruncated. Omitted on an error.",
             "type": "integer"
           }
         },
@@ -3716,7 +3863,7 @@
       "Integrity": {
         "properties": {
           "brokenAt": {
-            "description": "BrokenAt is the seq of the FIRST record that failed verification, and -1\nwhenever the walk found no break (including an unread chain, where no seq\nwas reached). Reason describes the break (recomputed-hash mismatch,\nprev-hash discontinuity, or a seq gap) or why the chain could not be read.",
+            "description": "BrokenAt is the seq of the FIRST record that failed verification, and -1\nwhenever the walk found no break (including an unread chain, where no seq\nwas reached).",
             "type": "integer"
           },
           "count": {
@@ -3732,6 +3879,7 @@
             "type": "string"
           },
           "reason": {
+            "description": "Reason says HOW the chain fails at BrokenAt — a recomputed-hash mismatch, a\nprev-hash discontinuity, or a seq gap — or, on an unread chain, why it could\nnot be walked at all. Absent on an intact chain, which is the only verdict\nwith nothing to explain.",
             "type": "string"
           },
           "verdict": {
@@ -3744,30 +3892,39 @@
       "InvoiceRow": {
         "properties": {
           "amountCents": {
+            "description": "AmountCents is the invoice total in minor units of Currency, as of its latest\nevent. It is the amount BILLED — a partially paid invoice does not report a\nremainder here.",
             "type": "integer"
           },
           "currency": {
+            "description": "Currency is the invoice's ISO code. AmountCents is minor units of THIS, so a list\nspanning currencies must not be summed without reading it.",
             "type": "string"
           },
           "display": {
+            "description": "Display is the same slug as Org. The warehouse holds no friendly name and this\nread does no per-org IAM fan-out, so it repeats the slug rather than inventing one.",
             "type": "string"
           },
           "due": {
+            "description": "Due is when payment is due, RFC3339. Empty when the invoice carries no due date.",
             "type": "string"
           },
           "id": {
+            "description": "ID is commerce's invoice id — the row's identity, and what a detail view fetches\n/v1/billing/invoices/:id with.",
             "type": "string"
           },
           "issued": {
+            "description": "Issued is when the invoice was issued, RFC3339 as commerce emitted it. The list is\nsorted by it, newest first.",
             "type": "string"
           },
           "number": {
+            "description": "Number is the human invoice number the customer sees on the document. Distinct from\nID, which is the machine handle.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant the invoice was issued to, and what ?org= matches exactly.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the EFFECTIVE lifecycle state, folded from the invoice's latest event:\n`paid` and `void` are terminal and come from the event itself; anything else is the\nlast status the events carried, defaulting to `open` for a finalized invoice.",
             "type": "string"
           }
         },
@@ -3776,18 +3933,22 @@
       "InvoicesOut": {
         "properties": {
           "data": {
+            "description": "Data is the matching invoices, newest issued first, capped by limit.",
             "items": {
               "$ref": "#/components/schemas/InvoiceRow"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the query failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A warehouse that is not connected answers ok with an\nempty list and total 0 — the honest not-yet-wired state, not a claim that the fleet\nhas never invoiced anyone.",
             "type": "string"
           },
           "total": {
+            "description": "Total is how many matched BEFORE limit truncated, so a console can say \"showing 50\nof 812\". Omitted on an error.",
             "type": "integer"
           }
         },
@@ -3796,30 +3957,39 @@
       "LoadBalancer": {
         "properties": {
           "blockedReason": {
+            "description": "BlockedReason is why not — which Service still wants it, or how many of its member\ndroplets sit outside every cluster and so cannot be vouched for. Empty exactly when\nDeletable is true.",
             "type": "string"
           },
           "cluster": {
+            "description": "Cluster is the owning cluster's name — from the claiming Service where there is\none, otherwise from the cluster its member droplets belong to.",
             "type": "string"
           },
           "deletable": {
+            "description": "Deletable is the standing verdict: no live Service claims it, every member droplet\nbelongs to a cluster this board scanned, and the scan was complete.",
             "type": "boolean"
           },
           "droplets": {
+            "description": "Droplets is how many droplets it forwards to. NOT a liveness signal: a DOKS load\nbalancer lists every node in its cluster, so a leaked one still looks busy.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the DO load balancer UUID. DOKS writes it into the Service's\n`kubernetes.digitalocean.com/load-balancer-id` annotation, which is one of the two\nidentities the liveness index is keyed by.",
             "type": "string"
           },
           "ip": {
+            "description": "IP is the public address it answers on — the address that black-holes if it is\ndeleted while a Service still wants it. It is also the second identity the\nliveness index matches on, for a Service that carries no annotation.",
             "type": "string"
           },
           "monthlyCents": {
+            "description": "MonthlyCents is SizeUnit at $12 per node per month. Derived, because DO's API\nprices droplets but not load balancers.",
             "type": "integer"
           },
           "name": {
+            "description": "Name is DigitalOcean's own name for it. A DOKS-provisioned load balancer is named\nafter neither its Service nor its cluster, so this does not identify who uses it —\nService does.",
             "type": "string"
           },
           "region": {
+            "description": "Region is DO's region slug (\"nyc3\").",
             "type": "string"
           },
           "service": {
@@ -3827,9 +3997,11 @@
             "type": "string"
           },
           "sizeUnit": {
+            "description": "SizeUnit is the number of billed load-balancer nodes DO reports. Never below 1: DO\nomits the field on the legacy single-node size, which is one node, not zero.",
             "type": "integer"
           },
           "status": {
+            "description": "Status is DO's own state for it (\"new\", \"active\", \"errored\").",
             "type": "string"
           }
         },
@@ -3838,27 +4010,35 @@
       "Machine": {
         "properties": {
           "blockedReason": {
+            "description": "BlockedReason is why not, in the operator's language, and it names the lever that\nDOES work — scale or edit the node pool. Empty exactly when Mutable is true.",
             "type": "string"
           },
           "cluster": {
+            "description": "Cluster is the DOKS cluster's name, or \"\" for a droplet no cluster owns — the only\nkind this board will ever delete.",
             "type": "string"
           },
           "clusterId": {
+            "description": "ClusterID is that cluster's UUID, read from the droplet's own `k8s:\u003cuuid\u003e` tag. On\na DROPLET the tag is authoritative, unlike on a volume: DOKS creates the droplet\nand destroys it with the pool, so the tag cannot outlive what it describes.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when DO created the droplet, RFC3339.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the DigitalOcean droplet id. Numeric, and the id every droplet route takes.",
             "type": "integer"
           },
           "localDiskGiB": {
+            "description": "LocalDiskGiB is the droplet's own disk, in GiB. Its price is already inside\nMonthlyCents — DO does not bill it as block storage, and adding it to the volume\ntotals is how a fleet appears to hold terabytes it never pays for.",
             "type": "integer"
           },
           "memoryMiB": {
+            "description": "MemoryMiB is the plan's RAM, in MiB as DO reports it.",
             "type": "integer"
           },
           "monthlyCents": {
+            "description": "MonthlyCents is DO's list price for SizeSlug, in cents per month. It is the plan's\nprice, not a metered bill, so it does not move with how hard the machine works.",
             "type": "integer"
           },
           "mutable": {
@@ -3866,42 +4046,54 @@
             "type": "boolean"
           },
           "name": {
+            "description": "Name is the droplet name. For a DOKS node it is also the Kubernetes node name, and\nthat equality is the join: it is how Ready, Schedulable and Pods below get filled.",
             "type": "string"
           },
           "pods": {
+            "description": "Pods is how many pods the scan found scheduled on this node.",
             "type": "integer"
           },
           "privateIp": {
+            "description": "PrivateIP is the droplet's VPC address, or \"\" when it has none.",
             "type": "string"
           },
           "publicIp": {
+            "description": "PublicIP is the droplet's internet-facing address, or \"\" when it has none.",
             "type": "string"
           },
           "ready": {
+            "description": "Ready is the Kubernetes node's own Ready condition, joined by Name. False for a\ndroplet that is not a node at all, and for a node in a cluster that did not answer\n— unknown reads as not-ready, which refuses more and is the safe direction.",
             "type": "boolean"
           },
           "region": {
+            "description": "Region is DO's region slug (\"nyc3\").",
             "type": "string"
           },
           "schedulable": {
+            "description": "Schedulable is the same node's cordon state, inverted: false means unschedulable.\nIt is what the cordon route sets, and only a Ready AND schedulable node counts\ntoward NodePool.clusterSchedulable.",
             "type": "boolean"
           },
           "sizeSlug": {
+            "description": "SizeSlug is the DigitalOcean plan (\"s-4vcpu-8gb\"). It decides MonthlyCents and is\nwhat a resize sets.",
             "type": "string"
           },
           "status": {
+            "description": "Status is DO's droplet state (\"new\", \"active\", \"off\", \"archive\"). A powered-off\ndroplet still bills, which is why \"off\" here and a cost row are not in tension.",
             "type": "string"
           },
           "tags": {
+            "description": "Tags are DO's resource tags verbatim, including the DOKS stamps `k8s:\u003cuuid\u003e` and\n`k8s:worker`. Never null — an untagged droplet carries an empty list.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "vcpus": {
+            "description": "VCPUs is the plan's virtual CPU count.",
             "type": "integer"
           },
           "volumes": {
+            "description": "Volumes is how many block-storage volumes DO reports attached to this droplet.",
             "type": "integer"
           }
         },
@@ -3928,6 +4120,7 @@
             "type": "array"
           },
           "generatedAt": {
+            "description": "GeneratedAt is when the admin plane served this read, RFC3339. Same instant as\nasOf: this board computes on demand and caches nothing, so the two cannot diverge.",
             "type": "string"
           },
           "orgs": {
@@ -3937,6 +4130,7 @@
             "$ref": "#/components/schemas/SaaSRevenue"
           },
           "sources": {
+            "description": "Sources is the upstream freshness strip. Exactly one row, \"billing-warehouse\", and\nits ok=false is what distinguishes a fleet with no revenue from a deployment where\nthe warehouse is not connected — both otherwise answer zeros.",
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
@@ -3957,12 +4151,15 @@
       "MetricsOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/MetricsData"
+            "$ref": "#/components/schemas/MetricsData",
+            "description": "Data is the board. Never null on an ok answer."
           },
           "msg": {
+            "description": "Msg is the failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A warehouse that is not connected still answers ok, with\nreal zeros and a not-ok source row — an honest empty board rather than a failure.",
             "type": "string"
           }
         },
@@ -3971,12 +4168,15 @@
       "MoneyOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/moneyBoard"
+            "$ref": "#/components/schemas/moneyBoard",
+            "description": "Data is the consolidated board. Omitted when the caller was refused."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way. A degraded upstream still\nanswers \"ok\" — it is reported in data.sources, because a consolidated board\nthat fails whole because one source is down is useless.",
             "type": "string"
           }
         },
@@ -3985,12 +4185,15 @@
       "MutationOut": {
         "properties": {
           "data": {
+            "description": "Data is the per-action result, and is deliberately opaque: its keys differ by\naction, and each handler's own description names them. Null on a refusal or a\nfailure — and on a partial failure it may carry what DID happen, such as the\nsnapshotId of an undo taken before a delete that then failed.",
             "type": "object"
           },
           "msg": {
+            "description": "Msg is why, and is empty on success. \"refusing: \u003creason\u003e\" is the board's verdict;\nanything else is the change having been attempted and failed.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A REFUSAL is an error too, and reads differently from a\nfailure: msg opens \"refusing: \" and means the board proved the change unsafe and\nnever attempted it, so nothing changed.",
             "type": "string"
           }
         },
@@ -3999,30 +4202,39 @@
       "NodePool": {
         "properties": {
           "blockedReason": {
+            "description": "BlockedReason is why not, in the operator's language. Empty exactly when Scalable\nis true — allowed carries no reason, blocked always names one.",
             "type": "string"
           },
           "cluster": {
+            "description": "Cluster is that cluster's name, carried on the row so a refusal can say which\ncluster a shrink would strand.",
             "type": "string"
           },
           "clusterId": {
+            "description": "ClusterID is the DOKS cluster this pool belongs to.",
             "type": "string"
           },
           "clusterSchedulable": {
+            "description": "ClusterSchedulable is how many nodes in the WHOLE cluster are both Ready and\nschedulable — not just this pool's. Cordoned and NotReady nodes are excluded,\nbecause a shrink's evicted pods cannot land on them. It rides on the row so\nScaleTo is a pure method of the row and needs no second lookup.",
             "type": "integer"
           },
           "count": {
+            "description": "Count is how many nodes the pool is currently set to. It is the DECLARED count, so\nit can lead reality while DOKS creates or drains machines.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the DO node pool UUID. The scale route accepts it or Name interchangeably,\nsince both are unique within a cluster.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the pool's name (\"workers\") — what an operator reads off the board and\nwhat every message about a scale names.",
             "type": "string"
           },
           "scalable": {
+            "description": "Scalable is the standing verdict: whether a scale may be attempted at all. It\nreflects the shared completeness gate ONLY. Whether a PARTICULAR count is allowed\ndepends on the number asked for, which ScaleTo decides at request time.",
             "type": "boolean"
           },
           "size": {
+            "description": "Size is the DigitalOcean size slug every node in this pool is created at\n(\"s-4vcpu-8gb\"). One slug per pool: it is the pool, not the droplet, that declares\nwhat its machines are, which is why a hand-resized node gets reverted.",
             "type": "string"
           }
         },
@@ -4031,24 +4243,31 @@
       "ProviderCredit": {
         "properties": {
           "burn_cents": {
+            "description": "BurnCents is what we have consumed against that grant, in USD cents. For\nDigitalOcean it is grant minus remaining, floored at zero — derived from their\nauthoritative balance. For every other provider it is the all-time sum of\ncost_cents in the usage warehouse, which is not windowed.",
             "type": "integer"
           },
           "error": {
+            "description": "Error names the read that did not answer — a revoked token passes the\nis-it-configured check and fails here. Omitted on a healthy row. When it is set,\ntreat the classification as absent rather than as \"no credit\".",
             "type": "string"
           },
           "grant_cents": {
+            "description": "GrantCents is the promo credit that provider has issued us, in USD cents. For\nDigitalOcean it is DISCOVERED from their own invoices, never declared: the\nhand-entered number was wrong by ~$22k and nobody could check it. Zero means no\ngrant — or, when Error is set, that we could not find out.",
             "type": "integer"
           },
           "has_credit": {
+            "description": "HasCredit reports that promo credit remains at this provider — so calls to it are\nstill being paid for with someone else's money.",
             "type": "boolean"
           },
           "is_paid_only": {
+            "description": "IsPaidOnly reports the opposite: every call to this provider now costs real cash.\nExactly one of HasCredit and IsPaidOnly is true on a healthy row. BOTH false is\nthe deliberate \"we could not tell\" state, and it is reachable only with Error set.",
             "type": "boolean"
           },
           "provider": {
+            "description": "Provider is the upstream we buy from, by its warehouse name (\"do-ai\", \"openai\").\nThe roster is the union of the seeded grants, DigitalOcean, and every provider the\nusage ledger has burn for — so a provider appears once it has cost us anything.",
             "type": "string"
           },
           "remaining_cents": {
+            "description": "RemainingCents is the grant still available, in USD cents, never negative. For\nDigitalOcean it is the live negated account balance; for the rest it is grant minus\nburn. Zero on a provider with no grant, and zero on one whose grant is spent —\nHasCredit and IsPaidOnly separate those two.",
             "type": "integer"
           },
           "runway_days": {
@@ -4061,15 +4280,18 @@
       "ProvidersCreditOut": {
         "properties": {
           "data": {
+            "description": "Data is one row per provider, sorted by provider name.",
             "items": {
               "$ref": "#/components/schemas/ProviderCredit"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A provider whose upstream read failed does not fail this\nanswer — it comes back as a row with `error` set, which is the whole reason that\nfield exists.",
             "type": "string"
           }
         },
@@ -4078,12 +4300,15 @@
       "ReadOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Snapshot"
+            "$ref": "#/components/schemas/Snapshot",
+            "description": "Data is the board. Null exactly when Status is \"error\"."
           },
           "msg": {
+            "description": "Msg is the failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". An error here means the DigitalOcean account itself is\nunreadable; a partial read still answers ok, with the failures named in\ndata.sources and the safety verdicts degraded via data.complete.",
             "type": "string"
           }
         },
@@ -4092,18 +4317,23 @@
       "RecordsOut": {
         "properties": {
           "data": {
+            "description": "Data is the page of records, newest first, and it is one of TWO shapes: this\nstore's own rows, or IAM's get-records payload forwarded verbatim by the fallback.\n`integrity` being null is what tells you which — the fallback is a different trail.\nNever null; an absent page is an empty list.",
             "type": "object"
           },
           "integrity": {
-            "$ref": "#/components/schemas/Integrity"
+            "$ref": "#/components/schemas/Integrity",
+            "description": "Integrity is the live hash-chain verdict for THE ONE CHAIN these records came from,\ncarrying that chain's name so it cannot be read as the whole trail's. The trail is\na family of chains, one per process; GET /v1/admin/audit/verify answers for all of\nthem. NULL means no verdict, not a failed one: either the check could not run, or\nthese rows came from the IAM fallback, which has no chain of ours to verify."
           },
           "msg": {
+            "description": "Msg is the failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A chain whose live verification failed still answers ok\n— the verdict travels in `integrity`, and a verify problem must not hide the\nrecords an auditor came for.",
             "type": "string"
           },
           "total": {
+            "description": "Total is how many records match the filter across all pages, so a console can page\nwithout walking. Omitted on an error.",
             "type": "integer"
           }
         },
@@ -4112,21 +4342,27 @@
       "RevenueCustomer": {
         "properties": {
           "balanceCents": {
+            "description": "BalanceCents is the prepaid wallet the org still holds, in USD cents. Money not yet\nearned: it becomes revenue only as it is spent.",
             "type": "integer"
           },
           "display": {
+            "description": "Display is the org's display name, falling back to the slug.",
             "type": "string"
           },
           "mrrCents": {
+            "description": "MRRCents is the org's monthly recurring revenue, in USD cents, over the\nsubscriptions commerce counts as revenue. Contract value, not cash collected.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the tenant slug — the row's identity.",
             "type": "string"
           },
           "plan": {
+            "description": "Plan is the live subscription tier's name, or \"pay-as-you-go\" — which is also what\nan org reads as when the subscriptions read failed, so it is not proof of no plan.",
             "type": "string"
           },
           "spendCents": {
+            "description": "SpendCents is realized consumption over the trailing 30 days, in USD cents. The\ntable's primary sort, largest first.",
             "type": "integer"
           }
         },
@@ -4135,42 +4371,52 @@
       "RevenueData": {
         "properties": {
           "arpuCents": {
+            "description": "ARPUCents is TotalSpendCents divided by PayingCustomers, in USD cents — average\nrevenue per PAYING customer, not per signup. Zero when nobody pays, which is\ndivision declining to happen rather than a measured zero.",
             "type": "integer"
           },
           "customers": {
+            "description": "Customers is every org IAM lists, paying or not.",
             "type": "integer"
           },
           "generatedAt": {
+            "description": "GeneratedAt is when the read ran, RFC3339. Nothing here is cached.",
             "type": "string"
           },
           "mrrCents": {
+            "description": "MRRCents is fleet monthly recurring revenue, in USD cents — the sum of every org's\nrevenue-counting subscriptions. Orthogonal to TotalSpendCents, and never added to\nit: one is contract value, the other is consumption.",
             "type": "integer"
           },
           "payingCustomers": {
+            "description": "PayingCustomers counts the orgs with spend or MRR above zero. It is the ARPU\ndenominator, chosen so a fleet of free signups cannot deflate the number.",
             "type": "integer"
           },
           "perCustomer": {
+            "description": "PerCustomer is every org, richest first by 30-day spend, then by balance held.",
             "items": {
               "$ref": "#/components/schemas/RevenueCustomer"
             },
             "type": "array"
           },
           "sources": {
+            "description": "Sources is the freshness strip: \"iam\" for the org directory, \"commerce\" for the\nmoney, and \"commerce-ledger\" when the usage history behind SpendTrend was partial.\nA not-ok commerce row means the totals above are an UNDERCOUNT, not a fleet that\nearned less.",
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
             "type": "array"
           },
           "spendTrend": {
+            "description": "SpendTrend is fleet consumption bucketed by DAY over the last 30 days, each point's\nvalue in USD cents. The axis is continuous: a day with no usage is a real 0.",
             "items": {
               "$ref": "#/components/schemas/SeriesPoint"
             },
             "type": "array"
           },
           "totalBalancesCents": {
+            "description": "TotalBalancesCents is prepaid credit held across the fleet, in USD cents. A\nLIABILITY, not revenue — it is money customers have not spent yet.",
             "type": "integer"
           },
           "totalSpendCents": {
+            "description": "TotalSpendCents is realized consumption across the fleet over the trailing 30 days,\nin USD cents. This is the revenue figure; balances above are not.",
             "type": "integer"
           }
         },
@@ -4179,12 +4425,15 @@
       "RevenueOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/RevenueData"
+            "$ref": "#/components/schemas/RevenueData",
+            "description": "Data is the board. Null exactly when Status is \"error\"."
           },
           "msg": {
+            "description": "Msg is the failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". Only an unreadable IAM org directory is an error: a\nper-org money failure degrades that row to zeros and marks the commerce source, so\nthe board still answers.",
             "type": "string"
           }
         },
@@ -4193,12 +4442,15 @@
       "SaaSCategory": {
         "properties": {
           "category": {
+            "description": "Category is the plan's category as the subscription event declared it. Empty is a\nreal bucket — subscriptions whose plan carries no category land there.",
             "type": "string"
           },
           "mrrCents": {
+            "description": "MRRCents is this category's run-rate MRR, active subscriptions only.",
             "type": "integer"
           },
           "subscriptions": {
+            "description": "Subscriptions counts every non-canceled subscription in the category, trialing\nincluded. So a category of nothing but trials shows subscriptions above zero and\nmrrCents at zero, which is the honest reading.",
             "type": "integer"
           }
         },
@@ -4207,27 +4459,35 @@
       "SaaSCustomer": {
         "properties": {
           "category": {
+            "description": "Category is that plan's category. Empty for a pay-as-you-go org.",
             "type": "string"
           },
           "mrrCents": {
+            "description": "MRRCents is the org's run-rate MRR, summed over its active subscriptions. Zero for\na pay-as-you-go org, which is a true zero and not a gap.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the organization id, which is the row's identity.",
             "type": "string"
           },
           "plan": {
+            "description": "Plan is the label of the org's LARGEST subscription by MRR, so an org on several\nplans is named by the one it pays most for. An org with usage but no subscription\nat all reads \"pay-as-you-go\".",
             "type": "string"
           },
           "seats": {
+            "description": "Seats is licensed seats across all the org's non-canceled subscriptions.",
             "type": "integer"
           },
           "since": {
+            "description": "Since is when the org's OLDEST live subscription began, RFC3339 — how long it has\nbeen a customer. Omitted for an org that has never subscribed.",
             "type": "string"
           },
           "status": {
+            "description": "Status is that subscription's state — `active`, `trialing`, `past_due`. A\npay-as-you-go org reads \"active\", since it is spending.",
             "type": "string"
           },
           "usageCents": {
+            "description": "UsageCents is the org's metered spend over the window. It is the tiebreaker in the\nranking, and the only revenue a pay-as-you-go org has.",
             "type": "integer"
           }
         },
@@ -4236,21 +4496,27 @@
       "SaaSEvent": {
         "properties": {
           "at": {
+            "description": "At is when the movement happened, RFC3339. The feed is ordered by it, newest first.",
             "type": "string"
           },
           "category": {
+            "description": "Category is the plan's category at the moment of the movement — the same bucket\nrevenue.byCategory sums into.",
             "type": "string"
           },
           "mrrDeltaCents": {
+            "description": "MRRDeltaCents is SIGNED: positive for a creation, negative for a cancellation. It\nis the run-rate this one movement added or took away, so summing the feed over the\nwindow gives revenue.netNewMrrCents.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the organization whose subscription moved.",
             "type": "string"
           },
           "plan": {
+            "description": "Plan is the plan's human label at the moment of the movement.",
             "type": "string"
           },
           "type": {
+            "description": "Type is `created` or `canceled` — the warehouse's event name normalised to the two\nmovements this feed carries.",
             "type": "string"
           }
         },
@@ -4259,24 +4525,31 @@
       "SaaSPlan": {
         "properties": {
           "active": {
+            "description": "Active counts this plan's subscriptions in the `active` state — the ones MRRCents\nis summed over.",
             "type": "integer"
           },
           "category": {
+            "description": "Category is the plan's category, the same bucket revenue.byCategory sums into.",
             "type": "string"
           },
           "mrrCents": {
+            "description": "MRRCents is this plan's contribution to run-rate MRR, active subscriptions only.",
             "type": "integer"
           },
           "name": {
+            "description": "Name is the plan's human label, as the warehouse last saw it. A plan renamed\nmid-life shows one of its names, not both.",
             "type": "string"
           },
           "plan": {
+            "description": "Plan is the plan's stable id — the key subscriptions are grouped by.",
             "type": "string"
           },
           "seats": {
+            "description": "Seats is licensed seats across ALL of this plan's non-canceled subscriptions,\ntrialing included — a wider set than Active, so seats can be non-zero on a plan\ncarrying no MRR at all.",
             "type": "integer"
           },
           "trialing": {
+            "description": "Trialing counts this plan's subscriptions still in a trial. Not yet revenue.",
             "type": "integer"
           }
         },
@@ -4285,33 +4558,42 @@
       "SaaSRevenue": {
         "properties": {
           "activeSubscriptions": {
+            "description": "ActiveSubscriptions counts every non-canceled subscription — trialing and past_due\nincluded. It is deliberately a wider set than the one MRRCents sums, so this can be\nnon-zero while MRR is zero.",
             "type": "integer"
           },
           "arrCents": {
+            "description": "ARRCents is MRRCents times twelve. A run-rate restatement of today's MRR, not a\nforecast: nothing in it anticipates growth, churn or an annual discount.",
             "type": "integer"
           },
           "byCategory": {
+            "description": "ByCategory is the plan mix: run-rate MRR per plan category, largest first. It sums\nto MRRCents. Never null.",
             "items": {
               "$ref": "#/components/schemas/SaaSCategory"
             },
             "type": "array"
           },
           "churnedMrrCents": {
+            "description": "ChurnedMRRCents is the MRR carried by subscriptions CANCELED inside the window,\nreported as a POSITIVE magnitude — the sign convention lives in NetNewMRRCents,\nwhich subtracts it, not here.",
             "type": "integer"
           },
           "mrrCents": {
+            "description": "MRRCents is run-rate monthly recurring revenue, in USD cents, summed over the\nsubscriptions whose LATEST lifecycle event left them `active`. Trialing, past_due\nand unpaid subscriptions contribute nothing — the predicate is exactly commerce's\nCountsTowardMRR, spelled in SQL because this board reads the warehouse rather than\ncalling the Go function.",
             "type": "integer"
           },
           "netNewMrrCents": {
+            "description": "NetNewMRRCents is NewMRRCents minus ChurnedMRRCents. Negative means the fleet lost\nmore recurring revenue than it won over the window. It counts only creations and\ncancellations — an upgrade or downgrade in place moves MRRCents without appearing\nhere.",
             "type": "integer"
           },
           "newMrrCents": {
+            "description": "NewMRRCents is the MRR carried by subscriptions CREATED inside the window. Gross,\nand positive.",
             "type": "integer"
           },
           "payingCustomers": {
+            "description": "PayingCustomers counts distinct ORGS with at least one active subscription carrying\nMRR above zero. Orgs, not subscriptions: an org on three plans counts once.",
             "type": "integer"
           },
           "trials": {
+            "description": "Trials counts subscriptions currently in a trial. Revenue that has not started, so\nit is reported beside MRR and never inside it.",
             "type": "integer"
           }
         },
@@ -4320,24 +4602,29 @@
       "SaaSSubs": {
         "properties": {
           "byPlan": {
+            "description": "ByPlan is every plan the fleet has a live subscription on, richest first by MRR.\nNever null.",
             "items": {
               "$ref": "#/components/schemas/SaaSPlan"
             },
             "type": "array"
           },
           "canceled": {
+            "description": "Canceled is how many were canceled inside the window. Not a rate: divide by New, or\nby activeSubscriptions, only if you mean to.",
             "type": "integer"
           },
           "new": {
+            "description": "New is how many subscriptions were created inside the window.",
             "type": "integer"
           },
           "recent": {
+            "description": "Recent is the movement feed, newest first, capped at twenty and bounded by the same\nwindow. It is a sample of what New and Canceled counted, not the whole of it.\nNever null.",
             "items": {
               "$ref": "#/components/schemas/SaaSEvent"
             },
             "type": "array"
           },
           "trialsActive": {
+            "description": "TrialsActive is how many subscriptions are trialing right now. The same number as\nrevenue.trials, restated on the panel an operator works trials from.",
             "type": "integer"
           }
         },
@@ -4346,12 +4633,15 @@
       "SaaSUsage": {
         "properties": {
           "instrumented": {
+            "description": "Instrumented reports that at least one metered debit was observed in the window.\nFalse means NOT MEASURED — the two fields below are then meaningless rather than\nzero, and gaps says so. It is the difference between \"nobody used the API\" and\n\"nothing is emitting usage events yet\".",
             "type": "boolean"
           },
           "requests": {
+            "description": "Requests is how many billed API calls the window recorded — one per debit event.",
             "type": "integer"
           },
           "windowUsageCents": {
+            "description": "WindowUsageCents is metered API spend over the window, in USD cents. Consumption\nrevenue, entirely separate from MRR — adding the two double-counts nothing but\ninvents a figure the business does not have.",
             "type": "integer"
           }
         },
@@ -4377,9 +4667,11 @@
       "SeriesPoint": {
         "properties": {
           "t": {
+            "description": "T is the bucket key, and its shape says which interval the series was built at:\n\"2006-01-02\" for a day, the ISO week's Monday in the same form for a week,\n\"2006-01\" for a month. Buckets are enumerated end to end over the window, so the\naxis is continuous and successive points are one interval apart.",
             "type": "string"
           },
           "value": {
+            "description": "Value is the bucket's total, in the unit its own series carries: CENTS for spend,\nrevenue and usage; a COUNT for signups, active customers, cumulative customers and\nchurn. A bucket nothing landed in is an honest 0, not a gap — the axis was\nenumerated first and every bucket exists whether or not anything filled it.",
             "type": "integer"
           }
         },
@@ -4388,21 +4680,26 @@
       "ServiceInput": {
         "properties": {
           "description": {
+            "description": "Description is one line saying what the service is, for the board.",
             "type": "string"
           },
           "displayName": {
+            "description": "DisplayName is the name the launch board shows. It also titles the switch\n(\"Waitlist · \u003cdisplayName\u003e\") the first time the service is registered.",
             "type": "string"
           },
           "hosts": {
+            "description": "Hosts is every request host this service governs — \"chat.hanzo.ai\",\n\"hanzo.chat\". Each is normalized (lowercased, port stripped) and the set\nREPLACES the stored one, so an edit that omits a host stops governing it. A\nhost another service already claims is skipped: first claim wins.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "service": {
+            "description": "Service is the slug to onboard or edit, lowercased on the way in. Required.\nIt is the registry key and it names the switch — waitlist.\u003cservice\u003e — so a\nslug that already exists edits that service rather than creating a second.",
             "type": "string"
           },
           "waitlistMode": {
+            "description": "WaitlistMode is the launch mode for a NEW service: true gates it to approved\nusers, false opens it. On a re-register it is IGNORED — the live switch is\npreserved, so editing the hosts of an opened service never silently closes it.",
             "type": "boolean"
           }
         },
@@ -4435,6 +4732,7 @@
             "type": "string"
           },
           "waitlistMode": {
+            "description": "WaitlistMode is the mode IN FORCE: true means the service is gated to\napproved users, false means it is open to anyone. It is read from the\nwaitlist.\u003cservice\u003e switch at the moment of the read, not stored on the\nregistry row, so it reflects a flip made anywhere in the fleet within one\nevaluation TTL.",
             "type": "boolean"
           }
         },
@@ -4443,51 +4741,62 @@
       "Snapshot": {
         "properties": {
           "at": {
+            "description": "At is when the scan ran, RFC3339 in UTC. Analyze takes it as an argument instead of\nreading a clock, which is what makes the whole fold byte-reproducible in a test.",
             "type": "string"
           },
           "clusters": {
+            "description": "Clusters is every DOKS cluster in the account, each with the rollup of its scan.\nA cluster DO reports appears here even when its Kubernetes never answered.",
             "items": {
               "$ref": "#/components/schemas/Cluster"
             },
             "type": "array"
           },
           "complete": {
+            "description": "Complete reports that EVERY cluster answered. It is the gate in front of every\ndestructive verdict on this board: while it is false nothing is deletable,\nexpandable or scalable, because the cluster that stayed silent is exactly the one\nthat might be holding the volume.",
             "type": "boolean"
           },
           "cost": {
-            "$ref": "#/components/schemas/Cost"
+            "$ref": "#/components/schemas/Cost",
+            "description": "Cost is what the fleet bills per month, in cents, plus what could be recovered."
           },
           "findings": {
+            "description": "Findings is the audit pass over everything above, sorted worst first: severity,\nthen money, then id. Empty means the fold found nothing worth a human's attention.",
             "items": {
               "$ref": "#/components/schemas/Finding"
             },
             "type": "array"
           },
           "incompleteReason": {
+            "description": "IncompleteReason names the clusters that did not answer and what their silence\ncosts, in the operator's language. Empty exactly when Complete is true, and it is\nthe same sentence every blocked row then repeats as its own BlockedReason.",
             "type": "string"
           },
           "loadBalancers": {
+            "description": "LoadBalancers is every DO load balancer, attributed to a cluster by the Service\nthat claims it, or failing that by its member droplets.",
             "items": {
               "$ref": "#/components/schemas/LoadBalancer"
             },
             "type": "array"
           },
           "nodes": {
+            "description": "Nodes is EVERY droplet in the account, not only cluster members. A droplet no\ncluster claims has an empty cluster and is the only kind this board will delete.",
             "items": {
               "$ref": "#/components/schemas/Machine"
             },
             "type": "array"
           },
           "sources": {
+            "description": "Sources is one freshness row per upstream read: `do.clusters`, `do.droplets`,\n`do.volumes`, `do.loadBalancers`, and `k8s.\u003ccluster name\u003e` for each cluster scanned.\nA row with ok=false is usually why Complete is false.",
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
             "type": "array"
           },
           "totals": {
-            "$ref": "#/components/schemas/Totals"
+            "$ref": "#/components/schemas/Totals",
+            "description": "Totals are the fleet counts — how many of each thing, and how much capacity."
           },
           "volumes": {
+            "description": "Volumes is every block-storage volume, each carrying the state machine's verdict\non who owns it. It is the list the safety rule exists for.",
             "items": {
               "$ref": "#/components/schemas/Volume"
             },
@@ -4499,18 +4808,23 @@
       "SourceStatus": {
         "properties": {
           "at": {
+            "description": "At is when the aggregator ran, RFC3339. It is the READ's timestamp, shared by every\nrow in the list — not a per-source last-success time, so it never implies a stale\nsource is fresh.",
             "type": "string"
           },
           "error": {
+            "description": "Error is why the read failed, and is empty exactly when OK is true.",
             "type": "string"
           },
           "name": {
+            "description": "Name identifies the upstream read, dotted by system: \"do.volumes\", \"do.balance\",\n\"k8s.hanzo-k8s\", \"iam.orgs\", \"billing.subscriptions\". It is stable, so a console\ncan keep per-source state across reads.",
             "type": "string"
           },
           "ok": {
+            "description": "OK is whether that read succeeded. False is the whole point of this row: an\naggregator answers with what it got rather than failing, so the only way a reader\ncan tell a real zero from a missing source is here.",
             "type": "boolean"
           },
           "rows": {
+            "description": "Rows is how many records came back. Zero with ok=true is a genuine empty result;\nzero with ok=false means nothing was read at all.",
             "type": "integer"
           }
         },
@@ -4519,30 +4833,39 @@
       "SubscriptionRow": {
         "properties": {
           "display": {
+            "description": "Display is the same slug as Org. The warehouse holds no friendly name and this read\ndoes no per-org IAM fan-out, so it repeats the slug rather than inventing one.",
             "type": "string"
           },
           "id": {
+            "description": "ID is commerce's subscription id — the row's identity and the warehouse GROUP BY\nkey. One row per subscription, so an org on several plans has several rows.",
             "type": "string"
           },
           "mrrCents": {
+            "description": "MRRCents is the subscription's monthly recurring revenue in USD cents — already\ninterval-normalized and multiplied by seats by the emitter, so an annual plan\nreports a twelfth here and not its yearly price. Reported for EVERY row, including\ntrialing and canceled ones, which are not revenue: filter on Status before summing.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the tenant that holds the subscription, and what ?org= matches exactly.",
             "type": "string"
           },
           "plan": {
+            "description": "Plan is the plan's human label as of the subscription's latest event. A plan\nrenamed mid-life reports the name it carries now.",
             "type": "string"
           },
           "renews": {
+            "description": "Renews is the current period's end, RFC3339 — when it next bills. On a canceled\nsubscription it is the last period's end, so it is a date in the past, not a\npromise of a charge.",
             "type": "string"
           },
           "started": {
+            "description": "Started is the earliest event on this subscription, RFC3339 — when it first\nappeared in the warehouse. The tiebreaker in the ranking, newest first.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the EFFECTIVE lifecycle state: `canceled` when the latest event is a\ncancel, whatever the last status snapshot said, otherwise that snapshot, defaulting\nto `active`. Common values are `active`, `trialing`, `past_due`, `canceled`.",
             "type": "string"
           },
           "user": {
+            "description": "User is the individual the subscription was created by, from the event's\ndistinct_id. Empty for one created by a machine rather than a person.",
             "type": "string"
           }
         },
@@ -4551,18 +4874,22 @@
       "SubscriptionsOut": {
         "properties": {
           "data": {
+            "description": "Data is the matching subscriptions, highest MRR first, then newest, capped by\nlimit. Canceled subscriptions are included unless ?status= excludes them.",
             "items": {
               "$ref": "#/components/schemas/SubscriptionRow"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the query failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A warehouse that is not connected answers ok with an\nempty list and total 0 — the honest not-yet-wired state, not a fleet with no\nsubscribers.",
             "type": "string"
           },
           "total": {
+            "description": "Total is how many matched BEFORE limit truncated. Omitted on an error.",
             "type": "integer"
           }
         },
@@ -4571,12 +4898,15 @@
       "SubsystemsOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/subsystemBoard"
+            "$ref": "#/components/schemas/subsystemBoard",
+            "description": "Data is the board. Null only when the caller was refused."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way. An absent warehouse still\nanswers \"ok\" with the full inventory — the telemetry gap is reported in\ndata.sources.",
             "type": "string"
           }
         },
@@ -4585,30 +4915,39 @@
       "SwitchView": {
         "properties": {
           "category": {
+            "description": "Category is the board's grouping: Launch, Signup, Subsystems, Gateway or\nNetwork. Any subsystem may register a switch with a category of its own, so\ntreat it as a label to group by, not a fixed set.",
             "type": "string"
           },
           "description": {
+            "description": "Description is what flipping this switch does, written by whoever registered\nit — including the preconditions for flipping it, where there are any.",
             "type": "string"
           },
           "env": {
+            "description": "Env is the environment variable that supplies the fallback. Present only on\nthe boot-time switches, where env IS the mechanism; a runtime switch carries\nnone on purpose, so that this surface is the one place its value comes from.",
             "type": "string"
           },
           "key": {
+            "description": "Key is the registry key, which is also the flag key the engine evaluates and\nthe path segment a write addresses: snake_case for the seeded platform set\n(waitlist_open, public_signup), waitlist.\u003cservice\u003e for a launch gate.",
             "type": "string"
           },
           "label": {
+            "description": "Label is the switch's title on the board.",
             "type": "string"
           },
           "readOnly": {
+            "description": "ReadOnly marks a switch the process reads once at BOOT (subsystem activation,\nthe network ids). Writing it is not refused and the stored value is real, but\nthe running process keeps its boot value until it is restarted — so a flip\nhere is a request for a redeploy rather than a hot change.",
             "type": "boolean"
           },
           "source": {
+            "description": "Source is where Value came from, in the order they are tried: \"flags\" (a\nstored definition — the only one a cockpit write produces), \"env\" (the Env\nvar below), or \"default\" (the registered literal). Anything but \"flags\"\nmeans nothing has ever been written for this key.",
             "type": "string"
           },
           "type": {
+            "description": "Type is how Value is to be read back: bool, int or string.",
             "type": "string"
           },
           "value": {
+            "description": "Value is the value IN FORCE right now, always as a string whatever Type says\n— \"true\"/\"false\" for a bool, decimal digits for an int. It is what the\nrunning deployment is using, not what is stored: an unstored switch reports\nits env or literal fallback here.",
             "type": "string"
           }
         },
@@ -4617,30 +4956,39 @@
       "Totals": {
         "properties": {
           "attachedGiB": {
+            "description": "AttachedGiB is the provisioned capacity of the attached volumes, in GiB.",
             "type": "integer"
           },
           "attachedVolumes": {
+            "description": "AttachedVolumes counts the volumes DO reports attached to a droplet right now.",
             "type": "integer"
           },
           "clusters": {
+            "description": "Clusters is how many DOKS clusters DigitalOcean reports, scanned or not. It is the\ndenominator the completeness gate counts unanswered clusters against.",
             "type": "integer"
           },
           "detachedGiB": {
+            "description": "DetachedGiB is the provisioned capacity of the detached volumes, in GiB. With\nAttachedGiB it sums to VolumeGiB.",
             "type": "integer"
           },
           "detachedVolumes": {
+            "description": "DetachedVolumes is the exact complement of AttachedVolumes — bound, released and\nunreferenced together, so the two always sum to Volumes. Detached is NOT idle and\nNOT garbage: most of these are live data between mounts.",
             "type": "integer"
           },
           "idlePVCs": {
+            "description": "IdlePVCs counts volumes whose PVC is Bound but which no running pod mounts. A\nreview queue, never a delete queue — the usual member is a stopped database — and\ndeliberately excluded from ReclaimableMonthly.",
             "type": "integer"
           },
           "loadBalancers": {
+            "description": "LoadBalancers is every DO load balancer in the account.",
             "type": "integer"
           },
           "localDiskGiB": {
+            "description": "LocalDiskGiB is the droplets' own disk, summed. Broken out precisely so it is never\nadded to VolumeGiB: it is included in each droplet's own monthly price and DO does\nnot bill it as block storage.",
             "type": "integer"
           },
           "measuredGiB": {
+            "description": "MeasuredGiB is the PROVISIONED capacity of the measured volumes — how much of the\nfleet UsedGiB and WastedGiB were computed from, not how much of it is full.",
             "type": "integer"
           },
           "measuredVolumes": {
@@ -4648,30 +4996,39 @@
             "type": "integer"
           },
           "nodes": {
+            "description": "Nodes is every droplet in the account, cluster member or not — the same population\nas Snapshot.nodes, which is a superset of the machines Kubernetes knows about.",
             "type": "integer"
           },
           "unmeasuredGiB": {
+            "description": "UnmeasuredGiB is the provisioned capacity of the unmeasured volumes, in GiB — the\nsize of the blind spot behind UsedGiB and WastedGiB.",
             "type": "integer"
           },
           "unmeasuredVolumes": {
+            "description": "UnmeasuredVolumes counts volumes no kubelet reported a reading for. Not measured is\na different fact from empty, so these contribute to neither UsedGiB nor WastedGiB.",
             "type": "integer"
           },
           "unreferencedGiB": {
+            "description": "UnreferencedGiB is the provisioned capacity of the unreferenced volumes, in GiB —\nthe space a delete would hand back.",
             "type": "integer"
           },
           "unreferencedVolumes": {
+            "description": "UnreferencedVolumes counts the volumes no PV in any cluster names — the deletable\nset, and the only one. It is a count of CANDIDATES: whether the button is live\nstill depends on Complete.",
             "type": "integer"
           },
           "usedGiB": {
+            "description": "UsedGiB is what the measured filesystems actually hold. Summed in BYTES and\nconverted once at the end, so hundreds of sub-GiB readings do not each round to\nzero on the way in.",
             "type": "integer"
           },
           "volumeGiB": {
+            "description": "VolumeGiB is the PROVISIONED block-storage capacity, in whole GiB — the number\nDigitalOcean bills for. It excludes droplet local disk entirely; see LocalDiskGiB.",
             "type": "integer"
           },
           "volumes": {
+            "description": "Volumes is every block-storage volume in the account.",
             "type": "integer"
           },
           "wastedGiB": {
+            "description": "WastedGiB is provisioned minus measured across the measured set, in billed GiB. A\nLOWER BOUND on fleet waste, and not the same money as ReclaimableMonthly: this\nspace sits inside volumes holding live data. See Cost.wastedMonthly.",
             "type": "integer"
           }
         },
@@ -4708,15 +5065,18 @@
       "UsageFundingOut": {
         "properties": {
           "data": {
+            "description": "Data is one row per (provider, model) over the window, most expensive first. Never\nnull; empty also means the warehouse was unreachable, so read it beside the credit\nledger before concluding nothing was spent.",
             "items": {
               "$ref": "#/components/schemas/UsageFundingRow"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the failure, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A warehouse that is not connected still answers ok with\nan empty list — this is a dashboard read, and it degrades rather than refusing.",
             "type": "string"
           }
         },
@@ -4725,6 +5085,7 @@
       "UsageFundingRow": {
         "properties": {
           "cost_cents": {
+            "description": "CostCents is what those calls cost US at the provider, in USD cents. Upstream\nspend, not what a customer was billed. The rows are ordered by it, largest first.",
             "type": "integer"
           },
           "funding": {
@@ -4732,15 +5093,19 @@
             "type": "string"
           },
           "model": {
+            "description": "Model is the model those calls named, as the usage ledger recorded it.",
             "type": "string"
           },
           "provider": {
+            "description": "Provider is the upstream the calls went to, joining this row to the credit ledger.",
             "type": "string"
           },
           "requests": {
+            "description": "Requests is how many calls the window recorded for this provider and model.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is total tokens across the window's calls — prompt and completion together,\nas the meter summed them.",
             "type": "integer"
           }
         },
@@ -4749,12 +5114,15 @@
       "Vendor": {
         "properties": {
           "amountCents": {
+            "description": "Amount is the period's cost in USD cents, POSITIVE — money out is not negated\nhere. Summed across lines it is the platform COGS the margin subtracts.",
             "type": "integer"
           },
           "note": {
+            "description": "Note is commerce's own caveat on the line — usually how an estimate was reached.\nOmitted when there is none.",
             "type": "string"
           },
           "service": {
+            "description": "Service is what we pay them FOR, so one vendor can bill several lines. Commerce\nchooses the vocabulary; this surface reports it verbatim.",
             "type": "string"
           },
           "source": {
@@ -4762,6 +5130,7 @@
             "type": "string"
           },
           "vendor": {
+            "description": "Name is who we pay — the vendor's own name (\"digitalocean\", \"anthropic\"). The wire\nspells it `vendor`; a line is identified by this together with Service.",
             "type": "string"
           }
         },
@@ -4770,12 +5139,15 @@
       "VerifyOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Trail"
+            "$ref": "#/components/schemas/Trail",
+            "description": "Data is the verdict for every chain the deployment keeps — a set, because the trail\nis a family of chains, one per process, and no single boolean is true of all of\nthem. Null exactly when Status is \"error\". A BROKEN or UNREAD chain is still an ok\nanswer: read the counts inside before concluding the trail is sound."
           },
           "msg": {
+            "description": "Msg is why the walk could not run, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". A deployment with no audit store is an ERROR here, not\nan empty pass: \"there is nothing to check\" and \"everything checks out\" must never\nrender the same on a compliance surface.",
             "type": "string"
           }
         },
@@ -4784,6 +5156,7 @@
       "Volume": {
         "properties": {
           "blockedReason": {
+            "description": "BlockedReason is why not, in the operator's language — which cluster's PV holds it,\nor which clusters went unanswered. Empty exactly when Deletable is true.",
             "type": "string"
           },
           "cluster": {
@@ -4791,6 +5164,7 @@
             "type": "string"
           },
           "clusterId": {
+            "description": "ClusterID is that cluster's UUID. Falls back to the cluster of the droplet the\nvolume is physically attached to, which is evidence of the same quality: live\nkernel state, not a label someone wrote once.",
             "type": "string"
           },
           "controller": {
@@ -4798,18 +5172,22 @@
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when DO created the volume, RFC3339. Age is corroboration for a human\njudging an orphan, never an input to the deletable verdict.",
             "type": "string"
           },
           "deletable": {
+            "description": "Deletable is the standing verdict: this volume is unreferenced AND the scan was\ncomplete enough to prove it. It is the only thing the delete route consults, and it\nis recomputed from a fresh scan at the moment the button is pressed.",
             "type": "boolean"
           },
           "dropletIds": {
+            "description": "DropletIDs are the droplets DO reports this volume attached to. Non-empty is hard\nkernel-level evidence the volume is in use right now. Never null.",
             "items": {
               "type": "integer"
             },
             "type": "array"
           },
           "expandBlockedReason": {
+            "description": "ExpandBlockedReason is why a grow is refused: a PV claims the volume but no PVC\ndoes, so growing the device would leave the PV declaring a capacity that is wrong.\nEmpty exactly when Expandable is true.",
             "type": "string"
           },
           "expandable": {
@@ -4821,45 +5199,58 @@
             "type": "boolean"
           },
           "id": {
+            "description": "ID is the DigitalOcean volume id. It is also the `spec.csi.volumeHandle` a\nPersistentVolume names, which is what makes the cross-cluster liveness test an\nexact match rather than a guess.",
             "type": "string"
           },
           "idle": {
+            "description": "Idle is Bound with nothing mounting it: live data nobody is currently reading,\ntypically a stopped database. It is a queue for a human and is deliberately kept\nout of Cost.reclaimableMonthly.",
             "type": "boolean"
           },
           "monthlyCents": {
+            "description": "MonthlyCents is SizeGiB at DO's rate of 10 cents per GiB per month. It is charged\non provisioned capacity, so an empty volume and a full one of the same size cost\nexactly the same.",
             "type": "integer"
           },
           "mountedBy": {
+            "description": "MountedBy lists the `namespace/name` of every running pod mounting this volume.\nEmpty on a Bound volume means idle — a review signal, never a delete signal.\nNever null.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "name": {
+            "description": "Name is the DO volume name. DOKS-provisioned volumes are named `pvc-\u003cuuid\u003e`, which\nis a naming convention and NOT evidence of ownership — only a PV reference is.",
             "type": "string"
           },
           "nodeName": {
+            "description": "NodeName is the name of the first attached droplet, or \"\" when detached. Carried so\na refusal can name the machine an operator would have to go look at.",
             "type": "string"
           },
           "pv": {
+            "description": "PV is the name of the PersistentVolume that claims this volume, or \"\" when no PV in\nany scanned cluster does. Non-empty is the proof that makes it undeletable.",
             "type": "string"
           },
           "pvPhase": {
+            "description": "PVPhase is that PV's phase — `Bound`, `Released`, `Available` or `Failed`. Bound\nmeans live data; anything else means the claim is retired but the PV still exists,\nso a human retires the PV before the volume can go.",
             "type": "string"
           },
           "pvcName": {
+            "description": "PVCName is that claim's name. It plus the namespace is what the fill reading and\nthe mounting pods are keyed by, so an empty PVCName means neither can exist.",
             "type": "string"
           },
           "pvcNamespace": {
+            "description": "PVCNamespace is the namespace of the claim the PV is bound to, or \"\" when unbound.",
             "type": "string"
           },
           "region": {
+            "description": "Region is DO's region slug (\"nyc3\"). A volume can only ever attach to a droplet in\nits own region, so this bounds where it could possibly be in use.",
             "type": "string"
           },
           "sizeGiB": {
+            "description": "SizeGiB is the PROVISIONED size — what DigitalOcean bills. It is not the\nfilesystem's capacity, which is a few percent smaller after format overhead.",
             "type": "integer"
           },
           "state": {
+            "description": "State is the ownership verdict, one of `attached`, `bound`, `released`,\n`unreferenced`. The machine is total and ordered — attachment beats reference,\nreference beats absence — and `unreferenced` is the ONLY deletable state.",
             "type": "string"
           },
           "tagCluster": {
@@ -4875,6 +5266,7 @@
             "type": "integer"
           },
           "wastedMonthlyCents": {
+            "description": "WastedMonthlyCents is WastedGiB at the same 10 cents per GiB per month. Money the\nfleet pays for empty space inside a volume that is IN USE — so it is not\ncollectable by any button here, only by the copy-and-swap migration the matching\nfinding spells out. Zero when HasUsage is false, which means unknown, not none.",
             "type": "integer"
           }
         },
@@ -4904,12 +5296,15 @@
       "VolumeSnapshotOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/digitalocean.Snapshot"
+            "$ref": "#/components/schemas/digitalocean.Snapshot",
+            "description": "Data is the snapshot DigitalOcean created — the undo, addressable in the DO\nconsole. Null exactly when Status is \"error\", which means no snapshot exists."
           },
           "msg": {
+            "description": "Msg is why the snapshot failed, and is empty on success.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\".",
             "type": "string"
           }
         },
@@ -4918,12 +5313,15 @@
       "adminMe": {
         "properties": {
           "displayName": {
+            "description": "DisplayName is the label to render. It carries the same value as Name today:\nthis answer is assembled from the sanitized identity headers, which carry no\nseparate display name.",
             "type": "string"
           },
           "email": {
+            "description": "Email is the operator's email, and the actor an audited admin write is\nrecorded under.",
             "type": "string"
           },
           "isSuperAdmin": {
+            "description": "IsSuperAdmin is the platform-sudo fact: true iff Owner is the reserved admin\norg. That is IAM's IsSuperAdmin predicate and the ONE thing every\ncross-tenant surface checks — an org's own isAdmin is a different power and\nnever grants it.",
             "type": "boolean"
           },
           "isWhiteLabel": {
@@ -4931,9 +5329,11 @@
             "type": "boolean"
           },
           "name": {
+            "description": "Name is the IAM user name — the login handle, unique within Owner.",
             "type": "string"
           },
           "owner": {
+            "description": "Owner is the IAM org this operator belongs to: the reserved admin org for a\nSuperAdmin, the tenant's own slug for a white-label admin. It is read off the\nvalidated principal the gate just checked, never from a client claim.",
             "type": "string"
           },
           "scopeOrgs": {
@@ -4949,46 +5349,51 @@
       "aiMetrics": {
         "properties": {
           "end": {
+            "description": "End is the moment of this read, RFC 3339 UTC. The window is always right up\nto now; there is no lag to allow for.",
             "type": "string"
           },
           "evalRuns": {
-            "description": "recent eval runs (progress)",
+            "description": "EvalRuns is the twelve most RECENT eval runs, newest first — recency, not\nquality.",
             "items": {
               "$ref": "#/components/schemas/aimRunStat"
             },
             "type": "array"
           },
           "evals": {
-            "$ref": "#/components/schemas/aimEvals"
+            "$ref": "#/components/schemas/aimEvals",
+            "description": "Evals is the eval plane's band: the trace half and the score half."
           },
           "o11yAi": {
-            "$ref": "#/components/schemas/aimO11yAI"
+            "$ref": "#/components/schemas/aimO11yAI",
+            "description": "O11yAI is the generation rollup over gen_ai spans. Its money is US DOLLARS,\nunlike Usage below — the two halves of this board come from different planes\nand each keeps its plane's unit."
           },
           "o11yAiModels": {
-            "description": "gen_ai spans per-model",
+            "description": "O11yAIModels is the twelve busiest models by GENERATION count, from gen_ai\nspans. It answers the same question as TopModels from the other plane, and its\nmoney is US dollars.",
             "items": {
               "$ref": "#/components/schemas/aimLfModelStat"
             },
             "type": "array"
           },
           "range": {
+            "description": "Range is the window every figure below covers: 24h, 7d or 30d. It is the\nNORMALIZED value — an unrecognized ?range reads as 30d and says so here.",
             "type": "string"
           },
           "scoreNames": {
-            "description": "eval_scores per score-name",
+            "description": "ScoreNames is the twelve busiest scorers, each with its own distribution.",
             "items": {
               "$ref": "#/components/schemas/aimScoreStat"
             },
             "type": "array"
           },
           "scoreSeries": {
-            "description": "avg eval score over time (progress trend)",
+            "description": "ScoreSeries is the average eval score bucketed over the window, oldest first.\nThis series IS the training/eval progress signal on this board.",
             "items": {
               "$ref": "#/components/schemas/aimScorePoint"
             },
             "type": "array"
           },
           "start": {
+            "description": "Start is the window's lower bound, RFC 3339 UTC, derived from Range.",
             "type": "string"
           },
           "topActors": {
@@ -4999,14 +5404,15 @@
             "type": "array"
           },
           "topModels": {
-            "description": "cloud_usage per-model (populated today)",
+            "description": "TopModels is the twelve busiest models by request count, from the billing\nledger. Money in these rows is US cents.",
             "items": {
               "$ref": "#/components/schemas/aimModelStat"
             },
             "type": "array"
           },
           "usage": {
-            "$ref": "#/components/schemas/aimUsage"
+            "$ref": "#/components/schemas/aimUsage",
+            "description": "Usage is the fleet LLM-usage band from the ledger the gateway writes. Its\nmoney is US CENTS."
           }
         },
         "type": "object"
@@ -5035,27 +5441,35 @@
       "aimEvals": {
         "properties": {
           "avgScore": {
+            "description": "AvgScore is the unweighted mean of every score value in the window,\nregardless of scorer, to 4dp. Because the scorers are pooled it also moves\nwhen the MIX of scorers changes, so read it as a trend and the per-scorer\nrows for the level.",
             "type": "number"
           },
           "datasets": {
+            "description": "Datasets is how many distinct datasets those traces ran against.",
             "type": "integer"
           },
           "latencyMsAvg": {
+            "description": "LatencyMsAvg is the mean model-under-test call duration in milliseconds,\naveraged only over traces whose end time is after their start — an unfinished\ntrace does not drag it down.",
             "type": "number"
           },
           "models": {
+            "description": "Models is how many distinct models were under test.",
             "type": "integer"
           },
           "runs": {
+            "description": "Runs is how many DISTINCT eval runs left traces in the window.",
             "type": "integer"
           },
           "scoreNames": {
+            "description": "ScoreNames is how many distinct scorers produced them.",
             "type": "integer"
           },
           "scores": {
+            "description": "Scores is how many individual score values were recorded, across every\nscorer.",
             "type": "integer"
           },
           "traces": {
+            "description": "Traces is how many eval traces were recorded — one per model-under-test call.",
             "type": "integer"
           }
         },
@@ -5064,12 +5478,15 @@
       "aimLfModelStat": {
         "properties": {
           "costUsd": {
+            "description": "CostUsd is their summed cost in US DOLLARS — the span attribute's unit, not\nthe cents the ledger leaderboard beside this uses.",
             "type": "number"
           },
           "generations": {
+            "description": "Generations is how many gen_ai spans named it. The board ranks on this.",
             "type": "integer"
           },
           "model": {
+            "description": "Model is the model the span reported answering as, falling back to the model\nit was asked for when the response named none.",
             "type": "string"
           }
         },
@@ -5078,15 +5495,19 @@
       "aimModelStat": {
         "properties": {
           "costCents": {
+            "description": "CostCents is what they cost, in US cents.",
             "type": "integer"
           },
           "model": {
+            "description": "Model is the model id the ledger recorded. Unattributed rows carry no model\nand are left out rather than ranked as a nameless one.",
             "type": "string"
           },
           "requests": {
+            "description": "Requests is how many calls went to it. The board ranks on this.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is what those calls consumed.",
             "type": "integer"
           }
         },
@@ -5095,15 +5516,19 @@
       "aimO11yAI": {
         "properties": {
           "costUsd": {
+            "description": "CostUsd is their summed cost in US DOLLARS, not cents: it is the span\nattribute's native unit and is carried through unconverted.",
             "type": "number"
           },
           "generations": {
+            "description": "Generations is how many LLM calls the fleet made in the window — one per\ngen_ai span.",
             "type": "integer"
           },
           "latencyMsAvg": {
+            "description": "LatencyMsAvg is the mean generation duration in milliseconds, over spans that\nrecorded a duration at all.",
             "type": "number"
           },
           "latencyMsP95": {
+            "description": "LatencyMsP95 is the 95th-percentile generation duration in milliseconds — the\ntail a user actually feels.",
             "type": "number"
           }
         },
@@ -5112,18 +5537,23 @@
       "aimRunStat": {
         "properties": {
           "avgValue": {
+            "description": "AvgValue is their mean, to 4dp, pooled across the run's scorers.",
             "type": "number"
           },
           "dataset": {
+            "description": "Dataset is one dataset the run scored against — an arbitrary one of them if\nthe run spanned several, since a run is named per row here and a dataset is\nnot.",
             "type": "string"
           },
           "lastTs": {
+            "description": "LastTs is when the run last recorded a score, RFC 3339 UTC. The board is\nordered by it, so these rows are the most RECENT runs, not the best ones.",
             "type": "string"
           },
           "runName": {
+            "description": "RunName is the eval run's name, as the run recorded it. Unnamed runs are left\nout.",
             "type": "string"
           },
           "scores": {
+            "description": "Scores is how many score values the run recorded in the window.",
             "type": "integer"
           }
         },
@@ -5132,12 +5562,15 @@
       "aimScorePoint": {
         "properties": {
           "avgValue": {
+            "description": "AvgValue is the mean of every score in that bucket, to 4dp. This series IS\nthe eval-progress signal.",
             "type": "number"
           },
           "count": {
+            "description": "Count is how many scores the mean was taken over — the weight behind the\npoint, and what tells a real dip from a thin bucket.",
             "type": "integer"
           },
           "ts": {
+            "description": "Ts is the bucket's start, RFC 3339 UTC. The bucket width follows the range —\nan hour at 24h, six hours at 7d, a day at 30d — so it is not a fixed unit.",
             "type": "string"
           }
         },
@@ -5146,18 +5579,23 @@
       "aimScoreStat": {
         "properties": {
           "avgValue": {
+            "description": "AvgValue is their mean, to 4dp.",
             "type": "number"
           },
           "count": {
+            "description": "Count is how many values this scorer produced in the window. The board ranks\non this, so a busy scorer leads whether or not it scores well.",
             "type": "integer"
           },
           "maxValue": {
+            "description": "MaxValue is the highest. With Min it bounds the spread the mean hides.",
             "type": "number"
           },
           "minValue": {
+            "description": "MinValue is the lowest single value this scorer recorded in the window.",
             "type": "number"
           },
           "name": {
+            "description": "Name is the scorer's name. Its scale is the scorer's own — there is no fleet\nconvention that these are 0..1 — so compare a name against itself over time,\nnever one name against another.",
             "type": "string"
           }
         },
@@ -5166,21 +5604,27 @@
       "aimUsage": {
         "properties": {
           "completionTokens": {
+            "description": "CompletionTokens is the generated half of Tokens.",
             "type": "integer"
           },
           "costCents": {
+            "description": "CostCents is what those calls cost, in US CENTS — this half of the board is\nthe billing ledger, so it is cents while the gen_ai half is dollars.",
             "type": "integer"
           },
           "models": {
+            "description": "Models is how many DISTINCT models were called, not a count of calls.",
             "type": "integer"
           },
           "promptTokens": {
+            "description": "PromptTokens is the input half of Tokens.",
             "type": "integer"
           },
           "requests": {
+            "description": "Requests is how many calls the ledger recorded in the window, errored ones\nincluded.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is prompt plus completion across them.",
             "type": "integer"
           }
         },
@@ -5189,12 +5633,15 @@
       "aimetricsOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/aiMetrics"
+            "$ref": "#/components/schemas/aiMetrics",
+            "description": "Data is the board. A warehouse that is not connected, or a table that is\nmissing, yields the ZERO board rather than a failure — so zeros here mean\neither an idle fleet or a blind one, and this envelope cannot tell you which."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           }
         },
@@ -5203,111 +5650,126 @@
       "analyticsData": {
         "properties": {
           "activeCustomers": {
-            "description": "Active customers — from the usage ledger.",
+            "description": "ActiveCustomers is how many DISTINCT customers had at least one usage event\nin each bucket. Empty when the ledger returned no usage at all.",
             "items": {
               "$ref": "#/components/schemas/SeriesPoint"
             },
             "type": "array"
           },
           "arpuCents": {
+            "description": "ARPUCents is average revenue per active customer over the window, in US\ncents: window spend divided by MAU, falling back to TotalCustomers when\nnothing was active. Integer division, so it truncates.",
             "type": "integer"
           },
           "churn": {
-            "description": "Churn — logo churn (count) + rate.",
+            "description": "Churn is LOGO churn per month — customers active in the previous month and\nnot in this one. It counts customers, not revenue. The first point is always\nzero because there is no month before it to compare against.",
             "items": {
               "$ref": "#/components/schemas/SeriesPoint"
             },
             "type": "array"
           },
           "churnRatePct": {
+            "description": "ChurnRatePct is churned customers as a percentage of the at-risk base,\npooled over the last SIX months rather than over Range.",
             "type": "number"
           },
           "computed": {
             "additionalProperties": {
               "type": "boolean"
             },
-            "description": "Transparency: which metrics are backed by real data vs honest-empty.",
+            "description": "Computed says which metrics on this board are backed by real data, keyed\ngrowth, retention, active, churn, usage, revenue, mrr, arpu, ltv, nrr. False\nmeans the number beside it is an honest zero because the ledger held nothing\nto fold — NOT that it measured zero. Read it before reading any of them.",
             "type": "object"
           },
           "cumulativeCustomers": {
+            "description": "CumulativeCustomers is the all-time customer count as of each bucket's END —\na running total, so it only rises and its last point is TotalCustomers.",
             "items": {
               "$ref": "#/components/schemas/SeriesPoint"
             },
             "type": "array"
           },
           "dau": {
+            "description": "DAU is how many distinct customers had a usage event in the last 24 hours. A\nFIXED lookback — it ignores Range, so it does not change when the window\ndoes.",
             "type": "integer"
           },
           "generatedAt": {
+            "description": "GeneratedAt is when this board was computed, RFC 3339 UTC. Nothing is\ncached, so it is the moment of this request.",
             "type": "string"
           },
           "growthRatePct": {
+            "description": "GrowthRatePct is the percentage change in signups against the immediately\npreceding window of the same length; negative when signups fell. It is 0\nwhen the prior window had none, which is not the same as flat.",
             "type": "number"
           },
           "interval": {
+            "description": "Interval is the bucket width every series below uses: day, week or month,\nderived from Range (7d and 30d give day, 90d gives week, all gives month).",
             "type": "string"
           },
           "ltvCents": {
-            "description": "null until churn is observed",
+            "description": "LTVCents is estimated lifetime value per customer, in US cents: ARPU divided\nby the monthly churn rate. NULL until real churn is observed — with no churn\nthe formula divides by zero, and a huge number would read as good news.",
             "type": "integer"
           },
           "mau": {
+            "description": "MAU is the same over the last 30 days, and it is the denominator ARPUCents\nuses.",
             "type": "integer"
           },
           "mrrCents": {
-            "description": "Revenue analytics.",
+            "description": "MRRCents is monthly recurring revenue as of NOW, in US cents, summed from\nactive subscriptions across the caller's window. Point-in-time: it is the\none revenue figure here that is not a fold of the usage window.",
             "type": "integer"
           },
           "newCustomers": {
+            "description": "NewCustomers is how many of them signed up inside the window.",
             "type": "integer"
           },
           "nrrPct": {
-            "description": "null — needs MRR history",
+            "description": "NRRPct is net revenue retention. Always NULL: it needs a history of MRR over\ntime and commerce keeps only the current value, so there is nothing honest to\ncompute.",
             "type": "number"
           },
           "range": {
+            "description": "Range is the requested window: 7d, 30d, 90d, or all (the last two years).\nNORMALIZED — anything else reads as 30d and says so here.",
             "type": "string"
           },
           "retention": {
             "$ref": "#/components/schemas/retentionGrid",
-            "description": "Retention triangle — signup cohort × active period."
+            "description": "Retention is the cohort triangle: signup month against months elapsed since,\nas percentages of each cohort."
           },
           "revenue": {
+            "description": "Revenue is realized revenue per bucket, in US cents. For a pay-as-you-go\nfleet it carries the same numbers as Usage; it is a separate field so a\nconsole can theme the two differently.",
             "items": {
               "$ref": "#/components/schemas/SeriesPoint"
             },
             "type": "array"
           },
           "signups": {
-            "description": "Growth — from IAM createdTime (always real).",
+            "description": "Signups is new orgs created per bucket, from IAM's own createdTime. It is\nthe one series here that is always real: a signup timestamp exists whether\nor not that tenant ever used anything.",
             "items": {
               "$ref": "#/components/schemas/SeriesPoint"
             },
             "type": "array"
           },
           "sources": {
+            "description": "Sources is one row per upstream this board read — iam and commerce-ledger —\nwith whether it answered and how many rows it gave. A ledger that answered\nfor only some orgs is marked degraded here, which is the only thing\ndistinguishing an undercount from a quiet month.",
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
             "type": "array"
           },
           "topCustomers": {
+            "description": "TopCustomers is the ten biggest spenders in the window, largest first. A\ncustomer with no spend is left out rather than listed at zero.",
             "items": {
               "$ref": "#/components/schemas/analyticsSlice"
             },
             "type": "array"
           },
           "totalCustomers": {
+            "description": "TotalCustomers is how many customers in the caller's window carry a signup\ndate at all, over ALL time rather than within Range.",
             "type": "integer"
           },
           "usage": {
-            "description": "Usage analytics.",
+            "description": "Usage is usage spend per bucket, in US cents, oldest first.",
             "items": {
               "$ref": "#/components/schemas/SeriesPoint"
             },
             "type": "array"
           },
           "wau": {
+            "description": "WAU is the same over the last 7 days.",
             "type": "integer"
           }
         },
@@ -5316,12 +5778,15 @@
       "analyticsOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/analyticsData"
+            "$ref": "#/components/schemas/analyticsData",
+            "description": "Data is the board. Null when Status is \"error\"."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\" — here, that the tenant\nwindow itself could not be resolved. A degraded upstream is not this: it is\nreported in data.sources with Status still \"ok\".",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           }
         },
@@ -5330,12 +5795,15 @@
       "analyticsSlice": {
         "properties": {
           "hint": {
+            "description": "Hint is the org slug behind Label, so two customers sharing a display name\nstay distinguishable and a row can be clicked through to its tenant. Absent\nwhen unknown.",
             "type": "string"
           },
           "label": {
+            "description": "Label is the customer's display name — what to render.",
             "type": "string"
           },
           "value": {
+            "description": "Value is that customer's spend over the window, in US cents.",
             "type": "integer"
           }
         },
@@ -5344,24 +5812,31 @@
       "baseInstance": {
         "properties": {
           "created": {
+            "description": "Created is when the instance was created, as the engine reports it.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the instance's name at the Base engine.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant that owns the instance, and the key the scope filter runs\non. A row whose org is empty or outside the caller's subtree is DROPPED for\na non-SuperAdmin, so an instance the engine reports without an org is\nvisible only to a super.",
             "type": "string"
           },
           "plan": {
+            "description": "Plan is the plan the instance runs on, as the engine names it.",
             "type": "string"
           },
           "region": {
+            "description": "Region is where it is hosted, as the engine names it.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the engine's own lifecycle word for the instance — running and its\nsiblings. The vocabulary belongs to the Base engine, which is why this layer\nforwards it rather than mapping it.",
             "type": "string"
           },
           "url": {
+            "description": "URL is where the instance is reached.",
             "type": "string"
           }
         },
@@ -5370,18 +5845,22 @@
       "basesOut": {
         "properties": {
           "data": {
+            "description": "Data is the instances in the caller's window, after the scope re-check. Null\nwhen Status is \"error\".",
             "items": {
               "$ref": "#/components/schemas/baseInstance"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\" (the engine was unreachable\nor answered non-2xx). On a SUCCESS it may still carry an advisory: \"the Base\nengine is not yet embedded on this deployment\" beside an empty list, which\nis the honest not-yet state rather than a fleet with no instances.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way. An unconfigured Base\nengine answers \"ok\", not \"error\" — see Msg.",
             "type": "string"
           },
           "total": {
+            "description": "Total is len(data): the caller's whole window after scope filtering,\nunpaginated. Absent when the read failed.",
             "type": "integer"
           }
         },
@@ -5403,27 +5882,35 @@
       "computeLeaf": {
         "properties": {
           "active": {
+            "description": "Active is how many of them are still running — the ones whose LATEST\nlifecycle event is not a terminal one (stop, destroy, terminate, delete,\noff, shutdown, expire and their past tenses). Decided in the warehouse over\nevery machine, not over a page.",
             "type": "integer"
           },
           "app": {
+            "description": "App is the application within that tenant, as the emitter recorded it.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the workload class: bot, machine, cluster, nodepool, container,\nfunction and whatever else the emitter writes. An OPEN set, lowercased, not\nan enum — a bot is a machine running the agent, a machine is raw compute —\nso match it as a string and expect values this list does not have.",
             "type": "string"
           },
           "lastTs": {
+            "description": "LastTs is the most recent event in the group, RFC 3339 UTC. For a group with\nno active machines it is when the last one stopped.",
             "type": "string"
           },
           "machines": {
+            "description": "Machines is how many DISTINCT machines of that kind ran in the window,\ncounted by machine id. Not a count of events.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the tenant these workloads belong to.",
             "type": "string"
           },
           "project": {
+            "description": "Project is the project within that app. With Org and App and Kind it forms\nthe group this row folds — the console's org to app to project tree is these\nfour columns.",
             "type": "string"
           },
           "spendCents": {
+            "description": "SpendCents is what the group billed over the window, in US cents, summed\nfrom the per-event prices.",
             "type": "integer"
           }
         },
@@ -5432,18 +5919,22 @@
       "computeOut": {
         "properties": {
           "data": {
+            "description": "Data is one row per group, biggest spender first. Null when Status is\n\"error\"; empty when there is genuinely nothing, or when the warehouse is\nunavailable.",
             "items": {
               "$ref": "#/components/schemas/computeLeaf"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\" — the warehouse rejected\nthe query. A warehouse that is not connected, or a usage table not\nprovisioned yet, is a SUCCESS carrying an empty list instead.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           },
           "total": {
+            "description": "Total is len(data): the roll-up is one row per group, unpaginated. Absent\nwhen the read failed.",
             "type": "integer"
           }
         },
@@ -5452,18 +5943,23 @@
       "datastoreVolume": {
         "properties": {
           "mount": {
+            "description": "Mount is its filesystem path on the datastore node.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the disk as the datastore names it.",
             "type": "string"
           },
           "pct": {
+            "description": "Pct is UsedGiB as a percentage of SizeGiB, 0..100 to one decimal. The alert\nthresholds read this.",
             "type": "number"
           },
           "sizeGiB": {
+            "description": "SizeGiB is its total capacity in GiB.",
             "type": "integer"
           },
           "usedGiB": {
+            "description": "UsedGiB is the space in use, in GiB to one decimal. This is the ONE real\nfill on the board and the number to scale on.",
             "type": "number"
           }
         },
@@ -5472,12 +5968,15 @@
       "digitalocean.Snapshot": {
         "properties": {
           "ID": {
+            "description": "ID is DigitalOcean's snapshot id. It is what a restore takes, so it is the handle\nthe undo actually hangs on — a delete that snapshotted first returns it.",
             "type": "string"
           },
           "Name": {
+            "description": "Name is the snapshot's name, as given or as minted `\u003cvolume\u003e-predelete-\u003cunix\u003e` when\nthe caller left it blank. It is how the snapshot is found in the DO console.",
             "type": "string"
           },
           "SizeGiB": {
+            "description": "SizeGiB is the snapshot's size, from DO's size_gigabytes: the PROVISIONED size of\nthe volume it was taken from, not the bytes the snapshot occupies. DO bills\nsnapshots on used space, which this does not report.",
             "type": "integer"
           }
         },
@@ -5486,12 +5985,15 @@
       "flagsOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/BoardView"
+            "$ref": "#/components/schemas/BoardView",
+            "description": "Data is the whole control-plane board — after the write, on a write, so a\ncaller sees the effect of its own flip without a second read. Null when the\nop failed."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           }
         },
@@ -5500,15 +6002,19 @@
       "iamRowsOut": {
         "properties": {
           "data": {
+            "description": "Data is IAM's own row array, forwarded byte-for-byte and therefore left\nundescribed here: IAM's schema has one home, and a second copy of it in this\ndocument would be free to drift from the one IAM serves. An absent page is\n[], never null.",
             "type": "object"
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           },
           "total": {
+            "description": "Total is IAM's count across all pages. Absent when the read failed.",
             "type": "integer"
           }
         },
@@ -5517,12 +6023,15 @@
       "meOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/adminMe"
+            "$ref": "#/components/schemas/adminMe",
+            "description": "Data is the caller's own identity and tenant window. Null when Status is\n\"error\"."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\". An error here is still HTTP 200 — the transport\nreads this field, not the status line.",
             "type": "string"
           }
         },
@@ -5531,27 +6040,34 @@
       "moneyBoard": {
         "properties": {
           "byOrg": {
+            "description": "ByOrg is one line per customer, biggest spender first. The row SET comes\nfrom revenue, so an org that was granted credit but no longer exists in IAM\nis inside the fleet totals above and has no line of its own.",
             "items": {
               "$ref": "#/components/schemas/moneyOrgRow"
             },
             "type": "array"
           },
           "credits": {
-            "$ref": "#/components/schemas/moneyCredits"
+            "$ref": "#/components/schemas/moneyCredits",
+            "description": "Credits is the granted-against-consumed ledger, including the balance\ncustomers still hold."
           },
           "generatedAt": {
+            "description": "GeneratedAt is when the board was assembled, RFC 3339 UTC. Nothing here is\ncached.",
             "type": "string"
           },
           "infrastructure": {
-            "$ref": "#/components/schemas/moneyInfra"
+            "$ref": "#/components/schemas/moneyInfra",
+            "description": "Infra is what the platform costs to run: vendor COGS, the DigitalOcean\nburn-down, and the reserve backing the payout programs."
           },
           "margin": {
-            "$ref": "#/components/schemas/moneyMargin"
+            "$ref": "#/components/schemas/moneyMargin",
+            "description": "Margin is revenue against cost, carried through from the finance board\nunchanged so the two can never report different margins."
           },
           "revenue": {
-            "$ref": "#/components/schemas/moneyRevenue"
+            "$ref": "#/components/schemas/moneyRevenue",
+            "description": "Revenue is what customers actually pay: realized consumption, recurring\ncontract value, and the counts behind them."
           },
           "sources": {
+            "description": "Sources is one row per upstream, each name prefixed by the domain that read\nit (revenue:, finance:, grants:audit, treasury) — a bare \"commerce\" appears\nunder two domains and would otherwise collide. A not-ok row means the total\nit feeds is an UNDERCOUNT, not a smaller number.",
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
@@ -5563,23 +6079,27 @@
       "moneyCredits": {
         "properties": {
           "consumedCents": {
+            "description": "ConsumedCents is realized spend, in US cents. A credit is consumed exactly\nwhen it is spent, so this is the same number revenue reports, stated once\nfrom one source.",
             "type": "integer"
           },
           "grantedCents": {
+            "description": "GrantedCents is every credit successfully issued, in US cents, over the\nwhole grant history rather than a window. Refused grants are excluded — they\nmoved nothing.",
             "type": "integer"
           },
           "grantedPrepaidCents": {
-            "description": "real money added",
+            "description": "GrantedPrepaidCents is the half backed by real money the customer paid in, in\nUS cents. With GrantedTrialCents it sums to GrantedCents.",
             "type": "integer"
           },
           "grantedTrialCents": {
-            "description": "non-cash comps/promos",
+            "description": "GrantedTrialCents is the non-cash half — comps and promos we gave away — in\nUS cents. A grant whose source the ledger did not record counts here, since a\ngrant nobody paid for is the safer assumption.",
             "type": "integer"
           },
           "grants": {
+            "description": "Grants is how many successful grants make up GrantedCents. If it reaches the\nscan bound the grants source is marked partial rather than the sum being\npresented as complete.",
             "type": "integer"
           },
           "outstandingCents": {
+            "description": "OutstandingCents is the LIABILITY: prepaid and promo balance customers still\nhold and have not burned. It is not revenue, and it is not GrantedCents\nminus ConsumedCents — customers also add their own money.",
             "type": "integer"
           }
         },
@@ -5588,24 +6108,31 @@
       "moneyInfra": {
         "properties": {
           "doAvgDailyBurnCents": {
+            "description": "DOAvgDailyBurnCents is the average DigitalOcean spend per day, in US cents.\nDividing the credit above by it is the runway.",
             "type": "integer"
           },
           "doCreditRemainingCents": {
+            "description": "DOCreditRemainingCents is the promo credit left on the DigitalOcean account,\nin US cents — what is left to spend, not what was granted.",
             "type": "integer"
           },
           "doMonthToDateCents": {
+            "description": "DOMonthToDateCents is DigitalOcean spend so far this month, in US cents.",
             "type": "integer"
           },
           "period": {
+            "description": "Period is the billing month the vendor COGS covers, \"2006-01\", as commerce\nreports it. It bounds VendorCogsCents only — the DigitalOcean figures below\nare month-to-date and the reserve is point-in-time.",
             "type": "string"
           },
           "treasuryReserveCents": {
+            "description": "TreasuryReserveCents is the platform reserve backing the payout programs, in\nUS cents, read live from the treasury app. Zero here can mean an empty\nreserve OR an unreachable treasury — the treasury row in sources is what\ntells them apart.",
             "type": "integer"
           },
           "vendorCogsCents": {
+            "description": "VendorCogsCents is what the platform owes its vendors for Period, in US\ncents, POSITIVE — money out is not negated. This is the COGS the margin\nsubtracts.",
             "type": "integer"
           },
           "vendors": {
+            "description": "Vendors is the COGS broken out per vendor and service line for Period, each\namount positive.",
             "items": {
               "$ref": "#/components/schemas/Vendor"
             },
@@ -5617,15 +6144,19 @@
       "moneyMargin": {
         "properties": {
           "grossCents": {
+            "description": "GrossCents is realized revenue minus vendor COGS, in US cents. Negative\nmeans the fleet spent more on vendors than its customers consumed. GROSS\nonly: salaries, tooling and everything outside vendor COGS are not in it.",
             "type": "integer"
           },
           "grossPct": {
+            "description": "GrossPct is that margin as a percentage of revenue — 42.5 means 42.5%, not\n0.425. Zero when revenue is zero, which is arithmetic rather than a claim of\nbreak-even.",
             "type": "number"
           },
           "profitable": {
+            "description": "Profitable is revenue strictly greater than COGS — the sign of GrossCents\nstated outright, so no consumer has to decide what zero means.",
             "type": "boolean"
           },
           "runwayDays": {
+            "description": "RunwayDays is DigitalOcean promo credit divided by average daily burn: how\nlong the credit lasts at today's rate, and nothing to do with the margin\nabove. NULL — never a large number — when DigitalOcean is unconfigured or\nburn is zero, because no honest projection exists and an infinity would read\nas safety.",
             "type": "number"
           }
         },
@@ -5634,27 +6165,35 @@
       "moneyOrgRow": {
         "properties": {
           "balanceCents": {
+            "description": "BalanceCents is the prepaid wallet the tenant still holds, in US cents —\nmoney not yet earned.",
             "type": "integer"
           },
           "display": {
+            "description": "Display is the org's display name, falling back to the slug.",
             "type": "string"
           },
           "grantedCents": {
+            "description": "GrantedCents is credit successfully granted TO this tenant, in US cents,\nacross all history. Zero for a tenant that was never granted any.",
             "type": "integer"
           },
           "grants": {
+            "description": "Grants is how many grants that was.",
             "type": "integer"
           },
           "mrrCents": {
+            "description": "MRRCents is the tenant's monthly recurring revenue, in US cents. Contract\nvalue, not cash collected.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the tenant slug — the row's identity.",
             "type": "string"
           },
           "plan": {
+            "description": "Plan is the live subscription tier's name, or \"pay-as-you-go\" — which is\nalso what an org reads as when the subscriptions read failed, so it is not\nproof of no plan.",
             "type": "string"
           },
           "spendCents": {
+            "description": "SpendCents is realized consumption over the trailing 30 days, in US cents.\nThe board sorts on it, largest first.",
             "type": "integer"
           }
         },
@@ -5663,22 +6202,27 @@
       "moneyRevenue": {
         "properties": {
           "arpuCents": {
+            "description": "ARPUCents is realized spend divided by PAYING customers, in US cents — per\npaying customer, not per signup, so free signups cannot deflate it.",
             "type": "integer"
           },
           "arrCents": {
+            "description": "ARRCents is MRRCents times twelve, in US cents. A projection of today's\ncontracts, not a measurement of a year.",
             "type": "integer"
           },
           "customers": {
+            "description": "Customers is every org IAM lists, paying or not.",
             "type": "integer"
           },
           "mrrCents": {
+            "description": "MRRCents is fleet monthly recurring revenue, in US cents — contract value\nfrom subscriptions. Orthogonal to RealizedCents and never added to it.",
             "type": "integer"
           },
           "paying": {
+            "description": "Paying is how many of them have spend or MRR above zero. It is the ARPU\ndenominator.",
             "type": "integer"
           },
           "realizedCents": {
-            "description": "consumed spend, fleet-wide",
+            "description": "RealizedCents is credit customers have actually CONSUMED, fleet-wide, in US\ncents. This is the revenue figure — MRR beside it is contract value and the\ntwo are never added.",
             "type": "integer"
           }
         },
@@ -5687,49 +6231,59 @@
       "o11yGlobal": {
         "properties": {
           "end": {
+            "description": "End is the moment of this read, RFC 3339 UTC.",
             "type": "string"
           },
           "llm": {
-            "$ref": "#/components/schemas/o11yLLM"
+            "$ref": "#/components/schemas/o11yLLM",
+            "description": "LLM is the generation rollup over gen_ai spans. Its money is US DOLLARS,\nunlike Totals above — the two come from different planes and each keeps its\nplane's unit."
           },
           "logSeries": {
+            "description": "LogSeries is log volume over the SAME buckets as Series, so the two line up.",
             "items": {
               "$ref": "#/components/schemas/o11yLogPoint"
             },
             "type": "array"
           },
           "range": {
+            "description": "Range is the window every figure below covers: 24h, 7d or 30d. It is the\nNORMALIZED value — an unrecognized ?range reads as 30d and says so here.",
             "type": "string"
           },
           "series": {
+            "description": "Series is usage bucketed over the window, oldest first. A bucket with no\ntraffic has no point — the series is not padded to a fixed length.",
             "items": {
               "$ref": "#/components/schemas/o11ySeries"
             },
             "type": "array"
           },
           "start": {
+            "description": "Start is the window's lower bound, RFC 3339 UTC, derived from Range.",
             "type": "string"
           },
           "topModels": {
+            "description": "TopModels is the ten busiest models by request count.",
             "items": {
               "$ref": "#/components/schemas/o11yModelStat"
             },
             "type": "array"
           },
           "topOrgs": {
+            "description": "TopOrgs is the ten busiest tenants by request count.",
             "items": {
               "$ref": "#/components/schemas/o11yOrgStat"
             },
             "type": "array"
           },
           "topServices": {
+            "description": "TopServices is the twelve busiest services by trace count.",
             "items": {
               "$ref": "#/components/schemas/o11ySvcStat"
             },
             "type": "array"
           },
           "totals": {
-            "$ref": "#/components/schemas/o11yTotals"
+            "$ref": "#/components/schemas/o11yTotals",
+            "description": "Totals is the KPI band: the usage half, the trace half and log volume."
           }
         },
         "type": "object"
@@ -5737,9 +6291,11 @@
       "o11yLLM": {
         "properties": {
           "costUsd": {
+            "description": "CostUsd is their summed cost in US DOLLARS, not cents: the span attribute's\nnative unit, carried through unconverted.",
             "type": "number"
           },
           "generations": {
+            "description": "Generations is how many LLM calls the fleet made in the window — one per\ngen_ai span. It counts the same activity the usage totals do, from the trace\nplane instead of the billing ledger, so the two need not match exactly.",
             "type": "integer"
           }
         },
@@ -5748,9 +6304,11 @@
       "o11yLogPoint": {
         "properties": {
           "count": {
+            "description": "Count is the log lines emitted in that bucket, fleet-wide.",
             "type": "integer"
           },
           "ts": {
+            "description": "Ts is the bucket's start, RFC 3339 UTC, on the same buckets as the usage\nseries so the two can be read together.",
             "type": "string"
           }
         },
@@ -5759,15 +6317,19 @@
       "o11yModelStat": {
         "properties": {
           "costCents": {
+            "description": "CostCents is what they cost, in US cents.",
             "type": "integer"
           },
           "model": {
+            "description": "Model is the model id the ledger recorded. Unattributed rows carry no model\nand are left out rather than ranked as a nameless one.",
             "type": "string"
           },
           "requests": {
+            "description": "Requests is how many calls went to it. The board ranks on this.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is what those calls consumed.",
             "type": "integer"
           }
         },
@@ -5776,15 +6338,19 @@
       "o11yOrgStat": {
         "properties": {
           "costCents": {
+            "description": "CostCents is what they cost, in US cents.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the tenant slug.",
             "type": "string"
           },
           "requests": {
+            "description": "Requests is how many calls that tenant made. The board ranks on this, so the\ntop rows are the busiest tenants and not necessarily the costliest.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is what those calls consumed.",
             "type": "integer"
           }
         },
@@ -5793,12 +6359,15 @@
       "o11yOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/o11yGlobal"
+            "$ref": "#/components/schemas/o11yGlobal",
+            "description": "Data is the board. A warehouse that is not connected, or a table that is\nmissing, yields the ZERO board rather than a failure — so zeros here mean\neither a quiet fleet or a blind one, and this envelope cannot tell you\nwhich."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           }
         },
@@ -5807,18 +6376,23 @@
       "o11ySeries": {
         "properties": {
           "costCents": {
+            "description": "CostCents is what they cost, in US cents.",
             "type": "integer"
           },
           "errors": {
+            "description": "Errors is how many of them failed.",
             "type": "integer"
           },
           "requests": {
+            "description": "Requests is the calls served in that bucket.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is the tokens they consumed.",
             "type": "integer"
           },
           "ts": {
+            "description": "Ts is the bucket's start, RFC 3339 UTC. The width follows the range — an\nhour at 24h, six hours at 7d, a day at 30d — so it is not a fixed unit.",
             "type": "string"
           }
         },
@@ -5831,12 +6405,15 @@
             "type": "number"
           },
           "latencyP95Ms": {
+            "description": "LatencyP95Ms is that service's 95th-percentile span duration in\nmilliseconds.",
             "type": "number"
           },
           "requests": {
+            "description": "Requests is how many spans it emitted in the window. The board ranks on\nthis.",
             "type": "integer"
           },
           "service": {
+            "description": "Service is the emitting service's name, from the span's own service column.\nThe whole cloud binary reports under ONE such name however many subsystems\nit mounts, which is what the per-subsystem board next door exists to split\napart.",
             "type": "string"
           }
         },
@@ -5845,48 +6422,59 @@
       "o11yTotals": {
         "properties": {
           "completionTokens": {
+            "description": "CompletionTokens is the generated half of Tokens.",
             "type": "integer"
           },
           "costCents": {
+            "description": "CostCents is what those calls cost, in US CENTS. The trace and gen_ai\nfigures elsewhere on this board are not in cents; this one is.",
             "type": "integer"
           },
           "errors": {
+            "description": "Errors is how many of Requests the ledger marked failed.",
             "type": "integer"
           },
           "latencyP50Ms": {
+            "description": "LatencyP50Ms is the median request duration in milliseconds, over spans\nrather than over ledger rows — so it covers every traced request, not only\nthe LLM ones counted above.",
             "type": "number"
           },
           "latencyP95Ms": {
+            "description": "LatencyP95Ms is the 95th percentile of the same durations.",
             "type": "number"
           },
           "latencyP99Ms": {
+            "description": "LatencyP99Ms is the 99th percentile — the tail worth paging on.",
             "type": "number"
           },
           "logVolume": {
-            "description": "Logs (event.log), fleet volume over the window.",
+            "description": "LogVolume is how many log lines the fleet emitted in the window. Volume only\n— nothing here says how many of them were errors.",
             "type": "integer"
           },
           "models": {
+            "description": "Models is how many distinct models were called.",
             "type": "integer"
           },
           "orgs": {
+            "description": "Orgs is how many DISTINCT tenants appear in the window — the fleet's active\ntenant count, not a count of calls.",
             "type": "integer"
           },
           "promptTokens": {
+            "description": "PromptTokens is the input half of Tokens.",
             "type": "integer"
           },
           "requests": {
-            "description": "LLM usage (hanzo.cloud_usage), all orgs.",
+            "description": "Requests is how many LLM calls the fleet served in the window, across every\ntenant, errored ones included. From the billing ledger.",
             "type": "integer"
           },
           "services": {
+            "description": "Services is how many distinct services emitted a span in the window.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is prompt plus completion tokens across those calls.",
             "type": "integer"
           },
           "traceCount": {
-            "description": "Traces (event.span), all services.",
+            "description": "TraceCount is how many spans the fleet emitted in the window, across every\nservice. It counts TRACED REQUESTS, so it is a much larger number than\nRequests above and is not a superset of it: one is the trace plane, the other\nthe billing ledger.",
             "type": "integer"
           },
           "traceErrorRate": {
@@ -5899,33 +6487,43 @@
       "operatorUser": {
         "properties": {
           "created": {
+            "description": "Created is when the account was created, as IAM records it (RFC 3339).",
             "type": "string"
           },
           "displayName": {
+            "description": "DisplayName is the human name IAM holds. Often empty; render Name when it is.",
             "type": "string"
           },
           "email": {
+            "description": "Email is the user's email address.",
             "type": "string"
           },
           "forbidden": {
+            "description": "Forbidden is true when IAM has the account blocked: it exists and cannot sign\nin. Distinct from deleted, which simply would not appear here.",
             "type": "boolean"
           },
           "isAdmin": {
+            "description": "IsAdmin is admin OF THEIR OWN ORG — they manage that org's users and apps. It\nis not platform privilege and grants nothing outside Owner.",
             "type": "boolean"
           },
           "isSuperAdmin": {
+            "description": "IsSuperAdmin is platform sudo: true iff Owner is the reserved admin org. It is\nderived here from Owner, which is the one predicate — never read off the user\nrow, so a tenant cannot set it on themselves.",
             "type": "boolean"
           },
           "lastSignin": {
+            "description": "LastSignin is the last successful sign-in, as IAM records it. Empty for an\naccount that has never signed in — which is what an unused invite looks like.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the IAM user name — the login handle, unique within Owner.",
             "type": "string"
           },
           "owner": {
+            "description": "Owner is the org this user belongs to. A user belongs to exactly one, so this\nis also the tenant column of the directory.",
             "type": "string"
           },
           "tag": {
+            "description": "Tag is IAM's free-form label on the user. Empty unless the tenant uses it.",
             "type": "string"
           }
         },
@@ -5934,27 +6532,35 @@
       "orgRow": {
         "properties": {
           "created": {
+            "description": "Created is when the org was created, as IAM records it (RFC 3339).",
             "type": "string"
           },
           "creditsCents": {
+            "description": "CreditsCents is the credit balance the tenant still holds, in US cents, from\nthe commerce wallet. What they have left, not what they were given.",
             "type": "integer"
           },
           "display": {
+            "description": "Display is the org's display name, falling back to the slug when IAM holds\nnone, so it is always renderable.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant slug — the key every other admin read joins on.",
             "type": "string"
           },
           "products": {
+            "description": "Products is always 0. The fleet workload registry is not attributed to\ntenants yet, and a count of the platform's own workloads on a tenant row\nwould be a number about somebody else.",
             "type": "integer"
           },
           "spendCents": {
+            "description": "SpendCents is the tenant's AI spend over the trailing 30 days, in US cents,\nfrom the usage ledger. A tenant with no rows in that window reads a true zero.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is the tokens served for this tenant over that same 30-day window.",
             "type": "integer"
           },
           "users": {
+            "description": "Users is the tenant's member count, from IAM's own total.",
             "type": "integer"
           }
         },
@@ -5963,18 +6569,22 @@
       "orgsOut": {
         "properties": {
           "data": {
+            "description": "Data is one row per tenant, sorted by slug. Null when the read failed, [] when\nthe caller's window is genuinely empty.",
             "items": {
               "$ref": "#/components/schemas/orgRow"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           },
           "total": {
+            "description": "Total is the whole directory's row count BEFORE paging, so a console can page\nagainst it. Absent when the read failed, since there is then nothing to count.",
             "type": "integer"
           }
         },
@@ -5983,36 +6593,46 @@
       "overviewData": {
         "properties": {
           "activeProducts": {
+            "description": "ActiveProducts is how many of those the operator reconciled to green health.\nThe gap against Products is everything not green, unknown health included.",
             "type": "integer"
           },
           "creditsCents": {
+            "description": "CreditsCents is the credit balance customers still HOLD — the liability, in\nUS cents, summed over the window from the commerce wallet. It is not revenue\nand not spend.",
             "type": "integer"
           },
           "drift": {
+            "description": "Drift is how many workloads the operator flagged as drifting — its declared\nimage and what is actually running disagree. It counts the operator's own\nverdict; this layer does not re-derive it.",
             "type": "integer"
           },
           "lastSync": {
+            "description": "LastSync is when this answer was assembled, RFC 3339 UTC. admin caches\nnothing — the read IS the sync — so it is the time of this request and never\nof an earlier batch.",
             "type": "string"
           },
           "orgs": {
+            "description": "Orgs is how many tenants are in the caller's window: every org for a\nSuperAdmin, their own subtree for a white-label admin.",
             "type": "integer"
           },
           "products": {
+            "description": "Products is how many workloads the operator is observing across the platform\nnamespaces — one per App CR.",
             "type": "integer"
           },
           "sources": {
+            "description": "Sources is one row per upstream this board fanned out to — iam, commerce,\nusage, o11y, fleet — saying whether it answered, with how many rows, and why\nnot. It is what tells a zero above apart from a silence.",
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
             "type": "array"
           },
           "spendCents30d": {
+            "description": "SpendCents30d is AI spend over the trailing 30 days, in US cents, folded from\nthe usage ledger (one row per served request).",
             "type": "integer"
           },
           "tokens30d": {
+            "description": "Tokens30d is total tokens served over that same 30-day window.",
             "type": "integer"
           },
           "users": {
+            "description": "Users is the member count summed over those orgs. An org whose IAM read\nfailed contributes zero rather than failing the tile.",
             "type": "integer"
           }
         },
@@ -6021,12 +6641,15 @@
       "overviewOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/overviewData"
+            "$ref": "#/components/schemas/overviewData",
+            "description": "Data is the tile board. Null only when the caller was refused outright."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way. This board answers \"ok\"\neven when upstreams are down — a tile board that fails whole because one\nsource is unreachable is useless — so a degraded read is reported in\ndata.sources, not here.",
             "type": "string"
           }
         },
@@ -6067,6 +6690,7 @@
             "type": "string"
           },
           "name": {
+            "description": "Name is the operator App CR's name — the handle the operator, the PaaS board\nand this one all address the workload by. Unique within its namespace.",
             "type": "string"
           },
           "namespace": {
@@ -6094,6 +6718,7 @@
             "type": "string"
           },
           "updated": {
+            "description": "Updated is always empty. The App CR carries no per-row reconcile timestamp and\nthis observation is taken live, so there is no moment to report; the time that\napplies to the whole answer is the overview's lastSync.",
             "type": "string"
           }
         },
@@ -6102,18 +6727,22 @@
       "productsOut": {
         "properties": {
           "data": {
+            "description": "Data is the matching workload rows. Null when the read failed.",
             "items": {
               "$ref": "#/components/schemas/productRow"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\" — here, that the PaaS plane\ncould not be reached at all. A plane that answers with nothing observed yet is\na success carrying an empty list, which is a different fact.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           },
           "total": {
+            "description": "Total is len(data): the registry is the whole observed fleet after filtering,\nunpaginated. Absent when the read failed.",
             "type": "integer"
           }
         },
@@ -6150,15 +6779,19 @@
       "rawOut": {
         "properties": {
           "data": {
+            "description": "Data is the upstream's payload verbatim, left undescribed for the same reason\nas iamRowsOut: re-describing someone else's schema here would be a second copy\nof it, free to drift.",
             "type": "object"
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way. It is THIS layer's verdict\non the forwarding; an upstream that answered carries its own status inside\ndata.",
             "type": "string"
           },
           "total": {
+            "description": "Total is the upstream's row count when it forwarded a list, and absent when it\nforwarded a single object — which is why it is optional rather than zero.",
             "type": "integer"
           }
         },
@@ -6167,12 +6800,15 @@
       "retentionCohort": {
         "properties": {
           "cohort": {
+            "description": "Cohort is the signup month, YYYY-MM. Every customer who signed up in it is\nin this row.",
             "type": "string"
           },
           "size": {
+            "description": "Size is how many customers signed up in that month — the denominator behind\nevery percentage in Values.",
             "type": "integer"
           },
           "values": {
+            "description": "Values is the percentage of the cohort ACTIVE in each month after signup,\n0..100, with values[0] the signup month itself. Its length varies by row: an\nolder cohort has more months behind it, which is what makes the grid a\ntriangle.",
             "items": {
               "type": "number"
             },
@@ -6184,16 +6820,18 @@
       "retentionGrid": {
         "properties": {
           "cohorts": {
+            "description": "Cohorts is one row per signup month, oldest first, capped at the last\ntwelve. A month in which nobody signed up is omitted rather than shown\nempty.",
             "items": {
               "$ref": "#/components/schemas/retentionCohort"
             },
             "type": "array"
           },
           "interval": {
-            "description": "\"month\"",
+            "description": "Interval is the cohort width, always \"month\": the triangle is built from\nsignup months and active months, and no other bucketing is offered.",
             "type": "string"
           },
           "periods": {
+            "description": "Periods is the longest Values length across the cohorts — the width of the\ntriangle, so a renderer can size the grid before walking it.",
             "type": "integer"
           }
         },
@@ -6236,12 +6874,15 @@
       "serviceOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/serviceOne"
+            "$ref": "#/components/schemas/serviceOne",
+            "description": "Data is the one service the write touched, re-read after the write, so a\ncaller sees the effect of its own change without a second request. Null when\nthe write failed."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           }
         },
@@ -6250,12 +6891,15 @@
       "servicesOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/serviceList"
+            "$ref": "#/components/schemas/serviceList",
+            "description": "Data is the launch board. Null when the read failed."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           }
         },
@@ -6280,12 +6924,15 @@
       "storageAlert": {
         "properties": {
           "level": {
+            "description": "Level is \"warn\" from 80% and \"critical\" from 90%. Below 80 no alert is\nemitted at all — there is no third level meaning fine.",
             "type": "string"
           },
           "pct": {
+            "description": "Pct is the fill that raised the alert, 0..100.",
             "type": "number"
           },
           "volume": {
+            "description": "Volume is the volume the alert is about. Only the datastore carries a\nmeasured fill today, so it is the only name that appears here.",
             "type": "string"
           }
         },
@@ -6294,18 +6941,23 @@
       "storageFleet": {
         "properties": {
           "count": {
+            "description": "Count is how many volumes the DigitalOcean account holds. A measurement only\nwhen the snapshot is complete — otherwise it is zero because nothing was\nread.",
             "type": "integer"
           },
           "monthlyUsd": {
+            "description": "MonthlyUsd is the fleet's block-storage cost in whole US DOLLARS per month —\ncapacity times DO's $0.10/GiB list price, rounded. A list-price estimate for\nthe ops budget, not an invoice line, and dollars rather than the cents the\nmoney boards use.",
             "type": "integer"
           },
           "pct": {
+            "description": "Pct is null, for the same reason as UsedGiB.",
             "type": "number"
           },
           "totalGiB": {
+            "description": "TotalGiB is their summed provisioned capacity in GiB.",
             "type": "integer"
           },
           "usedGiB": {
+            "description": "UsedGiB is null: with no per-volume fill there is no honest fleet total to\nsum.",
             "type": "number"
           }
         },
@@ -6314,30 +6966,37 @@
       "storageSnapshot": {
         "properties": {
           "alerts": {
+            "description": "Alerts is the near-full warnings, derived from the datastore fill. Empty\nmeans nothing is near full AND also that there was no fill to judge —\nDatastore being null is what tells those apart.",
             "items": {
               "$ref": "#/components/schemas/storageAlert"
             },
             "type": "array"
           },
           "complete": {
+            "description": "Complete is whether the fleet roll-up may be read as a MEASUREMENT. False\nmeans DigitalOcean was not read, so the count, capacity and cost below are\nunknown rather than zero — and zero is exactly what an account with no\nvolumes looks like, which is why the distinction has to travel beside them.",
             "type": "boolean"
           },
           "datastore": {
-            "$ref": "#/components/schemas/datastoreVolume"
+            "$ref": "#/components/schemas/datastoreVolume",
+            "description": "Datastore is the analytics datastore's own volume, the one card carrying a\nmeasured fill. NULL when the datastore is not connected or reported no\ncapacity — no card at all rather than a fabricated 0%."
           },
           "fleet": {
-            "$ref": "#/components/schemas/storageFleet"
+            "$ref": "#/components/schemas/storageFleet",
+            "description": "Fleet is the DigitalOcean roll-up: count, capacity and monthly list cost."
           },
           "incompleteReason": {
+            "description": "IncompleteReason says which read did not happen and what that makes the\nnumbers, in a sentence fit to show an operator. Empty when Complete is true.",
             "type": "string"
           },
           "sources": {
+            "description": "Sources is one row per upstream — do.volumes — with whether it answered, how\nmany rows it gave, and why not.",
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
             "type": "array"
           },
           "volumes": {
+            "description": "Volumes is one row per DigitalOcean volume: capacity, region and attachment,\nwith fill absent.",
             "items": {
               "$ref": "#/components/schemas/storageVolume"
             },
@@ -6349,27 +7008,35 @@
       "storageVolume": {
         "properties": {
           "attached": {
+            "description": "Attached is whether at least one droplet has the volume mounted. A detached\nvolume still bills its full size, which is what makes this the reclaim\nsignal.",
             "type": "boolean"
           },
           "id": {
+            "description": "ID is DigitalOcean's own volume id.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the volume's name at DigitalOcean.",
             "type": "string"
           },
           "pct": {
+            "description": "Pct is null on every row, for the same reason as UsedGiB. The console\nrenders an em dash rather than a number nobody took.",
             "type": "number"
           },
           "region": {
+            "description": "Region is the DO region slug it lives in (nyc3, sfo3). A volume can only\nattach to a droplet in its own region.",
             "type": "string"
           },
           "service": {
+            "description": "Service names the workload this volume backs. Empty on every row today:\nnothing tags a DO volume with its consumer, and guessing one from the name\nwould be a claim rather than a reading.",
             "type": "string"
           },
           "sizeGiB": {
+            "description": "SizeGiB is the PROVISIONED capacity in GiB. It is what is billed, attached\nor not, used or not.",
             "type": "integer"
           },
           "usedGiB": {
+            "description": "UsedGiB is null on every row. DigitalOcean exposes capacity and attachment\nbut not fill, so nothing here has measured it — null means unmeasured, and\nis not 0.",
             "type": "number"
           }
         },
@@ -6378,28 +7045,34 @@
       "subsystemBoard": {
         "properties": {
           "end": {
+            "description": "End is the moment of this read, RFC 3339 UTC.",
             "type": "string"
           },
           "range": {
+            "description": "Range is the telemetry window the RED columns cover: 24h, 7d or 30d,\nnormalized the same way the o11y board normalizes it. It does NOT bound the\ninventory — a subsystem appears whether or not it served anything.",
             "type": "string"
           },
           "rows": {
+            "description": "Rows is one row per subsystem MOUNTED IN THIS PROCESS, in the composition\nroot's order. The row set comes from the mount index, not from the\nwarehouse, so a subsystem that served nothing appears as a real zero instead\nof vanishing.",
             "items": {
               "$ref": "#/components/schemas/subsystemRow"
             },
             "type": "array"
           },
           "sources": {
+            "description": "Sources is one row per input: mount-index (always ok — it IS this process),\ntraces, and trace-errors. The last two go not-ok when the warehouse is\nabsent, which is what says \"telemetry unavailable\" instead of implying every\nsubsystem served nothing.",
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
             "type": "array"
           },
           "start": {
+            "description": "Start is that window's lower bound, RFC 3339 UTC.",
             "type": "string"
           },
           "totals": {
-            "$ref": "#/components/schemas/subsystemTotals"
+            "$ref": "#/components/schemas/subsystemTotals",
+            "description": "Totals is the KPI band above the table."
           }
         },
         "type": "object"
@@ -6407,6 +7080,7 @@
       "subsystemRow": {
         "properties": {
           "enabled": {
+            "description": "Enabled is whether it is switched ON in this process. Process-local and\nalways truthful — it needs no warehouse — which is what answers \"is that row\nempty because it is broken or because it is off\".",
             "type": "boolean"
           },
           "errorRate": {
@@ -6414,42 +7088,54 @@
             "type": "number"
           },
           "errors": {
+            "description": "Errors is how many of those requests errored.",
             "type": "integer"
           },
           "lastErrorAt": {
+            "description": "LastErrorAt is when this subsystem last errored in the window, RFC 3339 UTC.\nEmpty when it did not — or when the last-error read failed, which the\ntrace-errors source reports.",
             "type": "string"
           },
           "lastErrorMessage": {
+            "description": "LastErrorMessage is the span's status message. Empty when the span recorded\nnone, which is common: a span can be marked errored without a message.",
             "type": "string"
           },
           "lastErrorRoute": {
+            "description": "LastErrorRoute is the route pattern that error was on, e.g. /v1/admin/orgs.\nEmpty when the span carried none.",
             "type": "string"
           },
           "lastErrorStatus": {
+            "description": "LastErrorStatus is the HTTP status code it answered, as a STRING — it is a\nspan attribute, and attribute values arrive as text.",
             "type": "string"
           },
           "latencyP50Ms": {
+            "description": "LatencyP50Ms is its median request duration in milliseconds.",
             "type": "number"
           },
           "latencyP95Ms": {
+            "description": "LatencyP95Ms is its 95th percentile in milliseconds.",
             "type": "number"
           },
           "latencyP99Ms": {
+            "description": "LatencyP99Ms is its 99th percentile in milliseconds.",
             "type": "number"
           },
           "name": {
+            "description": "Name is the subsystem's name in the mount index, and the label the request\nspan is stamped with. It is the join key between the inventory and the\nwarehouse: a warehouse row naming something this binary does not mount is\ndropped rather than shown.",
             "type": "string"
           },
           "prefixes": {
+            "description": "Prefixes is the route prefixes it answers on, e.g. /v1/admin. Always a list,\nnever null — empty means it mounts no HTTP routes of its own.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "requests": {
+            "description": "Requests is the traced requests it served in the window. Zero when the\nwarehouse is unavailable, so read the board's sources before reading it as\nidle.",
             "type": "integer"
           },
           "requestsPerMin": {
+            "description": "RequestsPerMin is Requests averaged over the WHOLE window, to 2dp — a flat\nmean, so a burst and a steady trickle of the same volume look alike here.",
             "type": "number"
           }
         },
@@ -6458,9 +7144,11 @@
       "subsystemTotals": {
         "properties": {
           "disabled": {
+            "description": "Disabled is the rest. With Enabled it sums to Subsystems.",
             "type": "integer"
           },
           "enabled": {
+            "description": "Enabled is how many of them are switched ON.",
             "type": "integer"
           },
           "errorRate": {
@@ -6468,6 +7156,7 @@
             "type": "number"
           },
           "errors": {
+            "description": "Errors is how many of them errored.",
             "type": "integer"
           },
           "reporting": {
@@ -6475,9 +7164,11 @@
             "type": "integer"
           },
           "requests": {
+            "description": "Requests is the traced requests every subsystem served in the window,\nsummed.",
             "type": "integer"
           },
           "subsystems": {
+            "description": "Subsystems is how many are mounted in this binary — the row count.",
             "type": "integer"
           }
         },
@@ -6486,12 +7177,15 @@
       "syncOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/syncStarted"
+            "$ref": "#/components/schemas/syncStarted",
+            "description": "Data is the acknowledgement. Null when the caller was refused."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           }
         },
@@ -6500,6 +7194,7 @@
       "syncStarted": {
         "properties": {
           "started": {
+            "description": "Started is always true on a successful call. There is nothing to poll and\nnothing to cancel: the next read is the refresh.",
             "type": "boolean"
           }
         },
@@ -6508,12 +7203,15 @@
       "usageByModel": {
         "properties": {
           "model": {
+            "description": "Model is the model id the ledger recorded. Rows the ledger left unattributed\nare dropped rather than rendered as a nameless slice.",
             "type": "string"
           },
           "spendCents": {
+            "description": "SpendCents is this model's share of the window's cost, in US cents.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is this model's share of the tokens.",
             "type": "integer"
           }
         },
@@ -6522,19 +7220,22 @@
       "usageData": {
         "properties": {
           "byModel": {
+            "description": "ByModel is the window split by model, busiest first, capped at the top ten so\nthe ranking stays honest without paying for a tail nothing draws.",
             "items": {
               "$ref": "#/components/schemas/usageByModel"
             },
             "type": "array"
           },
           "series": {
+            "description": "Series is that window bucketed by day, oldest first. A day with no traffic has\nno point — the series is not padded.",
             "items": {
               "$ref": "#/components/schemas/usagePoint"
             },
             "type": "array"
           },
           "totals": {
-            "$ref": "#/components/schemas/usageTotals"
+            "$ref": "#/components/schemas/usageTotals",
+            "description": "Totals is the whole window folded into one row."
           }
         },
         "type": "object"
@@ -6542,12 +7243,15 @@
       "usageOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/usageData"
+            "$ref": "#/components/schemas/usageData",
+            "description": "Data is the usage roll-up. A warehouse that is not connected yields zeros\nhere, not null — which reads as an idle fleet, so use the overview's\nsources[] to tell the two apart."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           }
         },
@@ -6556,15 +7260,19 @@
       "usagePoint": {
         "properties": {
           "date": {
+            "description": "Date is the bucket's calendar day, YYYY-MM-DD in UTC. A day, not an instant:\nthe bucket covers the whole of it.",
             "type": "string"
           },
           "requests": {
+            "description": "Requests is that day's served-request count.",
             "type": "integer"
           },
           "spendCents": {
+            "description": "SpendCents is that day's cost, in US cents.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is that day's token count.",
             "type": "integer"
           }
         },
@@ -6573,12 +7281,15 @@
       "usageTotals": {
         "properties": {
           "requests": {
+            "description": "Requests is how many were served — including the ones that errored, which\nstill consumed the call.",
             "type": "integer"
           },
           "spendCents": {
+            "description": "SpendCents is what those requests cost, in US cents.",
             "type": "integer"
           },
           "tokens": {
+            "description": "Tokens is prompt plus completion tokens across them.",
             "type": "integer"
           }
         },
@@ -6587,18 +7298,22 @@
       "usersOut": {
         "properties": {
           "data": {
+            "description": "Data is ONE page of users. Null when the read failed.",
             "items": {
               "$ref": "#/components/schemas/operatorUser"
             },
             "type": "array"
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way.",
             "type": "string"
           },
           "total": {
+            "description": "Total is IAM's count across ALL pages, not len(data) — it is what the console\npages against. Absent when the read failed.",
             "type": "integer"
           }
         },
@@ -6607,12 +7322,15 @@
       "volumesOut": {
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/storageSnapshot"
+            "$ref": "#/components/schemas/storageSnapshot",
+            "description": "Data is the board. Null only when the caller was refused."
           },
           "msg": {
+            "description": "Msg is the failure reason when Status is \"error\", empty otherwise.",
             "type": "string"
           },
           "status": {
+            "description": "Status is \"ok\" or \"error\", at HTTP 200 either way. A DigitalOcean outage\nstill answers \"ok\": an operator reads this board DURING an incident, and the\ngap is named in data.incompleteReason rather than replacing the page.",
             "type": "string"
           }
         },

@@ -37,64 +37,140 @@ import (
 
 // CustomerRow is one row in GET /v1/admin/customers — a fleet customer at a glance.
 type CustomerRow struct {
-	Org          string `json:"org"`
-	Display      string `json:"display"`
-	OwnerEmail   string `json:"ownerEmail"`
-	Plan         string `json:"plan"`
-	Status       string `json:"status"` // "active" | "suspended"
-	Users        int    `json:"users"`
-	BalanceCents int64  `json:"balanceCents"`
-	SpendCents   int64  `json:"spendCents"`
-	MRRCents     int64  `json:"mrrCents"`
-	Created      string `json:"created"`
-	LastActive   string `json:"lastActive"`
+	// Org is the tenant slug — the row's identity, and the value every per-customer route
+	// takes in its path. The list is sorted by it.
+	Org string `json:"org"`
+	// Display is the org's display name, falling back to the slug when it has none. For
+	// humans; never key on it.
+	Display string `json:"display"`
+	// OwnerEmail is the org admin's email, or the first member with one. Empty when no
+	// member carries an email at all — IAM does not require one.
+	OwnerEmail string `json:"ownerEmail"`
+	// Plan is the name of the org's live subscription tier, or "pay-as-you-go" for a
+	// metered customer with no subscription. A trial names its plan here even though it
+	// contributes no MRR.
+	Plan string `json:"plan"`
+	// Status is `active` or `suspended`, derived from the members' IAM isForbidden flags.
+	// Suspended requires the org to have members and EVERY one of them to be forbidden —
+	// a partly-forbidden org still reads active, because some of it can still sign in.
+	Status string `json:"status"`
+	// Users is how many members IAM lists for the org, up to the 200-member page this
+	// read takes. Every other IAM-derived field on the row is folded from that same page.
+	Users int `json:"users"`
+	// BalanceCents is the prepaid wallet the org still holds, in USD cents. What is left
+	// to spend, not what was granted.
+	BalanceCents int64 `json:"balanceCents"`
+	// SpendCents is metered consumption over the TRAILING 30 DAYS, in USD cents — the one
+	// window every fleet money surface means by "spend". Positive, and it does not reset
+	// on the first of the month.
+	SpendCents int64 `json:"spendCents"`
+	// MRRCents is the org's monthly recurring revenue, in USD cents: commerce's own
+	// per-subscription figure, already interval-normalized and multiplied by seats, summed
+	// over the subscriptions commerce counts as revenue. A trial contributes zero.
+	MRRCents int64 `json:"mrrCents"`
+	// Created is when IAM created the org, RFC3339 — the signup date.
+	Created string `json:"created"`
+	// LastActive is the most recent sign-in across every member, RFC3339. The best
+	// activity signal IAM carries, so it tracks people logging in, not API traffic. Empty
+	// when no member has ever signed in.
+	LastActive string `json:"lastActive"`
 }
 
 // CustomerUser is one member in the customer detail (no secrets — the AccessKey PRESENCE
 // is surfaced as hasApiKey, never the key itself).
 type CustomerUser struct {
-	Name       string `json:"name"`
-	Email      string `json:"email"`
-	IsAdmin    bool   `json:"isAdmin"`
-	Forbidden  bool   `json:"forbidden"`
-	HasAPIKey  bool   `json:"hasApiKey"`
+	// Name is the IAM username, unique within the org. `<org>/<name>` is the id the
+	// suspend and reactivate actions address the user by.
+	Name string `json:"name"`
+	// Email is the member's address, empty when IAM holds none.
+	Email string `json:"email"`
+	// IsAdmin is admin OF THIS ORG — the customer's own account owner, who manages their
+	// members and apps. It is NOT platform privilege: SuperAdmin is membership of the
+	// reserved `admin` org and never appears on a customer row.
+	IsAdmin bool `json:"isAdmin"`
+	// Forbidden is IAM's isForbidden. True means IAM refuses this user at login AND at
+	// token issuance, so they can neither sign in nor mint a fresh one. It is what
+	// suspend sets and reactivate clears, per user — which is why an org can sit in a
+	// mixed state after a partial failure.
+	Forbidden bool `json:"forbidden"`
+	// HasAPIKey reports that the member holds an access key. PRESENCE only: the key
+	// itself is never read onto this surface.
+	HasAPIKey bool `json:"hasApiKey"`
+	// LastSignin is the member's most recent sign-in, RFC3339. Empty means never signed
+	// in — which is different from signed in long ago.
 	LastSignin string `json:"lastSignin"`
-	Created    string `json:"created"`
+	// Created is when IAM created the member, RFC3339.
+	Created string `json:"created"`
 }
 
 // CustomerTxn is one ledger row in the detail's top-up/usage history.
 type CustomerTxn struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"` // "deposit" (credit) | "withdraw" (usage)
-	Cents    int64  `json:"cents"`
+	// ID is the commerce ledger entry id — what reconciliation against commerce joins on.
+	ID string `json:"id"`
+	// Type is `deposit` (money in: a top-up or a staff grant) or `withdraw` (money out:
+	// metered usage). It is the only thing that gives Cents its direction.
+	Type string `json:"type"`
+	// Cents is the entry's magnitude in minor units, and it is UNSIGNED — a withdraw
+	// does not arrive negative, so a running balance has to be folded by reading Type.
+	Cents int64 `json:"cents"`
+	// Currency is the entry's ISO code, lower-cased. "usd" throughout the fleet today.
 	Currency string `json:"currency"`
-	Notes    string `json:"notes,omitempty"`
-	Time     string `json:"time"`
+	// Notes is the free-text memo the entry was written with — for a staff grant, the
+	// reason an operator typed. Omitted when blank.
+	Notes string `json:"notes,omitempty"`
+	// Time is when the entry was recorded, RFC3339. The history is newest first.
+	Time string `json:"time"`
 }
 
 // CustomerDetailData is the GET /v1/admin/customers/:org payload.
 type CustomerDetailData struct {
-	Org          string         `json:"org"`
-	Display      string         `json:"display"`
-	OwnerEmail   string         `json:"ownerEmail"`
-	Plan         string         `json:"plan"`
-	Status       string         `json:"status"`
-	Created      string         `json:"created"`
-	BalanceCents int64          `json:"balanceCents"`
-	SpendCents   int64          `json:"spendCents"`
-	MRRCents     int64          `json:"mrrCents"`
-	APIKeys      int            `json:"apiKeys"`
-	Users        []CustomerUser `json:"users"`
-	Transactions []CustomerTxn  `json:"transactions"`
+	// Org is the tenant slug, echoed from the path.
+	Org string `json:"org"`
+	// Display is the org's display name, falling back to the slug when it has none.
+	Display string `json:"display"`
+	// OwnerEmail is the org admin's email, or the first member with one. Empty when no
+	// member carries an email.
+	OwnerEmail string `json:"ownerEmail"`
+	// Plan is the live subscription tier's name, or "pay-as-you-go" with no subscription.
+	Plan string `json:"plan"`
+	// Status is `active` or `suspended` — suspended only when the org has members and
+	// every one of them is forbidden. The per-member truth is in users[].forbidden.
+	Status string `json:"status"`
+	// Created is when IAM created the org, RFC3339.
+	Created string `json:"created"`
+	// BalanceCents is the prepaid wallet still held, in USD cents.
+	BalanceCents int64 `json:"balanceCents"`
+	// SpendCents is metered consumption over the trailing 30 days, in USD cents.
+	SpendCents int64 `json:"spendCents"`
+	// MRRCents is monthly recurring revenue, in USD cents, over the subscriptions
+	// commerce counts as revenue. A trial contributes zero while still naming Plan.
+	MRRCents int64 `json:"mrrCents"`
+	// APIKeys is how many members hold an access key — the org's programmatic reach,
+	// counted from users[] and never the keys themselves.
+	APIKeys int `json:"apiKeys"`
+	// Users is the org's members, up to a 200-member page. Suspend and reactivate act on
+	// exactly this set.
+	Users []CustomerUser `json:"users"`
+	// Transactions is the org's ledger, newest first, capped at the last 50 entries. A
+	// sample of the history, not the whole of it, so the balance above cannot be
+	// recomputed by folding this.
+	Transactions []CustomerTxn `json:"transactions"`
 }
 
 // CustomersOut is the GET /v1/admin/customers envelope. total == len(data): the list is
 // every customer, unpaginated.
 type CustomersOut struct {
-	Status string        `json:"status"`
-	Msg    string        `json:"msg"`
-	Data   []CustomerRow `json:"data"`
-	Total  *int          `json:"total,omitempty"`
+	// Status is "ok" or "error". An error here means the IAM org directory could not be
+	// read; a per-org money or plan failure does not fail the fleet, it degrades that
+	// row's field to its zero.
+	Status string `json:"status"`
+	// Msg is the failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is every customer org, sorted by slug.
+	Data []CustomerRow `json:"data"`
+	// Total is len(data). The list is unpaginated, so it is a convenience, never a
+	// count of rows withheld. Omitted on an error.
+	Total *int `json:"total,omitempty"`
 }
 
 // ── GET /v1/admin/customers — the fleet customer list ────────────────────────
@@ -286,9 +362,13 @@ type OrgIn struct {
 
 // CustomerDetailOut is the GET /v1/admin/customers/:org envelope.
 type CustomerDetailOut struct {
-	Status string              `json:"status"`
-	Msg    string              `json:"msg"`
-	Data   *CustomerDetailData `json:"data"`
+	// Status is "ok" or "error". An unknown org is an error and also carries HTTP 404 —
+	// the status code is the addition, not a different contract.
+	Status string `json:"status"`
+	// Msg is the failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the customer. Null exactly when Status is "error".
+	Data *CustomerDetailData `json:"data"`
 }
 
 // AccessChange is what a suspend or reactivate DID, per user. A partial failure is
@@ -307,9 +387,16 @@ type AccessChange struct {
 
 // AccessOut is the envelope of the suspend and reactivate ops.
 type AccessOut struct {
-	Status string        `json:"status"`
-	Msg    string        `json:"msg"`
-	Data   *AccessChange `json:"data"`
+	// Status is "ok" or "error", and it answers whether the action RAN, not whether every
+	// user was updated. A partial failure is an ok answer with a non-empty data.failed —
+	// read that before treating the org as fully suspended.
+	Status string `json:"status"`
+	// Msg is why the action could not run at all: no org named, the org unknown (also
+	// HTTP 404), or IAM's member list unreadable. Empty on success.
+	Msg string `json:"msg"`
+	// Data is the per-user breakdown of what changed. Null exactly when Status is
+	// "error", which means no user was touched.
+	Data *AccessChange `json:"data"`
 }
 
 // ── POST /v1/admin/customers/:org/{suspend,reactivate} — access control ──────

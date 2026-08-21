@@ -30688,9 +30688,11 @@
             "type": "string"
           },
           "id": {
+            "description": "ID is the component's stable handle, which on this platform IS the service\nname — there is no separate component registry to allocate ids from.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the service as the fleet prober knows it (the `service` label on\nhanzo_service_up), so a reader can match a component to what is being probed.",
             "type": "string"
           }
         },
@@ -30699,6 +30701,7 @@
       "o11y.StatusIncident": {
         "properties": {
           "affected_components": {
+            "description": "AffectedComponents is what this incident covers. It is COUNTED rather than\nclassified: some services down is a partial outage and every probed service\ndown is a full one, because deciding that one service is critical and another\nis not would need a judgement nobody has measured.",
             "items": {
               "$ref": "#/components/schemas/o11y.StatusComponent"
             },
@@ -30709,6 +30712,7 @@
             "type": "string"
           },
           "id": {
+            "description": "ID is derived from the service, so the same outage keeps one id across reads\nrather than being reported as a new incident every 15 seconds.",
             "type": "string"
           },
           "last_update_at": {
@@ -30716,15 +30720,19 @@
             "type": "string"
           },
           "last_update_message": {
+            "description": "LastUpdateMessage says what was observed, not what is being done about it —\nthere is no operator writing updates here, only the probe that failed.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the one-line headline, built from the service that stopped answering.",
             "type": "string"
           },
           "status": {
+            "description": "Status is always \"investigating\" — the member of the client's closed set that\nmeans detected, cause not yet established, which is exactly what an automated\nprober knows. Nothing here ever claims \"identified\": that would assert a\ndiagnosis no measurement made.",
             "type": "string"
           },
           "url": {
+            "description": "URL points at the HUMAN status page, not back at this JSON. Every link in this\ndocument goes to the same place.",
             "type": "string"
           }
         },
@@ -30733,33 +30741,42 @@
       "o11y.StatusMaintenance": {
         "properties": {
           "affected_components": {
+            "description": "AffectedComponents is what the window touches.",
             "items": {
               "$ref": "#/components/schemas/o11y.StatusComponent"
             },
             "type": "array"
           },
           "ends_at": {
+            "description": "EndsAt is when it is expected to finish, RFC3339 UTC.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the window's handle.",
             "type": "string"
           },
           "last_update_at": {
+            "description": "LastUpdateAt is when the window was last revised, RFC3339 UTC.",
             "type": "string"
           },
           "last_update_message": {
+            "description": "LastUpdateMessage is the text of that revision.",
             "type": "string"
           },
           "name": {
+            "description": "Name is its one-line headline.",
             "type": "string"
           },
           "starts_at": {
+            "description": "StartsAt is when work begins, RFC3339 UTC.",
             "type": "string"
           },
           "status": {
+            "description": "Status is where the window is in its life, in the client's own vocabulary.",
             "type": "string"
           },
           "url": {
+            "description": "URL points at the human status page, as every link in this document does.",
             "type": "string"
           }
         },
@@ -30772,18 +30789,21 @@
             "type": "string"
           },
           "in_progress_maintenances": {
+            "description": "InProgressMaintenances is always empty: this platform has no maintenance\nscheduling plane, so \"nothing is running\" is a true statement rather than a\nplaceholder.",
             "items": {
               "$ref": "#/components/schemas/o11y.StatusMaintenance"
             },
             "type": "array"
           },
           "ongoing_incidents": {
+            "description": "OngoingIncidents is one entry per service that failed its health probe, sorted\nby name. Empty means every probed service answered — which is a measurement,\nnot an absence of reports.",
             "items": {
               "$ref": "#/components/schemas/o11y.StatusIncident"
             },
             "type": "array"
           },
           "page_title": {
+            "description": "PageTitle is the brand's own status-page title, resolved per request from the\nHost — a lux caller must never be shown Hanzo's.",
             "type": "string"
           },
           "page_url": {
@@ -30791,6 +30811,7 @@
             "type": "string"
           },
           "scheduled_maintenances": {
+            "description": "ScheduledMaintenances is always empty, for the same reason.",
             "items": {
               "$ref": "#/components/schemas/o11y.StatusMaintenance"
             },
@@ -31710,6 +31731,7 @@
       "o11y.availabilityResponse": {
         "properties": {
           "range": {
+            "description": "Range is the window and bucket width actually used, after clamping — not what\nwas asked for, which is why a caller reads it back rather than assuming.",
             "properties": {
               "sinceSec": {
                 "type": "integer"
@@ -31768,9 +31790,11 @@
       "o11y.deployment": {
         "properties": {
           "instance": {
+            "description": "Instance is the replica as the telemetry store labels it — the address the\nseries was recorded against, which is what distinguishes two replicas of one\nservice.",
             "type": "string"
           },
           "up": {
+            "description": "Up is that replica's last reported state. Every target emits on every cycle,\nso a replica missing from the list is one the prober is not reporting at all,\nwhich is a different fact from down.",
             "type": "boolean"
           }
         },
@@ -31860,9 +31884,11 @@
       "o11y.metricsResponse": {
         "properties": {
           "product": {
+            "description": "Product is the service these numbers are about, echoed back.",
             "type": "string"
           },
           "range": {
+            "description": "Range is the window actually used, after clamping — not what was asked for.\nA caller that wants to know what it got reads this rather than its own query.",
             "properties": {
               "sinceSec": {
                 "type": "integer"
@@ -31874,6 +31900,7 @@
             "type": "object"
           },
           "series": {
+            "description": "Series is the RED trend: request rate, error rate and two latency quantiles,\nbucketed at range.stepSec and oldest bucket first. Latencies are in\nMILLISECONDS.",
             "properties": {
               "errors": {
                 "items": {
@@ -31903,6 +31930,7 @@
             "type": "object"
           },
           "summary": {
+            "description": "Summary totals the window in one object, so a tile does not have to sum the\nseries to render. errorRate is a RATIO of the window's requests, not a\npercentage, and p95Ms is over the window rather than the worst bucket.",
             "properties": {
               "errorRate": {
                 "type": "number"
@@ -31920,6 +31948,7 @@
             "type": "object"
           },
           "usage": {
+            "description": "Usage is the LLM side of the same window: how many calls, how many tokens and\nwhat they cost. It counts model traffic, not HTTP requests, so it does not\nreconcile with series.requests.",
             "properties": {
               "calls": {
                 "type": "integer"
@@ -31995,24 +32024,30 @@
       "o11y.statusResult": {
         "properties": {
           "checkedAt": {
+            "description": "CheckedAt is when this answer was measured, RFC3339 UTC.",
             "type": "string"
           },
           "deployments": {
+            "description": "Deployments is the per-replica inventory behind the verdict. Empty means the\ntelemetry store reported none, not that the service runs on none.",
             "items": {
               "$ref": "#/components/schemas/o11y.deployment"
             },
             "type": "array"
           },
           "latencyMs": {
+            "description": "LatencyMs is the health probe's round trip in MILLISECONDS, time-boxed at two\nseconds. It is 0 when no probe answered, which is not a fast service.",
             "type": "integer"
           },
           "product": {
+            "description": "Product is the service this answer is about, echoed back.",
             "type": "string"
           },
           "source": {
+            "description": "Source is where the verdict came from: \"probe\" (we asked and it answered),\n\"datastore\" (the probe did not answer and the replica inventory decided it),\n\"unreachable\" (neither), or \"unknown-service\" for a well-formed product name\nnothing backs — which is answered without probing, since dialling an\narbitrary host on a caller's say-so is the request forgery this refuses.",
             "type": "string"
           },
           "up": {
+            "description": "Up is true when the health probe succeeded OR any replica reports up, so a\nservice reachable by either route reads up. Read Source to know which.",
             "type": "boolean"
           }
         },

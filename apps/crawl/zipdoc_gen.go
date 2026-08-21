@@ -14,6 +14,7 @@ func init() {
 			"crawlDocument.metadata": "Metadata is whatever the document said about itself — description, og:*,\nlanguage — plus the response status, the final URL and the content type. It\nis an OPEN key space, so it is carried as raw JSON: `map[string]any`\npublishes `additionalProperties:{\"type\":\"object\"}`, which the integer\n`status` inside it refutes, while raw JSON publishes `{}` — \"any JSON\",\nwhich is true. The bytes are identical either way (encoding/json writes a\nmap's keys sorted, and this IS that marshalling).",
 			"crawlDocument.title":    "Title is the document's title, when it carried one.",
 			"crawlDocument.url":      "URL is the address actually read, after redirects.",
+			"crawlRequest.url":       "URL is the page to read, absolute and http or https — no other scheme is\ndialled. It is resolved from inside the cluster, so an address that turns out\nto be loopback, link-local, private or multicast is refused at the dialer,\nredirects included. Empty is not an error status: the answer comes back with\nsuccess false and the reason in error.",
 			"crawlResult.data":       "Data is the page, present exactly when Success.",
 			"crawlResult.error":      "Error says what stopped the fetch: the host was refused, unreachable, or\nserved something that is not a document.",
 			"crawlResult.success":    "Success is whether the page was fetched and read. FALSE with an Error is a\ncomplete answer, not a fault — check this before reading Data.",

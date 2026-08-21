@@ -16,7 +16,12 @@ import (
 
 // Signer is one e-signature recipient.
 type Signer struct {
-	Name  string `json:"name"`
+	// Name is the person as they should appear on the signature request. Passed to
+	// the provider verbatim; nothing here matches it against a Hanzo user.
+	Name string `json:"name"`
+	// Email is where the provider sends the request, and the only way the signer is
+	// reached — a signer is a COUNTERPARTY, not necessarily a member of the org, so
+	// there is no account to fall back on.
 	Email string `json:"email"`
 }
 

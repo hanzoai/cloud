@@ -195,10 +195,13 @@ type Integrity struct {
 	Head string `json:"head"`
 	// BrokenAt is the seq of the FIRST record that failed verification, and -1
 	// whenever the walk found no break (including an unread chain, where no seq
-	// was reached). Reason describes the break (recomputed-hash mismatch,
-	// prev-hash discontinuity, or a seq gap) or why the chain could not be read.
-	BrokenAt int64  `json:"brokenAt"`
-	Reason   string `json:"reason,omitempty"`
+	// was reached).
+	BrokenAt int64 `json:"brokenAt"`
+	// Reason says HOW the chain fails at BrokenAt — a recomputed-hash mismatch, a
+	// prev-hash discontinuity, or a seq gap — or, on an unread chain, why it could
+	// not be walked at all. Absent on an intact chain, which is the only verdict
+	// with nothing to explain.
+	Reason string `json:"reason,omitempty"`
 }
 
 // Verify walks THIS recorder's chain and reports its integrity. The whole family

@@ -49,10 +49,20 @@ const byoLiveWindow = 90 * time.Second
 
 // byoGPU is one accelerator reported by nvidia-smi on the connecting machine.
 type byoGPU struct {
-	Name        string `json:"name"`
+	// Name is the card's model exactly as its own tooling named it ("NVIDIA
+	// GB10"), never normalized — an operator matches what they see here against
+	// what nvidia-smi tells them on the box.
+	Name string `json:"name"`
+	// MemoryTotal is the card's VRAM in the units the host reported it in
+	// ("122880 MiB") — a display string, not a byte count. On a unified part it is
+	// the shared CPU/GPU pool, so it is not memory reserved for the GPU.
 	MemoryTotal string `json:"memoryTotal,omitempty"` // VRAM (or unified pool), e.g. "122880 MiB"
-	Arch        string `json:"arch,omitempty"`        // native target, e.g. "gfx1151"
-	Unified     bool   `json:"unified,omitempty"`     // unified CPU/GPU memory pool (APU / SoC)
+	// Arch is the card's native compile target ("gfx1151"), which is what a kernel
+	// has to be built for. AMD reports one; NVIDIA cards leave it empty.
+	Arch string `json:"arch,omitempty"` // native target, e.g. "gfx1151"
+	// Unified reports that CPU and GPU share one memory pool (an APU or SoC), so
+	// MemoryTotal is not private to the GPU and the host competes for it.
+	Unified bool `json:"unified,omitempty"` // unified CPU/GPU memory pool (APU / SoC)
 }
 
 // engineAdvertisement is a hanzo-engine model server a BYO worker runs on its node
@@ -60,43 +70,90 @@ type byoGPU struct {
 // AND Anthropic HTTP APIs from one port, so the gateway can route model calls to this
 // GPU on the standard chat-completions provider. Surfaced verbatim on GET /v1/visor/fleet/workers.
 type engineAdvertisement struct {
-	URL    string   `json:"url"`
-	APIs   []string `json:"apis,omitempty"`   // ["openai","anthropic"]
+	// URL is the base address the node advertised its engine on — where a model
+	// call to this GPU is sent. The node chose it, so reaching it is a question
+	// about the node's network, not about this surface.
+	URL string `json:"url"`
+	// APIs are the wire formats the engine serves on that one port: "openai",
+	// "anthropic", or both.
+	APIs []string `json:"apis,omitempty"` // ["openai","anthropic"]
+	// Models are the model ids the node's own GET /v1/models answered with — what
+	// this GPU can actually be asked for.
 	Models []string `json:"models,omitempty"` // ids from the node's GET /v1/models
-	Status string   `json:"status,omitempty"` // "ready" | "unreachable"
+	// Status is "ready" when the node's engine answered, "unreachable" when it did
+	// not. Advertised is not the same as serving, and this is the difference.
+	Status string `json:"status,omitempty"` // "ready" | "unreachable"
 }
 
 // byoWorker is a connected BYO machine, normalized from its `fleet` presence
 // activity. It is the raw shape GET /v1/visor/fleet/workers returns and the source the
 // machine/gpu unions map from.
 type byoWorker struct {
-	ID            string   `json:"id"`
-	Hostname      string   `json:"hostname"`
-	Provider      string   `json:"provider"` // always "byo"
-	Location      string   `json:"location"` // "on-prem" (BYO has no cloud region)
-	Status        string   `json:"status"`   // online | offline
-	Rocm          string   `json:"rocm,omitempty"`
-	Hip           string   `json:"hip,omitempty"`
-	Cuda          string   `json:"cuda,omitempty"`
-	Driver        string   `json:"driver,omitempty"`
-	GPUs          []byoGPU `json:"gpus"`
-	LastHeartbeat string   `json:"lastHeartbeat,omitempty"`
-	FirstSeen     string   `json:"firstSeen,omitempty"`
-	Os            string   `json:"os,omitempty"`
+	// ID is the node's id in the fleet — the sanitized hostname it registered
+	// under, which is also the `unit` its samples and its gpu-jobs lane key on.
+	// This is the id to use everywhere else on the compute surface.
+	ID string `json:"id"`
+	// Hostname is what the host calls itself. It equals ID for any hostname already
+	// in the [a-z0-9-] alphabet, and differs when sanitizing had to change it.
+	Hostname string `json:"hostname"`
+	// Provider is always "byo": this machine is the operator's, not one Hanzo
+	// provisioned. It exists so a fold into the machines/GPUs pages says which
+	// rows are rented and which are the customer's own.
+	Provider string `json:"provider"` // always "byo"
+	// Location is always "on-prem" — a machine that dialed in has no cloud region,
+	// and inventing one would put it somewhere it is not.
+	Location string `json:"location"` // "on-prem" (BYO has no cloud region)
+	// Status is "online" when the last heartbeat landed within 90s, else
+	// "offline" — so it is a fact about heartbeat freshness, not about the box
+	// being powered on. A worker that has never beaten reads offline.
+	Status string `json:"status"` // online | offline
+	// Rocm is the host's ROCm version. AMD hosts report it; empty otherwise.
+	Rocm string `json:"rocm,omitempty"`
+	// Hip is the host's HIP runtime version, the AMD counterpart to Cuda.
+	Hip string `json:"hip,omitempty"`
+	// Cuda is the host's CUDA toolkit version. NVIDIA hosts report it.
+	Cuda string `json:"cuda,omitempty"`
+	// Driver is the host's NVIDIA kernel driver version — distinct from Cuda, and
+	// the one that bounds which CUDA versions can run on this box.
+	Driver string `json:"driver,omitempty"`
+	// GPUs are the accelerators the host found on itself. Empty is a real answer:
+	// a CPU-only machine can dial in and take non-GPU work.
+	GPUs []byoGPU `json:"gpus"`
+	// LastHeartbeat is the most recent beat this node sent, RFC 3339. It is what
+	// Status is computed from, so a reader can check the judgement.
+	LastHeartbeat string `json:"lastHeartbeat,omitempty"`
+	// FirstSeen is when this node first dialed in, RFC 3339 — the start of its
+	// presence record, which `hanzo unlink` ends.
+	FirstSeen string `json:"firstSeen,omitempty"`
+	// Os is the host's operating system: linux, darwin or windows.
+	Os string `json:"os,omitempty"`
 	// Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the
 	// registration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in
 	// BYTES — the same fields a code-linked run-target carries, so the /v1/visor/fleet
 	// board renders a linked node's arch + cores + RAM like any other unit.
-	Arch     string `json:"arch,omitempty"`
-	CPUs     int    `json:"cpus,omitempty"`
+	Arch string `json:"arch,omitempty"`
+	// CPUs is the host's logical core count.
+	CPUs int `json:"cpus,omitempty"`
+	// CPUModel is the processor as the host names it ("Apple M3 Max"), for display.
 	CPUModel string `json:"cpuModel,omitempty"`
-	Memory   int64  `json:"memory,omitempty"`
-	Version  string `json:"version,omitempty"`
+	// Memory is the host's total RAM in BYTES.
+	Memory int64 `json:"memory,omitempty"`
+	// Version is the `hanzo` CLI version running on the node. It is what to check
+	// when a worker is missing a field a newer registration reports.
+	Version string `json:"version,omitempty"`
+	// JobQueue is the tasks NAMESPACE this worker claims render jobs out of —
+	// "gpu-jobs" unless `hanzo link` was pointed at another. Within it, a job aimed
+	// at this node alone rides the task-queue value "gpu:<id>".
 	JobQueue string `json:"jobQueue,omitempty"`
-	// Capabilities the worker advertises ("studio.render", "engine.serve"); Engine
-	// is present when it runs a hanzo-engine model server. Both additive + omitempty.
-	Capabilities []string             `json:"capabilities,omitempty"`
-	Engine       *engineAdvertisement `json:"engine,omitempty"`
+	// Capabilities is what this worker offers the org: "studio.render" when the
+	// node can render, "engine.serve" when it serves a model endpoint. A node
+	// advertises one only once it can honour it, so an absent list means a node
+	// that has dialed in but is not ready to serve any of them yet.
+	Capabilities []string `json:"capabilities,omitempty"`
+	// Engine is the hanzo-engine model server this node runs, when it runs one
+	// (`hanzo link --serve-engine`). Absent means the node takes jobs but serves
+	// no model endpoint.
+	Engine *engineAdvertisement `json:"engine,omitempty"`
 }
 
 // fleetRegistration is the JSON the CLI stores as the presence activity's Input.
@@ -295,19 +352,52 @@ const (
 // claiming node — they differ (a shared-lane job has no target but has a claimant
 // once picked up), and the UI needs both.
 type gpuJob struct {
-	ID            string `json:"id"`
-	RunID         string `json:"runId,omitempty"`
-	Type          string `json:"type,omitempty"`
-	Status        string `json:"status"` // queued|running|completed|failed|canceled
-	GPU           string `json:"gpu,omitempty"`
-	Worker        string `json:"worker,omitempty"`
-	Label         string `json:"label,omitempty"`
-	Attempt       int    `json:"attempt,omitempty"`
-	StartTime     string `json:"startTime,omitempty"`
-	CloseTime     string `json:"closeTime,omitempty"`
+	// ID is the job's id, and the id the cancel route takes. The dispatcher sets it
+	// equal to the render's prompt id, so it is the same value the studio knows the
+	// job by.
+	ID string `json:"id"`
+	// RunID identifies this execution of the job. It equals ID for a job the
+	// dispatcher submitted, which is why a cancel that omits it still works.
+	RunID string `json:"runId,omitempty"`
+	// Type is the work being done ("studio.render") — what the claiming worker has
+	// to be able to execute.
+	Type string `json:"type,omitempty"`
+	// Status is the job's lifecycle state: queued, running, completed, failed or
+	// canceled — plus "stalled", which is this surface's own reading of a job that
+	// is STARTED whose worker died: its lease has elapsed and no reaper has taken
+	// it back yet. Without it such a job reads "running" forever. An engine state
+	// this surface does not recognize passes through lower-cased rather than being
+	// coerced into one of these.
+	Status string `json:"status"`
+	// GPU is the node this job is aimed AT — the lane "gpu:<node>" it was submitted
+	// on. Empty means the shared any-GPU lane: it was not aimed anywhere and the
+	// first free worker takes it.
+	GPU string `json:"gpu,omitempty"`
+	// Worker is the node that actually CLAIMED the job, which is not always the one
+	// it was aimed at: a shared-lane job has no GPU but does have a Worker once
+	// picked up. Empty while the job is still waiting.
+	Worker string `json:"worker,omitempty"`
+	// Label is the cheap human name for the render — the output filename prefix
+	// lifted out of the submitted graph. Empty when the graph carried none. The
+	// graph itself is never in this list; the tasks describe endpoint serves it.
+	Label string `json:"label,omitempty"`
+	// Attempt is which try this is, counting from 1. Above 1 means the job was
+	// retried after a failed or abandoned run.
+	Attempt int `json:"attempt,omitempty"`
+	// StartTime is when a worker began executing the job, RFC 3339. Empty while it
+	// is still queued.
+	StartTime string `json:"startTime,omitempty"`
+	// CloseTime is when the job reached a terminal state, RFC 3339. Empty means it
+	// is still live — queued, running or stalled.
+	CloseTime string `json:"closeTime,omitempty"`
+	// LastHeartbeat is the claiming worker's most recent beat on this job, RFC 3339
+	// — the evidence a long render is still alive rather than wedged.
 	LastHeartbeat string `json:"lastHeartbeat,omitempty"`
-	LeaseExpiry   string `json:"leaseExpiry,omitempty"`
-	FailureCause  string `json:"failureCause,omitempty"`
+	// LeaseExpiry is when the worker's claim lapses, RFC 3339. Past it with the job
+	// still STARTED, the claimant is presumed dead and Status reads "stalled".
+	LeaseExpiry string `json:"leaseExpiry,omitempty"`
+	// FailureCause is the engine's reason the job failed. Empty unless it did.
+	FailureCause string `json:"failureCause,omitempty"`
 }
 
 // gpuTarget parses the GPU a job targets from its taskQueue: "gpu:<node>" → "<node>";
@@ -683,12 +773,15 @@ type sampleIngest struct {
 	// GPUUtil is accelerator utilization as a fraction 0..1; the warehouse clamps
 	// anything outside that.
 	GPUUtil float64 `json:"gpuUtil"`
-	// GPUs is how many accelerators the reading covers, GPUModel the representative
-	// model name.
-	GPUs     int    `json:"gpus"`
+	// GPUs is how many accelerators this reading covers.
+	GPUs int `json:"gpus"`
+	// GPUModel names the representative accelerator ("GB10"); GPUs carries how
+	// many. A heterogeneous host names its first card rather than inventing a
+	// summary.
 	GPUModel string `json:"gpuModel"`
-	// MemUsed and MemFree are host memory in bytes.
+	// MemUsed is host memory in use, in BYTES.
 	MemUsed int64 `json:"memUsed"`
+	// MemFree is host memory still available, in BYTES.
 	MemFree int64 `json:"memFree"`
 }
 

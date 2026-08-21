@@ -94,10 +94,20 @@ func validTier(t Tier) bool { return allTiers[t] }
 
 // WalletAccount is a named grouping of wallets owned by exactly one org.
 type WalletAccount struct {
-	ID        string `json:"id"`
-	Org       string `json:"org"`
-	Name      string `json:"name"`
-	CreatedAt int64  `json:"createdAt"`
+	// ID is the account id, minted by the server as "acct_" + 24 hex. Wallets
+	// name it as their accountId, and it becomes a segment of each of their key
+	// refs — so it addresses key material and cannot be reassigned.
+	ID string `json:"id"`
+	// Org is the tenant that owns the account, stamped from the validated
+	// principal rather than taken from the request. Every read is physically
+	// scoped to it, so another tenant's accounts are not reachable at all.
+	Org string `json:"org"`
+	// Name is the label given at creation, trimmed and required. It groups
+	// wallets: it is not a key, holds no balance, and is not unique in the org.
+	Name string `json:"name"`
+	// CreatedAt is when the account was opened, Unix seconds. Listings order by
+	// it, newest first.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // Scope is the ownership+addressing scope of custodied key material and the ONE
@@ -108,9 +118,23 @@ type WalletAccount struct {
 // a named account grouping. One scope type, one derivation/lookup path — so a
 // wallet's key material and its row are addressed identically at every layer.
 type Scope struct {
-	Org       string `json:"org"`
-	Project   string `json:"project,omitempty"`
-	Agent     string `json:"agent,omitempty"`
+	// Org is the tenant. It is the hard isolation boundary, always present and
+	// never crossed, stamped from the validated principal rather than read from a
+	// request. It is also the first segment of the key ref, which is what stops
+	// another tenant from addressing this material.
+	Org string `json:"org"`
+	// Project narrows within the org to one project. On a wallet it is the
+	// caller's ambient X-Project-Id at creation and never a body field, so key
+	// material cannot be addressed under a scope no minter validated; the DEFAULT
+	// project collapses to empty, which is what keeps an org's default-scope
+	// wallet on the un-suffixed ref. Empty means the dimension is unused.
+	Project string `json:"project,omitempty"`
+	// Agent narrows within the org to one agent. Empty means the dimension is
+	// unused — the wallet belongs to the org (or project) at large.
+	Agent string `json:"agent,omitempty"`
+	// AccountID names the WalletAccount grouping. Required when creating a wallet
+	// and it must be an account of the caller's own org; empty in a lookup means
+	// no narrowing by account.
 	AccountID string `json:"accountId"`
 }
 
@@ -167,16 +191,46 @@ func validNarrowing(s string) bool { return s == "" || scopePattern.MatchString(
 // over the API. It embeds Scope, so Org/Project/Agent/AccountID promote (and stay
 // flat in JSON) and the wallet is addressed through the ONE scope type.
 type Wallet struct {
-	ID             string `json:"id"`
-	Scope                 // Org, Project, Agent, AccountID — the addressing scope
-	Name           string `json:"name"`
-	Custody        Kind   `json:"custody"`
-	Tier           Tier   `json:"tier"`
-	Chain          string `json:"chain"`
-	Address        string `json:"address"`
-	KeyRef         string `json:"-"` // custody-internal handle; never serialized
+	// ID is the wallet id, minted by the server as "wal_" + 24 hex. It is the
+	// last segment of the key ref, and it is the LEDGER SUBJECT an x402 payment
+	// into this wallet credits — so it names money as well as key material.
+	ID    string `json:"id"`
+	Scope        // Org, Project, Agent, AccountID — the addressing scope
+	// Name is the display label given at creation. It addresses nothing: the key
+	// ref is derived from the scope and the id, so renaming moves no material.
+	Name string `json:"name"`
+	// Custody is the backend holding the signing material, fixed at creation:
+	// "kms" (a secp256k1 key sealed under KMS and opened in-process), "mpc" or
+	// "treasury" (an m-of-n threshold key on the deployed ring, which differ by
+	// governance and not by signing mechanics), or "safe" (a Safe contract owned
+	// by an MPC key). A kind the deployment has not wired refuses with 503 rather
+	// than fabricating a signature.
+	Custody Kind `json:"custody"`
+	// Tier is the wallet tier the ring keys its TierPolicy on: hot, warm, cold,
+	// gas, bridge, contract_admin, validator, quarantine or disaster_recovery.
+	// It defaults to hot and is refused at the boundary if it is none of the nine.
+	Tier Tier `json:"tier"`
+	// Chain is the EVM chain the wallet is bound to, CAIP-2 "eip155:<n>" or a
+	// bare decimal chain id. Empty is chain-agnostic: the ring signs an unbound
+	// digest, and a Safe falls back to the Hanzo L1 (36963) because a Safe and
+	// its EIP-712 domain must be chain-bound.
+	Chain string `json:"chain"`
+	// Address is the on-chain address. For kms/mpc/treasury it is the EOA a
+	// signature from this wallet recovers to; for safe it is the CREATE2 address
+	// of the Safe CONTRACT, which holds no key — its approvals recover to the MPC
+	// owner instead. Rotating a kms wallet mints a new key and therefore a NEW
+	// address, and funds and approvals at the old one do not follow; mpc,
+	// treasury and safe addresses are invariant under rotation.
+	Address string `json:"address"`
+	KeyRef  string `json:"-"` // custody-internal handle; never serialized
+	// FinanceAccount is the finance ledger account bound to this wallet — the
+	// lookup that turns a ledger account back into an on-chain signer. Absent is
+	// the normal state and means unbound; the column is NULL until something
+	// binds it.
 	FinanceAccount string `json:"financeAccount,omitempty"`
-	CreatedAt      int64  `json:"createdAt"`
+	// CreatedAt is when the wallet was provisioned, Unix seconds. Listings order
+	// by it, newest first.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // keyRef derives this wallet's KMS secret ref from its scope + id — the ONE

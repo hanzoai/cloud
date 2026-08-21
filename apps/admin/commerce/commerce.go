@@ -187,11 +187,19 @@ func (c *Client) Ledger(ctx context.Context, subject string, limit int) ([]Entry
 
 // Vendor is one line of what WE pay a vendor for a service in a period (COGS).
 type Vendor struct {
-	Name    string      `json:"vendor"`
-	Service string      `json:"service"`
-	Amount  money.Cents `json:"amountCents"`
-	Source  string      `json:"source"` // "actual" | "estimated"
-	Note    string      `json:"note,omitempty"`
+	// Name is who we pay — the vendor's own name ("digitalocean", "anthropic"). The wire
+	// spells it `vendor`; a line is identified by this together with Service.
+	Name string `json:"vendor"`
+	// Service is what we pay them FOR, so one vendor can bill several lines. Commerce
+	// chooses the vocabulary; this surface reports it verbatim.
+	Service string `json:"service"`
+	// Amount is the period's cost in USD cents, POSITIVE — money out is not negated
+	// here. Summed across lines it is the platform COGS the margin subtracts.
+	Amount money.Cents `json:"amountCents"`
+	Source string      `json:"source"` // "actual" | "estimated"
+	// Note is commerce's own caveat on the line — usually how an estimate was reached.
+	// Omitted when there is none.
+	Note string `json:"note,omitempty"`
 }
 
 // Costs is the fleet COGS god-view: every vendor line for a period plus the total.

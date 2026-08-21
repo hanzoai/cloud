@@ -57,41 +57,81 @@ const bytesPerGiB = 1024 * 1024 * 1024
 // absent fill serializes as JSON null (→ the console's honest "—"), distinct from a
 // real 0%.
 type storageVolume struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Region   string   `json:"region"`
-	SizeGiB  int      `json:"sizeGiB"`
-	UsedGiB  *float64 `json:"usedGiB"`
-	Pct      *float64 `json:"pct"`
-	Attached bool     `json:"attached"`
-	Service  string   `json:"service"`
+	// ID is DigitalOcean's own volume id.
+	ID string `json:"id"`
+	// Name is the volume's name at DigitalOcean.
+	Name string `json:"name"`
+	// Region is the DO region slug it lives in (nyc3, sfo3). A volume can only
+	// attach to a droplet in its own region.
+	Region string `json:"region"`
+	// SizeGiB is the PROVISIONED capacity in GiB. It is what is billed, attached
+	// or not, used or not.
+	SizeGiB int `json:"sizeGiB"`
+	// UsedGiB is null on every row. DigitalOcean exposes capacity and attachment
+	// but not fill, so nothing here has measured it — null means unmeasured, and
+	// is not 0.
+	UsedGiB *float64 `json:"usedGiB"`
+	// Pct is null on every row, for the same reason as UsedGiB. The console
+	// renders an em dash rather than a number nobody took.
+	Pct *float64 `json:"pct"`
+	// Attached is whether at least one droplet has the volume mounted. A detached
+	// volume still bills its full size, which is what makes this the reclaim
+	// signal.
+	Attached bool `json:"attached"`
+	// Service names the workload this volume backs. Empty on every row today:
+	// nothing tags a DO volume with its consumer, and guessing one from the name
+	// would be a claim rather than a reading.
+	Service string `json:"service"`
 }
 
 // storageFleet is the roll-up: real count/capacity/cost; fleet fill absent (DO gives
 // no per-volume fill, so there is no honest fleet-wide used total to report).
 type storageFleet struct {
-	Count      int      `json:"count"`
-	TotalGiB   int      `json:"totalGiB"`
-	UsedGiB    *float64 `json:"usedGiB"`
-	Pct        *float64 `json:"pct"`
-	MonthlyUsd int      `json:"monthlyUsd"`
+	// Count is how many volumes the DigitalOcean account holds. A measurement only
+	// when the snapshot is complete — otherwise it is zero because nothing was
+	// read.
+	Count int `json:"count"`
+	// TotalGiB is their summed provisioned capacity in GiB.
+	TotalGiB int `json:"totalGiB"`
+	// UsedGiB is null: with no per-volume fill there is no honest fleet total to
+	// sum.
+	UsedGiB *float64 `json:"usedGiB"`
+	// Pct is null, for the same reason as UsedGiB.
+	Pct *float64 `json:"pct"`
+	// MonthlyUsd is the fleet's block-storage cost in whole US DOLLARS per month —
+	// capacity times DO's $0.10/GiB list price, rounded. A list-price estimate for
+	// the ops budget, not an invoice line, and dollars rather than the cents the
+	// money boards use.
+	MonthlyUsd int `json:"monthlyUsd"`
 }
 
 // datastoreVolume is the analytics backend's own volume, fill REAL from system.disks.
 type datastoreVolume struct {
-	Name    string  `json:"name"`
-	Mount   string  `json:"mount"`
-	SizeGiB int     `json:"sizeGiB"`
+	// Name is the disk as the datastore names it.
+	Name string `json:"name"`
+	// Mount is its filesystem path on the datastore node.
+	Mount string `json:"mount"`
+	// SizeGiB is its total capacity in GiB.
+	SizeGiB int `json:"sizeGiB"`
+	// UsedGiB is the space in use, in GiB to one decimal. This is the ONE real
+	// fill on the board and the number to scale on.
 	UsedGiB float64 `json:"usedGiB"`
-	Pct     float64 `json:"pct"`
+	// Pct is UsedGiB as a percentage of SizeGiB, 0..100 to one decimal. The alert
+	// thresholds read this.
+	Pct float64 `json:"pct"`
 }
 
 // storageAlert flags a near-full volume (only the datastore carries a real fill today,
 // so alerts are datastore-derived until a per-volume filesystem source is wired).
 type storageAlert struct {
-	Volume string  `json:"volume"`
-	Pct    float64 `json:"pct"`
-	Level  string  `json:"level"`
+	// Volume is the volume the alert is about. Only the datastore carries a
+	// measured fill today, so it is the only name that appears here.
+	Volume string `json:"volume"`
+	// Pct is the fill that raised the alert, 0..100.
+	Pct float64 `json:"pct"`
+	// Level is "warn" from 80% and "critical" from 90%. Below 80 no alert is
+	// emitted at all — there is no third level meaning fine.
+	Level string `json:"level"`
 }
 
 // storageSnapshot is the whole board payload the console normalizes.
@@ -104,13 +144,30 @@ type storageAlert struct {
 // account with no block storage, so it is also exactly what an unread account looks
 // like, and nothing in the payload told the two apart.
 type storageSnapshot struct {
-	Complete         bool                `json:"complete"`
-	IncompleteReason string              `json:"incompleteReason"`
-	Sources          []core.SourceStatus `json:"sources"`
-	Fleet            storageFleet        `json:"fleet"`
-	Datastore        *datastoreVolume    `json:"datastore"`
-	Volumes          []storageVolume     `json:"volumes"`
-	Alerts           []storageAlert      `json:"alerts"`
+	// Complete is whether the fleet roll-up may be read as a MEASUREMENT. False
+	// means DigitalOcean was not read, so the count, capacity and cost below are
+	// unknown rather than zero — and zero is exactly what an account with no
+	// volumes looks like, which is why the distinction has to travel beside them.
+	Complete bool `json:"complete"`
+	// IncompleteReason says which read did not happen and what that makes the
+	// numbers, in a sentence fit to show an operator. Empty when Complete is true.
+	IncompleteReason string `json:"incompleteReason"`
+	// Sources is one row per upstream — do.volumes — with whether it answered, how
+	// many rows it gave, and why not.
+	Sources []core.SourceStatus `json:"sources"`
+	// Fleet is the DigitalOcean roll-up: count, capacity and monthly list cost.
+	Fleet storageFleet `json:"fleet"`
+	// Datastore is the analytics datastore's own volume, the one card carrying a
+	// measured fill. NULL when the datastore is not connected or reported no
+	// capacity — no card at all rather than a fabricated 0%.
+	Datastore *datastoreVolume `json:"datastore"`
+	// Volumes is one row per DigitalOcean volume: capacity, region and attachment,
+	// with fill absent.
+	Volumes []storageVolume `json:"volumes"`
+	// Alerts is the near-full warnings, derived from the datastore fill. Empty
+	// means nothing is near full AND also that there was no fill to judge —
+	// Datastore being null is what tells those apart.
+	Alerts []storageAlert `json:"alerts"`
 }
 
 // volumes returns the realtime block-storage board: the DigitalOcean volume fleet
@@ -167,9 +224,14 @@ func fleetRead(configured bool, err error) (bool, string) {
 
 // volumesOut is the GET /v1/admin/volumes envelope.
 type volumesOut struct {
-	Status string           `json:"status"`
-	Msg    string           `json:"msg"`
-	Data   *storageSnapshot `json:"data"`
+	// Status is "ok" or "error", at HTTP 200 either way. A DigitalOcean outage
+	// still answers "ok": an operator reads this board DURING an incident, and the
+	// gap is named in data.incompleteReason rather than replacing the page.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error", empty otherwise.
+	Msg string `json:"msg"`
+	// Data is the board. Null only when the caller was refused.
+	Data *storageSnapshot `json:"data"`
 }
 
 // buildStorageSnapshot assembles the board payload (PURE — unit-tested). It folds the

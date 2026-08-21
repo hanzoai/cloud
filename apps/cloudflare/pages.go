@@ -21,41 +21,76 @@ import (
 // PagesKVBinding / PagesD1Binding / PagesR2Binding are the deployment-config resource
 // bindings (ported from PagesDeploymentConfig).
 type PagesKVBinding struct {
+	// NamespaceID is the KV namespace this binding points at, by Cloudflare's id
+	// rather than its title. The BINDING NAME — what the Worker code reads it as — is
+	// the map key this value sits under, not a field here.
 	NamespaceID string `json:"namespace_id"`
 }
 type PagesD1Binding struct {
+	// ID is the D1 database this binding points at, by Cloudflare's uuid. The binding
+	// name the Worker code reads it as is the map key, not a field here.
 	ID string `json:"id"`
 }
 type PagesR2Binding struct {
+	// Name is the R2 bucket this binding points at, by bucket name — R2 addresses
+	// buckets by name where KV and D1 use ids. The binding name the Worker code reads
+	// it as is the map key.
 	Name string `json:"name"`
 }
 
 // PagesEnvVar is one deployment env var (plain_text | secret_text).
 type PagesEnvVar struct {
+	// Value is the variable's value. Under type "secret_text" Cloudflare encrypts it
+	// on arrival and never reads it back, so a later read of the project shows the
+	// variable without this.
 	Value string `json:"value"`
-	Type  string `json:"type,omitempty"`
+	// Type is "plain_text" or "secret_text" and decides that: plain text is readable
+	// afterwards, secret text is write-only. Empty is Cloudflare's default,
+	// plain_text — so a secret with no type set is stored in the clear.
+	Type string `json:"type,omitempty"`
 }
 
 // PagesBuildConfig is the project build config.
 type PagesBuildConfig struct {
-	BuildCommand   string `json:"build_command,omitempty"`
+	// BuildCommand is what Cloudflare runs to build the site ("npm run build").
+	// Omitted means no build step: the repository is published as it stands.
+	BuildCommand string `json:"build_command,omitempty"`
+	// DestinationDir is the directory the build leaves the site in ("dist"),
+	// relative to RootDir. It is what gets served.
 	DestinationDir string `json:"destination_dir,omitempty"`
-	RootDir        string `json:"root_dir,omitempty"`
+	// RootDir is where in the repository the build runs, for a project that is not at
+	// the repository root. Omitted means the root.
+	RootDir string `json:"root_dir,omitempty"`
 }
 
 // PagesDeploymentConfig is a preview/production deployment config.
 type PagesDeploymentConfig struct {
-	CompatibilityDate  string                    `json:"compatibility_date,omitempty"`
-	CompatibilityFlags []string                  `json:"compatibility_flags,omitempty"`
-	EnvVars            map[string]PagesEnvVar    `json:"env_vars,omitempty"`
-	KVNamespaces       map[string]PagesKVBinding `json:"kv_namespaces,omitempty"`
-	D1Databases        map[string]PagesD1Binding `json:"d1_databases,omitempty"`
-	R2Buckets          map[string]PagesR2Binding `json:"r2_buckets,omitempty"`
+	// CompatibilityDate pins which Workers runtime behaviour the functions run under,
+	// as a date ("2024-01-01"). It is a pin, not a version: the runtime keeps that
+	// date's semantics for code deployed against it.
+	CompatibilityDate string `json:"compatibility_date,omitempty"`
+	// CompatibilityFlags turn individual runtime behaviours on or off ahead of, or
+	// behind, the date above ("nodejs_compat").
+	CompatibilityFlags []string `json:"compatibility_flags,omitempty"`
+	// EnvVars are the environment variables the functions see, KEYED BY VARIABLE NAME.
+	// The key is the name; the value carries the value and whether it is a secret.
+	EnvVars map[string]PagesEnvVar `json:"env_vars,omitempty"`
+	// KVNamespaces binds KV namespaces into the functions, KEYED BY THE BINDING NAME
+	// the code reads (`env.SESSIONS`). Same shape for the two below.
+	KVNamespaces map[string]PagesKVBinding `json:"kv_namespaces,omitempty"`
+	// D1Databases binds D1 databases in, keyed by binding name.
+	D1Databases map[string]PagesD1Binding `json:"d1_databases,omitempty"`
+	// R2Buckets binds R2 buckets in, keyed by binding name.
+	R2Buckets map[string]PagesR2Binding `json:"r2_buckets,omitempty"`
 }
 
 // PagesDeploymentConfigs pairs the preview + production deployment configs.
 type PagesDeploymentConfigs struct {
-	Preview    *PagesDeploymentConfig `json:"preview,omitempty"`
+	// Preview is the config every branch build other than the production branch runs
+	// under. It is a SEPARATE set of bindings and variables, which is what lets a
+	// preview point at test data.
+	Preview *PagesDeploymentConfig `json:"preview,omitempty"`
+	// Production is the config the production branch builds under.
 	Production *PagesDeploymentConfig `json:"production,omitempty"`
 }
 
@@ -63,9 +98,16 @@ type PagesDeploymentConfigs struct {
 // PagesProjectCreateParams). The platform sends {name, production_branch}; the full
 // shape is modeled so a richer caller is forwarded faithfully.
 type PagesProjectCreate struct {
-	Name              string                  `json:"name"`
-	ProductionBranch  string                  `json:"production_branch,omitempty"`
-	BuildConfig       *PagesBuildConfig       `json:"build_config,omitempty"`
+	// Name is the project name, and it is also the address: the site answers at
+	// <name>.pages.dev. Cloudflare will not rename a project afterwards.
+	Name string `json:"name"`
+	// ProductionBranch is which git branch builds to production; every other branch
+	// builds a preview. Omitted leaves Cloudflare's own default.
+	ProductionBranch string `json:"production_branch,omitempty"`
+	// BuildConfig says how to build the site. Omitted means no build step.
+	BuildConfig *PagesBuildConfig `json:"build_config,omitempty"`
+	// DeploymentConfigs carries the preview and production runtime configs — the
+	// bindings and variables the built site's functions run with.
 	DeploymentConfigs *PagesDeploymentConfigs `json:"deployment_configs,omitempty"`
 }
 
