@@ -7,7 +7,7 @@ package account
 // OIDC `picture` claim) and SCIM — so a user who signed up with a password had a
 // monogram and no way to replace it, and the console's Profile card answered the
 // attempt with "Edit in IAM", which links to an IAM that cannot do it either.
-// Production agreed: /v1/avatar was a 404 while /v1/keys was a 403.
+// Production agreed: the address was a 404 while the key surface beside it was a 403.
 //
 // STORAGE IS deps.VFS — the existing S3 seam (SeaweedFS via clients/s3vfs), which
 // was chosen for exactly this: "an adapter+crypto is needless complexity for small
@@ -75,7 +75,7 @@ func registerAvatar(o ops, open zip.Router, limit, csrf zip.Middleware) {
 }
 
 func init() {
-	openapi.Describe("/v1/avatar", http.MethodPost,
+	openapi.Describe(prefix+"/avatar", http.MethodPost,
 		"Set your profile photo",
 		"Stores one image as the signed-in user's profile photo and answers the URL it is "+
 			"served from, which is also written to the user's IAM record — so every surface "+
@@ -88,7 +88,7 @@ func init() {
 			"new URL rather than a stale cache of the old face. The caller is taken from the "+
 			"validated identity ONLY — there is no way to name a different subject — so this "+
 			"always sets your own photo, and a caller with no organization yet is refused.")
-	openapi.Describe("/v1/avatar/:org/:user/:digest", http.MethodGet,
+	openapi.Describe(prefix+"/avatar/:org/:user/:digest", http.MethodGet,
 		"Fetch a profile photo",
 		"Streams a profile photo's raw BYTES. This is the address stored on the user's IAM "+
 			"record and rendered directly by an `<img>`, so it takes no credentials — the "+
@@ -245,7 +245,7 @@ func (o ops) avatarURL(c *zip.Ctx, org, user, dg string) string {
 	if strings.HasPrefix(host, "localhost") || strings.HasPrefix(host, "127.0.0.1") {
 		scheme = "http://"
 	}
-	return scheme + host + "/v1/avatar/" + org + "/" + user + "/" + dg
+	return scheme + host + prefix + "/avatar/" + org + "/" + user + "/" + dg
 }
 
 // getAvatar streams a stored photo. No credentials — see the file header.
@@ -287,5 +287,5 @@ func (o ops) getAvatar(c *zip.Ctx) error {
 // avatarFor is the URL a stored digest is served from, used by tests and by any
 // caller that needs to name a photo it did not just upload.
 func avatarFor(domain, org, user, dg string) string {
-	return fmt.Sprintf("https://%s/v1/avatar/%s/%s/%s", domain, org, user, dg)
+	return fmt.Sprintf("https://%s%s/avatar/%s/%s/%s", domain, prefix, org, user, dg)
 }

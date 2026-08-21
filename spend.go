@@ -443,15 +443,19 @@ func Reachable(path string) bool {
 
 // reachableTrees are the /v1 sub-trees a spend gate may never refuse. Every entry is
 // written as a root WITH its trailing slash and covers the bare root too.
+//
+// /v1/account/ is one entry where it used to be two: the org create and switch the
+// shell resolves before it knows which org it is buying for answered at a bare
+// /v1/orgs, and folding it under the capability that serves it brought it inside a
+// tree this list already had.
 var reachableTrees = []string{
 	"/v1/billing/",      // the whole money surface: subscribe, top up, AND the inbound provider webhooks.
 	"/v1/commerce/",     // the co-resident commerce plane the checkout and tenant reads drive.
 	"/v1/iam/",          // IAM login / OAuth token exchange / .well-known OIDC discovery.
-	"/v1/account/",      // the account surface the shell renders before any purchase decision.
+	"/v1/account/",      // keys, csrf, appearance, avatar, embed and the org create + switch.
 	"/v1/admin/",        // platform sudo — including the cockpit that holds this gate's kill switch.
 	"/v1/plans/",        // the plans catalog — WHAT to buy (@hanzo/plans) — and its sub-routes.
 	"/v1/models/",       // the model catalog the shell reads for discovery, and /v1/models/:id.
-	"/v1/orgs/",         // org read + switch: the shell must resolve which org it is buying for.
 	"/v1/waitlist/",     // admission's join API — an un-admitted user must still reach it.
 	"/v1/flags/",        // the guard's public mode read; also how the kill switch is observed.
 	"/v1/entitlements/", // per-org enablement reads/writes that sit beside the projection.
