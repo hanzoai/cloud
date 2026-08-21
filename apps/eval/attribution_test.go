@@ -50,15 +50,15 @@ func doProj(t *testing.T, app *zip.App, method, path, org, project, authz string
 // seedRun creates a dataset + one item and runs it, so telemetry holds one trace.
 func seedRun(t *testing.T, app *zip.App, org, project, dataset, authz string) {
 	t.Helper()
-	if code, _ := doProj(t, app, http.MethodPost, "/v1/evals/datasets", org, project, authz,
+	if code, _ := doProj(t, app, http.MethodPost, "/v1/eval/datasets", org, project, authz,
 		map[string]any{"name": dataset}); code != http.StatusCreated {
 		t.Fatalf("seed dataset %q: %d", dataset, code)
 	}
-	if code, _ := doProj(t, app, http.MethodPost, "/v1/evals/datasets/"+dataset+"/items", org, project, authz,
+	if code, _ := doProj(t, app, http.MethodPost, "/v1/eval/datasets/"+dataset+"/items", org, project, authz,
 		map[string]any{"input": "2+2", "expectedOutput": "4"}); code != http.StatusCreated {
 		t.Fatalf("seed item: %d", code)
 	}
-	if code, _ := doProj(t, app, http.MethodPost, "/v1/evals/runs", org, project, authz,
+	if code, _ := doProj(t, app, http.MethodPost, "/v1/eval/runs", org, project, authz,
 		map[string]any{"dataset": dataset, "model": "m", "runName": dataset + "-run"}); code != http.StatusOK {
 		t.Fatalf("run %q: %d", dataset, code)
 	}
@@ -72,7 +72,7 @@ func TestTraceAttributionRecorded(t *testing.T) {
 	const bearer = "Bearer sk-secret-key"
 	seedRun(t, app, "o", "", "qa", bearer)
 
-	code, body := doProj(t, app, http.MethodGet, "/v1/evals/traces", "o", "", "", nil)
+	code, body := doProj(t, app, http.MethodGet, "/v1/eval/traces", "o", "", "", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list traces: %d %s", code, body)
 	}
@@ -120,28 +120,28 @@ func TestTraceProjectIsolation(t *testing.T) {
 	seedRun(t, app, "o", "", "dd", bearer)      // default project (whole org)
 
 	// alpha sees only its own trace.
-	code, body := doProj(t, app, http.MethodGet, "/v1/evals/traces", "o", "alpha", "", nil)
+	code, body := doProj(t, app, http.MethodGet, "/v1/eval/traces", "o", "alpha", "", nil)
 	traces := unmarshalTraces(t, code, body)
 	if len(traces) != 1 || traces[0].ProjectID != "alpha" || traces[0].SessionID != "da-run" {
 		t.Fatalf("alpha must see exactly its own trace, got %+v", traces)
 	}
 
 	// beta sees only its own trace.
-	code, body = doProj(t, app, http.MethodGet, "/v1/evals/traces", "o", "beta", "", nil)
+	code, body = doProj(t, app, http.MethodGet, "/v1/eval/traces", "o", "beta", "", nil)
 	traces = unmarshalTraces(t, code, body)
 	if len(traces) != 1 || traces[0].ProjectID != "beta" {
 		t.Fatalf("beta must see exactly its own trace, got %+v", traces)
 	}
 
 	// The default project (no X-Project-Id) sees the whole org — all three traces.
-	code, body = doProj(t, app, http.MethodGet, "/v1/evals/traces", "o", "", "", nil)
+	code, body = doProj(t, app, http.MethodGet, "/v1/eval/traces", "o", "", "", nil)
 	traces = unmarshalTraces(t, code, body)
 	if len(traces) != 3 {
 		t.Fatalf("default project must see the whole org (3 traces), got %d", len(traces))
 	}
 
 	// A sibling org sees none of o's traces (org is the hard boundary).
-	code, body = doProj(t, app, http.MethodGet, "/v1/evals/traces", "intruder", "alpha", "", nil)
+	code, body = doProj(t, app, http.MethodGet, "/v1/eval/traces", "intruder", "alpha", "", nil)
 	traces = unmarshalTraces(t, code, body)
 	if len(traces) != 0 {
 		t.Fatalf("cross-org read must be empty, got %d", len(traces))

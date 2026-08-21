@@ -201,7 +201,7 @@ func TestTheRefusalYieldsToTheDeeperOwner(t *testing.T) {
 	if got := manifest.OwnerOf("/v1/research/runs"); got != "research" {
 		t.Errorf("OwnerOf(/v1/research/runs) = %q, want research", got)
 	}
-	if got := manifest.OwnerOf("/v1/admin/authors"); got == "research" {
-		t.Errorf("OwnerOf(/v1/admin/authors) = %q — a staged capability must not own another's prefix", got)
+	if got := manifest.OwnerOf("/v1/admin/author"); got == "research" {
+		t.Errorf("OwnerOf(/v1/admin/author) = %q — a staged capability must not own another's prefix", got)
 	}
 }

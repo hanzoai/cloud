@@ -129,7 +129,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// UNIFIED PAYWALL (server-side enforcement). To gate this group behind the
 	// caller's plan, prepend the middleware to the group:
-	//   g := app.Group("/v1/world", entitlements.RequireProduct(deps.Commerce, "world"))
+	//   g := app.Group("/v1/world", entitlement.RequireProduct(deps.Commerce, "world"))
 	// DEFERRED — DO NOT ENABLE YET: the "world" product is ABSENT from @hanzo/plans
 	// licensing.product_ids (v1.4.4), so CheckEntitlement returns Active:false for
 	// EVERY org and enforcing now would 402 all users. Flip on once the catalog

@@ -20,7 +20,7 @@ var untypedByDesign = map[string]string{}
 func opsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string, schemas map[string]any) {
 	t.Helper()
 	app, _ := mountApp(t)
-	doc, err := openapi.Spec(app, openapi.Info{Title: "evals", Version: "v1"})
+	doc, err := openapi.Spec(app, openapi.Info{Title: "eval", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
@@ -28,7 +28,7 @@ func opsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
 	}
-	ours := func(p string) bool { return strings.HasPrefix(p, "/v1/evals") }
+	ours := func(p string) bool { return strings.HasPrefix(p, "/v1/eval") }
 	served, typed = map[string]bool{}, map[string]string{}
 	for path, item := range doc.Paths {
 		if !ours(path) {

@@ -116,7 +116,7 @@ type campaignResults struct {
 	// see exactly what was counted. Set even when Available is false.
 	Source string `json:"source"`
 	// ABTest is the creative A/B analysis from the experiments primitive
-	// (experiments.Analyze, pull-model), present only when the campaign runs
+	// (experiment.Analyze, pull-model), present only when the campaign runs
 	// more than one creative and an experiment is wired. Opaque JSON — campaign
 	// stays decoupled from the experiments analysis type.
 	ABTest json.RawMessage `json:"abTest,omitempty"`

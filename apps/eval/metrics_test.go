@@ -172,7 +172,7 @@ func TestMemTelemetryMetrics(t *testing.T) {
 
 func TestMetricsHandlerHonestEmpty(t *testing.T) {
 	app, _ := mountApp(t)
-	code, body := do(t, app, "GET", "/v1/evals/metrics?range=24h", "hanzo", nil)
+	code, body := do(t, app, "GET", "/v1/eval/metrics?range=24h", "hanzo", nil)
 	if code != http.StatusOK {
 		t.Fatalf("status = %d: %s", code, body)
 	}
@@ -207,7 +207,7 @@ func TestMetricsHandlerHonestEmpty(t *testing.T) {
 
 func TestMetricsHandlerRequiresPrincipal(t *testing.T) {
 	app, _ := mountApp(t)
-	code, _ := do(t, app, "GET", "/v1/evals/metrics", "", nil) // no principal
+	code, _ := do(t, app, "GET", "/v1/eval/metrics", "", nil) // no principal
 	if code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403 (no validated principal)", code)
 	}
@@ -217,7 +217,7 @@ func TestMetricsHandlerNonDefaultProjectEmpty(t *testing.T) {
 	app, _ := mountApp(t)
 	// The project is the server-minted X-Project-Id scope (not a client query
 	// param). A named project is honest-empty until the ledger carries a project.
-	code, body := doProj(t, app, "GET", "/v1/evals/metrics?range=24h", "hanzo", "alpha", "", nil)
+	code, body := doProj(t, app, "GET", "/v1/eval/metrics?range=24h", "hanzo", "alpha", "", nil)
 	if code != http.StatusOK {
 		t.Fatalf("status = %d: %s", code, body)
 	}
