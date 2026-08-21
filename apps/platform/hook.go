@@ -8,7 +8,8 @@
 // different process, where that registrant is nil forever: every delivery was
 // signed, accepted, answered 204, and built nothing. A receiver has to sit in the
 // process that can act, which is why moving the address was the fix and not a
-// rename. apps/git's route is the 410 that names this one.
+// rename. apps/git's route is a 410 naming platform.hanzo.ai — a different
+// deployment, not this one (see [hookPath]).
 //
 // The forge and native pushes now travel the SAME two seams. apps/git's
 // fireBranchBuild fires OnGitPush + EmitLifecycle for a push its own receive-pack
@@ -29,7 +30,7 @@
 // which covers every repository and every namespace at once, so a repo opts in by
 // having an application that tracks it rather than by owning a hook):
 //
-//	Target URL    https://api.hanzo.ai/v1/git-webhook
+//	Target URL    https://api.hanzo.ai/v1/platform/hook
 //	HTTP method   POST
 //	Content type  application/json
 //	Secret        the value at KMS forge.WebhookRef
@@ -71,11 +72,18 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// hookPath is where the forge delivers. It is the address apps/git's 410 has
-// been naming since that door was retired, so making it real is what turns a
-// published replacement into a working one; a receiver at a different address
-// would leave the retired door pointing at nothing.
-const hookPath = "/v1/git-webhook"
+// hookPath is where the forge delivers, and it is under this app because the
+// build trigger is: one capability, one prefix (HIP-0139 §3.1). The leaf is
+// `hook` — the noun for what arrives here — and not `git-webhook`, which is a
+// compound §2.3 refuses and a second spelling of the transport the first
+// segment already gives.
+//
+// NOTHING OUTSIDE THIS REPO FOLLOWS THIS ADDRESS. api.hanzo.ai is the only host
+// that reaches this receiver, and the forge's system webhook targets
+// platform.hanzo.ai — a separate deployment, the one apps/git's 410 names.
+// Moving this leaf changes what a forge would have to be pointed at to reach
+// THIS receiver, and nothing that is pointed anywhere today.
+const hookPath = "/v1/platform/hook"
 
 const (
 	// maxHookBody bounds what is HASHED and acted on: the bytes verified are
