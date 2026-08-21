@@ -16,50 +16,106 @@ func init() {
 	zip.Describe("GET /v1/tel/calls", zip.Doc{
 		Description: "Lists the calls this org has placed or received, newest first. Like the\nmessage list beside it, these are our own records rather than the carrier's.",
 		Fields: map[string]string{
-			"Call.status": "queued | ringing | answered | completed | failed",
+			"Call.agent":    "Agent names the Hanzo assistant handling the call. Set means the call was\nanswered by that assistant rather than connected to a person.",
+			"Call.from":     "From is the calling number in E.164. It must be one this org holds: a carrier\nrefuses an origination from a number nobody proved they own.",
+			"Call.id":       "ID is the carrier's handle for the call — what a hangup or a lookup names.",
+			"Call.org":      "Org is the tenant the call was placed for or received by.",
+			"Call.status":   "Status is where the call is: \"queued\", \"ringing\", \"answered\", \"completed\" or\n\"failed\". Only the last two are terminal.",
+			"Call.to":       "To is the called number in E.164.",
+			"callList.data": "Data is this org's own calls, newest first — what this platform placed or\nreceived on its behalf, which is our record rather than the carrier's.",
 		},
 	})
 	zip.Describe("GET /v1/tel/messages", zip.Doc{
 		Description: "Lists the messages this org has sent or received, newest first. Records from\nour own store, not the carrier's — so it is what this platform did on the\norg's behalf, which is the set an audit or a bill has to agree with.",
 		Fields: map[string]string{
-			"SMS.status": "queued | sent | delivered | failed",
+			"SMS.from":         "From is the sending number in E.164, and must be one this org holds.",
+			"SMS.id":           "ID is the carrier's handle for the message.",
+			"SMS.org":          "Org is the tenant the message was sent for or received by.",
+			"SMS.status":       "Status is where the message is: \"queued\", \"sent\", \"delivered\" or \"failed\".\n\"sent\" means the carrier took it; \"delivered\" means the handset got it, and\nnot every carrier or destination reports that.",
+			"SMS.text":         "Text is the message body. Empty is legal when the message carried only media.",
+			"SMS.to":           "To is the receiving number in E.164.",
+			"messageList.data": "Data is this org's own messages, newest first — from our store rather than the\ncarrier's, so it is the set an audit or a bill has to agree with.",
 		},
 	})
 	zip.Describe("GET /v1/tel/numbers", zip.Doc{
 		Description: "Lists the phone numbers this org HOLDS — the ones it has bought and not\nreleased. Distinct from the availability search one path down\n(`/numbers/available`), which asks the carrier what could be bought: this\nanswers only from our own store, so it is what an org owns rather than what\nit could own.",
 		Fields: map[string]string{
-			"Number.capable": "voice | sms | mms | fax",
-			"Number.monthly": "minor units, as the carrier quoted it",
+			"Number.capable":  "Capable is what the number can carry: any of \"voice\", \"sms\", \"mms\", \"fax\". A\nnumber missing \"sms\" cannot send one no matter what this platform does.",
+			"Number.country":  "Country is the ISO 3166-1 alpha-2 code the number is issued under. Numbering is\nnational, so this is what makes a search answerable at all.",
+			"Number.currency": "Currency is the ISO 4217 code Monthly is denominated in. Without it the number\nbeside it means nothing, so the two are always read together.",
+			"Number.e164":     "E164 is the number in E.164: a leading + and digits only, no spaces or dashes.\nThat is what a carrier accepts and what a search result must be bought by.",
+			"Number.id":       "ID is the carrier's handle for the number, and the id every route here\naddresses it by. It is not the number itself — see E164.",
+			"Number.monthly":  "Monthly is the recurring rental in the MINOR unit of Currency (cents for USD),\nexactly as the carrier quoted it. It is a price, not a charge: nothing is billed\nby this field.",
+			"Number.org":      "Org is the tenant holding the number. A search result carries none — nobody\nholds it yet — which is how an available number is told from a held one.",
+			"Number.type":     "Type is what kind of number it is: \"local\", \"national\", \"tollfree\" or \"mobile\".\nIt decides both price and what a carrier will let it originate.",
+			"numberList.data": "Data is the numbers, and which numbers depends on the route: a search answers\nwhat the carrier has available, a list answers what this org already holds.",
 		},
 	})
 	zip.Describe("GET /v1/tel/numbers/available", zip.Doc{
 		Description: "Asks the carrier what is available to buy. Nothing is recorded —\na search is not a holding, and treating it as one is how inventory leaks.",
 		Fields: map[string]string{
-			"Number.capable": "voice | sms | mms | fax",
-			"Number.monthly": "minor units, as the carrier quoted it",
+			"Number.capable":  "Capable is what the number can carry: any of \"voice\", \"sms\", \"mms\", \"fax\". A\nnumber missing \"sms\" cannot send one no matter what this platform does.",
+			"Number.country":  "Country is the ISO 3166-1 alpha-2 code the number is issued under. Numbering is\nnational, so this is what makes a search answerable at all.",
+			"Number.currency": "Currency is the ISO 4217 code Monthly is denominated in. Without it the number\nbeside it means nothing, so the two are always read together.",
+			"Number.e164":     "E164 is the number in E.164: a leading + and digits only, no spaces or dashes.\nThat is what a carrier accepts and what a search result must be bought by.",
+			"Number.id":       "ID is the carrier's handle for the number, and the id every route here\naddresses it by. It is not the number itself — see E164.",
+			"Number.monthly":  "Monthly is the recurring rental in the MINOR unit of Currency (cents for USD),\nexactly as the carrier quoted it. It is a price, not a charge: nothing is billed\nby this field.",
+			"Number.org":      "Org is the tenant holding the number. A search result carries none — nobody\nholds it yet — which is how an available number is told from a held one.",
+			"Number.type":     "Type is what kind of number it is: \"local\", \"national\", \"tollfree\" or \"mobile\".\nIt decides both price and what a carrier will let it originate.",
+			"numberList.data": "Data is the numbers, and which numbers depends on the route: a search answers\nwhat the carrier has available, a list answers what this org already holds.",
 		},
 	})
 	zip.Describe("GET /v1/tel/summary", zip.Doc{
 		Description: "Counts what this org holds on the telephony plane: its numbers, its calls and\nits messages. The one read a dashboard makes before it asks for any list, so\nit answers three totals and no rows.",
+		Fields: map[string]string{
+			"summary.calls":    "Calls is how many calls this org has placed or received, over its whole\nhistory — a running total, not a window.",
+			"summary.messages": "Messages is the same running total for messages.",
+			"summary.numbers":  "Numbers is how many numbers this org holds right now.",
+		},
 	})
 	zip.Describe("POST /v1/tel/calls", zip.Doc{
 		Description: "Dials. An `agent` names a Hanzo assistant to answer it; the call is\nrefused up front when no assistant plane is configured, because a call that\nconnects to silence has already cost the person who answered it.",
 		Fields: map[string]string{
-			"Call.status":      "queued | ringing | answered | completed | failed",
-			"callInput.record": "Record is a per-call flag rather than a product. Where a recording lands and\nhow long it is kept is the org's retention policy, not this call's.",
+			"Call.agent":        "Agent names the Hanzo assistant handling the call. Set means the call was\nanswered by that assistant rather than connected to a person.",
+			"Call.from":         "From is the calling number in E.164. It must be one this org holds: a carrier\nrefuses an origination from a number nobody proved they own.",
+			"Call.id":           "ID is the carrier's handle for the call — what a hangup or a lookup names.",
+			"Call.org":          "Org is the tenant the call was placed for or received by.",
+			"Call.status":       "Status is where the call is: \"queued\", \"ringing\", \"answered\", \"completed\" or\n\"failed\". Only the last two are terminal.",
+			"Call.to":           "To is the called number in E.164.",
+			"callInput.agent":   "Agent hands the answered call to a Hanzo assistant by name instead of\nconnecting it to a person. Empty places an ordinary call.",
+			"callInput.from":    "From is the number to call FROM, in E.164. It must be one this org holds.",
+			"callInput.record":  "Record is a per-call flag rather than a product. Where a recording lands and\nhow long it is kept is the org's retention policy, not this call's.",
+			"callInput.to":      "To is the number to call, in E.164.",
+			"callInput.webhook": "Webhook is a URL the carrier posts this call's events to as it progresses.\nEmpty means the call's outcome is only visible by reading it back.",
 		},
 	})
 	zip.Describe("POST /v1/tel/messages", zip.Doc{
 		Description: "Sends a message from one of this org's own numbers.\n\n`from` must be a number the org HOLDS, checked against the store rather than\ntaken on trust — a caller that could send from any number could impersonate\none, and the carrier would deliver it. `to` is required, and the body needs\ntext or media, because a message with neither is delivered as nothing and\nbilled as something.",
 		Fields: map[string]string{
-			"SMS.status": "queued | sent | delivered | failed",
+			"SMS.from":           "From is the sending number in E.164, and must be one this org holds.",
+			"SMS.id":             "ID is the carrier's handle for the message.",
+			"SMS.org":            "Org is the tenant the message was sent for or received by.",
+			"SMS.status":         "Status is where the message is: \"queued\", \"sent\", \"delivered\" or \"failed\".\n\"sent\" means the carrier took it; \"delivered\" means the handset got it, and\nnot every carrier or destination reports that.",
+			"SMS.text":           "Text is the message body. Empty is legal when the message carried only media.",
+			"SMS.to":             "To is the receiving number in E.164.",
+			"messageInput.from":  "From is the number to send FROM, in E.164. It must be one this org holds and it\nmust be sms-capable.",
+			"messageInput.media": "Media are URLs to attach. A message with any is an MMS to the carrier — the\ndistinction is the carrier's to make, not something the caller declares.",
+			"messageInput.text":  "Text is the message body. It may be empty when Media carries the message.",
+			"messageInput.to":    "To is the number to send to, in E.164.",
 		},
 	})
 	zip.Describe("POST /v1/tel/numbers", zip.Doc{
 		Description: "Provisions with the carrier FIRST and records second. The other order\nrecords a holding that may not exist, and a number the platform believes it owns\nbut cannot use is worse than one it failed to buy.",
 		Fields: map[string]string{
-			"Number.capable": "voice | sms | mms | fax",
-			"Number.monthly": "minor units, as the carrier quoted it",
+			"Number.capable":  "Capable is what the number can carry: any of \"voice\", \"sms\", \"mms\", \"fax\". A\nnumber missing \"sms\" cannot send one no matter what this platform does.",
+			"Number.country":  "Country is the ISO 3166-1 alpha-2 code the number is issued under. Numbering is\nnational, so this is what makes a search answerable at all.",
+			"Number.currency": "Currency is the ISO 4217 code Monthly is denominated in. Without it the number\nbeside it means nothing, so the two are always read together.",
+			"Number.e164":     "E164 is the number in E.164: a leading + and digits only, no spaces or dashes.\nThat is what a carrier accepts and what a search result must be bought by.",
+			"Number.id":       "ID is the carrier's handle for the number, and the id every route here\naddresses it by. It is not the number itself — see E164.",
+			"Number.monthly":  "Monthly is the recurring rental in the MINOR unit of Currency (cents for USD),\nexactly as the carrier quoted it. It is a price, not a charge: nothing is billed\nby this field.",
+			"Number.org":      "Org is the tenant holding the number. A search result carries none — nobody\nholds it yet — which is how an available number is told from a held one.",
+			"Number.type":     "Type is what kind of number it is: \"local\", \"national\", \"tollfree\" or \"mobile\".\nIt decides both price and what a carrier will let it originate.",
+			"buyInput.e164":   "E164 is the number to buy, in E.164 (a leading + and digits), exactly as the\nsearch returned it. This is the number itself, not the id from a search result.",
 		},
 	})
 }
