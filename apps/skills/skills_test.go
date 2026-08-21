@@ -55,7 +55,6 @@ type catalog struct {
 	Brand   string `json:"brand"`
 	BaseURL string `json:"base_url"`
 	Issuer  string `json:"issuer"`
-	Scope   string `json:"scope"`
 	Skills  []struct {
 		Name   string `json:"name"`
 		Path   string `json:"path"`
@@ -63,9 +62,9 @@ type catalog struct {
 	} `json:"skills"`
 }
 
-// TestServeMasterIndex proves the master catalogue is served with the right
+// TestServeIndex proves the catalogue is served with the right
 // content-type, schema, and (by Host) brand.
-func TestServeMasterIndex(t *testing.T) {
+func TestServeIndex(t *testing.T) {
 	app := newApp(t, "hanzo")
 	status, body, hdr := get(t, app, "/.well-known/agent-skills/index.json", "api.hanzo.ai")
 	if status != 200 {
@@ -78,7 +77,7 @@ func TestServeMasterIndex(t *testing.T) {
 	if err := json.Unmarshal(body, &doc); err != nil {
 		t.Fatalf("index json: %v", err)
 	}
-	if doc.Schema != "hanzo.agent-skills/v1" || doc.Scope != "master" || doc.Brand != "hanzo" {
+	if doc.Schema != "hanzo.agent-skills/v1" || doc.Brand != "hanzo" {
 		t.Fatalf("index shape: %+v", doc)
 	}
 	if doc.BaseURL != "https://api.hanzo.ai" {
