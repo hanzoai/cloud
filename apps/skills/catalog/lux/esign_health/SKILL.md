@@ -1,7 +1,7 @@
 ---
 name: esign_health
 version: "8.0.0"
-description: "Read esign health: Whether the e-signature surface is mounted."
+description: "Read esign health: Reports whether the e-signature surface is mounted.."
 ---
 
 # Lux · ESIGN · health
@@ -14,11 +14,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/esign/health` — Whether the e-signature surface is mounted
+- `GET https://api.lux.network/v1/esign/health` — Reports whether the e-signature surface is mounted.
 
 ## Response
 
-- `/v1/esign/health` → JSON object.
+- `/v1/esign/health` → `esignHealth` object with fields: `service`, `status`.
 
 ## Example
 

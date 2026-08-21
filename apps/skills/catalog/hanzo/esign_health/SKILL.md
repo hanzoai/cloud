@@ -1,7 +1,7 @@
 ---
 name: esign_health
 version: "8.0.0"
-description: "Read esign health: Whether the e-signature surface is mounted."
+description: "Read esign health: Reports whether the e-signature surface is mounted.."
 ---
 
 # Hanzo · ESIGN · health
@@ -14,11 +14,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/esign/health` — Whether the e-signature surface is mounted
+- `GET https://api.hanzo.ai/v1/esign/health` — Reports whether the e-signature surface is mounted.
 
 ## Response
 
-- `/v1/esign/health` → JSON object.
+- `/v1/esign/health` → `esignHealth` object with fields: `service`, `status`.
 
 ## Example
 

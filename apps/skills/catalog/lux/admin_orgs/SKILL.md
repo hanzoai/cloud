@@ -16,6 +16,13 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 - `GET https://api.lux.network/v1/admin/orgs` — Lists the tenant directory one row per org, sorted by slug: member count and the org's month-to-date spend and credit balance, read live from IAM and commerce.
 
+## Parameters
+
+| Name | In | Required | Type | Description |
+|---|---|---|---|---|
+| `p` | query | no | string | Page is the 1-based page number. Defaults to "1". |
+| `pageSize` | query | no | string | PageSize is rows per page. Defaults to "200", the shared admin page size. It bounds the fan-out: the page decides how many per-org reads happen, so the directory costs the same at eighty tenants and at eight thousand. |
+
 ## Response
 
 - `/v1/admin/orgs` → `orgsOut` object with fields: `data`, `msg`, `status`, `total`.

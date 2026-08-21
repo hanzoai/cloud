@@ -1,7 +1,7 @@
 ---
 name: social_providers
 version: "8.0.0"
-description: "Read social providers: Which networks this deployment can actually publish to."
+description: "Read social providers: Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing.."
 ---
 
 # Lux · SOCIAL · providers
@@ -14,11 +14,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/social/providers` — Which networks this deployment can actually publish to
+- `GET https://api.lux.network/v1/social/providers` — Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing.
 
 ## Response
 
-- `/v1/social/providers` → JSON object.
+- `/v1/social/providers` → `socialProviders` object with fields: `data`.
 
 ## Example
 

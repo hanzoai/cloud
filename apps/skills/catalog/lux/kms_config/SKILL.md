@@ -1,7 +1,7 @@
 ---
 name: kms_config
 version: "8.0.0"
-description: "Read kms config: Runtime configuration for the KMS console."
+description: "Read kms config: Returns the runtime configuration for the KMS console.."
 ---
 
 # Lux · KMS · config
@@ -14,11 +14,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/kms/config` — Runtime configuration for the KMS console
+- `GET https://api.lux.network/v1/kms/config` — Returns the runtime configuration for the KMS console.
 
 ## Response
 
-- `/v1/kms/config` → JSON object.
+- `/v1/kms/config` → `kmsConfig` object with fields: `apiBase`, `brand`, `issuer`, `loginPath`.
 
 ## Example
 

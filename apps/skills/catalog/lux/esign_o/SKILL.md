@@ -1,7 +1,7 @@
 ---
 name: esign_o
 version: "8.0.0"
-description: "Read esign o: Open a document you were asked to sign, using your signing link."
+description: "Read esign o: Opens a document you were asked to sign, using your signing link.."
 ---
 
 # Lux · ESIGN · o
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/esign/o/{org}/sign/{token}` — Open a document you were asked to sign, using your signing link
+- `GET https://api.lux.network/v1/esign/o/{org}/sign/{token}` — Opens a document you were asked to sign, using your signing link.
 
 ## Parameters
 
@@ -25,7 +25,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/esign/o/{org}/sign/{token}` → JSON object.
+- `/v1/esign/o/{org}/sign/{token}` → `esignSession` object with fields: `document`, `fields`, `pdfBase64`, `recipient`.
 
 ## Example
 

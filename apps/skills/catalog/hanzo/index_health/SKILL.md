@@ -1,7 +1,7 @@
 ---
 name: index_health
 version: "8.0.0"
-description: "Read index health: Report whether the search plane can serve."
+description: "Read index health: Reports whether the search plane can serve.."
 ---
 
 # Hanzo · INDEX · health
@@ -14,11 +14,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/index/health` — Report whether the search plane can serve
+- `GET https://api.hanzo.ai/v1/index/health` — Reports whether the search plane can serve.
 
 ## Response
 
-- `/v1/index/health` → JSON object.
+- `/v1/index/health` → `indexHealth` object with fields: `status`.
 
 ## Example
 

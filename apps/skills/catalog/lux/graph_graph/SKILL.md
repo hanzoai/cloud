@@ -20,11 +20,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `as_of` | query | no | string |  |
-| `entity` | query | no | string |  |
-| `limit` | query | no | integer |  |
-| `relation` | query | no | string |  |
-| `value` | query | no | string |  |
+| `as_of` | query | no | string | AsOf bounds the read to what was knowable at an instant, RFC 3339. Absent reads everything this plane holds. |
+| `entity` | query | no | string | Entity narrows to what was asserted ABOUT one entity. Absent matches every entity. |
+| `limit` | query | no | integer | Limit caps how many assertions come back. Absent, zero, or anything above the walk ceiling is the ceiling. |
+| `relation` | query | no | string | Relation narrows to one relation. Absent matches every relation. |
+| `value` | query | no | string | Value narrows to assertions pointing AT one value, which is how the edges into an entity are read. |
 
 ## Response
 
