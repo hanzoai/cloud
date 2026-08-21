@@ -91,7 +91,7 @@ else
   : > "$work/images.raw"
   page="https://ghcr.io/v2/${IMAGE_PATH}/tags/list?n=1000"
   while [ -n "$page" ]; do
-    if ! curl -fsSL --max-time 60 -D "$work/hdr" -H "Authorization: Bearer $TOKEN" "$page" > "$work/body"; then
+    if ! curl -fsSL --max-time 60 --retry 3 --retry-delay 3 -D "$work/hdr" -H "Authorization: Bearer $TOKEN" "$page" > "$work/body"; then
       echo "orphans: cannot list tags for ${IMAGE_PATH} — refusing to report a clean run against a registry that did not answer" >&2
       exit 2
     fi
@@ -115,10 +115,21 @@ if [ -n "${ORPHANS_TAGS:-}" ]; then
 else
   url="$ARBITER"
   [ -n "${FORGE_TOKEN:-}" ] && url="https://x-access-token:${FORGE_TOKEN}@${ARBITER#https://}"
-  if ! git -c http.followRedirects=false ls-remote --tags "$url" > "$work/ls" 2>/dev/null; then
-    echo "orphans: ${ARBITER} did not answer — refusing to call every published image an orphan on a failed read" >&2
-    exit 2
-  fi
+  # ASKED PROPERLY BEFORE IT REFUSES. The refusal is right — a read that failed
+  # must never be reported as "nothing is tagged" — but one attempt fires it on a
+  # single dropped packet, and it lands at the END of a release whose image, pin
+  # and production rollout all succeeded, marking a shipped version incomplete.
+  # So the read is retried before it is believed. Exhausting the tries still
+  # refuses, which is the direction this has to fail in.
+  arb=1
+  until git -c http.followRedirects=false ls-remote --tags "$url" > "$work/ls" 2>/dev/null; do
+    if [ "$arb" -ge 3 ]; then
+      echo "orphans: ${ARBITER} did not answer in ${arb} tries — refusing to call every published image an orphan on a failed read" >&2
+      exit 2
+    fi
+    sleep $(( arb * 3 ))
+    arb=$(( arb + 1 ))
+  done
   sed 's|.*refs/tags/||; s|\^{}$||' < "$work/ls" | grep -E "$SEMVER" | sort -u > "$work/tags" || true
 fi
 
