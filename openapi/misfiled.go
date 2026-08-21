@@ -89,6 +89,10 @@ func misfiled(path, app string) (string, bool) {
 		return r, false
 	case app == "ai" && Wire[strings.TrimPrefix(r, "/v1/")]:
 		return r, false
+	case app == "openapi" && (r == "/v1/openapi.json" || r == "/v1/mcp"):
+		// The document and the agent door (HIP-0139 §3.2): the two spellings
+		// every SDK generator and MCP client hard-codes, served by the host.
+		return r, false
 	}
 	return r, true
 }
