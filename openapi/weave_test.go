@@ -421,7 +421,10 @@ func readPublic(t *testing.T) *openapi.Document {
 func TestThePublicContractIsTheCustomerSurface(t *testing.T) {
 	d := readPublic(t)
 	for path, item := range d.Paths {
-		if !strings.HasPrefix(path, "/v1/") {
+		// The ROOT is inside the namespace, not outside it: /v1 is the index a
+		// client that knows nothing else starts from, and a contract that dropped it
+		// would generate clients unable to reach the index of their own API.
+		if path != openapi.RootPath && !strings.HasPrefix(path, "/v1/") {
 			t.Errorf("%s is outside /v1 and published in the public contract", path)
 		}
 		if strings.Contains(path, "{wildcard") {

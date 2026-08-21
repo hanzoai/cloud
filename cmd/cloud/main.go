@@ -288,6 +288,13 @@ func run(addr, zapAddr string) error {
 	// reaching through the root package for one function pulls eight of them in.
 	app.Use(zip.H(clientip.StampClientIP))
 
+	// THE API'S OWN INDEX, and the links every /v1 answer carries — here, for the
+	// same one reason clientip is: middleware reaches only what is composed after
+	// it, and both halves are about requests the subsystems below would otherwise
+	// answer. It costs the boot nothing; the index is woven on the first request
+	// that needs one (openapi/index.go).
+	index(app, composed)
+
 	for _, a := range manifest.Apps {
 		if err := mount(app, a, a.Eager, absent); err != nil {
 			return err
@@ -775,9 +782,36 @@ func unfit(absent map[string]string) map[string]string {
 // subsystem must not publish its routes. Production sets no allowlist, so there
 // the two are the same list — which is why the artifact comparison holds.
 func spec(app *zip.App, composed []string) {
-	openapi.MountFleet(app, func() ([]openapi.Part, error) {
+	openapi.MountFleet(app, subsets(composed))
+}
+
+// index is the fleet's HYPERMEDIA layer: GET /v1 lists what this deployment
+// answers, GET /v1/<capability> lists one capability's operations, and every /v1
+// answer carries the RFC 8288 links back to both plus the document.
+//
+// The host's, for the reason [spec] is the host's: the answer is about the whole
+// fleet and no plugin can see past itself. It reads the SAME subsets the document
+// is woven from, so the two doors describe one API by construction.
+//
+// It is composed BEFORE the mount loops — see the call site — because the
+// addresses it answers are inside subtrees the mounts claim. That is also why it
+// is middleware rather than routes: ai's row is the "/v1" REMAINDER and zip mounts
+// a prefix as All(prefix) too, so a host route at /v1 is two definitions claiming
+// one address and the composition is refused outright.
+func index(app *zip.App, composed []string) {
+	openapi.MountIndex(app, subsets(composed))
+}
+
+// subsets is what this deployment publishes: each app's own document, read from
+// the bytes its binary projected when it was built.
+//
+// Stated once because two doors read it — the fleet document and the index — and
+// they are mounted at different points in run(), so the reading would otherwise be
+// written twice and be free to disagree about which apps this deployment runs.
+func subsets(composed []string) func() ([]openapi.Part, error) {
+	return func() ([]openapi.Part, error) {
 		return openapi.Subsets(composed, plugin.Spec, manifest.StageOf)
-	})
+	}
 }
 
 // stillAbsent is the boot failures minus whatever has since come up on its own —
