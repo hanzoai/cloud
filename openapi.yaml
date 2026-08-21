@@ -13354,7 +13354,7 @@ components:
         abTest:
           description: |-
             ABTest is the creative A/B analysis from the experiments primitive
-            (experiments.Analyze, pull-model), present only when the campaign runs
+            (experiment.Analyze, pull-model), present only when the campaign runs
             more than one creative and an experiment is wired. Opaque JSON — campaign
             stays decoupled from the experiments analysis type.
         available:
@@ -20351,8 +20351,6 @@ components:
           type: string
         owner:
           type: string
-        privateKey:
-          type: string
         provider:
           type: string
         scope:
@@ -20693,6 +20691,17 @@ components:
             no plaintext and still be found in one indexed read — a salted hash cannot be
             looked up by value, which is the reason the plaintext was here.
           type: string
+        act:
+          description: |-
+            Act is the durable, opt-in grant that lets this key act FOR a user in its
+            own org — the credential behind as(): presenting it authorizes minting a
+            short-lived, user-bound token for a member of the key's tenant. Default
+            false, so a server key mints nothing on anyone's behalf until the grant is
+            set deliberately — the capability is never inherited by every key. It is
+            confined at mint time to the key's OWN Owner, and a reserved-org or
+            SuperAdmin target is refused, so the grant reaches only ordinary members of
+            the one tenant that holds the key.
+          type: boolean
         application:
           type: string
         createdAt:
@@ -43907,12 +43916,6 @@ components:
           description: |-
             Image is the output image ref to push. Required on the image lane, and it
             must target a registry namespace the caller's org owns.
-          type: string
-        organizationId:
-          description: |-
-            OrgID attributes the build to an org. On the IAM path it defaults to the
-            caller's own validated org, and a foreign one is refused unless the caller
-            is a platform SuperAdmin.
           type: string
         os:
           description: OS is the target operating system for the artifact lane.
@@ -75827,8 +75830,15 @@ paths:
     post:
       description: |-
         Adds a signing certificate your applications can verify tokens against
-        — the call you make to bring your own key, or to stage the next one before a
-        rotation. A name already used in your organization is refused.
+        — the call you make to stage the next one before a rotation. A name already
+        used in your organization is refused.
+
+        It registers the certificate's IDENTITY: its name (which is the JWKS `kid`),
+        its algorithm, its expiry. Key material does not travel this way and cannot:
+        the private key is not part of the Cert's JSON, so it is neither served here
+        nor accepted here. It is supplied to the process by the deployment, under the
+        name registered here (internal/keyring). Staging a rotation is therefore two
+        halves — this call names the key, and the deployment provides it.
       operationId: post_iam_certs
       requestBody:
         content:
@@ -75844,8 +75854,7 @@ paths:
                 $ref: '#/components/schemas/iam.Cert'
           description: ok
       summary: Adds a signing certificate your applications can verify tokens against
-        — the call you make to bring your own key, or to stage the next one before
-        a rotation.
+        — the call you make to stage the next one before a rotation.
       tags:
       - iam
       x-app: iam
@@ -75907,6 +75916,26 @@ paths:
       description: |-
         Changes a signing certificate's settings. What it is called does not
         change, and neither does when it was added.
+
+        A PUT here is a METADATA edit — display name, expiry, provider. It overlays
+        only the fields the request actually SET onto the loaded row: a field the JSON
+        omits (or leaves at its zero value) keeps what the row holds, rather than
+        blanking it. That is load-bearing, not a nicety. A read serves the public
+        Certificate (Mask hides only PrivateKey and AccessSecret), so a client that
+        reads a cert, changes one field, and writes it back sends the masked halves
+        empty and every other field it did not touch at its zero value — and the old
+        full-struct overlay wrote all of those blanks back. Blanking CryptoAlgorithm
+        alone drops the cert from the JWKS (oidc.Publishes turns false), so every
+        token under its `kid` stops verifying; blanking Provider/Account/ExpireTime
+        breaks ACME renewal and expiry — all from a request that only meant to rename
+        it. Absent-or-zero means "unchanged", so the deployment (key) and a rotation
+        (cert) remain the only way key or published material changes; the metadata API
+        cannot clear it.
+
+        The overlay is generic — it copies every set field, so a field nobody has added
+        yet is carried without a line here — and leaves three things the request may
+        not move: the bound Model (id, createdAt, key, snapshot), the natural key
+        (owner/name address the row, they do not mutate it), and the creation stamp.
       operationId: post_iam_certs_update
       requestBody:
         content:
@@ -77026,11 +77055,11 @@ paths:
         It requires the proof initiate handed out — a passcode from the authenticator, or the
         code that was sent — and verifies it BEFORE writing anything.
 
-        It used to write on the strength of a `secret` field alone. A client that skipped
-        the verify step, scanned the QR into the wrong app, or was simply buggy switched on
-        a factor no code would ever satisfy, and the account was then locked out with no
+        Verifying BEFORE writing is what keeps a client that never completed the proof —
+        a skipped verify step, a QR scanned into the wrong app, a bug — from switching on
+        a factor no code can satisfy. That would lock the account out with no
         self-service way back: the gate holds the sign-in before minting, so the person
-        cannot obtain the bearer that disable requires.
+        could not obtain the bearer that disable requires.
 
         The recovery codes are minted here and returned ONCE, on the first factor the
         account adds. Answering with them is the way back in when no factor can be
@@ -77172,11 +77201,9 @@ paths:
         Answers "what am I approving?" for a pending device code.
 
         The approval page exists to tell a human WHICH application they are authorizing;
-        a page that names the wrong one defeats the control it implements. It used to
-        render the portal's own app name — a constant, `hanzo-console` for every code —
-        so a device code minted by `hanzo-cli` was approved under a screen naming a
-        different application entirely. The client is a property of the CODE, so it is
-        read from the code's row here and nowhere else.
+        a page that names any other one defeats the control it implements. The client is
+        a property of the CODE, not of the page or of whatever app the browser happens
+        to be signed in to, so it is read from the code's row here and nowhere else.
 
         Requires a signed-in session, and answers with the same ONE opaque refusal
         approveDevice uses. That is deliberate: the user_code is only 40 bits and is the
@@ -77234,12 +77261,10 @@ paths:
         Ends a sign-in and sends the browser somewhere sensible. Accepts
         GET or POST, so it works as a plain link.
 
-        It ACTUALLY signs you out, which is worth stating because the endpoint spent a
-        release not doing it: the whole body computed a redirect and answered
-        {"status":"ok"} unconditionally — no session ended, no token revoked. A logout
-        that reports success while leaving the session live is worse than no logout at
-        all, because the person on the shared machine believes it worked. Three things
-        happen here now, in this order:
+        It ACTUALLY signs you out — worth stating, because a logout that computes a
+        redirect and answers {"status":"ok"} while ending no session and revoking no
+        token is worse than none: the person on the shared machine believes it worked.
+        Three things happen here, in this order:
 
          1. The browser session dies — sid revoked server-side AND the cookie expired
             (sessions.Clear). Server-side revocation is the load-bearing half: a copy
@@ -77265,12 +77290,10 @@ paths:
         Ends a sign-in and sends the browser somewhere sensible. Accepts
         GET or POST, so it works as a plain link.
 
-        It ACTUALLY signs you out, which is worth stating because the endpoint spent a
-        release not doing it: the whole body computed a redirect and answered
-        {"status":"ok"} unconditionally — no session ended, no token revoked. A logout
-        that reports success while leaving the session live is worse than no logout at
-        all, because the person on the shared machine believes it worked. Three things
-        happen here now, in this order:
+        It ACTUALLY signs you out — worth stating, because a logout that computes a
+        redirect and answers {"status":"ok"} while ending no session and revoking no
+        token is worse than none: the person on the shared machine believes it worked.
+        Three things happen here, in this order:
 
          1. The browser session dies — sid revoked server-side AND the cookie expired
             (sessions.Clear). Server-side revocation is the load-bearing half: a copy
@@ -77305,12 +77328,9 @@ paths:
         nothing — so the endpoint cannot be used to discover which tokens are real.
 
         PUBLIC clients revoke too, and must: sign-out is the only control a long-lived
-        refresh token has. hanzo-cli is a public PKCE client holding a 30-day rotating
-        refresh token, so a confidential-only revocation endpoint made `hanzo auth
-        logout` a LOCAL DELETE — the credential it dropped stayed spendable at
-        hanzo.id for the rest of the month, with nothing able to kill it. Measured
-        2026-08-01: revoke answered 401 invalid_client and the refresh token went on
-        minting access tokens.
+        refresh token has. A native app or CLI is a public PKCE client and holds no
+        secret, so requiring one here would leave signing out as a local delete —
+        forgetting a credential that stays spendable for the rest of its lifetime.
 
         Widening authentication does not widen authority. The caller must still POSSESS
         the token — and possession already permits USE, of which revocation is the
@@ -77406,10 +77426,9 @@ paths:
         GET with 403 before the handler runs. That was true and sufficient for as long
         as HTTP was the only way in. It stopped being sufficient when the same typed op
         became reachable over the agent door, where a request arrives at the handler
-        with no middleware in front of it — and this handler, reading no principal and
-        treating an absent Owner selector as no filter, answered with the whole table.
-        Measured on production: 670 organizations, 898KB, to a caller holding no
-        credential at all.
+        with no middleware in front of it. A handler that reads no principal and treats
+        an absent Owner selector as no filter would answer such a caller with the whole
+        registry, so the scope has to be the handler's own, not the door's.
 
         So the fact moves to where every door reaches it. The Guard keeps its own
         refusal — two checks of one rule is not two rules, and the outer one still
@@ -79346,12 +79365,12 @@ paths:
         their user record — so this list can never show more people than the surface
         beside it already does.
 
-        There is no organization-wide list. It used to scope to the ORG, which handed
-        an org admin every member's credential rows in one answer, and a SuperAdmin
-        every tenant's; a plain member meanwhile could not read even their own,
-        because an unnamed target fails the Guard's tenant rule. One scope fixes both
-        halves: the answer is a person's, and the caller is the person unless they say
-        otherwise and may.
+        There is no organization-wide list, by design. Scoping to the ORG would hand an
+        org admin every member's credential rows in one answer and a SuperAdmin every
+        tenant's, while a plain member could not read even their own (an unnamed target
+        fails the Guard's tenant rule). One scope answers both halves cleanly: the
+        answer is a person's, and the caller is that person unless they say otherwise
+        and may.
       operationId: listWebauthnCredentials
       parameters:
       - in: query
@@ -101309,17 +101328,23 @@ paths:
         to object storage instead; it must carry no `image`, because a build produces
         binaries or an image, never both.
 
-        PRIVILEGED, with exactly two credentials and never a third: the shared
-        build-callback token compared in constant time — the machine path, which a user
-        never holds — or a validated IAM principal who is an ADMIN of their org, which is
-        the `hanzo build` user path and means one IAM login authorizes a build with no
-        separate build token. A plain member is refused.
+        PRIVILEGED, and A BUILD BELONGS TO THE ORGANIZATION ITS CREDENTIAL NAMES. Two
+        credentials, never a third:
 
-        Both paths are bounded the same way: the output must push to a registry the
-        fabric owns, and on the IAM path the image's registry namespace must MATCH the
-        caller's own validated org — so an org admin can only publish into their own
-        brand and can never overwrite another's through the shared push credential. The
-        same confinement applies to the artifact lane's repo owner.
+          - one that NAMES an organization — a person who administers it (the `hanzo
+            build` path, so one IAM login authorizes a build with no separate build
+            token), or that organization's own machine identity (the pipeline path). The
+            build is attributed to that org and confined to what it owns.
+          - the shared build-callback token, compared in constant time. It names NO
+            organization, which is both why the fabric's own release can publish across
+            brands with it and why anything that CAN name one is read first.
+
+        Both are bounded by the owned-registry allowlist. The org path is bounded again,
+        by the org: the image's registry namespace must be one that organization owns, so
+        it publishes into its own brand and can never overwrite another's through the
+        shared push credential. The same confinement applies to the artifact lane's repo
+        owner. There is no request field naming an organization — the attribution is read
+        off the credential, so there is nothing for a caller to write it with.
 
         The output image is parsed and validated as a single well-formed OCI ref before
         any authorization decision reads it, so a crafted ref cannot smuggle a
