@@ -12,7 +12,7 @@ package risk
 // alerting on the campaign's own traffic — cannot be asked at all.
 //
 // So each decision is ALSO stated on the plane the organisation already reads:
-// event.fact, filled by POST /v1/event, read by /v1/insights, grouped by every
+// event.fact, filled by POST /v1/event, read by /v1/event/insights, grouped by every
 // product lens. One row per decide, in the same table as the pageview that led to
 // it, which is what makes "risk decisions beside product analytics" a JOIN rather
 // than a project.
@@ -53,7 +53,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	contract "github.com/hanzoai/cloud/plane"
-	peer "github.com/hanzoai/cloud/plane/analytics"
+	peer "github.com/hanzoai/cloud/plane/event"
 )
 
 // nameDecided is what the row is called, and it is a CONSTANT for the reason

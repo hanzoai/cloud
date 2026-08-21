@@ -110,7 +110,7 @@ var binaryReq = reflect.TypeFor[Binary]()
 // sets, because a document that says application/json over JavaScript is a
 // document that lies to whoever generates against it.
 //
-//	openapi.Register("/v1/event.js", "GET", nil, openapi.Bytes{Type: "application/javascript"})
+//	openapi.Register("/v1/event/tag.js", "GET", nil, openapi.Bytes{Type: "application/javascript"})
 //
 // Empty Type means opaque bytes (application/octet-stream). Like [Binary] it
 // names no component: an asset has no fields.
