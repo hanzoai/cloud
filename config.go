@@ -26,13 +26,19 @@ type Config struct {
 	Enable []string
 
 	// Replicas is the app-tier replica count the operator injects (CLOUD_REPLICAS,
-	// mirroring the Deployment's spec.replicas). 0 = unset/unmanaged. It exists to
-	// enforce ONE contract: embedded IAM (clients/iam) keeps its identity store as a
-	// per-pod embedded SQLite file, so an iam-enabled cloud MUST run at a single
-	// replica or each replica gets its OWN divergent identity store. Validate refuses
-	// to boot iam-enabled above 1; the helm chart pins replicas=1 whenever "iam" is in
-	// --enable. Pointing IAM at a shared external store lifts this.
+	// mirroring the Deployment's spec.replicas). 0 = unset/unmanaged. It is the
+	// left-hand side of ONE contract, whose right-hand side is IAMStore below.
 	Replicas int
+
+	// IAMStore names the backend holding embedded IAM's identity records, read
+	// from IAMStoreEnv. Empty or "sqlite" is the per-pod file at
+	// {DataDir}/iam/iam.db; any other name is a server every replica reaches
+	// alike (see apps/iam.openStore, which opens whichever this names).
+	//
+	// It is here, beside Replicas, because the two are one contract and this is
+	// where that contract is checked. IAMStoreShared is the predicate; Validate
+	// is the only caller that pairs it with a replica count.
+	IAMStore string
 
 	// Brand is the white-label brand identifier.
 	Brand string
@@ -338,6 +344,7 @@ func LoadConfig() *Config {
 		Role:                    role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
 
 		Replicas: getenvInt("CLOUD_REPLICAS", 0),
+		IAMStore: environ.Or(IAMStoreEnv, ""),
 		// Domain left empty here; derived from Brand below unless pinned — the
 		// literal "api.hanzo.ai" default used to live here, which meant a lux
 		// deployment that pinned nothing answered with Hanzo's host in every URL
@@ -578,6 +585,26 @@ func getenvInt(key string, dflt int) int {
 	return n
 }
 
+// IAMStoreEnv names the backend that holds embedded IAM's identity records —
+// users, organizations, applications, the signing certs, and the session rows.
+// apps/iam.openStore reads it to decide what to open; Config carries it so the
+// contract below can be checked at boot, before anything serves.
+const IAMStoreEnv = "IAM_STORE_BACKEND"
+
+// IAMStoreShared reports whether backend names an identity store every replica
+// reaches alike, rather than a file private to one pod.
+//
+// Empty and "sqlite" are the embedded file: real, encrypted, and LOCAL — two
+// pods holding it hold two different databases that never converge. Every other
+// name is a server (hanzoai/sql over ZAP, the datastore fork), reached over the
+// network, identical from anywhere. That is the whole distinction, and it is one
+// function so the chart's guard, the boot check, and the opener cannot each form
+// their own opinion of what "shared" means.
+func IAMStoreShared(backend string) bool {
+	b := strings.TrimSpace(backend)
+	return b != "" && b != "sqlite"
+}
+
 // Validate returns an error if the config is missing required values.
 func (c *Config) Validate() error {
 	if c.Brand == "" {
@@ -589,23 +616,36 @@ func (c *Config) Validate() error {
 	if c.DataDir == "" {
 		return fmt.Errorf("data-dir is required")
 	}
-	// Embedded IAM (apps/iam) keeps its identity store as a single SQLite file
-	// ({DataDir}/iam/iam.db) on a read-write-once volume, so a horizontally scaled app
-	// tier would give each replica its OWN divergent identity store — a user/session
-	// written on one replica is absent on the next. Refuse to boot an iam-enabled cloud
-	// above a single replica. CLOUD_REPLICAS=0 (unset) is the unmanaged/dev case — the
-	// helm chart pins replicas=1 whenever Enabled("iam") holds, which includes the
-	// empty (mount-all) enable list, so a managed deployment always sets it. Point IAM
-	// at a shared external store to lift this.
-	if c.Enabled("iam") && c.Replicas > 1 {
-		return fmt.Errorf("iam is enabled but CLOUD_REPLICAS=%d > 1: embedded IAM uses a per-pod SQLite store and requires replicas=1 (pin the Deployment to 1 replica or point IAM at a shared store)", c.Replicas)
+	// WHAT EMBEDDED IAM ACTUALLY NEEDS ABOVE ONE REPLICA: a shared identity store.
+	// Not one replica.
+	//
+	// The rule here read "iam enabled ⇒ replicas must be 1", justified by a memory
+	// session store. There is no memory session store. Sessions in hanzoai/iam are a
+	// signed stateless cookie whose MAC key is derived from the platform signing cert
+	// — chosen deterministically from the REFERENCED cert set precisely so it is the
+	// same on every replica — plus a revocation row that lives in the same orm.DB as
+	// every other identity record. So sessions are already replica-correct, and what
+	// is not shared is the DATABASE: {DataDir}/iam/iam.db is a file on one pod's
+	// volume, and two pods holding it hold two identity stores that never converge.
+	//
+	// So the check is the real condition. Name a shared backend and any replica
+	// count is sound; leave it at the per-pod file and more than one replica is two
+	// divergent identity stores, which is refused here rather than discovered when a
+	// user created on one pod cannot log in on the next.
+	//
+	// CLOUD_REPLICAS=0 (unset) is the unmanaged/dev case and never refuses.
+	if c.Enabled("iam") && c.Replicas > 1 && !IAMStoreShared(c.IAMStore) {
+		return fmt.Errorf("iam is enabled at CLOUD_REPLICAS=%d but %s=%q keeps its identity store in the per-pod file %s/iam/iam.db: %d replicas would hold %d divergent identity stores (set %s to a shared backend, or run one replica, or disable iam and point CLOUD_IAM_ADDR at one that is)",
+			c.Replicas, IAMStoreEnv, c.IAMStore, c.DataDir, c.Replicas, c.Replicas, IAMStoreEnv)
 	}
 	// Horizontal shard routing (CLOUD_PEERS names >1 pod). Two fail-closed guards:
 	//   1. THIS pod must be one of the peers, else it owns no shard and would forward
 	//      every request away (a silent black-hole) — refuse to boot.
-	//   2. Embedded IAM cannot be sharded: its per-pod SQLite identity store is local to
-	//      each pod, so a login/authorize step served on one pod is unreachable on the
-	//      owner pod a later request routes to. Disable iam (use external iam.hanzo.svc).
+	//   2. Embedded IAM on the per-pod FILE store cannot be sharded: that store is local
+	//      to each pod, so a login/authorize step served on one pod is unreachable on
+	//      the owner pod a later request routes to. A shared backend has no such
+	//      locality and shards fine — same condition as the replica check above, so it
+	//      is the same predicate and not a second opinion about IAM.
 	// Both are boot errors, never guesses — a wrong shard topology must fail loud.
 	if peers := parsePeers(c.ShardPeers); len(peers) >= 2 {
 		if c.ShardSelf == "" {
@@ -614,8 +654,8 @@ func (c *Config) Validate() error {
 		if !peersContain(peers, c.ShardSelf) {
 			return fmt.Errorf("shard self %q is not in CLOUD_PEERS %q: this pod is not a member of its own ring (it would forward every request away and own no shard)", c.ShardSelf, c.ShardPeers)
 		}
-		if c.Enabled("iam") {
-			return fmt.Errorf("iam is enabled with CLOUD_PEERS shard routing: embedded IAM uses a per-pod SQLite store and cannot be sharded; disable iam (use external iam.hanzo.svc) or run a single pod")
+		if c.Enabled("iam") && !IAMStoreShared(c.IAMStore) {
+			return fmt.Errorf("iam is enabled with CLOUD_PEERS shard routing but %s=%q keeps its identity store in the per-pod file: a login served on one pod is unreachable on the pod a later request routes to (set %s to a shared backend, or disable iam and point CLOUD_IAM_ADDR at one that is)", IAMStoreEnv, c.IAMStore, IAMStoreEnv)
 		}
 	}
 	return nil
