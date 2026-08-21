@@ -316,7 +316,7 @@ func TestUnsetKeyFailsClosed(t *testing.T) {
 	servePeer(t)
 	app := mount(t)
 	t.Setenv("CODE_EXEC_API_KEY", "")
-	for _, p := range []string{Path, Path+"/upload", Path+"/download/s/f", Path+"/files/s"} {
+	for _, p := range []string{Path, Path + "/upload", Path + "/download/s/f", Path + "/files/s"} {
 		resp := call(t, app, http.MethodGet, p, "", nil)
 		if resp.StatusCode != http.StatusServiceUnavailable {
 			t.Errorf("%s with no key = %d, want 503", p, resp.StatusCode)
@@ -332,7 +332,7 @@ func TestWrongKeyIsRejectedOnEveryPath(t *testing.T) {
 	p := servePeer(t)
 	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "ran", "", 0, nil }
 	app := mount(t)
-	for _, path := range []string{Path, Path+"/upload", Path+"/download/s/f", Path+"/files/s"} {
+	for _, path := range []string{Path, Path + "/upload", Path + "/download/s/f", Path + "/files/s"} {
 		rq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai"+path,
 			strings.NewReader(`{"lang":"py","code":"x=1"}`))
 		rq.Header.Set("X-API-Key", "wrong")

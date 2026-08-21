@@ -4,7 +4,7 @@
 // Meta, Google, TikTok, Reddit, LinkedIn or Microsoft with the org's own
 // connector token.
 //
-// It is also the PAID executor of the go-to-market plane: apps/campaign fans its
+// It is also the PAID executor of the go-to-market plane: apps/campaigns fans its
 // paid channel out to LaunchPaid/PaidSpend/PausePaid (provider.go), and this
 // surface runs the same campaigns standalone.
 //

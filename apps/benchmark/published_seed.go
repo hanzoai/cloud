@@ -287,4 +287,3 @@ var publishedImported = []publishedClaim{
 	{"tau2_bench", "OpenAI", "o3", 52, "third-party-leaderboard", "Sierra tau2-bench official leaderboard (taubench.com)"},
 	{"tau2_bench", "OpenAI", "o3-mini", 31.3, "third-party-leaderboard", "Artificial Analysis (tau2-Bench Telecom)"},
 }
-

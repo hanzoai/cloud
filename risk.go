@@ -21,7 +21,7 @@ package cloud
 // alone, so as composed today no binary holds both, and a scorer installed here
 // would arm the risk process while apps/gateway's RiskScorerInstalled — running in
 // the gateway binary — stayed false. Sibling apps DO co-reside wherever a root asks
-// them to: plugin/campaign, plugin/integrations and plugin/guide each link three or
+// them to: plugin/campaigns, plugin/integrations and plugin/guide each link three or
 // four apps/* and wire process-global seams across them (seams.go in each), which is
 // this seam's shape exactly, under no build tag. One import in one composition root
 // is the whole distance between the two arrangements, so read "one process per app"

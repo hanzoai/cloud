@@ -190,7 +190,7 @@ var Apps = []App{
 	// (hz.MountAt), and the round answers at a sub-path because POST /v1/agents is
 	// already the typed create. One name, one root (HIP-1210).
 	{Name: "agents", Prefixes: []string{"/v1/agents"}},
-	{Name: "link", Prefixes: []string{"/v1/link"}},
+	{Name: "links", Prefixes: []string{"/v1/links"}},
 	{Name: "wallets", Prefixes: []string{"/v1/wallets"}},
 	{Name: "x402", Prefixes: []string{"/v1/x402"}},
 	{Name: "deploy", Prefixes: []string{"/v1/deploy/account/can-i", "/v1/deploy/applications", "/v1/deploy/callback", "/v1/deploy/clusters", "/v1/deploy/gitops", "/v1/deploy/health", "/v1/deploy/login", "/v1/deploy/logout", "/v1/deploy/projects", "/v1/deploy/reconcile", "/v1/deploy/session/userinfo", "/v1/deploy/settings", "/v1/deploy/stream/applications", "/v1/deploy/version"}},
@@ -264,7 +264,7 @@ var Apps = []App{
 	// store. One package holding two tenancy models is the shape a privilege bug
 	// grows in, so they are two rows claiming two disjoint roots, and zip refuses
 	// two owners for one prefix at compose time.
-	{Name: "dataset", Prefixes: []string{"/v1/dataset"}},
+	{Name: "datasets", Prefixes: []string{"/v1/datasets"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	// It sat inside usage's prefix and answered under usage's name. The two are
 	// two capabilities — leaderboard keeps the opt-in store, usage keeps none —
@@ -274,7 +274,7 @@ var Apps = []App{
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},
 	{Name: "marketing", Prefixes: []string{"/v1/marketing"}},
 	{Name: "ads", Prefixes: []string{"/v1/ads"}},
-	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
+	{Name: "campaigns", Prefixes: []string{"/v1/campaigns"}},
 	{Name: "validators", Prefixes: []string{"/v1/validators"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
 	// The INGESTION door is load-bearing, not decorative: apps/event/event.go's
@@ -330,7 +330,7 @@ var Apps = []App{
 	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud
 	// prefix and never should), the public catalogue cache, the gateway's policy role,
 	// and THESE — ZT fabric edge-routers, which are the nodes of an overlay network and
-	// are now addressed as such at "/v1/network/routers". A prefix belongs to a product
+	// are now addressed as such at "/v1/networks/routers". A prefix belongs to a product
 	// a customer calls, so "edge" gets none: /v1/edge 404s at every depth, and that is
 	// the right answer rather than a missing product.
 	//
@@ -340,8 +340,8 @@ var Apps = []App{
 	// §2.2, because an org has one overlay — and §3.1 folds the second stem under
 	// it: a mesh row IS an edge service of this network, exactly as an edge-router
 	// is one of its nodes. ONE prefix now, and the /v1/<name> convention covers it,
-	// so plugin/network states no Prefixes at all.
-	{Name: "network", Prefixes: []string{"/v1/network"}},
+	// so plugin/networks states no Prefixes at all.
+	{Name: "networks", Prefixes: []string{"/v1/networks"}},
 	{Name: "share", Prefixes: []string{"/v1/share"}},
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}},
 	{Name: "explorer", Prefixes: []string{"/v1/explorer"}},

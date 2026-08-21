@@ -225,7 +225,7 @@ func TestVouchesIsTheBootCheckAndIsDerivedFromTheMint(t *testing.T) {
 }
 
 // The cross-brand refusal in [Of] is proved end to end, through the real request
-// boundary that mints the vouching brand, in apps/dataset —
+// boundary that mints the vouching brand, in apps/datasets —
 // TestATokenFromAnotherBrandIsNotThisBrandsTenant. Reaching it here would mean
 // writing the context values by hand, which is the one thing the unexported
 // context keys exist to prevent.
