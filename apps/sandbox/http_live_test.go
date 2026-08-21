@@ -70,14 +70,14 @@ func TestLiveHTTPSandboxEditsRealCode(t *testing.T) {
 
 	// The org gate is a ROUTE fact, not a handler courtesy: no principal, no
 	// sandbox. Checked first so a later 201 cannot be explained by an open door.
-	if code, b := req(t, app, http.MethodGet, "/v1/sandboxes", "", ""); code != http.StatusForbidden {
+	if code, b := req(t, app, http.MethodGet, "/v1/sandbox", "", ""); code != http.StatusForbidden {
 		t.Fatalf("unauthenticated list: want 403, got %d %s", code, b)
 	}
 
-	code, b := req(t, app, http.MethodPost, "/v1/sandboxes", org,
+	code, b := req(t, app, http.MethodPost, "/v1/sandbox", org,
 		`{"class":"exec","image":"node:22","ttlSec":600}`)
 	if code != http.StatusCreated {
-		t.Fatalf("POST /v1/sandboxes: want 201, got %d %s", code, b)
+		t.Fatalf("POST /v1/sandbox: want 201, got %d %s", code, b)
 	}
 	var m Sandbox
 	if err := json.Unmarshal(b, &m); err != nil {
@@ -88,11 +88,11 @@ func TestLiveHTTPSandboxEditsRealCode(t *testing.T) {
 	}
 	t.Logf("CREATED over HTTP: id=%s class=%s status=%s", m.ID, m.Class, m.Status)
 	defer func() {
-		c, _ := req(t, app, http.MethodDelete, "/v1/sandboxes/"+m.ID+"?purge=1", org, "")
-		t.Logf("DELETE /v1/sandboxes/%s -> %d", m.ID, c)
+		c, _ := req(t, app, http.MethodDelete, "/v1/sandbox/"+m.ID+"?purge=1", org, "")
+		t.Logf("DELETE /v1/sandbox/%s -> %d", m.ID, c)
 	}()
 
-	base := "/v1/sandboxes/" + m.ID
+	base := "/v1/sandbox/" + m.ID
 
 	// GET /:id — the member route answers the row it just minted.
 	if code, b = req(t, app, http.MethodGet, base, org, ""); code != http.StatusOK {
@@ -101,7 +101,7 @@ func TestLiveHTTPSandboxEditsRealCode(t *testing.T) {
 	t.Logf("GET MEMBER over HTTP: %s", firstLine(b))
 
 	// POST /:id/fs — raw body is the file. This is the agent writing code.
-	src := "export const answer = 42; // written over /v1/sandboxes/:id/fs\n"
+	src := "export const answer = 42; // written over /v1/sandbox/:id/fs\n"
 	if code, b = req(t, app, http.MethodPost, base+"/fs?path=answer.js", org, src); code != http.StatusOK {
 		t.Fatalf("POST %s/fs: want 200, got %d %s", base, code, b)
 	}
@@ -155,8 +155,8 @@ func TestLiveHTTPSandboxEditsRealCode(t *testing.T) {
 	t.Logf("CROSS-ORG REFUSED over HTTP: GET as other-org -> %d", code)
 
 	// The collection lists what it leased.
-	if code, b = req(t, app, http.MethodGet, "/v1/sandboxes", org, ""); code != http.StatusOK {
-		t.Fatalf("GET /v1/sandboxes: want 200, got %d %s", code, b)
+	if code, b = req(t, app, http.MethodGet, "/v1/sandbox", org, ""); code != http.StatusOK {
+		t.Fatalf("GET /v1/sandbox: want 200, got %d %s", code, b)
 	}
 	if !strings.Contains(string(b), m.ID) {
 		t.Fatalf("list does not contain the sandbox it just leased: %s", firstLine(b))

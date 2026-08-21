@@ -1,0 +1,193 @@
+// Package destinations is your events forwarded to the ad and analytics tools
+// you use.
+//
+// Server-side conversion forwarding: connect Google Analytics 4, Meta, X,
+// LinkedIn, TikTok, Reddit, Insights or Analytics, and every event the org captures
+// is translated into that platform's own conversion schema and sent from the
+// server, with PII hashed on the way out.
+//
+// It is a CONSUMER of the canonical /v1/event stream (apps/event), installed
+// as a sink at Mount — never a second collector and never a second ingest door.
+//
+// The plane is four decomplected concerns, one per file group:
+//
+//   - Destination interface + per-platform adapters (this file + ga4/meta/… .go):
+//     an adapter renders the normalized Conversion into its platform's wire shape
+//     and delivers it. Adapters self-register from init() — a new platform is a new
+//     file, never a change to the fan-out.
+//   - translator (translate.go): maps the canonical EVENTS vocabulary once onto the
+//     normalized StandardEvent taxonomy + lifts match keys — the ONE interlingua
+//     every adapter renders from.
+//   - per-org registry (store.go + KMS custody in destinations.go): the connected
+//     destinations + their non-secret ids (measurement/pixel), with the API secrets
+//     KMS-sealed per org.
+//   - fan-out consumer (fanout.go): the apps/event sink — for each of an
+//     org's enabled destinations, translate + Send, bounded and fail-soft.
+//
+// SECRET CUSTODY mirrors apps/integrations: a destination's API secret lives ONLY
+// in KMS (sealed, per org, at /orgs/{org}/destinations/{platform}); the store holds
+// only the non-secret ids. A destination may instead ride an existing integrations
+// connection's token (Meta CAPI reuses the meta_ads OAuth token) — Spec.Fallback.
+package destination
+
+import (
+	"context"
+	"maps"
+	"strings"
+	"time"
+)
+
+// Category groups a destination on the console card.
+const (
+	categoryAnalytics   = "Analytics"
+	categoryAdvertising = "Advertising"
+)
+
+// StandardEvent is Hanzo's normalized conversion taxonomy — the interlingua between
+// the canonical EVENTS vocabulary (@hanzo/event) and each platform's own
+// standard-event names. The translator maps canonical → StandardEvent ONCE
+// (translate.go); each adapter maps StandardEvent → its platform's name. The empty
+// value means "no standard mapping": the event is forwarded under its raw canonical
+// name as a custom event.
+type StandardEvent string
+
+const (
+	EventPageView      StandardEvent = "page_view"
+	EventViewContent   StandardEvent = "view_content"
+	EventSearch        StandardEvent = "search"
+	EventLead          StandardEvent = "lead"
+	EventSignUp        StandardEvent = "signup"
+	EventStartCheckout StandardEvent = "start_checkout"
+	EventAddToCart     StandardEvent = "add_to_cart"
+	EventPurchase      StandardEvent = "purchase"
+	EventContact       StandardEvent = "contact"
+	EventCustom        StandardEvent = "" // forwarded under the raw canonical name
+)
+
+// DestinationField is one NON-SECRET config input a destination needs (a measurement or pixel
+// id). It drives the connect contract and the console card. Key is the camelCase
+// key on both the connect body and the stored config.
+type DestinationField struct {
+	Key      string `json:"key"`               // the camelCase key on both the connect body and the stored config
+	Label    string `json:"label"`             // human label for the console card's input
+	Required bool   `json:"required"`          // when true, a connect that leaves it empty is refused 400
+	Example  string `json:"example,omitempty"` // a sample value of the right shape ("G-XXXXXXX"), when one helps
+}
+
+// Spec is a destination's declared shape: the non-secret Fields it needs, the KMS
+// secret names it custodies, and an optional integrations provider id to source the
+// primary secret from when none is sealed locally (Meta CAPI → meta_ads token). The
+// connect body key for a secret is the camelCase of its KMS name (api_secret →
+// apiSecret); both forms are accepted.
+type Spec struct {
+	Fields   []DestinationField `json:"fields"`
+	Secrets  []string           `json:"secrets"`
+	Fallback string             `json:"fallback,omitempty"`
+}
+
+// Config is an org's non-secret destination configuration — the stored ids the
+// connect body fills and the fan-out passes to Send. It never contains a secret.
+type Config map[string]string
+
+func (c Config) get(k string) string { return strings.TrimSpace(c[k]) }
+
+// UserData is the raw match-key set the translator lifts from an event. Adapters
+// SHA-256 the PII fields (email/phone/externalId) before send (advanced matching);
+// click ids, ip, and user agent ride per each platform's contract. NOTHING here is
+// stored — it is built per batch, used to render the outbound payload, and dropped.
+type UserData struct {
+	Email      string
+	Phone      string
+	ExternalID string
+	IP         string
+	UserAgent  string
+	FBP        string            // Meta browser-id cookie (_fbp), if present
+	Clicks     map[string]string // fbclid|gclid|ttclid|twclid|rdt_cid|li_fat_id|msclkid → value
+}
+
+// click reads a click-id by key ("" if absent).
+func (u UserData) click(key string) string {
+	if u.Clicks == nil {
+		return ""
+	}
+	return strings.TrimSpace(u.Clicks[key])
+}
+
+// Conversion is one canonical event translated to the normalized model every adapter
+// renders. Standard is the normalized type (EventCustom ⇒ forward Name raw); EventID
+// is the dedup id shared between a browser pixel and the server CAPI event.
+type Conversion struct {
+	Standard   StandardEvent
+	Name       string // raw canonical event name (order_completed, …)
+	EventID    string // dedup id (pixel <-> CAPI)
+	Time       time.Time
+	Value      float64
+	Currency   string
+	User       UserData
+	URL        string
+	Referrer   string // referring URL (a first-party analytics dimension)
+	Items      []Item // ecommerce line items (nil for non-commerce events)
+	Properties map[string]any
+}
+
+// Item is one normalized ecommerce line item — the interlingua between an event's raw
+// items/products array (or a first-class product id) and each platform's product
+// schema (GA4 items[], Meta contents[]/content_ids[]). The translator lifts it ONCE
+// (liftItems); every adapter renders it into its platform's shape. An empty field is
+// omitted by each renderer, so a sink only ever sees what the event actually carried.
+type Item struct {
+	ID       string  // SKU / product id → GA4 item_id, Meta content id
+	Name     string  // → GA4 item_name
+	Category string  // → GA4 item_category
+	Brand    string  // → GA4 item_brand
+	Variant  string  // → GA4 item_variant
+	Price    float64 // unit price → GA4 price, Meta item_price
+	Quantity float64 // → GA4 quantity, Meta quantity
+}
+
+// Result is a Send outcome: how many events the platform accepted. Some APIs do not
+// report a count; on a 2xx those set Sent to the batch length.
+type Result struct {
+	Sent    int    `json:"sent"`
+	Message string `json:"message,omitempty"`
+}
+
+// Destination is one external ad/analytics platform Hanzo forwards to. Adapters are
+// pure over (Config, secret, batch): given an org's resolved non-secret config, its
+// resolved credential, and the normalized conversions, Send renders the platform's
+// wire shape and delivers it. An adapter reads no global state and no other tenant's
+// data — the fan-out hands it exactly one org's config + credential + batch.
+type Destination interface {
+	ID() string       // stable slug: ga4|meta|tiktok|linkedin|x|reddit
+	Name() string     // display name
+	Category() string // Analytics | Advertising
+	Spec() Spec
+	// Send delivers batch for one org. secret is the resolved primary credential
+	// (its own KMS secret, else the Spec.Fallback integrations token).
+	Send(ctx context.Context, cfg Config, secret string, batch []Conversion) (Result, error)
+}
+
+// registry is populated by each adapter file's register() from its init(). Go
+// initializes the map before any init() runs, so every adapter is present by the
+// time Mount snapshots it.
+var registry = map[string]Destination{}
+
+// register adds an adapter. A nil/empty/duplicate id is a programming error and
+// panics at init — two adapters cannot own the same platform slug.
+func register(d Destination) {
+	if d == nil || d.ID() == "" {
+		panic("destinations: register nil/empty destination")
+	}
+	if _, dup := registry[d.ID()]; dup {
+		panic("destinations: duplicate destination id " + d.ID())
+	}
+	registry[d.ID()] = d
+}
+
+// snapshot copies the global registry into a per-mount map so a mounted service reads
+// a stable set without aliasing package state.
+func snapshot() map[string]Destination {
+	out := make(map[string]Destination, len(registry))
+	maps.Copy(out, registry)
+	return out
+}

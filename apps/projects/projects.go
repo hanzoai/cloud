@@ -950,7 +950,7 @@ type projectsUpdate struct {
 	// (e.g. {"ga4":"G-…","meta":"…"}). track.js injects these first-party and the
 	// server CAPI reads them, per site. Absent LEAVES them; a present object REPLACES
 	// the set (send {} to clear). The ids are public — they ship in the page — so this
-	// is not the SECRET path (a CAPI token is sealed via POST /v1/destinations).
+	// is not the SECRET path (a CAPI token is sealed via POST /v1/destination).
 	Tags map[string]string `json:"tags"`
 }
 

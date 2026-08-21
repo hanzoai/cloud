@@ -53,12 +53,12 @@ var unwired = []string{
 // to wiring, or proves it is cloud's own machinery that belongs below apps/ —
 // either way the pin comes off.
 var unextracted = []string{
-	"admission", "ads", "affiliate", "agents", "allowance", "answer", "ask",
+	"admission", "ad", "affiliate", "agents", "allowance", "answer", "ask",
 	"auditlog", "author", "auto", "benchmark", "blueprint", "books",
 	"campaign", "catalog", "catalogsync", "channels", "cloudflare", "cms",
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
 	"controlplane", "crawl", "crm", "cron", "dataset", "graph",
-	"destinations", "domain", "entitlement", "erp", "esign", "exec",
+	"destination", "domain", "entitlement", "erp", "esign", "exec",
 	"experiment", "explorer", "finance", "fleet", "flow", "goja", "guide",
 	"help", "index", "integrations", "k8s", "knowledge",
 	// kv is the key-value door. The STORE is hanzoai/pubsub's — one embedded
@@ -81,7 +81,7 @@ var unextracted = []string{
 	// fork, not cloud's own machinery.
 	"node",
 	"payout", "plan", "plugin", "pref", "principal",
-	"projects", "prompts", "provisioning", "reference",
+	"projects", "prompt", "provisioning", "reference",
 	"referral", "registry", "risk", "rollingcap", "s3", "s3admin",
 	"samples", "sandbox", "sbom", "search", "security",
 	// seo is the search-visibility surface: a typed proxy onto a measurement
@@ -106,8 +106,8 @@ var unextracted = []string{
 	// hanzoai/cloud, and no hanzoai/tel exists to mount — so the functionality
 	// lives here and nowhere else, which is what this bucket means.
 	"tel",
-	"templates", "tenant", "tools", "todo", "translate",
-	"treasury", "validator", "wallets", "webhooks", "websearch",
+	"template", "tenant", "tools", "todo", "translate",
+	"treasury", "validator", "wallet", "webhook", "websearch",
 	// web3 is the chain-access surface. It REPLACES the api/ half of
 	// hanzoai/bootnode rather than extracting from it — that half was Python
 	// serving four routes, and this is the richer router bootnode's own api-go/

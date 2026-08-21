@@ -148,7 +148,7 @@ var allowedRequestUses = map[string]string{
 		"which both write ops ask; the TENANT is resolved with principal.OrgFrom (tenant, right beside " +
 		"it), never through the request. Fails closed off the HTTP path: no request, no attested admin, " +
 		"no mutation.",
-	"apps/wallets/wallets.go": "actor / ambientProject — TWO facts a wallet write needs beyond the org, " +
+	"apps/wallet/wallets.go": "actor / ambientProject — TWO facts a wallet write needs beyond the org, " +
 		"neither of which principal.OrgFrom carries and neither of which may be an In field. actor is the " +
 		"validated user id (X-User-Id) the tamper-evident audit trail ATTRIBUTES a key creation, rotation, " +
 		"signature or Safe proposal to. ambientProject is the caller's server-minted project scope " +
@@ -579,7 +579,7 @@ var allowedRequestUses = map[string]string{
 		"and X-User-IsOrgAdmin; it was cloud.Guard around the handler until these routes became typed ops, " +
 		"and a typed op has no zip.Handler for a wrapper to compose with. All three fail closed off the HTTP " +
 		"path: no request, no tenant, no attested authority, no answer.",
-	"apps/destinations/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
+	"apps/destination/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
 		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
 		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +
 		"principal.OrgFrom (tenantOf, right beside it), never through the request. ONE function, so the " +

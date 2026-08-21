@@ -283,7 +283,7 @@ func TestAskingForTheNodesKernelOverHTTPDoesNotGetIt(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if code := ask(t, app, c.org, "u-"+c.org, c.body); code != c.want {
-				t.Fatalf("POST /v1/sandboxes org=%q body=%s = %d, want %d", c.org, c.body, code, c.want)
+				t.Fatalf("POST /v1/sandbox org=%q body=%s = %d, want %d", c.org, c.body, code, c.want)
 			}
 		})
 	}
@@ -313,7 +313,7 @@ func TestClaimingTheReservedOrgWithoutAPrincipalIsRefused(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if code := ask(t, app, c.org, c.user, `{"class":"exec"}`); code != c.want {
-				t.Fatalf("POST /v1/sandboxes org=%q user=%q = %d, want %d", c.org, c.user, code, c.want)
+				t.Fatalf("POST /v1/sandbox org=%q user=%q = %d, want %d", c.org, c.user, code, c.want)
 			}
 		})
 	}
@@ -518,7 +518,7 @@ func door(t *testing.T) *zip.App {
 
 func ask(t *testing.T, app *zip.App, org, user, body string) int {
 	t.Helper()
-	r := httptest.NewRequest(http.MethodPost, "/v1/sandboxes", strings.NewReader(body))
+	r := httptest.NewRequest(http.MethodPost, "/v1/sandbox", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	if org != "" {
 		r.Header.Set("X-Org-Id", org)
@@ -528,7 +528,7 @@ func ask(t *testing.T, app *zip.App, org, user, body string) int {
 	}
 	resp, err := app.Test(r, zip.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
-		t.Fatalf("POST /v1/sandboxes: %v", err)
+		t.Fatalf("POST /v1/sandbox: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode

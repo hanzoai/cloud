@@ -100,7 +100,7 @@ func (f Funnel) recommend() []string {
 	case f.Orders == 0:
 		out = append(out, fmt.Sprintf("%d signups, 0 orders. Add a pricing page and a checkout — turn signups into revenue.", f.Signups))
 	default:
-		out = append(out, fmt.Sprintf("%d orders / $%.2f revenue. You are converting — connect an ad destination (/v1/destinations) so Meta and Google optimize on real purchases, not clicks.", f.Orders, f.Revenue))
+		out = append(out, fmt.Sprintf("%d orders / $%.2f revenue. You are converting — connect an ad destination (/v1/destination) so Meta and Google optimize on real purchases, not clicks.", f.Orders, f.Revenue))
 	}
 	if f.Orders > 0 || f.Signups > 0 {
 		out = append(out, "Forward these conversions to your ad platforms via Destinations so their algorithms bid on the people who actually convert.")

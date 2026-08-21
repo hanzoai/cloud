@@ -43,7 +43,7 @@ import (
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/wallets"
+	"github.com/hanzoai/cloud/apps/wallet"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/money"
@@ -566,7 +566,7 @@ func (e *replayed) Error() string { return "payment nonce already used: " + e.id
 // Now the same client is served whenever it comes back, and [Reconcile] finishes
 // the settlement even if it never does.
 func settle(s *cloud.Service[state], ctx context.Context, req PaymentRequirements, pay PaymentPayload,
-	terms Terms, target wallets.PaymentTarget, payerOrg, resource string) (*Receipt, error) {
+	terms Terms, target wallet.PaymentTarget, payerOrg, resource string) (*Receipt, error) {
 
 	a := pay.Payload.Authorization
 	id := settlementID(a.From, a.Nonce)

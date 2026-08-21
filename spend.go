@@ -339,7 +339,7 @@ var meteredApps = []string{
 	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
 	"risk",         // per-screen fee inside each op.
 	"s3",           // object-storage data plane.
-	"sandboxes",    // the lease, gated and debited around the pod (currently priced at zero).
+	"sandbox",    // the lease, gated and debited around the pod (currently priced at zero).
 	"security",     // scan fee.
 	"share",        // one tunnel account provisioned on the fabric; reading it back is free.
 	"seo",          // measurement resold at the vendor's own per-call price.
@@ -349,7 +349,7 @@ var meteredApps = []string{
 	"translate",    // per-character fee.
 	"validator",   // one validator node materialized on the cluster, 200Gi, until deleted.
 	"visor",        // GPU clusters (compute).
-	"wallets",      // ring keygen, threshold signing and Safe proposals; KMS custody is free.
+	"wallet",      // ring keygen, threshold signing and Safe proposals; KMS custody is free.
 	"websearch",    // the bought engines (Brave, Mojeek API); the keyless ones are free.
 	"zen",          // zen SKU token costs (zen self-meters).
 }

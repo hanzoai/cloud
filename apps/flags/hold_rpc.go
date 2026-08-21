@@ -14,7 +14,7 @@ import (
 // Whether an org holds one flag, published on the internal plane.
 //
 // The caller is the refusal a capability that is not yet ga installs on its own
-// prefixes (HIP-0139 §8, cloud.Stage): every request that reaches /v1/ads asks
+// prefixes (HIP-0139 §8, cloud.Stage): every request that reaches /v1/ad asks
 // whether this org has been let into `ads`, and a 404 is the answer when it has
 // not. That caller runs in the binary serving the capability, and the definitions
 // live in this app's per-org store, so the question crosses a process boundary —

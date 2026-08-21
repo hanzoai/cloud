@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/projects"
-	"github.com/hanzoai/cloud/apps/templates"
+	"github.com/hanzoai/cloud/apps/template"
 )
 
 // TestOriginSeparatesTheNouns is the bug this field exists for: a curated
@@ -16,7 +16,7 @@ import (
 func TestOriginSeparatesTheNouns(t *testing.T) {
 	t.Setenv(platformOrgEnv, "hanzo")
 	t.Setenv(sourceOrgsEnv, "-")
-	gallery(t, []templates.StarterKit{{Slug: "folio", Title: "Folio"}})
+	gallery(t, []template.StarterKit{{Slug: "folio", Title: "Folio"}})
 	restore(t, []projects.LiveSite{
 		// the curated starter's own demo
 		{Org: "hanzo", Slug: "folio", Name: "Folio", URL: "https://folio.hanzo.app"},
@@ -49,9 +49,9 @@ func TestOriginSeparatesTheNouns(t *testing.T) {
 // the name pattern looks right. The three slugs are the three the fork flow
 // derives (clients/projects fork.go), and anything else is somebody's app.
 func TestStartersAreReadFromTheGallery(t *testing.T) {
-	gallery(t, []templates.StarterKit{
+	gallery(t, []template.StarterKit{
 		{Slug: "metrics", Title: "Metrics"}, // reserved name ⇒ deploys as metrics-template
-		{Slug: "cipher", Title: "Cipher", Variants: []templates.Variant{
+		{Slug: "cipher", Title: "Cipher", Variants: []template.Variant{
 			{ID: "html"}, {ID: "react"},
 		}},
 	})
@@ -72,7 +72,7 @@ func TestStartersAreReadFromTheGallery(t *testing.T) {
 // this, and it wins over a slug that happens to match a starter. Otherwise a
 // remix that kept its parent's name would be filed as our own curated starter.
 func TestLineageOutranksTheGallery(t *testing.T) {
-	gallery(t, []templates.StarterKit{{Slug: "folio", Title: "Folio"}})
+	gallery(t, []template.StarterKit{{Slug: "folio", Title: "Folio"}})
 	s := starters()
 	remix := projects.LiveSite{Org: "acme", Slug: "folio", ForkedFrom: "folio"}
 	if got := siteOrigin(remix, s); got != OriginCommunity {
@@ -129,10 +129,10 @@ func TestUnnamedLicenceStillCredits(t *testing.T) {
 }
 
 // gallery swaps the curated-catalog seam for one test.
-func gallery(t *testing.T, cat []templates.StarterKit) {
+func gallery(t *testing.T, cat []template.StarterKit) {
 	t.Helper()
 	prev := curated
-	curated = func() ([]templates.StarterKit, error) { return cat, nil }
+	curated = func() ([]template.StarterKit, error) { return cat, nil }
 	t.Cleanup(func() { curated = prev })
 }
 

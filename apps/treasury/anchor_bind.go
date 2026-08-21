@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/apps/wallets"
+	"github.com/hanzoai/cloud/apps/wallet"
 	"github.com/luxfi/geth/common"
 	"github.com/zap-proto/zip"
 )
@@ -47,7 +47,7 @@ func (o ops) adminSetAnchorSigner(ctx context.Context, _ *noInput) (*signerOut, 
 		return nil, zip.ErrForbidden("a validated principal is required")
 	}
 	chain := "eip155:" + strconv.FormatInt(o.s.State.anchor.chainID, 10)
-	addr, sign, ok := wallets.TreasuryAnchorSigner(ctx, org, chain)
+	addr, sign, ok := wallet.TreasuryAnchorSigner(ctx, org, chain)
 	if !ok {
 		return nil, zip.Errorf(http.StatusServiceUnavailable,
 			"treasury MPC custody not configured (deploy the ring + set CLOUD_WALLETS_MPC_ADDR)")

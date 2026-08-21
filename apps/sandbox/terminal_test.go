@@ -391,7 +391,7 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 	// siblings answer. A 404 here would mean the route is not registered at all,
 	// which is the bug this test exists for. What happens WITH a principal needs
 	// the org's store and so belongs to the live suite.
-	if code, b := req(t, app, http.MethodPost, "/v1/sandboxes/m_nope/terminal/ticket", "", ""); code != http.StatusForbidden {
+	if code, b := req(t, app, http.MethodPost, "/v1/sandbox/m_nope/terminal/ticket", "", ""); code != http.StatusForbidden {
 		t.Fatalf("unauthenticated ticket: want 403, got %d %s", code, b)
 	}
 
@@ -401,7 +401,7 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 	// because a principal is not what opens a terminal.
 	for _, org := range []string{"", "hanzo"} {
 		for _, q := range []string{"", "?ticket=", "?ticket=forged"} {
-			code, b := req(t, app, http.MethodGet, "/v1/sandboxes/m_nope/terminal/ws"+q, org, "")
+			code, b := req(t, app, http.MethodGet, "/v1/sandbox/m_nope/terminal/ws"+q, org, "")
 			if code != http.StatusUnauthorized {
 				t.Errorf("socket with org=%q %s: want 401, got %d %s", org, q, code, b)
 			}
@@ -411,14 +411,14 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 	// A session name that could reach a command line is refused at the door, ahead
 	// of the ticket — so a caller cannot learn anything about a ticket by varying
 	// the name, and a malformed name never gets as far as a shell.
-	if code, b := req(t, app, http.MethodGet, "/v1/sandboxes/m_nope/terminal/ws?arg=a;id&ticket=x", "", ""); code != http.StatusBadRequest {
+	if code, b := req(t, app, http.MethodGet, "/v1/sandbox/m_nope/terminal/ws?arg=a;id&ticket=x", "", ""); code != http.StatusBadRequest {
 		t.Errorf("socket with an illegal session name: want 400, got %d %s", code, b)
 	}
 
 	// The PAGE is served to anyone. It is inert markup — its only power is the
 	// ticket in its own URL, and it does not redeem it — so gating it would only
 	// mean a framing host could not load the thing that asks for the credential.
-	code, b := req(t, app, http.MethodGet, "/v1/sandboxes/m_nope/terminal", "", "")
+	code, b := req(t, app, http.MethodGet, "/v1/sandbox/m_nope/terminal", "", "")
 	if code != http.StatusOK {
 		t.Fatalf("terminal page: want 200, got %d %s", code, b)
 	}
@@ -427,8 +427,8 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 	// its own path, so both spellings have to reach it or one of them silently
 	// dials the wrong address.
 	for _, p := range []string{
-		"/v1/sandboxes/m_nope/terminal/",
-		"/v1/sandboxes/m_nope/terminal/?ticket=t&arg=pane-1",
+		"/v1/sandbox/m_nope/terminal/",
+		"/v1/sandbox/m_nope/terminal/?ticket=t&arg=pane-1",
 	} {
 		if c, _ := req(t, app, http.MethodGet, p, "", ""); c != http.StatusOK {
 			t.Errorf("GET %s: want 200, got %d", p, c)

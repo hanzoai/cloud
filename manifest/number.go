@@ -43,7 +43,13 @@ import "strings"
 // Whichever spelling Apps carries, the other one already answers, so the reason
 // to reach for a rename has been removed rather than resolved. HIP-0139 §2.2.
 
-// plural is the ONE rule. It is naive English, deliberately and completely:
+// Plural is the ONE pluralisation rule in this repository, exported because it
+// has a second caller: fleet/verbs.go turns an operation id into the phrase an
+// SDK method and a CLI verb read as, and a collection read at a singular address
+// needs the plural of that address's noun to say "list". Two copies of English
+// in one repo is two answers to one question, so there is one.
+//
+// It is naive English, deliberately and completely:
 //
 //	-y after a consonant   ->  -ies      (entity   -> entities)
 //	-s -x -z -ch -sh       ->  -es       (sandbox  -> sandboxes)
@@ -55,7 +61,7 @@ import "strings"
 // should have named something else — HIP-0139 §2.5 already bans the compound and
 // the coinage. If one ever arrives it goes in noNumber, and the alias listing
 // shows exactly what was lost.
-func plural(w string) string {
+func Plural(w string) string {
 	switch {
 	case strings.HasSuffix(w, "y") && len(w) > 1 && !isVowel(w[len(w)-2]):
 		return w[:len(w)-1] + "ies"
@@ -66,7 +72,7 @@ func plural(w string) string {
 	return w + "s"
 }
 
-// singular is plural READ BACKWARDS, and it is defined that way rather than
+// singular is Plural READ BACKWARDS, and it is defined that way rather than
 // written as a second table of suffixes: it proposes the stem and accepts it
 // only if pluralising it yields the word back. So the two are inverse by
 // CONSTRUCTION, and there is exactly one rule of English in this file.
@@ -87,7 +93,7 @@ func singular(w string) string {
 		return one
 	}
 	if strings.HasSuffix(w, "ies") && len(w) > 4 {
-		if stem := w[:len(w)-3] + "y"; plural(stem) == w {
+		if stem := w[:len(w)-3] + "y"; Plural(stem) == w {
 			return stem
 		}
 	}
@@ -95,7 +101,7 @@ func singular(w string) string {
 	// word carrying the longer one also ends in the shorter.
 	for _, cut := range []int{2, 1} {
 		if len(w) > cut {
-			if stem := w[:len(w)-cut]; plural(stem) == w {
+			if stem := w[:len(w)-cut]; Plural(stem) == w {
 				return stem
 			}
 		}
@@ -135,7 +141,7 @@ func alt(w string) string {
 	if one := singular(w); one != "" {
 		return one
 	}
-	return plural(w)
+	return Plural(w)
 }
 
 func isVowel(b byte) bool { return strings.IndexByte("aeiou", b) >= 0 }

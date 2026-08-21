@@ -81,7 +81,7 @@ func post[T any](t *testing.T, app *zip.App, path, org string, in any) (T, time.
 // so a deferred cleanup that insisted on 200 would fail every successful run.
 func release(app *zip.App, org, id string, purge bool) {
 	body, _ := json.Marshal(plane.EndIn{ID: id, Purge: purge})
-	r := httptest.NewRequest(http.MethodPost, "/v1/sandboxes/end", strings.NewReader(string(body)))
+	r := httptest.NewRequest(http.MethodPost, "/v1/sandbox/end", strings.NewReader(string(body)))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Org-Id", org)
 	r.Header.Set("X-User-Id", "u-"+org)
@@ -110,7 +110,7 @@ func TestLiveLeaseKeepsWhatItPromisesToKeep(t *testing.T) {
 	// ---- THE VOLUME-BEARING WAY --------------------------------------------
 	// A project gives the sandbox a volume, and the volume is what decides the
 	// runtime. This half must survive the lease.
-	first, dLease := post[plane.Leased](t, app, "/v1/sandboxes/lease", org,
+	first, dLease := post[plane.Leased](t, app, "/v1/sandbox/lease", org,
 		plane.LeaseIn{Class: "dev", Project: project, TTLSec: 900})
 	if first.ID == "" {
 		t.Fatal("lease returned no id")
@@ -134,28 +134,28 @@ func TestLiveLeaseKeepsWhatItPromisesToKeep(t *testing.T) {
 		t.Fatalf("project volume %s is %q, want Bound", volumeName(org, project), phase)
 	}
 
-	_, dWrite := post[plane.Wrote](t, app, "/v1/sandboxes/write", org,
+	_, dWrite := post[plane.Wrote](t, app, "/v1/sandbox/write", org,
 		plane.WriteIn{ID: first.ID, Path: "keep.txt", Data: []byte(want)})
 	// Written THROUGH the sandbox's own filesystem, so the check below is not
 	// reading back the same buffer it just sent.
-	ran, dRun := post[plane.Ran](t, app, "/v1/sandboxes/run", org,
+	ran, dRun := post[plane.Ran](t, app, "/v1/sandbox/run", org,
 		plane.RunIn{ID: first.ID, Command: "sync; cat keep.txt; df -T " + first.Workdir + " | tail -1"})
 	t.Logf("  write %v · run %v", dWrite.Round(time.Millisecond), dRun.Round(time.Millisecond))
 	t.Logf("  in-sandbox view: %s", oneLine(ran.Stdout))
 
 	// THE MOMENT THAT MATTERS. End the lease: the pod goes, the volume stays.
-	_, dEnd := post[struct{}](t, app, "/v1/sandboxes/end", org, plane.EndIn{ID: first.ID})
+	_, dEnd := post[struct{}](t, app, "/v1/sandbox/end", org, plane.EndIn{ID: first.ID})
 	t.Logf("END %s in %v", first.ID, dEnd.Round(time.Millisecond))
 
 	// Same project, new lease. If the write went into a tmpfs, this read fails.
-	second, dRelease := post[plane.Leased](t, app, "/v1/sandboxes/lease", org,
+	second, dRelease := post[plane.Leased](t, app, "/v1/sandbox/lease", org,
 		plane.LeaseIn{Class: "dev", Project: project, TTLSec: 900})
 	t.Logf("RE-LEASE %s -> %s in %v", project, second.ID, dRelease.Round(time.Millisecond))
 	defer release(app, org, second.ID, true)
 	if second.ID == first.ID {
 		t.Fatalf("re-lease returned the SAME sandbox %s — the lease never ended, so nothing was proven", second.ID)
 	}
-	blob, dRead := post[plane.Blob](t, app, "/v1/sandboxes/read", org,
+	blob, dRead := post[plane.Blob](t, app, "/v1/sandbox/read", org,
 		plane.PathIn{ID: second.ID, Path: "keep.txt"})
 	if string(blob.Data) != want {
 		t.Fatalf("DATA LOSS: wrote %q before the lease ended, read %q after it — "+
@@ -167,7 +167,7 @@ func TestLiveLeaseKeepsWhatItPromisesToKeep(t *testing.T) {
 	// ---- THE VOLUMELESS WAY ------------------------------------------------
 	// No project, so no volume, so nothing to lose — and therefore free to take
 	// the fast runtime.
-	ex, dExLease := post[plane.Leased](t, app, "/v1/sandboxes/lease", org,
+	ex, dExLease := post[plane.Leased](t, app, "/v1/sandbox/lease", org,
 		plane.LeaseIn{Class: "exec", TTLSec: 600})
 	t.Logf("LEASE exec (no project) -> %s in %v", ex.ID, dExLease.Round(time.Millisecond))
 	defer release(app, org, ex.ID, false)
@@ -188,7 +188,7 @@ func TestLiveLeaseKeepsWhatItPromisesToKeep(t *testing.T) {
 	// THE KERNEL IS THE CONTROL. A runtimeClassName is a label; a different
 	// kernel version from the node's is the VM actually existing. Compared
 	// against the node this pod is on, read from the node object.
-	kern, dKern := post[plane.Ran](t, app, "/v1/sandboxes/run", org,
+	kern, dKern := post[plane.Ran](t, app, "/v1/sandbox/run", org,
 		plane.RunIn{ID: ex.ID, Command: "uname -r"})
 	guest, host := oneLine(kern.Stdout), hostKernel(t, ctx, rt, ex.ID)
 	t.Logf("  guest kernel %s vs host %s (run %v)", guest, host, dKern.Round(time.Millisecond))
@@ -290,11 +290,11 @@ func TestLiveLeaseCost(t *testing.T) {
 
 	t.Logf("runtime=%q  rounds=%d", rt.preference(context.Background()), rounds)
 	for i := range rounds {
-		m, dLease := post[plane.Leased](t, app, "/v1/sandboxes/lease", org,
+		m, dLease := post[plane.Leased](t, app, "/v1/sandbox/lease", org,
 			plane.LeaseIn{Class: "exec", TTLSec: 600})
-		ran, dRun := post[plane.Ran](t, app, "/v1/sandboxes/run", org,
+		ran, dRun := post[plane.Ran](t, app, "/v1/sandbox/run", org,
 			plane.RunIn{ID: m.ID, Command: work, TimeoutSec: 300})
-		_, dEnd := post[struct{}](t, app, "/v1/sandboxes/end", org, plane.EndIn{ID: m.ID})
+		_, dEnd := post[struct{}](t, app, "/v1/sandbox/end", org, plane.EndIn{ID: m.ID})
 		t.Logf("  round %d on %s: lease %v · run %v · end %v · %s",
 			i, runtimeOfPodOrGone(ctx0(), rt, m.ID),
 			dLease.Round(time.Millisecond), dRun.Round(time.Millisecond),

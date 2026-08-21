@@ -6,7 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/sites"
-	"github.com/hanzoai/cloud/apps/templates"
+	"github.com/hanzoai/cloud/apps/template"
 	"github.com/zap-proto/zip"
 )
 
@@ -80,7 +80,7 @@ func (o ops) fork(ctx context.Context, in *projectsFork) (*projectsProject, erro
 }
 
 // seedFrom resolves the fork parent and returns the projectsCreate it seeds. Templates
-// FIRST, through the ONE catalog door (templates.Lookup), which resolves the
+// FIRST, through the ONE catalog door (template.Lookup), which resolves the
 // CALLER ORG's own private templates ahead of the public gallery: a curated
 // template slug is a stable public name and must keep meaning the same thing even
 // if some org later publishes a live project under it, and an org's private
@@ -91,7 +91,7 @@ func (o ops) fork(ctx context.Context, in *projectsFork) (*projectsProject, erro
 // so the child builds from the same source; the parent's deployed BYTES are never
 // copied — releases are per-tenant by design, so the fork publishes its own.
 func seedFrom(s *cloud.Service[state], c *zip.Ctx, org, slug, variant string) (projectsCreate, error) {
-	if t, found := templates.Lookup(c.Context(), org, slug); found {
+	if t, found := template.Lookup(c.Context(), org, slug); found {
 		// One template, one slug: the format/page/theme it ships in is chosen
 		// here, from the catalog's own options.
 		v, ok := t.Variant(variant)
