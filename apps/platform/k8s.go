@@ -596,7 +596,7 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 	if ing := ingressSpec(activeHosts(a.DomainsJSON)); ing != nil {
 		spec["ingress"] = ing
 	}
-	// Container-serverless autoscaling: the /v1/run path sets MaxScale>0 to declare an
+	// Container-serverless autoscaling: the /v1/platform/run path sets MaxScale>0 to declare an
 	// HPA over [MinScale,MaxScale]. The operator makes autoscaling.minReplicas the
 	// authoritative floor and passes None for Deployment.spec.replicas when enabled
 	// (crs/gateway.yaml), so the two never fight. MaxScale==0 (the app-deploy path)
@@ -879,7 +879,7 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 // Dockerfile is the explicit escape hatch.
 const packFrontendImage = "ghcr.io/hanzoai/pack:latest"
 
-// platformBuildOrg labels fabric-owned (non-tenant) builds — the /v1/runner
+// platformBuildOrg labels fabric-owned (non-tenant) builds — the /v1/platform/runner
 // direct builds share this pool for the concurrency cap.
 const platformBuildOrg = "platform"
 
@@ -1430,7 +1430,7 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 // own share. It was the constant platformBuildOrg for every caller, which put
 // fabric builds and every tenant's builds in ONE pool of 3 — so a single org
 // looping deploys locked every other org out of building, with no attribution in
-// the Job labels to see it by. /v1/runner still passes platformBuildOrg (its
+// the Job labels to see it by. /v1/platform/runner still passes platformBuildOrg (its
 // builds ARE the fabric's); a tenant deploy passes the tenant.
 func (k *k8sClient) launchDirectBuild(ctx context.Context, org, repoURL, ref, image, dockerfile, buildID string, args map[string]string) (string, error) {
 	if strings.TrimSpace(org) == "" {

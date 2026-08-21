@@ -7,7 +7,7 @@ import (
 )
 
 // Per-deploy metering — product:hosting. Every go-live of a site (a tar-artifact
-// deploy, a /v1/sites brief build, a /v1/sites/deploy file manifest, or a git/CI
+// deploy, a /v1/projects/sites brief build, a /v1/projects/sites/deploy file manifest, or a git/CI
 // completion) is one billable hosting event, gated and metered through the ONE
 // shared cloud.ResourceMeter (s.State.bill) exactly like the functions invoke path
 // (clients/functions) and the agent run path (clients/agents): gate → work →

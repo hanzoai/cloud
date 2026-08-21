@@ -23,7 +23,7 @@
 //	                                     where they have drifted from what they
 //	                                     declare. It deploys nothing.
 //
-// Static sites are NOT here. /v1/platform/sites already serves them (apps/projects,
+// Static sites are NOT here. /v1/projects/sites already serves them (apps/projects,
 // S3-backed), and bucket listing is already /v1/s3/buckets (apps/storage). Adding
 // either name under this prefix would be a second address for one fact.
 //
@@ -287,7 +287,7 @@ func declareApp(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // launchDeclareBuild runs the repository through the SAME privileged BuildKit
-// lane /v1/runner drives — one build path, one set of validations, one job spec.
+// lane /v1/platform/runner drives — one build path, one set of validations, one job spec.
 // The output image is the one derived above, never a caller's string.
 func launchDeclareBuild(s *cloud.Service[state], c *zip.Ctx, req declareReq, org, repository, name string) (*buildRef, error) {
 	id := genID("bld")

@@ -40,9 +40,16 @@ var baseReserved = func() map[string]bool {
 		// keep this in lock-step with init_data.json (TestReservedCoversSharedAppRedirects).
 		"stg",
 		// infrastructure / app hosts
+		//
+		// The three that are also STATIC SEGMENTS under /v1/projects — sites, edge,
+		// tags — have a second job here. A static segment beats its param sibling on
+		// this router, so a project slugged `edge` would be addressed by the edge
+		// door instead of by itself; reserving the label means no such row can be
+		// created and the ambiguity has no way to arise.
 		"api", "app", "apps", "admin", "administrator", "root", "console", "dashboard",
-		"portal", "sites", "site", "host", "hosting", "internal", "gateway", "proxy",
-		"router", "ingress", "cdn", "static", "assets", "mail", "smtp", "imap", "ftp",
+		"portal", "sites", "site", "edge", "tags", "host", "hosting", "internal",
+		"gateway", "proxy", "router", "ingress", "cdn", "static", "assets", "mail",
+		"smtp", "imap", "ftp",
 		"ns", "ns1", "ns2", "dns", "status", "health", "healthz", "metrics", "grafana",
 		// auth / payment / security-sensitive (anti-phishing, cookie-tossing surface)
 		"login", "logout", "signin", "signup", "auth", "oauth", "oauth2", "sso", "session",

@@ -98,10 +98,10 @@ func TestConvertedRoutesAnswerAsBefore(t *testing.T) {
 		{"deployment", "/v1/platform/projects/web/apps/api/deployments/" + dep.ID, http.StatusOK, "applicationId,createdAt,id,image,org,source,status,updatedAt,version"},
 		{"logs", "/v1/platform/projects/web/apps/api/deployments/" + dep.ID + "/logs", http.StatusOK, "deploymentId,logs,source"},
 		{"domains", "/v1/platform/projects/web/apps/api/domains", http.StatusOK, "host,kind,primary,status,url,verified"},
-		{"environments", "/v1/environments", http.StatusOK, "environments"},
-		{"pipelines", "/v1/pipelines", http.StatusOK, "pipelines"},
-		{"builds", "/v1/builds", http.StatusOK, "builds"},
-		{"releases", "/v1/releases", http.StatusOK, "releases"},
+		{"environments", "/v1/platform/environments", http.StatusOK, "environments"},
+		{"pipelines", "/v1/platform/pipelines", http.StatusOK, "pipelines"},
+		{"builds", "/v1/platform/builds", http.StatusOK, "builds"},
+		{"releases", "/v1/platform/releases", http.StatusOK, "releases"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			code, body := do(t, app, http.MethodGet, tc.path, "acme", nil)
@@ -147,11 +147,11 @@ func TestConvertedRoutesRefuseAsBefore(t *testing.T) {
 		{http.MethodPost, "/v1/platform/projects/web/apps/api/domains", map[string]any{"host": "a.example.com"}},
 		{http.MethodPost, "/v1/platform/projects/web/apps/api/domains/a.example.com/verify", nil},
 		{http.MethodDelete, "/v1/platform/projects/web/apps/api/domains/a.example.com", nil},
-		{http.MethodPost, "/v1/run", map[string]any{"name": "x", "image": "ghcr.io/hanzoai/nginx:1"}},
-		{http.MethodGet, "/v1/environments", nil},
-		{http.MethodGet, "/v1/pipelines", nil},
-		{http.MethodGet, "/v1/builds", nil},
-		{http.MethodGet, "/v1/releases", nil},
+		{http.MethodPost, "/v1/platform/run", map[string]any{"name": "x", "image": "ghcr.io/hanzoai/nginx:1"}},
+		{http.MethodGet, "/v1/platform/environments", nil},
+		{http.MethodGet, "/v1/platform/pipelines", nil},
+		{http.MethodGet, "/v1/platform/builds", nil},
+		{http.MethodGet, "/v1/platform/releases", nil},
 	} {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			// No X-User-Id: a restored client header with no validated principal, the

@@ -196,7 +196,7 @@
   window.hanzo = { track: track, identify: identify, page: page, error: error, flush: flush }
 
   // ── config-driven tag injection (the hosted twin of track.js) ─────────────
-  // Fetch the SITE's connected browser pixels (/v1/tags, dual-resolved per site by
+  // Fetch the SITE's connected browser pixels (/v1/projects/tags, dual-resolved per site by
   // this key or the host) and inject them first-party. Every event then also fires
   // the native pixel — translated through the SAME taxonomy the server-side CAPI uses
   // (destinations/translate.go), stamped with a shared event_id carried on the
@@ -238,7 +238,7 @@
   }
   var active = []
   try {
-    fetch(src.origin + '/v1/tags?key=' + encodeURIComponent(key))
+    fetch(src.origin + '/v1/projects/tags?key=' + encodeURIComponent(key))
       .then(function (r) { return r.ok ? r.json() : { tags: [] } })
       .then(function (cfg) {
         var tags = (cfg && cfg.tags) || []

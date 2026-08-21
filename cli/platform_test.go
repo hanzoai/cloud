@@ -131,7 +131,7 @@ func TestPlatformEnqueueBuild(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer build-tok" {
 			t.Errorf("build auth header = %q (must use build token)", got)
 		}
-		if r.URL.Path != "/v1/runner" {
+		if r.URL.Path != "/v1/platform/runner" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		body, _ := io.ReadAll(r.Body)

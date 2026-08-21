@@ -302,13 +302,13 @@ func TestBuildReconcilerVersionMonotonic(t *testing.T) {
 	}
 }
 
-// A direct build — POST /v1/runner, no deployment — must be able to reach a
+// A direct build — POST /v1/platform/runner, no deployment — must be able to reach a
 // terminal status. It could not: the reconciler drove only off building
 // DEPLOYMENTS and reconcileBuild returns early for anything not sourced from git,
 // so these rows stayed "queued" for the life of the row whether the Job had
 // pushed an image, failed, or never been scheduled at all.
 //
-// That made GET /v1/builds unable to answer the only question it is asked. Six
+// That made GET /v1/platform/builds unable to answer the only question it is asked. Six
 // builds sat unschedulable for five days and read exactly like six in flight,
 // which is why the outage was invisible. This test pins the query the fix needs:
 // a non-terminal row WITH a job is offered for reconciliation, and a terminal one

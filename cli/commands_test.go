@@ -41,9 +41,9 @@ func withPlatform(t *testing.T, h http.HandlerFunc) string {
 }
 
 // withCloud is withPlatform's sibling for routes the CLOUD binary serves.
-// /v1/runner is one: the platform host does not implement it, so a build sent
-// to PlatformURL answers 500 there and 401 here. Pointing this at CloudURL is
-// what the test is asserting.
+// /v1/platform/runner is one: the platform host does not implement it, so a
+// build sent to PlatformURL answers 500 there and 401 here. Pointing this at
+// CloudURL is what the test is asserting.
 func withCloud(t *testing.T, h http.HandlerFunc) string {
 	t.Helper()
 	sandbox(t)
@@ -231,7 +231,7 @@ func TestBuildCommandValidation(t *testing.T) {
 
 func TestBuildCommand(t *testing.T) {
 	withCloud(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/runner" {
+		if r.URL.Path != "/v1/platform/runner" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer bt" {
