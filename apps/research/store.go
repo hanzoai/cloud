@@ -976,15 +976,34 @@ func (s *store) setArtifactVisibility(ctx context.Context, project, sha256Hex, v
 // intentionally absent (the corpus carries no per-attempt token usage); cost_usd is
 // the real spend.
 type ProjectSummary struct {
-	Project             string   `json:"project"`
-	Experiments         int      `json:"experiments"` // canonical
-	ExperimentsRetained int      `json:"experiments_retained"`
-	Attempts            int      `json:"attempts"` // canonical
-	AttemptsRetained    int      `json:"attempts_retained"`
-	Models              int      `json:"models"`
-	Benchmarks          int      `json:"benchmarks"`
-	CostUSD             float64  `json:"cost_usd"`
-	Kinds               []string `json:"kinds"`
+	// Project is the project these totals cover. Rows are one per project the org
+	// has evidence under, sorted by this.
+	Project string `json:"project"`
+	// Experiments counts the CANONICAL answered runs: one per stable id, the
+	// latest non-retracted version, faulted and failed left out.
+	Experiments int `json:"experiments"`
+	// ExperimentsRetained counts every run version the store holds for the
+	// project — superseded and retracted included. Retained is always ≥
+	// canonical, and the gap is history rather than loss.
+	ExperimentsRetained int `json:"experiments_retained"`
+	// Attempts counts the CANONICAL answered attempts, one per (benchmark, item,
+	// model).
+	Attempts int `json:"attempts"`
+	// AttemptsRetained counts every attempt version held, on the same terms as
+	// ExperimentsRetained.
+	AttemptsRetained int `json:"attempts_retained"`
+	// Models is how many DISTINCT models appear across the canonical answered
+	// attempts.
+	Models int `json:"models"`
+	// Benchmarks is how many DISTINCT benchmarks those same attempts cover.
+	Benchmarks int `json:"benchmarks"`
+	// CostUSD is US DOLLARS (not cents) summed over the canonical answered runs,
+	// so it is what the deduped view cost and not what the history cost.
+	CostUSD float64 `json:"cost_usd"`
+	// Kinds are the discriminators seen in the project, sorted, over ALL retained
+	// versions — so a kind stays listed after its runs are superseded or
+	// retracted, even when it contributes nothing to Experiments.
+	Kinds []string `json:"kinds"`
 }
 
 func (s *store) projectSummaries(ctx context.Context) ([]ProjectSummary, error) {
@@ -1053,9 +1072,16 @@ func (s *store) projectSummaries(ctx context.Context) ([]ProjectSummary, error) 
 
 // KindTotal is the per-kind slice of a totals aggregate (canonical experiments + cost).
 type KindTotal struct {
-	Kind        string  `json:"kind"`
-	Experiments int     `json:"experiments"`
-	CostUSD     float64 `json:"cost_usd"`
+	// Kind is the discriminator this row aggregates: benchmark, kernel-perf,
+	// training, ablation, policy-eval, ab. A kind appears as soon as any RETAINED
+	// version carries it, so a kind whose every run was retracted or faulted is
+	// listed with zero experiments rather than dropped.
+	Kind string `json:"kind"`
+	// Experiments counts the canonical answered runs of this kind — the same
+	// predicate as the headline count, sliced.
+	Experiments int `json:"experiments"`
+	// CostUSD is US DOLLARS (not cents) summed over those same runs.
+	CostUSD float64 `json:"cost_usd"`
 }
 
 // ResearchTotals is the observatory's headline aggregate: canonical (answered) counts plus
@@ -1067,16 +1093,34 @@ type KindTotal struct {
 // `Totals`, and apps/admin publishes a `Totals` of its own about volumes and
 // clusters — the weave named the collision the moment this type became an op's Out.
 type ResearchTotals struct {
-	Project             string      `json:"project,omitempty"`
-	Projects            int         `json:"projects"`
-	Experiments         int         `json:"experiments"` // canonical
-	ExperimentsRetained int         `json:"experiments_retained"`
-	Attempts            int         `json:"attempts"` // canonical
-	AttemptsRetained    int         `json:"attempts_retained"`
-	Models              int         `json:"models"`
-	Benchmarks          int         `json:"benchmarks"`
-	CostUSD             float64     `json:"cost_usd"`
-	ByKind              []KindTotal `json:"by_kind"`
+	// Project echoes the project the aggregate was narrowed to. Absent means the
+	// figures below span the whole org.
+	Project string `json:"project,omitempty"`
+	// Projects is how many DISTINCT projects the counted evidence spans, so it is
+	// 1 whenever Project narrows to one.
+	Projects int `json:"projects"`
+	// Experiments counts the CANONICAL answered runs: one per stable id, the
+	// latest non-retracted version, faulted and failed left out.
+	Experiments int `json:"experiments"`
+	// ExperimentsRetained counts every run version held — superseded and
+	// retracted included. Retained is always ≥ canonical, and the gap is history
+	// rather than loss, which is why both travel together.
+	ExperimentsRetained int `json:"experiments_retained"`
+	// Attempts counts the CANONICAL answered attempts, one per (benchmark, item,
+	// model).
+	Attempts int `json:"attempts"`
+	// AttemptsRetained counts every attempt version held, on the same terms as
+	// ExperimentsRetained.
+	AttemptsRetained int `json:"attempts_retained"`
+	// Models is how many DISTINCT models appear across the canonical answered
+	// attempts.
+	Models int `json:"models"`
+	// Benchmarks is how many DISTINCT benchmarks those same attempts cover.
+	Benchmarks int `json:"benchmarks"`
+	// CostUSD is US DOLLARS (not cents) summed over the canonical answered runs.
+	CostUSD float64 `json:"cost_usd"`
+	// ByKind is the same headline split per discriminator, ordered by kind.
+	ByKind []KindTotal `json:"by_kind"`
 }
 
 func (s *store) totals(ctx context.Context, project string) (ResearchTotals, error) {
