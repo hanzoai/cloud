@@ -91,6 +91,18 @@ type orgsOut struct {
 	Total  *int     `json:"total,omitempty"`
 }
 
+// orgsIn is the GET /v1/admin/orgs query. The directory pages because each ROW
+// costs per-org reads, so an unpaged directory costs O(orgs) round trips on every
+// load — 684 tenants today against the eighty-one this fan-out was written for.
+type orgsIn struct {
+	// Page is the 1-based page number. Defaults to "1".
+	Page string `json:"p"`
+	// PageSize is rows per page. Defaults to "200", the shared admin page size.
+	// It bounds the fan-out: the page decides how many per-org reads happen, so
+	// the directory costs the same at eighty tenants and at eight thousand.
+	PageSize string `json:"pageSize"`
+}
+
 // usersIn is the GET /v1/admin/users query.
 type usersIn struct {
 	// Org narrows the directory to ONE tenant. Honoured for a SuperAdmin only — a
