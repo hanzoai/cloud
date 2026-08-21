@@ -734,7 +734,7 @@ type Hop interface {
 const (
 	// PeerInvokePath is where PeerHandler must be mounted for NewHTTPHop to find
 	// it. One constant, both ends.
-	PeerInvokePath = "/v1/bot/peer/invoke"
+	PeerInvokePath = "/v1/node/peer/invoke"
 
 	// peerTokenHeader carries the replica-to-replica secret. Deliberately not
 	// Authorization: this request has no user identity to present, and putting a

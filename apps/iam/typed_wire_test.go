@@ -57,8 +57,20 @@ import (
 // count reached 98 before anything else noticed. iam v1.34.21 converted thirteen
 // addresses, so both numbers move the only way they may.
 const (
-	typedOps   = 111
-	untypedOps = 85
+	typedOps = 111
+	// 85 + the two key doors iam v1.34.69 added at their nouns — keys/org and
+	// keys/principal, beside the resolve-key and get-user spellings they replace.
+	// They are raw handlers ON PURPOSE and the ratchet's usual remedy does not
+	// apply: this pair's REFUSALS are the {status, msg, code} envelope, and
+	// cloud's own key resolver parses `code` to tell a revoked key from an unknown
+	// one (auth_apikey.go). A typed op can only refuse by returning an error,
+	// which zip renders as its flat {status, code, error} — so converting them
+	// would move the wire on the authentication path, which is the exact thing
+	// serving both spellings exists to avoid.
+	//
+	// It falls, hard, when the verb surface is retired: internal/compat goes with
+	// it and takes far more than two untyped operations along.
+	untypedOps = 87
 )
 
 // ceremony is the WebAuthn handshake, and it is NAMED rather than counted.

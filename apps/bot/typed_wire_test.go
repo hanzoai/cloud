@@ -29,12 +29,12 @@ import (
 // written the way the DOCUMENT writes them, which is the identity every projection
 // keys on.
 var untypedByDesign = map[string]string{
-	"GET /v1/bot/connect": "a WebSocket UPGRADE. It answers 101 and the connection then carries " +
+	"GET /v1/node/connect": "a WebSocket UPGRADE. It answers 101 and the connection then carries " +
 		"duplex frames for the life of the node (NodeWS, ws.go). A typed op answers one marshalled " +
 		"value at one declared success status, and zip's WithStatus refuses a non-2xx — there is no " +
 		"Out that can express a socket.",
 
-	"POST /v1/bot/nodes/{id}/invoke": "a refusal here is a 403 carrying a DOMAIN body — " +
+	"POST /v1/node/{id}/invoke": "a refusal here is a 403 carrying a DOMAIN body — " +
 		"{\"error\":\"denied\",\"code\":…,\"reason\":…} — that a client switches on, returned both for " +
 		"the pre-flight system.run sanitize and for the node's own denial. A typed op's only refusal is " +
 		"a RETURNED error, which zip renders as its flat {status,code,error}; writing the body from " +
@@ -43,7 +43,7 @@ var untypedByDesign = map[string]string{
 		"also reads the caller's X-Device-Id (callerOf), which no In field may carry: a caller that " +
 		"could name its own device could pre-approve its own system.run.",
 
-	"POST /v1/bot/peer/invoke": "a replica-to-replica machine hop served by a net/http handler " +
+	"POST /v1/node/peer/invoke": "a replica-to-replica machine hop served by a net/http handler " +
 		"(Registry.PeerHandler, registry.go). Its refusals are text/plain — 503 \"peer forwarding " +
 		"disabled\", 403 \"forbidden\", 405, 400 — while every zip error is JSON; it caps the forwarded " +
 		"body with http.MaxBytesReader, a bound a typed op cannot see; and its ORG arrives in the body, " +
