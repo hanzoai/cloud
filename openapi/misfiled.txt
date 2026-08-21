@@ -12,7 +12,6 @@
 /tasks tasks
 /v1/admin affiliates
 /v1/admin pricing
-/v1/agent agents
 /v1/auto automations
 /v1/billing commerce
 /v1/bot bots
