@@ -310,9 +310,15 @@ func (c *Client) Sign(ctx context.Context, keyRef string, payload []byte) ([]byt
 // SecretMeta is a secret's non-sensitive descriptor (never any ciphertext or
 // plaintext), returned by List for the console's secret browser.
 type SecretMeta struct {
-	Name   string `json:"name"`
-	Path   string `json:"path"`
-	Env    string `json:"env"`
+	// Name is the secret's name within its path and environment.
+	Name string `json:"name"`
+	// Path is the subpath the secret is stored under, beneath the org root.
+	Path string `json:"path"`
+	// Env is the environment the secret belongs to. It is part of the storage
+	// key, so the same name in two environments is two secrets.
+	Env string `json:"env"`
+	// Scheme names how the value is sealed at rest, so a caller can tell a
+	// migrated record from a current one without opening it.
 	Scheme string `json:"scheme"`
 }
 

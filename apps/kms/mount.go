@@ -27,7 +27,6 @@
 package kms
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -57,53 +56,28 @@ import (
 type state struct {
 	kms         *Client
 	iamTokenURL string
+	// brand and issuer are what the console needs before anyone signs in. They
+	// live here rather than in a closure because a TypedHandler takes no deps
+	// parameter and a closure is not a bound method value cmd/zipdoc can lift
+	// prose from.
+	brand  string
+	issuer string
 }
 
-// The prose for this subsystem's seven operations. None of them is a typed op —
-// each answers a map assembled in the handler, and two answer the same body under
-// two statuses — so there is no doc comment for zipdoc to lift, and the prose is
-// declared beside the route table instead.
+// The prose for the TWO operations that are not typed ops, and the bodies they
+// carry. Every other route here declares its In and its Out (typed.go), so
+// zipdoc lifts its prose from the handler's own doc comment; a description
+// stated here as well would be the same fact in two places, and the fold
+// replaces a structural operation with the typed one, so the second copy would
+// simply never render.
 //
 // Written under one rule, because this is the credential broker: a description
 // says what an operation DOES and where its answer is scoped, and never implies
-// that secret material turns up anywhere but the one response body that exists to
-// carry it. The list op returns metadata, the read op returns a value, and neither
-// a log line nor an error body ever carries either — that asymmetry is the thing a
-// reader most needs stated, so it is stated.
+// that secret material turns up anywhere but the one response body that exists
+// to carry it. The list operation returns metadata, the read returns a value,
+// and neither a log line nor an error body carries either — that asymmetry is
+// the thing a reader most needs stated, so it is stated.
 func init() {
-	openapi.Describe("/v1/kms/secrets", http.MethodGet,
-		"List the secrets your org holds, without their values",
-		"Returns the METADATA of the caller's own secrets: each one's name, path, "+
-			"environment and sealing scheme. No value and no ciphertext is included — this "+
-			"operation exists to enumerate what is held, and reading a value is a separate, "+
-			"per-secret call.\n\n"+
-			"Scoped to the caller's own org and nothing else, structurally: there is no org "+
-			"in the path, the store root is derived from the validated org claim, and a "+
-			"caller therefore has no way to name another tenant's namespace. `path` narrows "+
-			"to a subpath and `env` selects the environment; both are also accepted under "+
-			"the operator's spellings, `secretPath` and `environment`.\n\n"+
-			"Admission is fail-closed and in order: a validated member, an org that is a "+
-			"DNS-1123 label, and a store holding a master key — 403, 400 and 503 "+
-			"respectively, all decided before any record is touched.")
-	openapi.Describe("/v1/kms/secrets", http.MethodPost,
-		"Store or replace one secret in your org",
-		"Upserts one secret under the caller's own org. The value is sealed before it is "+
-			"written — a fresh per-secret data key, itself wrapped by the master key — so "+
-			"plaintext never reaches disk. The receipt confirms the name and environment "+
-			"that were written and does not echo the value.\n\n"+
-			"`env` is REQUIRED on a write and has no default, which is the rule most easily "+
-			"got wrong here: reads and deletes still fall back to the default environment "+
-			"for older callers, but a write must not, because the environment is part of the "+
-			"storage key. A silently defaulted write lands in a bucket the readers that "+
-			"resolve project, environment and path never look in, and the stale value keeps "+
-			"being served — so the write fails loudly instead.\n\n"+
-			"`name` is required, `path` is an optional subpath beneath the org root, and the "+
-			"org is taken from the validated claim rather than the body.\n\n"+
-			"Requires ADMIN authority over the org — a member reads, an admin writes. A "+
-			"machine credential holds no membership and so is never an org admin: it can "+
-			"read the secrets it was issued for and cannot replace one. Fail-closed "+
-			"admission, in order: admin of the org, well-formed org, master key present — "+
-			"403, 400 and 503, all decided before any record is touched.")
 	openapi.Describe("/v1/kms/secrets/+", http.MethodGet,
 		"Read one secret's value",
 		"Opens one sealed secret belonging to the caller's own org and returns its value in "+
@@ -129,39 +103,15 @@ func init() {
 			"Requires ADMIN authority over the org, like the write: destroying a secret is an "+
 			"administrative act, and a credential distributed to read one must not be able to "+
 			"remove it.")
-	openapi.Describe("/v1/kms/auth/login", http.MethodPost,
-		"Exchange a machine credential for an IAM bearer token",
-		"Takes a tenant's machine credential — a client id and client secret — and returns "+
-			"an owner-scoped IAM access token with its lifetime, which is the bearer the "+
-			"caller then carries on the org-scoped secret operations.\n\n"+
-			"It is deliberately public and unauthenticated, because it IS the credential "+
-			"exchange and runs before any principal exists. That makes it the one route in "+
-			"this subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather "+
-			"than on any caller-supplied header.\n\n"+
-			"The submitted secret is never logged and never echoed, and failures collapse to "+
-			"one clean status with no upstream detail: 401 when the credential does not "+
-			"authenticate, 502 when the identity provider is unreachable, 503 when no issuer "+
-			"is configured. That is on purpose — a richer error would be a validity oracle "+
-			"for guessed credentials.")
-	openapi.Describe("/v1/kms/health", http.MethodGet,
-		"Whether this broker can actually serve secrets",
-		"A real readiness probe, not a liveness stub: 200 only when the store is open AND a "+
-			"master key is configured, with `signing` reporting whether signing keys are set "+
-			"up too. Anything less answers 503 with `ready:false` and the reason — no "+
-			"in-process store, or no master key — which are exactly the two states in which "+
-			"the secret operations refuse.\n\n"+
-			"Not token-gated, because the platform must be able to probe it without a "+
-			"credential. It reports the broker's configuration state only; no secret, no key "+
-			"material and no tenant name appears in it.")
-	openapi.Describe("/v1/kms/config", http.MethodGet,
-		"Runtime configuration for the KMS console",
-		"Returns what the console needs before anyone has signed in: the brand, the OIDC "+
-			"issuer it authenticates against, the API base for this subsystem and the path "+
-			"of the login exchange.\n\n"+
-			"Public on purpose, and it holds nothing sensitive — it is deliberately kept "+
-			"under this subsystem's own namespace rather than under an admin prefix, so a "+
-			"gateway that admin-gates the admin routes cannot break the console's legitimate "+
-			"pre-login fetch.")
+
+	// The BODIES those two answer with, declared through the reflection seam.
+	// Without this each renders as an operationId and a tag and NOTHING else —
+	// indistinguishable from a route that returns nothing at all — so every SDK
+	// generated off the document offered a secret read with no return type. Both
+	// read their input entirely from the URL, so the request half is nil: that is
+	// the honest declaration, not an omission.
+	openapi.Register("/v1/kms/secrets/+", http.MethodGet, nil, kmsSecret{})
+	openapi.Register("/v1/kms/secrets/+", http.MethodDelete, nil, kmsRemoved{})
 }
 
 // Mount wires /v1/kms/* onto app. The concrete-client cast (deps.KMS → *Client),
@@ -196,14 +146,32 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			tokenURL = base + "/v1/iam/oauth/token"
 		}
 	}
-	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "kms"), State: state{kms: kc, iamTokenURL: tokenURL}}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "kms"), State: state{
+		kms:         kc,
+		iamTokenURL: tokenURL,
+		brand:       deps.Brand,
+		issuer:      strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/"),
+	}}
+	o := ops{s: s}
 
 	// Plain /v1/kms surface. The /v1/kms/auth login broker below keeps its OWN
 	// group because it carries a per-source-IP rate-limit middleware this group
 	// must not apply.
 	g := app.Group("/v1/kms")
-	g.Get("/health", cloud.Handle(s, health))
-	g.Get("/config", configHandler(deps))
+	// Bridge FIRST: a typed op receives only a context, so the validated org and
+	// the request its authority is read off reach it by being parked there.
+	// fiber runs middleware in registration order, so this must precede every
+	// leaf below — including the ones Serve would otherwise have covered, which
+	// no test of this package alone ever runs.
+	g.Use(cloud.Bridge())
+	// Declared on the GROUP, so each op's path is the prefix composed with its
+	// leaf — the same composition the router does, and the identity every
+	// projection keys on. For a typed op that is not a change of address either:
+	// zip registers every op on the concrete *zip.App with the prefix already
+	// composed in, so `zip.Get(g, "/health")` is the route `/v1/kms/health` on
+	// the same router the absolute spelling would have reached.
+	zip.Get(g, "/health", o.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+	zip.Get(g, "/config", o.config)
 	// The login broker is PUBLIC (it IS the credential exchange) and independent of
 	// the local store: the kms-operator POSTs its per-tenant clientId/clientSecret
 	// here to mint the owner-scoped IAM bearer it then carries on the org-scoped
@@ -221,11 +189,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// gateway/ingress — so the limiter's per-key bucket map is bounded by that small
 	// peer set, not by arbitrary internet IPs. loginMaxConnsPerHost is the hard bound
 	// on the actual IAM fan-out regardless.
-	app.Group("/v1/kms/auth", middleware.RateLimit(middleware.RateLimitConfig{
+	//
+	// The BODY CAP lives at this door beside the limiter, and for the same
+	// reason: both are what a public, pre-identity door accepts, decided before
+	// any principal exists and before anything parses a byte. A typed op is
+	// handed a decoded value, so by the time it could refuse a 64 MiB body the
+	// body has been read — the cap was never the operation's business.
+	auth := app.Group("/v1/kms/auth", middleware.RateLimit(middleware.RateLimitConfig{
 		Limit:  loginRateLimit,
 		Window: loginRateWindow,
 		KeyFn:  func(c *zip.Ctx) string { return c.Fiber().IP() },
-	})).Post("/login", cloud.Handle(s, login))
+	}), capBody(maxLoginBodyBytes))
+	zip.Post(auth, "/login", o.login)
 
 	if kc == nil {
 		s.Log.Warn("kms REST mounted health-only: no in-process KMS client (secrets served out-of-process or disabled)")
@@ -251,9 +226,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// one. That is the right authority for a credential whose whole job is to deliver
 	// material into a workload, and it is the authority every reader in the fleet
 	// actually exercises — a sync reads.
-	g.Get("/secrets", guard(s, cloud.Member, cloud.Handle(s, listSecrets)))
+	//
+	// The collection is TYPED and the two value routes are not, and the split is
+	// the fiber `+` rather than anything about secrets: the document spells a
+	// wildcard `{wildcard1}` and zip's own registry spells it `+`, so a typed op
+	// there makes the two readings disagree about its path and the fold REFUSES
+	// to produce a document at all. typed_wire_test.go proves that by trying it.
+	zip.Get(g, "/secrets", o.listSecrets)
+	zip.Post(g, "/secrets", o.putSecret)
 	g.Get("/secrets/+", guard(s, cloud.Member, cloud.Handle(s, getSecret)))
-	g.Post("/secrets", guard(s, cloud.Admin, cloud.Handle(s, putSecret)))
 	g.Delete("/secrets/+", guard(s, cloud.Admin, cloud.Handle(s, deleteSecret)))
 
 	s.Log.Info(
@@ -308,73 +289,25 @@ func newEmbeddedClient(cfg *cloud.Config, dur *org.Durability, log luxlog.Logger
 	return c, nil
 }
 
-// guard wraps a secrets handler with the platform gate at the scope the ROUTE
-// requires (HIP-0519's one predicate set) and then the two facts that
-// are this subsystem's OWN business: the org key must be a storage-safe label,
-// and the store must hold a master key. Fail-closed in that order, before any
-// record is touched: 403 for an unvalidated caller, 400 for a malformed org, 503
-// for an unconfigured key.
+// guard is the RAW handlers' reading of the one admission door (admits, typed.go),
+// so the two value routes and the typed collection ops cannot answer differently
+// about who may pass or in what order.
 //
 // The scope is the ROUTE'S, passed in rather than fixed here, because reading a
-// secret and replacing one are different acts and the gate is where that difference
-// belongs. Taking it as a parameter also puts the answer at the route table, where a
-// reader sees which door each operation is behind without following a call.
-//
-// The org match is EXACT (==), not case-folded: this mirrors the platform's own
-// tenant boundary (SanitizeIdentity gates admin on `owner == adminOrg`, and
-// X-Org-Id is the raw owner claim), and it keeps the authz check and the store
-// path in lockstep — orgPath folds :org into /orgs/{org} verbatim, so a
-// case-insensitive authz check would let org "Acme" reach org "acme"'s namespace.
+// secret and replacing one are different acts and the gate is where that
+// difference belongs. Taking it as a parameter also puts the answer at the route
+// table, where a reader sees which door each operation is behind without
+// following a call.
 func guard(s *cloud.Service[state], scope cloud.Scope, h zip.Handler) zip.Handler {
-	return cloud.Guard(scope, func(ctx *zip.Ctx) error {
-		org := reqOrg(ctx)
-		if !validOrg(org) {
-			return zip.ErrBadRequest("org must be a DNS-1123 label")
-		}
-		if !s.State.kms.Ready() {
-			return zip.Errorf(http.StatusServiceUnavailable, "%s", ErrMasterKeyMissing.Error())
+	return func(ctx *zip.Ctx) error {
+		if err := admits(s, scope, cloud.AuthorityOf(ctx), reqOrg(ctx)); err != nil {
+			return err
 		}
 		return h(ctx)
-	})
+	}
 }
 
 // ── health + config ────────────────────────────────────────────────────────────
-
-// health is a REAL probe: 200 only when the store is open AND a master key is
-// configured; 503 + the honest reason in health-only mode. Not JWT-gated —
-// liveness must be probe-able by the platform without a token.
-func health(s *cloud.Service[state], ctx *zip.Ctx) error {
-	res := map[string]any{"service": "kms", "status": "ok"}
-	if s.State.kms == nil {
-		res["status"], res["ready"] = "degraded", false
-		res["error"] = "no in-process KMS client (secrets served out-of-process or disabled)"
-		return ctx.JSON(http.StatusServiceUnavailable, res)
-	}
-	res["signing"] = s.State.kms.SigningConfigured()
-	if !s.State.kms.Ready() {
-		res["status"], res["ready"] = "degraded", false
-		res["error"] = ErrMasterKeyMissing.Error()
-		return ctx.JSON(http.StatusServiceUnavailable, res)
-	}
-	res["ready"] = true
-	return ctx.JSON(http.StatusOK, res)
-}
-
-// configHandler serves the KMS console SPA's runtime config (the OIDC issuer the
-// console logs in against + the KMS API base). Kept under the /v1/kms namespace
-// (not /v1/admin) so a gateway that admin-gates the /v1/admin/* prefix cannot
-// block the console's legitimate public config fetch. No secrets, so it is public.
-func configHandler(deps cloud.Deps) zip.Handler {
-	issuer := strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/")
-	return func(ctx *zip.Ctx) error {
-		return ctx.JSON(http.StatusOK, map[string]any{
-			"brand":     deps.Brand,
-			"issuer":    issuer,
-			"apiBase":   "/v1/kms",
-			"loginPath": "/v1/kms/auth/login",
-		})
-	}
-}
 
 // ── secrets CRUD (org-scoped, sealed) ──────────────────────────────────────────
 
@@ -385,51 +318,6 @@ type secretPutRequest struct {
 	Name  string `json:"name"`  // required
 	Env   string `json:"env"`   // optional, default "default"
 	Value string `json:"value"` // required; sealed before storage
-}
-
-// listSecrets returns the metadata (no ciphertext) of the org's secrets at a
-// path/env. ?path= narrows to a subpath; ?env= selects the environment.
-func listSecrets(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	// The KMS operator (the fleet's only machine consumer) spells these
-	// `environment` and `secretPath`; this plane's own clients use `env` and
-	// `path`. Accept both so one endpoint serves both callers — the operator can
-	// be repointed here without a lockstep operator release.
-	// An OMITTED env means every environment, and an omitted path means the whole
-	// org — this is the enumeration surface, so it must be able to answer "what
-	// is in here". envOr's silent default belongs on the single-secret routes,
-	// where a coordinate has to be complete; applied here it reported a populated
-	// store as empty, because the fleet writes `prod` and the default was
-	// `default`. A caller that wants one env still says so.
-	env := strings.TrimSpace(firstQuery(ctx, "env", "environment"))
-	if env != "" && !validEnv(env) {
-		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
-	}
-	sub := firstQuery(ctx, "path", "secretPath")
-	if !ValidSubpath(sub) {
-		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
-	}
-	// Find, not List: the path is a subtree root here, so listing an org returns
-	// the org. List is exact-coordinate and stays that way for the credential
-	// broker, which must not have its scope widened by a listing change.
-	metas, err := s.State.kms.Find(orgPath(org, sub), env)
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "%v", err)
-	}
-	// Superset response: `secrets`/`total` for this plane's clients, `names` for
-	// the operator, which reads that key. Emitting both means the standalone KMS
-	// can be retired without a flag day — a consumer of either shape keeps working.
-	names := make([]string, 0, len(metas))
-	for _, m := range metas {
-		names = append(names, m.Name)
-	}
-	return ctx.JSON(http.StatusOK, map[string]any{"secrets": metas, "total": len(metas), "names": names})
-}
-
-// firstQuery returns the first non-empty value among alias query keys, so one
-// handler serves callers that spell the same parameter differently.
-func firstQuery(ctx *zip.Ctx, keys ...string) string {
-	return firstNonEmpty(ctx.Query, keys...)
 }
 
 // firstNonEmpty is firstQuery's lookup rule, taken as a plain function so the
@@ -463,48 +351,7 @@ func getSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
 		}
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
 	}
-	return ctx.JSON(http.StatusOK, map[string]any{"name": name, "env": env, "value": string(val)})
-}
-
-// putSecret seals + upserts a secret. Body: {path?, name, env?, value}. The value
-// is sealed under a fresh per-secret DEK (master-key-wrapped) before storage —
-// plaintext never touches disk.
-func putSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
-	var req secretPutRequest
-	if err := json.Unmarshal(ctx.Body(), &req); err != nil {
-		return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
-	}
-	name := strings.TrimSpace(req.Name)
-	if !validName(name) {
-		return zip.ErrBadRequest("'name' is required and must not contain '/', control characters, or exceed 253 bytes")
-	}
-	if req.Value == "" {
-		return zip.ErrBadRequest("'value' is required")
-	}
-	// env is a first-class component of the storage key
-	// (kms/secrets/{path}/{env}/{name}); it can never be aliased. A silent
-	// "default" would commit this write to a bucket that project/env/path
-	// readers (the kms-operator, cluster syncs) never resolve — the exact split
-	// that let an IAM z-password land in env=default while prod kept serving the
-	// stale value. Writes fail loud; reads/deletes keep the envOr compat default
-	// (a read/delete can't plant a value another reader later trusts, and legacy
-	// readers that omit env must keep working).
-	env := strings.TrimSpace(req.Env)
-	if env == "" {
-		return zip.ErrBadRequest(`'env' is required — there is no default. A silent default would split this write from the project/env/path record that readers resolve.`)
-	}
-	if !validEnv(env) {
-		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
-	}
-	if !ValidSubpath(req.Path) {
-		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
-	}
-	path := orgPath(org, req.Path)
-	if err := s.State.kms.Put(path, name, env, []byte(req.Value)); err != nil {
-		return zip.Errorf(http.StatusBadGateway, "%v", err)
-	}
-	return ctx.JSON(http.StatusOK, map[string]any{"stored": true, "name": name, "env": env})
+	return ctx.JSON(http.StatusOK, kmsSecret{Env: env, Name: name, Value: string(val)})
 }
 
 // deleteSecret removes one secret. The trailing wildcard is the sub-path + name.
@@ -524,7 +371,7 @@ func deleteSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
 		}
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
 	}
-	return ctx.JSON(http.StatusOK, map[string]any{"deleted": true, "name": name, "env": env})
+	return ctx.JSON(http.StatusOK, kmsRemoved{Deleted: true, Env: env, Name: name})
 }
 
 // ── path helpers ───────────────────────────────────────────────────────────────
