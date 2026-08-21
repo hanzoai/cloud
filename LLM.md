@@ -960,6 +960,15 @@ document pipeline" below.)
     a note about that file (`actions.go — the two GitOps write actions`) and state
     the real package doc in `<name>.go`, so the fallback would publish a file note
     as the `deploy` product's description.
+  - **A subsystem in ANOTHER MODULE is read the same way**, out of the module
+    cache at the version go.mod pins (`go list -f {{.Dir}}` — `GOPROXY=off`, so
+    describing an app reaches no network; `GOWORK=off`, so it reads the pin that
+    ships and not a developer's workspace). A candidate is an import under
+    `github.com/hanzoai/` that is NOT cloud itself: an app links the host in order
+    to BE served, so cloud's own doc — the fleet's identity — is never one
+    product's description. And the first import that DOCUMENTS ITSELF wins, not
+    the first that resolves: `plugin/licensing` imports two packages of one module
+    and only the front door says what the product is.
   - It is computed ONCE, when an app describes itself, and stamped into that app's
     subset as `info.description` (describe.go); the weave lifts the tag prose off
     the subsets it is already reading rather than looking the mapping up a second
@@ -982,14 +991,15 @@ document pipeline" below.)
     `/v1/finance/balance`, treasury at `/v1/finance/accounts` — and it is gone:
     HIP-0139 §7 closed it, treasury came home to `/v1/treasury` and billing's
     projections folded into `/v1/billing`.
-  - Still blank, measured, and each for a stated reason — **5 of 149 tags**:
-    `authz`, `licensing`, `metrics`, `logs`,
-    `traces` (root owner mounts a subsystem in ANOTHER MODULE, so there is no
-    package here to read). The upstream modules do carry package docs, but
-    maintainer-voiced ones ("the native, prometheus-free time-series store"), and
-    publishing those as a product description would be worse than silence — the
-    remedy is a customer-facing package doc in hanzoai/{metrics,authz,licensing}
-    plus a Synopsis that can reach a mounted module, not a string invented here.
+  - Still blank, measured, and for a stated reason — **1 of 120 tags**: `metrics`,
+    whose composition root mounts a function of cloud's own, so the only package
+    doc it reaches is the fleet's identity. `authz` and `licensing` were blank
+    beside it until the packages cloud mounts got a customer-facing doc —
+    hanzoai/authz v1.10.33 (`serve`) and hanzoai/licensing v0.1.16 — which is
+    where those two sentences live now. The repo that implements a capability
+    writes the sentence and cloud keeps no second copy, so the remedy for a blank
+    tag is never a string invented here: it is a doc comment in the repo that owns
+    the thing, and the pin bumped.
 - **What the router CANNOT tell you — do not try to fix this in the generator.**
   Method, path, path params, and product are derivable; request/response schemas,
   query/header params, status codes, and auth are NOT. The router holds a
