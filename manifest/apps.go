@@ -50,6 +50,10 @@ package manifest
 var Apps = []App{
 	{Name: "pubsub", Prefixes: []string{"/v1/kv", "/v1/pubsub"}, Eager: true},
 	{Name: "kafka", Prefixes: []string{"/v1/kafka"}, Eager: true},
+	// Eager for kafka's reason: it owns a listener. A wire adaptor that binds
+	// its port only once a request arrives at /v1/amqp would never bind, since
+	// its clients speak AMQP on :5672 and never knock on the HTTP door at all.
+	{Name: "amqp", Prefixes: []string{"/v1/amqp"}, Eager: true},
 	{Name: "mq", Prefixes: []string{"/v1/mq"}},
 	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
 	{Name: "flags", Prefixes: []string{"/v1/flags"}},
