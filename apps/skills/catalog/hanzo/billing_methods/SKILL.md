@@ -1,7 +1,7 @@
 ---
 name: billing_methods
 version: "8.0.0"
-description: "Read billing methods: Your saved cards, masked — the customer read."
+description: "Read billing methods: Cards and accounts on file for the caller."
 ---
 
 # Hanzo · BILLING · methods
@@ -14,7 +14,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/billing/methods` — Your saved cards, masked — the customer read
+- `GET https://api.hanzo.ai/v1/billing/methods` — Cards and accounts on file for the caller
 
 ## Response
 

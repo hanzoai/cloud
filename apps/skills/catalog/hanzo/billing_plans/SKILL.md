@@ -1,7 +1,7 @@
 ---
 name: billing_plans
 version: "8.0.0"
-description: "Read billing plans: The public plan catalog, annotated with the active platform promotion."
+description: "Read billing plans: The plan catalog, priced with whatever offer is in force."
 ---
 
 # Hanzo · BILLING · plans
@@ -14,7 +14,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/billing/plans` — The public plan catalog, annotated with the active platform promotion
+- `GET https://api.hanzo.ai/v1/billing/plans` — The plan catalog, priced with whatever offer is in force
 
 ## Response
 

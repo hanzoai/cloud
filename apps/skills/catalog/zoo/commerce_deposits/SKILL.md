@@ -1,12 +1,12 @@
 ---
-name: auto_pieces
+name: commerce_deposits
 version: "8.0.0"
-description: "Read auto pieces: Pieces is the retired-name alias of the connector catalogue.."
+description: "Read commerce deposits: Read the crypto deposit watcher's runtime state, asset by asset."
 ---
 
-# Zoo · AUTO · pieces
+# Zoo · COMMERCE · deposits
 
-Read-only Zoo capability derived from the `auto` OpenAPI product. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `commerce` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/auto/pieces` — Pieces is the retired-name alias of the connector catalogue.
+- `GET https://api.zoo.ngo/v1/commerce/deposits` — Read the crypto deposit watcher's runtime state, asset by asset
 
 ## Response
 
-- `/v1/auto/pieces` → `Catalog` object with fields: `connectorCount`, `connectors`.
+- `/v1/commerce/deposits` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/v1/auto/pieces" \
+curl -sS "https://api.zoo.ngo/v1/commerce/deposits" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

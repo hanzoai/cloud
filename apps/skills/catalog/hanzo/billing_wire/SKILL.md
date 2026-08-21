@@ -1,7 +1,7 @@
 ---
 name: billing_wire
 version: "8.0.0"
-description: "Read billing wire: Where to wire funds, and the reference that credits them to you."
+description: "Read billing wire: Answers where to send a wire top-up: the receiving bank details, with the caller's own payment reference.."
 ---
 
 # Hanzo · BILLING · wire
@@ -14,11 +14,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/billing/wire` — Where to wire funds, and the reference that credits them to you
+- `GET https://api.hanzo.ai/v1/billing/wire` — Answers where to send a wire top-up: the receiving bank details, with the caller's own payment reference.
 
 ## Response
 
-- `/v1/billing/wire` → JSON object.
+- `/v1/billing/wire` → `WireInstructions` object with fields: `accountName`, `accountNumber`, `bankAddress`, `bankName`, `iban`, `memo`, `reference`, `routingNumber`, `swiftCode`.
 
 ## Example
 

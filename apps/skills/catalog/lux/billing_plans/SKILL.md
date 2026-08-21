@@ -1,7 +1,7 @@
 ---
 name: billing_plans
 version: "8.0.0"
-description: "Read billing plans: The public plan catalog, annotated with the active platform promotion."
+description: "Read billing plans: The plan catalog, priced with whatever offer is in force."
 ---
 
 # Lux · BILLING · plans
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/billing/plans` — The public plan catalog, annotated with the active platform promotion
+- `GET https://api.lux.network/v1/billing/plans` — The plan catalog, priced with whatever offer is in force
 
 ## Response
 

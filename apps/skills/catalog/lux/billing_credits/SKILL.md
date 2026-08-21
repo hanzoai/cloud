@@ -1,7 +1,7 @@
 ---
 name: billing_credits
 version: "8.0.0"
-description: "Read billing credits: List the credit grants on your org's balance."
+description: "Read billing credits: Lists the caller's credit grants — every one of them, spent and lapsed and voided included.."
 ---
 
 # Lux · BILLING · credits
@@ -14,11 +14,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/billing/credits` — List the credit grants on your org's balance
+- `GET https://api.lux.network/v1/billing/credits` — Lists the caller's credit grants — every one of them, spent and lapsed and voided included.
 
 ## Response
 
-- `/v1/billing/credits` → JSON object.
+- `/v1/billing/credits` → `CreditGrants` object with fields: `count`, `grants`.
 
 ## Example
 

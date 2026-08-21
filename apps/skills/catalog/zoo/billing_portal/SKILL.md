@@ -1,7 +1,7 @@
 ---
 name: billing_portal
 version: "8.0.0"
-description: "Read billing portal: Cards saved against the caller's org, masked — the portal read."
+description: "Read billing portal: Cards and accounts on file for the caller."
 ---
 
 # Zoo · BILLING · portal
@@ -14,7 +14,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/billing/portal/methods` — Cards saved against the caller's org, masked — the portal read
+- `GET https://api.zoo.ngo/v1/billing/portal/methods` — Cards and accounts on file for the caller
 
 ## Response
 
