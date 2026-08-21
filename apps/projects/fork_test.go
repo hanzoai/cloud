@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/templates"
+	"github.com/hanzoai/cloud/apps/template"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -23,7 +23,7 @@ func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 // mountApp mounts the projects surface on a fresh in-memory app with a temp
 // store, exactly as the unified binary does. The fork route reads the embedded
-// templates catalog (templates.Lookup) — no template fixture needed.
+// templates catalog (template.Lookup) — no template fixture needed.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -354,16 +354,16 @@ func TestForkTemplateRecordsLineage(t *testing.T) {
 // TestForkPrivateTemplateIsOwnerOnly is the per-org template loop end to end:
 // acme publishes a template PRIVATE to acme, forks it, and gets a project seeded
 // from it with owner-qualified lineage — while globex, asking for the exact same
-// slug, gets a 404. templates.Lookup binds the caller's org, so another org's
+// slug, gets a 404. template.Lookup binds the caller's org, so another org's
 // template is not merely filtered out of the fork, it is unreachable from it.
 func TestForkPrivateTemplateIsOwnerOnly(t *testing.T) {
 	app := mountApp(t)
-	if err := templates.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("templates.Mount: %v", err)
+	if err := template.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("template.Mount: %v", err)
 	}
-	t.Cleanup(func() { _ = templates.Shutdown(t.Context()) })
+	t.Cleanup(func() { _ = template.Shutdown(t.Context()) })
 
-	if code, body := do(t, app, http.MethodPost, "/v1/templates", "acme", map[string]any{
+	if code, body := do(t, app, http.MethodPost, "/v1/template", "acme", map[string]any{
 		"slug": "acme-portal", "title": "Acme Portal", "framework": "React 18 + Vite",
 		"source": "https://git.acme.example/portal",
 	}); code != http.StatusCreated {

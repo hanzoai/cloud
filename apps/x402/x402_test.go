@@ -19,7 +19,7 @@ import (
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/apps/wallets"
+	"github.com/hanzoai/cloud/apps/wallet"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/luxfi/crypto"
@@ -155,7 +155,7 @@ func newHarness(t *testing.T) *harness {
 	// co-resident ledger — there is no "settled" to assert without one.
 	ledger := &halfDown{Client: finance.New(t.TempDir())}
 	finance.Publish(ledger)
-	t.Cleanup(func() { finance.Publish(nil); _ = wallets.Shutdown(); _ = Shutdown() })
+	t.Cleanup(func() { finance.Publish(nil); _ = wallet.Shutdown(); _ = Shutdown() })
 
 	log := luxlog.New("test")
 	dir := t.TempDir()
@@ -172,8 +172,8 @@ func newHarness(t *testing.T) *harness {
 	compose(app)
 	deps := cloud.Deps{KMS: kmsClient, DataDir: dir}
 
-	if err := wallets.Mount(app, deps); err != nil {
-		t.Fatalf("wallets.Mount: %v", err)
+	if err := wallet.Mount(app, deps); err != nil {
+		t.Fatalf("wallet.Mount: %v", err)
 	}
 
 	doer := &commerceDoer{}
@@ -208,7 +208,7 @@ func newHarness(t *testing.T) *harness {
 // wallet a marketplace listing would name.
 func (h *harness) createRecipient(org string) string {
 	h.t.Helper()
-	_, b, _ := h.req(http.MethodPost, "/v1/wallets/accounts", org, "", `{"name":"payee"}`)
+	_, b, _ := h.req(http.MethodPost, "/v1/wallet/accounts", org, "", `{"name":"payee"}`)
 	var acct struct {
 		ID string `json:"id"`
 	}
@@ -216,7 +216,7 @@ func (h *harness) createRecipient(org string) string {
 		h.t.Fatalf("create account: %v (%s)", err, b)
 	}
 	body := `{"accountId":"` + acct.ID + `","name":"earnings","custody":"kms","tier":"hot","chain":"eip155:36963"}`
-	code, b, _ := h.req(http.MethodPost, "/v1/wallets", org, "", body)
+	code, b, _ := h.req(http.MethodPost, "/v1/wallet", org, "", body)
 	if code != 200 {
 		h.t.Fatalf("create wallet = %d (%s)", code, b)
 	}

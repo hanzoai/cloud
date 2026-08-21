@@ -49,7 +49,7 @@ func ga(string) string { return "" }
 func TestMountFleetServesTheCompositionIncludingItself(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	openapi.MountFleet(app, func() ([]openapi.Part, error) {
-		return openapi.Subsets([]string{"ads", "crm"}, func(a string) []byte { return subset(t, "/v1/"+a) }, ga)
+		return openapi.Subsets([]string{"ad", "crm"}, func(a string) []byte { return subset(t, "/v1/"+a) }, ga)
 	})
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, openapi.Path, nil))
@@ -64,7 +64,7 @@ func TestMountFleetServesTheCompositionIncludingItself(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"/v1/ads", "/v1/crm", openapi.Path} {
+	for _, want := range []string{"/v1/ad", "/v1/crm", openapi.Path} {
 		if _, ok := doc.Paths[want]; !ok {
 			t.Errorf("the served document omits %s — it publishes %d paths", want, len(doc.Paths))
 		}
@@ -79,7 +79,7 @@ func TestMountFleetServesTheCompositionIncludingItself(t *testing.T) {
 // whole surface absent — 200 OK, well-formed, and wrong in the one way no
 // consumer can detect.
 func TestSubsetsRefuseAnAppThatPublishedNothing(t *testing.T) {
-	_, err := openapi.Subsets([]string{"ads", "ghost"}, func(a string) []byte {
+	_, err := openapi.Subsets([]string{"ad", "ghost"}, func(a string) []byte {
 		if a == "ghost" {
 			return nil // never described
 		}
@@ -129,7 +129,7 @@ func TestSubsetsRefusesAnAppWhoseOwnIDsCollide(t *testing.T) {
 	}
 
 	// An injective subset still decodes. The check must cost a green run nothing.
-	if _, err := openapi.Subsets([]string{"ads"}, func(a string) []byte { return subset(t, "/v1/"+a) }, ga); err != nil {
+	if _, err := openapi.Subsets([]string{"ad"}, func(a string) []byte { return subset(t, "/v1/"+a) }, ga); err != nil {
 		t.Errorf("injective subset: %v", err)
 	}
 }

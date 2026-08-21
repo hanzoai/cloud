@@ -331,7 +331,7 @@ var freeOfVendor = map[string]string{
 
 	// REACHABLE AND SPENDING, AND STILL CORRECTLY FREE — platform sudo. treasury
 	// really does anchor on-chain (SendTransaction) and really does mint a ring key
-	// through wallets.TreasuryAnchorSigner, but every one of its six admin ops opens
+	// through wallet.TreasuryAnchorSigner, but every one of its six admin ops opens
 	// with `admin(ctx)`, which is c.IsAdmin(). Its two tenant routes are reads. So
 	// the spend is Hanzo's own and there is no tenant on the request to attribute it
 	// to — Metered would assert a debit that must never exist.

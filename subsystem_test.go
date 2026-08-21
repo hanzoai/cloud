@@ -74,8 +74,8 @@ func TestDisabledSubsystemIsListedButOwnsNoPath(t *testing.T) {
 	if all[1].Name != "kms" || !all[1].Enabled {
 		t.Errorf("kms = %+v, want listed and enabled", all[1])
 	}
-	if got := SubsystemOf("/v1/ads/x"); got != "" {
-		t.Errorf("SubsystemOf(/v1/ads/x) = %q, want \"\" — a disabled subsystem serves nothing", got)
+	if got := SubsystemOf("/v1/ad/x"); got != "" {
+		t.Errorf("SubsystemOf(/v1/ad/x) = %q, want \"\" — a disabled subsystem serves nothing", got)
 	}
 	if got := SubsystemOf("/v1/kms/x"); got != "kms" {
 		t.Errorf("SubsystemOf(/v1/kms/x) = %q, want kms", got)

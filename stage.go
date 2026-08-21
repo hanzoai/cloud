@@ -129,7 +129,7 @@ func missing() error { return zip.ErrNotFound(http.StatusText(http.StatusNotFoun
 
 // covers reports whether path is one of the prefixes or beneath one.
 //
-// Segment-wise, so /v1/adsense is not under /v1/ads: a byte compare would refuse
+// Segment-wise, so /v1/adsense is not under /v1/ad: a byte compare would refuse
 // a neighbouring capability's whole surface on a shared spelling, and the two
 // have nothing to do with each other.
 func covers(prefixes []string, path string) bool {

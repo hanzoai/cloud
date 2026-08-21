@@ -150,7 +150,7 @@ func TestReaderProxy_EndToEndTransparent(t *testing.T) {
 	edge := httptest.NewServer(proxy)
 	defer edge.Close()
 
-	req, _ := http.NewRequest(http.MethodPut, edge.URL+"/v1/prompts/foo", strings.NewReader("BODY"))
+	req, _ := http.NewRequest(http.MethodPut, edge.URL+"/v1/prompt/foo", strings.NewReader("BODY"))
 	req.Header.Set("X-Org-Id", "acme")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -158,7 +158,7 @@ func TestReaderProxy_EndToEndTransparent(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	if gotMethod != http.MethodPut || gotPath != "/v1/prompts/foo" || gotOrg != "acme" {
+	if gotMethod != http.MethodPut || gotPath != "/v1/prompt/foo" || gotOrg != "acme" {
 		t.Fatalf("writer saw method=%q path=%q org=%q — not transparently forwarded", gotMethod, gotPath, gotOrg)
 	}
 	if resp.StatusCode != http.StatusCreated || string(body) != "echo:BODY" {

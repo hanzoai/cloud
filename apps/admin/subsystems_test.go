@@ -102,15 +102,15 @@ func TestApplyLastError_LandsOnTheRightRow(t *testing.T) {
 	idx := rowIndex(rows)
 
 	applyLastError(rows, idx, []map[string]any{
-		{"subsystem": "ads", "at": "2026-07-27T10:00:00Z", "route": "/v1/ads/serve", "status": "500", "message": "upstream timeout"},
+		{"subsystem": "ads", "at": "2026-07-27T10:00:00Z", "route": "/v1/ad/serve", "status": "500", "message": "upstream timeout"},
 	})
 
 	if rows[0].LastErrorRoute != "" {
 		t.Error("kms had no error; its last-error columns must stay empty")
 	}
 	ads := rows[1]
-	if ads.LastErrorRoute != "/v1/ads/serve" || ads.LastErrorStatus != "500" || ads.LastErrorMessage != "upstream timeout" {
-		t.Errorf("ads last error = %+v, want the /v1/ads/serve 500", ads)
+	if ad.LastErrorRoute != "/v1/ad/serve" || ad.LastErrorStatus != "500" || ad.LastErrorMessage != "upstream timeout" {
+		t.Errorf("ads last error = %+v, want the /v1/ad/serve 500", ads)
 	}
 }
 

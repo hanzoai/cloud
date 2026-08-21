@@ -281,7 +281,7 @@ func TestWeaveRefusesOneSchemaNameWithTwoShapes(t *testing.T) {
 		}}
 	}
 	_, err := openapi.Weave([]openapi.Part{
-		part("ads", map[string]any{"type": "object"}),
+		part("ad", map[string]any{"type": "object"}),
 		part("crm", map[string]any{"type": "string"}),
 	})
 	var c *openapi.Conflict
@@ -295,7 +295,7 @@ func TestWeaveRefusesOneSchemaNameWithTwoShapes(t *testing.T) {
 	// Identical shapes are ONE schema, not a conflict: two apps using the same
 	// type is composition working, not colliding.
 	same := map[string]any{"type": "object", "properties": map[string]any{"ok": map[string]any{"type": "boolean"}}}
-	doc, err := openapi.Weave([]openapi.Part{part("ads", same), part("crm", same)})
+	doc, err := openapi.Weave([]openapi.Part{part("ad", same), part("crm", same)})
 	if err != nil {
 		t.Fatalf("identical schemas: %v", err)
 	}

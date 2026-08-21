@@ -27,7 +27,7 @@ import (
 // TestEveryPublishedFieldIsDescribed fails on any property of any published schema
 // that carries no description.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	doc, err := openapi.Spec(mountHTTP(t), openapi.Info{Title: "sandboxes", Version: "v1"})
+	doc, err := openapi.Spec(mountHTTP(t), openapi.Info{Title: "sandbox", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
