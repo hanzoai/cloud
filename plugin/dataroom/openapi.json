@@ -52,6 +52,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -86,6 +87,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -109,6 +111,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -140,6 +143,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -174,6 +178,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -218,6 +223,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -241,6 +247,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -249,7 +256,8 @@
         "description": "Takes the file ITSELF as the raw request body — not a JSON envelope, not multipart — stores it on the object-storage seam, and records the metadata row, answering with the new document. `?name=` names it (default \"document\"), the request's Content-Type becomes the recorded mime type, and `?numPages=` is optional.\n\nRequires a validated principal; 403 without one. An empty body is 400 and anything over 64 MiB is 413 — a data room holds decks and PDFs, not a media library.\n\nThe storage key is 128 random bits under the tenant's own key prefix, minted before the bytes are written: if the system's randomness is unavailable the upload fails 500 rather than fall back to a predictable key that could overwrite another document's bytes. A storage write that fails is 502 and no metadata row is recorded, so a document never exists without its file.",
         "tags": [
           "dataroom"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/dataroom/documents/{id}": {
@@ -283,6 +291,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -303,7 +312,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/dataroom/health": {
@@ -313,7 +323,8 @@
         "description": "Answers {service, status} unconditionally — no principal, no tenant. It is registered BEFORE the bundle, the link index and the object-storage seam are wired, so it keeps answering when any of those fail and the subsystem degrades to health-only. That is the point, and the limit: a 200 here says the process is alive, never that a data room can be read or written.",
         "tags": [
           "dataroom"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/dataroom/links": {
@@ -336,6 +347,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -367,6 +379,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -387,7 +400,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/dataroom/view/{linkId}/authenticate": {
@@ -407,7 +421,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/dataroom/view/{linkId}/document/{documentId}/file": {
@@ -435,7 +450,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/dataroom/view/{linkId}/pageview": {
@@ -455,7 +471,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     }
   },

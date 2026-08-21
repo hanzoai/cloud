@@ -136,7 +136,9 @@ func descriptorOf(app string, op Op) json.RawMessage {
 // place that knows it did — the same call that registers the target names it.
 func Mount(host *zip.App, path string, apps []string, at At) *Door {
 	d := &Door{host: host, apps: apps, owner: map[string]string{}}
-	d.Serve(host, path, at)
+	// The EDGE door: the one address a client with no credential can reach, and
+	// therefore the one that has to say where a credential comes from (challenge).
+	host.Post(path, func(c *zip.Ctx) error { return d.serve(c, at, true) })
 	if path != manifest.FrameworkMCPPath {
 		host.All(manifest.FrameworkMCPPath, signpost(path))
 	}
@@ -166,7 +168,9 @@ func Mount(host *zip.App, path string, apps []string, at At) *Door {
 // is a sibling and its statement of who it acts for is what the socket makes it
 // worth. Same routing table, same curation, same hop — one value apart.
 func (d *Door) Serve(on *zip.App, path string, at At) {
-	on.Post(path, func(c *zip.Ctx) error { return d.serve(c, at) })
+	// The PLANE door: a sibling on the fleet's own socket carries its identity as
+	// headers the socket vouches for, never a bearer, so it is never challenged.
+	on.Post(path, func(c *zip.Ctx) error { return d.serve(c, at, false) })
 }
 
 // signpost answers the framework default on a host that moved its door.
@@ -191,7 +195,7 @@ type message struct {
 	Params json.RawMessage `json:"params"`
 }
 
-func (d *Door) serve(c *zip.Ctx, at At) error {
+func (d *Door) serve(c *zip.Ctx, at At, edge bool) error {
 	var req message
 	if err := json.Unmarshal(c.Body(), &req); err != nil {
 		return c.JSON(200, rpcErr(nil, -32700, "parse error"))
@@ -215,7 +219,7 @@ func (d *Door) serve(c *zip.Ctx, at At) error {
 	case "tools/list":
 		return d.list(c, req, at)
 	case "tools/call":
-		return d.call(c, req, at)
+		return d.call(c, req, at, edge)
 	case "ping":
 		return c.JSON(200, rpcResult(req.ID, map[string]any{}))
 	default:
@@ -259,7 +263,7 @@ func (d *Door) list(c *zip.Ctx, req message, at At) error {
 // ask tools/list makes — rather than a guess or a fan-out per call. If it is
 // still nobody's, that is a -32602 and not an outage: every app answered, and
 // none of them serves it.
-func (d *Door) call(c *zip.Ctx, req message, at At) error {
+func (d *Door) call(c *zip.Ctx, req message, at At, edge bool) error {
 	var p struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -270,6 +274,16 @@ func (d *Door) call(c *zip.Ctx, req message, at At) error {
 	// carry names and no schemas — so it is answered here rather than routed.
 	if p.Name == Describe {
 		return d.describe(c, req, p.Arguments, at)
+	}
+
+	// A tools/call that reached the EDGE with nothing to forward as an identity is
+	// answered with where to get one, before any subsystem is asked. The door
+	// validates nothing — identity is the owning plugin's to derive, and a bad
+	// token is still refused there on its own terms — it only notices absence.
+	// tools/list, initialize and describe stay open: a client has to be able to
+	// read what is here before it holds a credential.
+	if edge && !credentialed(c) {
+		return challenge(c, req.ID)
 	}
 
 	// Two DECODINGS stand between what a client sends and what a child is asked,
@@ -326,6 +340,28 @@ func (d *Door) call(c *zip.Ctx, req message, at At) error {
 	return c.Bytes(200, ans.Body)
 }
 
+// credentialed reports whether the request carries anything the owning plugin
+// could derive an identity from: a bearer in either spelling the identity
+// boundary accepts, or a session cookie.
+func credentialed(c *zip.Ctx) bool {
+	return c.Header("Authorization") != "" || c.Header("X-Authorization") != "" || c.Header("Cookie") != ""
+}
+
+// challenge is the answer to a credential-less tools/call at the edge: 401, and
+// the one header an MCP client reads to find out where to sign in (RFC 9728
+// §5.1) — the resource metadata this host serves at
+// manifest.ResourceMetadataPath, which names the authorization server.
+//
+// The origin is the request's own, so a white-label deployment challenges with
+// its own address and the client never learns a host it did not call.
+func challenge(c *zip.Ctx, id json.RawMessage) error {
+	origin := c.Fiber().BaseURL()
+	c.SetHeader("WWW-Authenticate", `Bearer resource_metadata="`+origin+manifest.ResourceMetadataPath+`"`)
+	return c.JSON(http.StatusUnauthorized, rpcErr(id, -32001,
+		"tools/call needs a bearer credential; the resource metadata at "+
+			origin+manifest.ResourceMetadataPath+" names the authorization server to sign in at"))
+}
+
 // named is one tool with its name, its OWNER and its one-line documentation
 // lifted out, so the composed list sorts, groups and reads without re-parsing —
 // and each descriptor is still carried VERBATIM, the bytes the child's own
@@ -338,6 +374,8 @@ type named struct {
 	// would be ambiguous. Written by [offer], never by the child.
 	as   string
 	desc string
+	// read says the operation is a GET, as its subsystem published it.
+	read bool
 	raw  json.RawMessage
 }
 
@@ -391,7 +429,7 @@ func (d *Door) gather(c *zip.Ctx, at At) ([]named, []Outage, int) {
 	for _, a := range d.apps {
 		c := contribution{app: a}
 		for _, op := range d.published(a) {
-			c.tools = append(c.tools, named{name: op.ID, desc: op.Doc, raw: descriptorOf(a, op)})
+			c.tools = append(c.tools, named{name: op.ID, desc: op.Doc, read: op.Read, raw: descriptorOf(a, op)})
 		}
 		in = append(in, c)
 	}

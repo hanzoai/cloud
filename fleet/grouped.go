@@ -159,8 +159,10 @@ func group(all []named) []map[string]any {
 func subsystemTool(app string, ops []named) map[string]any {
 	names := make([]string, len(ops))
 	var doc strings.Builder
+	reads := true
 	for i, t := range ops {
 		names[i] = t.as
+		reads = reads && t.read
 		if rank(t.name) == len(productStems) {
 			continue
 		}
@@ -175,7 +177,7 @@ func subsystemTool(app string, ops []named) map[string]any {
 	if doc.Len() > 0 {
 		op["description"] = doc.String()
 	}
-	return map[string]any{
+	tool := map[string]any{
 		"name": app,
 		"description": app + ": " + strconv.Itoa(len(ops)) + " operations. Name one in \"op\" and pass " +
 			"that operation's own arguments in \"input\". " + Describe + " returns an operation's input schema.",
@@ -188,6 +190,14 @@ func subsystemTool(app string, ops []named) map[string]any {
 			"required": []string{"op"},
 		},
 	}
+	// readOnlyHint is set only when it is TRUE OF THE WHOLE TOOL: a subsystem
+	// whose every offered operation is a GET. A tool that mixes reads and writes
+	// carries no hint rather than a false one — the hint is per tool, and a client
+	// that trusts it skips the confirmation a write deserves.
+	if reads && len(ops) > 0 {
+		tool["annotations"] = map[string]any{"readOnlyHint": true}
+	}
+	return tool
 }
 
 func describeTool() map[string]any {
@@ -200,6 +210,7 @@ func describeTool() map[string]any {
 			"properties": map[string]any{"op": map[string]any{"type": "string"}},
 			"required":   []string{"op"},
 		},
+		"annotations": map[string]any{"readOnlyHint": true},
 	}
 }
 

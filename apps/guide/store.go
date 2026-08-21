@@ -121,14 +121,29 @@ func (s *Store) ResetState(ctx context.Context, stepID string) error {
 
 // ActionRecord is one Business AI tool execution — the audit-visible ledger row.
 type ActionRecord struct {
-	ID        string `json:"id"`
-	StepID    string `json:"stepId"`
-	Tool      string `json:"tool"`
-	Args      string `json:"args,omitempty"`
-	Result    string `json:"result,omitempty"`
-	OK        bool   `json:"ok"`
-	Err       string `json:"err,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
+	// ID identifies this one execution. The ledger is append-only, so an id is
+	// never reused and never updated.
+	ID string `json:"id"`
+	// StepID is the checklist step the Business AI was acting on.
+	StepID string `json:"stepId"`
+	// Tool is the MCP tool that was dispatched, by name.
+	Tool string `json:"tool"`
+	// Args is the JSON the tool was called with, recorded as TEXT exactly as sent —
+	// including whatever the AI drafted into it — so a run can be read back and
+	// reproduced. It is a string, not an object.
+	Args string `json:"args,omitempty"`
+	// Result is the tool's own answer, likewise recorded as JSON text. Present on a
+	// failed run too, where the tool answered but the answer was a refusal.
+	Result string `json:"result,omitempty"`
+	// OK is whether the tool ran to completion. It is the ledger's own verdict, not
+	// the tool's opinion of the outcome — a tool that succeeded at reporting bad
+	// news is ok.
+	OK bool `json:"ok"`
+	// Err is why the run failed, when it did. Empty on a successful run.
+	Err string `json:"err,omitempty"`
+	// CreatedAt is when the run was recorded, as Unix seconds. The ledger is read
+	// newest-first on this column.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // AddAction appends an action-ledger row.

@@ -2,7 +2,7 @@
 
 # Hanzo Cloud
 
-**The Open AI Cloud as one deployment.** Identity, secrets, data, AI, gateway, observability, and the console — 116 Hanzo-native subsystems behind one origin and one `/v1`, each its own binary, composed by a light host router through the plugin contract in [HIP-0106](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0106-hanzo-plugin-contract.md).
+**The Open AI Cloud as one deployment.** Identity, secrets, data, AI, gateway, observability, and the console — every Hanzo subsystem behind one origin and one `/v1`, each its own binary, composed by a light host router through the plugin contract in [HIP-0106](https://github.com/hanzoai/hips/blob/main/HIPs/hip-0106-hanzo-plugin-contract.md).
 
 [![Status](https://img.shields.io/badge/status-beta-blue)]()
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)]()
@@ -35,7 +35,7 @@ middleware it would serve standalone.
 
 Apps start **lazily**, on the first request that reaches their prefix; the four that own
 a listener or a background loop (`pubsub`, `kafka`, `o11y`, `catalogsync`) say so and
-start with the host. That is what makes 116 subsystems affordable — an app nobody calls
+start with the host. That is what makes the whole fleet affordable — an app nobody calls
 costs a route entry and a struct, not a process and a resident set.
 
 This was one fused process once, and that binary is gone: it linked every subsystem's
@@ -113,7 +113,7 @@ in its own `plugin/<name>/main.go`.
 - `o11y` — metrics / traces / logs
 - `vfs` — virtual filesystem / object-store abstraction
 - `mq` — message queue
-- `dns`, `amqp`, `mcp`, `auto`, `tasks`, … — the other 107 rows are in `manifest/apps.go`
+- `dns`, `mq`, `tasks`, `auto`, `git`, … — the rest are rows in `manifest/apps.go`
 
 ## Deployment modes
 
@@ -226,7 +226,7 @@ Implements, by the filenames in [hanzoai/HIPs](https://github.com/hanzoai/HIPs/t
 
 In production. It serves `api.hanzo.ai` and the white-label cloud surfaces today, with
 per-org SQLite (HIP-0302) and the embedded console. `manifest/apps.go` is the one ordered
-list of everything mounted — 116 apps, 4 of them eager. For repo-level engineering
+list of everything mounted — every app, four of them eager. For repo-level engineering
 doctrine (module graph, route-table projections, cross-subsystem seams), see
 [`LLM.md`](./LLM.md).
 

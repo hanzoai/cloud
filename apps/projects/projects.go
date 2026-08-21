@@ -135,34 +135,70 @@ var mounted *cloud.Service[state]
 
 // ---- HTTP response shapes (the published contract) ----
 
+// projectsRepo is the git source a project builds from, when it has one. A project
+// deployed by uploading an artifact has none, and all three fields are then absent.
 type projectsRepo struct {
-	URL      string `json:"url,omitempty"`
-	Branch   string `json:"branch,omitempty"`
+	// URL is the clone address of the repository this project builds from.
+	URL string `json:"url,omitempty"`
+	// Branch is the ref a push has to touch for this project to rebuild. Pushes to
+	// any other branch are ignored.
+	Branch string `json:"branch,omitempty"`
+	// Provider is the forge the URL was recognised as — it decides which webhook
+	// and which credential reach the repository, and is DERIVED from the URL rather
+	// than chosen by the caller.
 	Provider string `json:"provider,omitempty"`
 }
 
 type projectsProject struct {
-	ID                  string       `json:"id"`
-	Org                 string       `json:"org"`
-	Slug                string       `json:"slug"`
-	Name                string       `json:"name"`
-	Description         string       `json:"description,omitempty"`
-	Repo                projectsRepo `json:"repo"`
-	Framework           string       `json:"framework"`
-	Status              string       `json:"status"`
-	LiveURL             string       `json:"liveUrl,omitempty"`
-	Bucket              string       `json:"bucket,omitempty"`
-	CurrentDeploymentID string       `json:"currentDeploymentId,omitempty"`
-	// Cache is the site's edge-cache state: the HTML/document Cache-Control policy
-	// in effect (TTL) and the last edge-purge time, so a console can show freshness.
+	// ID is the project's internal identifier. It is stable across a rename, but it
+	// is not what the API addresses this project by — `slug` is.
+	ID string `json:"id"`
+	// Org is the organisation that owns the project, and therefore who pays for it
+	// and who may change it. It is also the AUTHORSHIP line a gallery credits;
+	// there is no separate author field.
+	Org string `json:"org"`
+	// Slug is the identifier that MATTERS: the handle every later call addresses,
+	// the S3 key segment the site's objects live under, and the label of the public
+	// host `<slug>.hanzo.app`. Because it is a hostname it is constrained and
+	// reserved labels such as `api` are refused.
+	Slug string `json:"slug"`
+	// Name is the project's display name, free text a person chose.
+	Name string `json:"name"`
+	// Description is the one-line summary, which is copied onto forks of this
+	// project and shown on a gallery card.
+	Description string `json:"description,omitempty"`
+	// Repo is the git source this project builds from, empty when it is deployed by
+	// uploading an artifact instead.
+	Repo projectsRepo `json:"repo"`
+	// Framework is a BUILD HINT from a closed set, defaulting to static. It tells CI
+	// how to build a linked repo and never gates a deploy, so a wrong value costs a
+	// build rather than access.
+	Framework string `json:"framework"`
+	// Status is where the project stands — whether a build has ever succeeded and
+	// whether anything is serving right now.
+	Status string `json:"status"`
+	// LiveURL is where the site answers today. Absent until something has been
+	// deployed.
+	LiveURL string `json:"liveUrl,omitempty"`
+	// Bucket is the object-store bucket the site's files are served out of.
+	Bucket string `json:"bucket,omitempty"`
+	// CurrentDeploymentID names the deployment currently serving, so a caller can
+	// ask what is live without scanning the history.
+	CurrentDeploymentID string `json:"currentDeploymentId,omitempty"`
+	// CacheControl is the Cache-Control policy the edge serves this site's HTML
+	// under — how long a reader may hold a stale page before asking again. Assets
+	// are content-addressed and are not governed by it.
 	CacheControl string `json:"cacheControl,omitempty"`
-	LastPurgeAt  int64  `json:"lastPurgeAt,omitempty"`
-	// Analytics is the wired-by-default web-analytics flag (default true). It is the
-	// value the app's static-builder reads as deployment.analytics to inject the
-	// beacon. Space is the project's Base data space ("<org>/<slug>") a deployed
-	// site posts form/forum/data submissions to under /v1/base.
-	Analytics bool   `json:"analytics"`
-	Space     string `json:"space,omitempty"`
+	// LastPurgeAt is when the edge cache was last cleared, as Unix seconds, so a
+	// console can say how fresh what readers see actually is. Absent means never.
+	LastPurgeAt int64 `json:"lastPurgeAt,omitempty"`
+	// Analytics is whether the web-analytics beacon is injected into this site's
+	// pages. It is ON by default — a project has to opt out — and it is what the
+	// static builder reads to decide whether to inject at all.
+	Analytics bool `json:"analytics"`
+	// Space is the project's Base data space, which is where a deployed site's form,
+	// forum and data submissions land. Absent means the site stores nothing.
+	Space string `json:"space,omitempty"`
 	// Key is the project's publishable ingest key, minted at create. It is the
 	// value the injected beacon carries and the ONE thing that attributes this
 	// site's events; the static-builder reads it beside analytics.
@@ -182,20 +218,31 @@ type projectsProject struct {
 	// never renders a project as public because a field was missing.
 	//
 	// Authorship is deliberately absent: it is Org, above.
-	Visibility   string `json:"visibility"`
-	Hidden       bool   `json:"hidden"`
+	Visibility string `json:"visibility"`
+	// Hidden is PLATFORM MODERATION, and it is a different axis from visibility: it
+	// pulls a public project out of the catalogue without editing the publisher's
+	// own choice, so un-hiding restores exactly what they asked for. A project is
+	// listed only when it is public AND not hidden. Always present, never omitted,
+	// for the same reason as visibility.
+	Hidden bool `json:"hidden"`
+	// HiddenReason is why moderation hid it. Absent when it is not hidden.
 	HiddenReason string `json:"hiddenReason,omitempty"`
-	// Upstream/License credit the third-party work this project was published
-	// from, and the terms it carries. Omitted when nothing is declared: an absent
-	// credit means "nobody has said", not "there is nothing to say".
+	// Upstream credits the third-party work this project was published from — a
+	// free-text line, because the honest answer is a name and a title that no enum
+	// could hold. Absent means NOBODY HAS SAID, not that there is nothing to say.
 	Upstream string `json:"upstream,omitempty"`
-	License  string `json:"license,omitempty"`
+	// License is the terms that upstream work carries. Absent has the same reading:
+	// undeclared, not unencumbered.
+	License string `json:"license,omitempty"`
 	// Tags is the site's browser tag config: platform slug → non-secret pixel id (GA
 	// measurement, Meta pixel, …) — what track.js injects and the server CAPI reads,
 	// per site. Omitted when none are set. The API SECRET is never here (KMS).
-	Tags      map[string]string `json:"tags,omitempty"`
-	CreatedAt int64             `json:"createdAt"`
-	UpdatedAt int64             `json:"updatedAt"`
+	Tags map[string]string `json:"tags,omitempty"`
+	// CreatedAt is when the project was created, as Unix seconds.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when the project's own record last changed, as Unix seconds. A
+	// deploy is not an edit of the project, so this does not move on every publish.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 func toProject(p Project) projectsProject {
@@ -219,20 +266,44 @@ func toProject(p Project) projectsProject {
 type projectsProjects []projectsProject
 
 type projectsDeployment struct {
-	ID        string `json:"id"`
+	// ID identifies this one deployment attempt, and is what CI quotes back to
+	// complete it.
+	ID string `json:"id"`
+	// ProjectID is the project this deployment belongs to.
 	ProjectID string `json:"projectId"`
-	Version   int    `json:"version"`
-	Status    string `json:"status"`
-	Source    string `json:"source"`
-	Commit    string `json:"commit,omitempty"`
-	LiveURL   string `json:"liveUrl,omitempty"`
-	Bucket    string `json:"bucket,omitempty"`
-	Prefix    string `json:"prefix,omitempty"`
-	Files     int    `json:"files"`
-	Bytes     int64  `json:"bytes"`
-	Message   string `json:"message,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// Version counts deployments of this project from 1, so the history reads as an
+	// ordered sequence rather than by timestamp. It is per project, not global.
+	Version int `json:"version"`
+	// Status is where the attempt got to — queued, live, or failed. A deployment
+	// that is live is not necessarily the one SERVING: the project's own
+	// currentDeploymentId says which is.
+	Status string `json:"status"`
+	// Source is what caused the deployment — a git push, an uploaded artifact, a
+	// generated site.
+	Source string `json:"source"`
+	// Commit is the revision that was built, for a deployment that came from a
+	// repository. Absent for an uploaded artifact, which has no revision.
+	Commit string `json:"commit,omitempty"`
+	// LiveURL is where this deployment serves, once it is live.
+	LiveURL string `json:"liveUrl,omitempty"`
+	// Bucket is the object-store bucket its files were written to.
+	Bucket string `json:"bucket,omitempty"`
+	// Prefix is the key prefix within that bucket holding EXACTLY this deployment's
+	// objects — the unit an upload grant is scoped to, so a grant for one deployment
+	// cannot write over another.
+	Prefix string `json:"prefix,omitempty"`
+	// Files is how many objects the deployment published.
+	Files int `json:"files"`
+	// Bytes is their total size in bytes.
+	Bytes int64 `json:"bytes"`
+	// Message is what happened, in words — the build's own note, or on a failure
+	// why it failed.
+	Message string `json:"message,omitempty"`
+	// CreatedAt is when the deployment was queued, as Unix seconds.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when it last changed state, as Unix seconds — so the gap between
+	// the two is how long the build took.
+	UpdatedAt int64 `json:"updatedAt"`
 	// Upload is the prefix-scoped, short-lived S3 write grant handed to CI with a
 	// queued git deployment, so it needs no bucket credential (grant.go). Present
 	// ONLY on the 202 that creates the deployment — it is never stored and never
@@ -615,12 +686,27 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // ---- handlers ----
 
 type projectsCreate struct {
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
+	// Name is the project's display name and the only REQUIRED field. When slug is
+	// omitted it is also what the slug is derived from.
+	Name string `json:"name"`
+	// Slug is the handle everything else addresses this project by: the public host
+	// `<slug>.hanzo.app`, the object-store key segment, and the path parameter of
+	// every later call. Derived from the name when omitted. It is a hostname label,
+	// so it is constrained and reserved labels such as `api` or `admin` are refused.
+	Slug string `json:"slug"`
+	// Description is the one-line summary, copied onto anything forked from this
+	// project.
 	Description string `json:"description"`
-	Framework   string `json:"framework"`
-	Repo        struct {
-		URL    string `json:"url"`
+	// Framework is a BUILD HINT from a closed set, defaulting to static. It tells CI
+	// how to build a linked repo and never gates a deploy.
+	Framework string `json:"framework"`
+	// Repo links a git source, so pushes to it rebuild this project. Omit it for a
+	// project deployed by uploading an artifact.
+	Repo struct {
+		// URL is the repository's clone address.
+		URL string `json:"url"`
+		// Branch is the ref a push must touch to trigger a rebuild; pushes to any
+		// other branch are ignored.
 		Branch string `json:"branch"`
 	} `json:"repo"`
 	// Analytics is the opt-OUT for the wired-by-default analytics beacon: absent
@@ -632,11 +718,12 @@ type projectsCreate struct {
 	// the paid feature, so an unfunded org asking for it is refused rather than
 	// silently downgraded (see resolve).
 	Visibility string `json:"visibility"`
-	// Upstream/License credit the third-party work this project was published
-	// from. Taken from any caller: disclaiming authorship can only cost the
-	// publisher credit, so it needs no gate (see Project.Upstream).
+	// Upstream credits the third-party work this project was published from. It is
+	// accepted from any caller: giving away credit can only cost the publisher, so
+	// it needs no gate.
 	Upstream string `json:"upstream"`
-	License  string `json:"license"`
+	// License is the terms that upstream work carries.
+	License string `json:"license"`
 	// ForkedFrom is the lineage stamp. json:"-": it is set by the fork path from
 	// the parent it actually resolved, never by the caller, so an attribution edge
 	// always names a real ancestor.
@@ -853,13 +940,22 @@ func (o ops) get(ctx context.Context, in *projectsRef) (*projectsProject, error)
 type projectsUpdate struct {
 	// Slug is the project to update, from the path. The URL is the addressing
 	// authority — a `slug` in the body cannot move the write to another project.
-	Slug         string  `json:"slug"`
-	Name         *string `json:"name"`
-	Description  *string `json:"description"`
-	Framework    *string `json:"framework"`
+	Slug string `json:"slug"`
+	// Name replaces the display name. Absent leaves it; the slug never moves with it.
+	Name *string `json:"name"`
+	// Description replaces the one-line summary. Absent leaves it.
+	Description *string `json:"description"`
+	// Framework replaces the build hint. It affects the NEXT build only — nothing
+	// already deployed is rebuilt.
+	Framework *string `json:"framework"`
+	// CacheControl replaces the Cache-Control policy the edge serves this site's
+	// HTML under. Absent leaves it.
 	CacheControl *string `json:"cacheControl"`
-	Repo         *struct {
-		URL    string `json:"url"`
+	// Repo relinks the git source. Absent leaves the existing link.
+	Repo *struct {
+		// URL is the repository's clone address.
+		URL string `json:"url"`
+		// Branch is the ref a push must touch to trigger a rebuild.
 		Branch string `json:"branch"`
 	} `json:"repo"`
 	// Visibility flips an existing project between "public" and "private". Same
@@ -869,13 +965,17 @@ type projectsUpdate struct {
 	// a public project out of the catalogue from admin.hanzo.ai without editing
 	// the publisher's own visibility choice, so un-hiding restores exactly what
 	// they asked for. A tenant sending it is ignored.
-	Hidden       *bool   `json:"hidden"`
+	Hidden *bool `json:"hidden"`
+	// HiddenReason records WHY moderation hid it, so the action can be explained
+	// and reviewed later. Admin-gated like hidden itself.
 	HiddenReason *string `json:"hiddenReason"`
-	// Upstream/License credit the third-party work this app was published from —
-	// settable after the fact, because the demos that need crediting most are the
-	// ones already live. Pointers so "" clears a credit and absent leaves it.
+	// Upstream credits the third-party work this project was published from, and is
+	// settable after the fact because the live demos are the ones that most need
+	// crediting. An explicit empty string CLEARS the credit; absent leaves it.
 	Upstream *string `json:"upstream"`
-	License  *string `json:"license"`
+	// License is the terms that upstream work carries, with the same clear-versus-
+	// leave rule.
+	License *string `json:"license"`
 	// Tags sets the site's browser tag config: platform slug → non-secret pixel id
 	// (e.g. {"ga4":"G-…","meta":"…"}). track.js injects these first-party and the
 	// server CAPI reads them, per site. Absent LEAVES them; a present object REPLACES

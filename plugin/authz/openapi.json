@@ -28,7 +28,8 @@
         "description": "Answers one policy question — may this subject take this action on this object — against the CALLER'S OWN org policy set, and answers it with a bare allow/deny.\n\nThe org comes from the gateway-minted X-Org-Id and picks the per-org enforcer, so a decision is always rendered by that tenant's policies and never by another's. A request carrying no org is refused rather than answered from a shared or default set: collapsing tenants together is the one failure a policy engine must not have.\n\nBody: {sub, obj, act}, all three required. The reply echoes them beside `allow` so a cached or logged decision carries the question it answered.",
         "tags": [
           "authz"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/authz/health": {
@@ -38,7 +39,8 @@
         "description": "Reports that the authz process is up. Unauthenticated by design and never org-scoped: it answers while every tenant's enforcer is still cold, because a probe that needed a tenant would fail for reasons that have nothing to do with the process being alive.",
         "tags": [
           "authz"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/authz/readyz": {
@@ -48,7 +50,8 @@
         "description": "Reports that the authz process is ready to serve decisions. Unauthenticated and not org-scoped, for the same reason health is: readiness is a property of this process, not of any one tenant's policy set.",
         "tags": [
           "authz"
-        ]
+        ],
+        "x-public": true
       }
     }
   },

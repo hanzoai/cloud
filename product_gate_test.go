@@ -42,7 +42,7 @@ var mismatched = map[string]string{
 // functionality is (at least partly) duplicated on the cloud side. The worst
 // bucket, and the front of the migration worklist.
 var unwired = []string{
-	"admin", "analytics", "auto", "billing", "bot", "datastore", "dns",
+	"admin", "analytics", "billing", "bot", "datastore", "dns",
 	"engine", "eval", "functions", "gateway", "git", "idv", "ingress", "kms",
 	"marketing", "ml", "mpc", "platform", "research", "skills", "social",
 	"team", "usage", "visor", "world", "zt",
