@@ -526,6 +526,23 @@ const (
 	BooksFigures    = "books_figures"
 	GitFigures      = "git_figures"
 	ProjectsFigures = "projects_figures"
+
+	// FlagsHold answers whether the CALLER'S ORG holds one flag — the question a
+	// capability that is not yet ga asks about every request that reaches its
+	// prefix (HIP-0139 §8, cloud.Stage).
+	//
+	// It is on the plane because the two ends are different processes: the refusal
+	// runs in whichever binary serves the capability, and the definitions live in
+	// the flags app's per-org store. It is a plane op rather than a call to
+	// /v1/flags because the refusal runs BEFORE the capability's own door, on a
+	// request that may carry no credential this deployment can replay — and asking
+	// the edge would mean cloud presenting a customer's bearer to cloud.
+	//
+	// The subject is the org, and the org rides the caller. A flag keyed by
+	// capability is a fact about a TENANT — whether that customer has been let into
+	// the product — so there is nothing finer to name and no argument that could
+	// name it.
+	FlagsHold = "flags_hold"
 )
 
 // HostApp is the socket name the fleet router answers on. It is not an app —
@@ -840,6 +857,23 @@ type Send struct {
 	To      string `json:"to"`                // phone number for sms, address for email
 	Subject string `json:"subject,omitempty"` // carried on email only
 	Body    string `json:"body"`              // the message, sent verbatim
+}
+
+// ---- flags.hold ------------------------------------------------------------
+
+// FlagIn names the flag to evaluate, and nothing else. The subject is the
+// caller's org, which is why there is no field for one — see [FlagsHold].
+type FlagIn struct {
+	Key string `json:"key"` // the flag's key; for a capability's stage it is the capability's name
+}
+
+// Flag is the verdict: whether the caller's org holds it.
+//
+// One boolean, because the caller asks one question. A flag's variant and payload
+// are a richer answer that /v1/flags already gives to a caller that wants one, and
+// a refusal that read a variant would have to decide which variants mean yes.
+type Flag struct {
+	On bool `json:"on"`
 }
 
 // Product names the product whose platform configuration is wanted.

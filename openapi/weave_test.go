@@ -95,7 +95,7 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v — run `make describe`", goldenPath, err)
 	}
-	subsets, err := openapi.Subsets(manifest.Names(), fromTree)
+	subsets, err := openapi.Subsets(manifest.Names(), fromTree, manifest.StageOf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 // and feeding it the public one is REFUSED. The second is the load-bearing one —
 // it is the assertion that fails if the ratchet is ever re-based.
 func TestTheFloorGuardsTheInternalDocument(t *testing.T) {
-	subsets, err := openapi.Subsets(manifest.Names(), fromTree)
+	subsets, err := openapi.Subsets(manifest.Names(), fromTree, manifest.StageOf)
 	if err != nil {
 		t.Fatal(err)
 	}

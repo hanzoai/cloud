@@ -1212,6 +1212,48 @@ one before it.
   by the same run — one value in two places, not two sources of truth. It is
   named `hanzo`, not `cloud`, because the binary serves the WHOLE /v1 surface.
 
+### The stage: `x-stage`, and the 404 behind it
+
+A capability is `ga`, `beta` or `alpha`, declared ONCE — `manifest.App.Stage`,
+absent means ga (HIP-0139 §8). No env var, no flag, no per-app constant. The
+fleet's 123 rows are 79 ga, 44 beta, 0 alpha; `manifest/stage_test.go` holds the
+staged set as a golden, so a promotion is a diff rather than a number that moved.
+
+- **The weave stamps it.** `openapi.Part` carries the app's stage beside its
+  name and `Weave` writes `x-stage` onto every operation that part contributed.
+  It cannot be stamped earlier: an app describing itself (`<binary> openapi`)
+  projects its OWN router and never reads the fleet's manifest, so a subset does
+  not carry it — which is also why `openapi` may not import `manifest`
+  (`manifest/openapi_test.go` is `package manifest` and imports `openapi`, so
+  the edge would close a cycle). `manifest.StageOf` is the lookup both callers
+  of `Subsets` pass in.
+- **`public.yaml` is ga-only.** `audience` (openapi/public.go) gained the term,
+  so the rule stays one rule in one place, and `stamp` runs a SECOND time at the
+  end of `Weave` — over the finished composition, the first point at which every
+  term of the rule is known. Measured here: `openapi.yaml` unchanged at 1816
+  paths / 2473 operations, 465 of them now carrying `x-stage`; `public.yaml`
+  1671 → 1335 paths, 2284 → 1850 operations.
+- **`openapi/floor.json` is unchanged and still guards the INTERNAL document.**
+  Nothing left that document; a beta capability is reached by flag, not hidden.
+- **The agent door followed, and it had to be MOVED to.**
+  `plugin/gen-fleet-catalog` filters `x-tool AND x-public` — but it read
+  `x-public` off the SUBSETS, where the stage is not yet known, so 355 beta
+  operations stayed in the door while the same operations were absent from every
+  generated SDK. It now reads the audience off `public.yaml`, which IS the
+  published contract; the roster and the prose still come from each app's own
+  subset, because those are the app's own facts and the audience is the fleet's.
+  42 subsystem tools and 355 operations left the catalog; no ga app moved.
+  `fleet/catalog_test.go` asks the same question of the same file.
+- **The 404 is `cloud.Stage` (stage.go), installed by `Listen`.** One middleware
+  per non-ga app, over `manifest.PrefixesFor(name)`, asking flags across the
+  internal plane (`plane.FlagsHold`, `apps/flags/hold_rpc.go`) whether the
+  caller's org holds the flag whose key IS the capability's name — one name, so
+  there is no product→flag table to get wrong. A ga row composes `nil`, so ga
+  costs nothing. Not 403, which is an existence oracle; the body is zip's
+  ordinary not-found, asserted byte-for-byte against an unrouted path. A flags
+  outage and a caller with no validated org both fail CLOSED.
+  `cmd/cloud` learns nothing and stays light (405 packages, bound 450).
+
 ### What the projections MEASURE, asked of the running deployment
 
 Every number below was taken by making the request, not by reading the code. Two

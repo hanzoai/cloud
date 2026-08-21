@@ -233,6 +233,20 @@ func Listen(plugins []Plugin, enable []string) error {
 	deps.Audit = auditRec
 	app.Use(AuditTrail(auditRec))
 
+	// The stage (HIP-0139 §8): a capability that is not ga answers 404 on its own
+	// prefixes to an org that does not hold the flag named for it. Nothing for the
+	// seventy-nine ga rows, which compose a nil — see stage.go.
+	//
+	// AFTER AuditTrail, so a refusal is in the tamper-evident trail like every
+	// other one, and BEFORE the limiter, the abuse sensor and the two funding gates,
+	// because a request to a capability this org cannot reach must not spend its
+	// rate budget or touch its balance. It is the first thing asked about the
+	// ADDRESS once identity is settled, which is the right order: whether a thing
+	// exists for you comes before what it would cost you.
+	for _, p := range plugins {
+		app.Use(Stage(p.Name))
+	}
+
 	// Per-scope rate limit (issue #70). Runs AFTER identity (needs the validated
 	// principal to key on org/project/service) and AFTER audit (so a 429 is
 	// recorded), and BEFORE BillingGate so an over-rate request is rejected before
