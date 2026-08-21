@@ -115,26 +115,26 @@ func TestCompleteReadsAWildcardDeclarationThroughTheSameTranslation(t *testing.T
 // THE FALSE POSITIVE, at the pair that produced it.
 //
 // provisioning both SERVES and DESCRIBES POST /v1/s3 — the route at
-// apps/provisioning/provisioning.go:257, the prose at :341 — while storage serves
-// the deeper /v1/s3/buckets and /v1/s3/health. By product segment both are "s3",
-// so storage was charged with a declaration that is provisioning's and correct,
-// and `make check` died on an app with nothing wrong with it:
+// apps/provisioning/provisioning.go:257, the prose at :341 — while the s3 app
+// serves the deeper /v1/s3/buckets and /v1/s3/health. By product segment both are
+// "s3", so the data plane was charged with a declaration that is provisioning's
+// and correct, and `make check` died on an app with nothing wrong with it:
 //
-//	storage: 1 description(s) name no operation:
+//	s3: 1 description(s) name no operation:
 //	  POST /v1/s3
 //
-// By owner they are two apps, and storage is never asked about provisioning's prose.
+// By owner they are two apps, and s3 is never asked about provisioning's prose.
 func TestCompleteDoesNotChargeAnAppForASiblingSharingItsProduct(t *testing.T) {
 	Describe("/v1/s3", "POST", "Provision an s3 resource",
 		"provisioning's own declaration, on a route provisioning itself serves.")
 	t.Cleanup(func() { unregister("/v1/s3", "POST") })
 
-	storage := &Document{Paths: map[string]PathItem{
+	dataplane := &Document{Paths: map[string]PathItem{
 		"/v1/s3/buckets": {"get": {OperationID: "get_s3_buckets", Summary: "List your org's buckets"}},
 		"/v1/s3/health":  {"get": {OperationID: "get_s3_health", Summary: "Report the object store's reachability"}},
 	}}
-	if err := Complete(storage, routed); err != nil {
-		t.Fatalf("storage was charged with provisioning's declaration: %v", err)
+	if err := Complete(dataplane, routed); err != nil {
+		t.Fatalf("s3 was charged with provisioning's declaration: %v", err)
 	}
 }
 
@@ -142,28 +142,28 @@ func TestCompleteDoesNotChargeAnAppForASiblingSharingItsProduct(t *testing.T) {
 // actually happened.
 //
 // This is the mutation that proves the fix is a fix and not a deletion. The
-// declaration is mis-keyed INSIDE storage's own prefix — "object" for the
-// "objects" the router carries — so the fleet routes the address to storage, the
-// prose renders nowhere, and reading the source it looks landed. Exactly
+// declaration is mis-keyed INSIDE s3's own prefix — "object" for the "objects"
+// the router carries — so the fleet routes the address to s3, the prose renders
+// nowhere, and reading the source it looks landed. Exactly
 // POST /v1/store/storefront-token, one app over. Attributing by owner must not
 // soften this by one inch.
 func TestCompleteStillRefusesADeclarationMisfiledInsideTheAppsOwnPrefix(t *testing.T) {
 	const misfiled = "/v1/s3/buckets/:bucket/object" // the router carries .../objects
-	if got := routed(misfiled); got != "storage" {
+	if got := routed(misfiled); got != "s3" {
 		t.Fatalf("premise broken: the fleet routes %s to %q, so this no longer tests "+
-			"a misfile inside storage's OWN surface", misfiled, got)
+			"a misfile inside s3's OWN surface", misfiled, got)
 	}
 	Describe(misfiled, "GET", "List a bucket's objects", "Prose one character off the address.")
 	t.Cleanup(func() { unregister(misfiled, "GET") })
 
-	storage := &Document{Paths: map[string]PathItem{
+	dataplane := &Document{Paths: map[string]PathItem{
 		"/v1/s3/buckets": {"get": {OperationID: "get_s3_buckets", Summary: "List your org's buckets"}},
 		"/v1/s3/buckets/{bucket}/objects": {"get": {
 			OperationID: "get_s3_buckets_by_bucket_objects",
 			Summary:     "List the objects in one bucket",
 		}},
 	}}
-	err := Complete(storage, routed)
+	err := Complete(dataplane, routed)
 	if err == nil {
 		t.Fatal("a declaration misfiled inside the app's own prefix was ACCEPTED — the gate " +
 			"is gone, which is worse than the false positive it replaced")

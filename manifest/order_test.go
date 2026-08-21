@@ -23,7 +23,7 @@ import "testing"
 var frozen = []string{
 	"pubsub", "kafka", "mq", "skills", "flags", "kms", "metrics",
 	"ingress", "account", "iam", "base", "o11y", "authz",
-	"commerce", "licensing", "plan", "pricing", "storage", "provisioning",
+	"commerce", "licensing", "plan", "pricing", "s3", "provisioning",
 	"billing", "rollingcap", "allowance", "platform", "projects",
 	"dns", "domain", "prompts", "agents", "link", "wallets",
 	"x402", "deploy", "functions", "todo", "templates", "blueprint",
