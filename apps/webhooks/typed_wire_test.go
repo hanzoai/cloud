@@ -321,3 +321,36 @@ func TestListEnvelopesAndDelete(t *testing.T) {
 func sortedKeys(m map[string]bool) string {
 	return strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
+// gates cannot see. Typing a route documents its ADDRESS and its SHAPE; the shape's
+// FIELDS come from a doc comment on each one, which zipdoc lifts per field.
+//
+// Three facts here are load-bearing and invisible from the names. `secret` leaves
+// the server exactly ONCE, on create — a caller who plans to read it back later
+// finds it gone. An `httpStatus` of 0 is not a 200: it means the subscriber never
+// answered at all. And `deliveries7d`/`failures7d` count SETTLED deliveries, so a
+// delivery still climbing the retry ladder is in neither, which is why a busy
+// endpoint can show zero of both.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "webhooks", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("webhooks publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/webhooks describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+}
