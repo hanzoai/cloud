@@ -180,6 +180,13 @@ func Live(app *zip.App) []Route {
 		if !methods[r.Method] {
 			continue
 		}
+		// The router is a superset of the contract: it carries zip's own
+		// control routes and anything the app serves without declaring — a
+		// retired address answers 410 for every method and is not something a
+		// caller can DO, so it is not an operation.
+		if !app.Declares(r.Method, r.Path) {
+			continue
+		}
 		out = append(out, Route{Method: r.Method, Path: r.Path})
 	}
 	sort.Slice(out, func(i, j int) bool {
