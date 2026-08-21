@@ -1,4 +1,4 @@
-// POST /v1/usage/rollup/backfill — the DEPLOY-GATED, run-ONCE seed of the derived
+// POST /v1/admin/leaderboard/rollup — the DEPLOY-GATED, run-ONCE seed of the derived
 // rollup from pre-MV ledger history. SuperAdmin only.
 //
 // The incremental MV captures rows inserted AFTER its creation; this seeds everything

@@ -11,13 +11,15 @@
 // html/template auto-escaping is the XSS boundary — repo names, paths, and file
 // contents are all rendered through it, never concatenated into HTML.
 //
-// Routes (browser, distinct from the /v1/git API + smart-HTTP protocol):
+// Routes (browser pages; the JSON twin of each is a typed op under
+// /v1/git/repos/:name):
 //
-//	GET /git                         the caller's org repo list (home)
-//	GET /git/:org/:repo              repo home: branches, HEAD, root tree, clone
-//	GET /git/:org/:repo/tree/*?ref=  browse a subtree
-//	GET /git/:org/:repo/blob/*?ref=  view a file
-//	GET /git/:org/:repo/commits?ref= commit log
+//	GET /v1/git                         the caller's org repo list (home)
+//	GET /v1/git/explore                 every public repo in the fleet
+//	GET /v1/git/:org/:repo              repo home: branches, HEAD, root tree, clone
+//	GET /v1/git/:org/:repo/tree/*?ref=  browse a subtree
+//	GET /v1/git/:org/:repo/blob/*?ref=  view a file
+//	GET /v1/git/:org/:repo/commits?ref= commit log
 
 package git
 
@@ -42,42 +44,32 @@ const uiAccess = " A public repository is readable by anyone; a private one only
 	"by its own org. A repository that does not exist and one belonging to another " +
 	"org answer the SAME 404, so the page is never an existence oracle."
 
-// uiHTML is the fact an SDK or CLI consumer most needs about these twelve
+// uiHTML is the fact an SDK or CLI consumer most needs about these six
 // operations and cannot see from the operationId: they are pages, not data.
 const uiHTML = " This is a server-rendered browser page, not JSON — the console " +
-	"repo-browser reads the same repository through the JSON ops under /v1/git. " +
-	"Repository names, paths and file contents all render through auto-escaping " +
-	"templates rather than being concatenated into HTML."
+	"repo-browser reads the same repository through the JSON ops under " +
+	"/v1/git/repos. Repository names, paths and file contents all render through " +
+	"auto-escaping templates rather than being concatenated into HTML."
 
-// The two mounts, one handler set. Which mount a page is on is a real difference
-// in who can reach it, so each says which it is.
-const (
-	uiEverywhere = " Served on every host, which is how the console embeds the git " +
-		"browser under /git."
-	uiGitHostOnly = " Served only on the dedicated git host, where a browse URL " +
-		"matches the clone URL; on the API and console hosts it falls through to " +
-		"their own routes, so it can never shadow them."
-)
-
-// The prose for git's twelve browser pages. They are HTML handlers, so no typed
-// op can carry them and zipdoc has nothing to lift — left bare, every one of them
+// The prose for git's six browser pages. They are HTML handlers, so no typed op
+// can carry them and zipdoc has nothing to lift — left bare, every one of them
 // reached the published document as an operationId and a tag, indistinguishable
 // from a JSON route that takes no input. openapi.Describe attaches prose to a
 // route the router already carries; it can no more add a page than Register can
 // add an operation.
 //
-// One table, two mounts: the SAME six handlers answer under /git on every host
-// and at the root on the git host, so the descriptions are generated in pairs
-// from one row and cannot drift apart.
+// ONE row per page, because there is one mount. Each row was a PAIR — the same
+// handler described twice, at /git and at the root for the dedicated git host.
+// The root mount is gone and the pages are under /v1/git now (see uiRoutes).
 func init() {
-	for _, p := range []struct{ embedded, root, summary, lead string }{
-		{"/git", "/", "Browse your org's repositories",
+	for _, p := range []struct{ path, summary, lead string }{
+		{"/v1/git", "Browse your org's repositories",
 			"The repository list for the signed-in caller's org — each repo with its " +
 				"description, default branch, size and last update. SIGNED OUT it renders " +
 				"the public explore page instead of refusing, because most Hanzo repos are " +
 				"open source and the open face is the default one; signed in, the caller's " +
 				"own org shows its private repositories alongside its public ones."},
-		{"/git/explore", "/explore", "Discover public repositories across every org",
+		{"/v1/git/explore", "Discover public repositories across every org",
 			"The open, unauthenticated face of the git host: every PUBLIC repository in " +
 				"the fleet, org-qualified, so a project can be found and cloned with no " +
 				"account at all — signing in is for private repos and for writes. " +
@@ -85,31 +77,30 @@ func init() {
 				"each org's public rows and is bounded to a fixed number of stores per " +
 				"request, keeping discovery quick however many orgs exist. A fleet with no " +
 				"orgs yet is an empty page, not an error."},
-		{"/git/:org/:repo", "/:org/:repo", "Open a repository's home page",
+		{"/v1/git/:org/:repo", "Open a repository's home page",
 			"A repository at a glance: its branches, the tree at the tip, its most recent " +
 				"commits, its README rendered, and the HTTPS and SSH clone URLs. `?ref=` " +
 				"selects a branch, tag or commit; the default branch is used when it is " +
 				"omitted. A repository with no commits yet renders its clone instructions " +
 				"rather than an error, which is what a caller who has just created one " +
 				"needs to see."},
-		{"/git/:org/:repo/tree/*", "/:org/:repo/tree/*", "Browse a directory inside a repository",
+		{"/v1/git/:org/:repo/tree/*", "Browse a directory inside a repository",
 			"The contents of one directory at one revision, with breadcrumbs back up and " +
 				"links onward into subdirectories and files. The path after /tree/ is the " +
 				"directory and `?ref=` selects the branch, tag or commit, defaulting to the " +
 				"repository's own default branch. An unknown ref is 404, as is a repository " +
 				"with no commits."},
-		{"/git/:org/:repo/blob/*", "/:org/:repo/blob/*", "View a file in a repository",
+		{"/v1/git/:org/:repo/blob/*", "View a file in a repository",
 			"One file's contents at one revision, with its size and line count. A BINARY " +
 				"file is reported as binary rather than dumped into the page. The path " +
 				"after /blob/ is the file and `?ref=` selects the branch, tag or commit. An " +
 				"unknown ref or a path that is not a file in it is 404."},
-		{"/git/:org/:repo/commits", "/:org/:repo/commits", "Read a repository's commit log",
+		{"/v1/git/:org/:repo/commits", "Read a repository's commit log",
 			"The hundred most recent commits on one ref, each with its author, message " +
 				"and date. `?ref=` selects the branch, tag or commit, defaulting to the " +
 				"repository's default branch; an unknown one is 404."},
 	} {
-		openapi.Describe(p.embedded, http.MethodGet, p.summary, p.lead+access(p.embedded)+uiHTML+uiEverywhere)
-		openapi.Describe(p.root, http.MethodGet, p.summary, p.lead+access(p.root)+uiHTML+uiGitHostOnly)
+		openapi.Describe(p.path, http.MethodGet, p.summary, p.lead+access(p.path)+uiHTML)
 	}
 }
 
@@ -123,48 +114,45 @@ func access(path string) string {
 	return ""
 }
 
-// uiRoutes registers the browser UI. Called from routes() in git.go.
+// uiRoutes registers the browser UI. Called from routes() in git.go, with
+// ABSOLUTE paths under /v1/git — the one prefix this app owns, carrying the JSON
+// ops, the clone protocol and now the pages. Absolute rather than on the group
+// because the home page IS the prefix: a group composes "" to "/v1/git/", a
+// different route, and op.Path is the identity every projection keys on.
 //
-// TWO mount points, ONE handler set. The /git/* prefix serves the UI on EVERY
-// host (base "/git") — this is how the console embeds the git browser. The root
-// mount serves the SAME handlers GitHub-style at "/" on the DEDICATED git host
-// only (base ""), so a browse URL matches the clone URL (git.hanzo.ai/<org>/<repo>
-// ↔ git.hanzo.ai/<org>/<repo>.git). onGitHost gates the root routes to the git
-// host; on api/console they fall through (c.Next()) to the console SPA catch-all,
-// so a bare /:org/:repo can never shadow it there. They register AFTER the root
-// smart-HTTP routes (git.go), whose paths carry a distinct /info/refs |
-// /git-*-pack tail, so a 2-segment UI route and a clone route never collide.
+// There were TWO mounts. These same handlers also answered at the ROOT — GET /,
+// /explore, /:org/:repo/… — whenever the request Host was the dedicated git
+// host, so a browse URL matched a git.hanzo.ai clone URL. That Host is the
+// standalone forge in production, a separate process, so the root mount only
+// ever answered for someone running cloud AS their git host; and a manifest
+// prefix must start with a literal segment, so under the plugin host those
+// routes were never deliverable at all. They are gone, not moved: the browse
+// address is /v1/git/:org/:repo, and the clone address these pages PRINT is
+// still the forge's (uiCloneURL).
+//
+// They register AFTER the JSON ops and the smart-HTTP routes, so the literal
+// leaves — repos, usage, explore, keys, webhook, zap — are matched ahead of
+// :org/:repo and a real org can never shadow them. The clone routes carry a
+// distinct /info/refs | /git-*-pack tail, so a 2-segment page and a clone never
+// collide.
 //
 // Every route here stays raw because it serves a server-rendered HTML page to
 // a browser, not JSON; the JSON twin of each page is a typed op under
 // /v1/git/repos/:name (git.go).
 func uiRoutes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/git", cloud.Handle(s, uiHome))
-	app.Get("/git/explore", cloud.Handle(s, uiExplore))
-	app.Get("/git/:org/:repo", cloud.Handle(s, uiRepo))
-	app.Get("/git/:org/:repo/tree/*", cloud.Handle(s, uiTree))
-	app.Get("/git/:org/:repo/blob/*", cloud.Handle(s, uiBlob))
-	app.Get("/git/:org/:repo/commits", cloud.Handle(s, uiCommits))
-
-	onGit := onGitHost(s.State.gitHost)
-	app.Get("/", onGit(cloud.Handle(s, uiHome)))
-	app.Get("/explore", onGit(cloud.Handle(s, uiExplore)))
-	app.Get("/:org/:repo", onGit(cloud.Handle(s, uiRepo)))
-	app.Get("/:org/:repo/tree/*", onGit(cloud.Handle(s, uiTree)))
-	app.Get("/:org/:repo/blob/*", onGit(cloud.Handle(s, uiBlob)))
-	app.Get("/:org/:repo/commits", onGit(cloud.Handle(s, uiCommits)))
+	app.Get(uiBase, cloud.Handle(s, uiHome))
+	app.Get(uiBase+"/explore", cloud.Handle(s, uiExplore))
+	app.Get(uiBase+"/:org/:repo", cloud.Handle(s, uiRepo))
+	app.Get(uiBase+"/:org/:repo/tree/*", cloud.Handle(s, uiTree))
+	app.Get(uiBase+"/:org/:repo/blob/*", cloud.Handle(s, uiBlob))
+	app.Get(uiBase+"/:org/:repo/commits", cloud.Handle(s, uiCommits))
 }
 
-// uiBase is the URL base the UI links against for this request: "" on the
-// dedicated git host (git.hanzo.ai serves the UI at the ROOT, GitHub-style, so a
-// browse URL matches the clone URL) and "/git" everywhere else (the console
-// embeds the git browser under /git). One canonical URL per host — never both.
-func uiBase(s *cloud.Service[state], c *zip.Ctx) string {
-	if h := s.State.gitHost; h != "" && strings.EqualFold(c.Fiber().Hostname(), h) {
-		return ""
-	}
-	return "/git"
-}
+// uiBase is where the pages live and what every link they render is prefixed
+// with — the mount and the base spelled once, so a page can never link outside
+// where it is served. It was a function of the request Host while these handlers
+// also answered at the root on the dedicated git host.
+const uiBase = "/v1/git"
 
 // uiCloneURL is the canonical clone URL the UI shows: the clean git-host form
 // (https://git.hanzo.ai/<org>/<repo>.git) the root smart-HTTP routes serve, not
@@ -258,8 +246,7 @@ func uiHome(s *cloud.Service[state], c *zip.Ctx) error {
 			DefaultBranch: cmp.Or(strings.TrimSpace(r.DefaultBranch), defaultBranchName),
 			Size:          humanBytes(r.SizeBytes), Updated: rfc3339(r.UpdatedAt)})
 	}
-	base := uiBase(s, c)
-	return render(c, base, http.StatusOK, "Repositories", homeTmpl, homeData{Base: base, Org: o, Repos: rows})
+	return render(c, uiBase, http.StatusOK, "Repositories", homeTmpl, homeData{Base: uiBase, Org: o, Repos: rows})
 }
 
 func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
@@ -268,8 +255,7 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 		return err
 	}
 	ref := strings.TrimSpace(c.Query("ref"))
-	base := uiBase(s, c)
-	d := repoData{Base: base, Org: o, Repo: r.Name, Description: r.Description,
+	d := repoData{Base: uiBase, Org: o, Repo: r.Name, Description: r.Description,
 		CloneHTTP: uiCloneURL(s, o, r.Project, r.Name), CloneSSH: sshURL(s, o, r.Project, r.Name)}
 
 	repo, err := openRepository(s, r)
@@ -279,7 +265,7 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		if rev, label, e := repo.Resolve(c.Context(), ref); e == nil {
 			d.Ref = label
-			d.Entries = treeEntries(c.Context(), repo, rev, "", o, r.Name, label, base)
+			d.Entries = treeEntries(c.Context(), repo, rev, "", o, r.Name, label, uiBase)
 			d.Commits = recentCommits(c.Context(), repo, rev, 10)
 			if _, readme, ok := readmeAt(c.Context(), repo, rev); ok {
 				d.Readme = readme
@@ -293,7 +279,7 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	if d.Ref == "" {
 		d.Ref = cmp.Or(strings.TrimSpace(r.DefaultBranch), defaultBranchName)
 	}
-	return render(c, base, http.StatusOK, r.Name, repoTmpl, d)
+	return render(c, uiBase, http.StatusOK, r.Name, repoTmpl, d)
 }
 
 func uiTree(s *cloud.Service[state], c *zip.Ctx) error {
@@ -311,11 +297,10 @@ func uiTree(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotFound, "unknown ref")
 	}
 	sub := cleanTreePath(c.Fiber().Params("*"))
-	base := uiBase(s, c)
-	return render(c, base, http.StatusOK, r.Name+"/"+sub, treeTmpl, treeData{
-		Base: base, Org: o, Repo: r.Name, Ref: label, Path: sub,
-		Crumbs:  crumbs(o, r.Name, label, sub, base),
-		Entries: treeEntries(c.Context(), repo, rev, sub, o, r.Name, label, base),
+	return render(c, uiBase, http.StatusOK, r.Name+"/"+sub, treeTmpl, treeData{
+		Base: uiBase, Org: o, Repo: r.Name, Ref: label, Path: sub,
+		Crumbs:  crumbs(o, r.Name, label, sub, uiBase),
+		Entries: treeEntries(c.Context(), repo, rev, sub, o, r.Name, label, uiBase),
 	})
 }
 
@@ -338,16 +323,15 @@ func uiBlob(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusNotFound, "no such file")
 	}
-	base := uiBase(s, c)
-	d := blobData{Base: base, Org: o, Repo: r.Name, Ref: label, Path: fp,
-		Crumbs: crumbs(o, r.Name, label, fp, base), Size: humanBytes(blob.Size)}
+	d := blobData{Base: uiBase, Org: o, Repo: r.Name, Ref: label, Path: fp,
+		Crumbs: crumbs(o, r.Name, label, fp, uiBase), Size: humanBytes(blob.Size)}
 	if blob.Binary {
 		d.Binary = true
 	} else {
 		d.Content = string(blob.Content)
 		d.Lines = strings.Count(d.Content, "\n") + 1
 	}
-	return render(c, base, http.StatusOK, r.Name+"/"+fp, blobTmpl, d)
+	return render(c, uiBase, http.StatusOK, r.Name+"/"+fp, blobTmpl, d)
 }
 
 func uiCommits(s *cloud.Service[state], c *zip.Ctx) error {
@@ -364,9 +348,8 @@ func uiCommits(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusNotFound, "unknown ref")
 	}
-	base := uiBase(s, c)
-	return render(c, base, http.StatusOK, r.Name+" commits", commitsTmpl, commitsData{
-		Base: base, Org: o, Repo: r.Name, Ref: label, Commits: recentCommits(c.Context(), repo, rev, 100),
+	return render(c, uiBase, http.StatusOK, r.Name+" commits", commitsTmpl, commitsData{
+		Base: uiBase, Org: o, Repo: r.Name, Ref: label, Commits: recentCommits(c.Context(), repo, rev, 100),
 	})
 }
 

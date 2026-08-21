@@ -41,7 +41,7 @@
 // gets the platform catalogue alone, which is what the marketing landing renders
 // from — so the read is public by the mechanism this binary already has rather
 // than a new one: the identity middleware never rejects, it only strips and
-// re-mints, so a route is public by not calling a gate (the rule /v1/summary and
+// re-mints, so a route is public by not calling a gate (the rule /v1/o11y/summary and
 // /v1/health are served under). Who is calling decides only WHOSE rows join the
 // platform's, and whether unpublished ones are shown.
 //

@@ -7,11 +7,8 @@
 #
 # Exempt by rule, never listed: /.well-known/* (RFC 8615), the OpenAI- and
 # Anthropic-compatible wire served by ai, and /v1/admin/<app> served by <app>.
-/ git
 /_ commerce
 /collaborator team
-/explore git
-/git git
 /meet meet
 /tasks tasks
 /v1/admin affiliates
@@ -31,7 +28,6 @@
 /v1/coding agents
 /v1/commands openapi
 /v1/compute visor
-/v1/connectors integrations
 /v1/csrf account
 /v1/dev-bridge ai
 /v1/docs ai
@@ -90,20 +86,16 @@
 /v1/run platform
 /v1/runner platform
 /v1/s3 storage
-/v1/scrape websearch
 /v1/search product
 /v1/sentinel o11y
 /v1/sites projects
 /v1/skills tools
 /v1/store commerce
-/v1/summary o11y
 /v1/tags projects
 /v1/tokens web3
 /v1/traces metrics
 /v1/traffic ai
 /v1/upload exec
-/v1/usage leaderboard
 /v1/vector product
 /v1/wecom-bot ai
 /ws o11y
-/{org} git
