@@ -155,3 +155,39 @@ func TestEveryTypedTodoOpIsDescribed(t *testing.T) {
 			"Run: go generate -run zipdoc ./apps/todo/...", strings.Join(bare, ", "))
 	}
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the gates above
+// cannot see. Typing a route documents its ADDRESS and its SHAPE; the shape's FIELDS
+// come from a different place — a doc comment on each one, which zipdoc lifts one at
+// a time — so a fully typed surface can still publish a wholly unreadable document.
+//
+// It matters here because the scalars on this surface are closed sets and addresses,
+// not labels. `status` is backlog | todo | in_progress | done | canceled and `kind` is
+// issue | pr | epic; both are refused with 400 outside that set, so a caller who
+// cannot read them guesses at a value the server will not take. `priority` is never
+// empty — an unset one is the value "none" — while an empty `assignee` is load-bearing
+// the other way: it means unheld, which is the state a claim requires. And `id` is not
+// the address: an issue is addressed by `projectKey` plus `number`, which is per-board
+// and collides across the org.
+//
+// Presence is all a gate can check. A description restating the field's name is worse
+// than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(mountWire(t), openapi.Info{Title: "todo", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("todo publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/todo describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+}

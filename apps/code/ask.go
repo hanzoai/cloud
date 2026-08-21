@@ -49,21 +49,37 @@ func (a *aiSynth) Synthesize(ctx context.Context, org, billingOrg, project, prom
 
 // Citation points an /ask answer back at exact code.
 type Citation struct {
-	Repo    string `json:"repo,omitempty"`
-	File    string `json:"file"`
-	Line    int    `json:"line"`
-	EndLine int    `json:"endLine"`
-	Symbol  string `json:"symbol,omitempty"`
+	// Repo is the repository the cited code lives in ("owner/name"), absent when the
+	// ask was already scoped to one.
+	Repo string `json:"repo,omitempty"`
+	// File is the path inside the repo, relative to its root.
+	File string `json:"file"`
+	// Line is the first line of the cited region, 1-based.
+	Line int `json:"line"`
+	// EndLine is its last line, inclusive.
+	EndLine int `json:"endLine"`
+	// Symbol is the declaration the region belongs to, when it belongs to one.
+	Symbol string `json:"symbol,omitempty"`
 }
 
 // AskAnswer is the /ask result: the synthesized answer plus the exact spans it
 // was grounded on. Degraded=true means retrieval succeeded but synthesis was
 // unavailable — the caller still gets cited spans to reason over.
 type AskAnswer struct {
-	Question  string     `json:"question"`
-	Answer    string     `json:"answer"`
+	// Question is the ask, echoed back.
+	Question string `json:"question"`
+	// Answer is the synthesized prose. EMPTY is a real answer here: nothing in the
+	// index matched, or synthesis was unavailable — read `degraded` and `citations`
+	// to tell those apart. It is never written without grounding.
+	Answer string `json:"answer"`
+	// Citations are the exact regions the answer was grounded on, and they are the
+	// point: an answer is checkable only because every claim in it can be read back
+	// at a file and line. Present even when Answer is empty.
 	Citations []Citation `json:"citations"`
-	Degraded  bool       `json:"degraded,omitempty"`
+	// Degraded is true when retrieval worked but no synthesizer was reachable. The
+	// citations are still real code, so a caller can answer from them itself; a
+	// caller that treats this like an error throws away a usable result.
+	Degraded bool `json:"degraded,omitempty"`
 }
 
 const askContextBudget = 6000

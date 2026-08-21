@@ -1900,9 +1900,11 @@
       "githubForkOut": {
         "properties": {
           "clone_url": {
+            "description": "CloneURL is the fork's https git remote. GitHub populates a new fork in the\nbackground, so a clone issued the moment this answers can still find it empty.",
             "type": "string"
           },
           "default_branch": {
+            "description": "DefaultBranch is the branch the fork checks out, inherited from upstream.",
             "type": "string"
           },
           "existing": {
@@ -1910,9 +1912,11 @@
             "type": "boolean"
           },
           "full_name": {
+            "description": "FullName is the fork's \"owner/repo\". The owner is the account it landed in\n— the request's org, or the installation's own account when none was named.",
             "type": "string"
           },
           "html_url": {
+            "description": "HTMLURL is the fork's page on github.com.",
             "type": "string"
           }
         },
@@ -2206,27 +2210,35 @@
       "githubSearchHit": {
         "properties": {
           "clone_url": {
+            "description": "CloneURL is the repository's https git remote.",
             "type": "string"
           },
           "default_branch": {
+            "description": "DefaultBranch is the branch a clone checks out.",
             "type": "string"
           },
           "description": {
+            "description": "Description is the blurb the repository's owner wrote. Empty when it has none.",
             "type": "string"
           },
           "full_name": {
+            "description": "FullName is the repository's \"owner/repo\" on GitHub. Finding it here does\nNOT make it forkable: githubFork takes a repo the org's installation was\ngranted, and a hit from the public index usually is not one.",
             "type": "string"
           },
           "html_url": {
+            "description": "HTMLURL is the repository's page on github.com.",
             "type": "string"
           },
           "language": {
+            "description": "Language is the primary language GitHub detected from the file mix (\"Go\",\n\"TypeScript\"). Empty when GitHub attributes none.",
             "type": "string"
           },
           "private": {
+            "description": "Private is GitHub's visibility flag, passed through. This op reads the\npublic index — the org's token only charges the rate limit to the\ninstallation — so it is false for everything a search can reach.",
             "type": "boolean"
           },
           "stars": {
+            "description": "Stars is GitHub's stargazers_count as the SEARCH INDEX held it when the\nquery ran — a snapshot, not a live count off the repository.",
             "type": "integer"
           }
         },
@@ -2235,9 +2247,11 @@
       "githubSearchOut": {
         "properties": {
           "count": {
+            "description": "Count is how many hits Repos carries. It is that array's length, NOT\nGitHub's total_count, so it never exceeds limit and says nothing about how\nmany more repositories matched.",
             "type": "integer"
           },
           "repos": {
+            "description": "Repos are the matching repositories in GitHub's own relevance order, capped\nat limit. Always an array, never null.",
             "items": {
               "$ref": "#/components/schemas/githubSearchHit"
             },

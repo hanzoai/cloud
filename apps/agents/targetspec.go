@@ -35,13 +35,27 @@ type Spec struct {
 	Arch   string `json:"arch,omitempty"`   // amd64 | arm64 | ...
 	CPUs   int    `json:"cpus,omitempty"`   // logical cores
 	Memory int64  `json:"memory,omitempty"` // total RAM, bytes
-	GPUs   []GPU  `json:"gpus,omitempty"`
+	// GPUs is every accelerator the machine advertises, one entry each, capped at
+	// 32 on write. Empty means the probe found none — and that is the answer a
+	// Need is checked against, so a machine with no entry here clears no
+	// accelerator floor. The list is not vendor-filtered: what satisfies a job is
+	// counts and VRAM, never a brand (see Need).
+	GPUs []GPU `json:"gpus,omitempty"`
 }
 
 // Metrics is a machine's live state from the last heartbeat.
 type Metrics struct {
-	Load1   float64 `json:"load1,omitempty"`
-	Load5   float64 `json:"load5,omitempty"`
+	// Load1 is the machine's own one-minute load average — a count of runnable and
+	// uninterruptible tasks, NOT a percentage and NOT already divided by core
+	// count, so it is read against Spec.CPUs: 8.0 is idle on 16 cores and swamped
+	// on 4. Coerced finite and non-negative on write, so 0 means either genuinely
+	// idle or nothing reported.
+	Load1 float64 `json:"load1,omitempty"`
+	// Load5 is the same figure averaged over five minutes.
+	Load5 float64 `json:"load5,omitempty"`
+	// Load15 is the same figure over fifteen. The three together are what separate
+	// a machine that is busy right now from one that has been busy all along —
+	// which is the question a dispatcher is really asking.
 	Load15  float64 `json:"load15,omitempty"`
 	MemUsed int64   `json:"memUsed,omitempty"` // bytes
 	MemFree int64   `json:"memFree,omitempty"` // bytes

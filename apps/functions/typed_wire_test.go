@@ -92,43 +92,77 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
-// promoted names the published shapes whose properties are PROMOTED from an
-// embedded type. The schema builder inlines an embedded struct's fields into the
-// outer object; zipdoc keys a field's prose by the type that DECLARES it. So the
-// sentences exist — under functionView, which this surface publishes in its own
-// right — and the outer copy carries none. Listing the type here is the deliberate
-// edit that acknowledges it, rather than a silent hole in the gate.
-var promoted = map[string]bool{"functionDetail": true}
+// proseless is the CLOSED list of published properties that carry NO description,
+// and it names a generator limitation rather than a hole in anyone's diligence.
+//
+// All sixteen are PROMOTED from an embedded type: functionDetail embeds functionView,
+// the schema builder inlines the embedded struct's fields into the outer object, and
+// zipdoc keys a field's prose by the type that DECLARES it. So the sentences exist and
+// are published — under functionView, which this surface answers with in its own right
+// — and only the inlined copy is bare. Unrolling the embedding would fix the lookup and
+// change the wire, which a description task may not do.
+//
+// Exact in BOTH directions. A bare property anywhere else goes red, and an entry here
+// that starts publishing prose goes red too — that is the day zipdoc follows an
+// embedding, and this ledger shrinks instead of outliving the gap.
+var proseless = map[string]bool{
+	"functionDetail.avgDurationMs":  true,
+	"functionDetail.createdAt":      true,
+	"functionDetail.endpoint":       true,
+	"functionDetail.envCount":       true,
+	"functionDetail.environment":    true,
+	"functionDetail.errors7d":       true,
+	"functionDetail.image":          true,
+	"functionDetail.invocations7d":  true,
+	"functionDetail.lastDeployedAt": true,
+	"functionDetail.memoryLimit":    true,
+	"functionDetail.name":           true,
+	"functionDetail.namespace":      true,
+	"functionDetail.status":         true,
+	"functionDetail.successRate":    true,
+	"functionDetail.target":         true,
+	"functionDetail.timeoutSec":     true,
+}
 
 // TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
 // gate cannot see: the FIELDS of the published shapes.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	_, _, schemas := opsUnderTest(t)
-	if len(schemas) == 0 {
-		t.Fatal("no functions schemas in the typed registry at all")
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "functions", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
 	}
-	var bare []string
-	for name, raw := range schemas {
-		sch, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		props, ok := sch["properties"].(map[string]any)
-		if !ok || promoted[name] {
-			continue
-		}
-		for field, praw := range props {
-			p, ok := praw.(map[string]any)
-			if !ok {
-				continue
-			}
-			if desc, _ := p["description"].(string); strings.TrimSpace(desc) == "" {
-				bare = append(bare, name+"."+field)
-			}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("functions publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
 		}
 	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
 	if len(bare) > 0 {
-		sort.Strings(bare)
-		t.Errorf("published propert(ies) with no description: %s", strings.Join(bare, ", "))
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/functions describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
 	}
 }

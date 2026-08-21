@@ -337,12 +337,15 @@
       "catalogEntry": {
         "properties": {
           "configured": {
+            "description": "Configured is whether THIS DEPLOYMENT holds the OAuth client credentials for\nthe provider. False means Connect would dead-end, so the console can offer it\ndisabled instead of broken. It is deployment-wide and says nothing about\nwhether the caller's org has connected the source — that is the connector\nlist's `status`.",
             "type": "boolean"
           },
           "description": {
+            "description": "Description is one line of shop copy: what connecting this source pulls in.\nNative connectors carry written prose; a piece-backed one reads\n\"activepieces connector (\u003cpiece\u003e)\".",
             "type": "string"
           },
           "displayName": {
+            "description": "DisplayName is the label to show a person. First-party connectors carry a\nwritten name (\"GitHub\", \"Google Drive\"); a piece-backed one falls back to the\nprovider capitalized, because the rich activepieces metadata lives behind a\ncross-service call this read will not make.",
             "type": "string"
           },
           "kind": {
@@ -350,6 +353,7 @@
             "type": "string"
           },
           "provider": {
+            "description": "Provider is the source's id and the address every connector op takes it by\n(/v1/knowledge/connectors/:provider). One of github, slack, google, notion.",
             "type": "string"
           }
         },
@@ -424,6 +428,7 @@
       "graphEdge": {
         "properties": {
           "from": {
+            "description": "From is the id of the node the edge starts at: the child page for a parent\nedge, the page holding the wikilink for a link edge, the kb-source for a\nprovenance edge. Always one of Nodes.",
             "type": "string"
           },
           "kind": {
@@ -431,6 +436,7 @@
             "type": "string"
           },
           "to": {
+            "description": "To is the id of the node the edge points at: the parent page, the linked\npage, the kb-connector. Always one of Nodes — a wikilink matching no page\npoints at a synthetic \"unresolved:\u003clowercased title\u003e\" node rather than\ndangling.",
             "type": "string"
           }
         },
@@ -447,6 +453,7 @@
             "type": "string"
           },
           "project": {
+            "description": "Project is the project scope the underlying document was saved under. Absent\nfor a document saved with none, and for the synthetic nodes — unresolved link\ntargets and connectors belong to no project. When ?project= narrows the\ngraph, every page, memory and source node carries that value.",
             "type": "string"
           },
           "title": {
@@ -486,24 +493,31 @@
       "hit": {
         "properties": {
           "doctype": {
+            "description": "DocType is which kind of knowledge matched: kb-page (a wiki page), kb-memory\n(a unit of agent memory) or kb-source (a document a connector ingested).\nThose three are the whole indexed set, and searchIn.DocTypes filters on them.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the document's name in the framework store — the id to read or open\nit with. Unique per (org, doctype), so it identifies the document with\nDocType and not alone.",
             "type": "string"
           },
           "project": {
+            "description": "Project is the project scope the document was saved under. Absent for a\ndocument saved with none, which is also why a project-scoped query cannot\nreach it.",
             "type": "string"
           },
           "provider": {
+            "description": "Provider is the connector that ingested the document — github, slack, google\nor notion. Absent for a page or memory written in the product, which came\nfrom no connector.",
             "type": "string"
           },
           "score": {
+            "description": "Score is the cosine similarity between the query's embedding and the\ndocument's, from -1 to 1, higher being closer — the collection is created\nwith Cosine distance. Hits arrive ordered by it, descending. There is no\nabsolute cutoff: what counts as a good score moves with the query and the\nembedding model, so compare scores within one response and not across\nqueries.",
             "type": "number"
           },
           "title": {
+            "description": "Title is the document's title as it was indexed. Empty for a document saved\nwithout one; it is a label to show, never the id (that is Name).",
             "type": "string"
           },
           "url": {
+            "description": "URL is the document's link back into the app it was ingested from. Absent\nwhen the indexed payload carries none, which is the normal case for pages and\nmemories.",
             "type": "string"
           }
         },

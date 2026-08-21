@@ -79,8 +79,12 @@ type CalendarPost struct {
 	// Error is the exact reason the last publish attempt failed — the honest
 	// record behind a "failed" status, never a faked success.
 	Error string `json:"error,omitempty"`
-	// CreatedAt and UpdatedAt are unix seconds, both server-assigned.
+	// CreatedAt is unix seconds when the post was added, server-assigned and
+	// never rewritten.
 	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is unix seconds of the last write, server-assigned. The durable
+	// sweep writes too — claiming a due post, publishing it and recording a
+	// failure each bump it — so this moves without anyone editing the post.
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
@@ -316,8 +320,11 @@ type PostQuery struct {
 	Limit int `json:"limit"`
 }
 
-// PostList is a page of calendar posts, soonest scheduled first.
+// PostList is a page of calendar posts, latest scheduled first.
 type PostList struct {
+	// Data is the page, ordered by scheduledAt descending — the furthest-out
+	// post first and unscheduled drafts (scheduledAt 0) last. An empty array
+	// when the org's calendar holds no matching post.
 	Data []CalendarPost `json:"data"`
 }
 
@@ -356,7 +363,7 @@ func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 	return &p, nil
 }
 
-// listCalendarPosts returns the org's calendar, soonest scheduled first,
+// listCalendarPosts returns the org's calendar, latest scheduled first,
 // optionally narrowed to one status.
 //
 // Example: {"status": "scheduled", "limit": 50}

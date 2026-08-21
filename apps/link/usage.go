@@ -512,9 +512,12 @@ type boardResp struct {
 	Account string `json:"account,omitempty"`
 	// Range is the resolved period label.
 	Range string `json:"range"`
-	// From and To are the resolved [from, to) window, RFC 3339 UTC.
+	// From is when the resolved window opens, RFC 3339 UTC.
 	From string `json:"from"`
-	To   string `json:"to"`
+	// To is where it closes, EXCLUSIVE, RFC 3339 UTC — the instant the read was
+	// served, so the window walks forward with the clock and two reads a minute
+	// apart do not cover the same period.
+	To string `json:"to"`
 	// Source is always "account": the provider's own meter, not a Hanzo charge.
 	Source string `json:"source"`
 	// Scope is always "user": the caller's own linked accounts.
@@ -619,16 +622,25 @@ type summaryIn struct {
 type summaryResp struct {
 	// Range is the resolved period label.
 	Range string `json:"range"`
-	// From and To are the one [from, to) window BOTH halves resolved, RFC 3339 UTC.
+	// From is when the window opens, RFC 3339 UTC. ONE resolver fixes it for both
+	// ledgers, so the account rows and the Hanzo rows always cover the same period
+	// — two resolvers could drift and turn the union into a lie.
 	From string `json:"from"`
-	To   string `json:"to"`
+	// To is where the window closes, EXCLUSIVE, RFC 3339 UTC — the instant the read
+	// was served. Shared by both ledgers, for the reason From gives.
+	To string `json:"to"`
 	// Rows is the union of both ledgers, each row labelled by source and scope —
 	// concatenated, NEVER summed: a plan's percentage is not money.
 	Rows []totalView `json:"rows"`
-	// Account and Hanzo report each ledger's own availability, so a partial
-	// warehouse never fabricates the other half.
+	// Account reports the linked-accounts ledger's own availability, so a partial
+	// answer never fabricates this half. It is scoped to the CALLER: the accounts
+	// they linked, metered from each provider's own login.
 	Account sourceState `json:"account"`
-	Hanzo   sourceState `json:"hanzo"`
+	// Hanzo reports the same for the Hanzo-routed ledger, which is scoped to the
+	// ORG rather than the caller — a different question over the same window. The
+	// two are independent: either can be unavailable while the other answers, and
+	// Rows then carries only the half that did.
+	Hanzo sourceState `json:"hanzo"`
 }
 
 // sourceState is one ledger's own account of itself.

@@ -383,3 +383,79 @@ func TestCLINamesCollideExactlyWhereKnown(t *testing.T) {
 		}
 	}
 }
+
+// proseless is the CLOSED list of published properties that carry NO description
+// because the SEAM they arrived through cannot carry one — not because nobody wrote
+// it. All three DO have doc comments in zap.go; reflection cannot see them.
+//
+// It is exact in BOTH directions. A bare property anywhere else goes red, and an
+// entry here that starts publishing prose goes red too — that is the day the
+// generator learns, and this ledger must shrink then rather than outlive the gap.
+var proseless = map[string]bool{
+	// REFLECTION SEAM. The three ZAP procedures that read a body are declared with
+	// openapi.Register (webhook.go) rather than typed, because they are raw handlers
+	// binding a shared envelope — the reason is in untypedByDesign above. Register
+	// derives its schema by REFLECTION, and Go drops comments at compile time, so
+	// zipdoc — which walks zip's TYPED registrations — can never reach a type that
+	// arrives this way.
+	"zapProcReq.name":        true,
+	"zapProcReq.project":     true,
+	"zapProcReq.description": true,
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the gates above
+// cannot see. They prove every route's ADDRESS is typed or named and that a refused
+// route declares the BODY it reads; neither says whether that body's FIELDS mean
+// anything to a reader, and those come from a different place — a doc comment on
+// each one, which zipdoc lifts one at a time.
+//
+// It matters here because most of this surface is a value with a rule behind it. A
+// repo `name` is not free text but ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ with a trailing
+// ".git" stripped, and it is the last path segment of both clone URLs. `sizeBytes`
+// is the on-disk measurement BILLING METERS, not a display figure. `public` grants
+// anonymous READ and nothing else — push and the whole control plane stay org-authed
+// — so reading it as "world-writable" is a security misreading a name alone invites.
+// A tree entry's `mode` is git's octal ("100644", "040000", "120000"), not a number.
+//
+// The gate checks presence, not meaning. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "git", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("git publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
+		}
+	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/git describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
+	}
+}

@@ -48,9 +48,12 @@ type serviceList struct {
 
 // servicesOut is the GET /v1/admin/services envelope.
 type servicesOut struct {
-	Status string       `json:"status"`
-	Msg    string       `json:"msg"`
-	Data   *serviceList `json:"data"`
+	// Status is "ok" or "error", at HTTP 200 either way.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error", empty otherwise.
+	Msg string `json:"msg"`
+	// Data is the launch board. Null when the read failed.
+	Data *serviceList `json:"data"`
 }
 
 // serviceOne is the payload of the two write ops: the ONE service they touched.
@@ -61,9 +64,14 @@ type serviceOne struct {
 
 // serviceOut is the envelope of the two service write ops.
 type serviceOut struct {
-	Status string      `json:"status"`
-	Msg    string      `json:"msg"`
-	Data   *serviceOne `json:"data"`
+	// Status is "ok" or "error", at HTTP 200 either way.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error", empty otherwise.
+	Msg string `json:"msg"`
+	// Data is the one service the write touched, re-read after the write, so a
+	// caller sees the effect of its own change without a second request. Null when
+	// the write failed.
+	Data *serviceOne `json:"data"`
 }
 
 // serviceModeIn is the POST /v1/admin/services/:service/mode input.

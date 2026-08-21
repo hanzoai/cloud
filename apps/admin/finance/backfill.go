@@ -30,9 +30,17 @@ type Backfilled struct {
 
 // BackfillOut is the POST /v1/admin/finance/backfill envelope.
 type BackfillOut struct {
-	Status string      `json:"status"`
-	Msg    string      `json:"msg"`
-	Data   *Backfilled `json:"data"`
+	// Status is "ok" or "error". Error means NOTHING was carried — the commerce balance
+	// is read and must be readable before the wallet is written, so an unreadable source
+	// refuses the cutover rather than migrating a phantom zero.
+	Status string `json:"status"`
+	// Msg is why, and is empty on success. It names the half that failed: "read commerce
+	// balance: ..." before any money moved, "finance backfill: ..." at the write.
+	Msg string `json:"msg"`
+	// Data is the receipt. Null exactly when Status is "error". A retry is safe: the
+	// deposit carries the fixed ref "backfill:<org>", so the wallet is credited at most
+	// once however many times this runs.
+	Data *Backfilled `json:"data"`
 }
 
 // Backfill carries ONE org's current commerce prepaid balance into the native finance

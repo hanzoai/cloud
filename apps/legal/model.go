@@ -75,23 +75,52 @@ func counselRequired(c Category) bool {
 // body ({{.key}}) and a human label. Every declared field is REQUIRED — the engine
 // fails closed on a missing one rather than rendering a blank into a contract.
 type Field struct {
-	Key   string `json:"key"`
+	// Key is the identifier the body substitutes ({{.key}}) and the key a
+	// generation's data map must carry. snake_case by convention across the
+	// built-ins — effective_date, company_name, governing_law. An override whose
+	// body references a key no Field declares is refused on save.
+	Key string `json:"key"`
+	// Label is the human prompt for whoever fills the value in — "Governing law
+	// (state)". It never reaches the rendered document; only Key does.
 	Label string `json:"label"`
 }
 
-// Template is one standardized document template. Body is a text/template source that
-// references its Fields as {{.key}}. Version increments on each org override; a
-// built-in has Version 1 and Origin "builtin". CounselReview marks the formation and
-// securities instruments that must carry CounselNotice.
+// Template is one standardized document template, resolved for an org: its own
+// override if it has saved one, else the built-in.
 type Template struct {
-	ID            string   `json:"id"`
-	Category      Category `json:"category"`
-	Title         string   `json:"title"`
-	Version       int      `json:"version"`
-	Origin        string   `json:"origin"` // builtin | org
-	CounselReview bool     `json:"counselReview"`
-	Fields        []Field  `json:"fields"`
-	Body          string   `json:"body"`
+	// ID is the template's stable id and the path segment that addresses it —
+	// "nda", "msa", "safe". An override keeps the built-in's id, so the id names
+	// the DOCUMENT KIND rather than a particular version of it.
+	ID string `json:"id"`
+	// Category is the corporate need the template serves: formation, equity, ops or
+	// sales. Formation and equity are the securities-class categories, which is what
+	// forces CounselReview.
+	Category Category `json:"category"`
+	// Title is the display name, e.g. "Mutual Non-Disclosure Agreement". A generated
+	// document inherits it.
+	Title string `json:"title"`
+	// Version is which version of this template the caller resolved to, and what a
+	// generated document records so it stays reproducible. A built-in is version 1;
+	// an org's first override is 2 and each save increments, so an override version
+	// never collides with the built-in's.
+	Version int `json:"version"`
+	// Origin is "builtin" for a template the platform ships or "org" for one this
+	// org saved. It separates the catalog every tenant sees from this tenant's own.
+	Origin string `json:"origin"`
+	// CounselReview marks a template whose rendered documents open with
+	// CounselNotice. It can be raised but never lowered, and the engine also raises
+	// it for any formation or equity template whatever the flag says — so no org can
+	// render a securities-class document without the notice.
+	CounselReview bool `json:"counselReview"`
+	// Fields declares the merge fields Body consumes, each with its human label.
+	// Every one is REQUIRED at generation: a missing or blank value is refused
+	// rather than rendered as a silent blank into a contract.
+	Fields []Field `json:"fields"`
+	// Body is the text/template source, markdown, referencing each declared field as
+	// {{.key}}. Rendering is pure — no clock, no I/O — so a template version and a
+	// data map always produce identical bytes. Only the single-template read carries
+	// it; the catalog listing does not.
+	Body string `json:"body"`
 }
 
 // DocStatus is the lifecycle of a generated document. There is deliberately no
@@ -141,13 +170,34 @@ const (
 // TRACKING record: the platform does not file autonomously; the honest default state
 // is "manual" (file through your registered agent) until a filing partner is wired.
 type Filing struct {
-	ID           string       `json:"id"`
-	Org          string       `json:"org"`
-	DocumentIDs  []string     `json:"documentIds"`
-	Jurisdiction string       `json:"jurisdiction,omitempty"`
-	Provider     string       `json:"provider"`
-	Status       FilingStatus `json:"status"`
-	Note         string       `json:"note,omitempty"`
-	CreatedAt    int64        `json:"createdAt"`
-	UpdatedAt    int64        `json:"updatedAt"`
+	// ID is the filing's server-minted handle, "filing_"-prefixed. It is OURS, not
+	// the state's — a state file number arrives only from a real filing partner.
+	ID string `json:"id"`
+	// Org owns the filing. Every query is scoped to it, so another tenant's filing
+	// is indistinguishable from a missing one.
+	Org string `json:"org"`
+	// DocumentIDs are the generated documents this filing covers. At least one, and
+	// each must already belong to Org — a filing can never reach across tenants.
+	DocumentIDs []string `json:"documentIds"`
+	// Jurisdiction is the state or agency the filing is for, as the caller wrote it
+	// ("DE"). Free text, not validated against a list. Absent when the caller sent
+	// none.
+	Jurisdiction string `json:"jurisdiction,omitempty"`
+	// Provider is the filing partner that took the submission, or "manual" when no
+	// partner is wired on this deployment.
+	Provider string `json:"provider"`
+	// Status is where the filing stands: manual (no partner wired — file through
+	// your registered agent), submitted (a partner accepted it), filed (the state
+	// accepted it) or rejected.
+	Status FilingStatus `json:"status"`
+	// Note is the provider's explanation of Status, in prose meant for a person. On
+	// the manual default it says the documents were generated for signature and the
+	// org files them through its registered agent. Absent when the provider offered
+	// nothing.
+	Note string `json:"note,omitempty"`
+	// CreatedAt is when the filing was recorded, in unix seconds.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when it last changed, in unix seconds. Equal to CreatedAt until a
+	// provider reports movement.
+	UpdatedAt int64 `json:"updatedAt"`
 }

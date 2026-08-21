@@ -34,33 +34,69 @@ type ops struct{ s *cloud.Service[core.State] }
 
 // RevenueOut is the GET /v1/admin/revenue envelope.
 type RevenueOut struct {
-	Status string       `json:"status"`
-	Msg    string       `json:"msg"`
-	Data   *RevenueData `json:"data"`
+	// Status is "ok" or "error". Only an unreadable IAM org directory is an error: a
+	// per-org money failure degrades that row to zeros and marks the commerce source, so
+	// the board still answers.
+	Status string `json:"status"`
+	// Msg is the failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the board. Null exactly when Status is "error".
+	Data *RevenueData `json:"data"`
 }
 
 // RevenueCustomer is one row of the per-customer revenue table.
 type RevenueCustomer struct {
-	Org          string `json:"org"`
-	Display      string `json:"display"`
-	Plan         string `json:"plan"`
-	BalanceCents int64  `json:"balanceCents"`
-	SpendCents   int64  `json:"spendCents"`
-	MRRCents     int64  `json:"mrrCents"`
+	// Org is the tenant slug — the row's identity.
+	Org string `json:"org"`
+	// Display is the org's display name, falling back to the slug.
+	Display string `json:"display"`
+	// Plan is the live subscription tier's name, or "pay-as-you-go" — which is also what
+	// an org reads as when the subscriptions read failed, so it is not proof of no plan.
+	Plan string `json:"plan"`
+	// BalanceCents is the prepaid wallet the org still holds, in USD cents. Money not yet
+	// earned: it becomes revenue only as it is spent.
+	BalanceCents int64 `json:"balanceCents"`
+	// SpendCents is realized consumption over the trailing 30 days, in USD cents. The
+	// table's primary sort, largest first.
+	SpendCents int64 `json:"spendCents"`
+	// MRRCents is the org's monthly recurring revenue, in USD cents, over the
+	// subscriptions commerce counts as revenue. Contract value, not cash collected.
+	MRRCents int64 `json:"mrrCents"`
 }
 
 // RevenueData is the whole GET /v1/admin/revenue payload.
 type RevenueData struct {
-	TotalBalancesCents int64               `json:"totalBalancesCents"`
-	TotalSpendCents    int64               `json:"totalSpendCents"`
-	MRRCents           int64               `json:"mrrCents"`
-	Customers          int                 `json:"customers"`
-	PayingCustomers    int                 `json:"payingCustomers"`
-	ARPUCents          int64               `json:"arpuCents"`
-	PerCustomer        []RevenueCustomer   `json:"perCustomer"`
-	SpendTrend         []core.SeriesPoint  `json:"spendTrend"`
-	GeneratedAt        string              `json:"generatedAt"`
-	Sources            []core.SourceStatus `json:"sources"`
+	// TotalBalancesCents is prepaid credit held across the fleet, in USD cents. A
+	// LIABILITY, not revenue — it is money customers have not spent yet.
+	TotalBalancesCents int64 `json:"totalBalancesCents"`
+	// TotalSpendCents is realized consumption across the fleet over the trailing 30 days,
+	// in USD cents. This is the revenue figure; balances above are not.
+	TotalSpendCents int64 `json:"totalSpendCents"`
+	// MRRCents is fleet monthly recurring revenue, in USD cents — the sum of every org's
+	// revenue-counting subscriptions. Orthogonal to TotalSpendCents, and never added to
+	// it: one is contract value, the other is consumption.
+	MRRCents int64 `json:"mrrCents"`
+	// Customers is every org IAM lists, paying or not.
+	Customers int `json:"customers"`
+	// PayingCustomers counts the orgs with spend or MRR above zero. It is the ARPU
+	// denominator, chosen so a fleet of free signups cannot deflate the number.
+	PayingCustomers int `json:"payingCustomers"`
+	// ARPUCents is TotalSpendCents divided by PayingCustomers, in USD cents — average
+	// revenue per PAYING customer, not per signup. Zero when nobody pays, which is
+	// division declining to happen rather than a measured zero.
+	ARPUCents int64 `json:"arpuCents"`
+	// PerCustomer is every org, richest first by 30-day spend, then by balance held.
+	PerCustomer []RevenueCustomer `json:"perCustomer"`
+	// SpendTrend is fleet consumption bucketed by DAY over the last 30 days, each point's
+	// value in USD cents. The axis is continuous: a day with no usage is a real 0.
+	SpendTrend []core.SeriesPoint `json:"spendTrend"`
+	// GeneratedAt is when the read ran, RFC3339. Nothing here is cached.
+	GeneratedAt string `json:"generatedAt"`
+	// Sources is the freshness strip: "iam" for the org directory, "commerce" for the
+	// money, and "commerce-ledger" when the usage history behind SpendTrend was partial.
+	// A not-ok commerce row means the totals above are an UNDERCOUNT, not a fleet that
+	// earned less.
+	Sources []core.SourceStatus `json:"sources"`
 }
 
 // Revenue is the fleet money board: total prepaid balances held, total realized spend,

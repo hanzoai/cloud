@@ -171,19 +171,69 @@ func Ready() bool { return mounted != nil }
 // ---- HTTP response shapes (the published contract) ----
 
 type agentView struct {
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	Model            string   `json:"model"`
-	Description      string   `json:"description,omitempty"`
-	Tools            []string `json:"tools"`
-	Status           string   `json:"status"`
-	ExecutionMode    string   `json:"executionMode"`
-	Schedule         string   `json:"schedule,omitempty"`
-	ComputeRef       string   `json:"computeRef,omitempty"`
-	ServiceAccountID string   `json:"serviceAccountId,omitempty"`
-	Runs             int      `json:"runs"`
-	CreatedAt        string   `json:"createdAt"`
-	UpdatedAt        string   `json:"updatedAt"`
+	// ID is the agent's stable handle, minted here as "agent_" + 32 hex characters
+	// of crypto/rand. A caller cannot choose it, and it never changes — unlike Name,
+	// which is the other way to address the same agent.
+	ID string `json:"id"`
+	// Name is the agent's org-unique handle, matching
+	// ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. It addresses the agent everywhere ID does,
+	// it is what a run row records, and it is the suffix of the `agent_<name>` tool
+	// other agents call this one by. Set once at create; no update route moves it,
+	// because moving it would orphan that history.
+	Name string `json:"name"`
+	// Model is the Zen model this agent runs on, and it is always OUR name for it:
+	// writes normalize through cloud.ZenModel and the read normalizes again, so an
+	// upstream family name never leaves here even from a row written before that
+	// rule existed. A create that named none took the deployment's configured
+	// default, so this is where a caller learns which model it actually got.
+	Model string `json:"model"`
+	// Description is the one line another agent reads when deciding whether to call
+	// this one: the tool catalogue publishes it as the description of `agent_<name>`,
+	// falling back to "agent <name>" when it is empty. It is not part of the prompt —
+	// Instructions is — so writing the behaviour here reaches the caller and not the
+	// model.
+	Description string `json:"description,omitempty"`
+	// Tools are the tool names this agent may call, and the list IS the authority:
+	// an agent that declares none gets none. The single entry "*" means whatever the
+	// fleet's tool door serves at the moment of the run, resolved per run rather
+	// than frozen here, which is how the default assistant reaches subsystems that
+	// shipped after it was defined. Empty array, never null.
+	Tools []string `json:"tools"`
+	// Status is the agent's readiness, and today it is "ready" on every row: an
+	// agent is a definition rather than a provisioned thing, so nothing transitions
+	// it. Server-set at create; no route accepts it.
+	Status string `json:"status"`
+	// ExecutionMode is one-shot or long-running, and it decides who may start this
+	// agent. one-shot runs only when something POSTs to it; long-running is
+	// additionally invoked by the scheduler on Schedule, once a minute against the
+	// cron. An org's long-running agents are capped, so a switch INTO it can be
+	// refused with 409.
+	ExecutionMode string `json:"executionMode"`
+	// Schedule is the 5-field cron the scheduler fires a long-running agent on,
+	// evaluated once a minute. Required for long-running and DROPPED for one-shot —
+	// a one-shot agent's schedule is not stored, so absence here is the mode's
+	// answer rather than a value nobody set.
+	Schedule string `json:"schedule,omitempty"`
+	// ComputeRef is the visor machine this bot is bound to, opaque here: this
+	// package stores and echoes it, and the binding's lifecycle belongs elsewhere.
+	// Empty means unbound, which is what every one-shot agent is.
+	ComputeRef string `json:"computeRef,omitempty"`
+	// ServiceAccountID is the IAM agent service account (<org>-<agent>) a scheduled
+	// run is billed AS. It is what makes an autonomous run attributable to a
+	// principal rather than only to the org; empty means the org itself wears the
+	// spend.
+	ServiceAccountID string `json:"serviceAccountId,omitempty"`
+	// Runs is how many executions the org has recorded against this agent, counted
+	// at read time. The list and update reads count the WHOLE history; the detail
+	// read reports the size of the RecentRuns page it carries, which stops at 20 —
+	// so a detail row saying 20 means "at least 20", not "exactly 20".
+	Runs int `json:"runs"`
+	// CreatedAt is when the agent was defined, RFC 3339 in UTC to the second.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is the last time any field above was written, same format. It moves
+	// on an update to the DEFINITION and never on a run, so a busy agent nobody has
+	// edited keeps an old one.
+	UpdatedAt string `json:"updatedAt"`
 }
 
 // agentDetail is one agent plus what only the detail read carries: the system
@@ -201,19 +251,44 @@ type agentView struct {
 // incomplete schema for a field that silently stops being sent.
 type agentDetail struct {
 	agentView
-	Instructions string         `json:"instructions"`
-	RecentRuns   []agentRunView `json:"recentRuns"`
+	// Instructions is the agent's system prompt, verbatim, up to 32 KiB. It is the
+	// one field the list read withholds, because it is the agent's whole behaviour
+	// and a page of them would be a page of prompts.
+	Instructions string `json:"instructions"`
+	// RecentRuns is the agent's 20 most recent executions, newest first. It is a
+	// window on the history, not the history: the count beside it is `runs`.
+	RecentRuns []agentRunView `json:"recentRuns"`
 }
 
 type agentRunView struct {
-	ID         string `json:"id"`
-	Status     string `json:"status"`
-	Model      string `json:"model"`
-	Input      string `json:"input"`
-	Output     string `json:"output,omitempty"`
-	Error      string `json:"error,omitempty"`
-	DurationMs int64  `json:"durationMs"`
-	CreatedAt  string `json:"createdAt"`
+	// ID is the run's handle, minted as "run_" + 32 hex characters. It is the key
+	// the metering ledger records this run's per-round token spend under, so it is
+	// how a bill and a run are joined.
+	ID string `json:"id"`
+	// Status is the run's outcome, and there are exactly two: "ok" when the model
+	// answered, "error" when it did not. It is written when the run ends, so no row
+	// here is in flight.
+	Status string `json:"status"`
+	// Model is the model that actually SERVED this run, which is not always the one
+	// the agent is defined on — a failover records what answered. Normalized to our
+	// name on the way out; the stored row is left exactly as it happened, because a
+	// run is a record and rewriting it would be worse than the name it carries.
+	Model string `json:"model"`
+	// Input is the text the run was given, verbatim.
+	Input string `json:"input"`
+	// Output is what the model produced. Empty on an error run, and empty is also a
+	// legitimate answer from a run that succeeded with nothing to say — Status is
+	// what separates those.
+	Output string `json:"output,omitempty"`
+	// Error is why an "ok"-less run failed, as the failing call reported it. Empty
+	// on every successful run.
+	Error string `json:"error,omitempty"`
+	// DurationMs is wall-clock milliseconds around the completion, including a
+	// failover's retries. It is time SPENT, not time billed.
+	DurationMs int64 `json:"durationMs"`
+	// CreatedAt is when the run finished, RFC 3339 in UTC to the second — the
+	// duration above already says how long it had been going.
+	CreatedAt string `json:"createdAt"`
 
 	// What an operator needs to answer "what ran, for whom, and what did it do" —
 	// and, through traceId, to leave this record for the waterfall of the very
@@ -223,12 +298,28 @@ type agentRunView struct {
 	// a run that cannot name its agent is an orphan in exactly the view built to
 	// make sense of many of them. Every field is omitempty: a run recorded before
 	// these columns existed reports absence rather than a zero it never measured.
-	Agent            string `json:"agent,omitempty"`
-	Actor            string `json:"actor,omitempty"`
-	TraceID          string `json:"traceId,omitempty"`
-	PromptTokens     int    `json:"promptTokens,omitempty"`
-	CompletionTokens int    `json:"completionTokens,omitempty"`
-	ToolCalls        int    `json:"toolCalls,omitempty"`
+	Agent string `json:"agent,omitempty"`
+	// Actor is the "org/sub" identity the run was executed and billed AS. Empty
+	// means there was no PERSON — a schedule or a service token — which is a
+	// different fact from "we do not know", and the difference is what an audit
+	// asks about.
+	Actor string `json:"actor,omitempty"`
+	// TraceID is the trace this run IS, so the record and its spans are one thing to
+	// move between: it opens the waterfall for THIS run rather than a search that
+	// lands near it. Empty when the process had no tracer, never a fabricated id.
+	TraceID string `json:"traceId,omitempty"`
+	// PromptTokens is what the gateway reported for the run's FINAL completion, and
+	// only that one — a tool loop's earlier rounds are the metering ledger's account,
+	// joined by this run's id. Reading it as the run's total spend undercounts a
+	// loop.
+	PromptTokens int `json:"promptTokens,omitempty"`
+	// CompletionTokens is the same measurement for what the model produced, on the
+	// same final completion. It is a count of TOKENS, not of turns and not of money.
+	CompletionTokens int `json:"completionTokens,omitempty"`
+	// ToolCalls is how many tool dispatches the run made — a count of ACTIONS, which
+	// is a different measurement from the token counts above and from the turns a
+	// build reports. Zero is a run that answered straight from the model.
+	ToolCalls int `json:"toolCalls,omitempty"`
 }
 
 // ---- overview shapes (console Agents dashboard: metrics + activity) ----
@@ -246,7 +337,11 @@ type seriesPoint struct {
 }
 
 type seriesLine struct {
-	Key    string        `json:"key"` // agent name
+	Key string `json:"key"` // agent name
+	// Points is one bucket per interval across the whole window, in time order and
+	// never sparse: a bucket with no runs is present with v 0, so two lines drawn
+	// from two agents share an x-axis without the client aligning anything. The
+	// window decides the count — 24 hourly for 24H, 7 daily, 30 daily.
 	Points []seriesPoint `json:"points"`
 }
 
@@ -254,22 +349,42 @@ type seriesLine struct {
 // definitions and run I/O only — it does NOT meter CPU/memory/storage/cost — so
 // every field is nil, marshalling to explicit JSON null (honest "no data", not 0).
 type resourceUsage struct {
-	CPUVcpuHours   *float64 `json:"cpuVcpuHours"`
-	MemGbHours     *float64 `json:"memGbHours"`
+	// CPUVcpuHours would be vCPU-hours over the window. Always null: this store
+	// holds agent definitions and run I/O, and nothing here meters a CPU. Null is
+	// the honest answer and 0 would be a claim.
+	CPUVcpuHours *float64 `json:"cpuVcpuHours"`
+	// MemGbHours would be gigabyte-hours of memory. Always null, same reason.
+	MemGbHours *float64 `json:"memGbHours"`
+	// StorageIoBytes would be bytes moved to and from storage. Always null, same
+	// reason.
 	StorageIoBytes *float64 `json:"storageIoBytes"`
-	CostCents      *float64 `json:"costCents"`
+	// CostCents would be the window's spend in cents. Always null here — the money
+	// a run costs is the metering ledger's, joined by the run id, and repeating it
+	// from this side would be a second number that could disagree with the bill.
+	CostCents *float64 `json:"costCents"`
 }
 
 type metricsView struct {
-	Range    string        `json:"range"`  // echoes the requested window (24H|7D|30D)
-	Series   []seriesLine  `json:"series"` // per-agent invocation histogram (real)
+	Range  string       `json:"range"`  // echoes the requested window (24H|7D|30D)
+	Series []seriesLine `json:"series"` // per-agent invocation histogram (real)
+	// Resource is the Resource Usage panel's rollup, and every field of it is
+	// currently null — see resourceUsage. It is present rather than omitted so a
+	// panel renders "—" instead of guessing.
 	Resource resourceUsage `json:"resource"`
 }
 
 type activityView struct {
-	ID      string `json:"id"`
-	Kind    string `json:"kind"`  // invoked|failed|created|updated (from real events)
-	Agent   string `json:"agent"` // agent name
+	// ID identifies the event, and its shape says which kind it is: a run event
+	// carries the run's own id, while an agent event is the agent id suffixed
+	// ":created" or ":updated". Unique within a feed, and not an address — there is
+	// nothing to fetch it by.
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`  // invoked|failed|created|updated (from real events)
+	Agent string `json:"agent"` // agent name
+	// Message is the line to render, already bounded: "Invoked <model>" for a run
+	// that worked, the run's own error truncated to 200 characters for one that did
+	// not (or "Run failed" when it said nothing), and a fixed phrase for the two
+	// agent events. Nothing here is invented — every event is a row that exists.
 	Message string `json:"message,omitempty"`
 	At      string `json:"at"` // RFC3339 UTC
 }
@@ -513,15 +628,43 @@ type activityFeed struct {
 }
 
 type createAgentIn struct {
-	Name             string   `json:"name"`
-	Model            string   `json:"model"`
-	Instructions     string   `json:"instructions"`
-	Description      string   `json:"description"`
-	Tools            []string `json:"tools"`
-	ExecutionMode    string   `json:"executionMode"`
-	Schedule         string   `json:"schedule"`
-	ComputeRef       string   `json:"computeRef"`
-	ServiceAccountID string   `json:"serviceAccountId"`
+	// Name is the agent's org-unique handle and the only required field. It must
+	// match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$, and a name already taken in this org
+	// is a 409 rather than an overwrite. It is permanent: no update route moves it.
+	Name string `json:"name"`
+	// Model names the model to run on. Omit it to take the deployment's configured
+	// default; name one and it is checked against the gateway's served catalogue
+	// here, so a model this deployment cannot serve is refused now rather than at
+	// the first run. Stored under our own name for it, whatever spelling arrives.
+	Model string `json:"model"`
+	// Instructions is the system prompt, up to 32 KiB, stored verbatim. This is what
+	// the model reads; Description is what other CALLERS read.
+	Instructions string `json:"instructions"`
+	// Description is the one line published as the description of the `agent_<name>`
+	// tool, which is how another agent decides whether to call this one. Optional,
+	// and worth writing for exactly that reason.
+	Description string `json:"description"`
+	// Tools are the tool names this agent may call. Omitted or empty grants NONE —
+	// that default is the agent's authority and is not widened anywhere. The single
+	// entry "*" means whatever the fleet's tool door serves at the time of each run.
+	Tools []string `json:"tools"`
+	// ExecutionMode is one-shot or long-running. Empty takes one-shot, which runs
+	// only when something POSTs to it. long-running additionally requires Schedule,
+	// and counts against a per-org cap that answers 409 when it is full.
+	ExecutionMode string `json:"executionMode"`
+	// Schedule is the 5-field cron a long-running agent fires on, parsed here so a
+	// bad expression is a 400 and not an agent that silently never runs. Required
+	// with long-running; DISCARDED for one-shot rather than stored unused.
+	Schedule string `json:"schedule"`
+	// ComputeRef optionally binds this bot to a visor machine. Opaque here, bounded
+	// at 256 characters, and not resolved — this package stores the reference and
+	// the binding's lifecycle belongs elsewhere.
+	ComputeRef string `json:"computeRef"`
+	// ServiceAccountID optionally names the IAM agent service account (<org>-<agent>)
+	// a scheduled run should be billed AS, so an autonomous run is attributable to a
+	// principal rather than only to the org. Same 256-character bound, also
+	// unresolved here.
+	ServiceAccountID string `json:"serviceAccountId"`
 }
 
 // CreateAgent defines an agent in the caller's org: a model, a system prompt
@@ -676,15 +819,33 @@ func (o agentOps) get(ctx context.Context, in *agentRef) (*agentDetail, error) {
 // only `ref` and every generated client would be unable to send anything.
 type updateAgentIn struct {
 	// Ref is the agent to update — its public id or org-unique name, from the path.
-	Ref              string    `json:"ref"`
-	Model            *string   `json:"model"`
-	Instructions     *string   `json:"instructions"`
-	Description      *string   `json:"description"`
-	Tools            *[]string `json:"tools"`
-	ExecutionMode    *string   `json:"executionMode"`
-	Schedule         *string   `json:"schedule"`
-	ComputeRef       *string   `json:"computeRef"`
-	ServiceAccountID *string   `json:"serviceAccountId"`
+	Ref string `json:"ref"`
+	// Model re-points the agent at another model, checked against the gateway's
+	// served catalogue exactly as create checks it. Empty STRING is refused — say
+	// nothing to keep the current one. Past runs keep the model that served them.
+	Model *string `json:"model"`
+	// Instructions replaces the system prompt whole, up to 32 KiB. There is no
+	// append: a prompt is one text, and sending "" clears it.
+	Instructions *string `json:"instructions"`
+	// Description replaces the line other agents read in the tool catalogue.
+	Description *string `json:"description"`
+	// Tools replaces the whole allow-list, it does not add to it. Sending [] takes
+	// every tool away, which is the only way to say that.
+	Tools *[]string `json:"tools"`
+	// ExecutionMode switches between one-shot and long-running. The RESULTING
+	// mode+schedule are validated together, so switching to long-running without a
+	// stored or supplied cron is refused rather than accepted into an agent the
+	// scheduler would skip forever. A switch INTO long-running counts against the
+	// per-org cap and can be a 409.
+	ExecutionMode *string `json:"executionMode"`
+	// Schedule replaces the cron. It is validated against the mode this update
+	// leaves behind, and dropped if that mode is one-shot.
+	Schedule *string `json:"schedule"`
+	// ComputeRef re-binds (or, with "", unbinds) the visor machine. Opaque here.
+	ComputeRef *string `json:"computeRef"`
+	// ServiceAccountID re-points (or, with "", clears) the IAM service account a
+	// scheduled run is billed as. Clearing it puts that spend back on the org.
+	ServiceAccountID *string `json:"serviceAccountId"`
 }
 
 // UpdateAgent changes an agent in place. Every field is optional; a field the

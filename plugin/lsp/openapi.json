@@ -228,42 +228,52 @@
             "type": "boolean"
           },
           "completions": {
+            "description": "Completions is complete's answer: the candidates at the position, typed and\nresolved through the repository's dependencies rather than guessed from text.",
             "items": {
               "$ref": "#/components/schemas/Completion"
             },
             "type": "array"
           },
           "diagnostics": {
+            "description": "Diagnostics is diagnostics' answer: every problem the server finds in the\nwhole file, position ignored. Empty means it found none.",
             "items": {
               "$ref": "#/components/schemas/Diagnostic"
             },
             "type": "array"
           },
           "hover": {
+            "description": "Hover is hover's answer: the type and documentation as the language server\nitself renders them, so it is prose meant to be shown, not parsed.",
             "type": "string"
           },
           "lang": {
+            "description": "Lang is the language the server that answered speaks (\"go\"), as the daemon\nreports it. Empty when the daemon named none.",
             "type": "string"
           },
           "locations": {
+            "description": "Locations is locate's answer: where the symbol is defined, referenced, typed\nor implemented, per the relation asked for. Empty means the server resolved\nnothing there, which is an answer.",
             "items": {
               "$ref": "#/components/schemas/Location"
             },
             "type": "array"
           },
           "op": {
+            "description": "Op is the question that was asked: hover, locate, symbols, diagnostics or\ncomplete. It names which result field below is the populated one.",
             "type": "string"
           },
           "path": {
+            "description": "Path is the repo-relative file the question was about, echoed back.",
             "type": "string"
           },
           "repo": {
+            "description": "Repo is the repository the question was about, echoed back.",
             "type": "string"
           },
           "rev": {
+            "description": "Rev is the RESOLVED commit sha, never the branch or tag that was asked for.\nIt is what makes an answer re-askable: a branch moves, this does not.",
             "type": "string"
           },
           "symbols": {
+            "description": "Symbols is symbols' answer: the file's whole outline, position ignored.",
             "items": {
               "$ref": "#/components/schemas/Symbol"
             },
@@ -275,12 +285,15 @@
       "Completion": {
         "properties": {
           "detail": {
+            "description": "Detail is the server's short elaboration, typically the type or signature.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the LSP CompletionItemKind number (2 method, 3 function, 5 field, 6\nvariable, …), passed through as the protocol spells it.",
             "type": "integer"
           },
           "label": {
+            "description": "Label is the text a client would insert, and what an editor lists.",
             "type": "string"
           }
         },
@@ -289,18 +302,23 @@
       "Diagnostic": {
         "properties": {
           "code": {
+            "description": "Code is the checker's own identifier for the rule, a string or a number\ndepending on the server. Absent when it published none.",
             "type": "object"
           },
           "message": {
+            "description": "Message is the problem in the server's own words, meant to be shown.",
             "type": "string"
           },
           "range": {
-            "$ref": "#/components/schemas/Range"
+            "$ref": "#/components/schemas/Range",
+            "description": "Range is the span the problem is about."
           },
           "severity": {
+            "description": "Severity is the LSP's: 1 error, 2 warning, 3 information, 4 hint. A file with\nonly 3s and 4s still compiles.",
             "type": "integer"
           },
           "source": {
+            "description": "Source is which checker reported it (\"compiler\", \"go vet\", a linter's name),\nwhich is what separates a build error from a style opinion.",
             "type": "string"
           }
         },
@@ -309,13 +327,16 @@
       "Location": {
         "properties": {
           "external": {
+            "description": "External is true when the answer left the repository — the case a static index\ncannot answer, and the reason this service resolves through dependencies.",
             "type": "boolean"
           },
           "path": {
+            "description": "Path is repo-relative while External is false, and the module coordinate\n(\"golang.org/x/mod@v0.14.0/semver/semver.go\") once it is true.",
             "type": "string"
           },
           "range": {
-            "$ref": "#/components/schemas/Range"
+            "$ref": "#/components/schemas/Range",
+            "description": "Range is the span inside that file, in LSP positions."
           }
         },
         "type": "object"
@@ -323,9 +344,11 @@
       "Position": {
         "properties": {
           "character": {
+            "description": "Character is a 0-based UTF-16 code-unit offset within Line, per the LSP\nspecification: not a byte offset and not a rune index. An emoji before the\ncursor counts as one here and as two in Go's arithmetic.",
             "type": "integer"
           },
           "line": {
+            "description": "Line is 0-BASED, per the LSP specification — one less than the line an editor\nshows a human.",
             "type": "integer"
           }
         },
@@ -363,10 +386,12 @@
       "Range": {
         "properties": {
           "end": {
-            "$ref": "#/components/schemas/Position"
+            "$ref": "#/components/schemas/Position",
+            "description": "End is the position just past the span, excluded — the range is half-open, so\nan empty range has Start equal to End."
           },
           "start": {
-            "$ref": "#/components/schemas/Position"
+            "$ref": "#/components/schemas/Position",
+            "description": "Start is the first position in the span, included."
           }
         },
         "type": "object"
@@ -374,16 +399,20 @@
       "Symbol": {
         "properties": {
           "detail": {
+            "description": "Detail is the server's short elaboration, typically the signature. Absent when\nit offered none.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is the LSP SymbolKind number (5 class, 6 method, 12 function, 23 struct,\n…), passed through rather than translated to a word — these callers already\nspeak LSP, and inventing a second vocabulary is how the two drift.",
             "type": "integer"
           },
           "name": {
+            "description": "Name is the declared identifier.",
             "type": "string"
           },
           "range": {
-            "$ref": "#/components/schemas/Range"
+            "$ref": "#/components/schemas/Range",
+            "description": "Range is the declaration's span in the file."
           }
         },
         "type": "object"

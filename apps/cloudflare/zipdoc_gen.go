@@ -167,7 +167,29 @@ func init() {
 	})
 	zip.Describe("POST /v1/cloudflare/pages/projects", zip.Doc{
 		Description: "Creates a Cloudflare Pages project on the org's account. Requires\norg admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the\nrequest is dropped rather than forwarded.",
-		Example:     json.RawMessage(`{"name":"marketing-site","production_branch":"main"}`),
+		Fields: map[string]string{
+			"PagesBuildConfig.build_command":            "BuildCommand is what Cloudflare runs to build the site (\"npm run build\").\nOmitted means no build step: the repository is published as it stands.",
+			"PagesBuildConfig.destination_dir":          "DestinationDir is the directory the build leaves the site in (\"dist\"),\nrelative to RootDir. It is what gets served.",
+			"PagesBuildConfig.root_dir":                 "RootDir is where in the repository the build runs, for a project that is not at\nthe repository root. Omitted means the root.",
+			"PagesD1Binding.id":                         "ID is the D1 database this binding points at, by Cloudflare's uuid. The binding\nname the Worker code reads it as is the map key, not a field here.",
+			"PagesDeploymentConfig.compatibility_date":  "CompatibilityDate pins which Workers runtime behaviour the functions run under,\nas a date (\"2024-01-01\"). It is a pin, not a version: the runtime keeps that\ndate's semantics for code deployed against it.",
+			"PagesDeploymentConfig.compatibility_flags": "CompatibilityFlags turn individual runtime behaviours on or off ahead of, or\nbehind, the date above (\"nodejs_compat\").",
+			"PagesDeploymentConfig.d1_databases":        "D1Databases binds D1 databases in, keyed by binding name.",
+			"PagesDeploymentConfig.env_vars":            "EnvVars are the environment variables the functions see, KEYED BY VARIABLE NAME.\nThe key is the name; the value carries the value and whether it is a secret.",
+			"PagesDeploymentConfig.kv_namespaces":       "KVNamespaces binds KV namespaces into the functions, KEYED BY THE BINDING NAME\nthe code reads (`env.SESSIONS`). Same shape for the two below.",
+			"PagesDeploymentConfig.r2_buckets":          "R2Buckets binds R2 buckets in, keyed by binding name.",
+			"PagesDeploymentConfigs.preview":            "Preview is the config every branch build other than the production branch runs\nunder. It is a SEPARATE set of bindings and variables, which is what lets a\npreview point at test data.",
+			"PagesDeploymentConfigs.production":         "Production is the config the production branch builds under.",
+			"PagesEnvVar.type":                          "Type is \"plain_text\" or \"secret_text\" and decides that: plain text is readable\nafterwards, secret text is write-only. Empty is Cloudflare's default,\nplain_text — so a secret with no type set is stored in the clear.",
+			"PagesEnvVar.value":                         "Value is the variable's value. Under type \"secret_text\" Cloudflare encrypts it\non arrival and never reads it back, so a later read of the project shows the\nvariable without this.",
+			"PagesKVBinding.namespace_id":               "NamespaceID is the KV namespace this binding points at, by Cloudflare's id\nrather than its title. The BINDING NAME — what the Worker code reads it as — is\nthe map key this value sits under, not a field here.",
+			"PagesProjectCreate.build_config":           "BuildConfig says how to build the site. Omitted means no build step.",
+			"PagesProjectCreate.deployment_configs":     "DeploymentConfigs carries the preview and production runtime configs — the\nbindings and variables the built site's functions run with.",
+			"PagesProjectCreate.name":                   "Name is the project name, and it is also the address: the site answers at\n<name>.pages.dev. Cloudflare will not rename a project afterwards.",
+			"PagesProjectCreate.production_branch":      "ProductionBranch is which git branch builds to production; every other branch\nbuilds a preview. Omitted leaves Cloudflare's own default.",
+			"PagesR2Binding.name":                       "Name is the R2 bucket this binding points at, by bucket name — R2 addresses\nbuckets by name where KV and D1 use ids. The binding name the Worker code reads\nit as is the map key.",
+		},
+		Example: json.RawMessage(`{"name":"marketing-site","production_branch":"main"}`),
 	})
 	zip.Describe("POST /v1/cloudflare/pages/projects/:project/deployments", zip.Doc{
 		Description: "Triggers a new Pages deployment. Requires org admin.\n\nNOT a typed op: a body this handler cannot parse is IGNORED — the deployment\nfalls back to the project's production branch — where a typed In answers 400.\nThose are different contracts, and typing it would change what the route accepts.",

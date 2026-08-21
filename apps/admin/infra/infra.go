@@ -62,9 +62,14 @@ type ReadIn struct {
 
 // ReadOut is the GET /v1/admin/infra envelope.
 type ReadOut struct {
-	Status string    `json:"status"`
-	Msg    string    `json:"msg"`
-	Data   *Snapshot `json:"data"`
+	// Status is "ok" or "error". An error here means the DigitalOcean account itself is
+	// unreadable; a partial read still answers ok, with the failures named in
+	// data.sources and the safety verdicts degraded via data.complete.
+	Status string `json:"status"`
+	// Msg is the failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the board. Null exactly when Status is "error".
+	Data *Snapshot `json:"data"`
 }
 
 // MutationOut is the envelope EVERY infra change answers with. One type, because there is
@@ -76,9 +81,18 @@ type ReadOut struct {
 // says why; a refusal reads "refusing: <reason>" and means the board proved the change
 // unsafe, which is different from the change being attempted and failing.
 type MutationOut struct {
+	// Status is "ok" or "error". A REFUSAL is an error too, and reads differently from a
+	// failure: msg opens "refusing: " and means the board proved the change unsafe and
+	// never attempted it, so nothing changed.
 	Status string `json:"status"`
-	Msg    string `json:"msg"`
-	Data   any    `json:"data"`
+	// Msg is why, and is empty on success. "refusing: <reason>" is the board's verdict;
+	// anything else is the change having been attempted and failed.
+	Msg string `json:"msg"`
+	// Data is the per-action result, and is deliberately opaque: its keys differ by
+	// action, and each handler's own description names them. Null on a refusal or a
+	// failure — and on a partial failure it may carry what DID happen, such as the
+	// snapshotId of an undo taken before a delete that then failed.
+	Data any `json:"data"`
 }
 
 // VolumeIn addresses one DigitalOcean volume.
@@ -243,9 +257,13 @@ func collect(ctx context.Context, do *digitalocean.Client) (Snapshot, error) {
 // VolumeSnapshotOut is the POST /v1/admin/infra/volumes/:id/snapshot envelope. It is the
 // one infra change with a typed result, because DO returns a real snapshot object.
 type VolumeSnapshotOut struct {
-	Status string                 `json:"status"`
-	Msg    string                 `json:"msg"`
-	Data   *digitalocean.Snapshot `json:"data"`
+	// Status is "ok" or "error".
+	Status string `json:"status"`
+	// Msg is why the snapshot failed, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the snapshot DigitalOcean created — the undo, addressable in the DO
+	// console. Null exactly when Status is "error", which means no snapshot exists.
+	Data *digitalocean.Snapshot `json:"data"`
 }
 
 // snapshotVolume takes a point-in-time snapshot of one volume — the undo a delete relies

@@ -335,21 +335,27 @@
       "ActivityRow": {
         "properties": {
           "action": {
+            "description": "Action is one of created, updated, deleted.",
             "type": "string"
           },
           "actor": {
+            "description": "Actor is the email of the principal who made the change. Empty for a write\nby an in-process composer; a project key can never appear here, because\nevaluating flags is all a key may do.",
             "type": "string"
           },
           "at": {
+            "description": "At is when the change was made, RFC 3339 UTC.",
             "type": "string"
           },
           "detail": {
+            "description": "Detail is free-form context about the change. Nothing writes it today, so\nit is absent from every row the store serves.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the log's own sequence number, rising with each entry. The log is\nserved newest-first, which is this descending.",
             "type": "integer"
           },
           "key": {
+            "description": "Key is the flag that changed. It survives a delete, so the log still names\nflags the definition store no longer holds.",
             "type": "string"
           }
         },
@@ -357,17 +363,23 @@
       },
       "DefRow": {
         "properties": {
-          "definition": {},
+          "definition": {
+            "description": "Definition is the flag-definition document the evaluator consumes, kept\nBYTE-FOR-BYTE as it was written. It is the engine's format rather than this\npackage's, so it carries fields no Go type here names — targeting groups,\nrollout percentages, variants, payloads — and a caller must round-trip it\nwhole rather than rebuilding it from the parts it recognizes."
+          },
           "key": {
+            "description": "Key is the flag's primary key in the caller's (org, project) store, and the\nname evaluation looks it up by. On a write it is taken from the URL, never\nfrom the body: the stored document's own \"key\" is forced to match.",
             "type": "string"
           },
           "updated_at": {
+            "description": "UpdatedAt is when the definition was last written, RFC 3339 UTC.",
             "type": "string"
           },
           "updated_by": {
+            "description": "UpdatedBy is the email of the principal who last wrote it. Empty when the\nwrite came from an in-process composer (an experiment registering its own\nassignment flag) rather than from a signed-in person.",
             "type": "string"
           },
           "version": {
+            "description": "Version is 1 when the key was created and rises by one on every overwrite.\nIt counts writes, not content changes: re-storing an identical document\nbumps it.",
             "type": "integer"
           }
         },

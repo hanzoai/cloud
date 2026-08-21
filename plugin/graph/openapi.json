@@ -33,6 +33,7 @@
             "name": "entity",
             "in": "query",
             "required": false,
+            "description": "Entity narrows to what was asserted ABOUT one entity. Absent matches every\nentity.",
             "schema": {
               "type": "string"
             }
@@ -41,6 +42,7 @@
             "name": "relation",
             "in": "query",
             "required": false,
+            "description": "Relation narrows to one relation. Absent matches every relation.",
             "schema": {
               "type": "string"
             }
@@ -49,6 +51,7 @@
             "name": "value",
             "in": "query",
             "required": false,
+            "description": "Value narrows to assertions pointing AT one value, which is how the edges\ninto an entity are read.",
             "schema": {
               "type": "string"
             }
@@ -57,6 +60,7 @@
             "name": "as_of",
             "in": "query",
             "required": false,
+            "description": "AsOf bounds the read to what was knowable at an instant, RFC 3339. Absent\nreads everything this plane holds.",
             "schema": {
               "type": "string"
             }
@@ -65,6 +69,7 @@
             "name": "limit",
             "in": "query",
             "required": false,
+            "description": "Limit caps how many assertions come back. Absent, zero, or anything above\nthe walk ceiling is the ceiling.",
             "schema": {
               "type": "integer"
             }
@@ -212,6 +217,7 @@
       "graphAssertIn": {
         "properties": {
           "assertions": {
+            "description": "Assertions is the batch. Each member is judged on its own: one refusal\ndoes not discard the rest, because a caller redelivering five facts must\nnot lose four of them to one malformed fifth.",
             "items": {
               "$ref": "#/components/schemas/graphFact"
             },
@@ -223,18 +229,22 @@
       "graphAssertOut": {
         "properties": {
           "duplicate": {
+            "description": "Duplicate is how many members this plane already held. A redelivery\ncollides on its content address and is counted here, not refused: it is\nthe success a retrying caller depends on.",
             "type": "integer"
           },
           "reasons": {
+            "description": "Reasons names why each refused member was refused, in the order sent.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "recorded": {
+            "description": "Recorded is how many members became new rows.",
             "type": "integer"
           },
           "refused": {
+            "description": "Refused is how many members were turned away at the door, before the store\nwas touched — a missing entity, a timestamp that is not RFC 3339, a\nconfidence outside [0,1]. The rest of the batch was still recorded.",
             "type": "integer"
           }
         },
@@ -243,30 +253,39 @@
       "graphFact": {
         "properties": {
           "at": {
+            "description": "At is when the thing was so, RFC 3339. Required, and refused when it sits\nmore than five minutes ahead of the server clock — an assertion dated\nfurther out would never mature and would skew every read until it did.",
             "type": "string"
           },
           "confidence": {
+            "description": "Confidence in [0,1]. A tie-breaker within the order, never a substitute\nfor it. Absent is 0, the weakest an assertion can be.",
             "type": "number"
           },
           "entity": {
+            "description": "Entity is the thing being described, in the organization's own namespace.\nIt is not created: an entity exists because something was asserted about it.\nRequired, 512 bytes at most.",
             "type": "string"
           },
           "evidence": {
+            "description": "Evidence points at the record this claim came from, 512 bytes at most. An\nassertion without one is admitted and carries no defence.",
             "type": "string"
           },
           "names": {
+            "description": "Names says the value is an entity. A walk reads only the edges, so this is\na declaration and never a guess about the value's shape.",
             "type": "boolean"
           },
           "relation": {
+            "description": "Relation is what is being asserted — `depends`, `owner`, `same`, `title`.\nIt is open: this plane holds no vocabulary of its own. Required, 128 bytes\nat most.",
             "type": "string"
           },
           "seen": {
+            "description": "Seen is when this assertion became knowable, RFC 3339. Defaults to At and\nmay not precede it. It is provenance and it decides nothing: the instant\nevery read uses is derived as the later of Seen and the server's own clock.",
             "type": "string"
           },
           "source": {
+            "description": "Source names who asserted. Required, because an assertion nobody is named\nfor cannot be weighed against one that is. Open text: this plane ranks no\nsource above another.",
             "type": "string"
           },
           "value": {
+            "description": "Value is what the relation points at. When Names is true it is another\nentity's key and the assertion is an EDGE; otherwise it is a scalar and\nthe assertion is a property. 2048 bytes at most, or 512 when it names an\nentity.",
             "type": "string"
           }
         },
@@ -275,18 +294,23 @@
       "graphNeighborsIn": {
         "properties": {
           "as_of": {
+            "description": "AsOf walks the graph as it stood at an instant, RFC 3339. Absent walks it\nas it stands now.",
             "type": "string"
           },
           "depth": {
+            "description": "Depth is how many hops. Absent is one.",
             "type": "integer"
           },
           "direction": {
+            "description": "Direction is out, in or both. Out follows an edge from its entity to its\nvalue — what the node points at; in follows it the other way — what points\nat the node; both is the union of the two, not a third rule. Absent is out.",
             "type": "string"
           },
           "relation": {
+            "description": "Relation narrows the walk to one edge relation. Absent follows all. Only\nedges are ever followed: an assertion whose value is a scalar is a property\nand is never a hop.",
             "type": "string"
           },
           "seeds": {
+            "description": "Seeds is where the walk starts. At least one.",
             "items": {
               "type": "string"
             },
@@ -298,18 +322,22 @@
       "graphNeighborsOut": {
         "properties": {
           "bound": {
+            "description": "Bound is the ceiling this walk was held to, the same for every caller, so\nTruncated can be read against a number rather than guessed at.",
             "type": "integer"
           },
           "depth": {
+            "description": "Depth is the deepest hop count actually reached. It is at most the depth\nasked for, and smaller when the walk ran out of edges first.",
             "type": "integer"
           },
           "entities": {
+            "description": "Entities is everything reached, the seeds included, ordered by the fewest\nhops that reach each one and then by key.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "truncated": {
+            "description": "Truncated says the bound stopped the walk. The bound is part of the answer\nrather than a silent short read.",
             "type": "boolean"
           }
         },
@@ -318,6 +346,7 @@
       "graphReadOut": {
         "properties": {
           "assertions": {
+            "description": "Assertions are the matching rows in the order they were written, oldest\nfirst. Every version is here: this read resolves nothing and withholds\nnothing, so a superseded claim and the one that superseded it both appear.",
             "items": {
               "$ref": "#/components/schemas/wireFact"
             },
@@ -329,12 +358,15 @@
       "graphResolveIn": {
         "properties": {
           "as_of": {
+            "description": "AsOf is the instant to answer at, RFC 3339. Absent means now.",
             "type": "string"
           },
           "entity": {
+            "description": "Entity is the thing to answer about. Required.",
             "type": "string"
           },
           "relation": {
+            "description": "Relation is the one relation to settle. Required: this answers a single\n(entity, relation) pair, never a whole entity at once.",
             "type": "string"
           }
         },
@@ -343,28 +375,35 @@
       "graphResolveOut": {
         "properties": {
           "as_of": {
+            "description": "AsOf is the instant this answer was taken at, RFC 3339: the one asked for,\nor the server's clock when none was.",
             "type": "string"
           },
           "conflicts": {
+            "description": "Conflicts is every OTHER assertion knowable at AsOf, strongest first. They\nare not all disagreements: one that repeats the winner's value ranks below\nit and is listed here too.",
             "items": {
               "$ref": "#/components/schemas/wireFact"
             },
             "type": "array"
           },
           "contested": {
+            "description": "Contested is true when at least one conflict claims a value different from\nthe winner's. Any number of conflicts that all agree leaves it false.",
             "type": "boolean"
           },
           "entity": {
+            "description": "Entity is the entity the question named, echoed so a stored answer still\nsays what it is about.",
             "type": "string"
           },
           "known": {
+            "description": "Known is false when this plane held nothing knowable at AsOf. That is an\nanswer, not an error.",
             "type": "boolean"
           },
           "relation": {
+            "description": "Relation is the relation the question named, echoed for the same reason.",
             "type": "string"
           },
           "winner": {
-            "$ref": "#/components/schemas/wireFact"
+            "$ref": "#/components/schemas/wireFact",
+            "description": "Winner is the assertion in force — the strongest of those knowable at AsOf\nunder the order `rule` names. Absent exactly when Known is false."
           }
         },
         "type": "object"
@@ -372,15 +411,18 @@
       "graphVocabularyOut": {
         "properties": {
           "bound": {
+            "description": "Bound is the ceiling on one walk.",
             "type": "integer"
           },
           "relations": {
+            "description": "Relations is what this organization has actually asserted, which is the\nonly vocabulary there is: this plane declares none of its own.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "rule": {
+            "description": "Rule names the terms of the precedence order, in the order they apply. A\nreader who is told a winner without the rule cannot check it.",
             "items": {
               "type": "string"
             },
@@ -392,39 +434,51 @@
       "wireFact": {
         "properties": {
           "at": {
+            "description": "At is when the thing was so, RFC 3339, as the asserter gave it.",
             "type": "string"
           },
           "by": {
+            "description": "By is the identity that filed it — `owner` or `owner/user` — stamped from\nthe validated principal at the write, never from the body.",
             "type": "string"
           },
           "confidence": {
+            "description": "Confidence in [0,1] as the asserter gave it; absent is 0. It breaks a tie\nbetween two assertions equally knowable and decides nothing else.",
             "type": "number"
           },
           "entity": {
+            "description": "Entity is the thing described, in the organization's own namespace.",
             "type": "string"
           },
           "evidence": {
+            "description": "Evidence points at the record the claim came from. Absent when the asserter\ngave none.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the assertion's content address, minted by the server from what was\nasserted. Two callers who assert the identical thing land on one ID and one\nrow; changing any asserted field makes a different ID and a second row.",
             "type": "string"
           },
           "knowable": {
+            "description": "Knowable is the first instant this plane could have answered with the\nassertion, RFC 3339: the later of Seen and the server's clock at the write.\nDerived and never supplied, which is what stops history filed today from\nbeing backdated into a past read.",
             "type": "string"
           },
           "names": {
+            "description": "Names true means the assertion is an edge and Value is an entity. A walk\nreads only these.",
             "type": "boolean"
           },
           "relation": {
+            "description": "Relation is what was asserted of it.",
             "type": "string"
           },
           "seen": {
+            "description": "Seen is when the asserter says it became knowable, RFC 3339. Provenance\nonly — Knowable is what an as-of read is bounded by.",
             "type": "string"
           },
           "source": {
+            "description": "Source names who asserted, as the caller gave it. This plane ranks no\nsource above another, so it never outweighs a later Knowable.",
             "type": "string"
           },
           "value": {
+            "description": "Value is what the relation points at: another entity's key when Names is\ntrue, otherwise a scalar.",
             "type": "string"
           }
         },

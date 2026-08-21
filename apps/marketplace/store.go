@@ -27,17 +27,47 @@ import (
 // unconstructible rather than merely unlikely (wallets resolves an id only within
 // the org that is asked for).
 type Listing struct {
-	ID           string       `json:"id"`
-	PublisherOrg string       `json:"publisherOrg"`
-	Tool         string       `json:"tool"`
-	Title        string       `json:"title"`
-	Description  string       `json:"description"`
-	Category     string       `json:"category"`
-	Price        money.Amount `json:"price"` // exact per-call price; 0 is free.
-	Currency     string       `json:"currency"`
-	Recipient    string       `json:"recipient"` // seller payout WALLET ID, in PublisherOrg.
-	Public       bool         `json:"public"`
-	CreatedAt    int64        `json:"createdAt"`
+	// ID is the listing's id, minted here as "lst_" + 16 hex characters. A
+	// publisher cannot choose it: Create overwrites whatever arrives. It is unique
+	// within PublisherOrg (the primary key is the pair), and it is the path segment
+	// DELETE /v1/marketplace/listings/:id takes.
+	ID string `json:"id"`
+	// PublisherOrg is the org that published the listing, taken from the validated
+	// principal and never off the wire. It is also the PAYEE org — Recipient is
+	// resolved inside it — and the isolation key: a publisher reads and deletes
+	// only rows carrying its own org.
+	PublisherOrg string `json:"publisherOrg"`
+	// Tool is the registry name of the offered capability, in the flat fleet-wide
+	// tool namespace. It resolved in the publisher's own scope at publish time, so
+	// no listing advertises a capability that did not exist; it is also the key the
+	// price table looks a dispatch up by.
+	Tool string `json:"tool"`
+	// Title is the shop-window name, required and refused past 200 bytes. It is
+	// what discovery paints over the tool's registry name.
+	Title string `json:"title"`
+	// Description is the long copy. Publish REFUSES one past 4096 bytes rather
+	// than truncating it, so what is stored is what was sent; empty is allowed.
+	Description string `json:"description"`
+	// Category groups the listing in the shop window. Free text — no vocabulary,
+	// nothing validates it — and unlike Description it is silently cut to 4096
+	// bytes rather than refused. Empty means ungrouped.
+	Category string       `json:"category"`
+	Price    money.Amount `json:"price"` // exact per-call price; 0 is free.
+	// Currency is the ISO 4217 code Price is quoted in; Create defaults it to "USD"
+	// when the publisher names none. It is a LABEL that travels to the shop window:
+	// publish parses Price with money.ParseUSD and the x402 terms carry no
+	// currency, so another code here changes what is displayed, not what is charged.
+	Currency  string `json:"currency"`
+	Recipient string `json:"recipient"` // seller payout WALLET ID, in PublisherOrg.
+	// Public is whether other orgs can discover the listing. It also decides
+	// ENFORCEMENT: only public rows reach the price table, so a private listing
+	// with a price charges nobody. False leaves the row visible to its publisher
+	// alone.
+	Public bool `json:"public"`
+	// CreatedAt is when the listing was published, in Unix SECONDS, minted at
+	// insert. Every listing read orders by it descending, so it is the shop's
+	// ordering key as well as its age.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // Store is the marketplace listing store (one SQLite file, publisher_org column,

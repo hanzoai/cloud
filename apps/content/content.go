@@ -407,12 +407,28 @@ func (o contentOps) postGenerate(ctx context.Context, in *GenerateInput) (*Gener
 // TransitionResult is the outcome of a lifecycle move, including any distribution the
 // transition triggered (nil when the target state does not distribute).
 type TransitionResult struct {
-	DocType      string            `json:"doctype"`
-	Name         string            `json:"name"`
-	From         string            `json:"from"`
-	To           string            `json:"to"`
-	Distribution *PublishResult    `json:"distribution,omitempty"`
-	Storefront   *StorefrontResult `json:"storefront,omitempty"`
+	// DocType is the content type that moved — Campaign, SocialPost or Asset —
+	// echoed from the path.
+	DocType string `json:"doctype"`
+	// Name is the document that moved, echoed from the path.
+	Name string `json:"name"`
+	// From is the state the item held when it was read. A document carrying no
+	// status yet reads as "draft".
+	From string `json:"from"`
+	// To is the state it holds now. From == To on an idempotent re-transition,
+	// which is legal and is where a caller that lost a publish race lands.
+	To string `json:"to"`
+	// Distribution is the channel fan-out this move triggered. Present ONLY on the
+	// move to published, the single edge that distributes — so its absence means
+	// no fan-out was attempted, never that one failed quietly. A fan-out that DID
+	// fail is present carrying its own honest status, because distribution never
+	// rolls the status change back.
+	Distribution *PublishResult `json:"distribution,omitempty"`
+	// Storefront is the catalog side effect, present only when a published Asset
+	// was product imagery — it carries a design and a kind of ecom, product or
+	// lifestyle. Absent for everything else, so absence reads as "not catalog
+	// imagery" rather than "the catalog failed".
+	Storefront *StorefrontResult `json:"storefront,omitempty"`
 }
 
 // Transition moves a content item to a new lifecycle state and, when that state
@@ -516,12 +532,26 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 
 // boardItem is one row of the aggregate content board.
 type boardItem struct {
-	DocType   string `json:"doctype"`
-	Name      string `json:"name"`
-	Title     string `json:"title"`
-	Status    string `json:"status"`
-	Project   string `json:"project,omitempty"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// DocType is which content type the row came from: Campaign, SocialPost or
+	// Asset. The board spans all three at once, so this is what tells them apart.
+	DocType string `json:"doctype"`
+	// Name is the document within that type. (doctype, name) is the pair every
+	// /v1/content write addresses an item by.
+	Name string `json:"name"`
+	// Title is the item's headline, read from its type's own title field. Empty
+	// for a document that has none.
+	Title string `json:"title"`
+	// Status is the lifecycle state: draft, in_review, approved, queued, published
+	// or archived. It decides what a reader may see — the public site pulls
+	// exactly "published" and nothing else — so it is a visibility fact, not a
+	// workflow label.
+	Status string `json:"status"`
+	// Project is the brand/site sub-scope within the org. Absent for an item held
+	// at org level rather than under one brand.
+	Project string `json:"project,omitempty"`
+	// UpdatedAt is unix seconds of the document's last write, and the key the
+	// board sorts on, newest first.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 func boardItemFrom(dt string, d framework.Document) boardItem {
