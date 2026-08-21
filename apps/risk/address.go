@@ -62,7 +62,7 @@ package risk
 //	masses   Ref, Cur and Hist, hashed as IEEE-754 BITS and never as text. A
 //	         decimal rendering is a lossy function of a float64, so two runs
 //	         holding the same number could print it differently and be named
-//	         apart. apps/dataset reached this conclusion first and this is the same
+//	         apart. apps/datasets reached this conclusion first and this is the same
 //	         reasoning applied to the same problem.
 //	warmed   the FOLD WATERMARK: how far this organisation's own surface has
 //	         already been folded in. Not redundant with `learned`. Two models with
@@ -125,7 +125,7 @@ import (
 func address(f family, s anomaly.Snapshot, warmed time.Time) string {
 	h := sha256.New()
 	// Domain-separated, so a digest from this plane can never be mistaken for one
-	// from another — apps/dataset writes "hanzo.dataset\x00" for the same reason.
+	// from another — apps/datasets writes "hanzo.dataset\x00" for the same reason.
 	h.Write([]byte("hanzo.risk.model\x00"))
 	// AND DOMAIN-SEPARATED BY FAMILY, for the same reason one level in. Every term
 	// below is a term of one family's arithmetic — a digest over its geometry, a seed

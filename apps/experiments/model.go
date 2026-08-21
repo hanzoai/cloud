@@ -25,7 +25,7 @@
 //
 // The variant KIND is orthogonal: variant.payload can be a feature config (feature
 // experiment), an ad-creative id (campaign experiment), an email subject, a model id
-// — the primitive does not care. apps/campaign composes THIS to run a creative
+// — the primitive does not care. apps/campaigns composes THIS to run a creative
 // A/B; it does not reinvent assignment or evidence.
 //
 // Mounted into the unified cloud binary via apps.go ({Name:"experiments", Mount}).

@@ -337,8 +337,8 @@ func TestCacheControlFor(t *testing.T) {
 		// FINGERPRINTED one: before video was a media class it could not reach
 		// `immutable` at all, which is the asset that gains the most from a year.
 		"mock/containers-a1b2c3d4.mp4": "public, max-age=31536000, immutable",
-		"hero-9f8e7d6c.webm":          "public, max-age=31536000, immutable",
-		"workload/containers.mp4":     "public, max-age=3600", // not fingerprinted
+		"hero-9f8e7d6c.webm":           "public, max-age=31536000, immutable",
+		"workload/containers.mp4":      "public, max-age=3600", // not fingerprinted
 	}
 	for key, want := range cases {
 		if got := CacheControlFor(key, ""); got != want {

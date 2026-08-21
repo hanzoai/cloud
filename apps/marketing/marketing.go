@@ -8,8 +8,8 @@
 //   - Campaigns — named campaign on a delivery Channel (email/sms/social/meta/
 //     google/tiktok), a lifecycle Status (draft/scheduled/active/paused/
 //     completed), Budget/Spend in cents, and a send time (scheduled_at). This is
-//     a SECOND campaign record beside apps/campaign (the go-to-market plane) and
-//     apps/ads (the paid one); apps/campaign is the canonical owner of a campaign
+//     a SECOND campaign record beside apps/campaigns (the go-to-market plane) and
+//     apps/ads (the paid one); apps/campaigns is the canonical owner of a campaign
 //     that spans channels, and this one holds only what an email send needs.
 //   - Email sequences — ordered drip Steps sent as DURABLE tasks on the embedded
 //     hanzoai/tasks engine (drip.go): each enrollment's next_run_at lives in

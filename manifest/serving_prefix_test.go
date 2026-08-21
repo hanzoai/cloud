@@ -53,14 +53,14 @@ const servingOwner = "ml"
 // # The three times
 //
 // apps/label addressed /v1/ml/labels, apps/reference addressed /v1/ml/reference,
-// and apps/dataset addressed /v1/ml/datasets. All three are the RISK product —
+// and apps/datasets addressed /v1/ml/datasets. All three are the RISK product —
 // the labels a decision is adjudicated with, the lookup data it consults, and the
 // snapshot its model was fitted on — and all three were corrected to /v1/risk/*.
 // Each correction records the same finding in its own words: /v1/ml is a LIVE
 // product with customers on it, and a second product filed under it makes
-// /v1/ml/models mean two things at once. apps/dataset's own address_test.go says
+// /v1/ml/models mean two things at once. apps/datasets's own address_test.go says
 // the third time "stops being a recollection and becomes this gate", and it built
-// exactly that gate — for apps/dataset.
+// exactly that gate — for apps/datasets.
 //
 // A per-app gate cannot catch the fourth time, because the fourth time happens in
 // a fifth app that does not have one. This is the invariant stated once, on the
@@ -100,7 +100,7 @@ func TestOnlyOneAppAnswersTheServingPrefixes(t *testing.T) {
 					"app publishes there joins the %s product — its tag list, its floor, its SDK "+
 					"namespace and its CLI command tree — and %s is LIVE with customers on it. That is "+
 					"one prefix answering two products, which apps/label, apps/reference and "+
-					"apps/dataset each did once and each corrected. Address the plane under the product "+
+					"apps/datasets each did once and each corrected. Address the plane under the product "+
 					"it belongs to; if it genuinely is model serving, it belongs in app %q rather than "+
 					"beside it.",
 					a.Name, pre, s, strings.TrimPrefix(s, "/v1/"), s, servingOwner)
