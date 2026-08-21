@@ -54,10 +54,12 @@ var Apps = []App{
 	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
 	{Name: "flags", Prefixes: []string{"/v1/flags"}},
 	{Name: "kms", Prefixes: []string{"/v1/kms"}},
-	// /v1/logs and /v1/traces are metrics' own ingestion + query doors (see
-	// plugin/metrics/openapi.json); unnamed here they fell to whichever row held
-	// the bare "/v1" remainder, which serves none of them.
-	{Name: "metrics", Prefixes: []string{"/v1/logs", "/v1/metrics", "/v1/traces"}},
+	// One store, three signals, one root: the logs and traces doors fold under
+	// /v1/metrics (HIP-1241), so the capability's routes are all under its own
+	// name. The code moved with them — github.com/hanzoai/metrics is retired and
+	// its door now ships in github.com/hanzoai/o11y/metrics — but the capability
+	// did not: a shared module is shared code, not a second owner of the address.
+	{Name: "metrics", Prefixes: []string{"/v1/metrics"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
 	{Name: "account", Prefixes: []string{"/v1/account"}},
 	// The three root /.well-known documents are named EXACTLY, one prefix each, and
@@ -74,15 +76,14 @@ var Apps = []App{
 	// client's convention rather than by ours; Base moved it beneath the mount
 	// prefix, so it is /v1/base/rest/{collection} and this row covers it.
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/waitlist"}},
-	// Two prefixes here are not /v1/o11y, and both are hanzoai/o11y's own routes:
-	// /v1/sentinel is the Sentry product face (twelve literal paths the module
-	// registers) and /ws/query_progress is the websocket form of the
-	// query-progress read. They are the app's addresses, so they belong under the
-	// app's name — a route move in that module and a pin bump, not an edit here;
-	// unlisted meanwhile, the fleet publishes them and routes them nowhere.
-	// (The public status document was the third: it is cloud's own route and
-	// answers at /v1/o11y/summary now — apps/o11y/summary.go.)
-	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentinel", "/ws/query_progress"}, Eager: true},
+	// One prefix, which is the whole point of the name. The Sentry product face
+	// answers at /v1/o11y/sentinel and the query-progress read at
+	// /v1/o11y/query_progress — both folded in the module (v1.5.67), the second
+	// onto the HTTP twin it always shared a handler with, so a websocket Upgrade
+	// and a long poll are one address in two protocols. The public status
+	// document was the third, and it is cloud's own route at /v1/o11y/summary —
+	// apps/o11y/summary.go.
+	{Name: "o11y", Prefixes: []string{"/v1/o11y"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
 	// the fleet's route of last resort: every path no app named deeper — the whole

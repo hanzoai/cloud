@@ -1,6 +1,6 @@
 {
-  "paths": 1774,
-  "operations": 2421,
+  "paths": 1772,
+  "operations": 2415,
   "products": {
     "account": 10,
     "admin": 56,
@@ -76,7 +76,7 @@
     "ml": 7,
     "mq": 15,
     "notify": 4,
-    "o11y": 387,
+    "o11y": 381,
     "openapi": 4,
     "plan": 15,
     "platform": 37,

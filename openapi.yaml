@@ -87450,46 +87450,6 @@ paths:
       x-app: link
       x-stage: beta
       x-tool: true
-  /v1/logs/health:
-    get:
-      description: |-
-        Reports the native log store's live state for the calling tenant: the subsystem version and `records`, the count actually held right now rather than a constant. Not a dependency probe — the store is in-process, so this answers 200 whenever the process is up.
-
-        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.
-      operationId: get_logs_health
-      summary: How many log records this deployment holds for your org
-      tags:
-      - metrics
-      x-app: metrics
-      x-public: true
-  /v1/logs/query:
-    get:
-      description: |-
-        Answers `{count, records}`, newest first. `match` is the same `k=v,k2=v2` superset label matcher the metrics query uses; `contains` is a case-insensitive substring test against the record body; `start` and `end` are nanosecond bounds.
-
-        A bound that is absent, empty or unparseable becomes 0, which means UNBOUNDED — a malformed `start` widens the search rather than failing it. `limit` caps the page and defaults to 100 when absent or non-positive, so an unfiltered read is never the whole ring.
-
-        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, so a search can only reach the org the edge asserted.
-      operationId: get_logs_query
-      summary: Search your org's logs by label, time and substring
-      tags:
-      - metrics
-      x-app: metrics
-      x-public: true
-  /v1/logs/write:
-    post:
-      description: |-
-        Takes `{records:[{t, level, body, labels}]}`, appends each one, and answers `{written}`. Bodies are stored verbatim; `labels` are the indexed dimensions a query filters on, so what you do not label you can only find by substring.
-
-        `t` is NANOSECONDS since the Unix epoch. A record sent without one is stored at 0 and then falls outside any query carrying a lower bound — the usual reason a successful write does not read back. Retention is a bounded ring, 1048576 records per org, oldest evicted first. No record is validated or rejected, so `written` is the number of records SENT; only a body that does not decode at all is 400.
-
-        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`; each org's records live in its own WAL-durable store.
-      operationId: post_logs_write
-      summary: Append structured log records for your org
-      tags:
-      - metrics
-      x-app: metrics
-      x-public: true
   /v1/lsp/complete:
     post:
       description: |-
@@ -89180,6 +89140,46 @@ paths:
       - metrics
       x-app: metrics
       x-public: true
+  /v1/metrics/logs/health:
+    get:
+      description: |-
+        Reports the native log store's live state for the calling tenant: the subsystem version and `records`, the count actually held right now rather than a constant. Not a dependency probe — the store is in-process, so this answers 200 whenever the process is up.
+
+        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.
+      operationId: get_metrics_logs_health
+      summary: How many log records this deployment holds for your org
+      tags:
+      - metrics
+      x-app: metrics
+      x-public: true
+  /v1/metrics/logs/query:
+    get:
+      description: |-
+        Answers `{count, records}`, newest first. `match` is the same `k=v,k2=v2` superset label matcher the metrics query uses; `contains` is a case-insensitive substring test against the record body; `start` and `end` are nanosecond bounds.
+
+        A bound that is absent, empty or unparseable becomes 0, which means UNBOUNDED — a malformed `start` widens the search rather than failing it. `limit` caps the page and defaults to 100 when absent or non-positive, so an unfiltered read is never the whole ring.
+
+        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, so a search can only reach the org the edge asserted.
+      operationId: get_metrics_logs_query
+      summary: Search your org's logs by label, time and substring
+      tags:
+      - metrics
+      x-app: metrics
+      x-public: true
+  /v1/metrics/logs/write:
+    post:
+      description: |-
+        Takes `{records:[{t, level, body, labels}]}`, appends each one, and answers `{written}`. Bodies are stored verbatim; `labels` are the indexed dimensions a query filters on, so what you do not label you can only find by substring.
+
+        `t` is NANOSECONDS since the Unix epoch. A record sent without one is stored at 0 and then falls outside any query carrying a lower bound — the usual reason a successful write does not read back. Retention is a bounded ring, 1048576 records per org, oldest evicted first. No record is validated or rejected, so `written` is the number of records SENT; only a body that does not decode at all is 400.
+
+        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`; each org's records live in its own WAL-durable store.
+      operationId: post_metrics_logs_write
+      summary: Append structured log records for your org
+      tags:
+      - metrics
+      x-app: metrics
+      x-public: true
   /v1/metrics/query:
     get:
       description: |-
@@ -89190,6 +89190,56 @@ paths:
         The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, so a query can only ever read the org the edge asserted.
       operationId: get_metrics_query
       summary: Read your org's series back over a time range
+      tags:
+      - metrics
+      x-app: metrics
+      x-public: true
+  /v1/metrics/traces/health:
+    get:
+      description: |-
+        Reports the native trace store's live state for the calling tenant: the subsystem version and `spans`, the count actually held right now. Not a dependency probe — the store is in-process, so this answers 200 whenever the process is up.
+
+        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.
+      operationId: get_metrics_traces_health
+      summary: How many spans this deployment holds for your org
+      tags:
+      - metrics
+      x-app: metrics
+      x-public: true
+  /v1/metrics/traces/query:
+    get:
+      description: |-
+        Answers `{count, spans}`, newest first, filtered on each span's START time. `start` and `end` are nanosecond bounds where 0 — which is what an absent, empty or unparseable value becomes — means UNBOUNDED, so a malformed bound widens the listing instead of failing it. `limit` defaults to 100 when absent or non-positive.
+
+        It lists SPANS, not traces: several spans of one trace each count separately and each take a slot against `limit`. Assembling one trace is /v1/metrics/traces/trace. The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.
+      operationId: get_metrics_traces_query
+      summary: Recent spans for your org over a time range
+      tags:
+      - metrics
+      x-app: metrics
+      x-public: true
+  /v1/metrics/traces/trace:
+    get:
+      description: |-
+        Answers `{spans}`: every span the org holds for the trace id in `id`, in the order they were appended, which is what a waterfall view renders. Unlike the other reads there is no count, no time range and no limit — a trace is addressed by id or not at all.
+
+        An id with no spans answers an EMPTY list, never a 404: the store cannot tell a trace that never existed from one whose spans retention has already dropped, so it does not pretend to. The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, and a trace id belonging to another org is simply not in this org's store.
+      operationId: get_metrics_traces_trace
+      summary: Every span of one trace — the waterfall
+      tags:
+      - metrics
+      x-app: metrics
+      x-public: true
+  /v1/metrics/traces/write:
+    post:
+      description: |-
+        Takes `{spans:[{traceId, spanId, parentId, name, startNs, endNs, attrs}]}`, appends each, and answers `{written}` — the number of spans sent. Every span is indexed by its trace id as it lands, which is what makes the waterfall read possible without a second store.
+
+        Times are NANOSECONDS since the Unix epoch. Retention is a bounded ring of 1048576 spans per org: past that the OLDEST are evicted to keep the newest 1048576, and the trace index is rebuilt — so a long-lived trace can lose its early spans while its later ones survive, and a waterfall read is best-effort against retention, not a guarantee.
+
+        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`. A body that does not decode is 400.
+      operationId: post_metrics_traces_write
+      summary: Append spans for your org
       tags:
       - metrics
       x-app: metrics
@@ -90142,7 +90192,7 @@ paths:
       description: |-
         Accepts an application/x-sentry-envelope frame from a Sentry SDK — the batched wire format carrying events, sessions and attachments — and ingests it against the project named in the path.
 
-        THE /api/ SEGMENT IS NOT OURS TO NAME. An SDK appends its own fixed /api/<project>/envelope/ suffix to whatever DSN it is given, so this address is the SDK's, received verbatim. We receive this shape; we do not publish it. The clean spelling of the same wire is /v1/sentinel/{project}/envelope/.
+        THE /api/ SEGMENT IS NOT OURS TO NAME. An SDK appends its own fixed /api/<project>/envelope/ suffix to whatever DSN it is given, so this address is the SDK's, received verbatim. We receive this shape; we do not publish it. The clean spelling of the same wire is /v1/event/{project}/envelope/.
 
         AUTHENTICATED BY THE DSN PUBLIC KEY, never a Hanzo session, and therefore exempt from the principal gate: the ingest verifier checks the key in constant time, fails closed, and derives the org from it. A keyless submission is a 401 from that verifier — not a 403 from the gate, and not a 404 — which is how you tell the hops apart. The exemption is matched by method plus prefix plus suffix, never a bare prefix, so no read is reachable through it.
       operationId: post_o11y_api_by_project_id_envelope
@@ -97590,7 +97640,9 @@ paths:
       description: |-
         Reports how far a submitted query has got — rows scanned, bytes read, elapsed — and HOLDS the connection until the next update rather than answering immediately.
 
-        The long poll is the whole point, and the reason this cannot be a typed operation: an answer that arrived only when the query finished would report progress on nothing. The websocket form of the same read is /ws/query_progress.
+        ONE ADDRESS, TWO PROTOCOLS. Send an Upgrade and this is a websocket carrying the same progress; send an ordinary GET and it is a long poll. The Upgrade is a property of the request, not of the address, so the read that used to answer at /ws/query_progress answers here.
+
+        The long poll is the whole point, and the reason this cannot be a typed operation: an answer that arrived only when the query finished would report progress on nothing, and an upgraded connection has no JSON response to declare.
 
         A validated, org-scoped principal is required; a query id belonging to another tenant is simply not found.
       operationId: get_o11y_query_progress
@@ -98963,6 +99015,557 @@ paths:
           description: ok
       summary: Fires a test notification for a rule definition without saving it,
         answering with how many series would alert.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/discover:
+    post:
+      description: |-
+        Aggregates a project's captured errors into a table — the caller
+        names the filters, the groupings and the aggregations, and gets back the
+        columns and rows they asked for.
+
+        The project is mandatory and is checked against the caller's own org before it
+        scopes anything, so a project id belonging to someone else reads as absent
+        rather than as data.
+      operationId: post_o11y_sentinel_discover
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/o11y.O11yDiscoverIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11yDiscoverOut'
+          description: ok
+      summary: Aggregates a project's captured errors into a table — the caller names
+        the filters, the groupings and the aggregations, and gets back the columns
+        and rows they asked for.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/events/{id}:
+    get:
+      description: |-
+        Returns one captured error event of a project, by its id.
+
+        Callers need the viewer role; the runtime's own gate enforces it.
+      operationId: get_o11y_sentinel_events_by_id
+      parameters:
+      - description: ID is the event id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: Project is the project the event belongs to, by its id. Required.
+        in: query
+        name: project
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11ySentryEventOut'
+          description: ok
+      summary: Returns one captured error event of a project, by its id.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/issues:
+    get:
+      description: |-
+        Lists the caller's org's grouped error issues, optionally
+        narrowed to one project and one time window, and filtered by status, level,
+        environment, service, a free-text query and a sort.
+
+        Callers need the viewer role; the runtime's own gate enforces it.
+      operationId: get_o11y_sentinel_issues
+      parameters:
+      - description: 'Status narrows to one lifecycle state: unresolved, resolved
+          or ignored.'
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: Level narrows to one severity, e.g. error, warning, info.
+        in: query
+        name: level
+        required: false
+        schema:
+          type: string
+      - description: Environment narrows to one deployment environment.
+        in: query
+        name: environment
+        required: false
+        schema:
+          type: string
+      - description: ServiceName narrows to one reporting service.
+        in: query
+        name: serviceName
+        required: false
+        schema:
+          type: string
+      - description: Query narrows to issues whose text contains it.
+        in: query
+        name: query
+        required: false
+        schema:
+          type: string
+      - description: Sort orders the page, e.g. lastSeen, firstSeen, count.
+        in: query
+        name: sort
+        required: false
+        schema:
+          type: string
+      - description: Offset is how many issues to skip. Zero starts at the first.
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+      - description: Limit caps how many issues come back. Zero means the default.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - description: Project narrows the org's issues to one project, by its id.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      - description: Period is the window to read, relative to now — 1h, 24h, 7d,
+          14d, 30d.
+        in: query
+        name: period
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11yErrorIssuesOut'
+          description: ok
+      summary: Lists the caller's org's grouped error issues, optionally narrowed
+        to one project and one time window, and filtered by status, level, environment,
+        service, a free-text query and a sort.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/issues/{id}:
+    get:
+      description: |-
+        Returns one grouped issue of the caller's org with its latest
+        occurrence sample.
+
+        Callers need the viewer role; the runtime's own gate enforces it.
+      operationId: get_o11y_sentinel_issues_by_id
+      parameters:
+      - description: ID is the issue id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11yErrorGettableIssueOut'
+          description: ok
+      summary: Returns one grouped issue of the caller's org with its latest occurrence
+        sample.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Changes an issue's lifecycle — resolve, ignore, reopen or
+        assign — and returns the updated issue. Fields left unset are left unchanged.
+
+        Callers need the editor role; the runtime's own gate enforces it.
+      operationId: put_o11y_sentinel_issues_by_id
+      parameters:
+      - description: ID is the issue id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/o11y.O11ySentryUpdateIssueIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11yErrorIssueOut'
+          description: ok
+      summary: Changes an issue's lifecycle — resolve, ignore, reopen or assign —
+        and returns the updated issue.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/issues/{id}/events:
+    get:
+      description: |-
+        Lists one issue's captured occurrences, scoped to a project
+        — a project is an isolation unit, so the caller declares which project's
+        occurrences to read.
+
+        Callers need the viewer role; the runtime's own gate enforces it.
+      operationId: get_o11y_sentinel_issues_by_id_events
+      parameters:
+      - description: ID is the issue id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: Project is the project whose occurrences to read, by its id.
+          Required.
+        in: query
+        name: project
+        required: true
+        schema:
+          type: string
+      - description: Limit caps how many occurrences come back. Zero means the default.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11ySentryIssueEventsOut'
+          description: ok
+      summary: Lists one issue's captured occurrences, scoped to a project — a project
+        is an isolation unit, so the caller declares which project's occurrences to
+        read.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/logs:
+    get:
+      description: |-
+        Lists a project's captured error events, newest first, optionally
+        narrowed to those whose message or exception text contains a search string.
+      operationId: get_o11y_sentinel_logs
+      parameters:
+      - description: Project is the project to read, as its id. Required.
+        in: query
+        name: project
+        required: true
+        schema:
+          type: string
+      - description: Query narrows the page to events whose text contains it.
+        in: query
+        name: query
+        required: false
+        schema:
+          type: string
+      - description: Period is the window to read, relative to now — 1h, 24h, 7d,
+          14d, 30d.
+        in: query
+        name: period
+        required: false
+        schema:
+          type: string
+      - description: Limit caps how many events come back.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11yLogsOut'
+          description: ok
+      summary: Lists a project's captured error events, newest first, optionally narrowed
+        to those whose message or exception text contains a search string.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/projects:
+    get:
+      description: |-
+        Lists the caller's org's Sentry projects, each with its
+        freshly-derived DSN.
+
+        Callers need the viewer role; the runtime's own gate enforces it.
+      operationId: get_o11y_sentinel_projects
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11ySentryProjectsOut'
+          description: ok
+      summary: Lists the caller's org's Sentry projects, each with its freshly-derived
+        DSN.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Creates a Sentry project under the caller's org and
+        returns it, DSN included. Only the name, and optionally a slug and platform,
+        are the caller's to set; the org, id and key are server-assigned.
+
+        Callers need the editor role; the runtime's own gate enforces it.
+      operationId: post_o11y_sentinel_projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/o11y.O11ySentryPostableProject'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11ySentryProjectOut'
+          description: ok
+      summary: Creates a Sentry project under the caller's org and returns it, DSN
+        included.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/projects/{id}:
+    delete:
+      description: |-
+        Deletes one Sentry project of the caller's org. Its DSN
+        stops resolving immediately, so ingest for that id fails closed exactly as an
+        unknown project does; retained events are not touched. Answers 204.
+
+        Callers need the editor role; the runtime's own gate enforces it.
+      operationId: delete_o11y_sentinel_projects_by_id
+      parameters:
+      - description: ID is the project id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Deletes one Sentry project of the caller's org.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one Sentry project of the caller's org, DSN included.
+
+        Callers need the viewer role; the runtime's own gate enforces it.
+      operationId: get_o11y_sentinel_projects_by_id
+      parameters:
+      - description: ID is the project id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11ySentryProjectOut'
+          description: ok
+      summary: Returns one Sentry project of the caller's org, DSN included.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/projects/{id}/keys/rotate:
+    post:
+      description: |-
+        Rotates a project's DSN key — bumping its rotation
+        watermark so keys below it stop verifying — and returns the project with its
+        new DSN.
+
+        Callers need the editor role; the runtime's own gate enforces it.
+      operationId: post_o11y_sentinel_projects_by_id_keys_rotate
+      parameters:
+      - description: ID is the project id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11ySentryProjectOut'
+          description: ok
+      summary: Rotates a project's DSN key — bumping its rotation watermark so keys
+        below it stop verifying — and returns the project with its new DSN.
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/stats:
+    get:
+      description: |-
+        Returns a project's event-rate timeseries: one bucket per interval over
+        the requested period, counting the events in it.
+      operationId: get_o11y_sentinel_stats
+      parameters:
+      - description: Project is the project to read, as its id. Required.
+        in: query
+        name: project
+        required: true
+        schema:
+          type: string
+      - description: Field is the dimension to count over. Empty counts all events.
+        in: query
+        name: field
+        required: false
+        schema:
+          type: string
+      - description: Period is the window to read, relative to now — 1h, 24h, 7d,
+          14d, 30d.
+        in: query
+        name: period
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11yStatsOut'
+          description: ok
+      summary: 'Returns a project''s event-rate timeseries: one bucket per interval
+        over the requested period, counting the events in it.'
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/traces:
+    get:
+      description: |-
+        Lists the traces a project's captured errors reference, each with how
+        many errors landed on it, when they started and stopped, and the latest
+        message seen — the entry point for "which requests are failing".
+      operationId: get_o11y_sentinel_traces
+      parameters:
+      - description: Project is the project to read, as its id. Required.
+        in: query
+        name: project
+        required: true
+        schema:
+          type: string
+      - description: Period is the window to read, relative to now — 1h, 24h, 7d,
+          14d, 30d.
+        in: query
+        name: period
+        required: false
+        schema:
+          type: string
+      - description: Limit caps how many traces come back.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11yTracesOut'
+          description: ok
+      summary: Lists the traces a project's captured errors reference, each with how
+        many errors landed on it, when they started and stopped, and the latest message
+        seen — the entry point for "which requests are failing".
+      tags:
+      - o11y
+      x-app: o11y
+      x-public: true
+      x-tool: true
+  /v1/o11y/sentinel/traces/{id}:
+    get:
+      description: |-
+        Returns one trace's captured errors for a project — every error event
+        that carried the trace id, in the order the events plane holds them.
+      operationId: get_o11y_sentinel_traces_by_id
+      parameters:
+      - description: ID is the trace id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: Project is the project the trace's errors belong to. Required.
+        in: query
+        name: project
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/o11y.O11yTraceOut'
+          description: ok
+      summary: Returns one trace's captured errors for a project — every error event
+        that carried the trace id, in the order the events plane holds them.
       tags:
       - o11y
       x-app: o11y
@@ -108707,644 +109310,6 @@ paths:
       x-app: security
       x-stage: beta
       x-tool: true
-  /v1/sentinel/{wildcard1}:
-    delete:
-      description: |-
-        The one delete on the Sentry surface: removing a PROJECT, answering 204. Error issues, events and traces are not individually deletable — they are append-only telemetry, and their lifetime is retention's business, not an API call's.
-
-        Requires a validated, org-scoped principal with edit rights; a viewer is refused. The delete is confined to the org minted from that principal's claim, so a project id belonging to another tenant is not found rather than removed. Deleting a project retires the DSN that fed it, so any SDK still pointed at that key stops being accepted. Before the runtime is initialized, 503.
-      operationId: delete_sentinel_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Delete a Sentry project
-      tags:
-      - o11y
-      x-app: o11y
-    get:
-      description: |-
-        Serves the Sentry-compatible read surface — projects, error issues and one issue's occurrences, a single event, error logs, error-correlated traces and one trace's waterfall, and the event-rate stats — so a Sentry client or the error console reads its errors at the paths it already speaks.
-
-        It is the SAME runtime the observability surface serves, reached under a second path family, and there is NO rewrite: the runtime carries these routes literally. That is what makes this a product face rather than a translation layer. One runtime, two path families.
-
-        A validated principal is required and the read is scoped to that principal's own org. Errors are a tenant's OWN data, so org membership is the whole admission test and there is deliberately no admin term on it — gating the product on platform sudo would make the only way to see your own errors a scope that shows you everyone's. Before the runtime is initialized, 503.
-      operationId: get_sentinel_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Read the caller org's errors on the Sentry surface
-      tags:
-      - o11y
-      x-app: o11y
-    patch:
-      description: |-
-        The Sentry face carries NO route for a partial update. The wildcard admits every method, so this operation exists as an address, but nothing behind it answers and a request lands on the runtime as an unrouted path.
-
-        It is documented rather than silently omitted because the useful thing to say is where to go instead: an issue's lifecycle — resolve, ignore, assign — is a REPLACE on that issue, not a patch, and it is the only mutable state on this surface. A client that reaches for a partial update here is looking for that call.
-      operationId: patch_sentinel_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Not served — the Sentry surface has no partial update
-      tags:
-      - o11y
-      x-app: o11y
-    post:
-      description: |-
-        Carries every write on the Sentry-compatible surface: the SDK's error ingest, and the authenticated writes the console makes — creating a project, rotating a project's DSN key, and running a discover query over the events plane.
-
-        THE TWO ARE AUTHENTICATED DIFFERENTLY, and that is the rule to get right. An envelope or store submission presents a DSN public key, never a Hanzo session, so it is exempt from the principal gate and verified by the ingest key check instead — which derives the org from the DSN and fails closed. A keyless submission is a 401 from that verifier, not a 403 from the gate, and telling those two apart is how you tell the hops apart. Every other write here needs a validated, org-scoped principal, and creating or rotating requires an editor rather than a viewer.
-
-        The ingest exemption is matched by method plus prefix plus suffix, never a bare prefix, and the project segment must be a UUID — so no read is reachable through it. Before the runtime is initialized, 503.
-      operationId: post_sentinel_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Send events to the Sentry surface, or write on it
-      tags:
-      - o11y
-      x-app: o11y
-    put:
-      description: |-
-        The one replace on the Sentry surface: updating an error ISSUE — resolving it, ignoring it, or assigning it — and answering the updated issue.
-
-        Nothing else here takes a replace. A project is created and deleted but never replaced, and the event and trace planes are append-only telemetry, so an issue's lifecycle is the only mutable state this face exposes.
-
-        Requires a validated, org-scoped principal with edit rights; a viewer is refused. The write is confined to the org minted from that principal's claim, so an issue id belonging to another tenant is simply not found. Before the runtime is initialized, 503.
-      operationId: put_sentinel_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Move an error issue through its lifecycle
-      tags:
-      - o11y
-      x-app: o11y
-  /v1/sentinel/discover:
-    post:
-      description: |-
-        Aggregates a project's captured errors into a table — the caller
-        names the filters, the groupings and the aggregations, and gets back the
-        columns and rows they asked for.
-
-        The project is mandatory and is checked against the caller's own org before it
-        scopes anything, so a project id belonging to someone else reads as absent
-        rather than as data.
-      operationId: post_sentinel_discover
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/o11y.O11yDiscoverIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11yDiscoverOut'
-          description: ok
-      summary: Aggregates a project's captured errors into a table — the caller names
-        the filters, the groupings and the aggregations, and gets back the columns
-        and rows they asked for.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/events/{id}:
-    get:
-      description: |-
-        Returns one captured error event of a project, by its id.
-
-        Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentinel_events_by_id
-      parameters:
-      - description: ID is the event id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - description: Project is the project the event belongs to, by its id. Required.
-        in: query
-        name: project
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11ySentryEventOut'
-          description: ok
-      summary: Returns one captured error event of a project, by its id.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/issues:
-    get:
-      description: |-
-        Lists the caller's org's grouped error issues, optionally
-        narrowed to one project and one time window, and filtered by status, level,
-        environment, service, a free-text query and a sort.
-
-        Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentinel_issues
-      parameters:
-      - description: 'Status narrows to one lifecycle state: unresolved, resolved
-          or ignored.'
-        in: query
-        name: status
-        required: false
-        schema:
-          type: string
-      - description: Level narrows to one severity, e.g. error, warning, info.
-        in: query
-        name: level
-        required: false
-        schema:
-          type: string
-      - description: Environment narrows to one deployment environment.
-        in: query
-        name: environment
-        required: false
-        schema:
-          type: string
-      - description: ServiceName narrows to one reporting service.
-        in: query
-        name: serviceName
-        required: false
-        schema:
-          type: string
-      - description: Query narrows to issues whose text contains it.
-        in: query
-        name: query
-        required: false
-        schema:
-          type: string
-      - description: Sort orders the page, e.g. lastSeen, firstSeen, count.
-        in: query
-        name: sort
-        required: false
-        schema:
-          type: string
-      - description: Offset is how many issues to skip. Zero starts at the first.
-        in: query
-        name: offset
-        required: false
-        schema:
-          type: integer
-      - description: Limit caps how many issues come back. Zero means the default.
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      - description: Project narrows the org's issues to one project, by its id.
-        in: query
-        name: project
-        required: false
-        schema:
-          type: string
-      - description: Period is the window to read, relative to now — 1h, 24h, 7d,
-          14d, 30d.
-        in: query
-        name: period
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11yErrorIssuesOut'
-          description: ok
-      summary: Lists the caller's org's grouped error issues, optionally narrowed
-        to one project and one time window, and filtered by status, level, environment,
-        service, a free-text query and a sort.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/issues/{id}:
-    get:
-      description: |-
-        Returns one grouped issue of the caller's org with its latest
-        occurrence sample.
-
-        Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentinel_issues_by_id
-      parameters:
-      - description: ID is the issue id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11yErrorGettableIssueOut'
-          description: ok
-      summary: Returns one grouped issue of the caller's org with its latest occurrence
-        sample.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-    put:
-      description: |-
-        Changes an issue's lifecycle — resolve, ignore, reopen or
-        assign — and returns the updated issue. Fields left unset are left unchanged.
-
-        Callers need the editor role; the runtime's own gate enforces it.
-      operationId: put_sentinel_issues_by_id
-      parameters:
-      - description: ID is the issue id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/o11y.O11ySentryUpdateIssueIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11yErrorIssueOut'
-          description: ok
-      summary: Changes an issue's lifecycle — resolve, ignore, reopen or assign —
-        and returns the updated issue.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/issues/{id}/events:
-    get:
-      description: |-
-        Lists one issue's captured occurrences, scoped to a project
-        — a project is an isolation unit, so the caller declares which project's
-        occurrences to read.
-
-        Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentinel_issues_by_id_events
-      parameters:
-      - description: ID is the issue id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - description: Project is the project whose occurrences to read, by its id.
-          Required.
-        in: query
-        name: project
-        required: true
-        schema:
-          type: string
-      - description: Limit caps how many occurrences come back. Zero means the default.
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11ySentryIssueEventsOut'
-          description: ok
-      summary: Lists one issue's captured occurrences, scoped to a project — a project
-        is an isolation unit, so the caller declares which project's occurrences to
-        read.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/logs:
-    get:
-      description: |-
-        Lists a project's captured error events, newest first, optionally
-        narrowed to those whose message or exception text contains a search string.
-      operationId: get_sentinel_logs
-      parameters:
-      - description: Project is the project to read, as its id. Required.
-        in: query
-        name: project
-        required: true
-        schema:
-          type: string
-      - description: Query narrows the page to events whose text contains it.
-        in: query
-        name: query
-        required: false
-        schema:
-          type: string
-      - description: Period is the window to read, relative to now — 1h, 24h, 7d,
-          14d, 30d.
-        in: query
-        name: period
-        required: false
-        schema:
-          type: string
-      - description: Limit caps how many events come back.
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11yLogsOut'
-          description: ok
-      summary: Lists a project's captured error events, newest first, optionally narrowed
-        to those whose message or exception text contains a search string.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/projects:
-    get:
-      description: |-
-        Lists the caller's org's Sentry projects, each with its
-        freshly-derived DSN.
-
-        Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentinel_projects
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11ySentryProjectsOut'
-          description: ok
-      summary: Lists the caller's org's Sentry projects, each with its freshly-derived
-        DSN.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Creates a Sentry project under the caller's org and
-        returns it, DSN included. Only the name, and optionally a slug and platform,
-        are the caller's to set; the org, id and key are server-assigned.
-
-        Callers need the editor role; the runtime's own gate enforces it.
-      operationId: post_sentinel_projects
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/o11y.O11ySentryPostableProject'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11ySentryProjectOut'
-          description: ok
-      summary: Creates a Sentry project under the caller's org and returns it, DSN
-        included.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/projects/{id}:
-    delete:
-      description: |-
-        Deletes one Sentry project of the caller's org. Its DSN
-        stops resolving immediately, so ingest for that id fails closed exactly as an
-        unknown project does; retained events are not touched. Answers 204.
-
-        Callers need the editor role; the runtime's own gate enforces it.
-      operationId: delete_sentinel_projects_by_id
-      parameters:
-      - description: ID is the project id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Deletes one Sentry project of the caller's org.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one Sentry project of the caller's org, DSN included.
-
-        Callers need the viewer role; the runtime's own gate enforces it.
-      operationId: get_sentinel_projects_by_id
-      parameters:
-      - description: ID is the project id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11ySentryProjectOut'
-          description: ok
-      summary: Returns one Sentry project of the caller's org, DSN included.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/projects/{id}/keys/rotate:
-    post:
-      description: |-
-        Rotates a project's DSN key — bumping its rotation
-        watermark so keys below it stop verifying — and returns the project with its
-        new DSN.
-
-        Callers need the editor role; the runtime's own gate enforces it.
-      operationId: post_sentinel_projects_by_id_keys_rotate
-      parameters:
-      - description: ID is the project id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11ySentryProjectOut'
-          description: ok
-      summary: Rotates a project's DSN key — bumping its rotation watermark so keys
-        below it stop verifying — and returns the project with its new DSN.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/stats:
-    get:
-      description: |-
-        Returns a project's event-rate timeseries: one bucket per interval over
-        the requested period, counting the events in it.
-      operationId: get_sentinel_stats
-      parameters:
-      - description: Project is the project to read, as its id. Required.
-        in: query
-        name: project
-        required: true
-        schema:
-          type: string
-      - description: Field is the dimension to count over. Empty counts all events.
-        in: query
-        name: field
-        required: false
-        schema:
-          type: string
-      - description: Period is the window to read, relative to now — 1h, 24h, 7d,
-          14d, 30d.
-        in: query
-        name: period
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11yStatsOut'
-          description: ok
-      summary: 'Returns a project''s event-rate timeseries: one bucket per interval
-        over the requested period, counting the events in it.'
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/traces:
-    get:
-      description: |-
-        Lists the traces a project's captured errors reference, each with how
-        many errors landed on it, when they started and stopped, and the latest
-        message seen — the entry point for "which requests are failing".
-      operationId: get_sentinel_traces
-      parameters:
-      - description: Project is the project to read, as its id. Required.
-        in: query
-        name: project
-        required: true
-        schema:
-          type: string
-      - description: Period is the window to read, relative to now — 1h, 24h, 7d,
-          14d, 30d.
-        in: query
-        name: period
-        required: false
-        schema:
-          type: string
-      - description: Limit caps how many traces come back.
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11yTracesOut'
-          description: ok
-      summary: Lists the traces a project's captured errors reference, each with how
-        many errors landed on it, when they started and stopped, and the latest message
-        seen — the entry point for "which requests are failing".
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
-  /v1/sentinel/traces/{id}:
-    get:
-      description: |-
-        Returns one trace's captured errors for a project — every error event
-        that carried the trace id, in the order the events plane holds them.
-      operationId: get_sentinel_traces_by_id
-      parameters:
-      - description: ID is the trace id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - description: Project is the project the trace's errors belong to. Required.
-        in: query
-        name: project
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/o11y.O11yTraceOut'
-          description: ok
-      summary: Returns one trace's captured errors for a project — every error event
-        that carried the trace id, in the order the events plane holds them.
-      tags:
-      - o11y
-      x-app: o11y
-      x-public: true
-      x-tool: true
   /v1/seo/audit:
     post:
       description: |-
@@ -112534,56 +112499,6 @@ paths:
       x-app: tools
       x-public: true
       x-tool: true
-  /v1/traces/health:
-    get:
-      description: |-
-        Reports the native trace store's live state for the calling tenant: the subsystem version and `spans`, the count actually held right now. Not a dependency probe — the store is in-process, so this answers 200 whenever the process is up.
-
-        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.
-      operationId: get_traces_health
-      summary: How many spans this deployment holds for your org
-      tags:
-      - metrics
-      x-app: metrics
-      x-public: true
-  /v1/traces/query:
-    get:
-      description: |-
-        Answers `{count, spans}`, newest first, filtered on each span's START time. `start` and `end` are nanosecond bounds where 0 — which is what an absent, empty or unparseable value becomes — means UNBOUNDED, so a malformed bound widens the listing instead of failing it. `limit` defaults to 100 when absent or non-positive.
-
-        It lists SPANS, not traces: several spans of one trace each count separately and each take a slot against `limit`. Assembling one trace is /v1/traces/trace. The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.
-      operationId: get_traces_query
-      summary: Recent spans for your org over a time range
-      tags:
-      - metrics
-      x-app: metrics
-      x-public: true
-  /v1/traces/trace:
-    get:
-      description: |-
-        Answers `{spans}`: every span the org holds for the trace id in `id`, in the order they were appended, which is what a waterfall view renders. Unlike the other reads there is no count, no time range and no limit — a trace is addressed by id or not at all.
-
-        An id with no spans answers an EMPTY list, never a 404: the store cannot tell a trace that never existed from one whose spans retention has already dropped, so it does not pretend to. The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, and a trace id belonging to another org is simply not in this org's store.
-      operationId: get_traces_trace
-      summary: Every span of one trace — the waterfall
-      tags:
-      - metrics
-      x-app: metrics
-      x-public: true
-  /v1/traces/write:
-    post:
-      description: |-
-        Takes `{spans:[{traceId, spanId, parentId, name, startNs, endNs, attrs}]}`, appends each, and answers `{written}` — the number of spans sent. Every span is indexed by its trace id as it lands, which is what makes the waterfall read possible without a second store.
-
-        Times are NANOSECONDS since the Unix epoch. Retention is a bounded ring of 1048576 spans per org: past that the OLDEST are evicted to keep the newest 1048576, and the trace index is rebuilt — so a long-lived trace can lose its early spans while its later ones survive, and a waterfall read is best-effort against retention, not a guarantee.
-
-        The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`. A body that does not decode is 400.
-      operationId: post_traces_write
-      summary: Append spans for your org
-      tags:
-      - metrics
-      x-app: metrics
-      x-public: true
   /v1/translate:
     post:
       description: |-
@@ -115369,19 +115284,6 @@ paths:
       x-app: x402
       x-stage: beta
       x-tool: true
-  /ws/query_progress:
-    get:
-      description: |-
-        The same progress read as /v1/o11y/query_progress, delivered over a websocket: the Upgrade IS the contract, so there is no JSON response to declare and no typed operation to make of it.
-
-        It sits outside /v1/o11y on purpose — the upgrade handshake is a transport concern, not a resource — and it was unreachable from the composed binary until the route table named it, because the old wildcard covered only the o11y prefix.
-
-        A validated, org-scoped principal is required.
-      operationId: get_ws_query_progress
-      summary: Watch one running query's progress over a websocket
-      tags:
-      - o11y
-      x-app: o11y
 security:
 - bearer: []
 servers:

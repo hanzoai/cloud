@@ -20,11 +20,7 @@
 /v1/event.js analytics
 /v1/flags admission
 /v1/insights analytics
-/v1/logs metrics
 /v1/mesh zt
 /v1/networks zt
 /v1/replay analytics
 /v1/s3 storage
-/v1/sentinel o11y
-/v1/traces metrics
-/ws o11y

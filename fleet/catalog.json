@@ -2888,7 +2888,7 @@
    "doc": "Removes one review queue and every item in it. A queue\nid belonging to another org answers the same 404 an unknown id does, so a\nprobe learns nothing about what exists."
   },
   {
-   "id": "delete_sentinel_projects_by_id",
+   "id": "delete_o11y_sentinel_projects_by_id",
    "doc": "Deletes one Sentry project of the caller's org. Its DSN\nstops resolving immediately, so ingest for that id fails closed exactly as an\nunknown project does; retained events are not touched. Answers 204.\n\nCallers need the editor role; the runtime's own gate enforces it."
   },
   {
@@ -3162,6 +3162,56 @@
    "read": true
   },
   {
+   "id": "get_o11y_sentinel_events_by_id",
+   "doc": "Returns one captured error event of a project, by its id.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+   "read": true
+  },
+  {
+   "id": "get_o11y_sentinel_issues",
+   "doc": "Lists the caller's org's grouped error issues, optionally\nnarrowed to one project and one time window, and filtered by status, level,\nenvironment, service, a free-text query and a sort.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+   "read": true
+  },
+  {
+   "id": "get_o11y_sentinel_issues_by_id",
+   "doc": "Returns one grouped issue of the caller's org with its latest\noccurrence sample.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+   "read": true
+  },
+  {
+   "id": "get_o11y_sentinel_issues_by_id_events",
+   "doc": "Lists one issue's captured occurrences, scoped to a project\n— a project is an isolation unit, so the caller declares which project's\noccurrences to read.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+   "read": true
+  },
+  {
+   "id": "get_o11y_sentinel_logs",
+   "doc": "Lists a project's captured error events, newest first, optionally\nnarrowed to those whose message or exception text contains a search string.",
+   "read": true
+  },
+  {
+   "id": "get_o11y_sentinel_projects",
+   "doc": "Lists the caller's org's Sentry projects, each with its\nfreshly-derived DSN.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+   "read": true
+  },
+  {
+   "id": "get_o11y_sentinel_projects_by_id",
+   "doc": "Returns one Sentry project of the caller's org, DSN included.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+   "read": true
+  },
+  {
+   "id": "get_o11y_sentinel_stats",
+   "doc": "Returns a project's event-rate timeseries: one bucket per interval over\nthe requested period, counting the events in it.",
+   "read": true
+  },
+  {
+   "id": "get_o11y_sentinel_traces",
+   "doc": "Lists the traces a project's captured errors reference, each with how\nmany errors landed on it, when they started and stopped, and the latest\nmessage seen — the entry point for \"which requests are failing\".",
+   "read": true
+  },
+  {
+   "id": "get_o11y_sentinel_traces_by_id",
+   "doc": "Returns one trace's captured errors for a project — every error event\nthat carried the trace id, in the order the events plane holds them.",
+   "read": true
+  },
+  {
    "id": "get_o11y_services_list",
    "doc": "Lists the name of every service the trace store holds, with no\nwindow applied — the complete catalog, for pickers and autocomplete.",
    "read": true
@@ -3214,56 +3264,6 @@
   {
    "id": "get_o11y_version",
    "doc": "Reports the running build: its version, whether an enterprise\nedition is present (\"N\" in this build), and whether first-user setup has\ncompleted.\n\nOpen by design; the runtime's own gate is OpenAccess.",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_events_by_id",
-   "doc": "Returns one captured error event of a project, by its id.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_issues",
-   "doc": "Lists the caller's org's grouped error issues, optionally\nnarrowed to one project and one time window, and filtered by status, level,\nenvironment, service, a free-text query and a sort.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_issues_by_id",
-   "doc": "Returns one grouped issue of the caller's org with its latest\noccurrence sample.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_issues_by_id_events",
-   "doc": "Lists one issue's captured occurrences, scoped to a project\n— a project is an isolation unit, so the caller declares which project's\noccurrences to read.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_logs",
-   "doc": "Lists a project's captured error events, newest first, optionally\nnarrowed to those whose message or exception text contains a search string.",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_projects",
-   "doc": "Lists the caller's org's Sentry projects, each with its\nfreshly-derived DSN.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_projects_by_id",
-   "doc": "Returns one Sentry project of the caller's org, DSN included.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_stats",
-   "doc": "Returns a project's event-rate timeseries: one bucket per interval over\nthe requested period, counting the events in it.",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_traces",
-   "doc": "Lists the traces a project's captured errors reference, each with how\nmany errors landed on it, when they started and stopped, and the latest\nmessage seen — the entry point for \"which requests are failing\".",
-   "read": true
-  },
-  {
-   "id": "get_sentinel_traces_by_id",
-   "doc": "Returns one trace's captured errors for a project — every error event\nthat carried the trace id, in the order the events plane holds them.",
    "read": true
   },
   {
@@ -3483,6 +3483,18 @@
    "doc": "Enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404."
   },
   {
+   "id": "post_o11y_sentinel_discover",
+   "doc": "Aggregates a project's captured errors into a table — the caller\nnames the filters, the groupings and the aggregations, and gets back the\ncolumns and rows they asked for.\n\nThe project is mandatory and is checked against the caller's own org before it\nscopes anything, so a project id belonging to someone else reads as absent\nrather than as data."
+  },
+  {
+   "id": "post_o11y_sentinel_projects",
+   "doc": "Creates a Sentry project under the caller's org and\nreturns it, DSN included. Only the name, and optionally a slug and platform,\nare the caller's to set; the org, id and key are server-assigned.\n\nCallers need the editor role; the runtime's own gate enforces it."
+  },
+  {
+   "id": "post_o11y_sentinel_projects_by_id_keys_rotate",
+   "doc": "Rotates a project's DSN key — bumping its rotation\nwatermark so keys below it stop verifying — and returns the project with its\nnew DSN.\n\nCallers need the editor role; the runtime's own gate enforces it."
+  },
+  {
    "id": "post_o11y_service_entry_point_operations",
    "doc": "Returns one service's entry-point operations with the\nsame latency and error profile topOperations reports."
   },
@@ -3531,23 +3543,11 @@
    "doc": "Evaluates a dashboard variable query and returns the values the\nvariable may take.\n\nCallers need the viewer role; the runtime's own gate enforces it."
   },
   {
-   "id": "post_sentinel_discover",
-   "doc": "Aggregates a project's captured errors into a table — the caller\nnames the filters, the groupings and the aggregations, and gets back the\ncolumns and rows they asked for.\n\nThe project is mandatory and is checked against the caller's own org before it\nscopes anything, so a project id belonging to someone else reads as absent\nrather than as data."
-  },
-  {
-   "id": "post_sentinel_projects",
-   "doc": "Creates a Sentry project under the caller's org and\nreturns it, DSN included. Only the name, and optionally a slug and platform,\nare the caller's to set; the org, id and key are server-assigned.\n\nCallers need the editor role; the runtime's own gate enforces it."
-  },
-  {
-   "id": "post_sentinel_projects_by_id_keys_rotate",
-   "doc": "Rotates a project's DSN key — bumping its rotation\nwatermark so keys below it stop verifying — and returns the project with its\nnew DSN.\n\nCallers need the editor role; the runtime's own gate enforces it."
-  },
-  {
    "id": "put_o11y_explorer_views_by_viewid",
    "doc": "Replaces one saved explorer view by id with the given view and\nechoes it back.\n\nCallers need the editor role; the runtime's own gate enforces it."
   },
   {
-   "id": "put_sentinel_issues_by_id",
+   "id": "put_o11y_sentinel_issues_by_id",
    "doc": "Changes an issue's lifecycle — resolve, ignore, reopen or\nassign — and returns the updated issue. Fields left unset are left unchanged.\n\nCallers need the editor role; the runtime's own gate enforces it."
   }
  ],
