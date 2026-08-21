@@ -1,7 +1,7 @@
 ---
 name: admin_applications
 version: "8.0.0"
-description: "Read admin applications: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's get-applications.."
+description: "Read admin applications: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's application list.."
 ---
 
 # Lux · ADMIN · applications
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/admin/applications` — Lists IAM applications for one owner org, forwarded VERBATIM from IAM's get-applications.
+- `GET https://api.lux.network/v1/admin/applications` — Lists IAM applications for one owner org, forwarded VERBATIM from IAM's application list.
 
 ## Parameters
 

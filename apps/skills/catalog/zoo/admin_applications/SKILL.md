@@ -1,7 +1,7 @@
 ---
 name: admin_applications
 version: "8.0.0"
-description: "Read admin applications: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's get-applications.."
+description: "Read admin applications: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's application list.."
 ---
 
 # Zoo · ADMIN · applications
@@ -14,7 +14,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/admin/applications` — Lists IAM applications for one owner org, forwarded VERBATIM from IAM's get-applications.
+- `GET https://api.zoo.ngo/v1/admin/applications` — Lists IAM applications for one owner org, forwarded VERBATIM from IAM's application list.
 
 ## Parameters
 
