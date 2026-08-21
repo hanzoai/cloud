@@ -135,6 +135,13 @@ func TestPlatformEnqueueBuild(t *testing.T) {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		body, _ := io.ReadAll(r.Body)
+		// The organization a build belongs to is read off the credential, so the
+		// body carries no field to state a different one with.
+		var wire map[string]any
+		_ = json.Unmarshal(body, &wire)
+		if _, ok := wire["organizationId"]; ok {
+			t.Errorf("build body must name no organization: %s", body)
+		}
 		var req BuildReq
 		_ = json.Unmarshal(body, &req)
 		if req.Repo != "hanzoai/pricing" || req.SHA != "abc123" || req.Image == "" {

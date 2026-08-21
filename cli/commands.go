@@ -294,9 +294,6 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 			// idiomatic `owner/name` shorthand and expand it to GitHub (the host
 			// for every hanzoai/luxfi/zooai repo). A full URL passes through.
 			br.Repo = normalizeRepoURL(br.Repo)
-			if br.OrganizationID == "" {
-				br.OrganizationID = e.Org // optional; server defaults to DEFAULT_BUILD_ORG_ID
-			}
 			job, err := e.runner(gf).EnqueueBuild(cmd.Context(), br, e.buildToken(buildToken))
 			if err != nil {
 				return err
