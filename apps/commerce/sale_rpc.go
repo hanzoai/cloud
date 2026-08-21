@@ -30,14 +30,53 @@ import (
 )
 
 // exposeSale publishes the card doors and the recharge sweep. Mount calls it.
-func exposeSale() {
-	zip.Post[plane.CardIn, plane.Charged](cloud.Plane(), "/billing/topup/card", planeTopupCard,
+//
+// THE THREE CARD DOORS ARE SCREENED, through the same [screened] the agent's
+// payment op goes through. That is the whole reason it is a generic: four copies
+// of the composition is precisely the state that made the first screen a bound
+// on one entrance with others beside it, and these three ARE the others. Each
+// states what its input is worth off the DECODED input and what its answer
+// settled off the RETURNED receipt, because over the agent plane a body reader
+// and a response reader both see an envelope rather than a payment.
+//
+// The sweep is not screened and is not a hole: it is reached by a schedule with
+// no request behind it, charges cards the customer already saved under their own
+// standing instruction, and is refused at the door to anything but platform
+// authority.
+func exposeSale(s screen) {
+	zip.Post[plane.CardIn, plane.Charged](cloud.Plane(), "/billing/topup/card",
+		screened(s, "/billing/topup/card",
+			func(in *plane.CardIn) (int64, string) { return in.AmountCents, in.Currency },
+			func(out *plane.Charged) (string, string) {
+				return firstRefOf(out.ProcessorRef, out.TransactionID), out.TransactionID
+			}, planeTopupCard),
 		zip.WithOperationID(plane.BillingTopupCard),
 		zip.WithSummary("Charge a single-use card token and credit the wallet"))
-	zip.Post[plane.SavedCardIn, plane.Charged](cloud.Plane(), "/billing/topup", planeTopup,
+	zip.Post[plane.SavedCardIn, plane.Charged](cloud.Plane(), "/billing/topup",
+		screened(s, "/billing/topup",
+			func(in *plane.SavedCardIn) (int64, string) { return in.AmountCents, in.Currency },
+			func(out *plane.Charged) (string, string) {
+				return firstRefOf(out.ProcessorRef, out.TransactionID), out.TransactionID
+			}, planeTopup),
 		zip.WithOperationID(plane.BillingTopup),
 		zip.WithSummary("Charge a saved card and credit the wallet"))
-	zip.Post[plane.SaleIn, plane.Sold](cloud.Plane(), "/billing/subscribe", planeSubscribe,
+	zip.Post[plane.SaleIn, plane.Sold](cloud.Plane(), "/billing/subscribe",
+		screened(s, "/billing/subscribe",
+			// A sale carries NO amount — the price is the catalog's at the level
+			// asked for — so the worth a sale states is what the card was actually
+			// charged, which only the receipt knows. Zero on the way in is the
+			// honest reading: the axis is blind here, and blind is not zero-risk,
+			// which is why it is stated rather than inferred.
+			func(in *plane.SaleIn) (int64, string) { return 0, in.Currency },
+			func(out *plane.Sold) (string, string) {
+				if out.Sale == nil {
+					// A REPLAY settled nothing new: the money moved on the first
+					// attempt and was recorded then. Reporting a settlement here
+					// would teach the model one sale twice.
+					return "", ""
+				}
+				return out.Sale.SubscriptionID, out.Sale.SubscriptionID
+			}, planeSubscribe),
 		zip.WithOperationID(plane.BillingSubscribe),
 		zip.WithSummary("Buy a plan with a card"))
 	zip.Post[struct{}, plane.Recharge](cloud.Plane(), "/billing/recharge", planeRecharge,
@@ -196,6 +235,18 @@ func planeRecharge(ctx context.Context, _ *struct{}) (*plane.Recharge, error) {
 		})
 	}
 	return out, nil
+}
+
+// firstRefOf answers the first non-empty reference. A processor reference proves
+// money moved at the GATEWAY and is preferred; the ledger id is the fallback, so
+// a settlement is never reported with nothing naming it.
+func firstRefOf(refs ...string) string {
+	for _, r := range refs {
+		if r != "" {
+			return r
+		}
+	}
+	return ""
 }
 
 // chargeFault maps a saved-card charge's refusals onto the statuses this door has
