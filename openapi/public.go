@@ -1,16 +1,23 @@
 package openapi
 
-// THE AUDIENCE IS DERIVED, and public.yaml is what every projection reads.
+// THE AUDIENCE IS DERIVED, and it decides which of the two documents an operation
+// lands in.
 //
-// api.hanzo.ai answers ~1,800 paths across ~185 products, and the whole document
-// is served unauthenticated at /v1/openapi.json — a client has to be able to read
-// the contract before it holds a credential. So the split between the two
-// projections was never secrecy. It is AUDIENCE: what the published SDKs, the
-// CLI, the MCP door and docs.hanzo.ai present to a customer, against what an
-// operator reaches through the same origin.
+// api.hanzo.ai answers ~1,800 paths across ~185 products. The split between the
+// two is AUDIENCE, not secrecy: what the published SDKs, the CLI, the MCP door
+// and docs.hanzo.ai present to a customer, against what an operator reaches
+// through the same origin.
 //
-//	INTERNAL  everything, unchanged — openapi.yaml, the golden the weave is held to.
-//	PUBLIC    the customer surface — public.yaml, what every client is generated from.
+//	PUBLIC    the customer surface — openapi.yaml, and GET /v1/openapi.json.
+//	INTERNAL  everything, unchanged — private.yaml, the weave the routing gates measure.
+//
+// THE PUBLIC ONE HOLDS THE NAME, because the name is what gets read. openapi.yaml
+// is what a developer types, what an SDK generator defaults to and what a
+// spec-reading tool finds first, so a generator that has never heard of this rule
+// still obeys it. The two were the other way round, and the cost was exactly
+// that: hanzoai/openapi's publish.py projects cloud's openapi.yaml into every
+// published SDK and filters by path, never by stage, so every alpha capability
+// reached every generated client while this file said it could not.
 //
 // # One rule, read off facts the operation already carries
 //
@@ -55,9 +62,12 @@ package openapi
 //
 // # What holds it honest
 //
-// public.yaml is COMMITTED and regenerated from source by the drift gate
-// (mk/fleet.mk check), beside openapi.yaml. An operation entering or leaving the
-// contract is a diff in that file, reviewed next to the route that caused it.
+// Both documents are COMMITTED and regenerated from source by the drift gate
+// (mk/fleet.mk check), by one run of one weave. An operation entering or leaving
+// the contract is a diff in openapi.yaml, reviewed next to the route that caused
+// it, and openapi/weave_test.go asserts the property the two names promise: no
+// alpha capability and no operator path reaches the public one, and both reach
+// the private one.
 
 import (
 	"encoding/json"

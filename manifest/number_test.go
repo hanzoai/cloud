@@ -221,7 +221,10 @@ func TestNoAliasIsPublished(t *testing.T) {
 	}
 	sort.Strings(spellings)
 
-	for _, doc := range []string{"../openapi.yaml", "../public.yaml"} {
+	// BOTH documents — the customer contract and the internal one. A second
+	// spelling is a duplication wherever it is read, and an operator reads the
+	// second file.
+	for _, doc := range []string{"../openapi.yaml", "../private.yaml"} {
 		raw, err := os.ReadFile(doc)
 		if err != nil {
 			t.Fatalf("%s: %v", doc, err)

@@ -64,7 +64,7 @@ die() { echo "::error::review: $*" >&2; exit 1; }
 # The bound stays 400,000B. What changed is that the budget is spent on prose a
 # person wrote: the same range measures 118,143B once these are dropped.
 generated=(
-  ':(exclude)openapi.yaml' ':(exclude)public.yaml'
+  ':(exclude)openapi.yaml' ':(exclude)private.yaml'
   ':(exclude)openapi/floor.json' ':(exclude)openapi/closure.json'
   ':(exclude)fleet/catalog.json' ':(exclude)plugin/*/openapi.json'
 )
