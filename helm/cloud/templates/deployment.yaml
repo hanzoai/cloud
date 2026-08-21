@@ -111,6 +111,16 @@ spec:
             - name: IAM_STORE_BACKEND
               value: {{ $iamStore | quote }}
             {{- end }}
+            # The ceiling on the bare repositories git holds under {dataDir}/git,
+            # in bytes. Absent is unbounded — the store grows with what has ever
+            # been imported, which is what makes this claim large enough to need
+            # ReadWriteOnce and therefore what pins the deployment to one replica.
+            # Only a repository the forge or an upstream can hand back is ever
+            # released, so this costs a refetch and never a repository.
+            {{- if .Values.hanzo.gitCacheBytes }}
+            - name: GIT_CACHE_BYTES
+              value: {{ .Values.hanzo.gitCacheBytes | quote }}
+            {{- end }}
             # THE MEMORY RESERVATION, HANDED TO THE PROCESS THAT MUST SIZE ITSELF BY IT.
             #
             # This host holds N lazily-started plugin children and bounds N so their
