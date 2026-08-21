@@ -39,6 +39,7 @@ func callRoute(t *testing.T, app *zip.App, method, path, user, org string) (int,
 }
 
 func TestFinanceTyped_ContractUnmoved(t *testing.T) {
+	ledgerPeer(t, "acme")
 	f := &financeFake{}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
