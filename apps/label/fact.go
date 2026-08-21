@@ -10,13 +10,13 @@ package label
 // disagree without either being wrong to have been recorded.
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/claim"
 )
 
 // Disposition is what somebody concluded. The three values are the AML engine's
@@ -250,8 +250,7 @@ type Fact struct {
 // the world, so it is not part of what was asserted and it is not placed here.
 // It has its own op, which is also the only way it can be released.
 func digest(f Fact) string {
-	h := sha256.New()
-	for _, part := range []string{
+	return claim.Digest(
 		string(f.Kind),
 		f.Subject,
 		strconv.FormatInt(f.At.UTC().Unix(), 10),
@@ -261,16 +260,11 @@ func digest(f Fact) string {
 		f.Evidence,
 		f.By,
 		strconv.FormatFloat(f.Confidence, 'f', 6, 64),
-	} {
-		fmt.Fprintf(h, "%d:%s", len(part), part)
-	}
-	return hex.EncodeToString(h.Sum(nil))
+	)
 }
 
-// skew is how far ahead of the server clock a caller's timestamp may sit before
-// it is refused. Clocks differ by seconds; a label dated a year out would never
-// mature and would sit in the store distorting coverage for a year, unseen.
-const skew = 5 * time.Minute
+// skew is the shared clock-drift bound. See claim.Skew.
+const skew = claim.Skew
 
 // subjectMax bounds a subject id. It is a store key and a columnar sort term,
 // not free text.
