@@ -277,6 +277,23 @@ var freeOfVendor = map[string]string{
 	"link:CF_API_TOKEN":    "links apps/projects for SetDeployObserver only; mounts no route that reaches newEdge",
 	"team:CF_API_TOKEN":    "links apps/projects for SetDeployObserver only; mounts no route that reaches newEdge",
 
+	// THE SAME TWO LINKS, A SECOND VENDOR — and the claim is narrower than the
+	// one above rather than a repeat of it. The renderer arrived with
+	// apps/projects/shot.go, whose every function is UNEXPORTED: capture is
+	// reachable only from shotOf, and shotOf is registered exactly once, at
+	// apps/projects/projects.go's `GET /v1/projects/:slug/shot`, by projects'
+	// own Mount. Neither of these two calls projects.Mount, so there is no door
+	// into the renderer from either — not a nil client this time, but no
+	// callable symbol at all.
+	"billing:crawl.hanzo.svc": "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
+	"billing:CRAWL_API_TOKEN": "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
+	"catalog:crawl.hanzo.svc": "reaches apps/projects for Ready/LiveSites; the renderer is unexported behind a route projects alone mounts",
+	"catalog:CRAWL_API_TOKEN": "reaches apps/projects for Ready/LiveSites; the renderer is unexported behind a route projects alone mounts",
+	"link:crawl.hanzo.svc":    "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
+	"link:CRAWL_API_TOKEN":    "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
+	"team:crawl.hanzo.svc":    "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
+	"team:CRAWL_API_TOKEN":    "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
+
 	// The import is a TYPE, not a client: apps/admin/core.State declares a
 	// *digitalocean.Client field, and apps/plugin uses core only for Admit,
 	// CallerCreds and the OK/Err helpers. It never builds a State and never reads
