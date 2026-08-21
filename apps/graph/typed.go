@@ -253,6 +253,12 @@ type graphResolveOut struct {
 	// AsOf is the instant this answer was taken at, RFC 3339: the one asked for,
 	// or the server's clock when none was.
 	AsOf string `json:"as_of"`
+	// Truncated says this pair holds more assertions than one read returns, so
+	// the winner was decided from the most recent ceiling-full of them. It is
+	// reported because a provenance plane that trims silently is a plane that
+	// answers confidently and wrongly; narrow the question with as_of to see
+	// what it dropped.
+	Truncated bool `json:"truncated,omitempty"`
 	// Known is false when this plane held nothing knowable at AsOf. That is an
 	// answer, not an error.
 	Known bool `json:"known"`
@@ -282,11 +288,18 @@ func (o ops) resolve(ctx context.Context, in *graphResolveIn) (*graphResolveOut,
 			return nil, err
 		}
 	}
-	facts, err := st.read(ctx, filter{Entity: in.Entity, Relation: in.Relation})
+	// Bounded by the instant AND ordered newest-first, both of which decide the
+	// answer rather than merely trimming it. Without the instant, assertions
+	// knowable after `asOf` spend the ceiling on rows this resolution must
+	// ignore; without the ordering, the ceiling drops the newest rows, which are
+	// exactly the ones that win. The pair is what makes a truncated read still
+	// resolve to the right winner.
+	out := &graphResolveOut{Entity: in.Entity, Relation: in.Relation, AsOf: asOf.Format(time.RFC3339)}
+	facts, err := st.read(ctx, filter{Entity: in.Entity, Relation: in.Relation, AsOf: asOf, Newest: true})
 	if err != nil {
 		return nil, err
 	}
-	out := &graphResolveOut{Entity: in.Entity, Relation: in.Relation, AsOf: asOf.Format(time.RFC3339)}
+	out.Truncated = len(facts) == walkBound
 	win, conflicts, contested, ok := Resolve(facts, asOf)
 	if !ok {
 		return out, nil

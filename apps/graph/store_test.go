@@ -3,7 +3,9 @@ package graph
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -203,4 +205,93 @@ func has(xs []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// TestReadKeepsTheNewestAtTheCeiling is the property a resolution depends on.
+//
+// The table only grows: a correction is a row, so one (entity, relation) pair
+// accumulates assertions without bound, and a read of it is capped. Which end
+// the cap drops decides the answer rather than merely trimming it — the rows
+// that win are the last ones written, so an oldest-first read past the ceiling
+// returns a confident and wrong winner.
+func TestReadKeepsTheNewestAtTheCeiling(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+
+	// One pair, more assertions than a single read returns. Each is a distinct
+	// row because the value differs, which is how a correction is recorded.
+	facts := make([]Fact, 0, walkBound+1)
+	for i := range walkBound + 1 {
+		facts = append(facts, mk(t, "svc:api", "version",
+			fmt.Sprintf("v%d", i), false, "deploy", t0.Add(time.Duration(i)*time.Second)))
+	}
+	if _, err := s.record(ctx, facts); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	last := facts[len(facts)-1]
+	newest, err := s.read(ctx, filter{Entity: "svc:api", Relation: "version", Newest: true})
+	if err != nil {
+		t.Fatalf("read newest: %v", err)
+	}
+	if len(newest) != walkBound {
+		t.Fatalf("newest read returned %d rows, want the ceiling %d", len(newest), walkBound)
+	}
+	if !slices.ContainsFunc(newest, func(f Fact) bool { return f.ID == last.ID }) {
+		t.Fatal("the newest-first read dropped the most recent assertion, which is the one that wins")
+	}
+
+	// The default order is the opposite end, which is what makes the flag
+	// load-bearing rather than decorative.
+	oldest, err := s.read(ctx, filter{Entity: "svc:api", Relation: "version"})
+	if err != nil {
+		t.Fatalf("read oldest: %v", err)
+	}
+	if slices.ContainsFunc(oldest, func(f Fact) bool { return f.ID == last.ID }) {
+		t.Fatal("the default read reached the newest assertion; this test no longer proves the ordering matters")
+	}
+}
+
+// TestWalkRefusesUnboundedWork is why the two ceilings exist. The store holds one
+// connection, so a walk a caller sizes is a hold that caller places on the
+// organization's write path.
+func TestWalkRefusesUnboundedWork(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+
+	seeds := make([]string, seedMax+1)
+	for i := range seeds {
+		seeds[i] = fmt.Sprintf("svc:%d", i)
+	}
+	if _, _, _, err := s.walk(ctx, seeds, "", "out", 1, t0); err == nil {
+		t.Fatalf("a walk from %d seeds was admitted; the ceiling is %d", len(seeds), seedMax)
+	}
+	if _, _, _, err := s.walk(ctx, []string{"svc:api"}, "", "out", depthMax+1, t0); err == nil {
+		t.Fatalf("a walk of %d hops was admitted; the ceiling is %d", depthMax+1, depthMax)
+	}
+	// The ceilings themselves are admitted: a bound that refuses its own limit
+	// is a bound nobody can use.
+	if _, _, _, err := s.walk(ctx, seeds[:seedMax], "", "out", depthMax, t0); err != nil {
+		t.Fatalf("a walk at exactly the ceilings was refused: %v", err)
+	}
+}
+
+// TestEdgeNeedsAValue is the difference between the two kinds of assertion. A
+// property may assert the empty string; an edge names another entity, and an
+// edge naming nothing is a row a walk would follow to nowhere.
+func TestEdgeNeedsAValue(t *testing.T) {
+	edge := Fact{
+		Entity: "svc:api", Relation: "depends", Value: "  ", Names: true,
+		At: t0, Seen: t0, Source: "deploy", By: "tester",
+	}
+	if _, err := admit(edge, t0); err == nil {
+		t.Fatal("an edge with an empty value was admitted; it names no entity")
+	}
+	prop := Fact{
+		Entity: "svc:api", Relation: "note", Value: "", Names: false,
+		At: t0, Seen: t0, Source: "deploy", By: "tester",
+	}
+	if _, err := admit(prop, t0); err != nil {
+		t.Fatalf("a property asserting the empty string was refused: %v", err)
+	}
 }

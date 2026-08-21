@@ -419,6 +419,11 @@ jobs:
         env:
           GIT_TOKEN: ${{ github.token }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          # The client credential the run already holds. forge-rewrites.sh spends it on
+          # ONE short-lived token scoped to this forge when there is no per-job token —
+          # which is every run here, because this deployment issues none.
+          IAM_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          IAM_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
         # GOPRIVATE names exactly the namespace that is private. github.com/hanzoai/*
         # is: ai, account, commerce, orm, xorm, beego, csqlite and ~30 more are
         # private repos, so they must resolve direct+authenticated and skip a sumdb
@@ -1513,6 +1518,11 @@ jobs:
         env:
           GIT_TOKEN: ${{ github.token }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          # The client credential the run already holds. forge-rewrites.sh spends it on
+          # ONE short-lived token scoped to this forge when there is no per-job token —
+          # which is every run here, because this deployment issues none.
+          IAM_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          IAM_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           # PER REPO, because `insteadOf` is a rewrite and not a chain: one prefix

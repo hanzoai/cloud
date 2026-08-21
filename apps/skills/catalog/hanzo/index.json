@@ -5,7 +5,7 @@
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 676,
+  "skill_count": 675,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -1371,13 +1371,6 @@
       "path": "commerce_product/SKILL.md",
       "service": "commerce",
       "sha256": "72dc634e3285223ee22e3cdd36a070f4964dde9d707452aa184e6a40de4be035"
-    },
-    {
-      "description": "Read commerce rates: Every rate in the authority, or one product's.",
-      "name": "commerce_rates",
-      "path": "commerce_rates/SKILL.md",
-      "service": "commerce",
-      "sha256": "d4a42b88d2d9d003bea20d9a381e3ec8fd5798e551499da89eda047f16903f90"
     },
     {
       "description": "Read commerce return: List your org's returns, as a page, Fetch one return.",
