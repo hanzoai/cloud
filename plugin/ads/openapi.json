@@ -267,38 +267,47 @@
       "AdCampaign": {
         "properties": {
           "account": {
-            "description": "provider ad-account ref (Meta act_\u003cid\u003e)",
+            "description": "Account is the provider ad-account the campaign runs under, in Meta's\nact_\u003cid\u003e form. Empty until the org supplies one or a launch resolves it.",
             "type": "string"
           },
           "budget": {
+            "description": "Budget is the campaign's authorized spend in MINOR units (cents). Negative\nclamps to 0. It is the org's stored plan: a Meta launch creates the campaign\nobject only, and the delivering budget lives on the ad set.",
             "type": "integer"
           },
           "createdAt": {
+            "description": "CreatedAt is when the campaign was first stored, in unix seconds. It never\nchanges, including across a full-replace update.",
             "type": "integer"
           },
           "externalId": {
-            "description": "provider campaign id after a launch",
+            "description": "ExternalID is the ad network's own campaign id, written by a successful\nlaunch and by nothing else — an update never touches it. Empty means this\ncampaign has never reached its network.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the campaign's server-minted handle, \"camp_\" + 32 hex. A create body\ncannot choose it, and it is the id every other route addresses.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the campaign's display label, and the name Meta creates the campaign\nobject under at launch. Required; trimmed and bounded to 1024 bytes.",
             "type": "string"
           },
           "objective": {
+            "description": "Objective is the campaign goal spelled as the provider names it\n(\"conversions\", \"OUTCOME_TRAFFIC\"), passed through to the network verbatim at\nlaunch — Meta defaults an empty one to OUTCOME_TRAFFIC. Free text, bounded to\n1024 bytes; no vocabulary is enforced here.",
             "type": "string"
           },
           "platform": {
+            "description": "Platform is the ad network: meta, google, tiktok or x, and nothing else — a\nwrite naming another is 400. Empty stores as meta. Only meta executes today;\nlaunching any of the other three is 501.",
             "type": "string"
           },
           "spend": {
+            "description": "Spend is spend-to-date in MINOR units (cents), as last written through create\nor update. Negative clamps to 0. It is NOT read back from the network — that\nis a separate insights call — so 0 means nothing was recorded here, not that\nnothing was spent.",
             "type": "integer"
           },
           "status": {
+            "description": "Status is the lifecycle: draft, active, paused or completed, and nothing else\n— a write naming another is 400. Empty stores as draft; a successful launch\nsets active. It records what this deployment did, not what the ad network\ncurrently reports.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is when the row was last written, in unix seconds — set by create,\nupdate and launch. Listings are ordered by it, newest first.",
             "type": "integer"
           }
         },
