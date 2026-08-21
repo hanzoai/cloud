@@ -51,7 +51,7 @@ func (o ops) cryptoOptions(ctx context.Context, _ *noInput) (*plane.CryptoOption
 		return nil, err
 	}
 	return ask(ctx, org, "crypto options", func(ctx context.Context) (*plane.CryptoOptions, error) {
-		return commercepeer.BillingCryptoOptions(ctx, &struct{}{})
+		return commercepeer.BillingCryptoOptions(ctx)
 	})
 }
 

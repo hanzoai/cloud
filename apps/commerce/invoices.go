@@ -100,9 +100,9 @@ func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoic
 	if ierr != nil {
 		return nil, zip.Errorf(502, "invoices: %v", ierr)
 	}
-	out := make([]plane.InvoiceRow, 0, len(rows))
+	out := make([]plane.BillingInvoice, 0, len(rows))
 	for _, v := range rows {
-		row := plane.InvoiceRow{
+		row := plane.BillingInvoice{
 			ID: v.ID, UserID: v.UserID, CustomerEmail: v.CustomerEmail,
 			SubscriptionID: v.SubscriptionID,
 			PeriodStart:    stamp(v.PeriodStart), PeriodEnd: stamp(v.PeriodEnd),
