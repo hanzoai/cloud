@@ -57,12 +57,32 @@ var forbidden = []string{
 	"crawshaw.io/sqlite",
 }
 
+// registrants are the two packages that may call sql.Register("sqlite") — the
+// facade's two backends. Exactly one may be linked: the facade's build tags are
+// mutually exclusive (driver_cgo.go is `cgo && !sqlite_purego`, driver_nocgo.go
+// is `!cgo || sqlite_purego`), so both together means something OTHER than the
+// facade dragged one in, which is the duplicate registration this gate exists
+// to prevent.
+var registrants = []string{
+	"github.com/hanzoai/csqlite",
+	"modernc.org/sqlite",
+}
+
+// namedByNoApp is what a subsystem's SOURCE may never import. It is `forbidden`
+// plus the two registrants: modernc in the linked graph is the facade's own
+// backend and correct, but an app that NAMES it has reached past the facade to
+// an engine, which is how the second registrant arrives in the first place.
+var namedByNoApp = append(append([]string{}, forbidden...), registrants...)
+
 // TestOneSQLiteEngine fails when a second engine reaches the binary.
 func TestOneSQLiteEngine(t *testing.T) {
 	// The whole binary, not this package: `go list -deps` over the commands is
 	// what the linker sees, which is the set that decides whether two Register
 	// calls run.
-	out, err := exec.Command("go", "list", "-deps", "../cmd/...").Output()
+	// cmd/ AND plugin/: cmd/cloud is the light host and links no subsystem, so a
+	// scan of it alone cannot see an engine an app dragged in — each subsystem is
+	// its own binary under plugin/.
+	out, err := exec.Command("go", "list", "-deps", "../cmd/...", "../plugin/...").Output()
 	if err != nil {
 		t.Skipf("go list unavailable in this environment: %v", err)
 	}
@@ -89,6 +109,23 @@ func TestOneSQLiteEngine(t *testing.T) {
 	if !linked["github.com/hanzoai/sqlite"] {
 		t.Error("github.com/hanzoai/sqlite is not linked; it is the facade every store is supposed to open through")
 	}
+
+	// The rule this gate is named for: ONE registrant. Which one is a property
+	// of the build, so the test asks how many rather than which.
+	var present []string
+	for _, r := range registrants {
+		if linked[r] {
+			present = append(present, r)
+		}
+	}
+	if len(present) != 1 {
+		t.Errorf("cloud links %d SQLite engines (%v), want exactly 1.\n"+
+			"database/sql.Register panics on a duplicate driver name at init, before main, "+
+			"so two engines take the whole binary down with a stack naming neither. "+
+			"The facade selects one by build tag; a second means something else imported it directly.",
+			len(present), present)
+	}
+	t.Logf("one engine linked: %s", present)
 }
 
 // TestNoAppImportsAnEngineDirectly is the same rule read at the source, so a
@@ -117,7 +154,7 @@ func TestNoAppImportsAnEngineDirectly(t *testing.T) {
 			return err
 		}
 		src := string(b)
-		for _, bad := range forbidden {
+		for _, bad := range namedByNoApp {
 			if strings.Contains(src, `"`+bad+`"`) {
 				rel, _ := filepath.Rel(root, path)
 				t.Errorf("apps/%s imports %s directly; open through github.com/hanzoai/sqlite", rel, bad)
