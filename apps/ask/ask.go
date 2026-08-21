@@ -62,19 +62,53 @@ const maxQuestion = 2000
 // the document (see the init below), so the collision would have been live the
 // moment it was.
 type askRequest struct {
+	// Question is what to ask, in plain language. Trimmed, and clipped at 2000
+	// bytes rather than refused. Required unless q carries it.
 	Question string `json:"question"`
-	Q        string `json:"q"` // answer-engine alias for question
+	// Q is the answer-engine alias for question, and it WINS when both are sent.
+	Q string `json:"q"`
 
-	// Web grounding domain (mode-selected). Empty mode ⇒ the figure advisor, unchanged.
-	Mode       string   `json:"mode"`     // search|news|research|deep
-	Sources    []string `json:"sources"`  // @hints appended to the web query: web,news,academic,github,reddit,x
-	Model      string   `json:"model"`    // override the narration/synthesis model
-	Stream     *bool    `json:"stream"`   // force SSE (else Accept: text/event-stream / ?stream=1)
-	Language   string   `json:"language"` // web-search language (BCP-47-ish)
-	MaxSources int      `json:"maxSources"`
-	MaxQueries int      `json:"maxQueries"`
-	FollowUps  *bool    `json:"followUps"` // default true
-	System     string   `json:"system"`    // override the synthesis system prompt
+	// Mode selects the WEB grounding domain: search (one fast pass, 6 sources),
+	// news (the same, recency-biased), or research (a plan, several rounds, pages
+	// actually fetched and read). deep is a retired name for research. Empty — or
+	// anything else — is not an error: it takes the FIGURE advisor instead, which
+	// answers from the caller's own org data and never touches the web. The rest
+	// of the web fields are inert unless this names a mode.
+	Mode string `json:"mode"`
+	// Sources narrows where the evidence comes from: any of web, news, academic,
+	// github, reddit, x. Each becomes a site-scoped web query, so ["x"] searches
+	// X/Twitter posts rather than the open web. Unknown tokens are dropped rather
+	// than passed through, so caller input cannot pollute the query.
+	Sources []string `json:"sources"`
+	// Model overrides the synthesis model. It REPLACES the whole chain rather
+	// than heading it: the mode's fallbacks are not tried, so a model that is
+	// down fails the answer instead of degrading to the next one.
+	Model string `json:"model"`
+	// Stream forces the answer onto an SSE stream (true) or onto a single JSON
+	// body (false). Absent is not false — it hands the decision to
+	// `Accept: text/event-stream` or `?stream=1`.
+	Stream *bool `json:"stream"`
+	// Language narrows the web search to a locale, BCP-47-ish ("en", "ja").
+	// Empty means no narrowing.
+	Language string `json:"language"`
+	// MaxSources caps how many pages the loop gathers. It can only LOWER the
+	// mode's own budget (6 for search and news, 32 for research): 0 or a value
+	// above the ceiling takes the mode's, so a caller can buy a cheaper answer
+	// but never a more expensive one.
+	MaxSources int `json:"maxSources"`
+	// MaxQueries caps how many web searches the loop runs, clamped the same way
+	// against the mode's budget (1 for search and news, 6 for research). It is
+	// the other half of what bounds an answer's cost and latency.
+	MaxQueries int `json:"maxQueries"`
+	// FollowUps asks for the next-questions list (at most five) alongside the
+	// answer. Absent means true; false skips the extra completion that generates
+	// them. They are best-effort even when asked for — the loop drops them rather
+	// than crossing its token ceiling.
+	FollowUps *bool `json:"followUps"`
+	// System replaces the mode's synthesis prompt for this one answer. Empty
+	// keeps the mode's own. It steers how the answer is WRITTEN; it cannot reach
+	// the gathering, the ranking or the citation check.
+	System string `json:"system"`
 }
 
 // query is the caller's question, accepting either the advisor field (question) or
