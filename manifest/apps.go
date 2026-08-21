@@ -202,7 +202,7 @@ var Apps = []App{
 	// (hz.MountAt), and the round answers at a sub-path because POST /v1/agents is
 	// already the typed create. One name, one root (HIP-1210).
 	{Name: "agents", Prefixes: []string{"/v1/agents"}},
-	{Name: "links", Prefixes: []string{"/v1/links"}},
+	{Name: "link", Prefixes: []string{"/v1/link"}},
 	{Name: "wallets", Prefixes: []string{"/v1/wallets"}},
 	{Name: "x402", Prefixes: []string{"/v1/x402"}},
 	{Name: "deploy", Prefixes: []string{"/v1/deploy/account/can-i", "/v1/deploy/applications", "/v1/deploy/callback", "/v1/deploy/clusters", "/v1/deploy/gitops", "/v1/deploy/health", "/v1/deploy/login", "/v1/deploy/logout", "/v1/deploy/projects", "/v1/deploy/reconcile", "/v1/deploy/session/userinfo", "/v1/deploy/settings", "/v1/deploy/stream/applications", "/v1/deploy/version"}},
@@ -276,7 +276,7 @@ var Apps = []App{
 	// store. One package holding two tenancy models is the shape a privilege bug
 	// grows in, so they are two rows claiming two disjoint roots, and zip refuses
 	// two owners for one prefix at compose time.
-	{Name: "datasets", Prefixes: []string{"/v1/datasets"}},
+	{Name: "dataset", Prefixes: []string{"/v1/dataset"}},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	// It sat inside usage's prefix and answered under usage's name. The two are
 	// two capabilities — leaderboard keeps the opt-in store, usage keeps none —
@@ -286,7 +286,7 @@ var Apps = []App{
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},
 	{Name: "marketing", Prefixes: []string{"/v1/marketing"}},
 	{Name: "ads", Prefixes: []string{"/v1/ads"}},
-	{Name: "campaigns", Prefixes: []string{"/v1/campaigns"}},
+	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
 	{Name: "validators", Prefixes: []string{"/v1/validators"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
 	// The INGESTION door is load-bearing, not decorative: apps/event/event.go's
@@ -342,18 +342,18 @@ var Apps = []App{
 	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud
 	// prefix and never should), the public catalogue cache, the gateway's policy role,
 	// and THESE — ZT fabric edge-routers, which are the nodes of an overlay network and
-	// are now addressed as such at "/v1/networks/routers". A prefix belongs to a product
+	// are now addressed as such at "/v1/network/routers". A prefix belongs to a product
 	// a customer calls, so "edge" gets none: /v1/edge 404s at every depth, and that is
 	// the right answer rather than a missing product.
 	//
-	// The app was called zt and answered on two stems, /v1/networks and /v1/mesh.
+	// The app was called zt and answered on two stems, /v1/network and /v1/mesh.
 	// "zt" abbreviates the UPSTREAM controller and is not a word anyone says for the
 	// thing, so HIP-0139 §7.3 renames the app to the address's word — singular by
 	// §2.2, because an org has one overlay — and §3.1 folds the second stem under
 	// it: a mesh row IS an edge service of this network, exactly as an edge-router
 	// is one of its nodes. ONE prefix now, and the /v1/<name> convention covers it,
-	// so plugin/networks states no Prefixes at all.
-	{Name: "networks", Prefixes: []string{"/v1/networks"}},
+	// so plugin/network states no Prefixes at all.
+	{Name: "network", Prefixes: []string{"/v1/network"}},
 	{Name: "share", Prefixes: []string{"/v1/share"}},
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}},
 	{Name: "explorer", Prefixes: []string{"/v1/explorer"}},
@@ -415,20 +415,20 @@ var Apps = []App{
 	// A bot RUN and the relay to the executor that drives it — two route families
 	// under one prefix:
 	//
-	//	/v1/bots/runs[/{runId}/stop]  the run control plane
-	//	/v1/bots/runtime/*            @hanzo/bot's own ops paths, relayed
+	//	/v1/bot/runs[/{runId}/stop]  the run control plane
+	//	/v1/bot/runtime/*            @hanzo/bot's own ops paths, relayed
 	//
 	// The relay's greedy wildcard sits under its own segment. It was
-	// app.All("/v1/bots/*") once, one specificity rule away from swallowing every
+	// app.All("/v1/bot/*") once, one specificity rule away from swallowing every
 	// sibling above it.
-	{Name: "bots", Prefixes: []string{"/v1/bots"}},
+	{Name: "bot", Prefixes: []string{"/v1/bot"}},
 	// The MACHINES, which are not a kind of bot. A node dials in over a socket and
 	// is asked to run commands it declared it can run; a bot run is a task the
 	// executor drives on a surface it rents. Two stores, two addresses, two names
 	// — HIP-0139 §7.2, which permits a split along a store boundary and only
 	// there: the node plane's is the presence registry over Hanzo KV, the run
 	// plane's is the executor's own, and neither reads the other's.
-	{Name: "nodes", Prefixes: []string{"/v1/nodes"}},
+	{Name: "node", Prefixes: []string{"/v1/node"}},
 	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}},

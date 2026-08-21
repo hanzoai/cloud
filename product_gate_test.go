@@ -42,9 +42,9 @@ var mismatched = map[string]string{
 // functionality is (at least partly) duplicated on the cloud side. The worst
 // bucket, and the front of the migration worklist.
 var unwired = []string{
-	"admin", "billing", "bots", "datastore", "dns",
+	"admin", "billing", "bot", "datastore", "dns",
 	"engine", "eval", "event", "functions", "gateway", "git", "idv", "ingress", "kms",
-	"marketing", "ml", "mpc", "networks", "platform", "research", "skills",
+	"marketing", "ml", "mpc", "network", "platform", "research", "skills",
 	"social", "team", "usage", "visor", "world",
 }
 
@@ -55,9 +55,9 @@ var unwired = []string{
 var unextracted = []string{
 	"admission", "ads", "affiliates", "agents", "allowance", "answer", "ask",
 	"auditlog", "authors", "auto", "benchmark", "blueprint", "books",
-	"campaigns", "catalog", "catalogsync", "channels", "cloudflare", "cms",
+	"campaign", "catalog", "catalogsync", "channels", "cloudflare", "cms",
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
-	"controlplane", "crawl", "crm", "cron", "datasets", "graph",
+	"controlplane", "crawl", "crm", "cron", "dataset", "graph",
 	"destinations", "domain", "entitlements", "erp", "esign", "exec",
 	"experiments", "explorer", "finance", "fleet", "flow", "goja", "guide",
 	"help", "index", "integrations", "k8s", "knowledge",
@@ -70,7 +70,7 @@ var unextracted = []string{
 	// product with a daemon of its own.
 	"kv",
 	"label",
-	"leaderboard", "legal", "links", "lsp", "marketplace", "meet", "membership",
+	"leaderboard", "legal", "link", "lsp", "marketplace", "meet", "membership",
 	"metering", "mq",
 	// nodes is the machine control plane, split out of bots (HIP-0139 §7.2). It
 	// carries the pin bots carried for it: no hanzoai/nodes exists, and what lives
@@ -79,7 +79,7 @@ var unextracted = []string{
 	// decision it owes is this bucket's first branch, because an agent runtime that
 	// connects your machines and runs commands on them is a product somebody would
 	// fork, not cloud's own machinery.
-	"nodes",
+	"node",
 	"payout", "plan", "plugin", "prefs", "principal",
 	"projects", "prompts", "provisioning", "reference",
 	"referrals", "registry", "risk", "rollingcap", "s3", "s3admin",

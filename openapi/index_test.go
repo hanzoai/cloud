@@ -350,21 +350,21 @@ func TestALiteralAddressBeatsTheTemplateItFits(t *testing.T) {
 		return &Operation{OperationID: id, Summary: id, Public: true}
 	}
 	a := addressesOf(&Document{Paths: map[string]PathItem{
-		"/v1/nodes":      {"get": pub("get_nodes")},
-		"/v1/nodes/{id}": {"get": pub("get_node")},
-		"/v1/nodes/peer": {"post": pub("post_nodes_peer")},
+		"/v1/node":      {"get": pub("get_nodes")},
+		"/v1/node/{id}": {"get": pub("get_node")},
+		"/v1/node/peer": {"post": pub("post_nodes_peer")},
 	}})
 
-	if got, ok := a.at("/v1/nodes/peer"); !ok || got.allow != "POST" || got.member {
-		t.Errorf("/v1/nodes/peer resolved to %+v — it is an address, not a node id", got)
+	if got, ok := a.at("/v1/node/peer"); !ok || got.allow != "POST" || got.member {
+		t.Errorf("/v1/node/peer resolved to %+v — it is an address, not a node id", got)
 	}
-	if got, ok := a.at("/v1/nodes/n1"); !ok || got.allow != "GET" || !got.member {
-		t.Errorf("/v1/nodes/n1 resolved to %+v — it is a member of the collection", got)
+	if got, ok := a.at("/v1/node/n1"); !ok || got.allow != "GET" || !got.member {
+		t.Errorf("/v1/node/n1 resolved to %+v — it is a member of the collection", got)
 	}
-	if got, ok := a.at("/v1/nodes"); !ok || got.hasUp {
-		t.Errorf("/v1/nodes resolved to %+v — /v1 is the index, not its collection", got)
+	if got, ok := a.at("/v1/node"); !ok || got.hasUp {
+		t.Errorf("/v1/node resolved to %+v — /v1 is the index, not its collection", got)
 	}
-	if _, ok := a.at("/v1/nodes/n1/deeper"); ok {
+	if _, ok := a.at("/v1/node/n1/deeper"); ok {
 		t.Error("a path the contract does not serve resolved to an address")
 	}
 }

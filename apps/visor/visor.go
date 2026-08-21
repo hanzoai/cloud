@@ -252,7 +252,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// Bot machines — a kind=bot machine + an agent binding, composed from the vm
 	// compute + binding surface (bots.go). The value is a MACHINE that hosts a bot
-	// runtime, not the bot itself: /v1/bots is the bot RUN (clients/bots), a
+	// runtime, not the bot itself: /v1/bot is the bot RUN (clients/bots), a
 	// different noun, and it belongs to bots. This one nests under
 	// /v1/visor/compute, so the two never share a route namespace. launch is an
 	// explicit literal, registered before :id so it never binds as an id.
