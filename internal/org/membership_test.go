@@ -77,20 +77,19 @@ func TestMembershipKeepsLastGoodOnError(t *testing.T) {
 	}
 }
 
-// CLOUD_REPLICAS env parsing: "id@addr" and bare "id" forms.
-func TestParseReplicasEnv(t *testing.T) {
-	ms := parseReplicasEnv("r1@10.0.0.1:9653, r2 , r3@10.0.0.3:9653")
-	if len(ms) != 3 {
-		t.Fatalf("want 3, got %d", len(ms))
+// StaticSource reads NO environment. It used to fall back to CLOUD_REPLICAS,
+// which is an integer replica count everywhere else in this binary — so "3"
+// parsed here as a peer named "3", and a set of one bogus member elects a writer
+// with confidence. A source given nothing must yield nothing, so the fencer has
+// nobody to elect rather than somebody wrong.
+func TestStaticSourceReadsNoEnvironment(t *testing.T) {
+	t.Setenv("CLOUD_REPLICAS", "3")
+	got, err := StaticSource()(context.Background())
+	if err != nil {
+		t.Fatalf("StaticSource(): %v", err)
 	}
-	if ms[0].ID != "r1" || ms[0].Addr != "10.0.0.1:9653" {
-		t.Fatalf("r1 parse: %+v", ms[0])
-	}
-	if ms[1].ID != "r2" || ms[1].Addr != "r2" { // bare id → addr==id
-		t.Fatalf("bare id parse: %+v", ms[1])
-	}
-	if got := parseReplicasEnv(""); got != nil {
-		t.Fatalf("empty env → nil, got %+v", got)
+	if len(got) != 0 {
+		t.Fatalf("StaticSource() with no members yielded %+v — it read the environment", got)
 	}
 }
 

@@ -373,9 +373,15 @@ func openStore(dir string) (orm.DB, *sql.DB, error) {
 	//
 	// On "sql" the identity store is not a file on a volume at all: no path and no
 	// per-file key, reached identically from every replica.
-	backend := strings.TrimSpace(os.Getenv("IAM_STORE_BACKEND"))
+	//
+	// The name and the "is it shared?" question both come from cloud, because
+	// Config.Validate asks the SAME question of the SAME variable when it decides
+	// whether this deployment may run more than one replica. Spelling the test
+	// twice is how the boot check and the opener come to disagree about which
+	// backends are local.
+	backend := strings.TrimSpace(os.Getenv(cloud.IAMStoreEnv))
 
-	if backend != "" && backend != "sqlite" {
+	if cloud.IAMStoreShared(backend) {
 		// NO PATH TO CHECK, and the invariant below still has to hold. The file
 		// stat was never about files: it was about refusing to serve an identity
 		// store this process did not find, because minting an empty one answers

@@ -225,13 +225,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// It is one VALUE, not one call per door, so there is no arrangement of these two
 	// registrations in which they hold different screens.
 	screen := riskGate(lg)
-	if deps.Payments == nil {
-		lg.Warn("commerce: deps.Payments is nil — payment intent paths will fail; tenant config + admin still served")
-	}
-	if deps.Vault == nil {
-		lg.Warn("commerce: deps.Vault is nil — vault charge paths unavailable; tenant config + admin still served")
-	}
-
 	// The typed payment surface. Registered EARLY, beside the health probe and
 	// ahead of the embed, for the reason the probe is: these are the fleet's only
 	// agent-callable money ops, and a failure to boot the legacy embed must not be

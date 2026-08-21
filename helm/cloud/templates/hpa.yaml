@@ -1,0 +1,48 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "cloud.fullname" . }}
+  labels: {{- include "cloud.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "cloud.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    # CPU ALONE. Memory is a function of how much of the plugin catalog is warm
+    # rather than of load — see values.yaml, where the two are measured an hour
+    # apart on the running pod — so a memory target reads flat through a surge and
+    # then latches a scale-up the idle reaper cannot undo.
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+  behavior:
+    scaleUp:
+      # A new pod serves nothing until it has started the children the request
+      # needs, so the first minute of a scale-up is colder than the pods it joins.
+      # Two at a time, judged over a short window, because waiting five minutes to
+      # confirm a surge is how the surge is served by the pods that were already
+      # struggling.
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      # Slow, and slower than the symmetric argument suggests. Removing a pod
+      # discards every plugin child it had warmed, and the survivors pay those cold
+      # starts back on the next request for each — so a scale-down that turns out
+      # to be premature costs more than the pod it saved. Five minutes of quiet,
+      # then one pod at a time.
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+{{- end }}

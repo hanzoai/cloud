@@ -173,7 +173,7 @@ func TestValidateImageRef(t *testing.T) {
 		"ghcr.io/hanzoai/cloud:v1.801.89",
 		"ghcr.io/luxfi/wallet-web:00971263b",
 		"ghcr.io/hanzoai/tenant-myorg/my-app:latest",
-		"registry.hanzo.ai/zooai/api:v2.3.4",
+		"oci.hanzo.ai/zooai/api:v2.3.4",
 		"ghcr.io/hanzoai/app-web:main",
 		"ghcr.io/hanzoai/x@sha256:" + strings.Repeat("a", 64),
 	}

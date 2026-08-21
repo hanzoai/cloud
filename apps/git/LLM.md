@@ -419,3 +419,117 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
       d=json.load(open('plugin/git/openapi.json'))
       print([p for p in sorted(d['paths']) if not p.startswith('/v1/')])
       EOF
+
+## The store is a CACHE, and only a copy is ever released (`reclaim.go`)
+
+**201.7G of the 214.3G on cloud's ReadWriteOnce claim was `/var/lib/cloud/git`**,
+against 11G for every other thing on it. That is what pins the deployment to one
+replica: a claim that large is RWO, RWO attaches to one node, and the chart
+refuses a second pod rather than watch it hang on Multi-Attach. Measured on the
+live volume, 2026-08-21:
+
+| | |
+|---|---|
+| bare repositories | 3,160 across 74 orgs, all org-level (`_`) |
+| also on the forge | 2,603 (82%) |
+| volume-only | 553 — of which 74 are empty shells, 344 under 10MB, **137 substantial (29.3G)** |
+| substantial volume-only whose tip IS on the forge under another owner | 87 (22.5G) |
+| substantial volume-only found NOWHERE on the forge | **54 (6.9G)** |
+
+**Every third-party org is 100% forge-backed.** The volume-only set is entirely
+first-party (`hanzo-inc` 343, `hanzo` 73, `hanzo-templates` 69, `hanzoai` 12,
+`luxdao` 7, …) plus `maxpower` (2 repos, 132KB) and `admin/tel-probe-a` (36KB).
+Cross-org duplication is real and verified by SHA, not by size:
+`hanzo-inc/phi` and `hanzoai/phi` are both 10.4G at the same HEAD
+`9c96a299…`; so are `enso-browser`, `insights` and `erp`. `kms` is NOT
+(`hanzoai/kms` a44b5ea6… against `hanzo/kms` 8c64ef62…), which is why identity
+is asserted per repository and never inferred from a name.
+
+**Both stores are independent mirrors of the same GitHub estate.** The forge's
+repos carry `remote.*.url = https://github.com/<org>/<repo>.git` with
+`mirror = true` — Forgejo pull mirrors. Cloud's carry `[core] bare = true` and
+NOTHING else: no remote, no record of where the bytes came from. So the two
+copies never knew about each other, and nothing on this volume can say what it
+is a copy OF.
+
+### The rule: a copy with an ORIGIN can be made again
+
+`Repo.Origin` is the URL a repo's objects can be fetched from, written by
+`ops.mirror` on a fetch that SUCCEEDED — a source that has answered, not a claim
+a caller made. It lives on the metadata ROW because eviction deletes the
+directory a git config would be in, and a fact that dies with the thing it
+describes cannot be the reason it was safe to delete it.
+
+Everything else is PINNED, and the failure direction is the safe one in both
+halves: an unrecorded origin costs disk, and disk is recoverable. So all 553
+volume-only repos are pinned by construction — no migration decision is required
+before turning the bound on, and none is taken by turning it on.
+
+**Idle is the safety criterion, size is the target** — the split
+`cloud.OrgStore`'s reclaim makes, for the same reason: `materialize` hands back a
+bare directory its caller streams a pack out of long after the call returns. A
+repo is a candidate only after `repoIdle` untouched AND with no reader inside it,
+and among candidates the COLDEST goes first. Over the bound with nothing
+releasable is SAID and the store stays over.
+
+**`GIT_CACHE_BYTES` is unset by default and unset means unbounded.** Bytes, not a
+count: the 3,160 repositories range from 36KB to 10.4GB.
+
+### A LANDED LOCAL WRITE ENDS THE COPY, and a test is why we know
+
+The first version released on the origin alone. Measured, in
+`TestPushIsStillADeployAfterARelease`: a push landed on a released-and-refetched
+repo, the reader let go, reclaim released it again, and the next clone refetched
+the UPSTREAM and answered with its tip — the pushed commit gone, 200 OK, nothing
+logged. A repository that has been written to is not a copy of anything.
+
+`fireBranchBuild` clears the origin, and it is the right place because it is
+already **the** place every local ref advance is announced — HTTP receive-pack,
+SSH receive-pack, the client-less `/push` and a pull-request merge all funnel
+through it (`smart_http.go`). A tenth writer announces itself there or it fires
+no build, and a repo whose pushes fire no build is a defect somebody notices; a
+repo that quietly lost a commit to a refetch is not.
+
+It clears BOTH the row and the live cache entry (`cache.diverged`). The entry is
+a projection of the row read at the start of the serve, so clearing only the row
+leaves the in-flight entry still claiming an origin — which is the second bug the
+same test found, one layer down.
+
+### Why this is NOT a thin proxy to the forge, yet
+
+The forge is the authority and `apps/git` imports `forge` NOWHERE, so the obvious
+answer is to serve reads through it. The read seam even exists and is clean:
+`Repository` (`repository.go`) with `openRepository` (`gitbackend.go`) as its ONE
+door, so a `forgeRepository` would move browse, the UI, the code index, the CI
+config read and repo detail with no handler change.
+
+**What blocks it is addressing, not plumbing.** `forge.Owner` is a CLOSED table
+holding exactly `{"hanzo": "hanzoai"}`, and its closedness is a documented
+control: it used to fall back to the org's own name, which made an IAM org a
+forge coordinate whenever it was unmapped — sign up as `hanzoai` and every read
+and write addresses the estate's own repositories, on repos carrying Actions
+workflows on in-cluster runners. So 73 of the 74 orgs on this volume have no
+forge coordinate cloud may derive, and widening the table to give them one is
+that vulnerability, not a config change.
+
+The pack plane is blocked by the same fact from the other side: a transparent
+proxy must present a credential the forge accepts for git-http, and the only one
+this process holds is the machine token — a site administrator — which is
+precisely the privileged-credential presentation `mirrorOutHostAllowed` refuses
+(Red MED-1). A redirect instead of a proxy moves the credential problem to the
+client, which then needs a forge login it does not have.
+
+**An ORIGIN is not that mapping and does not need the table.** It is a URL an
+operator states per repository, exactly as `mirrorReq.Source` already is — an
+operator statement about one repo, never a namespace derived from a tenant's
+name. That is the whole reason this shape is available today and a proxy is not.
+
+Two supporting facts about how far the retirement has already gone, both
+measured: `apps/sync`'s importer answers the same `GitImporter` and
+`GitMirrorController` seams AGAINST THE FORGE and says so in its own header;
+`apps/deploy` and `apps/lsp` already read tree and rev from the forge; the live
+push door is `/v1/platform/hook` and `apps/git/webhook.go` is a 410 tombstone
+pointing at it. And the SSH front door is already dead: it binds `:2222`, no
+chart or compose exposes it, cloud's Service publishes no 22 or 2222, and
+`gitSSHHost` advertises `git@git.hanzo.ai:` — which resolves to the Forgejo
+Service, not to this listener.

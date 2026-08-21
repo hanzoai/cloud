@@ -235,6 +235,13 @@ func (r *tollRig) doors() []tollDoor {
 			body, _ := io.ReadAll(res.Body)
 			// A tools/call reports a handler failure as isError content, per the MCP
 			// spec — the status is 200 either way, so the status is not the answer.
+			//
+			// The `error` member is decoded too, and it is not decoration. A frame
+			// carrying a JSON-RPC error carries NO `result`, so `Result.IsError`
+			// decodes to FALSE — byte-identical to a success. A caller asking this
+			// helper "was the op refused?" would read -32602 "no such tool" as an
+			// OPEN DOOR, which is the one answer a toll test must never get wrong:
+			// the gate would look green because the name it guards does not exist.
 			var ans struct {
 				Result struct {
 					IsError bool `json:"isError"`
@@ -242,9 +249,17 @@ func (r *tollRig) doors() []tollDoor {
 						Text string `json:"text"`
 					} `json:"content"`
 				} `json:"result"`
+				Error *struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
 			}
 			if err := json.Unmarshal(body, &ans); err != nil {
 				t.Fatalf("MCP %s: reply is not a frame: %v (%s)", op, err, body)
+			}
+			if ans.Error != nil {
+				t.Fatalf("MCP %s: the door answered a protocol error, so this op was never invoked "+
+					"and the toll was never asked: %d %s", op, ans.Error.Code, ans.Error.Message)
 			}
 			text := ""
 			if len(ans.Result.Content) > 0 {

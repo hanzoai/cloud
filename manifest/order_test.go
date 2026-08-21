@@ -24,12 +24,12 @@ var frozen = []string{
 	"pubsub", "kv", "kafka", "amqp", "mq", "skills", "flags", "kms", "metrics",
 	"ingress", "account", "iam", "base", "o11y", "authz",
 	"commerce", "licensing", "plan", "pricing", "s3", "provisioning",
-	"billing", "rollingcap", "allowance", "platform", "projects",
+	"billing", "allowance", "platform", "projects",
 	"dns", "domain", "prompt", "agents", "link", "wallet",
 	"x402", "deploy", "functions", "todo", "template", "blueprint",
-	"framework", "knowledge", "graph", "help", "content", "catalogsync", "webhook",
+	"framework", "knowledge", "graph", "help", "content", "webhook",
 	"ml", "label", "reference", "risk", "dataset", "usage", "leaderboard", "crm", "marketing", "ad",
-	"campaign", "validator", "social", "event", "git", "sync",
+	"campaign", "validator", "social", "standing", "event", "git", "sync",
 	"visor", "captable", "code", "lsp", "network", "share",
 	"dataroom", "explorer", "security", "integrations", "destination", "cloudflare",
 	"sbom", "team", "meet", "settings", "pref", "notify",
@@ -49,6 +49,19 @@ var frozen = []string{
 	// four reads went to the apps that own those roots — the Meilisearch pair to
 	// search, the Qdrant pair to provisioning's operator surface — and the app,
 	// its plugin and its row went with them.
+	//
+	// `rollingcap` and `catalogsync` are gone for the SAME reason carried one step
+	// further. Neither opened a store, and neither answered a path either — each
+	// claimed a /v1/<name> nothing was ever registered behind. They held rows only
+	// because a row is how the host starts a process, and in this fleet starting a
+	// process is exactly what neither of them could survive: rollingcap set a hook
+	// the `ai` module reads out of a package global, and a global set in its own
+	// child is invisible in ai's; catalogsync called content.EnsureCatalogAsset,
+	// which refuses whenever content's own singleton is nil, and it is nil in every
+	// process but content's. So the cap moved into apps/ai, beside the gate that
+	// reads it, and the catalog loop — open at BOTH ends, since commerce publishes
+	// product.created only when PUBSUB_URL is set and nothing sets it — was deleted
+	// rather than rehomed.
 	"guide", "company", "compliance", "legal", "ask",
 	// ai precedes zen — a DECISION, not drift: both claim "/v1", equal patterns
 	// resolve by mount order, and the /v1 remainder (the OpenAI-compatible
