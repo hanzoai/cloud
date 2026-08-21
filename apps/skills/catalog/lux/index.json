@@ -2475,7 +2475,7 @@
       "name": "iam_keys",
       "path": "iam_keys/SKILL.md",
       "service": "iam",
-      "sha256": "9325221107267f96e1d433c7bfb8c2dca7b4b04b565b0f9b941ac5114256c6bc"
+      "sha256": "37670c0f97ac7bde7df2d3deaeeda554cd9dadebfd99a15b2e91829549d3ef1f"
     },
     {
       "description": "Read iam linked accounts: Returns the sign-in identities linked to the calling person's account — every provider they can currently sign in with..",
