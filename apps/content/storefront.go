@@ -93,9 +93,23 @@ type StorefrontRequest struct {
 // "published" (the product image was set) | "not_configured" (no commerce edge, a
 // fail-closed no-op) | "failed" (the edge was reachable but errored) — never fatal.
 type StorefrontResult struct {
-	Status   string `json:"status"`
-	Slug     string `json:"slug,omitempty"`
-	Store    string `json:"store,omitempty"`
+	// Status is one of "published" (the product image was set), "not_configured"
+	// (no commerce edge, no store provisioned for the org, or a token that is not
+	// admin on the store — a fail-closed no-op) or "failed" (commerce answered and
+	// errored). None of the three fails the transition that produced it.
+	Status string `json:"status"`
+	// Slug is the product handle the image was attached to. It IS the asset's
+	// `design` field — that equality is the whole join between the studio and the
+	// catalog, which is why an asset with no design produces no storefront result
+	// at all.
+	Slug string `json:"slug,omitempty"`
+	// Store is the commerce store id the image landed in, resolved for the org
+	// mid-call. Present only on "published": a result that never got that far
+	// carries none.
+	Store string `json:"store,omitempty"`
+	// ImageURL is the absolute URL the listing's headerImage now points at. The
+	// image is REFERENCED, not copied — it stays in the org's studio output
+	// bucket, so removing it there empties the storefront tile.
 	ImageURL string `json:"imageUrl,omitempty"`
 }
 
