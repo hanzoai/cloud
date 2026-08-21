@@ -35,6 +35,24 @@ API="${REVIEW_API:-https://api.hanzo.ai}"
 # 65536 would truncate exactly the hunk the bound exists to keep whole.
 MODEL="${REVIEW_MODEL:-zen5-coder}"
 
+# WHEN THE PREMIUM MODEL CANNOT BE PAID FOR, FALL BACK RATHER THAN STOP THE TRAIN.
+# A 402 is not a verdict and it is not a transient — it is the gateway saying the
+# ACCOUNT cannot buy this model right now, which says nothing about the change
+# under review. Refusing on it stops every release for a billing fact, and that
+# has happened: the upstream provider account emptied and the gate refused 254
+# commits, including a fix for an unauthenticated admin surface.
+#
+# So a 402 drops to the next model that can answer. The order is deliberate —
+# premium first, because this reviewer reads a private diff and the best judgment
+# is worth paying for; then the models served by a provider we hold capacity
+# with. FALLBACKS is overridable for the same reason MODEL is, and an empty value
+# turns the ladder off and restores the old behaviour exactly.
+#
+# Fail-closed is UNTOUCHED. Exhausting the ladder still reaches `die`: this makes
+# the gate try harder to get a verdict, never accept the absence of one. Nothing
+# here can turn a refusal into a pass — only a real answer from a real model can.
+FALLBACKS="${REVIEW_FALLBACKS:-fireworks/gpt-oss-120b fireworks/gpt-oss-20b}"
+
 # An IAM access token, minted for this run by whoever invokes the reviewer.
 # There is no API key here and there is not meant to be one: IAM issues tokens,
 # the gateway accepts them, and a bearer that outlives the run is a bearer that
@@ -171,19 +189,31 @@ PY
 # fallback APPENDS to that rather than standing in for it, and the refusal read
 # `answered 000000` — a status nothing can look up. Take curl's own word, and
 # default only the case where it printed nothing at all.
-attempt=1
-while :; do
-  code=$(curl -sS -m 180 -o "$resp" -w '%{http_code}' "$API/v1/chat/completions" \
-    -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @"$req" || true)
-  code=${code:-000}
-  case "$code" in
-    000|429|502|503|504) : ;;
-    *) break ;;
-  esac
-  if [ "$attempt" -ge 3 ]; then break; fi
-  echo "review: $LABEL — reviewer answered $code, which is no answer; asking again ($attempt of 3)"
-  sleep $(( attempt * 5 ))
-  attempt=$(( attempt + 1 ))
+# The ladder is walked from the outside: each rung is a whole ask, retries and
+# all, so a fallback model is given exactly the patience the first one had.
+for try_model in $MODEL $FALLBACKS; do
+  if [ "$try_model" != "$MODEL" ]; then
+    echo "review: $LABEL — $MODEL could not be paid for; asking $try_model instead"
+    python3 -c 'import json,sys; b=json.load(open(sys.argv[1])); b["model"]=sys.argv[2]; json.dump(b, open(sys.argv[1],"w"))' "$req" "$try_model"
+  fi
+  attempt=1
+  while :; do
+    code=$(curl -sS -m 180 -o "$resp" -w '%{http_code}' "$API/v1/chat/completions" \
+      -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @"$req" || true)
+    code=${code:-000}
+    case "$code" in
+      000|429|502|503|504) : ;;
+      *) break ;;
+    esac
+    if [ "$attempt" -ge 3 ]; then break; fi
+    echo "review: $LABEL — reviewer answered $code, which is no answer; asking again ($attempt of 3)"
+    sleep $(( attempt * 5 ))
+    attempt=$(( attempt + 1 ))
+  done
+  # 402 is the ONLY status that moves to the next rung. A 401 is a bad bearer and
+  # a 400 a bad body — both fail identically on every model, so walking the ladder
+  # on them turns one legible refusal into three slow ones.
+  [ "$code" = "402" ] || break
 done
 # A REFUSED BEARER NAMES ITSELF. The gateway answers `jwt: audience not allowed`
 # without saying which audience it saw or which it wanted, and the two live in
