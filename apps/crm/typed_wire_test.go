@@ -159,35 +159,22 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // every schema a crm op publishes must carry a description. Add a field to a row
 // type without saying what it is and this fails.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	_, _, schemas := crmOps(t)
-	if len(schemas) == 0 {
-		t.Fatal("no crm schemas in the typed registry at all")
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "crm", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
 	}
-	var bare []string
-	for name, raw := range schemas {
-		sch, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		props, ok := sch["properties"].(map[string]any)
-		if !ok {
-			continue // a scalar or an array schema has no properties to describe
-		}
-		for field, praw := range props {
-			p, ok := praw.(map[string]any)
-			if !ok {
-				continue
-			}
-			if desc, _ := p["description"].(string); strings.TrimSpace(desc) == "" {
-				bare = append(bare, name+"."+field)
-			}
-		}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("crm publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
 	}
 	if len(bare) > 0 {
-		sort.Strings(bare)
-		t.Errorf("published propert(ies) with no description: %s\n"+
-			"Every field of a published schema is read by SDK users and by a model choosing a tool. Write a "+
-			"doc comment on the struct field and run: go generate -run zipdoc ./apps/crm/...",
-			strings.Join(bare, ", "))
+		t.Errorf("%d published propert(ies) with no description: %s\n"+
+			"Every field of a published schema is read by SDK users and by a model choosing a tool. "+
+			"Write a doc comment on the struct field — its OWN comment, not a header above a group of "+
+			"them, which zipdoc files under the first field alone — then run: "+
+			"go generate -run zipdoc ./apps/crm/...", len(bare), strings.Join(bare, ", "))
 	}
 }
