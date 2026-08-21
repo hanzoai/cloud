@@ -249,6 +249,7 @@
    "read": true
   }
  ],
+ "amqp": [],
  "ask": [
   {
    "id": "research_web",

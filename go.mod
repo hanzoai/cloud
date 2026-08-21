@@ -14,6 +14,7 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.3.3
+	github.com/hanzoai/amqp v0.4.1
 	github.com/hanzoai/cek v0.2.7
 	github.com/hanzoai/commerce v1.50.72
 	github.com/hanzoai/dataroom v1.1.7
@@ -39,6 +40,7 @@ require (
 	github.com/luxfi/zapdb v1.10.6
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/nats-io/nats.go v1.50.0
+	github.com/rabbitmq/amqp091-go v1.14.0
 	github.com/spf13/cobra v1.10.2
 	github.com/twmb/franz-go v1.21.5
 	github.com/vulcand/oxy/v2 v2.2.0
