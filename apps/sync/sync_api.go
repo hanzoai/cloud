@@ -114,22 +114,48 @@ func orgOf(ctx context.Context) (string, error) {
 	return o, nil
 }
 
+// endpointView is one side of a sync as the API answers it: the concrete
+// integration and the thing it points at.
 type endpointView struct {
+	// Connector names a connected account from the org's connector registry, when the
+	// endpoint reaches its provider through one. Absent means the locator stands on
+	// its own; the pair below is always sufficient either way.
 	Connector string `json:"connector,omitempty"`
-	Provider  string `json:"provider"`
-	Locator   string `json:"locator"`
+	// Provider is the concrete integration: "github", "gitlab" or "hanzo-git".
+	Provider string `json:"provider"`
+	// Locator addresses the thing INSIDE that provider, in the provider's own terms —
+	// an https clone URL for a hosted forge, a bare repository name for hanzo-git. It
+	// never carries a credential.
+	Locator string `json:"locator"`
 }
 
+// syncView is one declared link as the API answers it. The engine's cursor is
+// deliberately not here: it is internal state, not a fact about the intent.
 type syncView struct {
-	ID        string       `json:"id"`
-	Kind      string       `json:"kind"`
-	Source    endpointView `json:"source"`
-	Target    endpointView `json:"target"`
-	Direction string       `json:"direction"`
-	Trigger   string       `json:"trigger"`
-	Actor     string       `json:"actor,omitempty"`
-	CreatedAt string       `json:"createdAt"`
-	UpdatedAt string       `json:"updatedAt,omitempty"` // bumped on every reconcile — the last-synced time
+	// ID is the link's handle, derived from its source and target — which is what
+	// makes re-declaring the same pair an update rather than a duplicate.
+	ID string `json:"id"`
+	// Kind is what is being synced. "git" today; the field exists so a storage or
+	// database link is a value here rather than a second route family.
+	Kind string `json:"kind"`
+	// Source is the side read FROM on a pull.
+	Source endpointView `json:"source"`
+	// Target is the side written TO on a push.
+	Target endpointView `json:"target"`
+	// Direction is which way work flows: "both", "pull" (target ← source), "push"
+	// (source → target), or "off" — which keeps the link declared and moves nothing.
+	Direction string `json:"direction"`
+	// Trigger is what starts a reconcile: "webhook" (the provider tells us),
+	// "poll" (we ask on a schedule), or "manual" (only an explicit call).
+	Trigger string `json:"trigger"`
+	// Actor is the identity a reconcile writes AS. It is the loop guard: a change
+	// this identity made is one we already have, so it is not synced back.
+	Actor string `json:"actor,omitempty"`
+	// CreatedAt is when the link was first declared, RFC3339 in UTC.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is bumped by every reconcile, so it reads as the LAST-SYNCED time
+	// rather than the last edit. Absent until the first one runs.
+	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
 func syncToView(v Sync) syncView {
