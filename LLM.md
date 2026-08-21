@@ -3427,8 +3427,8 @@ semantic is identical — fail closed once armed, allow before.
 - **Nouns, one owner each (2026-07-28).** IAM owns orgs and Projects
   (`/v1/iam/projects`); platform makes APPS and SITES under them and its
   `ProjectStore` is READ-ONLY (List/Get/Exists — re-adding Create breaks the
-  build). `/v1/run` RESOLVES the org's default project (424 → IAM when absent),
-  never mints one. Apps whose IAM project is gone are removed by the orphan
+  build). `/v1/platform/run` RESOLVES the org's default project (424 → IAM when
+  absent), never mints one. Apps whose IAM project is gone are removed by the orphan
   reaper (`apps/platform/orphans.go`) — fails SAFE (IAM unreachable ⇒ reap
   nothing), one existence question per (org,project), volumes left behind.
 - **An app declares storage** (`storageGb` on the platform Application): the
@@ -3718,13 +3718,14 @@ reconcile half behind `DEPLOY_ENGINE_ENABLED` (default off), with a prune-safety
 
 ## "edge" is a position, not a product, so it owns no prefix
 
-Four unrelated things wore the word, which is why it read like a missing product:
+Five unrelated things wore the word, which is why it read like a missing product:
 
 | called "edge" | what it is | prefix |
 |---|---|---|
 | `hanzoai/edge` | on-device inference runtime (Rust; candle + GGUF + WASM). A binary the customer runs on their OWN machine. | **none, forever** |
 | `hanzoai/catalog` | the public catalogue cache (Cloudflare Worker, `catalog.hanzo.ai`) | none — a cache is not a product |
 | `apps/gateway/edge` | the CORS allowlist + per-IP flood cap + per-org rate ceiling store | it IS the gateway role; `/v1/gateway/config` |
+| `apps/projects/edge.go` | the CDN in front of published sites — provider, reach, cache policy | it is a fact about projects; `/v1/projects/edge` |
 | `/v1/edge/nodes` (`apps/zt`) | ZT fabric **edge-routers** — the nodes of an overlay network | now `/v1/networks/routers` |
 
 **A prefix belongs to a product a customer calls.** Edge names a *position* in
@@ -4292,7 +4293,7 @@ Two consequences, both load-bearing:
 **Three transports, one trigger.** A push reaches `cloud.OnGitPush` — the
 single-registrant seam, never a second CI — from the embedded git server
 (`apps/git/smart_http.go`), the GitHub App (`/v1/connector/github/webhook`), and
-the canonical forge (`POST /v1/git-webhook`, `apps/platform/hook.go`). The third
+the canonical forge (`POST /v1/platform/hook`, `apps/platform/hook.go`). The third
 exists because git.hanzo.ai is a SEPARATE process: its pushes never touch our
 receive-pack, so without that door the host we call canonical builds nothing and
 only the mirror releases. It lives in **platform** because the builder does —
@@ -4490,16 +4491,16 @@ Rust's `node join` is a one-shot registration, not that daemon. Do not add to `c
 do not wire it into a build, and do not delete it until those are ported — deleting
 it destroys the only spec for work that is owed.
 
-`POST /v1/runner` (native buildkit fabric) has no CLI verb today: it is served here
+`POST /v1/platform/runner` (native buildkit fabric) has no CLI verb today: it is served here
 but unauthored in `hanzoai/openapi`, and the bare name `runner` is already taken by
 the Rust CLI's CI-runner daemon. Authoring it needs a name decision first. Called
 directly, with `image:` it builds a container image; with NO `image:` it reads the
 repo's own `hanzo.yml` (`binaries:` + `bucket:`) and builds the ARTIFACT lane
 instead — see below.
 
-### `/v1/runner` builds ANY project, not only a Dockerfile
+### `/v1/platform/runner` builds ANY project, not only a Dockerfile
 
-`/v1/runner` has two lanes, and a request is in exactly one of them:
+`/v1/platform/runner` has two lanes, and a request is in exactly one of them:
 
 - **image** (`image:`) → `launchDirectBuild` → rootless BuildKit → a pushed OCI ref.
 - **artifact** (`binaries:`) → `launchArtifactBuild` (`apps/platform/artifact.go`) → a
@@ -4522,7 +4523,7 @@ PUBLIC URL, because `s3.hanzo.ai` is this cluster's own LoadBalancer and does no
 a pod dialling it times out. Its egress hole is `artifact-publish-egress` in universe,
 selecting the pod label `hanzo.ai/publish=artifact`.
 
-`/v1/platform/fleet` auth mirrors `/v1/runner` (`apps/platform/runner.go`): the `guard` admits a
+`/v1/platform/fleet` auth mirrors `/v1/platform/runner` (`apps/platform/runner.go`): the `guard` admits a
 validated principal who is SuperAdmin OR OrgAdmin, then each handler CONFINES a non-super
 caller to the platform namespaces its own validated org owns (`scopedNamespaces`, keyed on
 `principal.Org` — a tenant admin can never observe/restart another org's, or a platform,

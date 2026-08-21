@@ -1,4 +1,4 @@
-// run.go — POST /v1/run, the container-serverless one-shot.
+// run.go — POST /v1/platform/run, the container-serverless one-shot.
 //
 // It is the single-call shortcut over the project → app → deploy flow: given an
 // image (and optional port / scale bounds / env), it create-or-updates an
@@ -37,7 +37,7 @@ const (
 	runKind         = "run"
 )
 
-// runReq is the CLI contract for POST /v1/run. The org is NEVER read from here —
+// runReq is the CLI contract for POST /v1/platform/run. The org is NEVER read from here —
 // it is resolved from the validated identity.
 //
 // Every field carries `url:"-"`: zip's binder fills an In field from the query
@@ -246,7 +246,7 @@ func ensureRunProject(s *cloud.Service[state], ctx context.Context, org string) 
 	name := principal.DefaultProject
 	ok, err := s.State.projects.Exists(ctx, org, name)
 	if err != nil {
-		// The project store being unreachable must not take /v1/run down for the
+		// The project store being unreachable must not take /v1/platform/run down for the
 		// implicit default — the row is owed by provisioning, not load-bearing.
 		s.Log.Warn("run: project store unavailable; proceeding under the implicit default project", "org", org, "err", err)
 		return name, nil

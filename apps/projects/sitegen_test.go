@@ -269,7 +269,7 @@ func TestResolveSlug(t *testing.T) {
 }
 
 // TestGenerateSiteNamesThePayer closes the leak the price-declaration work uncovered.
-// POST /v1/sites reserved its flat hosting fee against principal.Ledger(c) and then
+// POST /v1/projects/sites reserved its flat hosting fee against principal.Ledger(c) and then
 // generated the site with a ChatRequest that named NO billing org at all. cloud's
 // inference decorator treats an empty org as EXEMPT — its gate returns nil and its
 // record writes a log line instead of a debit — so the tokens, the expensive half of

@@ -155,14 +155,14 @@ func TestOpenAPICarriesPlatformBodies(t *testing.T) {
 		t.Errorf("PUT env 200 = %q, want $ref appView", got)
 	}
 
-	// POST /v1/run: runReq in, runView out, at the 202 the route has always sent
+	// POST /v1/platform/run: runReq in, runView out, at the 202 the route has always sent
 	// and the document could not previously say.
-	run := at(paths, "/v1/run", "post")
+	run := at(paths, "/v1/platform/run", "post")
 	if got := schemaRef(body(run)); got != "#/components/schemas/runReq" {
-		t.Errorf("POST /v1/run requestBody = %q, want $ref runReq", got)
+		t.Errorf("POST /v1/platform/run requestBody = %q, want $ref runReq", got)
 	}
 	if got := schemaRef(answer(run, "202")); got != "#/components/schemas/runView" {
-		t.Errorf("POST /v1/run 202 = %q, want $ref runView", got)
+		t.Errorf("POST /v1/platform/run 202 = %q, want $ref runView", got)
 	}
 
 	// Project reads: the list is an array of projectView, the get is one of them.

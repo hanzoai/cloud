@@ -52,22 +52,22 @@ func TestTagsKeyHost(t *testing.T) {
 		}
 		return r
 	}
-	if k := tagsKey(mk("/v1/tags?key=pk-q", "", "", "")); k != "pk-q" {
+	if k := tagsKey(mk("/v1/projects/tags?key=pk-q", "", "", "")); k != "pk-q" {
 		t.Errorf("?key= → %q", k)
 	}
-	if k := tagsKey(mk("/v1/tags", "Bearer pk-b", "", "")); k != "pk-b" {
+	if k := tagsKey(mk("/v1/projects/tags", "Bearer pk-b", "", "")); k != "pk-b" {
 		t.Errorf("Bearer → %q", k)
 	}
-	if k := tagsKey(mk("/v1/tags?key=pk-q", "Bearer pk-b", "", "")); k != "pk-b" {
+	if k := tagsKey(mk("/v1/projects/tags?key=pk-q", "Bearer pk-b", "", "")); k != "pk-b" {
 		t.Errorf("Bearer must win → %q", k)
 	}
-	if h := tagsHost(mk("/v1/tags?host=hanzo.ai", "", "", "")); h != "hanzo.ai" {
+	if h := tagsHost(mk("/v1/projects/tags?host=hanzo.ai", "", "", "")); h != "hanzo.ai" {
 		t.Errorf("?host= → %q", h)
 	}
-	if h := tagsHost(mk("/v1/tags", "", "https://hanzo.chat", "")); h != "hanzo.chat" {
+	if h := tagsHost(mk("/v1/projects/tags", "", "https://hanzo.chat", "")); h != "hanzo.chat" {
 		t.Errorf("Origin → %q", h)
 	}
-	if h := tagsHost(mk("/v1/tags", "", "", "https://hanzo.app/x?y=1")); h != "hanzo.app" {
+	if h := tagsHost(mk("/v1/projects/tags", "", "", "https://hanzo.app/x?y=1")); h != "hanzo.app" {
 		t.Errorf("Referer → %q", h)
 	}
 }
@@ -76,7 +76,7 @@ func TestTagsKeyHost(t *testing.T) {
 // an empty set at 200 with permissive CORS, so a page never breaks on its tag config.
 func TestServeTagsFailSafe(t *testing.T) {
 	s := &cloud.Service[state]{}
-	req := httptest.NewRequest(http.MethodGet, "/v1/tags", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/projects/tags", nil)
 	w := httptest.NewRecorder()
 	serveTags(s, w, req)
 

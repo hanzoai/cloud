@@ -7,7 +7,7 @@ import (
 	"github.com/hanzoai/cloud/internal/migratetest"
 )
 
-// legacyPlatformAppsDDL is the platform_apps table BEFORE the /v1/run autoscaling
+// legacyPlatformAppsDDL is the platform_apps table BEFORE the /v1/platform/run autoscaling
 // bounds (min_scale/max_scale) existed.
 const legacyPlatformAppsDDL = `
 CREATE TABLE platform_apps (

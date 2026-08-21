@@ -169,7 +169,7 @@ type Project struct {
 	License  string
 	// Tags is the site's per-project browser tag config: platform slug → its
 	// non-secret pixel/measurement id (e.g. {"ga4":"G-…","meta":"…"}). The per-SITE
-	// half of the tag manager — track.js fetches it from /v1/tags (by this project's
+	// half of the tag manager — track.js fetches it from /v1/projects/tags (by this project's
 	// pk-, or derived from the request host) and injects those pixels, and the
 	// server-side CAPI fan-out reads the same ids, so hanzo.ai and hanzo.chat carry
 	// different tags under one org. The API SECRET (a CAPI token/api_secret) is NOT

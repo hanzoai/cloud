@@ -13,7 +13,7 @@ import (
 )
 
 // TestRunCreatesAutoscaledServiceCR proves the container-serverless one-shot: POST
-// /v1/run writes the operator Service CR into tenant-<org> (derived from the
+// /v1/platform/run writes the operator Service CR into tenant-<org> (derived from the
 // VALIDATED org, never the body) with the requested image, an autoscaling block
 // over [minScale,maxScale], the port, and the default-host ingress — and returns
 // the run's live URL + status. It reuses the SAME Service-CR writer as deploy.go
@@ -21,9 +21,9 @@ import (
 func TestRunCreatesAutoscaledServiceCR(t *testing.T) {
 	k := fakeK8s()
 	app := mountAppK8s(t, k)
-	// /v1/run resolves the org\'s default project; it no longer creates one.
+	// /v1/platform/run resolves the org\'s default project; it no longer creates one.
 
-	code, body := do(t, app, http.MethodPost, "/v1/run", "maxpower", map[string]any{
+	code, body := do(t, app, http.MethodPost, "/v1/platform/run", "maxpower", map[string]any{
 		"name":     "api",
 		"image":    "ghcr.io/hanzoai/nginx:1.27",
 		"port":     8080,
@@ -74,7 +74,7 @@ func TestRunCreatesAutoscaledServiceCR(t *testing.T) {
 
 	// The run is a first-class Application in the org's default project: re-running
 	// the same name UPDATES it in place (idempotent), not a second app.
-	code, body = do(t, app, http.MethodPost, "/v1/run", "maxpower", map[string]any{
+	code, body = do(t, app, http.MethodPost, "/v1/platform/run", "maxpower", map[string]any{
 		"name": "api", "image": "ghcr.io/hanzoai/nginx:1.28", "minScale": 1,
 	})
 	if code != http.StatusAccepted {
@@ -91,20 +91,20 @@ func TestRunCreatesAutoscaledServiceCR(t *testing.T) {
 	}
 }
 
-// TestRunTenantGateAndFailClosed proves /v1/run refuses the forgeable no-principal
+// TestRunTenantGateAndFailClosed proves /v1/platform/run refuses the forgeable no-principal
 // path (403) and fails closed with 503 when the cluster is unreachable — never a
 // fabricated URL.
 func TestRunTenantGateAndFailClosed(t *testing.T) {
 	// No validated principal (X-User-Id omitted) → 403, even with an org header.
 	appNoCluster := mountApp(t)
-	if code, _ := doAs(t, appNoCluster, http.MethodPost, "/v1/run", "maxpower", "", map[string]any{
+	if code, _ := doAs(t, appNoCluster, http.MethodPost, "/v1/platform/run", "maxpower", "", map[string]any{
 		"name": "api", "image": "ghcr.io/hanzoai/nginx:1.27",
 	}); code != http.StatusForbidden {
 		t.Fatalf("no-principal run want 403, got %d", code)
 	}
 
 	// Validated principal but no cluster → fail closed 503 (honest), not a fake URL.
-	if code, body := do(t, appNoCluster, http.MethodPost, "/v1/run", "maxpower", map[string]any{
+	if code, body := do(t, appNoCluster, http.MethodPost, "/v1/platform/run", "maxpower", map[string]any{
 		"name": "api", "image": "ghcr.io/hanzoai/nginx:1.27",
 	}); code != http.StatusServiceUnavailable {
 		t.Fatalf("no-cluster run want 503, got %d (%s)", code, body)
@@ -112,7 +112,7 @@ func TestRunTenantGateAndFailClosed(t *testing.T) {
 
 	// Missing image is a 400 at the boundary.
 	appK8s := mountAppK8s(t, fakeK8s())
-	if code, _ := do(t, appK8s, http.MethodPost, "/v1/run", "maxpower", map[string]any{"name": "api"}); code != http.StatusBadRequest {
+	if code, _ := do(t, appK8s, http.MethodPost, "/v1/platform/run", "maxpower", map[string]any{"name": "api"}); code != http.StatusBadRequest {
 		t.Fatalf("missing image want 400, got %d", code)
 	}
 }
@@ -124,7 +124,7 @@ func TestRunTenantGateAndFailClosed(t *testing.T) {
 func TestRunWorksWithoutDefaultProjectRow(t *testing.T) {
 	k := fakeK8s()
 	app := mountAppK8s(t, k)
-	code, body := do(t, app, http.MethodPost, "/v1/run", "maxpower", map[string]any{
+	code, body := do(t, app, http.MethodPost, "/v1/platform/run", "maxpower", map[string]any{
 		"name": "api", "image": "ghcr.io/hanzoai/nginx:1.27", "port": 8080,
 	})
 	if code != http.StatusAccepted {

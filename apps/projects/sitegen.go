@@ -52,13 +52,13 @@ type projectsFile struct {
 	Content string `json:"content"`
 }
 
-// genManifest is the JSON object the model must emit for POST /v1/sites.
+// genManifest is the JSON object the model must emit for POST /v1/projects/sites.
 type genManifest struct {
 	Name  string         `json:"name"`
 	Files []projectsFile `json:"files"`
 }
 
-// maxBriefBytes caps the natural-language brief accepted by POST /v1/sites.
+// maxBriefBytes caps the natural-language brief accepted by POST /v1/projects/sites.
 const maxBriefBytes = 8 << 10 // 8 KiB
 
 // generateSite turns a natural-language brief into a validated, responsive
@@ -71,7 +71,7 @@ const maxBriefBytes = 8 << 10 // 8 KiB
 // org and payer are REQUIRED, and they are the whole reason this signature has them.
 // cloud's inference decorator gates and debits on the request's billing org, and its
 // one exempt path is the empty string: `if org == "" { return nil }` in the gate and a
-// log line instead of a debit in the record. This call named neither, so POST /v1/sites
+// log line instead of a debit in the record. This call named neither, so POST /v1/projects/sites
 // charged its flat hosting fee and gave the model tokens away — on the SAME request
 // that had already resolved the payer for that fee. The tokens are the expensive half.
 func generateSite(ctx context.Context, ai cloud.AIClient, model, brief, org, payer string) (name string, st *site, err error) {
@@ -639,7 +639,7 @@ func ensureProject(s *cloud.Service[state], ctx context.Context, org, slug, name
 		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,
 	}
 	// Same wired-by-default settings as POST /v1/projects — analytics ON, the Base
-	// data-space namespace, and the publishable ingest key — so the /v1/sites create
+	// data-space namespace, and the publishable ingest key — so the /v1/projects/sites create
 	// path is not a second place defaults are decided. A generated site has no
 	// opt-out knob (nil ⇒ ON).
 	if err := setProjectDefaults(&np, nil); err != nil {
