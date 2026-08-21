@@ -20,7 +20,7 @@
 // is secure-by-default (every read/write needs a validated principal AND a role), so
 // there is no anonymous "read the public knowledge base" or "a customer files a
 // ticket" path. subsystem.go adds exactly that — the public plane — the same way the
-// knowledge lane adds /v1/kb for retrieval the generic surface lacks. It owns NO
+// knowledge lane adds /v1/knowledge for retrieval the generic surface lacks. It owns NO
 // store: every read/write delegates to the framework in-process API (Ingest/Get/
 // Search), so there is ONE storage engine and no duplicated CRUD.
 //

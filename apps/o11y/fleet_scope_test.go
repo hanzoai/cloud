@@ -121,9 +121,9 @@ func claimsAPIRoot(a manifest.App) bool {
 // TestDerivedRoutesBeatTheSlashV1NameConvention pins the REASON the routes come
 // from the manifest rather than from string concatenation.
 //
-// For ~20 apps `/v1/<name>` is not a path anyone serves: plan serves /v1/plans,
+// For ~20 apps `/v1/<name>` is not a path anyone serves: plan serves /v1/plan,
 // storage serves /v1/s3/buckets, account serves /v1/orgs, knowledge serves
-// /v1/kb/*. Scoping their RED series to `/v1/<name>` matches no span at all and
+// /v1/knowledge/*. Scoping their RED series to `/v1/<name>` matches no span at all and
 // renders as a healthy service with no traffic — the worst kind of wrong, because
 // it looks like an answer.
 //

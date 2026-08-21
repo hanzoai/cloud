@@ -6,7 +6,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/plan"
-	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the plan app.
@@ -18,19 +17,9 @@ import (
 // `plan openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "plan",
-		Price: cloud.Free,
-		Mount: plan.Mount,
-		// This subsystem is named "plan" and serves "/v1/plans", so the
-		// /v1/<Name> convention MountPrefixes assumes is off by one letter and
-		// covers nothing it registers. Undeclared, every /v1/plans request was
-		// attributed to NO subsystem by the tracing and price index cloud.Declare
-		// builds from this (ownerOf matches "/v1/plan" and "/v1/plan/…", never
-		// "/v1/plans"), and the subsystem's own middleware — including the typed-op
-		// Bridge that carries the validated org to every op — installed on
-		// "/v1/plan" and never ran. The list comes from the manifest so it cannot
-		// drift from the prefix the host routes here.
-		Prefixes:   manifest.PrefixesFor("plan"),
+		Name:       "plan",
+		Price:      cloud.Free,
+		Mount:      plan.Mount,
 		OwnsHealth: true,
 	}}, []string{"plan"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

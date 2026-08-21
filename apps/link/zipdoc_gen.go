@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/links/:id", zip.Doc{
+	zip.Describe("DELETE /v1/link/:id", zip.Doc{
 		Description: "Logs out one account and stops the sessions it was running.\n\nIt revokes a single linked account and stops the agent sessions that ran under\nit, answering with the revoked row and how many sessions stopped. The link is\nRETAINED with a revoked status rather than deleted, so its usage history and\nthe audit trail survive the log-out — which also means a revoked account still\nappears in the list, and is excluded from the route plan rather than absent\nfrom it. The session stop is narrowed to the revoking user's own sessions on\nthat device, provider and account, and a stop that fails does not fail the\nrevoke: the revoked row is the durable truth. An id that does not exist, or\nbelongs to another user or org, is the same 404.",
 		Fields: map[string]string{
 			"linkRef.id":                 "ID is the link to act on, from the path. It is scoped to the caller, so\nanother user's or org's id is a 404.",
@@ -31,7 +31,7 @@ func init() {
 			"revokeResp.sessionsStopped": "SessionsStopped is how many of the caller's own agent sessions stopped. A\nstop that fails does not fail the revoke, so this may honestly report fewer.",
 		},
 	})
-	zip.Describe("GET /v1/links", zip.Doc{
+	zip.Describe("GET /v1/link", zip.Doc{
 		Description: "Lists your linked accounts and the devices they sit on.\n\nIt answers the caller's own links plus a devices projection of the same rows\nfolded per machine — the cross-machine \"AI Providers / Accounts\" view. A\ndevice is a projection, not a stored entity: its labels come from its\nmost-recently-seen account, so there is no device to create and none to\ngarbage-collect. Revoked links are INCLUDED rather than dropped, because a\nlogged-out account keeps its usage history and audit trail. Scoped to the\ncaller: a validated principal and a non-empty org, else 403.",
 		Fields: map[string]string{
 			"deviceView.accounts":       "Accounts is every account the caller has signed in on this machine.",
@@ -59,7 +59,7 @@ func init() {
 			"linkView.user":             "User is the owning subject — the validated caller who registered the link.",
 		},
 	})
-	zip.Describe("GET /v1/links/:id", zip.Doc{
+	zip.Describe("GET /v1/link/:id", zip.Doc{
 		Description: "Reads one linked account.\n\nIt answers a single link — its device, provider, account, plan, how it bills,\nits status and its latest usage snapshot. An id that does not exist, or\nbelongs to another user or org, is the same 404: the scope is a bound\npredicate on the read, so a wrong id and a foreign id are indistinguishable\nand neither confirms the other's existence. The static paths on this\ncollection — route, usage, devices — register before this one and win\nfirst-match, so a link whose id collided with one of those words could not be\naddressed here.",
 		Fields: map[string]string{
 			"linkRef.id":         "ID is the link to act on, from the path. It is scoped to the caller, so\nanother user's or org's id is a 404.",
@@ -80,7 +80,7 @@ func init() {
 			"linkView.user":      "User is the owning subject — the validated caller who registered the link.",
 		},
 	})
-	zip.Describe("GET /v1/links/devices/:machine", zip.Doc{
+	zip.Describe("GET /v1/link/devices/:machine", zip.Doc{
 		Description: "Shows one machine: its accounts, usage and live sessions.\n\nIt answers one device — its host and OS labels, every account the caller has\nsigned in on that machine with its latest usage, and how many agent sessions\nthe caller currently has running on it. The device labels come from the\nmost-recently-seen account, since a device is a projection of its links rather\nthan a row of its own. A machine with none of the caller's accounts is 404,\nwhich is also the answer when the machine belongs to someone else — the scope\nmakes the two indistinguishable, deliberately. The session count reports 0\nwhere the agent plane is not mounted rather than failing the read.",
 		Fields: map[string]string{
 			"deviceView.accounts":       "Accounts is every account the caller has signed in on this machine.",
@@ -107,7 +107,7 @@ func init() {
 			"machineRef.machine":        "Machine is the machine to act on, from the path. It is scoped to the\ncaller, so a machine with none of the caller's accounts is a 404.",
 		},
 	})
-	zip.Describe("GET /v1/links/route", zip.Doc{
+	zip.Describe("GET /v1/link/route", zip.Doc{
 		Description: "Gets the failover order across your linked accounts.\n\nIt answers an ordered redundancy plan over the caller's LINKED (not revoked)\naccounts: each candidate with its remaining rate-limit headroom, whether it is\nroutable right now, how it BILLS (plan or commerce), and a reason when it is\nnot — plus the primary to try first. It is what lets a router fail over from\none subscription to another and fall back to the metered API as the\nalways-available backstop, knowing the cost consequence before it dials.\n\nIt is POLICY, not execution: the plan is computed purely from the usage\nsnapshots already in the registry, never by probing a provider, so it is a\ntotal function of the links and costs nothing to ask for. Actually dialing,\ndetecting a live 429 and advancing to the next candidate belongs to the\ncaller. A link with no snapshot counts as full headroom.",
 		Fields: map[string]string{
 			"RouteCandidate.account":     "Account is the provider-side account identifier.",
@@ -126,7 +126,7 @@ func init() {
 			"RoutePlan.primary":          "Primary is the first available candidate; absent when every account is\nrate-limited.",
 		},
 	})
-	zip.Describe("GET /v1/links/usage", zip.Doc{
+	zip.Describe("GET /v1/link/usage", zip.Doc{
 		Description: "Shows one provider account's own usage dashboard.\n\nIt answers the time series for a SINGLE provider account — the windows in\nrange plus the currently-open ones — as that provider's own meter reported it:\n\"my plan is 47% through its 6h window, resets at 14:20\". current is the newest\ninstance of each lane (the headline); windows is the history behind it, both\ncomputed from ONE deduped read. provider is required; an unknown window class\nor range is 400, never a quiet fallback to a different one. When no series is\navailable the response is a 200 with available:false and empty lists — an\nhonest \"we have no data\", which is a different claim from zero usage.",
 		Fields: map[string]string{
 			"boardResp.account":             "Account is the account the series narrows to, when one was named.",
@@ -163,7 +163,7 @@ func init() {
 			"readingView.windowStart":       "WindowStart is when the measured window opened, RFC 3339 UTC.",
 		},
 	})
-	zip.Describe("GET /v1/links/usage/accounts", zip.Doc{
+	zip.Describe("GET /v1/link/usage/accounts", zip.Doc{
 		Description: "Breaks down what the gateway routed through each of your accounts.\n\nIt answers one row per linked account the GATEWAY actually routed through,\nplus their total — requests, prompt and completion tokens, and cost. This is\nthe routed ledger, the read twin of the counter the router writes, and it is\ndistinct from both of its neighbours: not the device collector's plan\nsnapshots, and not the org money ledger. The source and scope fields on the\nresponse say so on every payload. The same shape answers in the billing\nnamespace, from one shaping function, so the two mounts cannot drift.",
 		Fields: map[string]string{
 			"AccountsTotal.accounts":         "Accounts is how many linked accounts the total folds.",
@@ -187,7 +187,7 @@ func init() {
 			"RoutedUsage.totalTokens":        "TotalTokens is the routed total token count.",
 		},
 	})
-	zip.Describe("GET /v1/links/usage/summary", zip.Doc{
+	zip.Describe("GET /v1/link/usage/summary", zip.Doc{
 		Description: "Shows plan consumption and Hanzo spend side by side.\n\nIt answers the global usage board over one window: the caller's own linked\naccounts, metered from each provider's own login, alongside their org's\nHanzo-routed inference. These come from different ledgers and mean different\nthings, so every row is LABELLED by source, by scope and by availability, and\nTHE TWO ARE NEVER SUMMED — a plan's percentage is not money, and a provider's\nown spend is not a Hanzo charge. The rows sit side by side and say what they\nare.\n\nOne resolver fixes the window for both halves, so the two sets always cover\nthe same period. range is one of 1h, 24h, 7d or 30d and defaults to 24h;\nanything else is 400 rather than a silent substitution. A ledger that cannot\nanswer reports available:false instead of a zero that would read as \"no usage\".",
 		Fields: map[string]string{
 			"sourceState.available": "Available reports whether this ledger answered; false is honest\n\"unavailable\", never a zero that would read as no usage.",
@@ -211,7 +211,7 @@ func init() {
 			"totalView.windows":     "Windows is how many window instances the row folds.",
 		},
 	})
-	zip.Describe("POST /v1/links", zip.Doc{
+	zip.Describe("POST /v1/link", zip.Doc{
 		Description: "Registers a signed-in AI provider account on a machine.\n\nIt records that a developer has signed into one provider account on one\nmachine — a Claude Max or ChatGPT Plus subscription, a Hanzo key, a raw\nprovider key — and answers 201 with the stored link. Re-reporting the same\n(machine, provider, account) UPDATES that link rather than creating a second,\nso a collector may call this on every heartbeat. machine and provider are\nrequired (400 otherwise), as is a valid kind, and every field is\nlength-bounded. Scoped to the caller: a validated principal and a non-empty\norg, else 403, so a caller writes only their OWN accounts within their own org.",
 		Fields: map[string]string{
 			"enrollReq.account":  "Account is the provider-side account identifier.",
@@ -239,7 +239,7 @@ func init() {
 			"linkView.user":      "User is the owning subject — the validated caller who registered the link.",
 		},
 	})
-	zip.Describe("POST /v1/links/devices/:machine/revoke", zip.Doc{
+	zip.Describe("POST /v1/link/devices/:machine/revoke", zip.Doc{
 		Description: "Logs out every account on one machine and stops its sessions.\n\nIt revokes every one of the caller's accounts on one machine and stops the\nagent sessions they were running, answering with how many of each. This is the\n\"I lost that laptop\" button. Revoked links are RETAINED, not deleted, so usage\nhistory and the audit trail survive a log-out — the rows come back in the\nresponse with their new status. The session stop reaches only the REVOKING\nuser's own sessions, so a shared machine name can never be used to stop a\nco-tenant's work, and a stop that fails does not fail the revoke: the revoked\nrow is the durable truth and the count then honestly reports fewer. A machine\nwith nothing left to revoke is 404.",
 		Fields: map[string]string{
 			"linkView.account":           "Account is the provider-side account identifier, when the collector knows it.",
@@ -263,7 +263,7 @@ func init() {
 			"revokeResp.sessionsStopped": "SessionsStopped is how many of the caller's own agent sessions stopped. A\nstop that fails does not fail the revoke, so this may honestly report fewer.",
 		},
 	})
-	zip.Describe("POST /v1/links/usage", zip.Doc{
+	zip.Describe("POST /v1/link/usage", zip.Doc{
 		Description: "Reports usage samples from the device collector.\n\nIt ingests a batch of usage samples and answers with how many were accepted,\nwhether history was durably stored, and the links they refreshed. A report\nalso REFRESHES one link per distinct (machine, provider, account) it names, so\na running collector keeps the accounts overview current without a separate\nregistration call.\n\nA caller can only ever report for THEMSELVES: org and subject come from the\nvalidated bearer, never from the body, so no sample can be attributed to\nanother user or tenant. History is FAIL-SOFT and stored says which happened —\na warehouse outage still accepts the report and refreshes the links rather\nthan failing the device, and answers 202 either way. Send either one sample\ninline or up to 256 in samples; an empty batch or an over-long one is 400, as\nis a provider, window class or kind outside the closed vocabulary — an\nunrecognized window is refused rather than rewritten, because a silently\nreclassified sample would fill a dashboard with a class nobody reported.",
 		Fields: map[string]string{
 			"ingestReq.samples":            "Samples is the batch form, up to 256 samples; leave it empty to send one\nsample inline on the same fields.",

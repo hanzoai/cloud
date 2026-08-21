@@ -22,7 +22,7 @@ import (
 	hplans "github.com/hanzoai/plans"
 )
 
-// This file is the PROOF that typing the fifteen /v1/plans operations did not
+// This file is the PROOF that typing the fifteen /v1/plan operations did not
 // move their wire, and the GATE that keeps the surface typed.
 //
 // It is a proof rather than a claim because it re-derives the pre-typing answer
@@ -84,18 +84,18 @@ func bundleAnswer(t *testing.T, route, tenant string, params map[string]string) 
 // serves — the same pairing Mount declares, written once more here so the test
 // names the wire it checks rather than reaching into the router.
 var sectionRoutes = map[string]string{
-	"/v1/plans":               "plans",
-	"/v1/plans/subscriptions": "subscriptions",
-	"/v1/plans/cloud":         "cloud",
-	"/v1/plans/blockchain":    "blockchain",
-	"/v1/plans/dns":           "dns",
-	"/v1/plans/gpu":           "gpu",
-	"/v1/plans/regions":       "regions",
-	"/v1/plans/storage":       "storage",
-	"/v1/plans/tools":         "tools",
-	"/v1/plans/policy":        "policy",
-	"/v1/plans/schema":        "schema",
-	"/v1/plans/vocab":         "vocab",
+	"/v1/plan":               "plans",
+	"/v1/plan/subscriptions": "subscriptions",
+	"/v1/plan/cloud":         "cloud",
+	"/v1/plan/blockchain":    "blockchain",
+	"/v1/plan/dns":           "dns",
+	"/v1/plan/gpu":           "gpu",
+	"/v1/plan/regions":       "regions",
+	"/v1/plan/storage":       "storage",
+	"/v1/plan/tools":         "tools",
+	"/v1/plan/policy":        "policy",
+	"/v1/plan/schema":        "schema",
+	"/v1/plan/vocab":         "vocab",
 }
 
 // TestSectionsAreByteIdenticalToTheBundle drives every catalog address on the
@@ -167,8 +167,8 @@ func TestResolutionIsByteIdenticalForEveryPlanInTheCatalog(t *testing.T) {
 	ids = append(ids, "does-not-exist")
 
 	for _, route := range []struct{ path, bundle string }{
-		{"/v1/plans/resolve/", "resolve"},
-		{"/v1/plans/entitlements/", "entitlements"},
+		{"/v1/plan/resolve/", "resolve"},
+		{"/v1/plan/entitlements/", "entitlements"},
 	} {
 		for _, id := range ids {
 			wantStatus, wantBody := bundleAnswer(t, route.bundle, "hanzo", map[string]string{"id": id})
@@ -270,7 +270,7 @@ func catalogIDs(t *testing.T) []string {
 // wire, and an unrecorded byte is how a delta becomes a surprise.
 func TestContentTypeIsTheTypedWriters(t *testing.T) {
 	fa := planApp(t).Fiber()
-	for _, path := range []string{"/v1/plans", "/v1/plans/vocab", "/v1/plans/health", "/v1/plans/resolve/pro"} {
+	for _, path := range []string{"/v1/plan", "/v1/plan/vocab", "/v1/plan/health", "/v1/plan/resolve/pro"} {
 		resp, err := fa.Test(httptest.NewRequest(http.MethodGet, path, nil), fiber.TestConfig{Timeout: 30 * time.Second})
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
@@ -285,9 +285,9 @@ func TestContentTypeIsTheTypedWriters(t *testing.T) {
 // bytes and the status are what the raw handler's map produced, keys sorted.
 func TestHealthIsUnchanged(t *testing.T) {
 	fa := planApp(t).Fiber()
-	resp, err := fa.Test(httptest.NewRequest(http.MethodGet, "/v1/plans/health", nil), fiber.TestConfig{Timeout: 30 * time.Second})
+	resp, err := fa.Test(httptest.NewRequest(http.MethodGet, "/v1/plan/health", nil), fiber.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
-		t.Fatalf("GET /v1/plans/health: %v", err)
+		t.Fatalf("GET /v1/plan/health: %v", err)
 	}
 	got, _ := io.ReadAll(resp.Body)
 	const want = `{"service":"plans","status":"ok"}`
@@ -325,7 +325,7 @@ func planOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	return served, typed
 }
 
-// TestEveryRouteIsTypedOrNamed fails when a /v1/plans operation is not a typed
+// TestEveryRouteIsTypedOrNamed fails when a /v1/plan operation is not a typed
 // op. The list of exceptions is EMPTY and there is no map to add one to on
 // purpose: nothing on this surface has a wire fact that resists typing — every
 // address is a GET that relays one bundle route — so the next route added here is

@@ -298,7 +298,7 @@ func TestPayPathStaysReachable(t *testing.T) {
 		"/v1/billing/plans",             // what to buy
 		"/v1/billing/subscribe",         // buying it
 		"/v1/billing/webhooks/stripe",   // the INBOUND payment callback — gating it loses money
-		"/v1/plans",                     // the @hanzo/plans catalog
+		"/v1/plan",                      // the @hanzo/plans catalog
 		"/v1/entitlements",              // the shell's own upgrade projection
 		"/v1/iam/login",                 // signing in to pay at all
 		"/v1/signin", "/v1/get-account", // session bootstrap + the read AuthGate needs

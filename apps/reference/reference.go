@@ -49,12 +49,12 @@
 //
 // Surface (/v1 only):
 //
-//	GET    /v1/risk/reference            every set, its version and its freshness
-//	GET    /v1/risk/reference/{set}      one set, plus this org's overrides
-//	PUT    /v1/risk/reference/{set}      write this org's overrides
-//	DELETE /v1/risk/reference/{set}      clear one of this org's overrides
-//	POST   /v1/risk/reference/resolve    resolve keys, naming the version consulted
-//	POST   /v1/risk/reference/refresh    take a new version of a set (SuperAdmin)
+//	GET    /v1/reference            every set, its version and its freshness
+//	GET    /v1/reference/{set}      one set, plus this org's overrides
+//	PUT    /v1/reference/{set}      write this org's overrides
+//	DELETE /v1/reference/{set}      clear one of this org's overrides
+//	POST   /v1/reference/resolve    resolve keys, naming the version consulted
+//	POST   /v1/reference/refresh    take a new version of a set (SuperAdmin)
 package reference
 
 import (
@@ -81,10 +81,10 @@ import (
 
 const (
 	// parentPrefix and leaf compose the ONE address this app answers on,
-	// /v1/risk/reference. They are separate because the collection route has to be
+	// /v1/reference. They are separate because the collection route has to be
 	// declared on the parent to avoid a trailing slash, and a prefix written twice
 	// is a prefix that can disagree with itself.
-	parentPrefix = "/v1/risk"
+	parentPrefix = "/v1"
 	leaf         = "/reference"
 	// subsystem names this app's per-org store file: {DataDir}/orgs/{org}/reference.db.
 	subsystem = "reference"
@@ -166,7 +166,7 @@ type work struct {
 // stores.
 var mounted *cloud.Service[state]
 
-// Mount wires /v1/risk/reference/* and starts the hydrate-and-refresh loop.
+// Mount wires /v1/reference/* and starts the hydrate-and-refresh loop.
 //
 // The loop is started rather than the sets being loaded inline because the
 // warehouse connects ASYNCHRONOUSLY: at mount time it is usually not up, and a
@@ -497,35 +497,35 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// A typed op receives only a context, so the validated principal has to be
 	// parked there — cloud.Bridge does that, and the composer owns that install,
 	// once at its root. Both groups here are bare path prefixes carrying no
-	// middleware: /v1/risk is a shared parent (the decision plane answers on
-	// /v1/risk/score and the ground-truth plane on /v1/risk/labels in the same
-	// process), so this app declares its own leaf and gates nothing above it.
+	// middleware: the parent is the whole /v1 namespace, so gating on it would
+	// gate every sibling in the process. This app declares its own leaf and gates
+	// nothing above it.
 	parent := app.Group(parentPrefix)
 	g := parent.Group(leaf)
 
 	o := ops{s: s}
 	zip.Post(g, "/resolve", o.resolve,
 		zip.WithOperationID("riskResolveReference"),
-		zip.WithTags("risk"))
+		zip.WithTags("reference"))
 	zip.Post(g, "/refresh", o.refresh,
 		zip.WithOperationID("riskRefreshReference"),
-		zip.WithTags("risk"))
+		zip.WithTags("reference"))
 	// The collection route is declared on the PARENT with a non-empty leaf:
 	// zip.Get(g, "") normalises to a trailing slash, and op.Path is the identity
 	// every projection keys on — the document, the operationId, the MCP tool and
 	// every generated SDK would carry an address this API has never served.
 	zip.Get(parent, leaf, o.sets,
 		zip.WithOperationID("riskReferenceSets"),
-		zip.WithTags("risk"))
+		zip.WithTags("reference"))
 	zip.Get(g, "/:set", o.set,
 		zip.WithOperationID("riskReference"),
-		zip.WithTags("risk"))
+		zip.WithTags("reference"))
 	zip.Put(g, "/:set", o.write,
 		zip.WithOperationID("riskSetReference"),
-		zip.WithTags("risk"))
+		zip.WithTags("reference"))
 	zip.Delete(g, "/:set", o.clear,
 		zip.WithOperationID("riskClearReference"),
-		zip.WithTags("risk"))
+		zip.WithTags("reference"))
 }
 
 // ops binds the mounted Service so each op is a method value — the only bound
@@ -630,7 +630,7 @@ func actor(ctx context.Context) string {
 	return ""
 }
 
-// ── GET /v1/risk/reference ─────────────────────────────────────────────────────
+// ── GET /v1/reference ─────────────────────────────────────────────────────
 
 // ReferenceSet is one published set and how current it is.
 //
@@ -795,7 +795,7 @@ func project(set Set, s *snap, now time.Time) ReferenceSet {
 	return view
 }
 
-// ── GET /v1/risk/reference/{set} ───────────────────────────────────────────────
+// ── GET /v1/reference/{set} ───────────────────────────────────────────────
 
 // ReferenceIn addresses one set and pages this org's overrides in it.
 type ReferenceIn struct {
@@ -867,7 +867,7 @@ func (o ops) set(ctx context.Context, in *ReferenceIn) (*ReferenceOut, error) {
 	return out, nil
 }
 
-// ── PUT /v1/risk/reference/{set} ───────────────────────────────────────────────
+// ── PUT /v1/reference/{set} ───────────────────────────────────────────────
 
 // ReferenceOverrideIn is one entry your org is laying over the baseline.
 type ReferenceOverrideIn struct {
@@ -1008,7 +1008,7 @@ func normal(set Set, key string) string {
 	return key
 }
 
-// ── DELETE /v1/risk/reference/{set} ────────────────────────────────────────────
+// ── DELETE /v1/reference/{set} ────────────────────────────────────────────
 
 // ClearReferenceIn names one of your org's overrides to remove.
 //
@@ -1077,7 +1077,7 @@ func (o ops) clear(ctx context.Context, in *ClearReferenceIn) (*ClearReferenceOu
 	return &ClearReferenceOut{Set: set.Name, Key: key, Cleared: gone, Overrides: got}, nil
 }
 
-// ── POST /v1/risk/reference/resolve ────────────────────────────────────────────
+// ── POST /v1/reference/resolve ────────────────────────────────────────────
 
 // ResolveReferenceIn asks about keys.
 type ResolveReferenceIn struct {
@@ -1235,7 +1235,7 @@ func chosen(names []string) ([]Set, error) {
 	return out, nil
 }
 
-// ── POST /v1/risk/reference/refresh ────────────────────────────────────────────
+// ── POST /v1/reference/refresh ────────────────────────────────────────────
 
 // ReferenceReceipt is a load receipt from the component that HOLDS a set's
 // membership — the screening engine, for the designation lists.

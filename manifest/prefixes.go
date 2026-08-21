@@ -131,11 +131,10 @@ func GrantFor(name string) []string {
 // and stating it here lets anything downstream ask "whose surface is this?"
 // without restating the routing table — the mistake PrefixesFor exists to avoid.
 //
-// It matters because prefixes nest. `provisioning` is routed /v1/vector and
-// /v1/search, while `product` is routed the more specific /v1/vector/collections
-// and /v1/search/indexes — so a shorter prefix from a different app can swallow a
-// path it does not actually serve. Anything deciding policy from a bare
-// HasPrefix scan will attribute those paths to the wrong app.
+// It matters because prefixes nest. `code` is routed /v1/code while `lsp` is
+// routed the more specific /v1/code/lsp — so a shorter prefix from a different
+// app can swallow a path it does not actually serve. Anything deciding policy
+// from a bare HasPrefix scan will attribute those paths to the wrong app.
 //
 // An unrouted path returns "" — the caller decides what that means.
 //
