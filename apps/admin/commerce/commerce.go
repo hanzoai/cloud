@@ -35,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/commerce/models/subscription"
 
 	"github.com/hanzoai/cloud"
@@ -216,19 +217,28 @@ type Costs struct {
 // sends no subject. Zero (not an error) when commerce is unwired.
 func (c *Client) Costs(ctx context.Context, period string) (Costs, error) {
 	var out Costs
-	if !c.Ready() {
+	// The platform's own books live in the reserved admin org, and this read is a
+	// fleet god-view rather than a tenant one — so it names that org rather than
+	// a subject, which is the same scope the service token gave it.
+	reply, err := commercepeer.FinanceCosts(cloud.For(ctx, authz.AdminOrg), &plane.CostsIn{Period: period})
+	if err != nil {
+		if errors.Is(err, cloud.ErrNoPeer) {
+			// This deployment runs no commerce. An honest zero, which is what an
+			// unwired commerce has always read as here.
+			return out, nil
+		}
+		return out, fmt.Errorf("commerce costs read: %w", err)
+	}
+	if reply == nil {
 		return out, nil
 	}
-	q := url.Values{}
-	if period != "" {
-		q.Set("period", period)
-	}
-	body, err := c.get(ctx, "/v1/costs", q, "")
-	if err != nil {
-		return out, err
-	}
-	if err := json.Unmarshal(body, &out); err != nil {
-		return out, fmt.Errorf("commerce costs decode: %w", err)
+	out.Period, out.Total, out.Currency = reply.Period, money.Cents(reply.TotalCents), reply.Currency
+	out.Vendors = make([]Vendor, 0, len(reply.Vendors))
+	for _, v := range reply.Vendors {
+		out.Vendors = append(out.Vendors, Vendor{
+			Name: v.Vendor, Service: v.Service, Amount: money.Cents(v.AmountCents),
+			Source: v.Source, Note: v.Note,
+		})
 	}
 	return out, nil
 }
