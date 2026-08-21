@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("POST /v1/automations/connectors/:id/run", zip.Doc{
+	zip.Describe("POST /v1/auto/connectors/:id/run", zip.Doc{
 		Description: "Run executes one connector action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the connector does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown connector is 404 and a\nmissing action 422.",
 		Fields: map[string]string{
 			"runIn.action":   "Action is the name of the connector action to invoke.",
