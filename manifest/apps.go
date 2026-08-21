@@ -485,6 +485,13 @@ var Apps = []App{
 	{Name: "guide", Prefixes: []string{"/v1/guide"}},
 	{Name: "company", Prefixes: []string{"/v1/company"}},
 	{Name: "compliance", Prefixes: []string{"/v1/compliance"}},
+	// A DIFFERENT NOUN from the row above, and the two must never be merged.
+	// compliance is the CUSTOMER's identity verification — KYC/KYB onboarding,
+	// accreditation records and the evidence trail behind them. trust is THIS
+	// organization's own control posture, published for a reviewer to read. One
+	// is about who your customer is; the other is about how you run. They share
+	// a vocabulary and nothing else, so they get two names and two prefixes.
+	{Name: "trust", Prefixes: []string{"/v1/trust"}},
 	{Name: "legal", Prefixes: []string{"/v1/legal"}},
 	{Name: "ask", Prefixes: []string{"/v1/ask"}},
 	{Name: "translate", Prefixes: []string{"/v1/translate"}},
