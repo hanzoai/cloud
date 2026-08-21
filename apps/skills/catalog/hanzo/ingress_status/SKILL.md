@@ -6,7 +6,7 @@ description: "Read ingress status: Status reports the ingress edge's live postur
 
 # Hanzo · INGRESS · status
 
-Read-only Hanzo capability derived from the `ingress` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `ingress` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -50,7 +50,6 @@ REVISION        ?= $(shell git describe --always --abbrev=40 --match='' --dirty 
 # stamp one binary and forget the one that answers /v1/health.
 STAMP            = -X github.com/hanzoai/cloud.Version=$(VERSION) -X github.com/hanzoai/cloud.revision=$(REVISION)
 # Path to a hanzoai/openapi checkout — the SOT the agent-skills catalog is generated from.
-OPENAPI_DIR    ?= ../openapi
 
 # The shipped binary is NOT pure Go. Dockerfile builds /cloud with
 #   CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5"
@@ -146,14 +145,24 @@ deploy-ui: ## Build the monochrome ArgoCD dashboard bundle into apps/deploy/webu
 	cp -r "$(DEPLOY_DIR)/ui/dist/app/." apps/deploy/webui/dist/
 	@echo ">> embedded monochrome ArgoCD bundle into apps/deploy/webui/dist (index.html $$(wc -c < apps/deploy/webui/dist/index.html) bytes)"
 
-skills: ## Regenerate the FULL agent-skills catalog into apps/skills/catalog (go:embed source) from the openapi SOT. OPENAPI_DIR=<path to openapi>.
-	@test -f "$(OPENAPI_DIR)/skills.py" || { echo "openapi checkout not found at $(OPENAPI_DIR) — set OPENAPI_DIR=<path> or clone hanzoai/openapi"; exit 1; }
-	# skills.py rewrites the whole catalog dir, and every file of it is tracked —
-	# commit what changes. The catalog is prose an agent follows, so its diff is
-	# worth reading; it used to arrive as a container image and be committed as a
-	# one-skill stub, which made a registry permission a build outage.
-	python3 "$(OPENAPI_DIR)/skills.py" --no-services --out apps/skills/catalog
-	@echo ">> embedded FULL agent-skills catalog ($$(jq -r .skill_count apps/skills/catalog/hanzo/index.json) skills/brand)"
+skills: ## Regenerate the agent-skills catalogue into apps/skills/catalog (go:embed source) from this repo's own specs.
+	# THE SOURCE IS plugin/<app>/openapi.json — each app's own binary describing its
+	# own live router, the same input the fleet catalogue and openapi.yaml are built
+	# from. So a skill names a route this fleet serves, and the chain from Go doc
+	# comment to published skill has one link per step and no hand-written copy:
+	#
+	#     Go doc comment -> zipdoc -> the app's binary -> openapi.json -> catalogue
+	#
+	# It used to run hanzoai/openapi's skills.py, which read THAT repo's specs — so
+	# the catalogue was a function of a checkout this one does not pin, and a run
+	# against a branched one silently emitted 357 skills per brand against the 542
+	# committed. It also kept a second copy of the brand table, which had drifted to
+	# a Zoo issuer that does not resolve. Both are gone with it.
+	#
+	# The catalogue is prose an agent follows, so its diff is worth reading; every
+	# file of it is tracked, so commit what changes.
+	$(GO) run ./plugin/gen-skills .
+	@echo ">> embedded agent-skills catalogue ($$(jq -r .skill_count apps/skills/catalog/hanzo/index.json) skills/brand)"
 
 # THE DEFAULT BUILD IS THE HOST, and that is the whole point of the plugin model:
 # nothing compiles together. The fused binary linked all 112 subsystems into one

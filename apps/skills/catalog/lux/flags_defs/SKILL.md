@@ -6,7 +6,7 @@ description: "Read flags defs: Returns every flag definition in the caller's (or
 
 # Lux · FLAGS · defs
 
-Read-only Lux capability derived from the `flags` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `flags` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

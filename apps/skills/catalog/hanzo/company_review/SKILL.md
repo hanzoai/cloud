@@ -6,7 +6,7 @@ description: "Read company review: Reports the founders whose KYC is not yet set
 
 # Hanzo · COMPANY · review
 
-Read-only Hanzo capability derived from the `company` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `company` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -1,12 +1,12 @@
 ---
 name: git_commits
 version: "8.0.0"
-description: "Read git commits: Read a repository's commit log, Read a repository's commit log."
+description: "Read git commits: Read a repository's commit log."
 ---
 
 # Zoo · GIT · commits
 
-Read-only Zoo capability derived from the `git` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `git` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,8 +14,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/git/{org}/{repo}/commits` — Read a repository's commit log
-- `GET https://api.zoo.ngo/{org}/{repo}/commits` — Read a repository's commit log
+- `GET https://api.zoo.ngo/v1/git/{org}/{repo}/commits` — Read a repository's commit log
 
 ## Parameters
 
@@ -26,13 +25,12 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/git/{org}/{repo}/commits` → JSON body.
-- `/{org}/{repo}/commits` → JSON body.
+- `/v1/git/{org}/{repo}/commits` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/git/{org}/{repo}/commits" \
+curl -sS "https://api.zoo.ngo/v1/git/{org}/{repo}/commits" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

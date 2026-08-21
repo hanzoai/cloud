@@ -6,7 +6,7 @@ description: "Read platform projects: Returns your org's projects, each with how
 
 # Hanzo · PLATFORM · projects
 
-Read-only Hanzo capability derived from the `platform` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `platform` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

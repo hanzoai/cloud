@@ -6,7 +6,7 @@ description: "Read tel numbers: Lists the phone numbers this org HOLDS — the o
 
 # Zoo · TEL · numbers
 
-Read-only Zoo capability derived from the `tel` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `tel` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

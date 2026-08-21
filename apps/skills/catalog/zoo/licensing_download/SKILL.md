@@ -6,7 +6,7 @@ description: "Read licensing download: Download resolves a release to its artifa
 
 # Zoo · LICENSING · download
 
-Read-only Zoo capability derived from the `licensing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `licensing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

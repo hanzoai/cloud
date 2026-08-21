@@ -6,7 +6,7 @@ description: "Read marketplace marketplace: Discover lists every tool and agent 
 
 # Lux · MARKETPLACE · marketplace
 
-Read-only Lux capability derived from the `marketplace` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `marketplace` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

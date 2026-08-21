@@ -6,7 +6,7 @@ description: "Read engine model: Read one model's load state on the serving runt
 
 # Lux · ENGINE · model
 
-Read-only Lux capability derived from the `engine` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `engine` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

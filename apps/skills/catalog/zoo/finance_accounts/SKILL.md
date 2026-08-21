@@ -6,7 +6,7 @@ description: "Read finance accounts: Returns the ledger accounts the caller may 
 
 # Zoo · FINANCE · accounts
 
-Read-only Zoo capability derived from the `finance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `finance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

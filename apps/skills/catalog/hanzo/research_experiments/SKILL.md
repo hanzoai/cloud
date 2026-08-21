@@ -6,7 +6,7 @@ description: "Read research experiments: Returns the caller org's CANONICAL expe
 
 # Hanzo · RESEARCH · experiments
 
-Read-only Hanzo capability derived from the `research` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `research` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

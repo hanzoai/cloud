@@ -6,7 +6,7 @@ description: "Read cloudflare d1: Lists the D1 databases on the org's Cloudflare
 
 # Zoo · CLOUDFLARE · d1
 
-Read-only Zoo capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

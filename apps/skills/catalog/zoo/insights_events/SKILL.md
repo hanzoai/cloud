@@ -6,7 +6,7 @@ description: "Read insights events: Returns the caller org's most recent product
 
 # Zoo · INSIGHTS · events
 
-Read-only Zoo capability derived from the `insights` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `insights` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `limit` | query | no | integer | Limit is how many rows to return, newest first. Default 50, maximum 200; a |
+| `limit` | query | no | integer | Limit is how many rows to return, newest first. Default 50, maximum 200; a value at or below zero, or one that is not a number, takes the default. |
 
 ## Response
 

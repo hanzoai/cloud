@@ -6,7 +6,7 @@ description: "Read iam users: Returns a page of the people in your organization,
 
 # Lux · IAM · users
 
-Read-only Lux capability derived from the `iam` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `iam` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

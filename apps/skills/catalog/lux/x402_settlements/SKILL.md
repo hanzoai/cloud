@@ -6,7 +6,7 @@ description: "Read x402 settlements: Settlement reads one x402 payment receipt b
 
 # Lux · X402 · settlements
 
-Read-only Lux capability derived from the `x402` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `x402` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the settlement id from the URL — the deterministic keccak(from\|nonce) |
+| `id` | path | yes | string | ID is the settlement id from the URL — the deterministic keccak(from\|nonce) key an x402 receipt is issued under (the `id` field of a Receipt, and the `transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid request answers with). |
 
 ## Response
 

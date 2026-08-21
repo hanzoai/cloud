@@ -6,7 +6,7 @@ description: "Read deploy projects: Returns the argocd AppProjectList this conso
 
 # Hanzo · DEPLOY · projects
 
-Read-only Hanzo capability derived from the `deploy` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `deploy` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

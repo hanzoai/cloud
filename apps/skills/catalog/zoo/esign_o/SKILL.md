@@ -6,7 +6,7 @@ description: "Read esign o: Open a document you were asked to sign, using your s
 
 # Zoo · ESIGN · o
 
-Read-only Zoo capability derived from the `esign` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `esign` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,7 +25,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/esign/o/{org}/sign/{token}` → JSON body.
+- `/v1/esign/o/{org}/sign/{token}` → JSON object.
 
 ## Example
 

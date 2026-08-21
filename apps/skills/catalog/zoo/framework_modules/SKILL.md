@@ -6,7 +6,7 @@ description: "Read framework modules: Returns every app lane compiled into this 
 
 # Zoo · FRAMEWORK · modules
 
-Read-only Zoo capability derived from the `framework` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `framework` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

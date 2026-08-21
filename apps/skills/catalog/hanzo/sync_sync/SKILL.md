@@ -6,7 +6,7 @@ description: "Read sync sync: List returns every sync link the caller's org has,
 
 # Hanzo · SYNC · sync
 
-Read-only Hanzo capability derived from the `sync` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `sync` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

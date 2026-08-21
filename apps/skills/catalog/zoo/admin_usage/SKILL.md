@@ -6,7 +6,7 @@ description: "Read admin usage: Returns the trailing 30 days of AI usage: one or
 
 # Zoo · ADMIN · usage
 
-Read-only Zoo capability derived from the `admin` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `admin` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -21,8 +21,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `from` | query | no | string | From is the inclusive start of the window. Unparseable or absent, together with |
-| `org` | query | no | string | Org reads ONE tenant's trailing-30-day total instead of the fleet sum. Honoured |
+| `from` | query | no | string | From is the inclusive start of the window. Unparseable or absent, together with To, falls back to the last 30 days. |
+| `org` | query | no | string | Org reads ONE tenant's trailing-30-day total instead of the fleet sum. Honoured for a SuperAdmin only — a white-label admin always reads their own org. The window is the one core.OrgMoney returns, and it is what the operator board beside this already labelled ("Daily, last 30 days"). The wire used to say month-to-date while that UI said 30 days; they agree now. This comment is REGENERATED into plugin/admin/openapi.json and openapi.yaml as the ?org parameter description, so a stale word here ships as a contradiction inside one spec file — which is the drift this whole change set exists to remove. |
 | `to` | query | no | string | To is the exclusive end of the window. |
 
 ## Response

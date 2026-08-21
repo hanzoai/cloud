@@ -6,7 +6,7 @@ description: "Read finance credits: Answers the money PUT IN to the org's wallet
 
 # Hanzo · FINANCE · credits
 
-Read-only Hanzo capability derived from the `finance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `finance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

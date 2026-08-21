@@ -6,7 +6,7 @@ description: "Read o11y user: Lists the org's members with their single legacy r
 
 # Hanzo · O11Y · user
 
-Read-only Hanzo capability derived from the `o11y` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `o11y` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

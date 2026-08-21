@@ -6,7 +6,7 @@ description: "Read destinations destinations: Reports every destination this dep
 
 # Hanzo · DESTINATIONS · destinations
 
-Read-only Hanzo capability derived from the `destinations` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `destinations` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `platform` | path | yes | string | Platform is the destination to act on, from the path: ga4 \| meta \| tiktok \| |
+| `platform` | path | yes | string | Platform is the destination to act on, from the path: ga4 \| meta \| tiktok \| linkedin \| x \| reddit \| posthog \| umami. |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read engine status: Whether the serving runtime is reachable, and 
 
 # Lux · ENGINE · status
 
-Read-only Lux capability derived from the `engine` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `engine` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

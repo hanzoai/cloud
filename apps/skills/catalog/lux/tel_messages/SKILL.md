@@ -6,7 +6,7 @@ description: "Read tel messages: Lists the messages this org has sent or receive
 
 # Lux · TEL · messages
 
-Read-only Lux capability derived from the `tel` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `tel` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

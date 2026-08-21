@@ -6,7 +6,7 @@ description: "Read marketing summary: Rolls up the caller org's campaigns: how m
 
 # Hanzo · MARKETING · summary
 
-Read-only Hanzo capability derived from the `marketing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `marketing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

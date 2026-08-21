@@ -6,7 +6,7 @@ description: "Read compliance verifications: Returns the org's KYC/KYB verificat
 
 # Zoo · COMPLIANCE · verifications
 
-Read-only Zoo capability derived from the `compliance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `compliance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

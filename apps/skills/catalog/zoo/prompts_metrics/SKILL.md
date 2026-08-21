@@ -6,7 +6,7 @@ description: "Read prompts metrics: Metrics returns real per-prompt statistics f
 
 # Zoo · PROMPTS · metrics
 
-Read-only Zoo capability derived from the `prompts` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `prompts` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

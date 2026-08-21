@@ -6,7 +6,7 @@ description: "Read tel messages: Lists the messages this org has sent or receive
 
 # Hanzo · TEL · messages
 
-Read-only Hanzo capability derived from the `tel` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `tel` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

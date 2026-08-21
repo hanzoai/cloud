@@ -6,7 +6,7 @@ description: "Read compliance audit: AuditRead is the compliance read of the SHA
 
 # Hanzo · COMPLIANCE · audit
 
-Read-only Hanzo capability derived from the `compliance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `compliance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

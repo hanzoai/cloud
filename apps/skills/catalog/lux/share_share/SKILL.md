@@ -6,7 +6,7 @@ description: "Read share share: Returns the tunnel shares the caller's org curre
 
 # Lux · SHARE · share
 
-Read-only Lux capability derived from the `share` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `share` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

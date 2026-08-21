@@ -6,7 +6,7 @@ description: "Read marketing unsubscribe: Is the PUBLIC one-click endpoint (no p
 
 # Lux · MARKETING · unsubscribe
 
-Read-only Lux capability derived from the `marketing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `marketing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | `address` | query | no | string | Address is the recipient to opt out. |
 | `channel` | query | no | string | Channel is the surface to opt out of. |
 | `org` | query | no | string | Org is the org the link was minted for. |
-| `token` | query | no | string | Token is the HMAC over (org, channel, address). It is the ONLY authority |
+| `token` | query | no | string | Token is the HMAC over (org, channel, address). It is the ONLY authority here — there is no principal — so it binds the request to one tuple and nothing else. |
 
 ## Response
 

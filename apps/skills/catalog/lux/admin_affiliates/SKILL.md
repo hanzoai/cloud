@@ -6,7 +6,7 @@ description: "Read admin affiliates: Lists every affiliate across the fleet with
 
 # Lux · ADMIN · affiliates
 
-Read-only Lux capability derived from the `admin` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `admin` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `limit` | query | no | integer | Limit caps the rows returned. Absent or non-positive means the default of |
+| `limit` | query | no | integer | Limit caps the rows returned. Absent or non-positive means the default of 500; anything above 1000 is clamped to 1000. |
 
 ## Response
 

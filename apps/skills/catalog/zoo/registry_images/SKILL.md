@@ -6,7 +6,7 @@ description: "Read registry images: Images lists the org's container repositorie
 
 # Zoo · REGISTRY · images
 
-Read-only Zoo capability derived from the `registry` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `registry` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

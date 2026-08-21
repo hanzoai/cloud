@@ -6,7 +6,7 @@ description: "Read platform apps: What this organization has declared, and what 
 
 # Hanzo · PLATFORM · apps
 
-Read-only Hanzo capability derived from the `platform` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `platform` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -26,9 +26,9 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/platform/apps` → JSON body.
-- `/v1/platform/apps/{app}` → JSON body.
-- `/v1/platform/apps/{app}/cd` → JSON body.
+- `/v1/platform/apps` → JSON object.
+- `/v1/platform/apps/{app}` → JSON object.
+- `/v1/platform/apps/{app}/cd` → JSON object.
 
 ## Example
 

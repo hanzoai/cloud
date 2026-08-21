@@ -6,7 +6,7 @@ description: "Read cloudflare pages: Lists the org's Cloudflare Pages projects.,
 
 # Hanzo · CLOUDFLARE · pages
 
-Read-only Hanzo capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

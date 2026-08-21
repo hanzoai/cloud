@@ -6,7 +6,7 @@ description: "Read guide blueprint: Returns the FULL authored brand blueprint �
 
 # Zoo · GUIDE · blueprint
 
-Read-only Zoo capability derived from the `guide` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `guide` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

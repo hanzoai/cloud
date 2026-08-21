@@ -6,7 +6,7 @@ description: "Read company register: Returns the platform's whole formation regi
 
 # Hanzo · COMPANY · register
 
-Read-only Hanzo capability derived from the `company` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `company` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

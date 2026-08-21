@@ -6,7 +6,7 @@ description: "Read benchmark compare: Is the ONLY valid arm-vs-arm test: it pair
 
 # Lux · BENCHMARK · compare
 
-Read-only Lux capability derived from the `benchmark` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `benchmark` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

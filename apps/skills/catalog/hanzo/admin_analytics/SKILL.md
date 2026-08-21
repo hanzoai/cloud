@@ -6,7 +6,7 @@ description: "Read admin analytics: Is the SaaS product-analytics board over the
 
 # Hanzo · ADMIN · analytics
 
-Read-only Hanzo capability derived from the `admin` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `admin` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `range` | query | no | string | Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the |
+| `range` | query | no | string | Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the board's own default. |
 
 ## Response
 

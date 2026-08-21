@@ -6,7 +6,7 @@ description: "Read engine system: The serving host's own inventory: devices, mem
 
 # Lux · ENGINE · system
 
-Read-only Lux capability derived from the `engine` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `engine` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

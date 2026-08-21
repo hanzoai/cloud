@@ -6,7 +6,7 @@ description: "Read deploy gitops: Lists every Hanzo CD Application in the cluste
 
 # Hanzo · DEPLOY · gitops
 
-Read-only Hanzo capability derived from the `deploy` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `deploy` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

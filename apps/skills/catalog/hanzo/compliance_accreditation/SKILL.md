@@ -6,7 +6,7 @@ description: "Read compliance accreditation: Returns the org's tracked accredita
 
 # Hanzo · COMPLIANCE · accreditation
 
-Read-only Hanzo capability derived from the `compliance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `compliance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

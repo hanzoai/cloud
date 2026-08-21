@@ -6,7 +6,7 @@ description: "Read team billing: Returns the plan and seat counts for the caller
 
 # Zoo · TEAM · billing
 
-Read-only Zoo capability derived from the `team` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `team` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -27,8 +27,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Response
 
 - `/v1/team/billing/plan` → `planInfo` object with fields: `active`, `guestLimit`, `guests`, `plan`, `seats`, `upgradeUrl`.
-- `/v1/team/billing/ui` → JSON body.
-- `/v1/team/billing/ui/{wildcard1}` → JSON body.
+- `/v1/team/billing/ui` → JSON object.
+- `/v1/team/billing/ui/{wildcard1}` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read evals metrics: Is your org's AI overview board over a window:
 
 # Hanzo · EVALS · metrics
 
-Read-only Hanzo capability derived from the `evals` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `evals` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,8 +20,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `interval` | query | no | string | Interval overrides the bucket the series is grouped into: "hour" or "day". |
-| `range` | query | no | string | Range is 24h (the default), 7d or 30d. Anything else normalises to 24h |
+| `interval` | query | no | string | Interval overrides the bucket the series is grouped into: "hour" or "day". Any other value leaves the range's own default in place. |
+| `range` | query | no | string | Range is 24h (the default), 7d or 30d. Anything else normalises to 24h rather than failing, so the board always has a valid window. |
 
 ## Response
 

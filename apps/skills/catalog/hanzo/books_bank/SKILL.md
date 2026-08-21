@@ -6,7 +6,7 @@ description: "Read books bank: Returns the org's normalized bank transactions, n
 
 # Hanzo · BOOKS · bank
 
-Read-only Hanzo capability derived from the `books` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `books` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

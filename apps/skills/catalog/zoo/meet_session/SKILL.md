@@ -6,7 +6,7 @@ description: "Read meet session: What this caller may open a room in."
 
 # Zoo · MEET · session
 
-Read-only Zoo capability derived from the `meet` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `meet` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/meet/session` → JSON body.
+- `/v1/meet/session` → JSON object.
 
 ## Example
 

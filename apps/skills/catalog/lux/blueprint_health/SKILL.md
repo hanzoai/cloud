@@ -6,7 +6,7 @@ description: "Read blueprint health: Reports blueprint liveness and echoes the c
 
 # Lux · BLUEPRINT · health
 
-Read-only Lux capability derived from the `blueprint` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `blueprint` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

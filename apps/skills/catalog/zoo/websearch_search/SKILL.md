@@ -6,7 +6,7 @@ description: "Read websearch search: Keyless web meta-search, in the SearXNG JSO
 
 # Zoo · WEBSEARCH · search
 
-Read-only Zoo capability derived from the `websearch` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `websearch` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/websearch/search` → JSON body.
+- `/v1/websearch/search` → JSON object.
 
 ## Example
 

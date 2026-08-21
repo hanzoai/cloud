@@ -6,7 +6,7 @@ description: "Read dataroom health: Liveness of the dataroom subsystem."
 
 # Lux · DATAROOM · health
 
-Read-only Lux capability derived from the `dataroom` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `dataroom` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/dataroom/health` → JSON body.
+- `/v1/dataroom/health` → JSON object.
 
 ## Example
 

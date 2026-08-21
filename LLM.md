@@ -1279,11 +1279,12 @@ one before it.
 - **SDK repos PULL; cloud does not push.** A stale spec does not stop at cloud —
   it ships wrong clients to four package registries. The repos read
   `openapi.yaml`, regenerate, and release on their own cadence.
-  `make openapi OPENAPI_DIR=<checkout>` additionally drops the same document into
-  a hanzoai/openapi checkout as `generated/hanzo.json`, where that repo
-  aggregates, audits and generates from it. The drop is the same document written
-  by the same run — one value in two places, not two sources of truth. It is
-  named `hanzo`, not `cloud`, because the binary serves the WHOLE /v1 surface.
+  `make -f mk/fleet.mk openapi OUT=<path>` writes the same pair somewhere else
+  for a consumer that wants them dropped into its own checkout — the same
+  document written by the same run, one value in two places rather than two
+  sources of truth. (It took `OPENAPI_DIR` when the target lived in the root
+  Makefile and cloud pushed into a hanzoai/openapi checkout; that variable is
+  deleted, along with the last thing that read it.)
 
 ### The stage: `x-stage`, and the 404 behind it
 
@@ -3438,20 +3439,34 @@ migration silently strips request shapes from every generated CLI and SDK.
   charges for — which is the failure its own comment already records for a
   previous dead name, `"agent"`. The pins only refuse; this one bills.
   Grep all three for the app's name in the SAME commit that removes it.
-- **The agent-skills catalogue is generated in ANOTHER REPO, so a regeneration
-  can delete hundreds of skills and look routine.** `apps/skills/catalog` is
-  `go:embed`ed and committed, and `make skills` runs `hanzoai/openapi`'s
-  `skills.py` — which reads THAT repo's per-service `openapi.yaml` files, not
-  cloud's. The output is therefore a function of a checkout this repo does not
-  pin: measured against a local one on a feature branch, **357 skills per brand
-  against the 542 committed**, i.e. 555 deletions across three brands arriving as
-  a one-command "regenerate".
-  `TestCatalogIntegrity` cannot see it — it quantifies over the INDEX, so when
-  the index and the files shrink together every surviving entry still checks out.
-  `TestTheCatalogMayNotQuietlyShrink` (`floorSkills`) is the ratchet that can,
-  on the `openapi/floor.json` pattern: a deliberate deletion lowers the number by
-  hand in the same commit. Before `make skills`, read
-  `git -C $OPENAPI_DIR status` and generate to a scratch `--out` first.
+- **The agent-skills catalogue is a projection of this repo's own specs, and the
+  Python that used to build it from ANOTHER repo is deleted.**
+  `plugin/gen-skills` reads `plugin/<app>/openapi.json` — the same input
+  `gen-fleet-catalog` reads and the weave holds against `openapi.yaml` — so the
+  chain has one link per step and no hand-written copy anywhere in it:
+
+      Go doc comment -> zipdoc -> the app's own binary -> openapi.json -> catalogue
+
+  What it replaced is the argument for it. `hanzoai/openapi`'s `skills.py` read
+  THAT repo's per-service specs, so the catalogue was a function of a checkout
+  this one does not pin: measured, a run against a branched checkout emitted 357
+  skills per brand against the 542 committed, arriving as a routine
+  "regenerate". It had drifted in both directions — advertising `balancers` and
+  `builds`, which production 404s, while missing products this fleet serves — and
+  it kept a SECOND COPY of the brand table, which had drifted to `zoo.id` as the
+  Zoo OIDC issuer. That host does not resolve. Brands now come from `cloud/brand`,
+  the registry the serving code already reads, so the catalogue cannot disagree
+  with the deployment about who issues its tokens.
+  **Keyed by PRODUCT, not by app** — `openapi.Product`, imported rather than
+  re-derived, because that is the axis the tags, the CLI tree and every SDK
+  already use: `apps/plan` serves `/v1/plans`, `apps/visor` serves the compute
+  plane, and billing and treasury share `/v1/finance`. A customer calls the
+  product. Coverage is the check that matters and it is total: all **127**
+  products carrying a GET have at least one skill.
+  **Uncapped, deliberately.** A per-product cap of 10 was tried first and dropped
+  live surfaces — `/v1/ai/chats` answers 200 in production and lost its slot to
+  higher-ranked clusters of the same product. The old per-SERVICE cap hid that,
+  because the other repo's finer service split gave each its own budget.
 
 ## Lifecycle defense: ONE scorer seam, ONE fail policy, a sensor at the edge
 

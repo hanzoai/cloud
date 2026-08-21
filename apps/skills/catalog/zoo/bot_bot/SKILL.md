@@ -6,7 +6,7 @@ description: "Read bot bot: Relay one of the bot runtime's own operational paths
 
 # Zoo · BOT · bot
 
-Read-only Zoo capability derived from the `bot` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `bot` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/bot/{wildcard1}` → JSON body.
+- `/v1/bot/{wildcard1}` → JSON object.
 
 ## Example
 

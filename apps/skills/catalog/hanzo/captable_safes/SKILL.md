@@ -6,7 +6,7 @@ description: "Read captable safes: Returns the caller org's SAFEs, newest first.
 
 # Hanzo · CAPTABLE · safes
 
-Read-only Hanzo capability derived from the `captable` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `captable` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

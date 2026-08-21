@@ -6,7 +6,7 @@ description: "Read captable stakeholders: Returns the caller org's stakeholders,
 
 # Hanzo · CAPTABLE · stakeholders
 
-Read-only Hanzo capability derived from the `captable` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `captable` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

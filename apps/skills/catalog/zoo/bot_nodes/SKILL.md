@@ -6,7 +6,7 @@ description: "Read bot nodes: Returns the caller org's currently connected bot n
 
 # Zoo · BOT · nodes
 
-Read-only Zoo capability derived from the `bot` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `bot` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

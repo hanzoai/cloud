@@ -6,7 +6,7 @@ description: "Read notify health: Reports that the notify send surface is mounte
 
 # Zoo · NOTIFY · health
 
-Read-only Zoo capability derived from the `notify` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `notify` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

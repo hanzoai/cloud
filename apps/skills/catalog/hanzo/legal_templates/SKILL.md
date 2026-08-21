@@ -6,7 +6,7 @@ description: "Read legal templates: Returns the org's effective template catalog
 
 # Hanzo · LEGAL · templates
 
-Read-only Hanzo capability derived from the `legal` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `legal` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

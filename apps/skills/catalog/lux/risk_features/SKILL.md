@@ -6,7 +6,7 @@ description: "Read risk features: The feature catalogue: what the model reads, a
 
 # Lux · RISK · features
 
-Read-only Lux capability derived from the `risk` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `risk` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `days` | query | no | integer | Days is how far back to measure the organisation's own coverage, 1 to 400. |
+| `days` | query | no | integer | Days is how far back to measure the organisation's own coverage, 1 to 400. Zero takes thirty. |
 
 ## Response
 

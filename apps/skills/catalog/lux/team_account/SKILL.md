@@ -6,7 +6,7 @@ description: "Read team account: Start a sign-in at lux.id, Complete a sign-in a
 
 # Lux · TEAM · account
 
-Read-only Lux capability derived from the `team` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `team` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -26,8 +26,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/team/account/auth/{provider}` → JSON body.
-- `/v1/team/account/auth/{provider}/callback` → JSON body.
+- `/v1/team/account/auth/{provider}` → JSON object.
+- `/v1/team/account/auth/{provider}/callback` → JSON object.
 - `/v1/team/account/providers` → JSON array of `ProviderInfo`.
 
 ## Example

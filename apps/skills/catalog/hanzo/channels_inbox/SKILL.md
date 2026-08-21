@@ -6,7 +6,7 @@ description: "Read channels inbox: Returns the messages people have sent to the 
 
 # Hanzo · CHANNELS · inbox
 
-Read-only Hanzo capability derived from the `channels` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `channels` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,8 +20,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `limit` | query | no | string | Limit caps how many messages come back. Empty or 0 uses the store's |
-| `since` | query | no | string | Since is the exclusive cursor: only messages with a higher row id come |
+| `limit` | query | no | string | Limit caps how many messages come back. Empty or 0 uses the store's default page size. Must parse as an integer. |
+| `since` | query | no | string | Since is the exclusive cursor: only messages with a higher row id come back. Empty starts at the beginning. Must parse as an integer. |
 
 ## Response
 

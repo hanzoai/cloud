@@ -6,7 +6,7 @@ description: "Read index health: Report whether the search plane can serve."
 
 # Hanzo · INDEX · health
 
-Read-only Hanzo capability derived from the `index` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `index` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/index/health` → JSON body.
+- `/v1/index/health` → JSON object.
 
 ## Example
 

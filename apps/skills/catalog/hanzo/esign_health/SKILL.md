@@ -6,7 +6,7 @@ description: "Read esign health: Whether the e-signature surface is mounted."
 
 # Hanzo · ESIGN · health
 
-Read-only Hanzo capability derived from the `esign` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `esign` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/esign/health` → JSON body.
+- `/v1/esign/health` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read marketing calendar: Returns the org's calendar, soonest sched
 
 # Lux · MARKETING · calendar
 
-Read-only Lux capability derived from the `marketing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `marketing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the post id from the path, as returned by create. |
 | `limit` | query | no | integer | Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured. |
-| `status` | query | no | string | Status keeps only posts in that state (draft, scheduled, published, |
+| `status` | query | no | string | Status keeps only posts in that state (draft, scheduled, published, failed, canceled). Empty means every post. |
 
 ## Response
 

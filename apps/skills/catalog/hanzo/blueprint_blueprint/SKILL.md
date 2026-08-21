@@ -6,7 +6,7 @@ description: "Read blueprint blueprint: Returns every deployable blueprint with 
 
 # Hanzo · BLUEPRINT · blueprint
 
-Read-only Hanzo capability derived from the `blueprint` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `blueprint` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read team bots: Returns the caller org's bot members — the org's
 
 # Lux · TEAM · bots
 
-Read-only Lux capability derived from the `team` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `team` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read videos videos: Implements GET /v1/videos/{id} — poll a job'
 
 # Zoo · VIDEOS · videos
 
-Read-only Zoo capability derived from the `videos` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `videos` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/videos/{id}` → JSON body.
+- `/v1/videos/{id}` → JSON object.
 
 ## Example
 

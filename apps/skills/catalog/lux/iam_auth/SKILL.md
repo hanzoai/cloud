@@ -6,7 +6,7 @@ description: "Read iam auth: Returns everything a login screen needs to draw its
 
 # Lux · IAM · auth
 
-Read-only Lux capability derived from the `iam` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `iam` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,8 +21,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `clientId` | query | no | string | ClientId is the application's OAuth client id — the one field that selects |
-| `responseType` | query | no | string | ResponseType is the OAuth response type the screen will ask for. Only "code" |
+| `clientId` | query | no | string | ClientId is the application's OAuth client id — the one field that selects which login screen this is. |
+| `responseType` | query | no | string | ResponseType is the OAuth response type the screen will ask for. Only "code" is served; anything else is refused here rather than at the authorize leg, where the person has already typed a password. |
 
 ## Response
 

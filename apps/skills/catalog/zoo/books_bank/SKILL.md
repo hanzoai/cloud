@@ -6,7 +6,7 @@ description: "Read books bank: Returns the org's normalized bank transactions, n
 
 # Zoo · BOOKS · bank
 
-Read-only Zoo capability derived from the `books` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `books` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

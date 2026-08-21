@@ -6,7 +6,7 @@ description: "Read captable shares: Returns the caller org's share certificates,
 
 # Zoo · CAPTABLE · shares
 
-Read-only Zoo capability derived from the `captable` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `captable` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

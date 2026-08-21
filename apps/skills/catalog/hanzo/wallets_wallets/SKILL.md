@@ -6,7 +6,7 @@ description: "Read wallets wallets: Returns the caller org's wallets, newest fir
 
 # Hanzo · WALLETS · wallets
 
-Read-only Hanzo capability derived from the `wallets` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `wallets` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

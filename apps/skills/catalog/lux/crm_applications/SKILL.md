@@ -6,7 +6,7 @@ description: "Read crm applications: Returns the org's Startup Program applicati
 
 # Lux · CRM · applications
 
-Read-only Lux capability derived from the `crm` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `crm` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the record to act on, from the path. |
 | `limit` | query | no | integer | Limit caps the rows returned: 200 by default, 1000 at most. |
-| `stage` | query | no | string | Stage returns only the applications at that pipeline stage when set: |
+| `stage` | query | no | string | Stage returns only the applications at that pipeline stage when set: applied, screened, qualified, credits-offered, onboarded or rejected. |
 
 ## Response
 

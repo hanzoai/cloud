@@ -6,7 +6,7 @@ description: "Read commerce return: List your org's returns, as a page, Fetch on
 
 # Hanzo · COMMERCE · return
 
-Read-only Hanzo capability derived from the `commerce` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `commerce` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/commerce/return/` → JSON body.
-- `/v1/commerce/return/{returnid}` → JSON body.
+- `/v1/commerce/return/` → JSON object.
+- `/v1/commerce/return/{returnid}` → JSON object.
 
 ## Example
 

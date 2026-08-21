@@ -6,7 +6,7 @@ description: "Read mesh services: Returns the Zero Trust edge services the calle
 
 # Hanzo · MESH · services
 
-Read-only Hanzo capability derived from the `mesh` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `mesh` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

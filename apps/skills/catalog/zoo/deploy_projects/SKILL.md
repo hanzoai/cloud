@@ -6,7 +6,7 @@ description: "Read deploy projects: Returns the argocd AppProjectList this conso
 
 # Zoo · DEPLOY · projects
 
-Read-only Zoo capability derived from the `deploy` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `deploy` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

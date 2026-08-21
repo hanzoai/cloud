@@ -6,7 +6,7 @@ description: "Read captable convertibles: Returns the caller org's convertible n
 
 # Zoo · CAPTABLE · convertibles
 
-Read-only Zoo capability derived from the `captable` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `captable` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

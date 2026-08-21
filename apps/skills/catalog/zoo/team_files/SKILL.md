@@ -6,7 +6,7 @@ description: "Read team files: Download a workspace file."
 
 # Zoo · TEAM · files
 
-Read-only Zoo capability derived from the `team` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `team` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,7 +25,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/team/files/{workspace}/{filename}` → JSON body.
+- `/v1/team/files/{workspace}/{filename}` → JSON object.
 
 ## Example
 

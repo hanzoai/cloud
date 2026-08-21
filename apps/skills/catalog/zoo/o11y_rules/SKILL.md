@@ -6,7 +6,7 @@ description: "Read o11y rules: Lists all alert rules with their current evaluati
 
 # Zoo · O11Y · rules
 
-Read-only Zoo capability derived from the `o11y` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `o11y` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

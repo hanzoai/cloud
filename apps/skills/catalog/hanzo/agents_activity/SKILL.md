@@ -6,7 +6,7 @@ description: "Read agents activity: Serves the org-wide recent-activity feed.."
 
 # Hanzo · AGENTS · activity
 
-Read-only Hanzo capability derived from the `agents` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `agents` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

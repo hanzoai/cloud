@@ -6,7 +6,7 @@ description: "Read guide profile: Profile returns the caller org's OBSERVED grow
 
 # Zoo · GUIDE · profile
 
-Read-only Zoo capability derived from the `guide` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `guide` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read campaign campaign: Returns the org's campaigns, newest first,
 
 # Lux · CAMPAIGN · campaign
 
-Read-only Lux capability derived from the `campaign` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `campaign` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -22,8 +22,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the campaign's server-minted handle, "cmp_"-prefixed. |
-| `limit` | query | no | integer | Limit bounds the page. 0 or less means the default of 200; anything above |
-| `status` | query | no | string | Status keeps only campaigns in that state: draft, live, paused or failed. |
+| `limit` | query | no | integer | Limit bounds the page. 0 or less means the default of 200; anything above 1000 is clamped to 1000. |
+| `status` | query | no | string | Status keeps only campaigns in that state: draft, live, paused or failed. Empty means any. |
 
 ## Response
 

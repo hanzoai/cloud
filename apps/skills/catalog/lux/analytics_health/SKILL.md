@@ -6,7 +6,7 @@ description: "Read analytics health: Health reports whether the event plane can 
 
 # Lux · ANALYTICS · health
 
-Read-only Lux capability derived from the `analytics` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `analytics` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

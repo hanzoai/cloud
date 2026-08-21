@@ -6,7 +6,7 @@ description: "Read research experiments: Returns the caller org's CANONICAL expe
 
 # Zoo · RESEARCH · experiments
 
-Read-only Zoo capability derived from the `research` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `research` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

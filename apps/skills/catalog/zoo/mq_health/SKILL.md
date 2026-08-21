@@ -6,7 +6,7 @@ description: "Read mq health: Reports whether the message plane behind this surf
 
 # Zoo · MQ · health
 
-Read-only Zoo capability derived from the `mq` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `mq` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

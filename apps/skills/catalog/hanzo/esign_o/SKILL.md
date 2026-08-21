@@ -6,7 +6,7 @@ description: "Read esign o: Open a document you were asked to sign, using your s
 
 # Hanzo · ESIGN · o
 
-Read-only Hanzo capability derived from the `esign` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `esign` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,7 +25,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/esign/o/{org}/sign/{token}` → JSON body.
+- `/v1/esign/o/{org}/sign/{token}` → JSON object.
 
 ## Example
 

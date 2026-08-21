@@ -6,7 +6,7 @@ description: "Read analytics overview: Overview returns the caller org's analyti
 
 # Hanzo · ANALYTICS · overview
 
-Read-only Hanzo capability derived from the `analytics` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `analytics` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `end` | query | no | string | End is the exclusive upper bound of a custom window, RFC3339. Requires start. |
-| `range` | query | no | string | Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or |
+| `range` | query | no | string | Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d — or day, week, month, all. Default 24h. Ignored when both start and end are given. An unknown value, or one past the 730-day horizon, is a 400. |
 | `start` | query | no | string | Start is the inclusive lower bound of a custom window, RFC3339. Requires end. |
 
 ## Response

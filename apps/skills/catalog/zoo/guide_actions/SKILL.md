@@ -6,7 +6,7 @@ description: "Read guide actions: Returns the caller org's Business AI action le
 
 # Zoo · GUIDE · actions
 
-Read-only Zoo capability derived from the `guide` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `guide` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

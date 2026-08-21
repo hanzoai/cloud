@@ -6,7 +6,7 @@ description: "Read research artifacts: Returns the caller org's research-diary f
 
 # Hanzo · RESEARCH · artifacts
 
-Read-only Hanzo capability derived from the `research` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `research` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -29,7 +29,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/research/artifacts` → `artifactsOut` object with fields: `data`, `total`.
-- `/v1/research/artifacts/{sha256}` → JSON body.
+- `/v1/research/artifacts/{sha256}` → JSON object.
 
 ## Example
 

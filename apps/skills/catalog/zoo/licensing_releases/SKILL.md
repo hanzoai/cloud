@@ -6,7 +6,7 @@ description: "Read licensing releases: Lists the signed binary releases this dep
 
 # Zoo · LICENSING · releases
 
-Read-only Zoo capability derived from the `licensing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `licensing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

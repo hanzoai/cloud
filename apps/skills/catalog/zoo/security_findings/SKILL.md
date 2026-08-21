@@ -6,7 +6,7 @@ description: "Read security findings: Is the org's findings — rule, severity, 
 
 # Zoo · SECURITY · findings
 
-Read-only Zoo capability derived from the `security` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `security` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the finding the URL names. |
 | `limit` | query | no | integer | Limit caps the page. |
-| `minSeverity` | query | no | string | MinSeverity drops everything below that rank: critical, high, medium or low. |
+| `minSeverity` | query | no | string | MinSeverity drops everything below that rank: critical, high, medium or low. A value outside that set is refused rather than quietly ignored, so a filter typo cannot read as "no findings". |
 | `scanId` | query | no | string | ScanID narrows to a single scan. |
 
 ## Response

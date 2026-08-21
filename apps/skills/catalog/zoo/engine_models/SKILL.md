@@ -6,7 +6,7 @@ description: "Read engine models: List the models the serving runtime holds, wit
 
 # Zoo · ENGINE · models
 
-Read-only Zoo capability derived from the `engine` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `engine` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

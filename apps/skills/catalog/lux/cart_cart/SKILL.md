@@ -6,7 +6,7 @@ description: "Read cart cart: Read one cart with its lines and totals."
 
 # Lux · CART · cart
 
-Read-only Lux capability derived from the `cart` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `cart` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read research totals: Returns the caller org's headline aggregate 
 
 # Hanzo · RESEARCH · totals
 
-Read-only Hanzo capability derived from the `research` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `research` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

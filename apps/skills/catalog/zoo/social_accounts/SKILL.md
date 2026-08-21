@@ -6,7 +6,7 @@ description: "Read social accounts: List the social accounts connected to your o
 
 # Zoo · SOCIAL · accounts
 
-Read-only Zoo capability derived from the `social` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `social` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/social/accounts` → JSON body.
-- `/v1/social/accounts/{id}` → JSON body.
+- `/v1/social/accounts` → JSON object.
+- `/v1/social/accounts/{id}` → JSON object.
 
 ## Example
 

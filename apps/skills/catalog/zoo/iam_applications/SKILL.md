@@ -6,7 +6,7 @@ description: "Read iam applications: Returns the applications in one organizatio
 
 # Zoo · IAM · applications
 
-Read-only Zoo capability derived from the `iam` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `iam` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

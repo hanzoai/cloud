@@ -6,7 +6,7 @@ description: "Read platform ci: Continuous integration (not wired)."
 
 # Hanzo · PLATFORM · ci
 
-Read-only Hanzo capability derived from the `platform` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `platform` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/platform/ci` → JSON body.
+- `/v1/platform/ci` → JSON object.
 
 ## Example
 

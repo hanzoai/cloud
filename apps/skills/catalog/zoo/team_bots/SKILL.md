@@ -6,7 +6,7 @@ description: "Read team bots: Returns the caller org's bot members — the org's
 
 # Zoo · TEAM · bots
 
-Read-only Zoo capability derived from the `team` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `team` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

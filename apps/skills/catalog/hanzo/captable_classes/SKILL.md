@@ -6,7 +6,7 @@ description: "Read captable classes: Returns the caller org's share classes, in 
 
 # Hanzo · CAPTABLE · classes
 
-Read-only Hanzo capability derived from the `captable` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `captable` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

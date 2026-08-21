@@ -6,7 +6,7 @@ description: "Read help categories: Returns the knowledge-base sections for the 
 
 # Hanzo · HELP · categories
 
-Read-only Hanzo capability derived from the `help` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `help` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

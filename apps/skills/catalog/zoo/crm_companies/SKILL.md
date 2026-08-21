@@ -6,7 +6,7 @@ description: "Read crm companies: Returns the caller org's companies, most recen
 
 # Zoo · CRM · companies
 
-Read-only Zoo capability derived from the `crm` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `crm` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

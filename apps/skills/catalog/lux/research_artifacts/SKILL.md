@@ -6,7 +6,7 @@ description: "Read research artifacts: Returns the caller org's research-diary f
 
 # Lux · RESEARCH · artifacts
 
-Read-only Lux capability derived from the `research` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `research` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -29,7 +29,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Response
 
 - `/v1/research/artifacts` → `artifactsOut` object with fields: `data`, `total`.
-- `/v1/research/artifacts/{sha256}` → JSON body.
+- `/v1/research/artifacts/{sha256}` → JSON object.
 
 ## Example
 

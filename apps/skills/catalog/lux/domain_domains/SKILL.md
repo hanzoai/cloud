@@ -6,7 +6,7 @@ description: "Read domain domains: Is the domains your org has bought here, newe
 
 # Lux · DOMAIN · domains
 
-Read-only Lux capability derived from the `domain` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `domain` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read finance invoices: Answers an empty typed array, always.."
 
 # Lux · FINANCE · invoices
 
-Read-only Lux capability derived from the `finance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `finance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

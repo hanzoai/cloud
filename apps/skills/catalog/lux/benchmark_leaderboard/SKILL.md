@@ -6,7 +6,7 @@ description: "Read benchmark leaderboard: Answers one row per model for the benc
 
 # Lux · BENCHMARK · leaderboard
 
-Read-only Lux capability derived from the `benchmark` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `benchmark` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

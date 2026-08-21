@@ -6,7 +6,7 @@ description: "Read company company: Get returns the caller org's formation and t
 
 # Lux · COMPANY · company
 
-Read-only Lux capability derived from the `company` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `company` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

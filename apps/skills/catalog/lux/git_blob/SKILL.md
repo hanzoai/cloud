@@ -1,12 +1,12 @@
 ---
 name: git_blob
 version: "8.0.0"
-description: "Read git blob: View a file in a repository, View a file in a repository."
+description: "Read git blob: View a file in a repository."
 ---
 
 # Lux · GIT · blob
 
-Read-only Lux capability derived from the `git` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `git` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,8 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/git/{org}/{repo}/blob/{wildcard1}` — View a file in a repository
-- `GET https://api.lux.network/{org}/{repo}/blob/{wildcard1}` — View a file in a repository
+- `GET https://api.lux.network/v1/git/{org}/{repo}/blob/{wildcard1}` — View a file in a repository
 
 ## Parameters
 
@@ -27,13 +26,12 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/git/{org}/{repo}/blob/{wildcard1}` → JSON body.
-- `/{org}/{repo}/blob/{wildcard1}` → JSON body.
+- `/v1/git/{org}/{repo}/blob/{wildcard1}` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/git/{org}/{repo}/blob/{wildcard1}" \
+curl -sS "https://api.lux.network/v1/git/{org}/{repo}/blob/{wildcard1}" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

@@ -6,7 +6,7 @@ description: "Read usage analytics: Is the entitlement-GATED per-provider breakd
 
 # Lux · USAGE · analytics
 
-Read-only Lux capability derived from the `usage` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `usage` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -22,9 +22,9 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `end` | query | no | string | End is the exclusive window end, RFC3339. Read only when Range is custom. |
-| `plan` | query | no | string | Plan is the plan id whose entitlement decides access and retention. INTERIM: |
-| `range` | query | no | string | Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d — |
-| `start` | query | no | string | Start is the inclusive window start, RFC3339. Read only when Range is |
+| `plan` | query | no | string | Plan is the plan id whose entitlement decides access and retention. INTERIM: cloud has no org-to-plan resolver yet, so the caller names the plan; when that resolver lands this becomes the caller org's own plan. |
+| `range` | query | no | string | Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d — or day, week, month, all, custom. Empty means 24h. The window is then clamped forward to the plan's retention entitlement. |
+| `start` | query | no | string | Start is the inclusive window start, RFC3339. Read only when Range is custom, and clamped forward to the plan's retention floor. |
 
 ## Response
 

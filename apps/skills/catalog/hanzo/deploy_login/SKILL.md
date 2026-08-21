@@ -6,7 +6,7 @@ description: "Read deploy login: Start the sign-in round trip for this console."
 
 # Hanzo · DEPLOY · login
 
-Read-only Hanzo capability derived from the `deploy` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `deploy` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/deploy/login` → JSON body.
+- `/v1/deploy/login` → JSON object.
 
 ## Example
 

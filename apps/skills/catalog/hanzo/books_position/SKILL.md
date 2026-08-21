@@ -6,7 +6,7 @@ description: "Read books position: Returns the org's Balance Sheet as of `to` (e
 
 # Hanzo · BOOKS · position
 
-Read-only Hanzo capability derived from the `books` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `books` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

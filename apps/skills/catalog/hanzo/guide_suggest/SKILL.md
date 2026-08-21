@@ -6,7 +6,7 @@ description: "Read guide suggest: Suggest returns the caller org's next-best que
 
 # Hanzo · GUIDE · suggest
 
-Read-only Hanzo capability derived from the `guide` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `guide` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

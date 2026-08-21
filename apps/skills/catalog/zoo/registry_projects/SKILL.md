@@ -6,7 +6,7 @@ description: "Read registry projects: Projects lists the namespaces the caller c
 
 # Zoo · REGISTRY · projects
 
-Read-only Zoo capability derived from the `registry` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `registry` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read enablement enablement: Returns what the caller's org can actu
 
 # Lux · ENABLEMENT · enablement
 
-Read-only Lux capability derived from the `enablement` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `enablement` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

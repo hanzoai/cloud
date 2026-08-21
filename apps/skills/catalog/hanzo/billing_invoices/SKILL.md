@@ -6,7 +6,7 @@ description: "Read billing invoices: List your org's billing invoices, Read one 
 
 # Hanzo · BILLING · invoices
 
-Read-only Hanzo capability derived from the `billing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `billing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -26,9 +26,9 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/invoices` → JSON body.
+- `/v1/billing/invoices` → JSON object.
 - `/v1/billing/invoices/{id}` → `InvoiceOut` object with fields: `amountDueCents`, `amountPaidCents`, `createdAt`, `currency`, `customerEmail`, `id`, `lines`, `number`, `paymentRef`, `status`, `subtotalCents`, `userId`.
-- `/v1/billing/invoices/{id}/pdf` → JSON body.
+- `/v1/billing/invoices/{id}/pdf` → JSON object.
 
 ## Example
 

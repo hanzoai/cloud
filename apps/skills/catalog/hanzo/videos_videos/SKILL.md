@@ -6,7 +6,7 @@ description: "Read videos videos: Implements GET /v1/videos/{id} — poll a job'
 
 # Hanzo · VIDEOS · videos
 
-Read-only Hanzo capability derived from the `videos` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `videos` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/videos/{id}` → JSON body.
+- `/v1/videos/{id}` → JSON object.
 
 ## Example
 

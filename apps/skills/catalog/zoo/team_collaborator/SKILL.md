@@ -6,7 +6,7 @@ description: "Read team collaborator: Open the live collaborative-editing socket
 
 # Zoo · TEAM · collaborator
 
-Read-only Zoo capability derived from the `team` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `team` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/collaborator` — Open the live collaborative-editing socket
+- `GET https://api.zoo.ngo/v1/team/collaborator` — Open the live collaborative-editing socket
 
 ## Response
 
-- `/collaborator` → JSON body.
+- `/v1/team/collaborator` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/collaborator" \
+curl -sS "https://api.zoo.ngo/v1/team/collaborator" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

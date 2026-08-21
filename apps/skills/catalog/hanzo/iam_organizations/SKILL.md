@@ -6,7 +6,7 @@ description: "Read iam organizations: Returns the organizations you can see, new
 
 # Hanzo · IAM · organizations
 
-Read-only Hanzo capability derived from the `iam` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `iam` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

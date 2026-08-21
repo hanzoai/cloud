@@ -6,7 +6,7 @@ description: "Read ads summary: Rolls the caller org's ad campaigns up into four
 
 # Hanzo · ADS · summary
 
-Read-only Hanzo capability derived from the `ads` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `ads` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

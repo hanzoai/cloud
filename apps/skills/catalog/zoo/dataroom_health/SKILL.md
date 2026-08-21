@@ -6,7 +6,7 @@ description: "Read dataroom health: Liveness of the dataroom subsystem."
 
 # Zoo · DATAROOM · health
 
-Read-only Zoo capability derived from the `dataroom` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `dataroom` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/dataroom/health` → JSON body.
+- `/v1/dataroom/health` → JSON object.
 
 ## Example
 

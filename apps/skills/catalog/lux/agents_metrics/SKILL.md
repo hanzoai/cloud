@@ -6,7 +6,7 @@ description: "Read agents metrics: Serves the invocations-over-time histogram fo
 
 # Lux · AGENTS · metrics
 
-Read-only Lux capability derived from the `agents` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `agents` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

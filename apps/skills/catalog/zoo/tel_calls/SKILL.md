@@ -6,7 +6,7 @@ description: "Read tel calls: Lists the calls this org has placed or received, n
 
 # Zoo · TEL · calls
 
-Read-only Zoo capability derived from the `tel` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `tel` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

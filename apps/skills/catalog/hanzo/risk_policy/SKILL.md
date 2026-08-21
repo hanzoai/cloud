@@ -6,7 +6,7 @@ description: "Read risk policy: Your organisation's decision-regime history, and
 
 # Hanzo · RISK · policy
 
-Read-only Hanzo capability derived from the `risk` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `risk` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

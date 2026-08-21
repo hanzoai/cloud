@@ -6,7 +6,7 @@ description: "Read platform fleet: Returns the platform's own service tier, and 
 
 # Lux · PLATFORM · fleet
 
-Read-only Lux capability derived from the `platform` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `platform` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -22,7 +22,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `app` | path | yes | string | App is the service's CR name, from the path. It must be a DNS-1123 label. |
-| `drift` | query | no | string | Drift is `1` or `true` to show only rows that have actually drifted. It is |
+| `drift` | query | no | string | Drift is `1` or `true` to show only rows that have actually drifted. It is a STRING and not a bool because those two spellings are exactly what the board has always accepted, and a bool would silently widen that to `?drift` alone and to `TRUE` — a behaviour change wearing a type change's clothes. |
 | `env` | query | no | string | Env narrows to one lifecycle env: main, test or dev. |
 | `health` | query | no | string | Health narrows to one health colour: green, yellow or red. |
 | `org` | query | no | string | Org narrows to one image namespace. |

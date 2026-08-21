@@ -6,7 +6,7 @@ description: "Read compliance subjects: Returns the org's subjects as PII-MINIMI
 
 # Zoo · COMPLIANCE · subjects
 
-Read-only Zoo capability derived from the `compliance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `compliance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

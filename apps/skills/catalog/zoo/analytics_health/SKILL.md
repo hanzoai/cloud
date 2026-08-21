@@ -6,7 +6,7 @@ description: "Read analytics health: Health reports whether the event plane can 
 
 # Zoo · ANALYTICS · health
 
-Read-only Zoo capability derived from the `analytics` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `analytics` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

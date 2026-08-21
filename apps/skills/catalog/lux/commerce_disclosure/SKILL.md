@@ -6,7 +6,7 @@ description: "Read commerce disclosure: List your org's disclosures, as a page, 
 
 # Lux · COMMERCE · disclosure
 
-Read-only Lux capability derived from the `commerce` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `commerce` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/commerce/disclosure/` → JSON body.
-- `/v1/commerce/disclosure/{disclosureid}` → JSON body.
+- `/v1/commerce/disclosure/` → JSON object.
+- `/v1/commerce/disclosure/{disclosureid}` → JSON object.
 
 ## Example
 

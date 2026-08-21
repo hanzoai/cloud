@@ -6,7 +6,7 @@ description: "Read sync sync: List returns every sync link the caller's org has,
 
 # Lux · SYNC · sync
 
-Read-only Lux capability derived from the `sync` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `sync` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

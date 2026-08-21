@@ -6,7 +6,7 @@ description: "Read admin bases: Lists the tenant Base instances in the caller's 
 
 # Zoo · ADMIN · bases
 
-Read-only Zoo capability derived from the `admin` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `admin` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

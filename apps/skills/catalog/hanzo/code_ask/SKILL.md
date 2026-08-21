@@ -6,7 +6,7 @@ description: "Read code ask: Answers a question about the caller org's code with
 
 # Hanzo · CODE · ask
 
-Read-only Hanzo capability derived from the `code` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `code` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `q` | query | no | string | Q is the question to answer. Required, max 4000 bytes. |
-| `repo` | query | no | string | Repo narrows retrieval to one repository. Empty searches every repo the org |
+| `repo` | query | no | string | Repo narrows retrieval to one repository. Empty searches every repo the org has indexed. |
 
 ## Response
 

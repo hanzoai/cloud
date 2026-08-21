@@ -6,7 +6,7 @@ description: "Read framework framework: Returns the caller org's documents of on
 
 # Lux · FRAMEWORK · framework
 
-Read-only Lux capability derived from the `framework` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `framework` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -22,10 +22,10 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `doctype` | path | yes | string | DocType is the DocType to list, from the path. |
-| `name` | path | yes | string | Name is the document's name — its key within the DocType — from the path. |
-| `fields` | query | no | string | Fields projects the response to a subset — a JSON array ["a","b"] or a |
-| `filters` | query | no | string | Filters is a JSON object of equality matches, e.g. {"priority":"High"}. |
-| `limit` | query | no | string | Limit caps the rows returned. Anything that is not a positive integer |
+| `name` | path | yes | string | Name is the document's name — its key within the DocType — from the path. A name containing a space arrives percent-encoded and is decoded before it is matched against the stored one. |
+| `fields` | query | no | string | Fields projects the response to a subset — a JSON array ["a","b"] or a comma list "a,b". The envelope keys are always returned. |
+| `filters` | query | no | string | Filters is a JSON object of equality matches, e.g. {"priority":"High"}. Every key must be a field the DocType declares (or the managed name / docstatus); an undeclared one is refused rather than silently ignored. |
+| `limit` | query | no | string | Limit caps the rows returned. Anything that is not a positive integer leaves the engine's default in place. |
 | `order_by` | query | no | string | OrderBy is "<field> [asc\|desc]". Empty means most-recently-updated first. |
 
 ## Response
