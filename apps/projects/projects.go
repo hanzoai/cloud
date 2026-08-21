@@ -588,6 +588,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// zip's own registry — prose lifted per field, an MCP tool and a CLI command.
 	app.Post("/v1/projects/:slug/deploy", cloud.Handle(s, deploy))
 
+	// UNTYPED for the same reason deploy is: it answers image bytes. A typed op
+	// declares one JSON Out, and describing a PNG as one is a schema that lies
+	// about what comes back.
+	app.Get("/v1/projects/:slug/shot", cloud.Handle(s, shotOf))
+
 	zip.Post(r, "/v1/projects/:slug/purge", o.purge)
 
 	// The deployment lifecycle, in the order it runs: open one and take the scoped
