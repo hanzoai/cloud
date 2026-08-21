@@ -1,4 +1,4 @@
-// GET /v1/usage/leaderboard — the ranked board.
+// GET /v1/leaderboard — the ranked board.
 //
 //	scope=personal  caller's rank + the top users of the caller's OWN org, identities
 //	                anonymized except self + opted-in peers (the "as a participant" view)

@@ -73,8 +73,8 @@ guard. Moving inbound sync to the forge therefore needs a decision: accept
 upstream-wins, or have cloud fetch and push fast-forward-only itself.
 
 
-COMPLETE at **28 typed / 30 refused**, and that partition is now a **GATE, not
-prose**: `untypedByDesign` (typed_wire_test.go) is the closed list of the 30
+COMPLETE at **28 typed / 18 refused**, and that partition is now a **GATE, not
+prose**: `untypedByDesign` (typed_wire_test.go) is the closed list of the 18
 refusals with the wire fact behind each, and `TestEveryRouteIsTypedOrNamed`
 fails three ways — a served operation that is neither typed nor named, a name
 that describes an operation git no longer serves, and a name that IS a typed op.
@@ -91,14 +91,13 @@ handlers and against zip v1.18.15 itself, not against this file. Do not re-type
 them; run the gate before believing any route counter that says git has untyped
 work left.
 
-**A refusal is still DESCRIBED.** Twelve of the 30 read a request body, and each
-now declares it through `openapi.Register` (webhook.go's init) without becoming a
-typed op: the forge webhook's push envelope, the three ZAP procedures that bind
-one, and the eight pack POSTs as `openapi.Binary`. They previously published an
-operationId, tags and nothing else — which no SDK generator can tell apart from a
-route that takes no body, so the published webhook had nowhere to put a delivery.
+**A refusal is still DESCRIBED.** Seven of the 18 read a request body, and each
+declares it through `openapi.Register` (webhook.go's init) without becoming a
+typed op: the three ZAP procedures that bind one, and the four pack POSTs as
+`openapi.Binary`. They previously published an operationId, tags and nothing
+else — which no SDK generator can tell apart from a route that takes no body.
 `declaredBodies` + `TestRefusedRoutesDeclareTheBodyTheyRead` pin it both ways: a
-declared body that vanishes fails, and a body declared for one of the eighteen
+declared body that vanishes fails, and a body declared for one of the eleven
 that read none fails too. What a refusal still cannot have, and only a typed op
 gives, is prose, an MCP tool and a CLI command.
 
@@ -113,19 +112,16 @@ gives, is prose, an MCP tool and a CLI command.
    it is wrapped in cloud.Terminal so its 401/400 cannot be flattened by the
    co-mounted /v1 error handler.
 
-2. **Smart-HTTP git protocol** (git.go:353-355 and :361-363 under /v1/git,
-   git.go:371-376 root-level on the git host) — 12 routes: the org/repo trio
-   and the project-scoped org/project/repo trio, each at both addresses. The
-   git pack wire: request bodies are `application/x-git-*-request` pack
-   streams, responses are `application/x-git-*-advertisement|result`, the
-   packfile streamed via SendStream (smart_http.go:151,180) — not JSON in
-   either direction. The root-level six additionally fall through with
-   c.Next() on non-git hosts (onGitHost, git.go:434), and a typed dispatch
-   cannot decline into the next route.
+2. **Smart-HTTP git protocol** (routes() in git.go, under /v1/git) — 6 routes:
+   the org/repo trio and the project-scoped org/project/repo trio. The git pack
+   wire: request bodies are `application/x-git-*-request` pack streams,
+   responses are `application/x-git-*-advertisement|result`, the packfile
+   streamed via SendStream (smart_http.go:151,180) — not JSON in either
+   direction.
 
-3. **Browser UI** (ui.go:137-150) — 12 routes. Server-rendered text/html
-   (html/template); a typed dispatch ends in c.JSON(out). The root-level six
-   are also host-gated with the same c.Next() fall-through as family 2.
+3. **Browser UI** (uiRoutes in ui.go) — 6 routes, under /v1/git beside the JSON
+   ops. Server-rendered text/html (html/template); a typed dispatch ends in
+   c.JSON(out).
 
 4. **ZAP procedure adapters** (zap.go:120-124) — 5 routes. The published
    envelope contract: success is the cloud.OK envelope, failure is a non-2xx
@@ -396,30 +392,30 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
       EOF
       go run /tmp/cliname/main.go   # from the repo root, so it resolves this module's zip
 
-- **NEW: TWELVE host-gated root paths are published as if `api.hanzo.ai` served
-  them.** The six root UI pages (`/`, `/explore`, `/{org}/{repo}`, and the
-  tree/blob/commits forms) and the six root smart-HTTP routes (the org/repo trio
-  and its project-scoped twin) are registered on
-  the ROOT router and gated to the git host by `onGitHost`, which falls through
-  with `c.Next()` on every other Host — `TestRootSmartHTTP_HostGuard` and
-  `TestRootUI_HostGuard` pin the 404 on `api.hanzo.test`. The document has ONE
+- **CLOSED: the twelve host-gated root paths are gone.** The six root UI pages
+  (`/`, `/explore`, `/{org}/{repo}`, and the tree/blob/commits forms) and the six
+  root smart-HTTP routes (the org/repo trio and its project-scoped twin) were
+  registered on the ROOT router and gated to the git host by `onGitHost`, which
+  fell through with `c.Next()` on every other Host. The document has ONE
   `servers` entry, `https://api.hanzo.ai`, and no notion of a per-path host, so
-  all twelve land in `plugin/git/openapi.json` and then in `openapi.yaml`
-  unqualified: every SDK generated from the golden gains twelve methods that 404
-  against the server the document itself names. `GET /` is the sharpest — its
-  operationId is the bare word `get`.
+  all twelve landed in `plugin/git/openapi.json` and then in `openapi.yaml`
+  unqualified: every SDK generated from the golden gained twelve methods that
+  404ed against the server the document itself names. `GET /` was the
+  sharpest — its operationId was the bare word `get`.
 
-  This is the root playbook's #8 shape (a document describing a FALSE wire), not
-  its #7 shape (a true wire under-described), and it is the one class here that
-  cannot be closed inside this package: either the projection learns a per-path
-  `servers` (OpenAPI 3.1 allows it on a path item) or a host-gated route declares
-  itself out of the document. The `/git/*` six are NOT in this twelve — those are
-  registered without a host gate and do serve on every host, so publishing them
-  is true (they answer HTML, which is why they are in `untypedByDesign`). Count
-  them from the golden, never from this list:
+  It read as the root playbook's #8 shape, a document describing a FALSE wire,
+  and the fix was neither of the two the note expected (a per-path `servers`, or
+  a host-gated route declaring itself out of the document). It was that the
+  routes had no reason to exist: `git.hanzo.ai` is served by the standalone
+  forge, a separate process, so nothing in production ever reached them, and a
+  manifest prefix must begin with a literal segment, so `/:org` could not be
+  declared and under the plugin host they were undeliverable even in dev.
+  Deleted. The six browse pages are `/v1/git`, `/v1/git/explore` and the
+  `/v1/git/{org}/{repo}` forms — HTML, which is why they are still in
+  `untypedByDesign`. Count them from the golden, never from this list:
 
       python3 - <<'EOF'
       import json
       d=json.load(open('plugin/git/openapi.json'))
-      print([p for p in sorted(d['paths']) if not p.startswith(('/v1/','/git'))])
+      print([p for p in sorted(d['paths']) if not p.startswith('/v1/')])
       EOF
