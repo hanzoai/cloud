@@ -776,7 +776,7 @@ func unfit(absent map[string]string) map[string]string {
 // the two are the same list — which is why the artifact comparison holds.
 func spec(app *zip.App, composed []string) {
 	openapi.MountFleet(app, func() ([]openapi.Part, error) {
-		return openapi.Subsets(composed, plugin.Spec)
+		return openapi.Subsets(composed, plugin.Spec, manifest.StageOf)
 	})
 }
 

@@ -35,6 +35,12 @@ func subset(t *testing.T, path string) []byte {
 	return raw
 }
 
+// ga is the stage lookup the fixtures below are composed with: every app in them
+// is ga, which is what an app with no manifest row would answer anyway. Production
+// passes manifest.StageOf; the stage's own behaviour is asserted where it decides
+// something — TestBetaIsNotPublic.
+func ga(string) string { return "" }
+
 // TestMountFleetServesTheCompositionIncludingItself: the host's answer is every
 // app's surface PLUS the door it came through. The door is projected from a real
 // mount rather than written down, so it cannot name an address the fleet does not
@@ -43,7 +49,7 @@ func subset(t *testing.T, path string) []byte {
 func TestMountFleetServesTheCompositionIncludingItself(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	openapi.MountFleet(app, func() ([]openapi.Part, error) {
-		return openapi.Subsets([]string{"ads", "crm"}, func(a string) []byte { return subset(t, "/v1/"+a) })
+		return openapi.Subsets([]string{"ads", "crm"}, func(a string) []byte { return subset(t, "/v1/"+a) }, ga)
 	})
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, openapi.Path, nil))
@@ -78,7 +84,7 @@ func TestSubsetsRefuseAnAppThatPublishedNothing(t *testing.T) {
 			return nil // never described
 		}
 		return subset(t, "/v1/"+a)
-	})
+	}, ga)
 	if err == nil {
 		t.Fatal("Subsets accepted an app with no subset — its whole surface would be silently absent from the published spec")
 	}
@@ -112,7 +118,7 @@ func TestSubsetsRefusesAnAppWhoseOwnIDsCollide(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = openapi.Subsets([]string{"commerce"}, func(string) []byte { return collide })
+	_, err = openapi.Subsets([]string{"commerce"}, func(string) []byte { return collide }, ga)
 	if err == nil {
 		t.Fatal("Subsets accepted one operationId at two addresses — every generator downstream " +
 			"mis-consumes that document, and the weave that catches it later cannot say whose it is")
@@ -123,7 +129,7 @@ func TestSubsetsRefusesAnAppWhoseOwnIDsCollide(t *testing.T) {
 	}
 
 	// An injective subset still decodes. The check must cost a green run nothing.
-	if _, err := openapi.Subsets([]string{"ads"}, func(a string) []byte { return subset(t, "/v1/"+a) }); err != nil {
+	if _, err := openapi.Subsets([]string{"ads"}, func(a string) []byte { return subset(t, "/v1/"+a) }, ga); err != nil {
 		t.Errorf("injective subset: %v", err)
 	}
 }
@@ -135,7 +141,7 @@ func TestSubsetsRefusesAnAppWhoseOwnIDsCollide(t *testing.T) {
 func TestMountFleetReportsAFailedCompositionRatherThanAnEmptyDocument(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	openapi.MountFleet(app, func() ([]openapi.Part, error) {
-		return openapi.Subsets([]string{"ghost"}, func(string) []byte { return nil })
+		return openapi.Subsets([]string{"ghost"}, func(string) []byte { return nil }, ga)
 	})
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, openapi.Path, nil))

@@ -79,7 +79,7 @@ func TestShrinkKeepsOnlyWhatIsStillMeasured(t *testing.T) {
 // still measured. With -weave it regenerates the file (shrinking only); without,
 // it verifies. Same dual mode as the golden, for the same reason.
 func TestNoOperationIsMisfiled(t *testing.T) {
-	subsets, err := openapi.Subsets(manifest.Names(), fromTree)
+	subsets, err := openapi.Subsets(manifest.Names(), fromTree, manifest.StageOf)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -72,6 +72,25 @@ func Coresident(name string) bool {
 	return false
 }
 
+// StageOf is the stage the named app's row declares (App.Stage, HIP-0139 §8).
+//
+// It is a function rather than a field read at each call site because the two
+// callers are in packages that cannot see this type: the weave takes it as
+// `func(string) string` (openapi cannot import manifest — manifest's own tests
+// read that package), and the refusal at Serve takes the name it was handed.
+//
+// An unknown name is ga, which is the same answer the zero value gives. A name
+// that is not in Apps was never routed here, so there is no prefix for a refusal
+// to sit on and nothing for a stage to decide.
+func StageOf(name string) string {
+	for _, a := range Apps {
+		if a.Name == name {
+			return a.Stage
+		}
+	}
+	return ""
+}
+
 // GrantFor is the subtrees whose MIDDLEWARE an app may install — what
 // cloud.Plugin.Prefixes bounds, and what a plugin/<app>/main.go hands it.
 //

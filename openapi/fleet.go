@@ -106,6 +106,12 @@ func FleetSpec(app *zip.App) (*Document, error) {
 // (plugin.Spec). Neither is a second source — check regenerates the files
 // both read, from source, and fails on any diff.
 //
+// stage answers with one app's stage (HIP-0139 §8), and it is a function for the
+// same reason read is: the fact lives in manifest.Apps, and this package cannot
+// import manifest because manifest's own tests import this one. Production passes
+// manifest.StageOf. It cannot be read out of the subset, because the app that
+// wrote the subset does not know it — see [Part].
+//
 // A missing subset is refused rather than skipped. Skipping it would publish a
 // fleet document with one app's whole surface quietly absent, which is precisely
 // the failure mode plugin/ingress cost eight paths to.
@@ -126,7 +132,7 @@ func FleetSpec(app *zip.App) (*Document, error) {
 // statement of the rule, asked once per part here and once over the whole
 // composition there, because a part being injective and the weave being injective
 // are different facts and neither implies the other.
-func Subsets(apps []string, read func(app string) []byte) ([]Part, error) {
+func Subsets(apps []string, read func(app string) []byte, stage func(app string) string) ([]Part, error) {
 	out := make([]Part, 0, len(apps))
 	for _, name := range apps {
 		raw := read(name)
@@ -141,7 +147,7 @@ func Subsets(apps []string, read func(app string) []byte) ([]Part, error) {
 			return nil, fmt.Errorf("%s subset: %w — its own generator refuses this, so the file was "+
 				"not generated; run `make -C apps/%s describe` rather than editing it", name, err, name)
 		}
-		out = append(out, Part{App: name, Doc: &doc})
+		out = append(out, Part{App: name, Stage: stage(name), Doc: &doc})
 	}
 	return out, nil
 }

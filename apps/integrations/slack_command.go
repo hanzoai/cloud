@@ -110,7 +110,7 @@ var registryFailed sync.Once
 // price of reading the whole fleet's registry without a network hop, and it is
 // paid once at link time rather than per request.
 func fleetCommands() ([]zip.Command, error) {
-	parts, err := openapi.Subsets(manifest.Names(), plugin.Spec)
+	parts, err := openapi.Subsets(manifest.Names(), plugin.Spec, manifest.StageOf)
 	if err != nil {
 		return nil, err
 	}

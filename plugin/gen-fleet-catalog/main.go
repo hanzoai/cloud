@@ -13,6 +13,16 @@
 // tool per subsystem whose `op` enum holds names, and a model fetches the schema
 // for the one it picked — that fetch reaches the owning subsystem, which is one
 // process rather than a hundred.
+//
+// THE AUDIENCE COMES FROM public.yaml AND NOT FROM THE SUBSET, and the two are
+// not the same answer. A subset's x-public is what the app's own binary could
+// derive about itself, and one term of that rule is a fleet fact the app cannot
+// see: its STAGE (HIP-0139 §8, stamped by the weave). Read off the subsets, a
+// beta capability's 355 operations stayed in the door — offered to every model
+// while the same operations were absent from every generated SDK, which is
+// exactly the split the paragraph below says does not exist. public.yaml IS the
+// public contract, so reading it is not a second copy of the rule; it is the
+// only copy, asked where it has been fully applied.
 package main
 
 import (
@@ -21,6 +31,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"sigs.k8s.io/yaml"
 )
 
 // op is one operation as its own subsystem published it. Read says the
@@ -43,6 +55,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	published, err := contract(root)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gen-fleet-catalog: %v\n", err)
+		os.Exit(1)
+	}
+
 	out := map[string][]op{}
 	for _, path := range specs {
 		app := filepath.Base(filepath.Dir(path))
@@ -59,9 +77,6 @@ func main() {
 				// x-tool, written by openapi.Fold for the ops the app's own typed
 				// registry holds — the same registry zip builds its MCP tools from.
 				Tool bool `json:"x-tool"`
-				// x-public, the audience openapi.stamp derived: the customer
-				// contract. The door offers that contract and nothing beside it.
-				Public bool `json:"x-public"`
 			} `json:"paths"`
 		}
 		if err := json.Unmarshal(raw, &doc); err != nil {
@@ -89,9 +104,11 @@ func main() {
 				}
 				// THE DOOR IS THE PUBLIC CONTRACT. An operation the public document
 				// leaves out — the operator's /v1/admin family, a relay door, a
-				// legacy spelling — is not offered to a model either; the tool
-				// surface and the SDK surface are two projections of one audience.
-				if !o.Public {
+				// legacy spelling, a capability that is not yet ga — is not offered
+				// to a model either; the tool surface and the SDK surface are two
+				// projections of one audience, so this asks the document that IS
+				// that audience rather than the subset's own guess at it.
+				if !published[o.OperationID] {
 					continue
 				}
 				seen[o.OperationID] = true
@@ -132,6 +149,46 @@ func main() {
 		n += len(ops)
 	}
 	fmt.Printf("%s: %d subsystems, %d operations\n", dst, len(out), n)
+}
+
+// contract is every operationId in the published contract, read off public.yaml.
+//
+// An id is a fleet-wide key — openapi.uniqueOperationIDs refuses a document where
+// two addresses share one — so membership is all this needs and the address does
+// not have to be matched a second time. `make -f mk/fleet.mk documents` writes
+// public.yaml immediately before running this, from the same subsets, so the two
+// always describe one commit.
+//
+// A missing or empty public.yaml is a REFUSAL. Treating it as "nothing is public"
+// would silently write a catalog with no tools in it, and the door would answer
+// tools/list with an empty fleet — 200 OK, and wrong in the way nobody files.
+func contract(root string) (map[string]bool, error) {
+	path := filepath.Join(root, "public.yaml")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w — run `make -f mk/fleet.mk openapi` first", path, err)
+	}
+	var doc struct {
+		Paths map[string]map[string]struct {
+			OperationID string `json:"operationId"`
+		} `json:"paths"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	ids := map[string]bool{}
+	for _, methods := range doc.Paths {
+		for method, o := range methods {
+			if method == "parameters" || o.OperationID == "" {
+				continue
+			}
+			ids[o.OperationID] = true
+		}
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("%s names no operation — the door would publish an empty fleet", path)
+	}
+	return ids, nil
 }
 
 func pick(first, second string) string {

@@ -43,6 +43,12 @@ func init() {
 		},
 		Response: json.RawMessage(`{"ok":true,"engine":"hanzo-flags"}`),
 	})
+	zip.Describe("POST /flags/hold", zip.Doc{
+		Description: "Evaluates one flag FOR THE CALLER'S OWN ORG.\n\nThe subject is the org, not a person: a capability flag says whether a customer\nhas been let into a product, which is a fact about the tenant. So the org is\nboth the tenant whose definitions are read and the distinct_id they are\nevaluated against, and a caller has no way to name either.\n\nIt goes through [Assign], which is the ONE bucketing in this app — the same\npure function of (key, subject, definition) that /v1/flags and the experiments\nprimitive run. A second evaluator here would be a second answer to \"does this\norg hold X\", and the two would disagree on the day a rollout percentage is set.\n\nA flag this org has no definition for is OFF, which is a real answer and the\nright one: a capability nobody was let into is held by nobody. An engine that\ncannot answer is an ERROR, never a false — the caller fails closed on it, and\nsilently reporting \"not held\" would make an outage indistinguishable from a\ndecision.",
+		Fields: map[string]string{
+			"FlagIn.key": "the flag's key; for a capability's stage it is the capability's name",
+		},
+	})
 	zip.Describe("POST /v1/flags", zip.Doc{
 		Description: "Evaluate runs the caller's flag definitions for one identity and returns the\nflag verdict: which flags are on (or which variant), their payloads,\nand whether any definition failed to compute. Evaluation is in-process over the\ncaller's own (org, project) definitions — no network hop, no shared KV — so a\ntenant can only ever evaluate its own flags.",
 		Fields: map[string]string{

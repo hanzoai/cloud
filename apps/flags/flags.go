@@ -478,6 +478,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	cloud.SetSwitchReader(Bool)
 	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
 	routes(app, svc)
+	exposeHold()
 	log.Info("flags engine ready", "engine", "hanzo-flags", "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
 	return nil
 }

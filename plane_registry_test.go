@@ -23,10 +23,12 @@ import (
 	"github.com/hanzoai/cloud/apps/allowance"
 	"github.com/hanzoai/cloud/apps/analytics"
 	"github.com/hanzoai/cloud/apps/commerce"
+	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/risk"
 	allowancepeer "github.com/hanzoai/cloud/plane/allowance"
 	analyticspeer "github.com/hanzoai/cloud/plane/analytics"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	flagspeer "github.com/hanzoai/cloud/plane/flags"
 	riskpeer "github.com/hanzoai/cloud/plane/risk"
 	"github.com/zap-proto/zip"
 )
@@ -117,6 +119,24 @@ func TestGeneratedAllowanceSurfaceIsTheLiveSurface(t *testing.T) {
 	sameSurface(t, "allowance", allowancepeer.Ops, live,
 		"allowance registered no plane ops at all — the AI gate can neither admit a free "+
 			"caller nor count one, and nothing says so. Mount must call expose.")
+}
+
+// TestGeneratedFlagsSurfaceIsTheLiveSurface holds the FLAG READ to the same gate,
+// and its absence is the loudest of the five.
+//
+// It is what every capability that is not yet ga asks about every request reaching
+// its prefix (HIP-0139 §8), from whichever binary serves that capability. The
+// refusal fails CLOSED, so an op that stopped being registered — a Mount that no
+// longer calls exposeHold, a rename on one side — does not error anywhere: it
+// turns every beta product off for every customer who was let into it, and each
+// one reads as a 404 that is indistinguishable from the product not existing.
+// So the registration itself is asserted, from the running registry.
+func TestGeneratedFlagsSurfaceIsTheLiveSurface(t *testing.T) {
+	live := liveOps(t, flagspeer.App, flags.Mount, false)
+	t.Cleanup(func() { _ = flags.Shutdown(t.Context()) })
+	sameSurface(t, "flags", flagspeer.Ops, live,
+		"flags registered no plane ops at all — every capability that is not ga refuses "+
+			"every org, including the ones holding its flag, and nothing says so. Mount must call exposeHold.")
 }
 
 // sameSurface holds a generated peer client to the surface its app actually
