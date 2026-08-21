@@ -10,7 +10,6 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-
 // reasonProxy is the one reason the seven relay operations share. Three wire facts
 // each independently forbid a typed op:
 //
