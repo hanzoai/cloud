@@ -497,7 +497,7 @@ type PathItem map[string]*Operation
 // merged duplicate and a middleware chain are INDISTINGUISHABLE through the
 // public API, so "handlers > 1" cannot mean "collision" fleet-wide; treating it
 // as one would refuse a spec for a healthy router.
-// (apps/bots/routes_test.go asserts exactly that rule, and is right to: it is
+// (apps/bot/routes_test.go asserts exactly that rule, and is right to: it is
 // a local truth for the bots/visor/runtime surface, where nothing chains
 // middleware. It is not a global one.)
 //

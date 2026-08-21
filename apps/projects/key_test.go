@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 )
 
 // storeAt opens a fresh projects store in a temp dir — migrations and all.
@@ -239,7 +239,7 @@ func TestBackfillNeverRotatesAServingKey(t *testing.T) {
 }
 
 // keyResolver must satisfy the seam the ingest door consults.
-var _ analytics.KeyResolver = keyResolver{}
+var _ event.KeyResolver = keyResolver{}
 
 func mustKey(t *testing.T) string {
 	t.Helper()

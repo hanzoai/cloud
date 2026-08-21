@@ -89,7 +89,7 @@ type Spend struct {
 
 // LLM is the org's LLM usage totals from the warehouse ledger. Available=false when
 // the datastore is not connected (honest zeros). The detailed per-model / timeseries
-// breakdown lives at /v1/analytics/*; this is the KPI-band total.
+// breakdown lives at /v1/event/*; this is the KPI-band total.
 type LLM struct {
 	// Available is false when the warehouse was not connected or a query blipped.
 	// The totals below are then honest zeros, NOT measured ones.

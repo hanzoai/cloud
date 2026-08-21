@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/hanzoai/cloud/apps/automations"
+	"github.com/hanzoai/cloud/apps/auto"
 	"github.com/hanzoai/cloud/apps/integrations"
 )
 
@@ -32,7 +32,7 @@ func init() {
 	// credential custody). A primitive-typed adapter keeps the seam free of the
 	// automations types.
 	integrations.SetAutomationTrigger(func(ctx context.Context, org, source, name, dedupeKey string, depth int, payload map[string]any) (int, error) {
-		return automations.Deliver(ctx, org, automations.TriggerEvent{
+		return auto.Deliver(ctx, org, auto.TriggerEvent{
 			Source: source, Name: name, DedupeKey: dedupeKey, Depth: depth, Payload: payload,
 		})
 	})
