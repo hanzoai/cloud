@@ -10,14 +10,4 @@
 /_ commerce
 /meet meet
 /tasks tasks
-/v1/auto automations
 /v1/billing commerce
-/v1/bot bots
-/v1/errors analytics
-/v1/event analytics
-/v1/event.js analytics
-/v1/insights analytics
-/v1/mesh zt
-/v1/networks zt
-/v1/replay analytics
-/v1/s3 storage
