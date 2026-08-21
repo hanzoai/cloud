@@ -21,12 +21,17 @@
 // says is one package with one plugin. The values stay distinct; the name does
 // not multiply.
 //
-// Three route families, all under /v1/bot:
+// Two prefixes, because there are two nouns: the MACHINE surface is /v1/node
+// (a node connects, is listed, and is asked to run a command), and the RUN
+// surface stays /v1/bot. A bot is an agent bound to a machine, so the machine
+// is not a kind of bot and does not live under its name.
 //
-//	GET  /v1/bot/connect            the socket a node dials and holds open
-//	GET  /v1/bot/nodes              this org's connected nodes
-//	POST /v1/bot/nodes/{id}/invoke  ask one of them to run a command
-//	POST /v1/bot/peer/invoke        replica-to-replica forward (machine hop)
+// Route families:
+//
+//	GET  /v1/node/connect            the socket a node dials and holds open
+//	GET  /v1/node              this org's connected nodes
+//	POST /v1/node/{id}/invoke  ask one of them to run a command
+//	POST /v1/node/peer/invoke        replica-to-replica forward (machine hop)
 //
 //	GET  /v1/bot/runs               this org's live bot runs        (run.go)
 //	POST /v1/bot/runs               launch one — 501 until the executor can
@@ -243,7 +248,7 @@ func mountNodes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 	// UNTYPED BY DESIGN: this is a WebSocket upgrade. It answers 101 and then the
 	// connection is a duplex frame stream for the life of the node, which is not a
 	// status a typed op can declare or a value it can return.
-	app.Get("/v1/bot/connect", cloud.Terminal(cloud.Handle(s, func(_ *cloud.Service[state], c *zip.Ctx) error {
+	app.Get("/v1/node/connect", cloud.Terminal(cloud.Handle(s, func(_ *cloud.Service[state], c *zip.Ctx) error {
 		if _, ok := principal.Org(c); !ok {
 			return principal.Refused(c)
 		}
@@ -251,7 +256,12 @@ func mountNodes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 	})))
 
 	o := nodeOps{s: s}
-	zip.Get(app.Group("/v1/bot"), "/nodes", o.listNodes)
+	// Registered on the ROOT group with the last segment as the path, the way
+	// run.go registers /v1/bot/runs: zip.Get(g, "") on a /v1/node group would
+	// normalise to "/v1/node/", and a trailing slash in the document is a
+	// trailing slash in every generated SDK.
+	root := app.Group("/v1")
+	zip.Get(root, "/node", o.listNodes)
 
 	// UNTYPED BY DESIGN: a policy refusal here is a 403 carrying a DOMAIN body —
 	// {"error":"denied","code":…,"reason":…} — that a client switches on, and the
@@ -263,7 +273,7 @@ func mountNodes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 	// in-band 402 and task #78's multi-status responses. It also needs the
 	// caller's X-Device-Id (callerOf), which no In field may carry: a caller that
 	// could name its own device could pre-approve its own system.run.
-	app.Post("/v1/bot/nodes/:id/invoke", cloud.Terminal(cloud.Handle(s, invokeNode)))
+	app.Post("/v1/node/:id/invoke", cloud.Terminal(cloud.Handle(s, invokeNode)))
 
 	// The machine hop. It carries no user identity and authenticates with its own
 	// token, so it is deliberately outside the principal gate the routes above use.
@@ -282,13 +292,13 @@ func mountNodes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 // keep them raw.
 //
 // zipdoc lifts a typed op's prose off its handler's doc comment, which is how
-// GET /v1/bot/nodes explains itself. These three have no typed op to lift from, so
+// GET /v1/node explains itself. These three have no typed op to lift from, so
 // without this they publish an operationId and nothing else — three SDK methods
 // that cannot say what they do and three CLI commands with no help. Describe is the
 // seam for exactly the operations the wire refuses to type; keyed by the fiber
 // pattern verbatim, so prose renders only while the router serves the route.
 func init() {
-	openapi.Describe("/v1/bot/connect", http.MethodGet,
+	openapi.Describe("/v1/node/connect", http.MethodGet,
 		"The socket a bot node dials and holds open to become invokable.",
 		"Upgrades to a WebSocket and keeps it for the life of the node. cloud writes a "+
 			"challenge frame immediately; the node answers with a connect frame naming the "+
@@ -317,7 +327,7 @@ func init() {
 			"connection: correlation ids are minted under the connection id and checked against "+
 			"it, so naming another node's in-flight call resolves nothing.")
 
-	openapi.Describe("/v1/bot/nodes/:id/invoke", http.MethodPost,
+	openapi.Describe("/v1/node/:id/invoke", http.MethodPost,
 		"Ask one of your connected machines to run a command, and get its answer back.",
 		"Sends {command, params, timeoutMs, idempotencyKey} to the named node and answers with "+
 			"what the node returned: {ok, payload, code, message}, where payload is the node's own "+
@@ -377,7 +387,7 @@ func init() {
 }
 
 // ---------------------------------------------------------------------------
-// GET /v1/bot/nodes
+// GET /v1/node
 // ---------------------------------------------------------------------------
 
 // nodeView is one connected node as an operator sees it. Everything in it is the
@@ -386,7 +396,7 @@ func init() {
 // socket, not this list.
 type nodeView struct {
 	// ID is the node's own identifier within the org — the value
-	// POST /v1/bot/nodes/{id}/invoke addresses it by.
+	// POST /v1/node/{id}/invoke addresses it by.
 	ID string `json:"id"`
 	// DisplayName is the human name the node reported for itself.
 	DisplayName string `json:"displayName,omitempty"`
@@ -457,7 +467,7 @@ func nonNil(v []string) []string {
 }
 
 // ---------------------------------------------------------------------------
-// POST /v1/bot/nodes/{id}/invoke
+// POST /v1/node/{id}/invoke
 // ---------------------------------------------------------------------------
 
 // invokeBody is one invocation as a caller writes it. There is no node id and no
