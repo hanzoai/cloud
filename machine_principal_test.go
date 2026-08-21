@@ -25,6 +25,8 @@ func agentToken(org string) *idClaims {
 	return &idClaims{Claims: authz.Claims{
 		Owner: org,
 		Azp:   app,
+		// The claim IAM stamps on a client_credentials token and on nothing else.
+		Type: authz.Program,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Audience: jwt.ClaimStrings{app},
 			Subject:  org + "/" + app,
