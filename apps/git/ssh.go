@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/brand"
@@ -57,8 +58,15 @@ type sshServer struct {
 	ln       net.Listener
 	closed   bool
 	wg       sync.WaitGroup
-	boundTCP string // actual bound address (resolves :0 to the ephemeral port for tests)
+	conns    map[net.Conn]struct{} // live connections, so stop can reach them
+	boundTCP string                // actual bound address (resolves :0 to the ephemeral port for tests)
 }
+
+// shutdownGrace is how long stop waits for connections to end on their own
+// before closing them underneath their handlers. A push mid-flight should be
+// allowed to finish; a client that is merely holding the connection open should
+// not be able to decide when this process exits.
+const shutdownGrace = 5 * time.Second
 
 // gitSSHHost resolves the SSH host advertised in sshUrl. GIT_SSH_HOST wins;
 // else it is derived from the deployment domain (api.hanzo.ai → git.hanzo.ai);
@@ -178,8 +186,21 @@ func (srv *sshServer) addr() string {
 	return srv.listen
 }
 
-// stop closes the listener and waits for in-flight connections to drain.
-// Idempotent.
+// stop closes the listener, lets in-flight connections finish, and closes any
+// that are still open once the grace expires. Idempotent.
+//
+// Closing the LISTENER does not close connections already accepted, and
+// handleConn sits on `range chans` until the client hangs up — so waiting on the
+// WaitGroup alone waits on the CLIENT, forever if it simply keeps the connection
+// open. git does exactly that between operations, which is why the SSH wire test
+// finished its assertions and then hung here until the suite's timeout killed it,
+// taking `go test ./...` with it.
+//
+// The wait is kept, because a push mid-flight should land rather than be cut in
+// half; what changes is that it is BOUNDED, and the deadline belongs to us rather
+// than to whoever is connected. A pod gets a termination grace and then SIGKILL,
+// so an unbounded wait here is not a gentler shutdown — it is the same kill with
+// the in-flight work lost and nothing said about why.
 func (srv *sshServer) stop() {
 	srv.mu.Lock()
 	if srv.closed {
@@ -192,7 +213,41 @@ func (srv *sshServer) stop() {
 	if ln != nil {
 		_ = ln.Close()
 	}
-	srv.wg.Wait()
+
+	done := make(chan struct{})
+	go func() { srv.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return
+	case <-time.After(shutdownGrace):
+	}
+	// Grace expired: close the sockets so every handler's read fails and returns.
+	srv.mu.Lock()
+	live := make([]net.Conn, 0, len(srv.conns))
+	for c := range srv.conns {
+		live = append(live, c)
+	}
+	srv.mu.Unlock()
+	for _, c := range live {
+		_ = c.Close()
+	}
+	<-done
+}
+
+// track registers a live connection so stop can reach it, and returns the
+// function that forgets it again.
+func (srv *sshServer) track(c net.Conn) func() {
+	srv.mu.Lock()
+	if srv.conns == nil {
+		srv.conns = make(map[net.Conn]struct{})
+	}
+	srv.conns[c] = struct{}{}
+	srv.mu.Unlock()
+	return func() {
+		srv.mu.Lock()
+		delete(srv.conns, c)
+		srv.mu.Unlock()
+	}
 }
 
 func (srv *sshServer) acceptLoop(ln net.Listener) {
@@ -220,6 +275,7 @@ func (srv *sshServer) acceptLoop(ln net.Listener) {
 // the connection's session channels.
 func (srv *sshServer) handleConn(nConn net.Conn) {
 	defer func() { _ = nConn.Close() }()
+	defer srv.track(nConn)()
 	sconn, chans, reqs, err := ssh.NewServerConn(nConn, srv.cfg)
 	if err != nil {
 		// Handshake / auth failure — normal for probes + rejected keys.
