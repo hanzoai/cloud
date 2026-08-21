@@ -11,16 +11,38 @@ import (
 // search, Snippet is a bounded excerpt; for context, it is the full AST chunk the
 // agent pastes into its window.
 type Span struct {
-	Repo    string  `json:"repo"`
-	File    string  `json:"file"`
-	Line    int     `json:"line"`
-	EndLine int     `json:"endLine"`
-	Kind    string  `json:"kind,omitempty"`
-	Symbol  string  `json:"symbol,omitempty"`
-	Snippet string  `json:"snippet"`
-	Score   float64 `json:"score"`
-	Tier    string  `json:"tier,omitempty"`
-	Role    string  `json:"role,omitempty"` // context: match | definition | caller
+	// Repo is the indexed repository the span was found in, as it was indexed
+	// ("owner/name"). A search may be scoped to one repo or run across all of them,
+	// so this is how a caller tells the results apart.
+	Repo string `json:"repo"`
+	// File is the path inside the repo, relative to its root and never absolute.
+	File string `json:"file"`
+	// Line is where the span starts, 1-based, as an editor counts.
+	Line int `json:"line"`
+	// EndLine is the last line of the span, inclusive. It equals Line for a
+	// one-line span rather than being zero or absent.
+	EndLine int `json:"endLine"`
+	// Kind is what the indexer decided this chunk IS — "func", "method", "type",
+	// "struct", "interface", "var", "const", or "block" for a run of code that
+	// declares nothing. Absent when the chunker could not classify it.
+	Kind string `json:"kind,omitempty"`
+	// Symbol is the declared name, when the span declares one. Absent on a block.
+	Symbol string `json:"symbol,omitempty"`
+	// Snippet is the code itself: a bounded excerpt on /search, the whole chunk on
+	// /context — which is why the same type serves both and why a /context span is
+	// the one an agent pastes into its window.
+	Snippet string `json:"snippet"`
+	// Score ranks this span against the OTHERS IN THE SAME RESPONSE and means
+	// nothing across responses or between tiers: the hybrid tier's number is a
+	// reciprocal-rank fusion sum (Σ 1/(60+rank), so tenths at best), the symbol
+	// tier's is a descending position count, and the text and semantic tiers pass
+	// through bm25 and cosine. Compare within a list; never threshold on it.
+	Score float64 `json:"score"`
+	// Tier is which retrieval produced the span: "hybrid" (the default — all three
+	// fused), "text" (trigram/FTS), "regex", "semantic" (vector), or "symbol". It is
+	// what explains a Score, so the two travel together.
+	Tier string `json:"tier,omitempty"`
+	Role string `json:"role,omitempty"` // context: match | definition | caller
 }
 
 const (
@@ -245,11 +267,24 @@ func (e *engine) rowsToSpans(_ context.Context, rows []chunkRow, tier string) []
 // most relevant spans plus the definitions they call and their key callers,
 // packed greedily until the budget is spent. It is deliberately NOT whole files.
 type ContextBundle struct {
-	Query        string `json:"query"`
-	Repo         string `json:"repo,omitempty"`
-	BudgetTokens int    `json:"budgetTokens"`
-	UsedTokens   int    `json:"usedTokens"`
-	Spans        []Span `json:"spans"`
+	// Query is the ask this bundle was packed for, echoed back so a cached or
+	// forwarded bundle still says what it answers.
+	Query string `json:"query"`
+	// Repo narrows the retrieval to one repository. Absent means every indexed repo
+	// was searched.
+	Repo string `json:"repo,omitempty"`
+	// BudgetTokens is the ceiling the caller asked for. Packing stops under it, so
+	// this is a bound and not a target.
+	BudgetTokens int `json:"budgetTokens"`
+	// UsedTokens is what the returned spans actually cost, by the same estimate the
+	// packer used (roughly one token per four characters — an estimate, not a
+	// tokenizer's count, so size a real window with headroom).
+	UsedTokens int `json:"usedTokens"`
+	// Spans are the packed chunks, most relevant first, each expanded with the
+	// definitions it calls and its notable callers. The top match is always present
+	// even if it had to be truncated to fit, so a matched query never comes back
+	// with nothing.
+	Spans []Span `json:"spans"`
 }
 
 const contextSeedPool = 12
