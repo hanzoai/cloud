@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // campaign.go is the in-process CAMPAIGN-METRICS seam over the ONE analytics
-// warehouse: the /v1/campaigns plane (apps/campaigns) reads a campaign's funnel
+// warehouse: the /v1/campaign plane (apps/campaigns) reads a campaign's funnel
 // from HERE rather than opening a second store. A campaign's results ARE an
 // analytics query scoped to the campaign — the utm_campaign-tagged acts on the
 // event plane (the attributes['utm_campaign'] entry the plane normalizer stamps)

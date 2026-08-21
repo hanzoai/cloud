@@ -8,7 +8,7 @@ package coding
 // The Runner seam had exactly one implementation, and it could not run. It
 // POSTed to bot's /v1/coding-tasks, which invokes the `docker` CLI —
 // bot-gateway has neither that binary nor a socket, so every dispatch 503'd.
-// The whole chain apps/coding → bots.Stream → /v1/coding-tasks was dead in
+// The whole chain apps/coding → bot.Stream → /v1/coding-tasks was dead in
 // production while reading as configured.
 //
 // The defect was never the ISOLATION. That path asked for --runtime=runsc or

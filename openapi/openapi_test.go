@@ -91,7 +91,7 @@ func TestChainYieldsOneOperationAndDuplicateIsRefused(t *testing.T) {
 	// (a) a legitimate chain: ONE registration, middleware + terminal handler —
 	// the apps/commerce/mount.go shape. One route entry, two handlers.
 	chain := newApp()
-	chain.Get("/v1/bots",
+	chain.Get("/v1/bot",
 		func(c *zip.Ctx) error { return c.Next() },
 		func(c *zip.Ctx) error { return c.JSON(200, "run") },
 	)
@@ -102,13 +102,13 @@ func TestChainYieldsOneOperationAndDuplicateIsRefused(t *testing.T) {
 	// fiber's own and is dropped from the projection below.
 	handlers := -1
 	for _, r := range chain.Fiber().GetRoutes(true) {
-		if r.Method == "GET" && r.Path == "/v1/bots" {
+		if r.Method == "GET" && r.Path == "/v1/bot" {
 			handlers = len(r.Handlers)
 			break
 		}
 	}
 	if handlers < 0 {
-		t.Fatalf("the chain registered no GET /v1/bots at all: %v", chain.Fiber().GetRoutes(true))
+		t.Fatalf("the chain registered no GET /v1/bot at all: %v", chain.Fiber().GetRoutes(true))
 	}
 	if handlers != 2 {
 		t.Fatalf("the chain should carry 2 chained handlers; got %d — if this "+
@@ -121,9 +121,9 @@ func TestChainYieldsOneOperationAndDuplicateIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("chain: Spec: %v", err)
 	}
-	item, ok := doc.Paths["/v1/bots"]
+	item, ok := doc.Paths["/v1/bot"]
 	if !ok || len(item) != 1 || item["get"] == nil {
-		t.Fatalf("chain: want exactly one get operation at /v1/bots, got %v", doc.Paths)
+		t.Fatalf("chain: want exactly one get operation at /v1/bot, got %v", doc.Paths)
 	}
 
 	// (b) a genuine duplicate: two separate registrations of one pattern. zip
@@ -134,14 +134,14 @@ func TestChainYieldsOneOperationAndDuplicateIsRefused(t *testing.T) {
 	func() {
 		defer func() {
 			if recover() == nil {
-				t.Error("zip composed a duplicate registration of GET /v1/bots — " +
+				t.Error("zip composed a duplicate registration of GET /v1/bot — " +
 					"a collision can reach the registry again, so the generator can no " +
 					"longer assume a handler count above one is always a chain")
 			}
 		}()
 		dup := newApp()
-		dup.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, "machine") })
-		dup.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, "run") })
+		dup.Get("/v1/bot", func(c *zip.Ctx) error { return c.JSON(200, "machine") })
+		dup.Get("/v1/bot", func(c *zip.Ctx) error { return c.JSON(200, "run") })
 		_ = dup.Fiber()
 	}()
 }

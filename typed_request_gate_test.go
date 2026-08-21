@@ -60,7 +60,7 @@ var allowedRequestUses = map[string]string{
 		"else. It fails OPEN of nothing: a call with no request at all (the CLI's LocalInvoke) resolves " +
 		"no payer and is screened as that state rather than exempted from it, and the handler's own " +
 		"payingOrg gate refuses it after.",
-	"apps/datasets/dataset.go": "who — the dataset plane's caller resolver, and the ONE place an op " +
+	"apps/dataset/dataset.go": "who — the dataset plane's caller resolver, and the ONE place an op " +
 		"establishes who is asking. The TENANT is resolved through apps/tenant, which reads " +
 		"principal.OrgFrom and nothing else; the request is needed for the other half, which is a " +
 		"different value on purpose: the BILLING identity. Materialising and tracing a lineage are " +
@@ -198,7 +198,7 @@ var allowedRequestUses = map[string]string{
 		"without the request could not name an actor — and an actorless forge call would fall back to the " +
 		"deployment's machine credential, reading every repository that token can see. Fails closed off the " +
 		"HTTP path with the same 403.",
-	"apps/campaigns/typed.go": "requireBody — the three writes that bind a body (create, update, addChannel) " +
+	"apps/campaign/typed.go": "requireBody — the three writes that bind a body (create, update, addChannel) " +
 		"have always refused a request with none, or with a content type this service does not parse, with " +
 		"c.Bind's own 400. zip's typed decode is TOLERANT by construction (it skips an empty body and leaves " +
 		"the In at its zero value), so without this a bodyless create would write empty values instead of " +
@@ -541,7 +541,7 @@ var allowedRequestUses = map[string]string{
 		"bodyless rate post would set a rate of zero. The TENANT is resolved with principal.OrgFrom " +
 		"(tenant, in this same file), never through the request. All fail closed off the HTTP path: no " +
 		"request, no attested admin, no actor, and nothing to require a body of.",
-	"apps/links/http.go": "scope — the linked-account surface is scoped to (org, SUBJECT): every op keys " +
+	"apps/link/http.go": "scope — the linked-account surface is scoped to (org, SUBJECT): every op keys " +
 		"the caller's own provider accounts and usage on the validated user id (c.User()) as well as the " +
 		"tenant, and principal.OrgFrom carries only the tenant. ONE function, which every op in the " +
 		"package asks — the SAME caller() boundary the raw handlers keyed — so both planes share one " +
