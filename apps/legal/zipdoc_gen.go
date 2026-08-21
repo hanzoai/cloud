@@ -65,13 +65,24 @@ func init() {
 	zip.Describe("GET /v1/legal/templates", zip.Doc{
 		Description: "Returns the org's effective template catalog: every built-in\ntemplate, with any the org has overridden replaced by its own latest version.\n\nThe listing carries each template's metadata and its declared MERGE FIELDS — the\nkeys a document generation must supply — but never the template bodies; fetch one\ntemplate to get its body. Templates in the formation and equity categories are\nmarked counselReview: every document rendered from them carries a counsel notice,\nand that posture cannot be dropped by an override.",
 		Fields: map[string]string{
+			"Field.key":                  "Key is the identifier the body substitutes ({{.key}}) and the key a\ngeneration's data map must carry. snake_case by convention across the\nbuilt-ins — effective_date, company_name, governing_law. An override whose\nbody references a key no Field declares is refused on save.",
+			"Field.label":                "Label is the human prompt for whoever fills the value in — \"Governing law\n(state)\". It never reaches the rendered document; only Key does.",
 			"templateCatalog.data":       "Data is the catalog, metadata and merge fields only — never the template\nbodies, which are fetched one at a time.",
 			"templateCatalog.disclaimer": "Disclaimer is the boundary made visible on the wire: Hanzo Legal is document\ntooling, not legal advice.",
+			"templateView.category":      "Category is the corporate need the template serves: formation, equity, ops or\nsales. Formation and equity are the securities-class categories, which is what\nforces counselReview.",
+			"templateView.counselReview": "CounselReview marks a template whose rendered documents open with the counsel\nnotice. True for every formation and equity template whatever an override\nsends: the engine prepends the notice and no caller can suppress it.",
+			"templateView.fields":        "Fields declares the merge fields the body consumes — every key a generation\nmust supply, each with its human label. All are REQUIRED: a missing one is\nrefused rather than rendered as a blank into a contract.",
+			"templateView.id":            "ID is the template's stable id and the path segment that fetches its body —\n\"nda\", \"msa\", \"safe\". An override keeps the built-in's id.",
+			"templateView.origin":        "Origin is \"builtin\" for a template the platform ships or \"org\" for one this\norg saved. It separates the catalog every tenant sees from this tenant's own.",
+			"templateView.title":         "Title is the display name, e.g. \"Mutual Non-Disclosure Agreement\". A generated\ndocument inherits it.",
+			"templateView.version":       "Version is which version of this template the caller's org resolves to. A\nbuilt-in is version 1; the org's first override is 2 and each save increments,\nso an override version never collides with the built-in's.",
 		},
 	})
 	zip.Describe("GET /v1/legal/templates/:id", zip.Doc{
 		Description: "Returns one template resolved for the caller's org — the org's\nown override if it has saved one, else the built-in — with its full text/template\nbody and its declared merge fields. 404 when neither exists.",
 		Fields: map[string]string{
+			"Field.key":                "Key is the identifier the body substitutes ({{.key}}) and the key a\ngeneration's data map must carry. snake_case by convention across the\nbuilt-ins — effective_date, company_name, governing_law. An override whose\nbody references a key no Field declares is refused on save.",
+			"Field.label":              "Label is the human prompt for whoever fills the value in — \"Governing law\n(state)\". It never reaches the rendered document; only Key does.",
 			"templateRef.id":           "ID is the template's stable id, e.g. \"nda\" or \"safe\".",
 			"templateReply.disclaimer": "Disclaimer is the boundary made visible on the wire.",
 			"templateReply.template":   "Template is the resolved template — the org's override if it has one, else\nthe built-in.",
@@ -136,6 +147,8 @@ func init() {
 	zip.Describe("PUT /v1/legal/templates/:id", zip.Doc{
 		Description: "Saves the org's own version of a template — a custom\nNDA, a house MSA — and returns it with its new version number. It takes effect\nfor that org only; other orgs keep the built-in.\n\nTwo boundaries cannot be crossed here. Overriding a built-in INHERITS its\ncategory and its counsel-review posture, which can be raised but never dropped;\nand a formation or equity template is counsel-review whatever the caller sends,\nso no org can generate a securities-class document without the notice.\n\nThe body is validated on save, not at generation: a template that references an\nUNDECLARED merge field is refused with 400 rather than stored and rendered blank\ninto a contract months later.",
 		Fields: map[string]string{
+			"Field.key":                      "Key is the identifier the body substitutes ({{.key}}) and the key a\ngeneration's data map must carry. snake_case by convention across the\nbuilt-ins — effective_date, company_name, governing_law. An override whose\nbody references a key no Field declares is refused on save.",
+			"Field.label":                    "Label is the human prompt for whoever fills the value in — \"Governing law\n(state)\". It never reaches the rendered document; only Key does.",
 			"templateOverride.body":          "Body is the text/template source. Required. Every {{.key}} it references must\nbe declared in Fields, or the save is refused rather than rendering a blank\ninto a contract later.",
 			"templateOverride.category":      "Category groups the template: formation, equity, ops or sales. Optional when\noverriding a built-in, which supplies its own.",
 			"templateOverride.counselReview": "CounselReview marks a template whose documents must carry the counsel notice.\nIt can be raised but never lowered: a formation or equity template is always\ncounsel-review, and an override of a counsel-review built-in stays one.",
