@@ -71,9 +71,9 @@ func planeAccounts(ctx context.Context, in *plane.CallerIn) (*plane.Accounts, er
 	if aerr != nil {
 		return nil, zip.Errorf(502, "accounts: %v", aerr)
 	}
-	out := make([]plane.Account, 0, len(rows))
+	out := make([]plane.BillingAccount, 0, len(rows))
 	for _, a := range rows {
-		out = append(out, plane.Account{
+		out = append(out, plane.BillingAccount{
 			ID: a.Id, Name: a.Name, OrgID: a.OrgId, OrgName: a.OrgName,
 			Currency: string(a.Currency), CreatedAt: stamp(a.CreatedAt), Role: a.Role,
 		})
@@ -103,7 +103,7 @@ func planeMembers(ctx context.Context, in *plane.HoldersIn) (*plane.Holders, err
 		// already know about their own org.
 		return nil, zip.Errorf(403, "account members: %v", merr)
 	}
-	out := make([]plane.Member, 0, len(rows))
+	out := make([]plane.Holder, 0, len(rows))
 	for _, m := range rows {
 		out = append(out, plane.Holder{
 			ID: m.Id, UserID: m.UserId, Email: m.Email, Role: m.Role, AddedAt: stamp(m.AddedAt),

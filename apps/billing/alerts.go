@@ -22,6 +22,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
@@ -40,6 +41,23 @@ func mountAlerts(app cloud.Router, o ops) {
 	// empty 204 — neither of which is that. A relay that tidied it would be
 	// changing a wire while claiming to preserve one.
 	app.Delete("/v1/billing/alerts/:id", cloud.Handle(o.s, dropAlert))
+}
+
+// The delete is the one route in this family the wire keeps untyped, so its
+// prose is declared beside the route rather than lifted off a typed handler.
+// Declared through the same registry Register uses, so it renders only while the
+// router actually serves the route.
+func init() {
+	openapi.Describe("/v1/billing/alerts/:id", http.MethodDelete,
+		"Remove one spend cap",
+		"Deletes a budget the caller's org owns and answers 204.\n\n"+
+			"Removing a cap REMOVES A CEILING, so it takes the same bar as setting "+
+			"one: a validated org admin, the platform SuperAdmin, or the trusted "+
+			"in-process service token. A member who could delete the org's cap would "+
+			"have unbounded spend.\n\n"+
+			"A cap this org does not own is NOT FOUND rather than refused — the same "+
+			"answer whether the id is unknown or belongs to another customer — so an "+
+			"id cannot be probed for existence by trying to delete it.")
 }
 
 // capAdmin refuses a cap WRITE to anyone but a validated org admin, the platform
