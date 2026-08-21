@@ -5950,7 +5950,35 @@
    "read": true
   }
  ],
- "s3": [],
+ "s3": [
+  {
+   "id": "delete_s3_buckets_by_bucket",
+   "doc": "Removes an EMPTY bucket and answers 204.\n\nA non-empty bucket is 409 rather than a cascade: deleting a tenant's objects\nbehind a single bucket call is not a thing this surface will do silently. A\nbucket the caller's org does not own is the same 404 an unknown name gives."
+  },
+  {
+   "id": "get_s3_buckets",
+   "doc": "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all.",
+   "read": true
+  },
+  {
+   "id": "get_s3_buckets_by_bucket_objects",
+   "doc": "Lists one folder level of a bucket.\n\nFolder-style by default: sub-prefixes come back as directory entries, which is\nthe file-manager view. `?recursive=true` lists every key flat under the prefix\ninstead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge\nbucket cannot exhaust memory — Total is what came back, not what the bucket\nholds.",
+   "read": true
+  },
+  {
+   "id": "get_s3_health",
+   "doc": "Health reports whether this deployment can serve object storage.\n\nIt is a REAL probe rather than a constant: 200 when admin credentials are\npresent, so the store is reachable in principle, and 503 with the reason when\nthey are not. It is deliberately NOT gated — liveness has to be probe-able\nwithout a token — so it is the one operation here that names no bucket and\nbills nothing.",
+   "read": true
+  },
+  {
+   "id": "post_s3_buckets",
+   "doc": "Makes a new bucket for the caller's org and answers 201 with it.\n\nThe physical name is derived from the caller's validated org, so a tenant can\nonly ever create inside its own namespace and no request field can redirect\nthat. A name already taken in the org is 409."
+  },
+  {
+   "id": "post_s3_buckets_by_bucket_objects",
+   "doc": "Mints a presigned PUT URL the caller uploads to DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work."
+  }
+ ],
  "sandbox": [
   {
    "id": "end_sandbox",
