@@ -8016,6 +8016,26 @@ components:
             "yes", "no" or "unclear" (anything it cannot resolve reads "unclear").
           type: string
       type: object
+    SecretMeta:
+      properties:
+        env:
+          description: |-
+            Env is the environment the secret belongs to. It is part of the storage
+            key, so the same name in two environments is two secrets.
+          type: string
+        name:
+          description: Name is the secret's name within its path and environment.
+          type: string
+        path:
+          description: Path is the subpath the secret is stored under, beneath the
+            org root.
+          type: string
+        scheme:
+          description: |-
+            Scheme names how the value is sealed at rest, so a caller can tell a
+            migrated record from a current one without opening it.
+          type: string
+      type: object
     Section:
       properties:
         detail:
@@ -22525,6 +22545,107 @@ components:
             Inbound attachments are not stored — this is the whole of what was said.
           type: string
       type: object
+    indexCount:
+      properties:
+        isIndexing:
+          description: |-
+            IsIndexing is always false: writes are applied before their response, so
+            there is never a background pass a caller could be waiting on.
+          type: boolean
+        numberOfDocuments:
+          description: NumberOfDocuments is how many documents this org holds in that
+            index.
+          type: integer
+      type: object
+    indexDocuments:
+      properties:
+        limit:
+          description: Limit is how many documents this page could hold.
+          type: integer
+        offset:
+          description: Offset is where this page starts.
+          type: integer
+        results:
+          description: Results are the documents themselves, exactly as they were
+            stored.
+          items: {}
+          type: array
+        total:
+          description: Total is how many documents the index holds altogether.
+          type: integer
+      type: object
+    indexEnqueued:
+      properties:
+        enqueuedAt:
+          description: |-
+            EnqueuedAt is when the task was recorded, RFC 3339 — which is also when it
+            completed.
+          type: string
+        indexUid:
+          description: IndexUID names the index the write landed in.
+          type: string
+        status:
+          description: |-
+            Status is always `enqueued`, for dialect compatibility. The work is
+            already done.
+          type: string
+        taskUid:
+          description: |-
+            TaskUID identifies the task for a client that polls it. Polling resolves
+            immediately.
+          type: integer
+        type:
+          description: |-
+            Type is the dialect's name for the kind of write: indexCreation,
+            indexDeletion, settingsUpdate, documentAdditionOrUpdate, documentDeletion.
+          type: string
+      type: object
+    indexFilter:
+      properties:
+        filterableAttributes:
+          description: |-
+            FilterableAttributes replaces the whole filterable set. Omitted leaves it
+            unchanged; an empty array clears it.
+          items:
+            type: string
+          type: array
+      type: object
+    indexHealth:
+      properties:
+        status:
+          description: |-
+            Status is `available` when the store is readable and `unavailable` when it
+            is not — the second answer rides a 503, so a pod with a broken volume is
+            taken out of rotation rather than serving empty searches.
+          type: string
+      type: object
+    indexHits:
+      properties:
+        estimatedTotalHits:
+          description: |-
+            EstimatedTotalHits is the dialect's name for the match count. Every hit is
+            materialised here, so for this page it is exact rather than estimated.
+          type: integer
+        hits:
+          description: Hits are the matching documents, most relevant first, exactly
+            as stored.
+          items: {}
+          type: array
+        limit:
+          description: Limit is how many hits this page could hold.
+          type: integer
+        offset:
+          description: Offset is where this page starts.
+          type: integer
+        processingTimeMs:
+          description: ProcessingTimeMs is how long the query took, in milliseconds.
+          type: integer
+        query:
+          description: |-
+            Query echoes the search terms, which is what a client renders above the
+            results.
+          type: string
+      type: object
     indexIn:
       properties:
         files:
@@ -22545,6 +22666,57 @@ components:
           description: |-
             Repo is the repository label to index under. Required, max 200 bytes. It is
             a stored column value, not a filesystem path.
+          type: string
+      type: object
+    indexList:
+      properties:
+        limit:
+          description: Limit is how many rows this page could hold.
+          type: integer
+        offset:
+          description: Offset is where this page starts.
+          type: integer
+        results:
+          description: Results are the index definitions themselves.
+          items:
+            $ref: '#/components/schemas/indexView'
+          type: array
+        total:
+          description: Total is how many indexes the org holds altogether.
+          type: integer
+      type: object
+    indexNew:
+      properties:
+        primaryKey:
+          description: |-
+            PrimaryKey is the document field that identifies a row. Optional — the
+            first write establishes one when it is omitted.
+          type: string
+        uid:
+          description: UID is the index's name within the org. Required.
+          type: string
+      type: object
+    indexQuery:
+      properties:
+        filter:
+          description: |-
+            Filter narrows the hits, in the dialect's filter syntax: a string, or an
+            array of strings combined with AND. Only attributes named in the index's
+            filterableAttributes can be constrained. Left unconstrained here because
+            the dialect accepts both shapes and naming one would publish an API that
+            cannot send the other.
+        limit:
+          description: Limit is how many hits to return. Absent means 20; the ceiling
+            is 1000.
+          type: integer
+        offset:
+          description: Offset is where to start. Absent means 0.
+          type: integer
+        q:
+          description: |-
+            Q is the search text. Typos are forgiven. An empty Q matches everything,
+            which is how a client lists an index by relevance rather than by insertion
+            order.
           type: string
       type: object
     indexResult:
@@ -22583,6 +22755,89 @@ components:
         vectors:
           description: Vectors is how many of those chunks carry an embedding.
           type: integer
+      type: object
+    indexSettings:
+      properties:
+        filterableAttributes:
+          description: |-
+            FilterableAttributes are the document fields a search `filter` may
+            constrain. A field not listed here cannot be filtered on.
+          items:
+            type: string
+          type: array
+      type: object
+    indexStats:
+      properties:
+        databaseSize:
+          description: |-
+            DatabaseSize is the org's total document count across its indexes. It is a
+            count, not bytes: the store is shared by every tenant, so a byte figure
+            would either be the whole file (another tenant's size) or a fiction.
+          type: integer
+        indexes:
+          additionalProperties:
+            $ref: '#/components/schemas/indexCount'
+          description: Indexes maps each index uid to its own count.
+          type: object
+      type: object
+    indexTask:
+      properties:
+        enqueuedAt:
+          description: |-
+            EnqueuedAt, StartedAt and FinishedAt are the same instant: the write was
+            applied before its task id was minted.
+          type: string
+        finishedAt:
+          description: FinishedAt is when the write completed.
+          type: string
+        startedAt:
+          description: StartedAt is when the write began.
+          type: string
+        status:
+          description: Status is always `succeeded`.
+          type: string
+        type:
+          description: Type names the kind of write, for a client that inspects it.
+          type: string
+        uid:
+          description: UID echoes the task id that was asked about.
+          type: integer
+      type: object
+    indexVersion:
+      properties:
+        commitDate:
+          description: |-
+            CommitDate is empty here: this surface is a dialect implementation, not a
+            build of Meilisearch, so there is no upstream commit to date.
+          type: string
+        commitSha:
+          description: |-
+            CommitSha names the implementation (`hanzo-cloud`) rather than a build
+            hash, so a client logging it records which server answered instead of
+            implying a Meilisearch release.
+          type: string
+        pkgVersion:
+          description: PkgVersion is this dialect implementation's own version.
+          type: string
+      type: object
+    indexView:
+      properties:
+        createdAt:
+          description: CreatedAt is when this org first created the index, RFC 3339.
+          type: string
+        primaryKey:
+          description: |-
+            PrimaryKey is the document field that identifies a row; an upsert is keyed
+            on it. Empty until a document establishes one.
+          type: string
+        uid:
+          description: UID is the index's name within the org. Two orgs may both hold
+            `messages`.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the index or its settings last changed, RFC
+            3339.
+          type: string
       type: object
     indexerView:
       properties:
@@ -23277,6 +23532,145 @@ components:
           items:
             $ref: '#/components/schemas/StarterKit'
           type: array
+      type: object
+    kmsConfig:
+      properties:
+        apiBase:
+          description: APIBase is this subsystem's own prefix, `/v1/kms`.
+          type: string
+        brand:
+          description: |-
+            Brand is the deployment's brand, so the console renders as the right
+            product.
+          type: string
+        issuer:
+          description: Issuer is the OIDC issuer the console authenticates against.
+          type: string
+        loginPath:
+          description: LoginPath is the credential exchange's address.
+          type: string
+      type: object
+    kmsHealth:
+      properties:
+        error:
+          description: |-
+            Error is the honest reason readiness is false: no in-process KMS client,
+            or no master key. Absent when ready.
+          type: string
+        ready:
+          description: |-
+            Ready is whether a secret operation would actually succeed right now.
+            These are exactly the two states in which the secret operations refuse.
+          type: boolean
+        service:
+          description: Service names the subsystem answering, `kms`.
+          type: string
+        signing:
+          description: |-
+            Signing reports whether signing keys are configured. Absent when there is
+            no in-process client to ask.
+          type: boolean
+        status:
+          description: Status is `ok` or `degraded`, the one-word form of Ready.
+          type: string
+      type: object
+    kmsLogin:
+      properties:
+        clientId:
+          description: ClientID is the machine identity's id, as IAM issued it.
+          type: string
+        clientSecret:
+          description: |-
+            ClientSecret is that identity's secret. It is never logged, never echoed,
+            and never carried in an error.
+          type: string
+      type: object
+    kmsPut:
+      properties:
+        env:
+          description: |-
+            Env is the environment to write under. REQUIRED, with no default: it is
+            part of the storage key, so a silently defaulted write lands in a bucket
+            the readers that resolve project, environment and path never look in, and
+            the stale value keeps being served.
+          type: string
+        name:
+          description: Name is the secret's name. Required.
+          type: string
+        path:
+          description: Path is an optional subpath beneath the org root, e.g. "/ci".
+          type: string
+        value:
+          description: |-
+            Value is the secret itself. It is sealed under a fresh per-secret data key
+            before storage, so plaintext never reaches disk, and it is never echoed
+            back, logged, or carried in an error.
+          type: string
+      type: object
+    kmsRemoved:
+      properties:
+        deleted:
+          type: boolean
+        env:
+          type: string
+        name:
+          type: string
+      type: object
+    kmsSecret:
+      properties:
+        env:
+          type: string
+        name:
+          type: string
+        value:
+          type: string
+      type: object
+    kmsSecrets:
+      properties:
+        names:
+          description: |-
+            Names is the same listing reduced to bare names, which is the shape the
+            KMS operator reads. Both are emitted so either consumer keeps working.
+          items:
+            type: string
+          type: array
+        secrets:
+          description: |-
+            Secrets are the descriptors: name, path, environment and sealing scheme.
+            No value and no ciphertext appears here.
+          items:
+            $ref: '#/components/schemas/SecretMeta'
+          type: array
+        total:
+          description: Total is how many descriptors this listing carries.
+          type: integer
+      type: object
+    kmsStored:
+      properties:
+        env:
+          description: Env is the environment the secret was written under.
+          type: string
+        name:
+          description: Name is the secret's name.
+          type: string
+        stored:
+          description: Stored is true; a write confirms by not failing.
+          type: boolean
+      type: object
+    kmsToken:
+      properties:
+        accessToken:
+          description: |-
+            AccessToken is IAM's own JWT, verbatim. Its `owner` claim scopes it to
+            exactly one org, which is what every secret operation then reads.
+          type: string
+        expiresIn:
+          description: ExpiresIn is the token's lifetime in seconds, as IAM reported
+            it.
+          type: integer
+        tokenType:
+          description: TokenType is `Bearer`.
+          type: string
       type: object
     kvAck:
       properties:
@@ -83141,50 +83535,115 @@ paths:
       x-public: true
   /v1/index/health:
     get:
-      description: Answers Meilisearch's `{"status":"available"}` when the index store
-        is readable. It FAILS CLOSED — an unreadable store answers 503 and `unavailable`
-        — so a replica whose volume has gone bad stops taking traffic instead of answering
-        every search with nothing found. It touches no tenant data and needs no credential.
+      description: |-
+        Reports whether the search plane can serve.
+
+        Answers the dialect's `{"status":"available"}` when the index store is
+        readable. It FAILS CLOSED — an unreadable store answers 503 with
+        `{"status":"unavailable"}` rather than an empty result set, because a
+        Meilisearch client probes this before it will use a server at all and a
+        cheerful 200 over a broken volume turns "search is down" into "nothing
+        matched". It requires no principal and reads no tenant data.
       operationId: get_index_health
-      summary: Report whether the search plane can serve
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexHealth'
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexHealth'
+          description: service unavailable
+      summary: Reports whether the search plane can serve.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
   /v1/index/indexes:
     get:
-      description: Answers every index in the caller's org with its primary key and
-        timestamps. It is the only way to enumerate what an org holds — without it
-        an index whose uid a caller has forgotten is unreachable. The tenant is the
-        org minted from the VALIDATED bearer's owner claim, never a client-supplied
-        header, and every query filters on it, so two orgs may both hold an index
-        named "messages" and neither can see the other's documents. Without a validated
-        principal the answer is 403 carrying Meilisearch's `invalid_api_key` body.
-        Errors use Meilisearch's {message, code, type, link} shape rather than cloud's,
-        because that `code` is a wire contract a Meilisearch client branches on.
+      description: |-
+        Lists the indexes your org holds.
+
+        Answers every index in the caller's own org with its primary key and
+        timestamps. Without it an index whose uid a caller has forgotten is
+        unreachable — there is no other way to enumerate what an org holds. The page
+        is the whole set: an org's index count is small by construction, so `limit`
+        and `total` both report it.
+
+        The tenant is the org minted from the VALIDATED bearer's owner claim, never a
+        client-supplied header, and two orgs may both hold an index named "messages"
+        without either seeing the other. Without a validated principal the answer is
+        403 carrying the dialect's `invalid_api_key` body.
       operationId: get_index_indexes
-      summary: List the indexes your org holds
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexList'
+          description: ok
+      summary: Lists the indexes your org holds.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
     post:
       description: |-
-        Creates an index named by `uid` in the caller's org. `primaryKey` names the document field that identifies a document and defaults to `id`. Creating an index that already exists is not an error — it settles on the existing one, primary key included — so a client that creates before every write is safe to run repeatedly. A missing or over-long uid is 400 `invalid_index_uid`. A new index starts with `user` filterable, which is what lets a multi-user app narrow searches to one end user without configuring anything. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named "messages" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.
+        Creates an index.
 
-        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.
+        Registers a named index in the caller's own org and answers the dialect's
+        EnqueuedTask. It is idempotent: creating an index that already exists returns
+        the same receipt and changes nothing, which is what lets a client create on
+        startup without checking first.
+
+        `primaryKey` is optional — the first write establishes one when it is omitted.
+        An index is a ROW here rather than a table, so an unusual uid is stored
+        verbatim instead of being sanitised into a schema name.
+
+        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of
+        later work: the write is already applied when this answers. A client that
+        polls waitForTask resolves immediately.
       operationId: post_index_indexes
-      summary: Create an index
+      requestBody:
+        content:
+          application/json:
+            example:
+              primaryKey: id
+              uid: messages
+            schema:
+              $ref: '#/components/schemas/indexNew'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexEnqueued'
+          description: accepted
+      summary: Creates an index.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
   /v1/index/indexes/{uid}:
     delete:
       description: |-
-        Drops one index in the caller's org together with all of its documents. This is the only way to retire an index; without it a mistaken uid would be permanent. It is idempotent — dropping an index that is not there still succeeds. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named "messages" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.
+        Deletes an index and everything in it.
 
-        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.
+        Drops the index and every document in it from the caller's own org, and
+        answers the dialect's EnqueuedTask. This is the only way to retire an index;
+        without it a mistaken uid is permanent. Deleting an index that is not there
+        succeeds, so a cleanup pass is safe to re-run.
+
+        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of
+        later work: the documents are already gone when this answers.
       operationId: delete_index_indexes_by_uid
       parameters:
       - in: path
@@ -83192,22 +83651,31 @@ paths:
         required: true
         schema:
           type: string
-      summary: Delete an index and everything in it
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexEnqueued'
+          description: accepted
+      summary: Deletes an index and everything in it.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
     get:
-      description: Answers a single index's uid, primary key and timestamps. An index
-        the caller's org does not hold is 404 `index_not_found` — which is the same
-        answer another org's index gives, since the org is a bound predicate on the
-        read. The tenant is the org minted from the VALIDATED bearer's owner claim,
-        never a client-supplied header, and every query filters on it, so two orgs
-        may both hold an index named "messages" and neither can see the other's documents.
-        Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key`
-        body. Errors use Meilisearch's {message, code, type, link} shape rather than
-        cloud's, because that `code` is a wire contract a Meilisearch client branches
-        on.
+      description: |-
+        Reads one index's definition.
+
+        Answers the index's uid, primary key and timestamps. An index this org does
+        not hold answers 404 carrying the dialect's `index_not_found` — the code a
+        Meilisearch client reads as permission to create it, which is why this is a
+        refusal rather than an empty object.
+
+        The uid is scoped to the caller's own org, so another tenant's index is
+        indistinguishable from one that never existed: this surface is not an
+        existence oracle.
       operationId: get_index_indexes_by_uid
       parameters:
       - in: path
@@ -83215,23 +83683,31 @@ paths:
         required: true
         schema:
           type: string
-      summary: Read one index's definition
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexView'
+          description: ok
+      summary: Reads one index's definition.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
   /v1/index/indexes/{uid}/documents:
     get:
-      description: Answers the documents in one index with a total count. `limit`
-        defaults to 20 and is capped at 1000, `offset` pages, and the response echoes
-        both back so a pager knows what it actually got. An index the caller's org
-        does not hold is 404 `index_not_found`. The tenant is the org minted from
-        the VALIDATED bearer's owner claim, never a client-supplied header, and every
-        query filters on it, so two orgs may both hold an index named "messages" and
-        neither can see the other's documents. Without a validated principal the answer
-        is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's
-        {message, code, type, link} shape rather than cloud's, because that `code`
-        is a wire contract a Meilisearch client branches on.
+      description: |-
+        Pages through the documents in an index.
+
+        Answers the org's stored documents in insertion order, whole, with the page's
+        bounds and the index's total. It is the enumeration surface — search ranks by
+        relevance and cannot walk a corpus — so a caller reconciling what it has
+        written reads it here.
+
+        An index this org does not hold answers 404 carrying the dialect's
+        `index_not_found`.
       operationId: get_index_indexes_by_uid_documents
       parameters:
       - in: path
@@ -83239,18 +83715,38 @@ paths:
         required: true
         schema:
           type: string
-      summary: Page through the documents in an index
+      - in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: offset
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexDocuments'
+          description: ok
+      summary: Pages through the documents in an index.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
     post:
       description: |-
-        Upserts documents into one index, keyed by the index's primary key: a document whose key is already present is REPLACED, one that is not is added, and it becomes searchable immediately. Send an array, or a single object — a hand-rolled caller sending one document is accepted rather than 400'd. The index is created on demand, so a first write needs no create call.
+        Writes documents into the caller's own index, keyed by the index's primary key: a document whose key is already present is REPLACED whole. The body is the dialect's own — an array of documents, or a single document — and each is stored verbatim, so a read gives back exactly what was written.
 
-        This and the PUT on the same path are the SAME operation: both are a whole document upsert, which is what a Meilisearch client's addDocuments and updateDocuments both reduce to here. A body that is neither an array nor an object is 400. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named "messages" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.
+        The index is CREATED when it is missing rather than refused, because a Meilisearch client writes before it configures.
 
-        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.
+        The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, so two orgs may both hold an index named "messages" and neither can see the other's documents. Without a validated principal the answer is 403 carrying the dialect's `invalid_api_key` body.
+
+        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the documents are searchable when this answers, and a client that polls waitForTask resolves immediately.
       operationId: post_index_indexes_by_uid_documents
       parameters:
       - in: path
@@ -83258,6 +83754,21 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - items: {}
+                type: array
+              - {}
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexEnqueued'
+          description: Success
       summary: Add or replace documents in an index
       tags:
       - index
@@ -83265,11 +83776,11 @@ paths:
       x-public: true
     put:
       description: |-
-        Upserts documents into one index, keyed by the index's primary key: a document whose key is already present is REPLACED, one that is not is added, and it becomes searchable immediately. Send an array, or a single object — a hand-rolled caller sending one document is accepted rather than 400'd. The index is created on demand, so a first write needs no create call.
+        The dialect's update spelling of the write above, and the same act: an upsert keyed by the index's primary key. The JS client's addDocuments and updateDocuments both reduce to this for whole documents, so both spellings are served and both behave identically.
 
-        This and the POST on the same path are the SAME operation, served by one handler. Both exist because the Meilisearch dialect has both verbs; there is no partial-update semantics on this one — a document is replaced whole either way. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named "messages" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.
+        The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header. Without a validated principal the answer is 403 carrying the dialect's `invalid_api_key` body.
 
-        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.
+        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers.
       operationId: put_index_indexes_by_uid_documents
       parameters:
       - in: path
@@ -83277,6 +83788,21 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - items: {}
+                type: array
+              - {}
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexEnqueued'
+          description: Success
       summary: Add or update documents in an index
       tags:
       - index
@@ -83285,9 +83811,14 @@ paths:
   /v1/index/indexes/{uid}/documents/{id}:
     delete:
       description: |-
-        Removes one document from an index. It is IDEMPOTENT: deleting a key that is not there succeeds rather than 404, so a retry after a lost response is safe. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named "messages" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.
+        Deletes one document by its primary key.
 
-        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.
+        Removes the document from the caller's own org and answers the dialect's
+        EnqueuedTask. Deleting a key that is not there succeeds, so a client
+        reconciling its own corpus can delete without checking first.
+
+        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of
+        later work: the document is already gone when this answers.
       operationId: delete_index_indexes_by_uid_documents_by_id
       parameters:
       - in: path
@@ -83300,22 +83831,29 @@ paths:
         required: true
         schema:
           type: string
-      summary: Delete one document by its primary key
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexEnqueued'
+          description: accepted
+      summary: Deletes one document by its primary key.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
     get:
-      description: Answers the stored document whose primary key matches, exactly
-        as it was written. A missing document is 404 `document_not_found` and a missing
-        index is 404 `index_not_found` — two different codes, because a client that
-        branches on them treats the cases differently. The tenant is the org minted
-        from the VALIDATED bearer's owner claim, never a client-supplied header, and
-        every query filters on it, so two orgs may both hold an index named "messages"
-        and neither can see the other's documents. Without a validated principal the
-        answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's
-        {message, code, type, link} shape rather than cloud's, because that `code`
-        is a wire contract a Meilisearch client branches on.
+      description: |-
+        Reads one document by its primary key.
+
+        Answers the stored document exactly as it was written — this surface keeps
+        documents whole rather than projecting them, so what comes back is what went
+        in. A primary key this index does not hold answers 404 carrying the dialect's
+        `document_not_found`; an index this org does not hold answers
+        `index_not_found`, and the two are different facts a client acts on
+        differently.
       operationId: get_index_indexes_by_uid_documents_by_id
       parameters:
       - in: path
@@ -83328,17 +83866,26 @@ paths:
         required: true
         schema:
           type: string
-      summary: Read one document by its primary key
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Reads one document by its primary key.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
   /v1/index/indexes/{uid}/documents/delete-batch:
     post:
       description: |-
-        Removes every document named by an array of primary keys. Keys may be sent as strings or numbers — a number keeps its exact decimal form, so an integer key round-trips as `42` and never as scientific notation. Keys that are absent from the index are skipped rather than failing the batch, so this is idempotent. A body that is not an array is 400. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named "messages" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.
+        Removes every named document from the caller's own index. The body is the dialect's own: a bare array of primary keys, which may be strings or numbers. A key that is not there is not an error, so a client reconciling its own corpus can send one list rather than checking each key first.
 
-        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.
+        The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header. Without a validated principal the answer is 403 carrying the dialect's `invalid_api_key` body.
+
+        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the documents are already gone when this answers.
       operationId: post_index_indexes_by_uid_documents_delete-batch
       parameters:
       - in: path
@@ -83346,6 +83893,24 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - items:
+                  type: string
+                type: array
+              - items:
+                  type: number
+                type: array
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexEnqueued'
+          description: Success
       summary: Delete many documents by primary key in one call
       tags:
       - index
@@ -83354,9 +83919,17 @@ paths:
   /v1/index/indexes/{uid}/search:
     post:
       description: |-
-        Answers the documents in one index matching `q`, ranked by how many of the query's terms they match, with prefix matching so a partial word still finds its document. `limit` defaults to 20 and is capped at 1000, `offset` pages; a negative value falls back to the default rather than erroring.
+        Searches an index, forgiving typos.
 
-        `filter` takes a Meilisearch filter expression, or an array of them, and the `user = "…"` and `user IN […]` forms are honoured — that is how an app with many end users narrows results to one of them WITHIN the org. `estimatedTotalHits` is exact for the page returned, not an estimate, because every hit is materialised. An index the caller's org does not hold is 404 `index_not_found`. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named "messages" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.
+        Ranks the org's documents in one index against `q` and answers the matching
+        documents whole, most relevant first. A prefix matches, so a partial word
+        finds the documents containing it, and `filter` narrows the result to
+        documents whose filterable attributes match — which is how a caller scopes
+        results to one end user within its own org.
+
+        `estimatedTotalHits` is the dialect's name for the count; every hit is
+        materialised here, so for this page it is exact. An index this org does not
+        hold answers 404 carrying the dialect's `index_not_found`.
       operationId: post_index_indexes_by_uid_search
       parameters:
       - in: path
@@ -83364,23 +83937,37 @@ paths:
         required: true
         schema:
           type: string
-      summary: Search an index, forgiving typos
+      requestBody:
+        content:
+          application/json:
+            example:
+              filter: user = alice
+              limit: 20
+              q: roadmap
+            schema:
+              $ref: '#/components/schemas/indexQuery'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexHits'
+          description: ok
+      summary: Searches an index, forgiving typos.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
   /v1/index/indexes/{uid}/settings:
     get:
-      description: Answers the attributes an index allows filtering on. This dialect
-        implements the filterable-attributes setting and no other, so that is the
-        whole of what comes back. An index the caller's org does not hold is 404 `index_not_found`.
-        The tenant is the org minted from the VALIDATED bearer's owner claim, never
-        a client-supplied header, and every query filters on it, so two orgs may both
-        hold an index named "messages" and neither can see the other's documents.
-        Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key`
-        body. Errors use Meilisearch's {message, code, type, link} shape rather than
-        cloud's, because that `code` is a wire contract a Meilisearch client branches
-        on.
+      description: |-
+        Reads an index's filterable attributes.
+
+        Answers the settings subset this surface implements: the attributes a search
+        `filter` may constrain. An index this org does not hold answers 404 carrying
+        the dialect's `index_not_found`.
       operationId: get_index_indexes_by_uid_settings
       parameters:
       - in: path
@@ -83388,16 +83975,33 @@ paths:
         required: true
         schema:
           type: string
-      summary: Read an index's filterable attributes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexSettings'
+          description: ok
+      summary: Reads an index's filterable attributes.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
     patch:
       description: |-
-        Replaces an index's filterable attributes with the list in `filterableAttributes`; omitting the field leaves them as they are. The index is CREATED ON DEMAND rather than 404'd, because a client that configures an index it has just asked for should not have to create it first — this is the one read-shaped path on the surface that writes. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named "messages" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.
+        Sets which attributes an index can be filtered on.
 
-        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.
+        Replaces the whole filterable set. An attribute not listed here cannot be
+        used in a search `filter`, so this is what makes a per-user or per-tag
+        narrowing possible at all.
+
+        It CREATES the index when it is missing rather than answering 404, because a
+        Meilisearch client configures settings on an index it has just asked for and
+        a refusal there leaves the client with no index at all.
+
+        The 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of
+        later work: the setting is already applied when this answers.
       operationId: patch_index_indexes_by_uid_settings
       parameters:
       - in: path
@@ -83405,61 +84009,111 @@ paths:
         required: true
         schema:
           type: string
-      summary: Set which attributes an index can be filtered on
+      requestBody:
+        content:
+          application/json:
+            example:
+              filterableAttributes:
+              - user
+              - conversationId
+            schema:
+              $ref: '#/components/schemas/indexFilter'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexEnqueued'
+          description: accepted
+      summary: Sets which attributes an index can be filtered on.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
   /v1/index/stats:
     get:
-      description: 'Answers a document count per index for the caller''s org, plus
-        their sum. `isIndexing` is always false, which is the honest answer here rather
-        than a stub: writes are applied before their response, so there is never a
-        backlog in progress to report. The tenant is the org minted from the VALIDATED
-        bearer''s owner claim, never a client-supplied header, and every query filters
-        on it, so two orgs may both hold an index named "messages" and neither can
-        see the other''s documents. Without a validated principal the answer is 403
-        carrying Meilisearch''s `invalid_api_key` body. Errors use Meilisearch''s
-        {message, code, type, link} shape rather than cloud''s, because that `code`
-        is a wire contract a Meilisearch client branches on.'
+      description: |-
+        Counts the documents in each of your indexes.
+
+        Reports every index the caller's own org holds with its document count, plus
+        the org's total. `isIndexing` is always false because writes here are applied
+        before their response — there is never a background pass to wait on.
+
+        The tenant is the org minted from the VALIDATED bearer's owner claim, never a
+        client-supplied header, so this counts the caller's own documents and no
+        other tenant's. Without a validated principal the answer is 403 carrying the
+        dialect's `invalid_api_key` body.
       operationId: get_index_stats
-      summary: Count the documents in each of your indexes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexStats'
+          description: ok
+      summary: Counts the documents in each of your indexes.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
   /v1/index/tasks/{uid}:
     get:
-      description: 'Answers `succeeded` for the task id given. It ALWAYS answers succeeded,
-        and that is honest rather than a stub: writes on this surface are applied
-        before their response returns, so by the time any task id exists to ask about,
-        its work is done. It exists so a Meilisearch client''s waitForTask resolves
-        at once instead of polling forever for a queue that was never there. It requires
-        a validated principal but reads no tenant data.'
+      description: |-
+        Checks a write task, which has already finished.
+
+        Always reports `succeeded`. Writes here are applied to SQLite before their
+        EnqueuedTask is returned, so a client polling waitForTask resolves on its
+        first call rather than waiting for a queue that was never there. The three
+        timestamps are the same instant for the same reason.
+
+        It requires a validated principal but reads no tenant data: the task id it
+        echoes was minted by this process and names nothing about any org.
       operationId: get_index_tasks_by_uid
       parameters:
       - in: path
         name: uid
         required: true
         schema:
-          type: string
-      summary: Check a write task, which has already finished
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexTask'
+          description: ok
+      summary: Checks a write task, which has already finished.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
   /v1/index/version:
     get:
-      description: Answers the version shape a Meilisearch client expects. It names
-        THIS implementation rather than a Meilisearch release — the commit field reads
-        `hanzo-cloud` — so a client that logs it records which server actually answered
-        instead of implying a Meilisearch build. Needs no credential.
+      description: |-
+        Identifies the search implementation answering.
+
+        Reports the dialect's version shape with `commitSha` naming this
+        implementation rather than a Meilisearch build, so a client that logs the
+        version records which server answered instead of implying a release of
+        software this is not. It requires no principal and reads no tenant data.
       operationId: get_index_version
-      summary: Identify the search implementation answering
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexVersion'
+          description: ok
+      summary: Identifies the search implementation answering.
       tags:
       - index
       x-app: index
       x-public: true
+      x-tool: true
   /v1/ingress/middlewares:
     get:
       description: |-
@@ -85440,70 +86094,211 @@ paths:
   /v1/kms/auth/login:
     post:
       description: |-
-        Takes a tenant's machine credential — a client id and client secret — and returns an owner-scoped IAM access token with its lifetime, which is the bearer the caller then carries on the org-scoped secret operations.
+        Exchanges a machine credential for an IAM bearer token.
 
-        It is deliberately public and unauthenticated, because it IS the credential exchange and runs before any principal exists. That makes it the one route in this subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather than on any caller-supplied header.
+        Takes a tenant's machine credential — a client id and client secret — and
+        returns an owner-scoped IAM access token with its lifetime, which is the
+        bearer the caller then carries on the org-scoped secret operations.
 
-        The submitted secret is never logged and never echoed, and failures collapse to one clean status with no upstream detail: 401 when the credential does not authenticate, 502 when the identity provider is unreachable, 503 when no issuer is configured. That is on purpose — a richer error would be a validity oracle for guessed credentials.
+        It is deliberately public and unauthenticated, because it IS the credential
+        exchange and runs before any principal exists. That makes it the one route in
+        this subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather
+        than on any caller-supplied header, and body-capped at the same door.
+
+        The submitted secret is never logged and never echoed, and failures collapse
+        to one clean status with no upstream detail: 401 when the credential does not
+        authenticate, 502 when the identity provider is unreachable, 503 when no
+        issuer is configured. That is on purpose — a richer error would be a validity
+        oracle for guessed credentials.
       operationId: post_kms_auth_login
-      summary: Exchange a machine credential for an IAM bearer token
+      requestBody:
+        content:
+          application/json:
+            example:
+              clientId: kms-operator
+              clientSecret: …
+            schema:
+              $ref: '#/components/schemas/kmsLogin'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kmsToken'
+          description: ok
+      summary: Exchanges a machine credential for an IAM bearer token.
       tags:
       - kms
       x-app: kms
       x-public: true
+      x-tool: true
   /v1/kms/config:
     get:
       description: |-
-        Returns what the console needs before anyone has signed in: the brand, the OIDC issuer it authenticates against, the API base for this subsystem and the path of the login exchange.
+        Returns the runtime configuration for the KMS console.
 
-        Public on purpose, and it holds nothing sensitive — it is deliberately kept under this subsystem's own namespace rather than under an admin prefix, so a gateway that admin-gates the admin routes cannot break the console's legitimate pre-login fetch.
+        What the console needs before anyone has signed in: the brand, the OIDC issuer
+        it authenticates against, the API base for this subsystem and the path of the
+        login exchange.
+
+        Public on purpose, and it holds nothing sensitive — it is deliberately kept
+        under this subsystem's own namespace rather than under an admin prefix, so a
+        gateway that admin-gates the admin routes cannot break the console's
+        legitimate pre-login fetch.
       operationId: get_kms_config
-      summary: Runtime configuration for the KMS console
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kmsConfig'
+          description: ok
+      summary: Returns the runtime configuration for the KMS console.
       tags:
       - kms
       x-app: kms
       x-public: true
+      x-tool: true
   /v1/kms/health:
     get:
       description: |-
-        A real readiness probe, not a liveness stub: 200 only when the store is open AND a master key is configured, with `signing` reporting whether signing keys are set up too. Anything less answers 503 with `ready:false` and the reason — no in-process store, or no master key — which are exactly the two states in which the secret operations refuse.
+        Reports whether this broker can actually serve secrets.
 
-        Not token-gated, because the platform must be able to probe it without a credential. It reports the broker's configuration state only; no secret, no key material and no tenant name appears in it.
+        A real readiness probe, not a liveness stub: 200 only when the store is open
+        AND a master key is configured, with `signing` reporting whether signing keys
+        are set up too. Anything less answers 503 with `ready:false` and the reason —
+        no in-process store, or no master key — which are exactly the two states in
+        which the secret operations refuse.
+
+        Not token-gated, because the platform must be able to probe it without a
+        credential. It reports the broker's configuration state only; no secret, no
+        key material and no tenant name appears in it.
       operationId: get_kms_health
-      summary: Whether this broker can actually serve secrets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kmsHealth'
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kmsHealth'
+          description: service unavailable
+      summary: Reports whether this broker can actually serve secrets.
       tags:
       - kms
       x-app: kms
       x-public: true
+      x-tool: true
   /v1/kms/secrets:
     get:
       description: |-
-        Returns the METADATA of the caller's own secrets: each one's name, path, environment and sealing scheme. No value and no ciphertext is included — this operation exists to enumerate what is held, and reading a value is a separate, per-secret call.
+        Lists the secrets your org holds, without their values.
 
-        Scoped to the caller's own org and nothing else, structurally: there is no org in the path, the store root is derived from the validated org claim, and a caller therefore has no way to name another tenant's namespace. `path` narrows to a subpath and `env` selects the environment; both are also accepted under the operator's spellings, `secretPath` and `environment`.
+        Returns the METADATA of the caller's own secrets: each one's name, path,
+        environment and sealing scheme. No value and no ciphertext is included — this
+        operation exists to enumerate what is held, and reading a value is a separate,
+        per-secret call.
 
-        Admission is fail-closed and in order: a validated member, an org that is a DNS-1123 label, and a store holding a master key — 403, 400 and 503 respectively, all decided before any record is touched.
+        Scoped to the caller's own org and nothing else, structurally: there is no org
+        in the path, the store root is derived from the validated org claim, and a
+        caller therefore has no way to name another tenant's namespace. `path` narrows
+        to a subpath and `env` selects the environment; both are also accepted under
+        the operator's spellings, `secretPath` and `environment`. An omitted `env`
+        means every environment and an omitted `path` means the whole org, because a
+        default here reported a populated store as empty.
+
+        Admission is fail-closed and in order: a validated member, an org that is a
+        DNS-1123 label, and a store holding a master key — 403, 400 and 503
+        respectively, all decided before any record is touched.
       operationId: get_kms_secrets
-      summary: List the secrets your org holds, without their values
+      parameters:
+      - in: query
+        name: env
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: environment
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: path
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: secretPath
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kmsSecrets'
+          description: ok
+      summary: Lists the secrets your org holds, without their values.
       tags:
       - kms
       x-app: kms
       x-public: true
+      x-tool: true
     post:
       description: |-
-        Upserts one secret under the caller's own org. The value is sealed before it is written — a fresh per-secret data key, itself wrapped by the master key — so plaintext never reaches disk. The receipt confirms the name and environment that were written and does not echo the value.
+        Stores or replaces one secret in your org.
 
-        `env` is REQUIRED on a write and has no default, which is the rule most easily got wrong here: reads and deletes still fall back to the default environment for older callers, but a write must not, because the environment is part of the storage key. A silently defaulted write lands in a bucket the readers that resolve project, environment and path never look in, and the stale value keeps being served — so the write fails loudly instead.
+        Upserts one secret under the caller's own org. The value is sealed before it
+        is written — a fresh per-secret data key, itself wrapped by the master key —
+        so plaintext never reaches disk. The receipt confirms the name and environment
+        that were written and does not echo the value.
 
-        `name` is required, `path` is an optional subpath beneath the org root, and the org is taken from the validated claim rather than the body.
+        `env` is REQUIRED on a write and has no default, which is the rule most easily
+        got wrong here: reads and deletes still fall back to the default environment
+        for older callers, but a write must not, because the environment is part of
+        the storage key. A silently defaulted write lands in a bucket the readers that
+        resolve project, environment and path never look in, and the stale value keeps
+        being served — so the write fails loudly instead.
 
-        Requires ADMIN authority over the org — a member reads, an admin writes. A machine credential holds no membership and so is never an org admin: it can read the secrets it was issued for and cannot replace one. Fail-closed admission, in order: admin of the org, well-formed org, master key present — 403, 400 and 503, all decided before any record is touched.
+        `name` is required, `path` is an optional subpath beneath the org root, and
+        the org is taken from the validated claim rather than the body.
+
+        Requires ADMIN authority over the org — a member reads, an admin writes. A
+        machine credential holds no membership and so is never an org admin: it can
+        read the secrets it was issued for and cannot replace one. Fail-closed
+        admission, in order: admin of the org, well-formed org, master key present —
+        403, 400 and 503, all decided before any record is touched.
       operationId: post_kms_secrets
-      summary: Store or replace one secret in your org
+      requestBody:
+        content:
+          application/json:
+            example:
+              env: prod
+              name: deploy-token
+              path: /ci
+              value: s3cr3t
+            schema:
+              $ref: '#/components/schemas/kmsPut'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kmsStored'
+          description: ok
+      summary: Stores or replaces one secret in your org.
       tags:
       - kms
       x-app: kms
       x-public: true
+      x-tool: true
   /v1/kms/secrets/{wildcard1}:
     delete:
       description: |-
@@ -85519,6 +86314,13 @@ paths:
         required: true
         schema:
           type: string
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kmsRemoved'
+          description: Success
       summary: Delete one secret from your org
       tags:
       - kms
@@ -85537,6 +86339,13 @@ paths:
         required: true
         schema:
           type: string
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kmsSecret'
+          description: Success
       summary: Read one secret's value
       tags:
       - kms
