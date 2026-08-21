@@ -78,6 +78,7 @@ func init() {
 			"graphResolveOut.entity":    "Entity is the entity the question named, echoed so a stored answer still\nsays what it is about.",
 			"graphResolveOut.known":     "Known is false when this plane held nothing knowable at AsOf. That is an\nanswer, not an error.",
 			"graphResolveOut.relation":  "Relation is the relation the question named, echoed for the same reason.",
+			"graphResolveOut.truncated": "Truncated says this pair holds more assertions than one read returns, so\nthe winner was decided from the most recent ceiling-full of them. It is\nreported because a provenance plane that trims silently is a plane that\nanswers confidently and wrongly; narrow the question with as_of to see\nwhat it dropped.",
 			"graphResolveOut.winner":    "Winner is the assertion in force — the strongest of those knowable at AsOf\nunder the order `rule` names. Absent exactly when Known is false.",
 			"wireFact.at":               "At is when the thing was so, RFC 3339, as the asserter gave it.",
 			"wireFact.by":               "By is the identity that filed it — `owner` or `owner/user` — stamped from\nthe validated principal at the write, never from the body.",

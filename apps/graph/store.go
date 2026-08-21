@@ -113,6 +113,11 @@ type filter struct {
 	Value    string
 	AsOf     time.Time
 	Limit    int
+	// Newest orders the read by descending sequence, so a read that hits the
+	// ceiling keeps the most recent assertions rather than the oldest. A
+	// resolution reads this way: the table only grows, a correction is a row,
+	// and the rows that decide what is in force are the last ones written.
+	Newest bool
 }
 
 func (s *store) read(ctx context.Context, f filter) ([]Fact, error) {
@@ -138,7 +143,11 @@ func (s *store) read(ctx context.Context, f filter) ([]Fact, error) {
 	if limit <= 0 || limit > walkBound {
 		limit = walkBound
 	}
-	q += ` ORDER BY seq LIMIT ?`
+	if f.Newest {
+		q += ` ORDER BY seq DESC LIMIT ?`
+	} else {
+		q += ` ORDER BY seq LIMIT ?`
+	}
 	args = append(args, limit)
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
