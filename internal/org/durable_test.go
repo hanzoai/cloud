@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/sqlpool"
+	"github.com/hanzoai/sqlite"
 	"github.com/hanzoai/vfs/replica"
 )
 
@@ -30,8 +31,16 @@ import (
 // the fenced ship to the object store, not the local fsync, and OFF keeps the suite
 // off this box's pathologically slow fsync. Production opens through cek/replica with
 // synchronous(NORMAL); the snapshot (checkpoint + file copy) is identical either way.
+// The driver builds it: the two backends spell a pragma differently in a DSN and
+// each ignores the other's spelling silently, so writing one by hand gets the
+// profile on one build and the defaults on the other — here, the fsync this
+// deliberately avoids.
 func testDSN(path string) string {
-	return path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(OFF)&_pragma=busy_timeout(5000)"
+	return sqlite.PragmaDSN(path, []sqlite.Pragma{
+		{Name: "journal_mode", Value: "WAL"},
+		{Name: "synchronous", Value: "OFF"},
+		{Name: "busy_timeout", Value: "5000"},
+	})
 }
 
 // durablePod models one replica opening an org DB through the Durable gate: its own
