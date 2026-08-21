@@ -27,10 +27,12 @@
 // DRY — no reimplementation of provider plumbing. The actual provider
 // implementations and the wire structs are notifyd's OWN public packages, imported
 // directly: github.com/hanzoai/notify/service/{twilio,twilioemail,plivo,mail} and
-// github.com/hanzoai/notify/pkg/types. Only the thin credential→constructor glue
-// (constructProvider) — which lives in notifyd's internal/ and is therefore not
-// importable across the module boundary — is mirrored here, matching
-// internal/tenant/tenant.go verbatim.
+// github.com/hanzoai/notify/pkg/types. Only the credential-to-client mapping is
+// ours, and it is DECLARED rather than switched: provider.go holds the contract and
+// the registry, and each vendor is one file beside it (twilio.go, plivo.go,
+// mail.go). WHICH providers a deployment can reach is therefore the set of files it
+// links, not a case list three functions have to agree about — a new provider is a
+// new file, never a change to the send path.
 //
 // SECURITY — the trust boundary moves with the code. notifyd was ClusterIP-internal
 // and trusted a raw X-Org-Id header. Mounted here, /v1/notify/send is reachable via
@@ -40,14 +42,16 @@
 // unauthenticated caller gets 401; a signed-in caller can only send scoped to their
 // OWN org.
 //
-// CREDENTIALS — KMS only, never env, never plaintext, never logged. Provider
-// credentials are read EXCLUSIVELY from cloud's embedded KMS via cloud.Deps.KMS,
+// CREDENTIALS — KMS only, never env, never plaintext, never logged. Each provider
+// DECLARES the keys it reads (provider.Keys) and the subset it cannot deliver
+// without (provider.Needs); credentials are read EXCLUSIVELY from cloud's embedded
+// KMS via cloud.Deps.KMS,
 // at the org-scoped, rotatable ref orgs/<org>/notify/<service>/<key> — the SAME
 // /orgs/<org> namespace apps/integrations uses, so a cred is writable and
 // rotatable through POST /v1/kms/orgs/:org/secrets with a validated org token
 // (no operator-injected env Secret, no restart to rotate). The org is the
 // VALIDATED principal's tenant (never a client header). A missing key yields an
-// empty value and constructProvider fails closed; no secret is ever hard-coded,
+// empty value and the send fails closed; no secret is ever hard-coded,
 // read from the environment, or logged.
 package notify
 
@@ -68,10 +72,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	ntypes "github.com/hanzoai/notify/pkg/types"
-	"github.com/hanzoai/notify/service/mail"
-	"github.com/hanzoai/notify/service/plivo"
-	"github.com/hanzoai/notify/service/twilio"
-	"github.com/hanzoai/notify/service/twilioemail"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -356,13 +356,13 @@ func (s *service) sendReal(ctx context.Context, org, channel, provider string, t
 	svc := provider
 	if svc == "" {
 		var err error
-		svc, err = s.defaultProvider(ctx, org, channel)
+		svc, err = s.pick(ctx, org, channel)
 		if err != nil {
 			return "", err
 		}
 	}
 	creds := s.creds(ctx, org, svc)
-	n, err := constructProvider(svc, creds, to)
+	n, err := open(svc, creds, to)
 	if err != nil {
 		return svc, err
 	}
@@ -372,31 +372,22 @@ func (s *service) sendReal(ctx context.Context, org, channel, provider string, t
 	return svc, nil
 }
 
-// defaultProvider picks the provider service for a channel from the credentials
-// that are actually configured — mirroring notifyd's env-fallback preference
-// order (the providers table is empty in production, so env creds are the live
-// path). Twilio is preferred (the notify-twilio Secret), then Plivo/SMTP.
-func (s *service) defaultProvider(ctx context.Context, org, channel string) (string, error) {
-	switch channel {
-	case string(ntypes.ChannelSMS), string(ntypes.ChannelVoice), string(ntypes.ChannelWhatsApp):
-		if hasKeys(s.creds(ctx, org, "twilio"), "account-sid", "auth-token", "from-number") {
-			return "twilio", nil
-		}
-		if hasKeys(s.creds(ctx, org, "plivo"), "auth-id", "auth-token") {
-			return "plivo", nil
-		}
-		return "", fmt.Errorf("notify: no SMS provider configured for org %q", org)
-	case string(ntypes.ChannelEmail):
-		if hasKeys(s.creds(ctx, org, "twilio_email"), "account-sid", "auth-token", "from-email") {
-			return "twilio_email", nil
-		}
-		if hasKeys(s.creds(ctx, org, "mail"), "smtp-host", "sender-email") {
-			return "mail", nil
-		}
-		return "", fmt.Errorf("notify: no email provider configured for org %q", org)
-	default:
-		return "", fmt.Errorf("notify: channel %q is not supported by the cloud fold (sms|email only)", channel)
+// pick chooses the provider for a channel when the caller pinned none: the
+// registered providers of that channel in preference order, first one whose org
+// credentials are actually present in KMS. It fails CLOSED — a channel no provider
+// declares, and a channel whose providers are all unconfigured for this org, are
+// both refused rather than attempted.
+func (s *service) pick(ctx context.Context, org, channel string) (string, error) {
+	candidates := forChannel(ntypes.Channel(channel))
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("notify: channel %q is not served by any provider in the cloud fold", channel)
 	}
+	for _, p := range candidates {
+		if hasKeys(s.creds(ctx, org, p.ID), p.Needs...) {
+			return p.ID, nil
+		}
+	}
+	return "", fmt.Errorf("notify: no %s provider configured for org %q", channel, org)
 }
 
 // creds resolves a provider's credential bag from KMS ONLY — never env, never
@@ -404,91 +395,19 @@ func (s *service) defaultProvider(ctx context.Context, org, channel string) (str
 // (cloud.Deps.KMS) at the org-scoped, rotatable ref orgs/<org>/notify/<svc>/<key>,
 // the same /orgs/<org> convention apps/integrations uses (so a cred is
 // writable + rotatable via POST /v1/kms/orgs/:org/secrets). A nil store or a
-// missing key leaves the value empty; constructProvider then fails closed.
+// missing key leaves the value empty; open then fails closed.
 func (s *service) creds(ctx context.Context, org, svc string) map[string]string {
 	out := make(map[string]string, 4)
 	if s.kms == nil {
 		return out
 	}
-	for _, k := range credKeys(svc) {
+	for _, k := range keysFor(svc) {
 		ref := "orgs/" + org + "/notify/" + svc + "/" + k
 		if v, err := s.kms.GetSecret(ctx, ref); err == nil && len(v) > 0 {
 			out[k] = string(v)
 		}
 	}
 	return out
-}
-
-// ---- provider credential + construction glue (mirrors notifyd internal/tenant) ----
-
-// credKeys is the KMS key set per provider service — mirrors
-// internal/tenant.credKeysForService.
-func credKeys(svc string) []string {
-	switch svc {
-	case "plivo":
-		return []string{"auth-id", "auth-token", "from-number"}
-	case "twilio":
-		return []string{"account-sid", "auth-token", "from-number"}
-	case "twilio_email":
-		return []string{"account-sid", "auth-token", "from-email", "from-name"}
-	case "mail":
-		return []string{"smtp-host", "smtp-port", "smtp-user", "smtp-password", "sender-email", "sender-name"}
-	default:
-		return nil
-	}
-}
-
-// constructProvider builds the notifyd library provider for one service, targeting
-// `to`. Mirrors internal/tenant.constructProvider verbatim (that function is
-// internal to hanzoai/notify and cannot be imported); the provider IMPLs are the
-// real, imported service/* packages, so only this ~40-line switch is duplicated.
-func constructProvider(svc string, c map[string]string, to []string) (notifier, error) {
-	switch svc {
-	case "plivo":
-		if c["auth-id"] == "" || c["auth-token"] == "" {
-			return nil, errors.New("notify: plivo requires auth-id and auth-token")
-		}
-		p, err := plivo.New(
-			&plivo.ClientOptions{AuthID: c["auth-id"], AuthToken: c["auth-token"]},
-			&plivo.MessageOptions{Source: c["from-number"]},
-		)
-		if err != nil {
-			return nil, err
-		}
-		p.AddReceivers(to...)
-		return p, nil
-	case "twilio":
-		if c["account-sid"] == "" || c["auth-token"] == "" || c["from-number"] == "" {
-			return nil, errors.New("notify: twilio requires account-sid, auth-token and from-number")
-		}
-		t, err := twilio.New(c["account-sid"], c["auth-token"], c["from-number"])
-		if err != nil {
-			return nil, err
-		}
-		t.AddReceivers(to...)
-		return t, nil
-	case "twilio_email":
-		if c["account-sid"] == "" || c["auth-token"] == "" || c["from-email"] == "" {
-			return nil, errors.New("notify: twilio_email requires account-sid, auth-token and from-email")
-		}
-		te := twilioemail.New(c["account-sid"], c["auth-token"], c["from-email"], c["from-name"])
-		te.AddReceivers(to...)
-		return te, nil
-	case "mail":
-		if c["smtp-host"] == "" || c["sender-email"] == "" {
-			return nil, errors.New("notify: mail requires smtp-host and sender-email")
-		}
-		port := c["smtp-port"]
-		if port == "" {
-			port = "587"
-		}
-		m := mail.New(c["sender-email"], c["smtp-host"]+":"+port)
-		m.AuthenticateSMTP("", c["smtp-user"], c["smtp-password"], c["smtp-host"])
-		m.AddReceivers(to...)
-		return m, nil
-	default:
-		return nil, fmt.Errorf("notify: provider %q not wired in the cloud fold", svc)
-	}
 }
 
 // ---- template rendering ----
