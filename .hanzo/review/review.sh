@@ -25,15 +25,29 @@ API="${REVIEW_API:-https://api.hanzo.ai}"
 # `fireworks/gpt-oss-120b` named a provider we do not use and an id the catalog
 # does not serve, so every review call failed and the train stopped for far
 # longer. The gate refused correctly both times — there was nothing on the other
-# end. Check an id against the live catalog before it stands here:
+# end.
 #
-#   curl -s https://api.hanzo.ai/v1/models | jq -r '.data[].id' | grep -v /
+# BEING IN THE CATALOG IS NOT BEING SERVED, and that is the check this comment
+# used to prescribe wrongly. The catalog names what the gateway KNOWS; whether an
+# upstream will answer for that id today is a different fact, and the two have
+# disagreed on every id above. So ask the id to answer, and read the body:
 #
-# zen5-coder is the Zen family's coding model: premium rather than the shared
-# free pool (this reviewer is handed the diff of a private repository), and a
-# 1,000,000-token context against the 400 KB diff bound below — zen5-flash's
-# 65536 would truncate exactly the hunk the bound exists to keep whole.
-MODEL="${REVIEW_MODEL:-zen5-coder}"
+#   curl -s https://api.hanzo.ai/v1/chat/completions -H "Authorization: Bearer $TOK" \
+#     -H 'content-type: application/json' \
+#     -d '{"model":"<id>","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}'
+#
+# A 200 carrying an upstream refusal in the body counts as no answer — the
+# gateway relays some of them at 200, so `-w '%{http_code}'` alone reads a dead
+# id as live.
+#
+# enso is the house long-context model — owned_by=hanzo, no provider prefix,
+# premium rather than the shared free pool (this reviewer is handed the diff of a
+# private repository), and a 1,000,000-token context against the 400 KB diff
+# bound below, where a 65,536 context would truncate exactly the hunk the bound
+# exists to keep whole. Measured on this range before it stood here: it reads a
+# hostile diff and refuses it naming both findings, and it answers the schema
+# below as strict JSON.
+MODEL="${REVIEW_MODEL:-enso}"
 
 # WHEN THE PREMIUM MODEL CANNOT BE PAID FOR, FALL BACK RATHER THAN STOP THE TRAIN.
 # A 402 is not a verdict and it is not a transient — it is the gateway saying the
@@ -168,7 +182,14 @@ user += f"{files} files changed.\n\nDIFF:\n{diff}"
 # JSON and nothing else" and a prompt is a request; response_format is a
 # constraint the gateway enforces. Verified against api.hanzo.ai on this model:
 # the content comes back bare and parses directly.
-json.dump({"model": model, "max_tokens": 1500, "temperature": 0,
+# THE ANSWER'S BUDGET IS PART OF THE WIRE, and too small a one reads as a hostile
+# change rather than as a truncated reply: the verdict comes back cut off, which
+# is not valid JSON, and this gate refuses what it cannot parse. Measured before
+# this number stood here — one commit costs ~1,000 tokens, a 33 KB eleven-file
+# slice 2,238 to 3,033, and the 1,500 this replaces returned NO content at all on
+# that slice. 8,000 leaves headroom over the largest observed answer without
+# leaving the budget unbounded.
+json.dump({"model": model, "max_tokens": 8000, "temperature": 0,
            "response_format": {"type": "json_object"},
            "messages": [{"role":"system","content":system},{"role":"user","content":user}]}, sys.stdout)
 PY
@@ -246,6 +267,17 @@ try:
     text = raw["choices"][0]["message"]["content"]
 except Exception:
     print("::error::review: no answer in the reviewer's response"); sys.exit(1)
+# AN ANSWER THAT RAN OUT OF ROOM NAMES ITSELF. A model that spends its whole
+# budget returns content `null` rather than a short object, and every reader
+# below expects a string — so this arrived as a TypeError traceback out of the
+# balanced-object scan, which refuses the release (correctly, it is fail-closed)
+# while naming neither the budget nor the model. Say which it was, so the remedy
+# is the number above rather than a bisect.
+if not text:
+    fin = (raw.get("choices") or [{}])[0].get("finish_reason")
+    used = (raw.get("usage") or {}).get("completion_tokens")
+    print(f"::error::review: the reviewer returned no content (finish_reason={fin}, completion_tokens={used})"
+          " — it did not fit in the answer budget, so there is no verdict to read"); sys.exit(1)
 # THE VERDICT IS AN OBJECT, NOT A SPAN OF TEXT.
 #
 # This used to be re.search(r"\{.*\}", text, re.S) — GREEDY, so it took from the
