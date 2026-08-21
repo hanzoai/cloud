@@ -17,7 +17,7 @@
 # see cmd/cloud.
 #
 # ── the skills catalog is source, not an artifact ────────────────────────────
-# apps/skills/catalog is TRACKED whole: 696 skills x 3 brands of markdown that
+# apps/skills/catalog is TRACKED whole: 675 skills x 3 brands of markdown that
 # //go:embed bakes in. It arrived here as a container image until a package
 # permission on that image stopped 28 commits from building — a registry 403
 # standing between this repo and its own text. `make skills` regenerates it with

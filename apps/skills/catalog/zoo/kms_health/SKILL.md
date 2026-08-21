@@ -1,7 +1,7 @@
 ---
 name: kms_health
 version: "8.0.0"
-description: "Read kms health: Whether this broker can actually serve secrets."
+description: "Read kms health: Reports whether this broker can actually serve secrets.."
 ---
 
 # Zoo · KMS · health
@@ -14,11 +14,11 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/kms/health` — Whether this broker can actually serve secrets
+- `GET https://api.zoo.ngo/v1/kms/health` — Reports whether this broker can actually serve secrets.
 
 ## Response
 
-- `/v1/kms/health` → JSON object.
+- `/v1/kms/health` → `kmsHealth` object with fields: `error`, `ready`, `service`, `signing`, `status`.
 
 ## Example
 

@@ -1,7 +1,7 @@
 ---
 name: marketing_calendar
 version: "8.0.0"
-description: "Read marketing calendar: Returns the org's calendar, soonest scheduled first, optionally narrowed to one status., Returns one of the caller org's posts, including the exact error behind a failed publish.."
+description: "Read marketing calendar: Returns the org's calendar, latest scheduled first, optionally narrowed to one status., Returns one of the caller org's posts, including the exact error behind a failed publish.."
 ---
 
 # Lux · MARKETING · calendar
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/marketing/calendar` — Returns the org's calendar, soonest scheduled first, optionally narrowed to one status.
+- `GET https://api.lux.network/v1/marketing/calendar` — Returns the org's calendar, latest scheduled first, optionally narrowed to one status.
 - `GET https://api.lux.network/v1/marketing/calendar/{id}` — Returns one of the caller org's posts, including the exact error behind a failed publish.
 
 ## Parameters

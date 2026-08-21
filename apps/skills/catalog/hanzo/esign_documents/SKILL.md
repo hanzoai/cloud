@@ -1,7 +1,7 @@
 ---
 name: esign_documents
 version: "8.0.0"
-description: "Read esign documents: Your org's documents, newest first, One document with its recipients and field layout, The document's full audit trail, oldest first."
+description: "Read esign documents: Returns your org's documents, newest first., Returns one document with its recipients and field layout., Returns the document's full audit trail, oldest first.."
 ---
 
 # Hanzo · ESIGN · documents
@@ -14,23 +14,23 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/esign/documents` — Your org's documents, newest first
-- `GET https://api.hanzo.ai/v1/esign/documents/{id}` — One document with its recipients and field layout
-- `GET https://api.hanzo.ai/v1/esign/documents/{id}/audit` — The document's full audit trail, oldest first
-- `GET https://api.hanzo.ai/v1/esign/documents/{id}/download` — Download the document — the sealed PDF once it is complete
+- `GET https://api.hanzo.ai/v1/esign/documents` — Returns your org's documents, newest first.
+- `GET https://api.hanzo.ai/v1/esign/documents/{id}` — Returns one document with its recipients and field layout.
+- `GET https://api.hanzo.ai/v1/esign/documents/{id}/audit` — Returns the document's full audit trail, oldest first.
+- `GET https://api.hanzo.ai/v1/esign/documents/{id}/download` — Returns the document — the sealed PDF once it is complete.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string |  |
+| `id` | path | yes | string | ID is the document to act on. It is the path segment: the URL is the addressing authority, and the org it is resolved in comes from the caller's principal, so an id belonging to another tenant is simply not found. |
 
 ## Response
 
-- `/v1/esign/documents` → JSON object.
-- `/v1/esign/documents/{id}` → JSON object.
-- `/v1/esign/documents/{id}/audit` → JSON object.
-- `/v1/esign/documents/{id}/download` → JSON object.
+- `/v1/esign/documents` → `esignDocuments` object with fields: `documents`.
+- `/v1/esign/documents/{id}` → `esignDocument` object with fields: `completedAt`, `createdAt`, `externalId`, `fields`, `id`, `message`, `recipients`, `signingOrder`, `source`, `status`, `subject`, `title`.
+- `/v1/esign/documents/{id}/audit` → `esignTrail` object with fields: `documentId`, `entries`.
+- `/v1/esign/documents/{id}/download` → `esignPDF` object with fields: `filename`, `id`, `pdfBase64`, `sealed`, `status`.
 
 ## Example
 

@@ -1,7 +1,7 @@
 ---
 name: social_accounts
 version: "8.0.0"
-description: "Read social accounts: List the social accounts connected to your org, Read one connected account."
+description: "Read social accounts: Returns the org's connected accounts — each one's id, network, handle, status and timestamps, most-recently-updated first., Returns one of the org's connected accounts by id — its network, handle, status and timestamps — or 404.."
 ---
 
 # Hanzo · SOCIAL · accounts
@@ -14,19 +14,21 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/social/accounts` — List the social accounts connected to your org
-- `GET https://api.hanzo.ai/v1/social/accounts/{id}` — Read one connected account
+- `GET https://api.hanzo.ai/v1/social/accounts` — Returns the org's connected accounts — each one's id, network, handle, status and timestamps, most-recently-updated first.
+- `GET https://api.hanzo.ai/v1/social/accounts/{id}` — Returns one of the org's connected accounts by id — its network, handle, status and timestamps — or 404.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string |  |
+| `id` | path | yes | string | ID is the account or post to act on, taken from the path. |
+| `limit` | query | no | string | Limit bounds the page, defaulting to 200 and capped at 1000. It is a string rather than an integer on purpose: the route parses it with a leading trim and falls back to the default on anything it cannot read, so `?limit=%2050` is a page of fifty today. An integer field would refuse the space and read an unparseable value as zero, which is a different page. |
+| `provider` | query | no | string | Provider keeps only accounts on one network — x, facebook, instagram, linkedin, tiktok, youtube or threads. Omit it for every network. It is lower-cased and trimmed before it is matched, and a value that names no network simply matches nothing rather than being refused. |
 
 ## Response
 
-- `/v1/social/accounts` → JSON object.
-- `/v1/social/accounts/{id}` → JSON object.
+- `/v1/social/accounts` → `socialAccounts` object with fields: `data`.
+- `/v1/social/accounts/{id}` → `socialAccount` object with fields: `createdAt`, `handle`, `id`, `provider`, `status`, `updatedAt`.
 
 ## Example
 
