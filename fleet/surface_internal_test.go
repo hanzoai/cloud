@@ -63,7 +63,7 @@ var refusals = []struct{ name, why string }{
 	{"CreateBulkInvite", "POST /v1/o11y/invite/bulk"},
 	{"CreateIngestionKey", "POST /v1/o11y/gateway/ingestion_keys"},
 	{"CreateRoutePolicy", "POST /v1/o11y/route_policies"},
-	{"post_iam_add-user", "POST /v1/iam/add-user"},
+	{"post_iam_users", "POST /v1/iam/users"},
 	{"post_iam_scim_v2_users", "SCIM user provisioning"},
 	{"delete_framework_roles_user_role", "DELETE /v1/framework/roles/{user}/{role}"},
 	{"post_git_keys", "POST /v1/git/keys — an SSH key is a credential even on the git surface"},

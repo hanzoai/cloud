@@ -409,7 +409,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": map[string]string{
 				"owner": org, "name": "eve", "id": inviteeSub, "email": gotUserEmail, "displayName": "Eve",
 			}})
-		case "/v1/iam/add-membership":
+		case "/v1/iam/memberships":
 			var body map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			gotAddBody = body
@@ -539,7 +539,7 @@ func TestGetMembershipsRefresh(t *testing.T) {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
-		if r.URL.Path == "/v1/iam/get-memberships" && r.URL.Query().Get("user") == "maxpower/dave" {
+		if r.URL.Path == "/v1/iam/memberships" && r.URL.Query().Get("user") == "maxpower/dave" {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": []model.OrgRef{
 				{Org: "maxpower", Role: "admin"}, {Org: "acme", Role: "member"},
