@@ -4329,6 +4329,52 @@ The in-binary index, speaking the Meilisearch REST dialect so a Meilisearch clie
 repoints by changing one host. It replaced the standalone Meilisearch containers
 (`chat-meilisearch`, `search-fts5`).
 
+**`/v1/search` MEANS ONE THING NOW.** It used to mean two: the tenant's fused
+query over its own corpora, and an operator's inventory of ONE shared backend
+deployment (`GET /v1/search/{indexes,stats}`, reading `search.hanzo.svc:7700`). A
+caller reading `/v1/search/indexes` has every reason to expect "the corpora my
+search covers" and got the index list of a Meilisearch that answers part of one
+leg. Those two moved to **`/v1/admin/search/*`** — `apps/provisioning` already put
+its shared-backend reads at `/v1/admin/provisioning/vector/*` for the same reason,
+and `misfiled.go` explicitly permits `/v1/admin/<app>` served by `<app>`.
+
+**THE TWO AXES ARE SEPARATE AND A MOVE ONLY TOUCHES ONE.** The ADDRESS decides
+audience — `public.go` reads the path's first segment, so those two left the
+customer contract by moving and needed no flag (openapi.yaml 1646 → 1644 paths).
+The TAG is the OWNER (HIP-0139 §4, `weave.go`: `op.Tags = []string{op.App}`), so
+they are still tagged `search` and `openapi/floor.json`'s `search: 3` is still
+correct — apps/search still owns three operations. **Do not read a floor product
+as a path prefix.** I misread it exactly that way, concluded the ratchet had
+failed to fire on a 3→1 shrink, and was about to "fix" a correct design; the
+counts agreed the whole time because they were never counting what I thought.
+
+**`/v1/search` IS THE DOOR, and the backends keep their own.** A caller asks
+`POST /v1/search` and does not choose a backend: `apps/search` fuses the three
+retrieval stores the platform runs — the lexical index (`apps/index`), the vector
+index (`apps/knowledge`) and the org's own repositories (`apps/code`) — by
+Reciprocal Rank Fusion, and reports per leg whether it answered, is degraded, is
+unprovisioned or was excluded by the mode. The other three addresses stay exactly
+what they are, because each is a backend's own surface rather than a door a caller
+should have to pick between: `/v1/index` speaks the Meilisearch dialect so a
+Meilisearch client repoints by changing one host, `/v1/code/search` answers spans
+with repo and line because that is what a coding agent wants, `/v1/knowledge/search`
+is the KB's own semantic read. **Fusing them is not deleting them.**
+
+The modes name RETRIEVAL KINDS and not legs — `text` runs every lexical leg, which
+is now the index AND the code corpus; `semantic` runs the vector one — so adding a
+leg never adds a mode. `apps/code/query.go` is that leg's in-process seam and is
+the SAME shape `apps/index/query.go` publishes (`Ready()` + a query), in-process
+for the two reasons index's own comment gives: a fused query is an agent tool call
+on a few-hundred-millisecond budget, and a second network path to the same store
+would be a second way to do one thing. A deployment without the code index reports
+that leg `disabled`, which is not a fault and does not make the answer partial.
+
+Do NOT assert the leg set by COUNT. `TestDegradationIsExplicit` pinned
+`len(Backends) != 2` and went red on the third leg saying only that a number moved;
+it asserts by NAME now, so the next leg's failure names which one is missing and
+the fix is to name it there. A count is satisfied by any three legs, including the
+wrong three.
+
 **Four different things, four names — do not merge them.** `hanzoai/search` is the
 SEARCH PRODUCT (our own Meilisearch build, serving `search.hanzo.ai` and the docs
 corpus). `apps/websearch` queries the OUTSIDE world. `apps/crawl` fetches it

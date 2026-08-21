@@ -438,7 +438,7 @@ var Apps = []App{
 	// capabilities that owned its roots, the Meilisearch inventory at
 	// /v1/search/{indexes,stats}. Allocating a search index is a different act and
 	// lives at /v1/provisioning/search.
-	{Name: "search", Prefixes: []string{"/v1/search"}},
+	{Name: "search", Prefixes: []string{"/v1/search", "/v1/admin/search"}},
 	{Name: "eval", Prefixes: []string{"/v1/eval"}},
 	{Name: "benchmark", Prefixes: []string{"/v1/benchmark"}},
 	{Name: "research", Prefixes: []string{"/v1/research"}, Stage: Alpha},

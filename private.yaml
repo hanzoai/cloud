@@ -929,8 +929,9 @@ components:
           type: integer
         name:
           description: |-
-            Name is which leg this reports: "index", the lexical store, or "vector", the
-            semantic one. Match.Backend uses the same two names.
+            Name is which leg this reports: "index", the lexical store, "vector", the
+            semantic one, or "code", the org's own repositories. Match.Backend uses the
+            same three names.
           type: string
         status:
           description: |-
@@ -5453,9 +5454,11 @@ components:
       properties:
         corpus:
           description: |-
-            Corpus is which store the document lives in. Both legs read the org's
-            knowledge base, so it is "kb" on every hit today; it is provenance for the
-            day a third corpus is fused, not a field to branch on.
+            Corpus is which store the document lives in: "kb" for a document either
+            knowledge leg returned, "code" for a span out of one of the org's own
+            repositories. It is PROVENANCE — read it to say where a hit came from, not
+            to branch on: the fused ranking is what decides order, and a caller that
+            filters by corpus wants the backend's own door instead.
           type: string
         doctype:
           description: |-
@@ -5473,8 +5476,9 @@ components:
         matched:
           description: |-
             Matched is one entry per leg that returned this document, with that leg's
-            rank and native score. Two entries mean both legs agreed, which is exactly
-            why the hit outranks one a single leg found. Never empty on a returned hit.
+            rank and native score. More than one entry means the legs AGREED, which is
+            exactly why the hit outranks one a single leg found. Never empty on a
+            returned hit.
           items:
             $ref: '#/components/schemas/Match'
           type: array
@@ -5487,7 +5491,7 @@ components:
           description: |-
             Score is the FUSED score, not a relevance or a similarity: Reciprocal Rank
             Fusion sums 1/(60+rank) over each leg that returned the document, so it is
-            bounded by roughly 1/61 per leg (about 0.033 for a document both legs put
+            bounded by roughly 1/61 per leg (about 0.033 for a document two legs put
             first) and hits are ordered by it, descending. Being built from ranks, it is
             comparable only WITHIN one response — never across queries, and never against
             a backend's own score, which stays in Matched.
@@ -6845,9 +6849,10 @@ components:
       properties:
         backend:
           description: |-
-            Backend is the leg that contributed this match: "index" (lexical) or
-            "vector" (semantic). It is the same name that leg reports itself under in
-            Response.Backends, so a hit can be traced to a status.
+            Backend is the leg that contributed this match: "index" (lexical), "vector"
+            (semantic) or "code" (the org's repositories). It is the same name that leg
+            reports itself under in Response.Backends, so a hit can be traced to a
+            status.
           type: string
         rank:
           description: |-
@@ -58603,6 +58608,75 @@ paths:
       tags:
       - admin
       x-app: admin
+      x-tool: true
+  /v1/admin/search/indexes:
+    get:
+      description: |-
+        Lists the search indexes with their document counts and timestamps.
+
+        It reads the in-cluster Meilisearch service and reshapes its /stats and
+        /indexes replies into the rows the console's Search panel renders. The read is
+        degrade-friendly by design: an unreachable Meilisearch answers 200 with an
+        EMPTY list, so the panel shows an honest empty state instead of an error.
+        createdAt falls back to now and lastIndexedAt to null when the index list is
+        unavailable.
+      operationId: get_admin_search_indexes
+      parameters:
+      - description: |-
+          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
+          key is accepted too. It is not `validate:"required"` on purpose: requireKey
+          answers absence itself, so an unconfigured surface 503s and a missing bearer
+          401s — a validation refusal would rewrite both statuses.
+        in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchIndexList'
+          description: ok
+      summary: Lists the search indexes with their document counts and timestamps.
+      tags:
+      - search
+      x-app: search
+      x-tool: true
+  /v1/admin/search/stats:
+    get:
+      description: |-
+        Totals the documents across every search index.
+
+        totalDocuments is summed from Meilisearch's own per-index counts. The other
+        three fields are structurally zero rather than estimated: Meilisearch keeps no
+        query-history counters, so searches, sessions and the per-day series are not
+        derivable from the index and this surface reports the honest zero instead of a
+        fabricated number. An unreachable Meilisearch answers 200 with all zeros.
+      operationId: get_admin_search_stats
+      parameters:
+      - description: |-
+          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
+          key is accepted too. It is not `validate:"required"` on purpose: requireKey
+          answers absence itself, so an unconfigured surface 503s and a missing bearer
+          401s — a validation refusal would rewrite both statuses.
+        in: header
+        name: Authorization
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchStats'
+          description: ok
+      summary: Totals the documents across every search index.
+      tags:
+      - search
+      x-app: search
       x-tool: true
   /v1/admin/services:
     get:
@@ -118020,77 +118094,6 @@ paths:
                 $ref: '#/components/schemas/Response'
           description: ok
       summary: Hybrid search over the org's own corpora
-      tags:
-      - search
-      x-app: search
-      x-public: true
-      x-tool: true
-  /v1/search/indexes:
-    get:
-      description: |-
-        Lists the search indexes with their document counts and timestamps.
-
-        It reads the in-cluster Meilisearch service and reshapes its /stats and
-        /indexes replies into the rows the console's Search panel renders. The read is
-        degrade-friendly by design: an unreachable Meilisearch answers 200 with an
-        EMPTY list, so the panel shows an honest empty state instead of an error.
-        createdAt falls back to now and lastIndexedAt to null when the index list is
-        unavailable.
-      operationId: get_search_indexes
-      parameters:
-      - description: |-
-          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
-          key is accepted too. It is not `validate:"required"` on purpose: requireKey
-          answers absence itself, so an unconfigured surface 503s and a missing bearer
-          401s — a validation refusal would rewrite both statuses.
-        in: header
-        name: Authorization
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/searchIndexList'
-          description: ok
-      summary: Lists the search indexes with their document counts and timestamps.
-      tags:
-      - search
-      x-app: search
-      x-public: true
-      x-tool: true
-  /v1/search/stats:
-    get:
-      description: |-
-        Totals the documents across every search index.
-
-        totalDocuments is summed from Meilisearch's own per-index counts. The other
-        three fields are structurally zero rather than estimated: Meilisearch keeps no
-        query-history counters, so searches, sessions and the per-day series are not
-        derivable from the index and this surface reports the honest zero instead of a
-        fabricated number. An unreachable Meilisearch answers 200 with all zeros.
-      operationId: get_search_stats
-      parameters:
-      - description: |-
-          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
-          key is accepted too. It is not `validate:"required"` on purpose: requireKey
-          answers absence itself, so an unconfigured surface 503s and a missing bearer
-          401s — a validation refusal would rewrite both statuses.
-        in: header
-        name: Authorization
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/searchStats'
-          description: ok
-      summary: Totals the documents across every search index.
       tags:
       - search
       x-app: search
