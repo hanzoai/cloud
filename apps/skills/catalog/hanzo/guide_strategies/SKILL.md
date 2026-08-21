@@ -6,7 +6,7 @@ description: "Read guide strategies: Strategies returns the ENABLED tactics corp
 
 # Hanzo · GUIDE · strategies
 
-Read-only Hanzo capability derived from the `guide` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `guide` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `category` | query | no | string | Category filters to tactics in exactly this category. |
-| `stage` | query | no | string | Stage previews the corpus at a chosen growth stage |
+| `stage` | query | no | string | Stage previews the corpus at a chosen growth stage (research\|formed\|launched\|activated\|scaling), overriding the org's observed one. An unknown value is ignored and the observed stage stands. |
 | `workload` | query | no | string | Workload filters to tactics with exactly this workload. |
 
 ## Response

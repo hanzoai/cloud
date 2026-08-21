@@ -6,7 +6,7 @@ description: "Read compliance audit: AuditRead is the compliance read of the SHA
 
 # Zoo · COMPLIANCE · audit
 
-Read-only Zoo capability derived from the `compliance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `compliance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

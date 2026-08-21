@@ -6,7 +6,7 @@ description: "Read admin customers: Lists every customer org at a glance, sorted
 
 # Lux · ADMIN · customers
 
-Read-only Lux capability derived from the `admin` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `admin` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

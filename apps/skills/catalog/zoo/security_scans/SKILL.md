@@ -6,7 +6,7 @@ description: "Read security scans: Is the org's scan history, newest first, each
 
 # Zoo · SECURITY · scans
 
-Read-only Zoo capability derived from the `security` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `security` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

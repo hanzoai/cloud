@@ -6,7 +6,7 @@ description: "Read crm contacts: Returns the caller org's contacts, most recentl
 
 # Hanzo · CRM · contacts
 
-Read-only Hanzo capability derived from the `crm` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `crm` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

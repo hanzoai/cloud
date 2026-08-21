@@ -6,7 +6,7 @@ description: "Read legal templates: Returns the org's effective template catalog
 
 # Zoo · LEGAL · templates
 
-Read-only Zoo capability derived from the `legal` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `legal` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read compliance accreditation: Returns the org's tracked accredita
 
 # Lux · COMPLIANCE · accreditation
 
-Read-only Lux capability derived from the `compliance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `compliance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

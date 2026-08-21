@@ -6,7 +6,7 @@ description: "Read compliance records: ListRecords is the unified compliance-rec
 
 # Zoo · COMPLIANCE · records
 
-Read-only Zoo capability derived from the `compliance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `compliance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

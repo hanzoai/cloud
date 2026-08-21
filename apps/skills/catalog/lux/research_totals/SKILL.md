@@ -6,7 +6,7 @@ description: "Read research totals: Returns the caller org's headline aggregate 
 
 # Lux · RESEARCH · totals
 
-Read-only Lux capability derived from the `research` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `research` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

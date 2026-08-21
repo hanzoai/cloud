@@ -6,7 +6,7 @@ description: "Read flags health: Health reports that the flag engine is serving.
 
 # Zoo · FLAGS · health
 
-Read-only Zoo capability derived from the `flags` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `flags` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

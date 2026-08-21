@@ -6,7 +6,7 @@ description: "Read world stream: Live news refreshes for the caller's org and pr
 
 # Zoo · WORLD · stream
 
-Read-only Zoo capability derived from the `world` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `world` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/world/stream` → JSON body.
+- `/v1/world/stream` → JSON object.
 
 ## Example
 

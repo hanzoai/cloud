@@ -6,7 +6,7 @@ description: "Read deploy gitops: Lists every Lux CD Application in the cluster:
 
 # Lux · DEPLOY · gitops
 
-Read-only Lux capability derived from the `deploy` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `deploy` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

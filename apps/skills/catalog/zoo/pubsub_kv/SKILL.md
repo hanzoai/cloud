@@ -6,7 +6,7 @@ description: "Read pubsub kv: Get returns one key's current value and revision.,
 
 # Zoo · PUBSUB · kv
 
-Read-only Zoo capability derived from the `pubsub` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `pubsub` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

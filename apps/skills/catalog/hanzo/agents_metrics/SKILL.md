@@ -6,7 +6,7 @@ description: "Read agents metrics: Serves the invocations-over-time histogram fo
 
 # Hanzo · AGENTS · metrics
 
-Read-only Hanzo capability derived from the `agents` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `agents` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read iam scim: Returns the kinds of record this directory provisio
 
 # Lux · IAM · scim
 
-Read-only Lux capability derived from the `iam` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `iam` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -37,8 +37,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 - `/v1/iam/scim/v2/Schemas` → `iam.listResponse` object with fields: `Resources`, `itemsPerPage`, `schemas`, `startIndex`, `totalResults`.
 - `/v1/iam/scim/v2/Schemas/{id}` → JSON object.
 - `/v1/iam/scim/v2/ServiceProviderConfig` → `iam.config` object with fields: `authenticationSchemes`, `bulk`, `changePassword`, `documentationUri`, `etag`, `filter`, `patch`, `schemas`, `sort`.
-- `/v1/iam/scim/v2/Users` → JSON body.
-- `/v1/iam/scim/v2/Users/{owner}/{name}` → JSON body.
+- `/v1/iam/scim/v2/Users` → JSON object.
+- `/v1/iam/scim/v2/Users/{owner}/{name}` → JSON object.
 
 ## Example
 

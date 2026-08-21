@@ -6,7 +6,7 @@ description: "Read marketing audiences: Returns the org's saved audiences, most 
 
 # Zoo · MARKETING · audiences
 
-Read-only Zoo capability derived from the `marketing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `marketing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

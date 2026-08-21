@@ -6,7 +6,7 @@ description: "Read content channels: Lists the distribution channels the caller'
 
 # Hanzo · CONTENT · channels
 
-Read-only Hanzo capability derived from the `content` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `content` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

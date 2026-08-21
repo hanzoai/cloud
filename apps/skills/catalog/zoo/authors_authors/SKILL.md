@@ -6,7 +6,7 @@ description: "Read authors authors: Returns the caller's author-program dashboar
 
 # Zoo · AUTHORS · authors
 
-Read-only Zoo capability derived from the `authors` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `authors` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

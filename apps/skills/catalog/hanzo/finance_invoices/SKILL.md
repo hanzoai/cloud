@@ -6,7 +6,7 @@ description: "Read finance invoices: Answers an empty typed array, always.."
 
 # Hanzo · FINANCE · invoices
 
-Read-only Hanzo capability derived from the `finance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `finance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read x402 settlements: Settlement reads one x402 payment receipt b
 
 # Zoo · X402 · settlements
 
-Read-only Zoo capability derived from the `x402` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `x402` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the settlement id from the URL — the deterministic keccak(from\|nonce) |
+| `id` | path | yes | string | ID is the settlement id from the URL — the deterministic keccak(from\|nonce) key an x402 receipt is issued under (the `id` field of a Receipt, and the `transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid request answers with). |
 
 ## Response
 

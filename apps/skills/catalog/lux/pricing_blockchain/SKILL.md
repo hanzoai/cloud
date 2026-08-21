@@ -6,7 +6,7 @@ description: "Read pricing blockchain: Returns the blockchain access plans — t
 
 # Lux · PRICING · blockchain
 
-Read-only Lux capability derived from the `pricing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `pricing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

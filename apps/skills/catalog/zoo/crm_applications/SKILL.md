@@ -6,7 +6,7 @@ description: "Read crm applications: Returns the org's Startup Program applicati
 
 # Zoo · CRM · applications
 
-Read-only Zoo capability derived from the `crm` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `crm` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the record to act on, from the path. |
 | `limit` | query | no | integer | Limit caps the rows returned: 200 by default, 1000 at most. |
-| `stage` | query | no | string | Stage returns only the applications at that pipeline stage when set: |
+| `stage` | query | no | string | Stage returns only the applications at that pipeline stage when set: applied, screened, qualified, credits-offered, onboarded or rejected. |
 
 ## Response
 

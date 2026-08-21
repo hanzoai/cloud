@@ -6,7 +6,7 @@ description: "Read authz readyz: Readiness of the policy engine."
 
 # Lux · AUTHZ · readyz
 
-Read-only Lux capability derived from the `authz` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `authz` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/authz/readyz` → JSON body.
+- `/v1/authz/readyz` → JSON object.
 
 ## Example
 

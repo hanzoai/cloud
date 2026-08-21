@@ -6,7 +6,7 @@ description: "Read integrations slack: Install the Lux app into a Slack workspac
 
 # Lux · INTEGRATIONS · slack
 
-Read-only Lux capability derived from the `integrations` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `integrations` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,10 +21,10 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/integrations/slack/install` → JSON body.
-- `/v1/integrations/slack/link` → JSON body.
-- `/v1/integrations/slack/link/callback` → JSON body.
-- `/v1/integrations/slack/link/slack` → JSON body.
+- `/v1/integrations/slack/install` → JSON object.
+- `/v1/integrations/slack/link` → JSON object.
+- `/v1/integrations/slack/link/callback` → JSON object.
+- `/v1/integrations/slack/link/slack` → JSON object.
 
 ## Example
 

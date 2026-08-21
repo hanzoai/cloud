@@ -6,7 +6,7 @@ description: "Read allowance allowance: Answers what the CALLER has left of thei
 
 # Zoo · ALLOWANCE · allowance
 
-Read-only Zoo capability derived from the `allowance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `allowance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

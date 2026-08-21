@@ -6,7 +6,7 @@ description: "Read iam keys: Returns your organization's API keys, newest first 
 
 # Lux · IAM · keys
 
-Read-only Lux capability derived from the `iam` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `iam` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -27,7 +27,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Response
 
 - `/v1/iam/keys` → `iam.ListResponse` object with fields: `keys`.
-- `/v1/iam/keys/get` → `iam.Key` object with fields: `accessKey`, `accessSecret`, `application`, `createdAt`, `createdTime`, `deleted`, `displayName`, `expireTime`, `id`, `name`, `organization`, `owner`.
+- `/v1/iam/keys/get` → `iam.Key` object with fields: `accessKey`, `accessSecret`, `accessSecretDigest`, `application`, `createdAt`, `createdTime`, `deleted`, `displayName`, `expireTime`, `id`, `name`, `organization`.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read guide analytics: Analytics returns the caller org's funnel fr
 
 # Zoo · GUIDE · analytics
 
-Read-only Zoo capability derived from the `guide` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `guide` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

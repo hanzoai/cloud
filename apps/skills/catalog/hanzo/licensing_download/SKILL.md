@@ -6,7 +6,7 @@ description: "Read licensing download: Download resolves a release to its artifa
 
 # Hanzo · LICENSING · download
 
-Read-only Hanzo capability derived from the `licensing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `licensing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read prefs prefs: Returns the signed-in caller's OWN preference do
 
 # Zoo · PREFS · prefs
 
-Read-only Zoo capability derived from the `prefs` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `prefs` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

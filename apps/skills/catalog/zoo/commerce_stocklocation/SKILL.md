@@ -6,7 +6,7 @@ description: "Read commerce stocklocation: List your org's stock locations, as a
 
 # Zoo · COMMERCE · stocklocation
 
-Read-only Zoo capability derived from the `commerce` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `commerce` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/commerce/stocklocation/` → JSON body.
-- `/v1/commerce/stocklocation/{stocklocationid}` → JSON body.
+- `/v1/commerce/stocklocation/` → JSON object.
+- `/v1/commerce/stocklocation/{stocklocationid}` → JSON object.
 
 ## Example
 

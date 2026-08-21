@@ -6,7 +6,7 @@ description: "Read ads summary: Rolls the caller org's ad campaigns up into four
 
 # Lux · ADS · summary
 
-Read-only Lux capability derived from the `ads` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `ads` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

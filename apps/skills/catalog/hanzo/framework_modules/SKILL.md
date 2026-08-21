@@ -6,7 +6,7 @@ description: "Read framework modules: Returns every app lane compiled into this 
 
 # Hanzo · FRAMEWORK · modules
 
-Read-only Hanzo capability derived from the `framework` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `framework` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

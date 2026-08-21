@@ -6,7 +6,7 @@ description: "Read campaign summary: Returns the org's go-to-market roll-up: how
 
 # Hanzo · CAMPAIGN · summary
 
-Read-only Hanzo capability derived from the `campaign` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `campaign` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

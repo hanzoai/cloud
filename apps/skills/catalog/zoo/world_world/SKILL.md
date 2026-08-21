@@ -6,7 +6,7 @@ description: "Read world world: Answers GET /v1/world — the product's front do
 
 # Zoo · WORLD · world
 
-Read-only Zoo capability derived from the `world` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `world` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read iam registry: Publishes the public key your registry uses to 
 
 # Zoo · IAM · registry
 
-Read-only Zoo capability derived from the `iam` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `iam` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -19,8 +19,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/iam/registry/jwks` → JSON body.
-- `/v1/iam/registry/token` → JSON body.
+- `/v1/iam/registry/jwks` → JSON object.
+- `/v1/iam/registry/token` → JSON object.
 
 ## Example
 

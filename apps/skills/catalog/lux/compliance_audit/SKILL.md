@@ -6,7 +6,7 @@ description: "Read compliance audit: AuditRead is the compliance read of the SHA
 
 # Lux · COMPLIANCE · audit
 
-Read-only Lux capability derived from the `compliance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `compliance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read licensing pubkey: Pubkey publishes the Ed25519 PUBLIC verific
 
 # Lux · LICENSING · pubkey
 
-Read-only Lux capability derived from the `licensing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `licensing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

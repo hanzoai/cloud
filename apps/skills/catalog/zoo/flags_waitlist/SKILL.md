@@ -6,7 +6,7 @@ description: "Read flags waitlist: Reports whether ONE host is currently gated b
 
 # Zoo · FLAGS · waitlist
 
-Read-only Zoo capability derived from the `flags` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `flags` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `host` | query | no | string | Host is the host to resolve, e.g. "chat.zoo.ngo". Defaults to the request's |
+| `host` | query | no | string | Host is the host to resolve, e.g. "chat.zoo.ngo". Defaults to the request's own Host header when omitted, which is what lets a guard running on the governed host ask about itself with no argument. |
 
 ## Response
 

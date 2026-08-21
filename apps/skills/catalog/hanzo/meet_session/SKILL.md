@@ -6,7 +6,7 @@ description: "Read meet session: What this caller may open a room in."
 
 # Hanzo · MEET · session
 
-Read-only Hanzo capability derived from the `meet` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `meet` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/meet/session` → JSON body.
+- `/v1/meet/session` → JSON object.
 
 ## Example
 

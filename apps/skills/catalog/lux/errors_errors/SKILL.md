@@ -6,7 +6,7 @@ description: "Read errors errors: Errors returns the caller org's most recently 
 
 # Lux · ERRORS · errors
 
-Read-only Lux capability derived from the `errors` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `errors` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `limit` | query | no | integer | Limit is how many rows to return, newest first. Default 50, maximum 200; a |
+| `limit` | query | no | integer | Limit is how many rows to return, newest first. Default 50, maximum 200; a value at or below zero, or one that is not a number, takes the default. |
 
 ## Response
 

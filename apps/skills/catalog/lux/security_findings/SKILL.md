@@ -6,7 +6,7 @@ description: "Read security findings: Is the org's findings — rule, severity, 
 
 # Lux · SECURITY · findings
 
-Read-only Lux capability derived from the `security` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `security` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the finding the URL names. |
 | `limit` | query | no | integer | Limit caps the page. |
-| `minSeverity` | query | no | string | MinSeverity drops everything below that rank: critical, high, medium or low. |
+| `minSeverity` | query | no | string | MinSeverity drops everything below that rank: critical, high, medium or low. A value outside that set is refused rather than quietly ignored, so a filter typo cannot read as "no findings". |
 | `scanId` | query | no | string | ScanID narrows to a single scan. |
 
 ## Response

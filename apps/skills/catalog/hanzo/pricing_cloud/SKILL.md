@@ -6,7 +6,7 @@ description: "Read pricing cloud: Returns the public cloud section of the catalo
 
 # Hanzo · PRICING · cloud
 
-Read-only Hanzo capability derived from the `pricing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `pricing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

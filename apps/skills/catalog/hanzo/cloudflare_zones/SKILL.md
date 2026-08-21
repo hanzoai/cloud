@@ -6,7 +6,7 @@ description: "Read cloudflare zones: Lists the Cloudflare zones the org's connec
 
 # Hanzo · CLOUDFLARE · zones
 
-Read-only Hanzo capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -29,7 +29,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | `order` | query | no | string | Order names the field to sort by, and Direction sorts asc or desc. |
 | `page` | query | no | string | Page is the 1-based page of zones to return. |
 | `per_page` | query | no | string | PerPage is how many zones one page holds. |
-| `since` | query | no | string | Since and Until bound the window, in the form Cloudflare accepts — an RFC 3339 |
+| `since` | query | no | string | Since and Until bound the window, in the form Cloudflare accepts — an RFC 3339 time or a negative number of minutes from now ("-1440" is the last day). |
 | `status` | query | no | string | Status filters by zone status (active, pending, initializing, …). |
 | `until` | query | no | string |  |
 

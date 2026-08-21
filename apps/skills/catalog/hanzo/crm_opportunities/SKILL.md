@@ -6,7 +6,7 @@ description: "Read crm opportunities: Returns the caller org's deals, most recen
 
 # Hanzo · CRM · opportunities
 
-Read-only Hanzo capability derived from the `crm` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `crm` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the record to act on, from the path. |
 | `limit` | query | no | integer | Limit caps the rows returned: 200 by default, 1000 at most. |
-| `stage` | query | no | string | Stage returns only the opportunities at that pipeline stage when set |
+| `stage` | query | no | string | Stage returns only the opportunities at that pipeline stage when set (NEW, SCREENING, MEETING, PROPOSAL or CUSTOMER; case-insensitive). |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read commerce saleschannel: List your org's sales channels, as a p
 
 # Zoo · COMMERCE · saleschannel
 
-Read-only Zoo capability derived from the `commerce` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `commerce` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/commerce/saleschannel/` → JSON body.
-- `/v1/commerce/saleschannel/{saleschannelid}` → JSON body.
+- `/v1/commerce/saleschannel/` → JSON object.
+- `/v1/commerce/saleschannel/{saleschannelid}` → JSON object.
 
 ## Example
 

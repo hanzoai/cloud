@@ -6,7 +6,7 @@ description: "Read platform cd: The delivery plane."
 
 # Hanzo · PLATFORM · cd
 
-Read-only Hanzo capability derived from the `platform` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `platform` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/platform/cd` → JSON body.
+- `/v1/platform/cd` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read flags activity: Returns the caller's flag change log newest-f
 
 # Hanzo · FLAGS · activity
 
-Read-only Hanzo capability derived from the `flags` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `flags` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

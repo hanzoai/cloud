@@ -6,7 +6,7 @@ description: "Read meet health: Health reports whether the office can mint join 
 
 # Lux · MEET · health
 
-Read-only Lux capability derived from the `meet` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `meet` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

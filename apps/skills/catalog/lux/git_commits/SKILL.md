@@ -1,12 +1,12 @@
 ---
 name: git_commits
 version: "8.0.0"
-description: "Read git commits: Read a repository's commit log, Read a repository's commit log."
+description: "Read git commits: Read a repository's commit log."
 ---
 
 # Lux · GIT · commits
 
-Read-only Lux capability derived from the `git` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `git` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,8 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/git/{org}/{repo}/commits` — Read a repository's commit log
-- `GET https://api.lux.network/{org}/{repo}/commits` — Read a repository's commit log
+- `GET https://api.lux.network/v1/git/{org}/{repo}/commits` — Read a repository's commit log
 
 ## Parameters
 
@@ -26,13 +25,12 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/git/{org}/{repo}/commits` → JSON body.
-- `/{org}/{repo}/commits` → JSON body.
+- `/v1/git/{org}/{repo}/commits` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/git/{org}/{repo}/commits" \
+curl -sS "https://api.lux.network/v1/git/{org}/{repo}/commits" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

@@ -6,7 +6,7 @@ description: "Read agents targets: Returns every machine registered to the calle
 
 # Hanzo · AGENTS · targets
 
-Read-only Hanzo capability derived from the `agents` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `agents` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

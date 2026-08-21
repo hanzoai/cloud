@@ -6,7 +6,7 @@ description: "Read networks routers: Returns the Zero Trust routers the caller's
 
 # Hanzo · NETWORKS · routers
 
-Read-only Hanzo capability derived from the `networks` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `networks` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

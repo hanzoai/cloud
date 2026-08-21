@@ -6,7 +6,7 @@ description: "Read tel calls: Lists the calls this org has placed or received, n
 
 # Hanzo · TEL · calls
 
-Read-only Hanzo capability derived from the `tel` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `tel` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

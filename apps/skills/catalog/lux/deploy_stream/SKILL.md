@@ -6,7 +6,7 @@ description: "Read deploy stream: Live application fleet updates as Server-Sent 
 
 # Lux · DEPLOY · stream
 
-Read-only Lux capability derived from the `deploy` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `deploy` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/deploy/stream/applications` → JSON body.
-- `/v1/deploy/stream/applications/{name}/resource-tree` → JSON body.
+- `/v1/deploy/stream/applications` → JSON object.
+- `/v1/deploy/stream/applications/{name}/resource-tree` → JSON object.
 
 ## Example
 

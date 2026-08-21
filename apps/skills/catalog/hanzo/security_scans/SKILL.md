@@ -6,7 +6,7 @@ description: "Read security scans: Is the org's scan history, newest first, each
 
 # Hanzo · SECURITY · scans
 
-Read-only Hanzo capability derived from the `security` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `security` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

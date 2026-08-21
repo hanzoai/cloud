@@ -6,7 +6,7 @@ description: "Read entitlements entitlements: Projection reports which console a
 
 # Zoo · ENTITLEMENTS · entitlements
 
-Read-only Zoo capability derived from the `entitlements` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `entitlements` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

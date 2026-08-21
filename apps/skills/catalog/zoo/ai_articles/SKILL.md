@@ -6,7 +6,7 @@ description: "Read ai articles: List articles, List articles across tenants, Ret
 
 # Zoo · AI · articles
 
-Read-only Zoo capability derived from the `ai` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ai` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -22,8 +22,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Resource name, unique within the owner. |
-| `owner` | path | yes | string | Owning organization. |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read content lifecycle: Returns the ONE marketing-content state ma
 
 # Hanzo · CONTENT · lifecycle
 
-Read-only Hanzo capability derived from the `content` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `content` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

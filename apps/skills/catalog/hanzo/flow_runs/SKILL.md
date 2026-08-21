@@ -6,7 +6,7 @@ description: "Read flow runs: Runs reads one workflow's recorded runs: every com
 
 # Hanzo · FLOW · runs
 
-Read-only Hanzo capability derived from the `flow` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `flow` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `workflow` | query | no | string | Workflow is the UUID of the workflow whose run records to read. It rides |
+| `workflow` | query | no | string | Workflow is the UUID of the workflow whose run records to read. It rides the query string. |
 
 ## Response
 

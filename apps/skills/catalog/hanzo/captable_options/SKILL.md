@@ -6,7 +6,7 @@ description: "Read captable options: Returns the caller org's option grants, new
 
 # Hanzo · CAPTABLE · options
 
-Read-only Hanzo capability derived from the `captable` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `captable` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

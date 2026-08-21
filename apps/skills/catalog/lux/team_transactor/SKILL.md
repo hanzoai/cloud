@@ -6,7 +6,7 @@ description: "Read team transactor: Statistics returns the transactor's live ses
 
 # Lux · TEAM · transactor
 
-Read-only Lux capability derived from the `team` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `team` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -29,7 +29,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 - `/v1/team/transactor/api/v1/statistics` → `statsOut` object with fields: `admin`, `metrics`, `statistics`.
 - `/v1/team/transactor/statistics` → `statsOut` object with fields: `admin`, `metrics`, `statistics`.
-- `/v1/team/transactor/{token}` → JSON body.
+- `/v1/team/transactor/{token}` → JSON object.
 
 ## Example
 

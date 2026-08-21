@@ -6,7 +6,7 @@ description: "Read iam applications: Returns the applications in one organizatio
 
 # Lux · IAM · applications
 
-Read-only Lux capability derived from the `iam` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `iam` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

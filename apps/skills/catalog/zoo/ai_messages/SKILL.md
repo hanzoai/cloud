@@ -6,7 +6,7 @@ description: "Read ai messages: List messages, List messages across tenants, Ret
 
 # Zoo · AI · messages
 
-Read-only Zoo capability derived from the `ai` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ai` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -23,15 +23,15 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Resource name, unique within the owner. |
-| `owner` | path | yes | string | Owning organization. |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 
 ## Response
 
 - `/v1/ai/messages` → JSON object.
 - `/v1/ai/messages/global` → JSON object.
 - `/v1/ai/messages/{owner}/{name}` → JSON object.
-- `/v1/ai/messages/{owner}/{name}/answer` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
+- `/v1/ai/messages/{owner}/{name}/answer` → JSON object.
 
 ## Example
 

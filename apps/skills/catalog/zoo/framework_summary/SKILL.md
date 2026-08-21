@@ -6,7 +6,7 @@ description: "Read framework summary: Reports how much of the DocType surface th
 
 # Zoo · FRAMEWORK · summary
 
-Read-only Zoo capability derived from the `framework` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `framework` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

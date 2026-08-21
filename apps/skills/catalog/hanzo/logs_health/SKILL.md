@@ -6,7 +6,7 @@ description: "Read logs health: How many log records this deployment holds for y
 
 # Hanzo · LOGS · health
 
-Read-only Hanzo capability derived from the `logs` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `logs` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/logs/health` → JSON body.
+- `/v1/logs/health` → JSON object.
 
 ## Example
 

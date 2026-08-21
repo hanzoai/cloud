@@ -6,7 +6,7 @@ description: "Read admin applications: Lists IAM applications for one owner org,
 
 # Lux · ADMIN · applications
 
-Read-only Lux capability derived from the `admin` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `admin` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,8 +20,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `owner` | query | no | string | Owner is the org whose rows to read. Defaults to the admin org, which owns the |
-| `p` | query | no | string | Page is the 1-based page number. Forwarded only when set — IAM applies its own |
+| `owner` | query | no | string | Owner is the org whose rows to read. Defaults to the admin org, which owns the platform's roles and applications. |
+| `p` | query | no | string | Page is the 1-based page number. Forwarded only when set — IAM applies its own default otherwise. |
 | `pageSize` | query | no | string | PageSize is rows per page. Forwarded only when set. |
 
 ## Response

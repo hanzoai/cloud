@@ -6,7 +6,7 @@ description: "Read compliance health: Health reports subsystem liveness and the 
 
 # Lux · COMPLIANCE · health
 
-Read-only Lux capability derived from the `compliance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `compliance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

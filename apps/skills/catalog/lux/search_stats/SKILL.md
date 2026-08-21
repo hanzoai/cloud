@@ -6,7 +6,7 @@ description: "Read search stats: Totals the documents across every search index.
 
 # Lux · SEARCH · stats
 
-Read-only Lux capability derived from the `search` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `search` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `Authorization` | header | no | string | Authorization carries the surface's bearer key (`Bearer <key>`); the bare |
+| `Authorization` | header | no | string | Authorization carries the surface's bearer key (`Bearer <key>`); the bare key is accepted too. It is not `validate:"required"` on purpose: requireKey answers absence itself, so an unconfigured surface 503s and a missing bearer 401s — a validation refusal would rewrite both statuses. |
 
 ## Response
 

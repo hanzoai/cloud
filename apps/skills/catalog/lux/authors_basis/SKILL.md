@@ -6,7 +6,7 @@ description: "Read authors basis: Returns the AUDIT TRAIL behind the caller's ow
 
 # Lux · AUTHORS · basis
 
-Read-only Lux capability derived from the `authors` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `authors` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `period` | query | no | string | Period is the UTC accrual month, YYYY-MM. Empty means every period; any other |
+| `period` | query | no | string | Period is the UTC accrual month, YYYY-MM. Empty means every period; any other shape is refused with 400, because the period is echoed back and used as a SQL filter and is only ever accepted in the one form the accrual latch mints. |
 
 ## Response
 

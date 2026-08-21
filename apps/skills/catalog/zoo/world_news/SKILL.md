@@ -6,7 +6,7 @@ description: "Read world news: Returns the caller's merged world-news feed: ever
 
 # Zoo · WORLD · news
 
-Read-only Zoo capability derived from the `world` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `world` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read iam oauth: Starts a sign-in — the address you send a browse
 
 # Hanzo · IAM · oauth
 
-Read-only Hanzo capability derived from the `iam` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `iam` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,10 +21,10 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/iam/oauth/authorize` → JSON body.
-- `/v1/iam/oauth/callback` → JSON body.
-- `/v1/iam/oauth/logout` → JSON body.
-- `/v1/iam/oauth/userinfo` → JSON body.
+- `/v1/iam/oauth/authorize` → JSON object.
+- `/v1/iam/oauth/callback` → JSON object.
+- `/v1/iam/oauth/logout` → JSON object.
+- `/v1/iam/oauth/userinfo` → JSON object.
 
 ## Example
 

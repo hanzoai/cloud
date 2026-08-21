@@ -6,7 +6,7 @@ description: "Read bots bots: List returns the caller org's live bot runs, read 
 
 # Zoo · BOTS · bots
 
-Read-only Zoo capability derived from the `bots` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `bots` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

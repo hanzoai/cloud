@@ -6,7 +6,7 @@ description: "Read gateway traffic: Report who is calling this org's API right n
 
 # Zoo · GATEWAY · traffic
 
-Read-only Zoo capability derived from the `gateway` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `gateway` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

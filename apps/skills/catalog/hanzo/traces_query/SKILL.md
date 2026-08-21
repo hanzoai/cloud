@@ -6,7 +6,7 @@ description: "Read traces query: Recent spans for your org over a time range."
 
 # Hanzo · TRACES · query
 
-Read-only Hanzo capability derived from the `traces` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `traces` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/traces/query` → JSON body.
+- `/v1/traces/query` → JSON object.
 
 ## Example
 

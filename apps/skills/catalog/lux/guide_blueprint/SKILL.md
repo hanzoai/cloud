@@ -6,7 +6,7 @@ description: "Read guide blueprint: Returns the FULL authored brand blueprint �
 
 # Lux · GUIDE · blueprint
 
-Read-only Lux capability derived from the `guide` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `guide` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

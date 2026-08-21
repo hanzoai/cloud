@@ -6,7 +6,7 @@ description: "Read kms config: Runtime configuration for the KMS console."
 
 # Hanzo · KMS · config
 
-Read-only Hanzo capability derived from the `kms` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `kms` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/kms/config` → JSON body.
+- `/v1/kms/config` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read channels pairing: Returns the pairing requests waiting for th
 
 # Zoo · CHANNELS · pairing
 
-Read-only Zoo capability derived from the `channels` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `channels` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

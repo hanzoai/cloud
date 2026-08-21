@@ -6,7 +6,7 @@ description: "Read index indexes: List the indexes your org holds, Read one inde
 
 # Zoo · INDEX · indexes
 
-Read-only Zoo capability derived from the `index` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `index` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -29,11 +29,11 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/index/indexes` → JSON body.
-- `/v1/index/indexes/{uid}` → JSON body.
-- `/v1/index/indexes/{uid}/documents` → JSON body.
-- `/v1/index/indexes/{uid}/documents/{id}` → JSON body.
-- `/v1/index/indexes/{uid}/settings` → JSON body.
+- `/v1/index/indexes` → JSON object.
+- `/v1/index/indexes/{uid}` → JSON object.
+- `/v1/index/indexes/{uid}/documents` → JSON object.
+- `/v1/index/indexes/{uid}/documents/{id}` → JSON object.
+- `/v1/index/indexes/{uid}/settings` → JSON object.
 
 ## Example
 

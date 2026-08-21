@@ -6,7 +6,7 @@ description: "Read affiliates me: Answers the richer self-view: the same lifetim
 
 # Zoo · AFFILIATES · me
 
-Read-only Zoo capability derived from the `affiliates` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `affiliates` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

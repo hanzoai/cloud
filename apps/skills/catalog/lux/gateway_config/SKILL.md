@@ -6,7 +6,7 @@ description: "Read gateway config: Read returns the EFFECTIVE edge policy the ca
 
 # Lux · GATEWAY · config
 
-Read-only Lux capability derived from the `gateway` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `gateway` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

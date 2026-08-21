@@ -6,7 +6,7 @@ description: "Read notify health: Reports that the notify send surface is mounte
 
 # Lux · NOTIFY · health
 
-Read-only Lux capability derived from the `notify` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `notify` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

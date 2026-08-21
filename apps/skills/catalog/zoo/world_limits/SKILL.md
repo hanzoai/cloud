@@ -6,7 +6,7 @@ description: "Read world limits: Echoes a World plan's rate limits, alert quota 
 
 # Zoo · WORLD · limits
 
-Read-only Zoo capability derived from the `world` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `world` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `plan` | query | no | string | Plan is a World plan id from the live @hanzo/plans catalog, e.g. world-pro. |
+| `plan` | query | no | string | Plan is a World plan id from the live @hanzo/plans catalog, e.g. world-pro. Empty means world-free, and so does an id the catalog does not know — this never fails on an unknown plan. |
 
 ## Response
 

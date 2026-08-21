@@ -6,7 +6,7 @@ description: "Read videos content: Implements GET /v1/videos/{id}/content — do
 
 # Lux · VIDEOS · content
 
-Read-only Lux capability derived from the `videos` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `videos` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/videos/{id}/content` → JSON body.
+- `/v1/videos/{id}/content` → JSON object.
 
 ## Example
 

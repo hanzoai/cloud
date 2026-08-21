@@ -6,7 +6,7 @@ description: "Read functions invocations: Is one function's past runs, newest fi
 
 # Hanzo · FUNCTIONS · invocations
 
-Read-only Hanzo capability derived from the `functions` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `functions` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

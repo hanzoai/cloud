@@ -6,7 +6,7 @@ description: "Read pricing iam: ListIAMPlans returns the identity plans — the 
 
 # Zoo · PRICING · iam
 
-Read-only Zoo capability derived from the `pricing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `pricing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

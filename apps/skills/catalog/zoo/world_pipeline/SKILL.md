@@ -6,7 +6,7 @@ description: "Read world pipeline: Returns the caller project's news pipeline: w
 
 # Zoo · WORLD · pipeline
 
-Read-only Zoo capability derived from the `world` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `world` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

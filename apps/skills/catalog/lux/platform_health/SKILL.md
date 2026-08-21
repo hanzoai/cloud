@@ -6,7 +6,7 @@ description: "Read platform health: Reports whether this control plane can actua
 
 # Lux · PLATFORM · health
 
-Read-only Lux capability derived from the `platform` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `platform` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

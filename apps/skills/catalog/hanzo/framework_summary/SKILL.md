@@ -6,7 +6,7 @@ description: "Read framework summary: Reports how much of the DocType surface th
 
 # Hanzo · FRAMEWORK · summary
 
-Read-only Hanzo capability derived from the `framework` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `framework` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

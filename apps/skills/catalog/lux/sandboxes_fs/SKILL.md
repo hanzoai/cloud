@@ -6,7 +6,7 @@ description: "Read sandboxes fs: Read a file, or list a directory."
 
 # Lux · SANDBOXES · fs
 
-Read-only Lux capability derived from the `sandboxes` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `sandboxes` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/sandboxes/{id}/fs` → JSON body.
+- `/v1/sandboxes/{id}/fs` → JSON object.
 
 ## Example
 

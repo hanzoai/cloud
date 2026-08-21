@@ -6,7 +6,7 @@ description: "Read flags waitlist: Reports whether ONE host is currently gated b
 
 # Lux · FLAGS · waitlist
 
-Read-only Lux capability derived from the `flags` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `flags` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `host` | query | no | string | Host is the host to resolve, e.g. "chat.lux.network". Defaults to the request's |
+| `host` | query | no | string | Host is the host to resolve, e.g. "chat.lux.network". Defaults to the request's own Host header when omitted, which is what lets a guard running on the governed host ask about itself with no argument. |
 
 ## Response
 

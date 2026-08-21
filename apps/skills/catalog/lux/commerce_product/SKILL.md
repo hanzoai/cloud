@@ -6,7 +6,7 @@ description: "Read commerce product: List your org's products, as a page, Fetch 
 
 # Lux · COMMERCE · product
 
-Read-only Lux capability derived from the `commerce` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `commerce` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/commerce/product/` → JSON body.
-- `/v1/commerce/product/{productid}` → JSON body.
+- `/v1/commerce/product/` → JSON object.
+- `/v1/commerce/product/{productid}` → JSON object.
 
 ## Example
 

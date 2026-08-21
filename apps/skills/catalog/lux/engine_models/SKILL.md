@@ -6,7 +6,7 @@ description: "Read engine models: List the models the serving runtime holds, wit
 
 # Lux · ENGINE · models
 
-Read-only Lux capability derived from the `engine` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `engine` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

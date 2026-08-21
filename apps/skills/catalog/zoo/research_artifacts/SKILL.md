@@ -6,7 +6,7 @@ description: "Read research artifacts: Returns the caller org's research-diary f
 
 # Zoo · RESEARCH · artifacts
 
-Read-only Zoo capability derived from the `research` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `research` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -29,7 +29,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Response
 
 - `/v1/research/artifacts` → `artifactsOut` object with fields: `data`, `total`.
-- `/v1/research/artifacts/{sha256}` → JSON body.
+- `/v1/research/artifacts/{sha256}` → JSON object.
 
 ## Example
 

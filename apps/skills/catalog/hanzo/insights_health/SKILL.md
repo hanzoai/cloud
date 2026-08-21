@@ -6,7 +6,7 @@ description: "Read insights health: Reports that the unified insights surface is
 
 # Hanzo · INSIGHTS · health
 
-Read-only Hanzo capability derived from the `insights` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `insights` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

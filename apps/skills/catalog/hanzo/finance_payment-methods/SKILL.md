@@ -6,7 +6,7 @@ description: "Read finance payment methods: Answers the masked card descriptors 
 
 # Hanzo · FINANCE · payment methods
 
-Read-only Hanzo capability derived from the `finance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `finance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read billing accounts: The billing account you are signed in to, W
 
 # Zoo · BILLING · accounts
 
-Read-only Zoo capability derived from the `billing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `billing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/accounts` → JSON body.
-- `/v1/billing/accounts/{id}/members` → JSON body.
+- `/v1/billing/accounts` → JSON object.
+- `/v1/billing/accounts/{id}/members` → JSON object.
 
 ## Example
 

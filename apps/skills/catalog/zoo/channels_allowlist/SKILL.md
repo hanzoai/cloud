@@ -6,7 +6,7 @@ description: "Read channels allowlist: Returns the caller org's access policy fo
 
 # Zoo · CHANNELS · allowlist
 
-Read-only Zoo capability derived from the `channels` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `channels` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `channel` | query | no | string | Channel is the transport to read: discord, slack, teams or telegram. |
+| `channel` | query | no | string | Channel is the transport to read: discord, slack, teams or telegram. Required; an unknown value is a 404. |
 
 ## Response
 

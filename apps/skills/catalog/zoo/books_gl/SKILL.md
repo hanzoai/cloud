@@ -6,7 +6,7 @@ description: "Read books gl: ListGL returns the org's most recent GL Entry rows,
 
 # Zoo · BOOKS · gl
 
-Read-only Zoo capability derived from the `books` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `books` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

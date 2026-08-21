@@ -6,7 +6,7 @@ description: "Read gateway traffic: Report who is calling this org's API right n
 
 # Lux · GATEWAY · traffic
 
-Read-only Lux capability derived from the `gateway` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `gateway` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

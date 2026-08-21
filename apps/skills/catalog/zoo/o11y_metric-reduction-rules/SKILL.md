@@ -6,7 +6,7 @@ description: "Read o11y metric reduction rules: Lists the org's metric volume-co
 
 # Zoo · O11Y · metric reduction rules
 
-Read-only Zoo capability derived from the `o11y` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `o11y` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -28,7 +28,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 | `metricName` | query | no | string | MetricName narrows the page to one metric's rule. |
 | `offset` | query | no | integer | Offset is how many rules to skip, for paging. |
 | `order` | query | no | string | Order is asc or desc. Unset means desc. |
-| `orderBy` | query | no | string | OrderBy sorts the page: metric, ingested_volume, reduced_volume or |
+| `orderBy` | query | no | string | OrderBy sorts the page: metric, ingested_volume, reduced_volume or last_updated. Unset means ingested_volume. |
 | `search` | query | no | string | Search narrows the page to rules whose metric name contains it. |
 
 ## Response

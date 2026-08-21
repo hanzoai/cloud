@@ -6,7 +6,7 @@ description: "Read sbom health: Health is a pure liveness probe: the service is 
 
 # Hanzo · SBOM · health
 
-Read-only Hanzo capability derived from the `sbom` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `sbom` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

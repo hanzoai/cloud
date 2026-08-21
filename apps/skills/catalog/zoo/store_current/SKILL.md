@@ -6,7 +6,7 @@ description: "Read store current: Resolve your org's active storefront without n
 
 # Zoo · STORE · current
 
-Read-only Zoo capability derived from the `store` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `store` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/store/current` → JSON body.
+- `/v1/store/current` → JSON object.
 
 ## Example
 

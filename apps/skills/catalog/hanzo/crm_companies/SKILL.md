@@ -6,7 +6,7 @@ description: "Read crm companies: Returns the caller org's companies, most recen
 
 # Hanzo · CRM · companies
 
-Read-only Hanzo capability derived from the `crm` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `crm` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

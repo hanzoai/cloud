@@ -6,7 +6,7 @@ description: "Read code tree: Returns one repository's file structure with a per
 
 # Zoo · CODE · tree
 
-Read-only Zoo capability derived from the `code` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `code` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

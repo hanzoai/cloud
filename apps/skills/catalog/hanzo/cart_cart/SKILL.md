@@ -6,7 +6,7 @@ description: "Read cart cart: Read one cart with its lines and totals."
 
 # Hanzo · CART · cart
 
-Read-only Hanzo capability derived from the `cart` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `cart` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

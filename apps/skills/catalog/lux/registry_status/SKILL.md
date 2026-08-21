@@ -6,7 +6,7 @@ description: "Read registry status: Status reports whether the OCI and npm regis
 
 # Lux · REGISTRY · status
 
-Read-only Lux capability derived from the `registry` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `registry` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

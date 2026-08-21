@@ -6,7 +6,7 @@ description: "Read billing invoices: List your org's billing invoices, Read one 
 
 # Lux · BILLING · invoices
 
-Read-only Lux capability derived from the `billing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `billing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -26,9 +26,9 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/billing/invoices` → JSON body.
+- `/v1/billing/invoices` → JSON object.
 - `/v1/billing/invoices/{id}` → `InvoiceOut` object with fields: `amountDueCents`, `amountPaidCents`, `createdAt`, `currency`, `customerEmail`, `id`, `lines`, `number`, `paymentRef`, `status`, `subtotalCents`, `userId`.
-- `/v1/billing/invoices/{id}/pdf` → JSON body.
+- `/v1/billing/invoices/{id}/pdf` → JSON object.
 
 ## Example
 

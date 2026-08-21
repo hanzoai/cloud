@@ -6,7 +6,7 @@ description: "Read ai stores: List stores, List stores across tenants, Names (st
 
 # Zoo · AI · stores
 
-Read-only Zoo capability derived from the `ai` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ai` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -24,15 +24,15 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Resource name, unique within the owner. |
-| `owner` | path | yes | string | Owning organization. |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 
 ## Response
 
 - `/v1/ai/stores` → JSON object.
 - `/v1/ai/stores/global` → JSON object.
-- `/v1/ai/stores/names` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
-- `/v1/ai/stores/providers` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
+- `/v1/ai/stores/names` → JSON object.
+- `/v1/ai/stores/providers` → JSON object.
 - `/v1/ai/stores/{owner}/{name}` → JSON object.
 
 ## Example

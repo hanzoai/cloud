@@ -6,7 +6,7 @@ description: "Read team collaborator: Open the live collaborative-editing socket
 
 # Hanzo · TEAM · collaborator
 
-Read-only Hanzo capability derived from the `team` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `team` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/collaborator` — Open the live collaborative-editing socket
+- `GET https://api.hanzo.ai/v1/team/collaborator` — Open the live collaborative-editing socket
 
 ## Response
 
-- `/collaborator` → JSON body.
+- `/v1/team/collaborator` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.hanzo.ai/collaborator" \
+curl -sS "https://api.hanzo.ai/v1/team/collaborator" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

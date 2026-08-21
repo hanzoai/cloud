@@ -6,7 +6,7 @@ description: "Read networks routers: Returns the Zero Trust routers the caller's
 
 # Zoo · NETWORKS · routers
 
-Read-only Zoo capability derived from the `networks` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `networks` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

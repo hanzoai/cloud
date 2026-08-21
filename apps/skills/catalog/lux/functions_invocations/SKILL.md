@@ -6,7 +6,7 @@ description: "Read functions invocations: Is one function's past runs, newest fi
 
 # Lux · FUNCTIONS · invocations
 
-Read-only Lux capability derived from the `functions` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `functions` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

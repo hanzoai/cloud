@@ -6,7 +6,7 @@ description: "Read cloudflare workers: Lists the Worker scripts on the org's Clo
 
 # Zoo · CLOUDFLARE · workers
 
-Read-only Zoo capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

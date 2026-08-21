@@ -6,7 +6,7 @@ description: "Read commerce discount: List your org's discounts, as a page, Fetc
 
 # Lux · COMMERCE · discount
 
-Read-only Lux capability derived from the `commerce` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `commerce` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/commerce/discount/` → JSON body.
-- `/v1/commerce/discount/{discountid}` → JSON body.
+- `/v1/commerce/discount/` → JSON object.
+- `/v1/commerce/discount/{discountid}` → JSON object.
 
 ## Example
 

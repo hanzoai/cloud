@@ -6,7 +6,7 @@ description: "Read integrations callback: OAuth return for any connector."
 
 # Lux · INTEGRATIONS · callback
 
-Read-only Lux capability derived from the `integrations` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `integrations` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/integrations/{provider}/callback` → JSON body.
+- `/v1/integrations/{provider}/callback` → JSON object.
 
 ## Example
 

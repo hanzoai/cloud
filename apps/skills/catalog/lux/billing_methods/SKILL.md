@@ -6,7 +6,7 @@ description: "Read billing methods: Your saved cards, masked — the customer re
 
 # Lux · BILLING · methods
 
-Read-only Lux capability derived from the `billing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `billing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/billing/methods` → JSON body.
+- `/v1/billing/methods` → JSON object.
 
 ## Example
 

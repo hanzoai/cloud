@@ -6,7 +6,7 @@ description: "Read deploy login: Start the sign-in round trip for this console."
 
 # Zoo · DEPLOY · login
 
-Read-only Zoo capability derived from the `deploy` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `deploy` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/deploy/login` → JSON body.
+- `/v1/deploy/login` → JSON object.
 
 ## Example
 

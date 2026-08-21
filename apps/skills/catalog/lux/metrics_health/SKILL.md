@@ -6,7 +6,7 @@ description: "Read metrics health: How many metric series this deployment holds 
 
 # Lux · METRICS · health
 
-Read-only Lux capability derived from the `metrics` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `metrics` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/metrics/health` → JSON body.
+- `/v1/metrics/health` → JSON object.
 
 ## Example
 

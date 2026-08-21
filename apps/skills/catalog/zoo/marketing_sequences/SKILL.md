@@ -6,7 +6,7 @@ description: "Read marketing sequences: Returns the org's drip sequences, most r
 
 # Zoo · MARKETING · sequences
 
-Read-only Zoo capability derived from the `marketing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `marketing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

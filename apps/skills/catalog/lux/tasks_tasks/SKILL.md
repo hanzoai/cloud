@@ -1,12 +1,12 @@
 ---
 name: tasks_tasks
 version: "8.0.0"
-description: "Read tasks tasks: The tasks console, The tasks console's assets and client-side routes, Redirect to the tasks API root."
+description: "Read tasks tasks: Redirect to the tasks API root, Read workflow state from the durable engine."
 ---
 
 # Lux · TASKS · tasks
 
-Read-only Lux capability derived from the `tasks` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `tasks` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,8 +14,6 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/tasks` — The tasks console
-- `GET https://api.lux.network/tasks/{wildcard1}` — The tasks console's assets and client-side routes
 - `GET https://api.lux.network/v1/tasks` — Redirect to the tasks API root
 - `GET https://api.lux.network/v1/tasks/{wildcard1}` — Read workflow state from the durable engine
 
@@ -27,15 +25,13 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/tasks` → JSON body.
-- `/tasks/{wildcard1}` → JSON body.
-- `/v1/tasks` → JSON body.
-- `/v1/tasks/{wildcard1}` → JSON body.
+- `/v1/tasks` → JSON object.
+- `/v1/tasks/{wildcard1}` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/tasks" \
+curl -sS "https://api.lux.network/v1/tasks" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

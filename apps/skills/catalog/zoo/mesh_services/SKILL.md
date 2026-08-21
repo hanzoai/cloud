@@ -6,7 +6,7 @@ description: "Read mesh services: Returns the Zero Trust edge services the calle
 
 # Zoo · MESH · services
 
-Read-only Zoo capability derived from the `mesh` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `mesh` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read security rules: Is the secret-detection catalog the engine sc
 
 # Hanzo · SECURITY · rules
 
-Read-only Hanzo capability derived from the `security` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `security` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

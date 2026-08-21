@@ -6,7 +6,7 @@ description: "Read authz readyz: Readiness of the policy engine."
 
 # Zoo · AUTHZ · readyz
 
-Read-only Zoo capability derived from the `authz` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `authz` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/authz/readyz` → JSON body.
+- `/v1/authz/readyz` → JSON object.
 
 ## Example
 

@@ -1,12 +1,12 @@
 ---
 name: git_blob
 version: "8.0.0"
-description: "Read git blob: View a file in a repository, View a file in a repository."
+description: "Read git blob: View a file in a repository."
 ---
 
 # Zoo · GIT · blob
 
-Read-only Zoo capability derived from the `git` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `git` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,8 +14,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/git/{org}/{repo}/blob/{wildcard1}` — View a file in a repository
-- `GET https://api.zoo.ngo/{org}/{repo}/blob/{wildcard1}` — View a file in a repository
+- `GET https://api.zoo.ngo/v1/git/{org}/{repo}/blob/{wildcard1}` — View a file in a repository
 
 ## Parameters
 
@@ -27,13 +26,12 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/git/{org}/{repo}/blob/{wildcard1}` → JSON body.
-- `/{org}/{repo}/blob/{wildcard1}` → JSON body.
+- `/v1/git/{org}/{repo}/blob/{wildcard1}` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/git/{org}/{repo}/blob/{wildcard1}" \
+curl -sS "https://api.zoo.ngo/v1/git/{org}/{repo}/blob/{wildcard1}" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

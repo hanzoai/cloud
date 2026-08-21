@@ -6,7 +6,7 @@ description: "Read iam well known: Publishes the public keys that verify the tok
 
 # Zoo · IAM · well known
 
-Read-only Zoo capability derived from the `iam` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `iam` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,26 +14,20 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/.well-known/jwks` — Publishes the public keys that verify the tokens issued here — the one URL you point a service at so it can check a token itself, offline, without calling back and without holding any secret of ours.
-- `GET https://api.zoo.ngo/.well-known/oauth-authorization-server` — Returns the OpenID Connect discovery document — the one URL you point a standards-compliant client at so it can find every other endpoint on its own, instead of you configuring them by hand.
-- `GET https://api.zoo.ngo/.well-known/openid-configuration` — Returns the OpenID Connect discovery document — the one URL you point a standards-compliant client at so it can find every other endpoint on its own, instead of you configuring them by hand.
 - `GET https://api.zoo.ngo/v1/iam/.well-known/jwks` — Publishes the public keys that verify the tokens issued here — the one URL you point a service at so it can check a token itself, offline, without calling back and without holding any secret of ours.
 - `GET https://api.zoo.ngo/v1/iam/.well-known/oauth-authorization-server` — Returns the OpenID Connect discovery document — the one URL you point a standards-compliant client at so it can find every other endpoint on its own, instead of you configuring them by hand.
 - `GET https://api.zoo.ngo/v1/iam/.well-known/openid-configuration` — Returns the OpenID Connect discovery document — the one URL you point a standards-compliant client at so it can find every other endpoint on its own, instead of you configuring them by hand.
 
 ## Response
 
-- `/.well-known/jwks` → JSON body.
-- `/.well-known/oauth-authorization-server` → JSON body.
-- `/.well-known/openid-configuration` → JSON body.
-- `/v1/iam/.well-known/jwks` → JSON body.
-- `/v1/iam/.well-known/oauth-authorization-server` → JSON body.
-- `/v1/iam/.well-known/openid-configuration` → JSON body.
+- `/v1/iam/.well-known/jwks` → JSON object.
+- `/v1/iam/.well-known/oauth-authorization-server` → JSON object.
+- `/v1/iam/.well-known/openid-configuration` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/.well-known/jwks" \
+curl -sS "https://api.zoo.ngo/v1/iam/.well-known/jwks" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

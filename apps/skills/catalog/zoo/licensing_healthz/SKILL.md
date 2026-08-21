@@ -6,7 +6,7 @@ description: "Read licensing healthz: Health reports which signer this deploymen
 
 # Zoo · LICENSING · healthz
 
-Read-only Zoo capability derived from the `licensing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `licensing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

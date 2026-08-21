@@ -6,7 +6,7 @@ description: "Read agent presets: List the agent presets available to a caller."
 
 # Hanzo · AGENT · presets
 
-Read-only Hanzo capability derived from the `agent` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `agent` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/agent/presets` → JSON body.
+- `/v1/agent/presets` → JSON object.
 
 ## Example
 

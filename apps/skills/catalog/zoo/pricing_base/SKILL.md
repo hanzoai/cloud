@@ -6,7 +6,7 @@ description: "Read pricing base: Returns the Zoo Base plans — the managed-inst
 
 # Zoo · PRICING · base
 
-Read-only Zoo capability derived from the `pricing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `pricing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

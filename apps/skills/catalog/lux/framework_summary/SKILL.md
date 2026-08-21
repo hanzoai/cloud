@@ -6,7 +6,7 @@ description: "Read framework summary: Reports how much of the DocType surface th
 
 # Lux · FRAMEWORK · summary
 
-Read-only Lux capability derived from the `framework` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `framework` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

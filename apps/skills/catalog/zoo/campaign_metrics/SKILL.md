@@ -6,7 +6,7 @@ description: "Read campaign metrics: Returns a campaign's results over a window:
 
 # Zoo · CAMPAIGN · metrics
 
-Read-only Zoo capability derived from the `campaign` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `campaign` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -22,8 +22,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the campaign to report on, from the path. |
 | `end` | query | no | string | End is an explicit RFC3339 window end. |
-| `range` | query | no | string | Range is the lookback window: 24h, 7d, 30d or 90d. Anything else, including |
-| `start` | query | no | string | Start is an explicit RFC3339 window start. Honored only together with End, |
+| `range` | query | no | string | Range is the lookback window: 24h, 7d, 30d or 90d. Anything else, including empty, reads as 30d. |
+| `start` | query | no | string | Start is an explicit RFC3339 window start. Honored only together with End, and only when End is after it. |
 
 ## Response
 

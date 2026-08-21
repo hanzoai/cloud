@@ -6,7 +6,7 @@ description: "Read integrations integrations: Returns every registered integrati
 
 # Hanzo · INTEGRATIONS · integrations
 
-Read-only Hanzo capability derived from the `integrations` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `integrations` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `provider` | path | yes | string | Provider is the registry id of the connector — "slack", "github", |
+| `provider` | path | yes | string | Provider is the registry id of the connector — "slack", "github", "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors) providers, which this surface never resolves. |
 
 ## Response
 

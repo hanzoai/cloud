@@ -6,7 +6,7 @@ description: "Read domain health: Reports registrar reachability honestly: ok on
 
 # Hanzo · DOMAIN · health
 
-Read-only Hanzo capability derived from the `domain` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `domain` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

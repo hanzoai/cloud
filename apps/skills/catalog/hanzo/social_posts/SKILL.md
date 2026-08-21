@@ -6,7 +6,7 @@ description: "Read social posts: List your org's posts, Read one post."
 
 # Hanzo · SOCIAL · posts
 
-Read-only Hanzo capability derived from the `social` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `social` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/social/posts` → JSON body.
-- `/v1/social/posts/{id}` → JSON body.
+- `/v1/social/posts` → JSON object.
+- `/v1/social/posts/{id}` → JSON object.
 
 ## Example
 

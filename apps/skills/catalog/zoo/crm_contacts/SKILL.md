@@ -6,7 +6,7 @@ description: "Read crm contacts: Returns the caller org's contacts, most recentl
 
 # Zoo · CRM · contacts
 
-Read-only Zoo capability derived from the `crm` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `crm` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

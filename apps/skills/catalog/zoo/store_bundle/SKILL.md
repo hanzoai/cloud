@@ -6,7 +6,7 @@ description: "Read store bundle: Fetch a bundle as this storefront sells it."
 
 # Zoo · STORE · bundle
 
-Read-only Zoo capability derived from the `store` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `store` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,7 +25,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/store/{storeid}/bundle/{key}` → JSON body.
+- `/v1/store/{storeid}/bundle/{key}` → JSON object.
 
 ## Example
 

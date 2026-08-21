@@ -6,7 +6,7 @@ description: "Read ai connections: Lists the org's connectable AI accounts and w
 
 # Lux · AI · connections
 
-Read-only Lux capability derived from the `ai` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `ai` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -27,10 +27,10 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/ai/connections` → JSON body.
-- `/v1/ai/connections/{provider}/authorize` → JSON body.
-- `/v1/ai/connections/{provider}/callback` → JSON body.
-- `/v1/ai/connections/{provider}/usage` → JSON body.
+- `/v1/ai/connections` → JSON object.
+- `/v1/ai/connections/{provider}/authorize` → JSON object.
+- `/v1/ai/connections/{provider}/callback` → JSON object.
+- `/v1/ai/connections/{provider}/usage` → JSON object.
 
 ## Example
 

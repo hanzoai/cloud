@@ -6,7 +6,7 @@ description: "Read compliance status: Status is the org's honest posture read: t
 
 # Hanzo · COMPLIANCE · status
 
-Read-only Hanzo capability derived from the `compliance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `compliance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

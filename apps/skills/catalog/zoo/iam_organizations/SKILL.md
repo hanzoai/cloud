@@ -6,7 +6,7 @@ description: "Read iam organizations: Returns the organizations you can see, new
 
 # Zoo · IAM · organizations
 
-Read-only Zoo capability derived from the `iam` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `iam` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

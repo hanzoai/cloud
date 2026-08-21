@@ -6,7 +6,7 @@ description: "Read integrations telegram: Begin linking a Lux account from Teleg
 
 # Lux · INTEGRATIONS · telegram
 
-Read-only Lux capability derived from the `integrations` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `integrations` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,9 +20,9 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/integrations/telegram/link` → JSON body.
-- `/v1/integrations/telegram/link/auth` → JSON body.
-- `/v1/integrations/telegram/link/callback` → JSON body.
+- `/v1/integrations/telegram/link` → JSON object.
+- `/v1/integrations/telegram/link/auth` → JSON object.
+- `/v1/integrations/telegram/link/callback` → JSON object.
 
 ## Example
 

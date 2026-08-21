@@ -6,7 +6,7 @@ description: "Read integrations gitlab: Lists the projects the org's GitLab conn
 
 # Zoo · INTEGRATIONS · gitlab
 
-Read-only Zoo capability derived from the `integrations` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `integrations` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

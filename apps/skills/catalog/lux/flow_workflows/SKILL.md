@@ -6,7 +6,7 @@ description: "Read flow workflows: Workflows lists the caller's workflows, paged
 
 # Lux · FLOW · workflows
 
-Read-only Lux capability derived from the `flow` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `flow` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

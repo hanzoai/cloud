@@ -6,7 +6,7 @@ description: "Read legal documents: Returns the org's generated documents, newes
 
 # Zoo · LEGAL · documents
 
-Read-only Zoo capability derived from the `legal` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `legal` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

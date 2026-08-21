@@ -6,7 +6,7 @@ description: "Read flags defs: Returns every flag definition in the caller's (or
 
 # Hanzo · FLAGS · defs
 
-Read-only Hanzo capability derived from the `flags` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `flags` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

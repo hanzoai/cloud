@@ -6,7 +6,7 @@ description: "Read crm summary: Summary counts the caller org's CRM records: com
 
 # Zoo · CRM · summary
 
-Read-only Zoo capability derived from the `crm` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `crm` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

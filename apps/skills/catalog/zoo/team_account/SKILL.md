@@ -6,7 +6,7 @@ description: "Read team account: Start a sign-in at zoolabs.id, Complete a sign-
 
 # Zoo · TEAM · account
 
-Read-only Zoo capability derived from the `team` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `team` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -26,8 +26,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/team/account/auth/{provider}` → JSON body.
-- `/v1/team/account/auth/{provider}/callback` → JSON body.
+- `/v1/team/account/auth/{provider}` → JSON object.
+- `/v1/team/account/auth/{provider}/callback` → JSON object.
 - `/v1/team/account/providers` → JSON array of `ProviderInfo`.
 
 ## Example

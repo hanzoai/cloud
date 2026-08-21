@@ -6,7 +6,7 @@ description: "Read marketplace marketplace: Discover lists every tool and agent 
 
 # Zoo · MARKETPLACE · marketplace
 
-Read-only Zoo capability derived from the `marketplace` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `marketplace` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

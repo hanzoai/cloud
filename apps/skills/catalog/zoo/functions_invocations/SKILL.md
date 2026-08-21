@@ -6,7 +6,7 @@ description: "Read functions invocations: Is one function's past runs, newest fi
 
 # Zoo · FUNCTIONS · invocations
 
-Read-only Zoo capability derived from the `functions` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `functions` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

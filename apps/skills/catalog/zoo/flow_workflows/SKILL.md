@@ -6,7 +6,7 @@ description: "Read flow workflows: Workflows lists the caller's workflows, paged
 
 # Zoo · FLOW · workflows
 
-Read-only Zoo capability derived from the `flow` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `flow` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

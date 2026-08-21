@@ -6,7 +6,7 @@ description: "Read o11y users: Lists the caller's org members., Returns the call
 
 # Zoo · O11Y · users
 
-Read-only Zoo capability derived from the `o11y` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `o11y` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -26,11 +26,11 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `id` | path | yes | string |  |
-| `limit` | query | no | integer | Limit caps how many dashboards come back. Zero means the default of 20; |
+| `limit` | query | no | integer | Limit caps how many dashboards come back. Zero means the default of 20; the runtime caps it at 200. |
 | `offset` | query | no | integer | Offset is how many dashboards to skip for pagination. |
 | `order` | query | no | string | Order is the sort direction: asc or desc. Empty orders desc. |
-| `query` | query | no | string | Query is the filter DSL over dashboard columns and tags, e.g. |
-| `sort` | query | no | string | Sort is the sort field: updated_at, created_at or name. Empty sorts by |
+| `query` | query | no | string | Query is the filter DSL over dashboard columns and tags, e.g. `name:cpu source:user`. Empty lists everything. |
+| `sort` | query | no | string | Sort is the sort field: updated_at, created_at or name. Empty sorts by updated_at. |
 
 ## Response
 

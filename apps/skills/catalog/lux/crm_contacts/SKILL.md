@@ -6,7 +6,7 @@ description: "Read crm contacts: Returns the caller org's contacts, most recentl
 
 # Lux · CRM · contacts
 
-Read-only Lux capability derived from the `crm` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `crm` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

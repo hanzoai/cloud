@@ -1,12 +1,12 @@
 ---
 name: books_pnl
 version: "8.0.0"
-description: "Read books pnl: Returns the org's accrual-basis Profit & Loss over an optional (from, to] window of RFC3339 posting times: recognized revenue, matched cost, and the net.."
+description: "Read books pnl: Returns the org's accrual-basis Profit \u0026 Loss over an optional (from, to] window of RFC3339 posting times: recognized revenue, matched cost, and the net.."
 ---
 
 # Hanzo · BOOKS · pnl
 
-Read-only Hanzo capability derived from the `books` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `books` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

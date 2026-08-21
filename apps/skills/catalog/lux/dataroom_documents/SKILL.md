@@ -6,7 +6,7 @@ description: "Read dataroom documents: Returns every document in the caller org'
 
 # Lux · DATAROOM · documents
 
-Read-only Lux capability derived from the `dataroom` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `dataroom` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -22,13 +22,13 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the document to read. It is the path segment: the URL is the |
+| `id` | path | yes | string | ID is the document to read. It is the path segment: the URL is the addressing authority, and the org it is resolved in comes from the caller's principal, so an id from another tenant is simply not found. |
 
 ## Response
 
 - `/v1/dataroom/documents` → `dataroomDocuments` object with fields: `documents`.
 - `/v1/dataroom/documents/{id}` → `dataroomDocumentOne` object with fields: `document`.
-- `/v1/dataroom/documents/{id}/file` → JSON body.
+- `/v1/dataroom/documents/{id}/file` → JSON object.
 
 ## Example
 

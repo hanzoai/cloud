@@ -6,7 +6,7 @@ description: "Read deploy settings: Returns the argocd AuthSettings object the d
 
 # Zoo · DEPLOY · settings
 
-Read-only Zoo capability derived from the `deploy` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `deploy` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read pricing compute: Returns the compute section of the catalog: 
 
 # Hanzo · PRICING · compute
 
-Read-only Hanzo capability derived from the `pricing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `pricing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

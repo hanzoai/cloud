@@ -6,7 +6,7 @@ description: "Read store store: List your org's storefronts as a page, Fetch one
 
 # Zoo · STORE · store
 
-Read-only Zoo capability derived from the `store` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `store` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/store/` → JSON body.
-- `/v1/store/{storeid}` → JSON body.
+- `/v1/store/` → JSON object.
+- `/v1/store/{storeid}` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read security rules: Is the secret-detection catalog the engine sc
 
 # Lux · SECURITY · rules
 
-Read-only Lux capability derived from the `security` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `security` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

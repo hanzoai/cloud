@@ -1,12 +1,12 @@
 ---
 name: git_info
 version: "8.0.0"
-description: "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client, Advertise a repository's refs to a git client."
+description: "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client."
 ---
 
 # Lux · GIT · info
 
-Read-only Lux capability derived from the `git` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `git` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -16,8 +16,6 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 - `GET https://api.lux.network/v1/git/{org}/{project}/{repo}/info/refs` — Advertise a repository's refs to a git client
 - `GET https://api.lux.network/v1/git/{org}/{repo}/info/refs` — Advertise a repository's refs to a git client
-- `GET https://api.lux.network/{org}/{project}/{repo}/info/refs` — Advertise a repository's refs to a git client
-- `GET https://api.lux.network/{org}/{repo}/info/refs` — Advertise a repository's refs to a git client
 
 ## Parameters
 
@@ -29,10 +27,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/git/{org}/{project}/{repo}/info/refs` → JSON body.
-- `/v1/git/{org}/{repo}/info/refs` → JSON body.
-- `/{org}/{project}/{repo}/info/refs` → JSON body.
-- `/{org}/{repo}/info/refs` → JSON body.
+- `/v1/git/{org}/{project}/{repo}/info/refs` → JSON object.
+- `/v1/git/{org}/{repo}/info/refs` → JSON object.
 
 ## Example
 

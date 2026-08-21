@@ -6,7 +6,7 @@ description: "Read social posts: List your org's posts, Read one post."
 
 # Zoo · SOCIAL · posts
 
-Read-only Zoo capability derived from the `social` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `social` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/social/posts` → JSON body.
-- `/v1/social/posts/{id}` → JSON body.
+- `/v1/social/posts` → JSON object.
+- `/v1/social/posts/{id}` → JSON object.
 
 ## Example
 

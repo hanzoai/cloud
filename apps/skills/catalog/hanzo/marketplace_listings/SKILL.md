@@ -6,7 +6,7 @@ description: "Read marketplace listings: Returns the listings the caller's own o
 
 # Hanzo · MARKETPLACE · listings
 
-Read-only Hanzo capability derived from the `marketplace` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `marketplace` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

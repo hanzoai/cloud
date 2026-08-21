@@ -6,7 +6,7 @@ description: "Read finance balance: Answers the org's spendable prepaid balance 
 
 # Lux · FINANCE · balance
 
-Read-only Lux capability derived from the `finance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `finance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

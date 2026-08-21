@@ -6,7 +6,7 @@ description: "Read finance treasury: Returns the reserve fund's health and the c
 
 # Zoo · FINANCE · treasury
 
-Read-only Zoo capability derived from the `finance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `finance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

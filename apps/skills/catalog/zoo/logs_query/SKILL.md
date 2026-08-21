@@ -6,7 +6,7 @@ description: "Read logs query: Search your org's logs by label, time and substri
 
 # Zoo · LOGS · query
 
-Read-only Zoo capability derived from the `logs` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `logs` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/logs/query` → JSON body.
+- `/v1/logs/query` → JSON object.
 
 ## Example
 

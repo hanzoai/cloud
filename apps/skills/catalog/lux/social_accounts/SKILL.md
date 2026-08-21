@@ -6,7 +6,7 @@ description: "Read social accounts: List the social accounts connected to your o
 
 # Lux · SOCIAL · accounts
 
-Read-only Lux capability derived from the `social` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `social` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/social/accounts` → JSON body.
-- `/v1/social/accounts/{id}` → JSON body.
+- `/v1/social/accounts` → JSON object.
+- `/v1/social/accounts/{id}` → JSON object.
 
 ## Example
 

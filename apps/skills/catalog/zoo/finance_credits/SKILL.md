@@ -6,7 +6,7 @@ description: "Read finance credits: Answers the money PUT IN to the org's wallet
 
 # Zoo · FINANCE · credits
 
-Read-only Zoo capability derived from the `finance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `finance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

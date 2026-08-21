@@ -6,7 +6,7 @@ description: "Read commerce discount: List your org's discounts, as a page, Fetc
 
 # Hanzo · COMMERCE · discount
 
-Read-only Hanzo capability derived from the `commerce` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `commerce` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/commerce/discount/` → JSON body.
-- `/v1/commerce/discount/{discountid}` → JSON body.
+- `/v1/commerce/discount/` → JSON object.
+- `/v1/commerce/discount/{discountid}` → JSON object.
 
 ## Example
 

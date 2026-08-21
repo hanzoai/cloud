@@ -6,7 +6,7 @@ description: "Read o11y metrics: Lists the distinct metric names seen in a time 
 
 # Lux · O11Y · metrics
 
-Read-only Lux capability derived from the `o11y` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `o11y` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -28,7 +28,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 |---|---|---|---|---|
 | `end` | query | no | integer | End is the end of the window as a Unix timestamp in milliseconds. |
 | `limit` | query | no | integer | Limit caps how many metrics come back; unset means 100, at most 5000. |
-| `metricName` | query | yes | string | MetricName is the metric's name; it may contain slashes, e.g. |
+| `metricName` | query | yes | string | MetricName is the metric's name; it may contain slashes, e.g. run.googleapis.com/request_latencies. Required. |
 | `searchText` | query | no | string | SearchText narrows the page to metric names containing it. |
 | `source` | query | no | string | Source narrows the page by ingestion source. |
 | `start` | query | no | integer | Start is the start of the window as a Unix timestamp in milliseconds. |

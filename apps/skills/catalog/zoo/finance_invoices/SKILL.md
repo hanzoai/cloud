@@ -6,7 +6,7 @@ description: "Read finance invoices: Answers an empty typed array, always.."
 
 # Zoo · FINANCE · invoices
 
-Read-only Zoo capability derived from the `finance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `finance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

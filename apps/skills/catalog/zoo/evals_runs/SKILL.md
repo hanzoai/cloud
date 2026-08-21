@@ -6,7 +6,7 @@ description: "Read evals runs: Is your past runs and how they scored — the dat
 
 # Zoo · EVALS · runs
 
-Read-only Zoo capability derived from the `evals` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `evals` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

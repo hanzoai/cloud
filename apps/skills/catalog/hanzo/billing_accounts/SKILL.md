@@ -6,7 +6,7 @@ description: "Read billing accounts: The billing account you are signed in to, W
 
 # Hanzo · BILLING · accounts
 
-Read-only Hanzo capability derived from the `billing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `billing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/accounts` → JSON body.
-- `/v1/billing/accounts/{id}/members` → JSON body.
+- `/v1/billing/accounts` → JSON object.
+- `/v1/billing/accounts/{id}/members` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read logs health: How many log records this deployment holds for y
 
 # Lux · LOGS · health
 
-Read-only Lux capability derived from the `logs` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `logs` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/logs/health` → JSON body.
+- `/v1/logs/health` → JSON object.
 
 ## Example
 

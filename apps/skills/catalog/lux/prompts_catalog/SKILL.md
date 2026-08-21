@@ -6,7 +6,7 @@ description: "Read prompts catalog: Catalog returns the read-only starter prompt
 
 # Lux · PROMPTS · catalog
 
-Read-only Lux capability derived from the `prompts` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `prompts` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

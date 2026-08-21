@@ -6,7 +6,7 @@ description: "Read ingress status: Status reports the ingress edge's live postur
 
 # Zoo · INGRESS · status
 
-Read-only Zoo capability derived from the `ingress` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ingress` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

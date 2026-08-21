@@ -6,7 +6,7 @@ description: "Read payments payments: Read one settled payment by its id."
 
 # Hanzo · PAYMENTS · payments
 
-Read-only Hanzo capability derived from the `payments` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `payments` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read bot bot: Relay one of the bot runtime's own operational paths
 
 # Hanzo · BOT · bot
 
-Read-only Hanzo capability derived from the `bot` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `bot` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/bot/{wildcard1}` → JSON body.
+- `/v1/bot/{wildcard1}` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read agents activity: Serves the org-wide recent-activity feed.."
 
 # Zoo · AGENTS · activity
 
-Read-only Zoo capability derived from the `agents` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `agents` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

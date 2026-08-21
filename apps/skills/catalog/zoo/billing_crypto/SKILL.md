@@ -6,7 +6,7 @@ description: "Read billing crypto: Follow one crypto deposit to settlement, Whic
 
 # Zoo · BILLING · crypto
 
-Read-only Zoo capability derived from the `billing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `billing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/crypto/deposit/{id}` → JSON body.
-- `/v1/billing/crypto/options` → JSON body.
+- `/v1/billing/crypto/deposit/{id}` → JSON object.
+- `/v1/billing/crypto/options` → JSON object.
 
 ## Example
 

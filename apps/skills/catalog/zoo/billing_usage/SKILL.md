@@ -1,12 +1,12 @@
 ---
 name: billing_usage
 version: "8.0.0"
-description: "Read billing usage: Every billed call the caller's org made, attributed to a product, Answers per-account totals for the linked provider accounts the gateway ROUTED this caller's traffic through — requests, prompt and completion tokens, recorded cost — plus their honest sum.."
+description: "Read billing usage: Every billed call the caller's org made, attributed to a product, Answers per-account totals for the linked provider accounts the gateway ROUTED this caller's traffic through — requests, prompt and completion tokens, recorded cost — plus their honest sum., Wha"
 ---
 
 # Zoo · BILLING · usage
 
-Read-only Zoo capability derived from the `billing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `billing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -16,11 +16,13 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 - `GET https://api.zoo.ngo/v1/billing/usage` — Every billed call the caller's org made, attributed to a product
 - `GET https://api.zoo.ngo/v1/billing/usage/accounts` — Answers per-account totals for the linked provider accounts the gateway ROUTED this caller's traffic through — requests, prompt and completion tokens, recorded cost — plus their honest sum.
+- `GET https://api.zoo.ngo/v1/billing/usage/rollup` — What plan you are on and how much of it is left, beside the wallet
 
 ## Response
 
-- `/v1/billing/usage` → JSON body.
+- `/v1/billing/usage` → JSON object.
 - `/v1/billing/usage/accounts` → `accounts` object with fields: `accounts`, `scope`, `source`, `total`.
+- `/v1/billing/usage/rollup` → JSON object.
 
 ## Example
 

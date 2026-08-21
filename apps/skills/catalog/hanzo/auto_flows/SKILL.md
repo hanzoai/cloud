@@ -1,12 +1,12 @@
 ---
 name: auto_flows
 version: "8.0.0"
-description: "Read auto flows: Flows lists the caller's flows, newest first., Flow reads one of the caller's flows — the full record, graph included.."
+description: "Read auto flows: Returns the caller org's automations, most-recently-updated first., Returns one automation and its latest version., Returns one flow's versions, newest first.."
 ---
 
 # Hanzo · AUTO · flows
 
-Read-only Hanzo capability derived from the `auto` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `auto` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -14,19 +14,22 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/auto/flows` — Flows lists the caller's flows, newest first.
-- `GET https://api.hanzo.ai/v1/auto/flows/{flow}` — Flow reads one of the caller's flows — the full record, graph included.
+- `GET https://api.hanzo.ai/v1/auto/flows` — Returns the caller org's automations, most-recently-updated first.
+- `GET https://api.hanzo.ai/v1/auto/flows/{id}` — Returns one automation and its latest version.
+- `GET https://api.hanzo.ai/v1/auto/flows/{id}/versions` — Returns one flow's versions, newest first.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `flow` | path | yes | string | Flow is the flow's id, taken from the path. |
+| `id` | path | yes | string | ID is the flow to act on, from the path. |
+| `limit` | query | no | integer | Limit bounds the page (default 200, maximum 1000). |
 
 ## Response
 
-- `/v1/auto/flows` → JSON object.
-- `/v1/auto/flows/{flow}` → JSON object.
+- `/v1/auto/flows` → `flowPage` object with fields: `data`.
+- `/v1/auto/flows/{id}` → `populatedFlow` object with fields: `created`, `externalId`, `folderId`, `id`, `metadata`, `projectId`, `publishedVersionId`, `status`, `updated`, `version`.
+- `/v1/auto/flows/{id}/versions` → `versionPage` object with fields: `data`.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read risk search: Read back one exhaustive search."
 
 # Zoo · RISK · search
 
-Read-only Zoo capability derived from the `risk` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `risk` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the run, taken from the path. A run another organisation started is |
+| `id` | path | yes | string | ID is the run, taken from the path. A run another organisation started is simply not there — the same answer an unknown id gives. |
 
 ## Response
 

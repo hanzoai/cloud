@@ -6,7 +6,7 @@ description: "Read legal filings: Returns the org's filing records, newest first
 
 # Hanzo · LEGAL · filings
 
-Read-only Hanzo capability derived from the `legal` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `legal` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

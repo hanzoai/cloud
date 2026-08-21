@@ -6,7 +6,7 @@ description: "Read domain health: Reports registrar reachability honestly: ok on
 
 # Zoo · DOMAIN · health
 
-Read-only Zoo capability derived from the `domain` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `domain` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

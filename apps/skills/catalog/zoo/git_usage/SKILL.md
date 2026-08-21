@@ -6,7 +6,7 @@ description: "Read git usage: Returns per-repo and total storage bytes for the c
 
 # Zoo · GIT · usage
 
-Read-only Zoo capability derived from the `git` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `git` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

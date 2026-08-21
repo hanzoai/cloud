@@ -6,7 +6,7 @@ description: "Read todo issues: Answers across every project in the org.."
 
 # Hanzo · TODO · issues
 
-Read-only Hanzo capability derived from the `todo` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `todo` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -22,11 +22,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 |---|---|---|---|---|
 | `assignee` | query | no | string | Assignee keeps issues held by one person. Pass "me" for yourself. |
 | `kind` | query | no | string | Kind keeps one shape: issue, pr, epic. |
-| `limit` | query | no | integer | Limit caps the answer; 0 means the default, and anything above the ceiling |
-| `project` | query | no | string | Project narrows to one team key; "" searches every project in the org, |
-| `q` | query | no | string | Q matches an issue's title or description. A word from the issue, which is |
+| `limit` | query | no | integer | Limit caps the answer; 0 means the default, and anything above the ceiling is clamped rather than refused — a search that errors on being too broad teaches people to guess. |
+| `project` | query | no | string | Project narrows to one team key; "" searches every project in the org, which is the point of this op. |
+| `q` | query | no | string | Q matches an issue's title or description. A word from the issue, which is what someone remembers — not its number, which is what they are looking up. |
 | `repo` | query | no | string | Repo keeps issues bound to one git repository. |
-| `source` | query | no | string | Source keeps one origin: team, git, crm, helpdesk, cms, agent. "git" is |
+| `source` | query | no | string | Source keeps one origin: team, git, crm, helpdesk, cms, agent. "git" is how you ask for the mirrored GitHub issues specifically. |
 | `status` | query | no | string | Status keeps one board column: backlog, todo, in_progress, done, canceled. |
 
 ## Response

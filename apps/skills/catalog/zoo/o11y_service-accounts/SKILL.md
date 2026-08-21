@@ -6,7 +6,7 @@ description: "Read o11y service accounts: Lists the caller's org's service accou
 
 # Zoo · O11Y · service accounts
 
-Read-only Zoo capability derived from the `o11y` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `o11y` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

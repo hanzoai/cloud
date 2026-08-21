@@ -6,7 +6,7 @@ description: "Read finance treasury: Returns the reserve fund's health and the c
 
 # Lux · FINANCE · treasury
 
-Read-only Lux capability derived from the `finance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `finance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

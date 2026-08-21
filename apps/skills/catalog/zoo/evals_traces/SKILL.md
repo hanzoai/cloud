@@ -6,7 +6,7 @@ description: "Read evals traces: Is the traces behind your evaluations — one p
 
 # Zoo · EVALS · traces
 
-Read-only Zoo capability derived from the `evals` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `evals` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

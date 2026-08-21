@@ -6,7 +6,7 @@ description: "Read index health: Report whether the search plane can serve."
 
 # Zoo · INDEX · health
 
-Read-only Zoo capability derived from the `index` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `index` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/index/health` → JSON body.
+- `/v1/index/health` → JSON object.
 
 ## Example
 

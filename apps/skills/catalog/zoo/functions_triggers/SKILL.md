@@ -6,7 +6,7 @@ description: "Read functions triggers: Is what calls the caller org's functions 
 
 # Zoo · FUNCTIONS · triggers
 
-Read-only Zoo capability derived from the `functions` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `functions` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

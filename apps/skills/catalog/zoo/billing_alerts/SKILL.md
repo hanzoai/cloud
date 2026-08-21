@@ -6,7 +6,7 @@ description: "Read billing alerts: List your org's spend caps and rate limits, T
 
 # Zoo · BILLING · alerts
 
-Read-only Zoo capability derived from the `billing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `billing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -19,8 +19,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/alerts` → JSON body.
-- `/v1/billing/alerts/authorize` → JSON body.
+- `/v1/billing/alerts` → JSON object.
+- `/v1/billing/alerts/authorize` → JSON object.
 
 ## Example
 

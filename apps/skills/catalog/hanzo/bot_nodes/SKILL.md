@@ -6,7 +6,7 @@ description: "Read bot nodes: Returns the caller org's currently connected bot n
 
 # Hanzo · BOT · nodes
 
-Read-only Hanzo capability derived from the `bot` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `bot` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

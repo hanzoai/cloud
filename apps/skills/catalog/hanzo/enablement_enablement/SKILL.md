@@ -6,7 +6,7 @@ description: "Read enablement enablement: Returns what the caller's org can actu
 
 # Hanzo · ENABLEMENT · enablement
 
-Read-only Hanzo capability derived from the `enablement` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `enablement` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

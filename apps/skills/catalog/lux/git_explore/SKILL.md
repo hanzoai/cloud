@@ -1,12 +1,12 @@
 ---
 name: git_explore
 version: "8.0.0"
-description: "Read git explore: Discover public repositories across every org, Discover public repositories across every org."
+description: "Read git explore: Discover public repositories across every org."
 ---
 
 # Lux · GIT · explore
 
-Read-only Lux capability derived from the `git` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `git` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,18 +14,16 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/explore` — Discover public repositories across every org
-- `GET https://api.lux.network/git/explore` — Discover public repositories across every org
+- `GET https://api.lux.network/v1/git/explore` — Discover public repositories across every org
 
 ## Response
 
-- `/explore` → JSON body.
-- `/git/explore` → JSON body.
+- `/v1/git/explore` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/explore" \
+curl -sS "https://api.lux.network/v1/git/explore" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

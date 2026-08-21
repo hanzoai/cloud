@@ -6,7 +6,7 @@ description: "Read ai connections: Lists the org's connectable AI accounts and w
 
 # Zoo · AI · connections
 
-Read-only Zoo capability derived from the `ai` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ai` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -27,10 +27,10 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/ai/connections` → JSON body.
-- `/v1/ai/connections/{provider}/authorize` → JSON body.
-- `/v1/ai/connections/{provider}/callback` → JSON body.
-- `/v1/ai/connections/{provider}/usage` → JSON body.
+- `/v1/ai/connections` → JSON object.
+- `/v1/ai/connections/{provider}/authorize` → JSON object.
+- `/v1/ai/connections/{provider}/callback` → JSON object.
+- `/v1/ai/connections/{provider}/usage` → JSON object.
 
 ## Example
 

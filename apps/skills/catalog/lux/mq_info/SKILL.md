@@ -6,7 +6,7 @@ description: "Read mq info: Returns the broker's identity and the org's stream c
 
 # Lux · MQ · info
 
-Read-only Lux capability derived from the `mq` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `mq` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

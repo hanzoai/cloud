@@ -6,7 +6,7 @@ description: "Read licensing jwks: Pubkey publishes the Ed25519 PUBLIC verificat
 
 # Zoo · LICENSING · jwks
 
-Read-only Zoo capability derived from the `licensing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `licensing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

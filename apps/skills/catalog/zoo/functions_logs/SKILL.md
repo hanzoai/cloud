@@ -6,7 +6,7 @@ description: "Read functions logs: Is the output of a function's most recent run
 
 # Zoo · FUNCTIONS · logs
 
-Read-only Zoo capability derived from the `functions` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `functions` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

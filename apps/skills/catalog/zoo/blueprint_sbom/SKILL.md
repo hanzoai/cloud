@@ -6,7 +6,7 @@ description: "Read blueprint sbom: A blueprint's bill of images and what running
 
 # Zoo · BLUEPRINT · sbom
 
-Read-only Zoo capability derived from the `blueprint` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `blueprint` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/blueprint/sbom` → JSON body.
+- `/v1/blueprint/sbom` → JSON object.
 
 ## Example
 

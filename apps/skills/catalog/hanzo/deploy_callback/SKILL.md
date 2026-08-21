@@ -6,7 +6,7 @@ description: "Read deploy callback: Finish the sign-in round trip and mint the c
 
 # Hanzo · DEPLOY · callback
 
-Read-only Hanzo capability derived from the `deploy` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `deploy` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/deploy/callback` → JSON body.
+- `/v1/deploy/callback` → JSON object.
 
 ## Example
 

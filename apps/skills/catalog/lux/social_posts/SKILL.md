@@ -6,7 +6,7 @@ description: "Read social posts: List your org's posts, Read one post."
 
 # Lux · SOCIAL · posts
 
-Read-only Lux capability derived from the `social` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `social` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/social/posts` → JSON body.
-- `/v1/social/posts/{id}` → JSON body.
+- `/v1/social/posts` → JSON object.
+- `/v1/social/posts/{id}` → JSON object.
 
 ## Example
 

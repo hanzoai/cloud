@@ -6,7 +6,7 @@ description: "Read company company: Get returns the caller org's formation and t
 
 # Hanzo · COMPANY · company
 
-Read-only Hanzo capability derived from the `company` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `company` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

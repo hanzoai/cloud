@@ -6,7 +6,7 @@ description: "Read mesh services: Returns the Zero Trust edge services the calle
 
 # Lux · MESH · services
 
-Read-only Lux capability derived from the `mesh` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `mesh` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
