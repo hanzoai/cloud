@@ -153,7 +153,7 @@ function anonOf(r) {
 //    cookie, so an origin carrying only this tag was its own population.
 {
   const id = '01920000-0000-7000-8000-0000000000ee'
-  const r = run({ 'data-key': 'pk-live-abc' }, { jar: { hz_anon_id: id } })
+  const r = run({ 'data-key': 'pk-live-abc' }, { jar: { 'iam-anon-id': id } })
   r.fire('pagehide')
   assert.strictEqual(anonOf(r), id, 'the cookie is the identity')
 }
@@ -166,8 +166,8 @@ function anonOf(r) {
   const r = run({ 'data-key': 'pk-live-abc' }, { storage: { hz_id: legacy } })
   r.fire('pagehide')
   assert.strictEqual(anonOf(r), legacy, 'hz.js legacy id adopted')
-  assert.strictEqual(r.jar.get('hz_anon_id'), legacy, 'carried onto the shared key')
-  assert.strictEqual(r.storage.get('hz_anon_id'), legacy)
+  assert.strictEqual(r.jar.get('iam-anon-id'), legacy, 'carried onto the shared key')
+  assert.strictEqual(r.storage.get('iam-anon-id'), legacy)
 }
 
 // 8. A browser carrying nothing is given ONE id, in the durable place. The
@@ -177,8 +177,8 @@ function anonOf(r) {
   r.fire('pagehide')
   const id = anonOf(r)
   assert.ok(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab]/.test(id), 'v7 anon id: ' + id)
-  assert.strictEqual(r.jar.get('hz_anon_id'), id, 'the cookie outlives the origin')
-  assert.strictEqual(r.storage.get('hz_anon_id'), id)
+  assert.strictEqual(r.jar.get('iam-anon-id'), id, 'the cookie outlives the origin')
+  assert.strictEqual(r.storage.get('iam-anon-id'), id)
   assert.ok(r.storage.has('hz_session'), 'hz_session')
   assert.ok(!r.jar.has('hz_session'), 'a session is not shared across surfaces')
 }
