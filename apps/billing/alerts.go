@@ -20,6 +20,8 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
@@ -38,6 +40,32 @@ func mountAlerts(app cloud.Router, o ops) {
 	// empty 204 — neither of which is that. A relay that tidied it would be
 	// changing a wire while claiming to preserve one.
 	app.Delete("/v1/billing/alerts/:id", cloud.Handle(o.s, dropAlert))
+}
+
+// capAdmin refuses a cap WRITE to anyone but a validated org admin, the platform
+// SuperAdmin, or the trusted in-process service token.
+//
+// A spend cap is a FINANCIAL SAFETY control, and both directions of getting it
+// wrong are expensive: a member who can delete the org's cap has unbounded
+// spend, and a member who can set a one-cent enforcing cap has an org-wide 402.
+// The store's own gate admits any authenticated member, so this is the
+// difference, and it has to be here — the reads beside it stay member-open, and
+// only the mutations require admin.
+//
+// It runs in the HANDLER rather than on the route, for the reason the risk
+// screen does: a typed op is reached by four projections and only the handler is
+// the point all four pass through. It moved here with the routes it guards; the
+// bits it reads are the unforgeable ones the identity boundary mints, never a
+// client header.
+func capAdmin(ctx context.Context) error {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return zip.ErrForbidden("org admin required to change spend caps")
+	}
+	if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) || account.IsServiceToken(c) {
+		return nil
+	}
+	return zip.ErrForbidden("org admin required to change spend caps")
 }
 
 // caps is the org's spend caps — a bare array, which is the wire this address
@@ -88,6 +116,9 @@ func (o ops) alerts(ctx context.Context, _ *noInput) (*caps, error) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) raiseAlert(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, error) {
+	if err := capAdmin(ctx); err != nil {
+		return nil, err
+	}
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
@@ -111,6 +142,9 @@ func (o ops) raiseAlert(ctx context.Context, in *plane.AlertSpec) (*plane.Alert,
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) amendAlert(ctx context.Context, in *plane.AlertPatch) (*plane.Alert, error) {
+	if err := capAdmin(ctx); err != nil {
+		return nil, err
+	}
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
@@ -129,6 +163,9 @@ func (o ops) amendAlert(ctx context.Context, in *plane.AlertPatch) (*plane.Alert
 // reproduce it. A cap belonging to another org is a 404, for the reason the
 // amend is.
 func dropAlert(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := capAdmin(c.Context()); err != nil {
+		return err
+	}
 	org, subject, err := payerOf(c)
 	if err != nil {
 		return err
