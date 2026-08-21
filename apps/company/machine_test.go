@@ -107,8 +107,10 @@ func TestPaymentGate(t *testing.T) {
 	if errors.Is(err, errIllegalTransition) {
 		t.Fatalf("payment gate: the edge exists — failure must be the guard, not illegal-transition: %v", err)
 	}
-	if !strings.Contains(err.Error(), "999") {
-		t.Fatalf("payment gate: error should name the $999 fee, got %q", err)
+	// Names the CONFIGURED fee rather than a literal: the price lives in one
+	// place, and a test that repeats it is a second place it can drift from.
+	if !strings.Contains(err.Error(), dollars(feeCents())) {
+		t.Fatalf("payment gate: error should name the $%s fee, got %q", dollars(feeCents()), err)
 	}
 	if f.Stage != StagePayment {
 		t.Fatalf("payment gate: blocked transition must not advance, got %s", f.Stage)

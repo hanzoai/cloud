@@ -76,7 +76,7 @@ func init() {
 //	POST   /v1/company/kyc                 start founder KYC (idv seam)
 //	POST   /v1/company/kyc/refresh         reconcile founder KYC with the wired provider
 //	POST   /v1/company/kyc/decision        reviewer decision on a founder {email,status}
-//	POST   /v1/company/payment             charge the $999 formation fee
+//	POST   /v1/company/payment             charge the formation fee
 //	POST   /v1/company/documents           generate formation docs → data room + file
 //	POST   /v1/company/esign               request signatures on the docs
 //	POST   /v1/company/esign/complete      record signing complete
@@ -201,6 +201,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 
 	// The platform's own book — SuperAdmin operations, cross-tenant, read-only.
 	// Registered before the tenant edges so the static paths are unambiguous.
+	zip.Post(g, "/tariff", o.tariff)
 	zip.Get(g, "/register", o.registerList)
 	zip.Get(g, "/register/summary", o.registerSummary)
 	zip.Get(g, "/review", o.registerReview)
@@ -650,7 +651,7 @@ func (o ops) kycDecision(ctx context.Context, in *decisionIn) (*formationView, e
 	return view(f), nil
 }
 
-// ---- payment (the $999 gate) ----
+// ---- payment (the fee gate; the amount is quoted, see fees.go) ----
 
 // pay charges the caller's own org the one-time Hanzo Company formation fee.
 //
