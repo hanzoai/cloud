@@ -391,6 +391,7 @@ documents: describe ## Write every generated document FROM SOURCE. Produces; ren
 	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi OUT=$(ROOT)/openapi.yaml 2>&1) \
 	  || { echo "$$out"; echo "!! the compose refused; nothing was written"; exit 1; }
 	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-fleet-catalog . >/dev/null
+	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-skills . >/dev/null
 
 # THE SET, NAMED ONCE. The gate judges these paths and the repair lane commits
 # them, and a repair carrying fewer paths than the gate judges leaves a tree that
@@ -409,13 +410,22 @@ documents: describe ## Write every generated document FROM SOURCE. Produces; ren
 # because the asymmetry is otherwise invisible — `make zipdoc-check` moves from
 # N stale to N-1 after this lane runs, for a reason nobody would connect to it.
 #
+# apps/skills/catalog/ IS here, and it is the largest entry: ~2000 files of
+# markdown plus three indexes. It belongs for the reason every other entry does —
+# it is GENERATED (plugin/gen-skills, from the same plugin/<app>/openapi.json the
+# fleet catalogue reads) and it is COMMITTED, which is the pair that drifts. It
+# came from a Python script in another repo until recently, where nothing in this
+# tree could regenerate it and so nothing could judge it; a hand-edited SKILL.md
+# or a spec change nobody re-ran was invisible. The floor in
+# apps/skills/skills_test.go catches a SHRINK; only this lane catches drift.
+#
 # OVERRIDE, so the pathspec is a property of this file and not an argument. Every
 # reader below judges or commits exactly this list, and a variable a caller can
 # set is a way past the gate: `make -f mk/fleet.mk DOCUMENTS=README.md check`
 # would regenerate the whole fleet, judge one unrelated path, find it clean and
 # report the surface unchanged. cicd.yml already states the rule for the reviewer
 # one lane over — "a reviewer with a way past it is one an attacker reaches for".
-override DOCUMENTS := openapi.yaml public.yaml openapi/floor.json openapi/closure.json fleet/catalog.json plugin/
+override DOCUMENTS := openapi.yaml public.yaml openapi/floor.json openapi/closure.json fleet/catalog.json plugin/ apps/skills/catalog/
 
 paths: ## Print the generated-document paths, for a caller that has to name them outside make.
 	@echo $(DOCUMENTS)
