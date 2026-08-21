@@ -390,7 +390,7 @@ func spendableCents(b commerceBalance) int64 {
 // funded it.
 //
 // Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
-// caller's own org; 401 without a validated principal. An org with no grants
+// caller's own wallet; 401 without a validated principal. A wallet with no grants
 // gets an empty array — honest, never a fabricated figure.
 func (o ops) financeCredits(ctx context.Context, _ *noInput) (*credits, error) {
 	org, subject, err := payer(ctx)
@@ -433,7 +433,7 @@ func (o ops) financeCredits(ctx context.Context, _ *noInput) (*credits, error) {
 // the same money, cut a different way.
 //
 // Cents are ROUNDED from the ledger's exact 18-decimal USD, so a window made of
-// sub-cent token calls totals LOW here. Scoped to the caller's own org; 401
+// sub-cent token calls totals LOW here. Scoped to the caller's own wallet; 401
 // without a validated principal.
 //
 // Example: {"range": "24h"}
@@ -599,9 +599,10 @@ func (o ops) financeMethods(ctx context.Context, _ *noInput) (*cards, error) {
 // date must show up in a money list, not vanish from it. `balanceCents` is
 // omitted: these are MOVEMENTS, and the standing balance is /v1/finance/balance.
 //
-// Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the
-// caller's own org, where the org's ledger file is the tenant boundary; 401
-// without a validated principal.
+// Cents are ROUNDED from the ledger's exact 18-decimal USD. Scoped to the caller's
+// own WALLET — the org's ledger file is the tenant boundary and the subject is the
+// account within it, the same pair /v1/finance/balance totals, so this page is the
+// movements behind that number; 401 without a validated principal.
 //
 // Example: {"range": "30d"}
 func (o ops) financeLedger(ctx context.Context, in *window) (*postings, error) {
@@ -676,14 +677,22 @@ func financeGet(s *cloud.Service[state], ctx context.Context, path, org, subject
 	return nil
 }
 
-// financeTxns reads the org's commerce ledger ONCE (the single transactions read the
-// credits/usage/ledger projections share). Tolerates the wrapped {transactions:[…]}
-// shape and a bare array.
+// financeTxns reads the caller's commerce ledger ONCE (the single transactions read
+// the credits/usage/ledger projections share). Tolerates the wrapped
+// {transactions:[…]} shape and a bare array.
+//
+// THE LEDGER ANSWERS FOR THE SUBJECT THE BALANCE ANSWERS FOR. org names the books
+// and subject names the wallet inside them — the pair balance.go already resolves
+// through principal.Subject, handed on here unchanged, so a customer's movements and
+// their spendable total describe one account. Where the payer IS the org (every
+// member pools) the subject resolves to the org and the answer is the pool's, which
+// is the same list it has always been; where the payer is a PERSON — the shared
+// signup org, one billing subject per self-serve customer — it is that person's.
 func financeTxns(s *cloud.Service[state], ctx context.Context, org, subject string) ([]commerceTxn, error) {
 	// The ledger's own entries, from the process that holds them. Credits, usage and
 	// the ledger page are three projections of this one list, and all three answered
 	// 501 from a process without the ledger — which is every process but commerce.
-	peer, served, err := peerTxns(ctx, org)
+	peer, served, err := peerTxns(ctx, org, subject)
 	if err != nil {
 		s.Log.Warn("finance transactions read failed", "org", org, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
@@ -810,17 +819,22 @@ func abs64(v int64) int64 {
 // Only the ROUTER may state absence (cloud.ErrNoPeer); it owns the manifest. Absence
 // inferred from a failed call is how a dead peer became a phantom split deploy.
 //
+// The org rides the CALLER (cloud.For) and the subject rides the ARGUMENT, which is
+// the same division the balance read makes: an org in the payload would let a caller
+// name another tenant's books, while a subject can only ever address a wallet inside
+// the books that caller's identity already pinned.
+//
 // The amount arrives as its exact 18-decimal integer and is flattened to cents HERE,
 // at the boundary where commerceTxn is already a cents-shaped view. The wire keeps
 // the precision so the day that view stops being cents-shaped, nothing upstream has
 // to be re-plumbed to find it.
-func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool, error) {
+func peerTxns(ctx context.Context, org, subject string) ([]commerceTxn, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, txnsPeerTimeout)
 	defer cancel()
 	// The generated peer client, not three loose strings: it is this call with the
 	// app name, the op name and the In/Out pair already fixed to each other, so
 	// the compiler checks what only a running fleet could check here.
-	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{})
+	reply, err := commercepeer.FinanceTxns(cloud.For(ctx, org), &plane.TxnsIn{Subject: subject})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {
 			return nil, false, nil
