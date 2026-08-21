@@ -1,6 +1,6 @@
 {
-  "paths": 1768,
-  "operations": 2396,
+  "paths": 1770,
+  "operations": 2400,
   "products": {
     "account": 10,
     "admin": 56,
@@ -8,7 +8,7 @@
     "ads": 7,
     "affiliates": 17,
     "agents": 37,
-    "ai": 295,
+    "ai": 294,
     "allowance": 1,
     "ask": 2,
     "audit": 1,
@@ -27,7 +27,7 @@
     "channels": 7,
     "cloudflare": 33,
     "code": 7,
-    "commerce": 178,
+    "commerce": 183,
     "company": 22,
     "compliance": 17,
     "content": 6,
