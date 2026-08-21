@@ -3,11 +3,17 @@ package content
 import (
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/zap-proto/zip"
 	"io"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 )
@@ -235,34 +241,52 @@ func TestTransitionStorefrontFailClosed(t *testing.T) {
 // (PUT /v1/commerce/store/:id/listing/:slug) with headerImage.url = the asset S3 URL — every
 // call admin-bearer + X-Org-Id pinned to the caller's own org (tenant isolation).
 func TestCommerceStorefrontWire(t *testing.T) {
-	t.Setenv(commerceTokenEnv, "svc-admin-token")
-	t.Setenv(commerceURLEnv, "") // force the in-process placeholder base
+	// A commerce peer on commerce's own socket — the arrangement production has,
+	// now that both halves of Publish ask by name instead of re-entering
+	// commerce's HTTP door.
+	//
+	// The assertions that went with that door are gone because the facts they
+	// checked are no longer carried the same way: there is no Authorization
+	// header to inspect, and no X-Org-Id, because identity rides the CALLER on the
+	// plane. What replaces them is stronger — the op reads the org out of the
+	// call itself, so a tenant leak would have to forge a capability rather than
+	// a header.
+	dir, err := os.MkdirTemp("", "sf")
+	if err != nil {
+		t.Fatalf("run dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Setenv("ZIP_RUNTIME_DIR", dir)
+	cloud.ResetPlane()
+	t.Cleanup(cloud.ResetPlane)
 
 	var (
-		gotCurrentOrg, gotCurrentAuth string
-		gotListingPath, gotListingOrg string
-		gotBody                       map[string]any
+		gotStoreOrg, gotListingOrg string
+		gotKey, gotStoreID         string
+		gotBody                    map[string]any
 	)
-	transport.SetHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/commerce/store/current":
-			gotCurrentOrg = r.Header.Get("X-Org-Id")
-			gotCurrentAuth = r.Header.Get("Authorization")
-			_, _ = io.WriteString(w, `{"store":{"id":"STORE123","name":"Karma"}}`)
-		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/v1/commerce/store/STORE123/listing/"):
-			gotListingPath = r.URL.Path
-			gotListingOrg = r.Header.Get("X-Org-Id")
-			raw, _ := io.ReadAll(r.Body)
-			_ = json.Unmarshal(raw, &gotBody)
-			w.WriteHeader(http.StatusCreated)
-			_, _ = io.WriteString(w, `{}`)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = io.WriteString(w, `{"error":"unexpected"}`)
+	app := zip.New(zip.Config{AppName: "commerce"})
+	zip.Post[plane.StoreIn, plane.Store](app, "/store/current",
+		func(ctx context.Context, _ *plane.StoreIn) (*plane.Store, error) {
+			gotStoreOrg = cloud.Who(ctx).Org
+			return &plane.Store{ID: "STORE123", Name: "Karma"}, nil
+		}, zip.WithOperationID(plane.StoreCurrent))
+	zip.Post[plane.ListingIn, plane.Listed](app, "/store/listing",
+		func(ctx context.Context, in *plane.ListingIn) (*plane.Listed, error) {
+			gotListingOrg = cloud.Who(ctx).Org
+			gotStoreID, gotKey = in.StoreID, in.Key
+			_ = json.Unmarshal(in.Patch, &gotBody)
+			return &plane.Listed{Existed: false}, nil
+		}, zip.WithOperationID(plane.StoreListing))
+	go func() { _ = app.Listen(zip.SocketPath("commerce")) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	for range 400 {
+		if c, derr := net.DialTimeout("unix", zip.SocketPath("commerce"), time.Second); derr == nil {
+			_ = c.Close()
+			break
 		}
-	}))
-	t.Cleanup(func() { transport.SetHandler(nil) })
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	const org = "karma"
 	const imgURL = "https://s3.hanzo.ai/hanzo-studio/orgs/karma/output/valentina/product_front.png"
@@ -275,19 +299,17 @@ func TestCommerceStorefrontWire(t *testing.T) {
 	if res.Status != "published" || res.Store != "STORE123" || res.Slug != "valentina" || res.ImageURL != imgURL {
 		t.Fatalf("result wrong: %+v", res)
 	}
-	// Store resolution: admin bearer + caller org.
-	if gotCurrentAuth != "Bearer svc-admin-token" {
-		t.Errorf("store/current auth = %q, want admin bearer", gotCurrentAuth)
-	}
-	if gotCurrentOrg != org {
-		t.Errorf("store/current X-Org-Id = %q, want %q", gotCurrentOrg, org)
-	}
-	// Listing upsert: keyed by slug, pinned to the caller org.
-	if gotListingPath != "/v1/commerce/store/STORE123/listing/valentina" {
-		t.Errorf("listing path = %q", gotListingPath)
+	// The tenant, on BOTH ops. It rides the capability rather than a header, so
+	// this is the leak that would matter.
+	if gotStoreOrg != org {
+		t.Errorf("store/current ran for org %q, want %q", gotStoreOrg, org)
 	}
 	if gotListingOrg != org {
-		t.Errorf("listing X-Org-Id = %q, want %q (tenant leak)", gotListingOrg, org)
+		t.Errorf("listing ran for org %q, want %q (tenant leak)", gotListingOrg, org)
+	}
+	// The listing is written to the store that was just resolved, keyed by slug.
+	if gotStoreID != "STORE123" || gotKey != "valentina" {
+		t.Errorf("listing targeted store %q key %q", gotStoreID, gotKey)
 	}
 	if gotBody["slug"] != "valentina" {
 		t.Errorf("listing body slug = %v", gotBody["slug"])
