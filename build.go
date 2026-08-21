@@ -58,9 +58,6 @@ import (
 // direct Go method call; a peer that is elsewhere is reached over the peer plane
 // (plane.Ask — ZAP bytes on the peer's own socket, addressed by name). JSON
 // happens only at the gateway/ingress edge, through the zip jsonenc helper.
-//
-// Payments and Vault are NEVER in-process (PCI solo-vault CDE). They are also
-// not deployed, so both resolve to the disabled stub — see pickPaymentsClient.
 func BuildDeps(cfg *Config) Deps {
 	logger := luxlog.New("cloud")
 
@@ -120,7 +117,6 @@ func BuildDeps(cfg *Config) Deps {
 	deps.Durable, deps.LiveMembers = buildDurability(cfg, logger)
 	deps.IAM = pick(cfg, logger, "iam", "IAM", clients.DisabledIAM)
 	deps.KMS = pickKMSClient(cfg, deps.Durable, logger)
-	deps.Base = pick(cfg, logger, "base", "Base", clients.DisabledBase)
 	deps.Commerce = pickCommerceClient(cfg, logger)
 	// Metering client BEFORE the AI client: deps.AI is wrapped in the metering
 	// decorator (the ONE inference gate+meter — no exempt path, no bypass, no
@@ -139,12 +135,9 @@ func BuildDeps(cfg *Config) Deps {
 	wireFinance(cfg, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
-	deps.MQ = pick(cfg, logger, "mq", "MQ", clients.DisabledMQ)
 
 	// Payments and Vault never co-resident. Disabled stub when no
 	// endpoint, otherwise RPC.
-	deps.Payments = pickPaymentsClient(cfg, logger)
-	deps.Vault = pickVaultClient(cfg, logger)
 
 	// Runtime-mutable edge-policy store (/v1/gateway config plane), layered over
 	// the static env/flag defaults so an un-provisioned deployment behaves exactly
@@ -1071,24 +1064,6 @@ func hostnameOr(def string) string {
 		return h
 	}
 	return def
-}
-
-// pickPaymentsClient and pickVaultClient resolve the two clients that are never
-// co-resident (PCI scope isolation — vault is the only system that touches PAN).
-//
-// Both are disabled, and saying so is the point. Neither has a caller: nothing in
-// the tree invokes CreateIntent, ConfirmIntent, GetIntentStatus or Charge — commerce
-// only nil-checks the fields. They were wired to an RPC client whose every method
-// returned "not yet wired", so the CDE transport was declared, logged as up, and
-// never carried a byte. A disabled stub carries exactly as much traffic and admits
-// it. When payments and vault do get a wire it will be a plane op like every other
-// peer, not a second mechanism resurrected from this one.
-func pickPaymentsClient(*Config, luxlog.Logger) PaymentsClient {
-	return clients.DisabledPayments()
-}
-
-func pickVaultClient(*Config, luxlog.Logger) VaultClient {
-	return clients.DisabledVault()
 }
 
 // MountFunc is a subsystem's mount contract: register your routes on app, using
