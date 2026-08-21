@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/automations"
+	"github.com/hanzoai/cloud/apps/auto"
 	"github.com/hanzoai/cloud/apps/content"
 	"github.com/hanzoai/cloud/apps/framework"
 	luxlog "github.com/luxfi/log"
@@ -17,7 +17,7 @@ import (
 // integration_test.go is the end-to-end proof of the module-install wiring fix: a
 // Guide "do it for me" step whose action needs the marketing module COMPLETES on an
 // org that never installed it. It mounts the REAL plane — framework + content +
-// automations + guide — with the real invoke seam (automations.InvokeTool), so the
+// automations + guide — with the real invoke seam (auto.InvokeTool), so the
 // positioning step runs content_generate through the per-principal MCP plane exactly
 // as in production. Before the always-on fix this returned
 // "content: marketing module not installed for org"; now it drafts, generates a real
@@ -35,10 +35,10 @@ func mountFullPlane(t *testing.T, ai cloud.AIClient) *zip.App {
 	if err := content.Mount(app, cloud.Deps{AI: ai, Domain: "api.test", Env: "testnet"}); err != nil {
 		t.Fatalf("content.Mount: %v", err)
 	}
-	if err := automations.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("automations.Mount: %v", err)
+	if err := auto.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("auto.Mount: %v", err)
 	}
-	// guide with the REAL invoke seam (automations.InvokeTool) — no fake.
+	// guide with the REAL invoke seam (auto.InvokeTool) — no fake.
 	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), AI: ai}); err != nil {
 		t.Fatalf("guide.Mount: %v", err)
 	}
@@ -46,7 +46,7 @@ func mountFullPlane(t *testing.T, ai cloud.AIClient) *zip.App {
 	mounted.State.detectors = map[string]Detector{"acted": mounted.State.detectors["acted"]}
 	t.Cleanup(func() {
 		_ = Shutdown()
-		_ = automations.Shutdown(context.Background())
+		_ = auto.Shutdown(context.Background())
 		_ = content.Shutdown()
 		_ = framework.Shutdown()
 	})

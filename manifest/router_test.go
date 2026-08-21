@@ -111,32 +111,27 @@ var unreachable = []string{
 	// skills' with it. Grafted, iam declares the three exact documents its
 	// router holds (jwks, openid-configuration, oauth-authorization-server), so the
 	// host routes exactly those. A relying party's FIRST call reaches an app now.
-	// The three paths `bot` holds inside the subtree `bots` relays. bots publishes
-	// /v1/bot/{wildcard1} — every path under /v1/bot, forwarded to the runtime that
-	// executes a run — and `bot`, whose product is connected machines, owns these
-	// three more specifically, so the router delivers them to `bot`. That is the
-	// declared routing working: a deeper prefix is the more specific one. What makes
-	// them a division rather than a nesting is that the relay's surface is decided
-	// UPSTREAM: the runtime chooses what it answers, so a path it adds under one of
-	// these three names arrives at `bot` instead, and neither document says so.
+	// Three lines lived here: /v1/bot/{connect,nodes,peer/invoke}, held by `bot`
+	// inside the subtree `bots` relayed. bots published /v1/bot/{wildcard1} — every
+	// path under /v1/bot — and bot owned those three more specifically, so the
+	// router delivered them correctly while the relay's surface was decided
+	// UPSTREAM: a path the runtime added under one of those names would have
+	// arrived at bot instead, and neither document said so.
 	//
-	// One app vacates and these three lines go. Which one is a product question —
-	// both addresses are published in the agent-skills catalog on three brands, and
-	// /v1/bot/connect is a socket already-deployed nodes hold open — so it is not a
-	// rename this ledger can make. The count is here to be argued down.
+	// They are gone because the two apps became one (HIP-0139 §2.4: bot and bots
+	// differ only in number and are one capability). There is no second app to
+	// shadow anything, and the relay forwards from its own segment,
+	// /v1/bot/runtime, where it can reach no sibling at all.
 	//
-	// git's eleven root-level lines are gone, and they are the first this ledger
-	// has lost to routes being DELETED. They were the bare-URL forms of the browse
-	// pages and the clone protocol — GET /, /:org/:repo/…, /:org/:repo/info/refs —
-	// answering only when the request Host was the dedicated git host, which is
+	// git's eleven root-level lines are gone too, and they are the first this
+	// ledger has lost to routes being DELETED. They were the bare-URL forms of the
+	// browse pages and the clone protocol — GET /, /:org/:repo/…, /:org/:repo/info/refs
+	// — answering only when the request Host was the dedicated git host, which is
 	// the standalone forge's in production. A prefix must start with a literal
 	// segment, so no manifest row could ever name /:org, which is exactly why they
 	// read "-> nothing" here for as long as they did: published, and deliverable
 	// by no host in the fleet. The browse pages moved to /v1/git and the clone
 	// address is /v1/git/<org>/<repo>.
-	"bots /v1/bot/connect -> bot",
-	"bots /v1/bot/nodes -> bot",
-	"bots /v1/bot/peer/invoke -> bot",
 }
 
 // oracle is the transport the probe mounts every app on. A mounted app is

@@ -62,10 +62,10 @@ func staged(names ...string) *zip.App {
 	app.Get("/v1/ads/campaigns", served)
 	app.Get("/v1/iam/keys", served)
 	app.Get("/v1/health", served)
-	// bot's surface, which sits INSIDE bots's prefix — see
+	// A nesting pair, shallow and deep, owned by two apps — see
 	// TestTheRefusalYieldsToTheDeeperOwner.
-	app.Get("/v1/bot/status", served)
-	app.Get("/v1/bot/connect", served)
+	app.Get("/v1/admin/authors", served)
+	app.Get("/v1/admin/leaderboard", served)
 	return app
 }
 
@@ -190,30 +190,28 @@ func TestTheRefusalStaysOnItsOwnPrefixes(t *testing.T) {
 	}
 }
 
-// PREFIXES NEST, and the deeper claim is a different capability. /v1/bot is
-// beta bots's and /v1/bot/connect is bot's, and the host routes by specificity —
-// so bots's refusal must not answer for bot's surface.
+// PREFIXES NEST, and the deeper claim is a different capability. /v1/admin is
+// admin's and /v1/admin/authors is authors's, and the host routes by
+// specificity — so a refusal owed by one must not answer for the other.
 //
-// The symptom scales with the stage. Where the deeper neighbour is beta too it is
-// narrow: an org holding it and not the shallower one is refused its own product.
-// Where the deeper one is ga — as bot is here — it is a shipped product answering
-// 404 to everybody. A byte-prefix compare gets this wrong in both directions,
-// which is why the decision is manifest.OwnerOf: the router's own rule, asked
-// rather than restated.
+// A byte-prefix compare gets this wrong in both directions, which is why the
+// decision is manifest.OwnerOf: the router's own rule, asked rather than
+// restated. Under a byte compare, beta authors would refuse every /v1/admin
+// path — a shipped operator surface answering 404 to everybody.
 //
-// The pair used to be risk and label, which is where the case was found. Label,
-// reference and dataset have since come home to their own names (HIP-0139 §7.1),
-// so /v1/risk has one owner again and this asks the same question of a pair that
-// still nests — and bots/bot is the sharper one anyway, because the shallower
-// capability is the beta and the deeper is live.
+// The pair used to be risk and label, where the case was found, then bots and
+// bot. Label, reference and dataset have come home to their own names
+// (HIP-0139 §7.1) and bot and bots became one capability (§2.4), so this asks
+// the same question of a pair that still nests and is still split across two
+// stages: admin is ga, authors under it is beta.
 func TestTheRefusalYieldsToTheDeeperOwner(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // flags unreachable: bots refuses everything it owns
-	app := staged("bots")
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // flags unreachable: authors refuses everything it owns
+	app := staged("authors")
 
-	if code, body := fetch(t, app, "/v1/bot/connect", member); code != http.StatusOK {
-		t.Errorf("GET /v1/bot/connect = %d %s, want 200 — bots answered for bot's capability", code, body)
+	if code, _ := fetch(t, app, "/v1/admin/authors", member); code != http.StatusNotFound {
+		t.Errorf("GET /v1/admin/authors = %d, want 404 — authors did not answer for its own surface", code)
 	}
-	if code, _ := fetch(t, app, "/v1/bot/status", member); code != http.StatusNotFound {
-		t.Errorf("GET /v1/bot/status = %d, want 404 — bots did not answer for its own surface", code)
+	if code, body := fetch(t, app, "/v1/admin/leaderboard", member); code != http.StatusOK {
+		t.Errorf("GET /v1/admin/leaderboard = %d %s, want 200 — authors answered for leaderboard's capability", code, body)
 	}
 }

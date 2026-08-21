@@ -37,7 +37,7 @@ import (
 	"errors"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 )
 
 // mintKey returns a fresh publishable ingest key.
@@ -63,20 +63,20 @@ type keyResolver struct{ store *Store }
 // Resolve maps a publishable key to the write scope it names. A key no project
 // holds is (…, false) — not an error, not a fallback, and never an org on its own,
 // because a key without a project is exactly the case that must stop recording.
-func (r keyResolver) Resolve(ctx context.Context, key string) (analytics.Attribution, bool, error) {
+func (r keyResolver) Resolve(ctx context.Context, key string) (event.Attribution, bool, error) {
 	p, err := r.store.ResolveKey(ctx, key)
 	if errors.Is(err, errNotFound) {
-		return analytics.Attribution{}, false, nil
+		return event.Attribution{}, false, nil
 	}
 	if err != nil {
-		return analytics.Attribution{}, false, err
+		return event.Attribution{}, false, err
 	}
 	// Analytics off is a project that holds a valid key and has asked not to be
 	// recorded. Reporting it as unresolvable is the honest answer: the caller is
 	// told the write did not land, rather than being told it did while the row is
 	// dropped somewhere downstream.
 	if !p.Analytics {
-		return analytics.Attribution{}, false, nil
+		return event.Attribution{}, false, nil
 	}
-	return analytics.Attribution{Org: p.Org, Project: p.Slug}, true, nil
+	return event.Attribution{Org: p.Org, Project: p.Slug}, true, nil
 }

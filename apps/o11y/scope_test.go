@@ -189,7 +189,7 @@ func TestProductAliasResolution(t *testing.T) {
 		{"api", "cloud"},
 		{"llm", "gateway"},
 		{"router", "gateway"},
-		{"analytics", "insights-capture"},
+		{"event", "insights-capture"},
 		{"observe", "o11y"},
 		{"o11y", "o11y"},
 		{"kms", "kms"}, // identity — no alias needed

@@ -45,7 +45,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/pubsub"
 	"github.com/hanzoai/commerce/events"
 	"github.com/hanzoai/commerce/infra"
@@ -103,7 +103,7 @@ type streamSource struct {
 }
 
 // streams is the consumed set: COMMERCE (commerce.>), owned by hanzoai/commerce, and the
-// canonical event plane (analytics.EventStream, event.>), owned by apps/analytics — which
+// canonical event plane (event.EventStream, event.>), owned by apps/analytics — which
 // publishes it, names it, and configures its retention. Neither is this package's to
 // declare; both are this package's to read.
 var streams = []streamSource{
@@ -114,11 +114,11 @@ var streams = []streamSource{
 		ensure:   ensureCommerceStream,
 	},
 	{
-		stream:     analytics.EventStream,
-		subjects:   analytics.EventSubjects,
-		orgKey:     analytics.EventOrgKey,
-		notMineKey: analytics.EventSignalKey,
-		ensure:     analytics.EnsureEventStream,
+		stream:     event.EventStream,
+		subjects:   event.EventSubjects,
+		orgKey:     event.EventOrgKey,
+		notMineKey: event.EventSignalKey,
+		ensure:     event.EnsureEventStream,
 	},
 }
 

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/automations"
+	"github.com/hanzoai/cloud/apps/auto"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/openapi"
@@ -94,8 +94,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		ai:           deps.AI,
 		model:        cloud.DefaultModel,
 		audit:        deps.Audit,
-		invoke:       automations.InvokeTool,
-		toolOK:       automations.ToolExists,
+		invoke:       auto.InvokeTool,
+		toolOK:       auto.ToolExists,
 	}}
 	s.State.detectors = newDetectors(func(_ context.Context, org string) (*Store, error) {
 		return storeFor(stores, org)

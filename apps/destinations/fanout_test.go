@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/kms"
 	luxlog "github.com/luxfi/log"
 )
@@ -76,7 +76,7 @@ func TestFanOutEndToEnd(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 
-	consume(s, "acme", []analytics.SinkEvent{
+	consume(s, "acme", []event.SinkEvent{
 		{Name: "order_completed", DistinctID: "u1", Revenue: 49, Currency: "usd", MessageID: "m1", Time: time.Now()},
 		{Name: "$pageview", DistinctID: "u1", MessageID: "m2", Time: time.Now()},
 	})
@@ -105,7 +105,7 @@ func TestFanOutSkipsDisabledAndForeign(t *testing.T) {
 	// Disabled for acme.
 	_ = s.State.store.Upsert(ctx, Row{Org: "acme", Platform: "fake", Enabled: false, Config: Config{"pixelId": "px"}})
 
-	consume(s, "acme", []analytics.SinkEvent{{Name: "order_completed", MessageID: "m", Time: time.Now()}})
+	consume(s, "acme", []event.SinkEvent{{Name: "order_completed", MessageID: "m", Time: time.Now()}})
 	fd.mu.Lock()
 	if fd.batch != nil {
 		t.Fatal("disabled destination must not be sent to")
@@ -113,7 +113,7 @@ func TestFanOutSkipsDisabledAndForeign(t *testing.T) {
 	fd.mu.Unlock()
 
 	// A DIFFERENT org with no connection: consume is a no-op for it.
-	consume(s, "other", []analytics.SinkEvent{{Name: "order_completed", MessageID: "m", Time: time.Now()}})
+	consume(s, "other", []event.SinkEvent{{Name: "order_completed", MessageID: "m", Time: time.Now()}})
 	fd.mu.Lock()
 	if fd.batch != nil {
 		t.Fatal("foreign org must not reach acme's destination")
