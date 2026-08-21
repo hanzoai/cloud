@@ -239,7 +239,7 @@ type noInput struct{}
 // a body says.
 type destinationRef struct {
 	// Platform is the destination to act on, from the path: ga4 | meta | tiktok |
-	// linkedin | x | reddit | posthog | umami.
+	// linkedin | x | reddit | insights | analytics.
 	Platform string `json:"platform"`
 }
 
@@ -541,7 +541,7 @@ type DestinationStatus struct {
 	Enabled bool `json:"enabled"`
 	// Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this
 	// org, else the integrations connection named by the platform's Fallback, else
-	// no credential needed at all (a public-ingest sink like Umami). False on a
+	// no credential needed at all (a public-ingest sink like Analytics). False on a
 	// connected destination whose secret has gone missing — Connected && !Live is
 	// exactly the "reconnect me" state.
 	Live bool `json:"live"`

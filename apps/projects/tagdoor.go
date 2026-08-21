@@ -32,10 +32,14 @@ import (
 // browserTags names the platforms with a client-side pixel track.js can inject, and the
 // injector `type` it dispatches on. A platform absent here forwards server-side only.
 var browserTags = map[string]string{
-	"ga4":    "ga",
-	"meta":   "meta",
-	"tiktok": "tiktok",
-	"x":      "x",
+	"ga4":        "ga",
+	"google-ads": "gads",
+	"linkedin":   "linkedin",
+	"meta":       "meta",
+	"pinterest":  "pinterest",
+	"reddit":     "reddit",
+	"tiktok":     "tiktok",
+	"x":          "x",
 }
 
 type browserTagOut struct {
@@ -52,7 +56,8 @@ func init() {
 	openapi.Register("/v1/projects/tags", http.MethodGet, nil, tagConfig{})
 	openapi.Describe("/v1/projects/tags", http.MethodGet,
 		"The site's browser tag set for the hosted tag — which pixels to inject, by publishable key",
-		"Returns the client-side pixels the SITE has connected (GA/Meta/TikTok/X) with their "+
+		"Returns the client-side pixels the SITE has connected (GA4, Google Ads, LinkedIn, Meta, "+
+			"Pinterest, Reddit, TikTok, X) with their "+
 			"NON-SECRET ids, so the hosted tag injects them first-party and stamps each browser event "+
 			"with the same event_id the server-side Conversions API uses — deduping the two. Resolved "+
 			"per site: by the publishable key on ?key= when it names a project, else by the request "+
