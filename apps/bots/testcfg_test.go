@@ -1,4 +1,4 @@
-package bot
+package bots
 
 import (
 	"github.com/zap-proto/zip"

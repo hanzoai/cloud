@@ -54,7 +54,7 @@
 // and then forwards the invocation there: the tenant boundary would exist in the
 // socket layer and nowhere in the routing layer.
 
-package bot
+package bots
 
 import (
 	"bytes"
@@ -734,7 +734,7 @@ type Hop interface {
 const (
 	// PeerInvokePath is where PeerHandler must be mounted for NewHTTPHop to find
 	// it. One constant, both ends.
-	PeerInvokePath = "/v1/node/peer/invoke"
+	PeerInvokePath = "/v1/nodes/peer/invoke"
 
 	// peerTokenHeader carries the replica-to-replica secret. Deliberately not
 	// Authorization: this request has no user identity to present, and putting a

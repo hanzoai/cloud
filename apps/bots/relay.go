@@ -1,19 +1,19 @@
-// relay.go mounts /v1/bot/runtime/* — @hanzo/bot's OWN operational paths (health, and the
+// relay.go mounts /v1/bots/runtime/* — @hanzo/bot's OWN operational paths (health, and the
 // surfaces the console Bot module links out to), relayed verbatim. It is the
 // executor's ops face, not a control plane: a liveness probe is not a
 // tenant-scoped resource, so it stays a relay rather than being reimplemented in
-// Go. Everything a tenant can ACT on is native and typed beside it — /v1/bot/runs is
+// Go. Everything a tenant can ACT on is native and typed beside it — /v1/bots/runs is
 // the run control plane (run.go).
 //
 // Path mapping: the executor serves bare paths (/health, /v1/chat/completions),
-// NOT the /v1/bot/runtime/* prefix — the edge strips it. So this face strips /v1/bot/runtime too:
-// /v1/bot/runtime/<rest> → {executor}/<rest> (e.g. /v1/bot/runtime/health → /health).
+// NOT the /v1/bots/runtime/* prefix — the edge strips it. So this face strips /v1/bots/runtime too:
+// /v1/bots/runtime/<rest> → {executor}/<rest> (e.g. /v1/bots/runtime/health → /health).
 //
-// Order 143 — binds /v1/bot/runtime/* before the AI subsystem's /v1/* catch-all (150).
+// Order 143 — binds /v1/bots/runtime/* before the AI subsystem's /v1/* catch-all (150).
 //
 // The package doc lives once, in node.go.
 
-package bot
+package bots
 
 import (
 	"bytes"
@@ -41,12 +41,12 @@ import (
 func init() {
 	const summary = "Relay one of the bot runtime's own operational paths"
 	const description = "Forwards a request to the bot runtime — the service that executes " +
-		"channels and skills — and hands back its answer unchanged. `/v1/bot/runtime` is stripped " +
-		"before forwarding, because the runtime serves bare paths: /v1/bot/runtime/health reaches it " +
+		"channels and skills — and hands back its answer unchanged. `/v1/bots/runtime` is stripped " +
+		"before forwarding, because the runtime serves bare paths: /v1/bots/runtime/health reaches it " +
 		"as /health.\n\n" +
 		"This is the runtime's OPS face, not a control plane. A liveness probe is not a " +
 		"tenant-scoped resource, so it stays a relay rather than being reimplemented in Go; " +
-		"everything a tenant can ACT on is native and typed at /v1/bot/runs.\n\n" +
+		"everything a tenant can ACT on is native and typed at /v1/bots/runs.\n\n" +
 		"A validated principal is required and the request is refused with 403 before " +
 		"anything is forwarded — the runtime trusts the identity headers it receives as " +
 		"gateway-minted, so an unauthenticated call must never be allowed to hand it a victim " +
@@ -57,7 +57,7 @@ func init() {
 		"One registration owns this address for every method, so which methods actually " +
 		"answer is the runtime's decision, not this edge's."
 	for _, m := range openapi.Methods() {
-		openapi.Describe("/v1/bot/runtime/*", m, summary, description)
+		openapi.Describe("/v1/bots/runtime/*", m, summary, description)
 	}
 }
 
@@ -75,16 +75,16 @@ type relay struct {
 	cc     *http.Client
 }
 
-// mountRelay registers the /v1/bot/runtime/* surface on app per HIP-0106. Mount
+// mountRelay registers the /v1/bots/runtime/* surface on app per HIP-0106. Mount
 // (node.go) calls it last: one capability, one entry point, three families.
 //
 // IT HAS ITS OWN SEGMENT, and that is what made the merge safe. The relay was
-// app.All("/v1/bot/*") in a separate app while the node plane served
-// /v1/node/connect, /v1/node and /v1/node/peer/invoke from another — one greedy
+// app.All("/v1/bots/*") in a separate app while the node plane served
+// /v1/nodes/connect, /v1/nodes and /v1/nodes/peer/invoke from another — one greedy
 // wildcard over the whole of a sibling's subtree, kept apart only by two manifest
 // rows and the router's specificity rule. In one app the wildcard would sit beside
 // the routes it can swallow, so it does not: it forwards from under
-// /v1/bot/runtime and cannot reach a sibling at all.
+// /v1/bots/runtime and cannot reach a sibling at all.
 func mountRelay(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("bot.mountRelay: nil app")
@@ -110,9 +110,9 @@ func mountRelay(app cloud.Router, deps cloud.Deps) error {
 	//     frequently not JSON at all. A typed op answers its DECLARED status and
 	//     serialises its Out as JSON, so both move.
 	//
-	// The tenant-actionable surface is native and typed elsewhere: /v1/bot/runs is the
+	// The tenant-actionable surface is native and typed elsewhere: /v1/bots/runs is the
 	// run control plane (run.go). This face is ops, and it stays a relay.
-	app.All("/v1/bot/runtime/*", s.proxy)
+	app.All("/v1/bots/runtime/*", s.proxy)
 	s.log.Info("bot relay surface mounted", "target", s.target, "brand", deps.Brand)
 	return nil
 }
@@ -126,7 +126,7 @@ func (s *relay) proxy(c *zip.Ctx) error {
 	if !principal.Validated(c) {
 		return zip.ErrForbidden("no validated principal")
 	}
-	// Strip the /v1/bot/runtime prefix — the runtime serves bare paths.
+	// Strip the /v1/bots/runtime prefix — the runtime serves bare paths.
 	rest := strings.TrimPrefix(c.Fiber().Params("*"), "/")
 	target := s.target + "/" + rest
 	if q := c.Fiber().Request().URI().QueryString(); len(q) > 0 {
