@@ -117,7 +117,6 @@ type Deps struct {
 	// Each is an interface with both in-process and ZAP-RPC implementations.
 	IAM      IAMClient
 	KMS      KMSClient
-	Base     BaseClient
 	Commerce CommerceClient
 	// AI runs CHAT COMPLETIONS (a WRITE endpoint): agents, guide, crm, content,
 	// sitegen, code /ask. It authenticates with the binary's IAM M2M identity — a
@@ -132,13 +131,6 @@ type Deps struct {
 	Embed AIClient
 	O11y  O11yClient
 	VFS   VFSClient
-	MQ    MQClient
-
-	// Payments + Vault stay out-of-process (PCI scope isolation per
-	// HIP-0106). These clients always resolve to ZAP-RPC implementations,
-	// never in-process.
-	Payments PaymentsClient
-	Vault    VaultClient
 
 	// Metering is the canonical commerce billing client used by the
 	// request-edge BillingGate. It speaks net/http to commerce's billing API
@@ -181,14 +173,10 @@ type Deps struct {
 
 type IAMClient = types.IAMClient
 type KMSClient = types.KMSClient
-type BaseClient = types.BaseClient
 type CommerceClient = types.CommerceClient
 type AIClient = types.AIClient
 type O11yClient = types.O11yClient
 type VFSClient = types.VFSClient
-type MQClient = types.MQClient
-type PaymentsClient = types.PaymentsClient
-type VaultClient = types.VaultClient
 
 // --- shared transport shapes ---
 //
@@ -203,7 +191,6 @@ type VaultClient = types.VaultClient
 type Claims = types.Claims
 type User = types.User
 type Org = types.Org
-type DBHandle = types.DBHandle
 
 // OrgConfig and LicenseEntitlement are the two values CommerceClient's methods
 // name. Both are aliased here for the same reason the interface is: a subsystem
@@ -219,8 +206,3 @@ type EmbedRequest = types.EmbedRequest
 type Counter = types.Counter
 type Timing = types.Timing
 type Span = types.Span
-type IntentRequest = types.IntentRequest
-type IntentResponse = types.IntentResponse
-type IntentStatus = types.IntentStatus
-type VaultChargeRequest = types.VaultChargeRequest
-type VaultChargeResponse = types.VaultChargeResponse

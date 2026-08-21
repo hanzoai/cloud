@@ -61,7 +61,7 @@ func staged(names ...string) *zip.App {
 	}
 	served := func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"served": c.Path()}) }
 	app.Get("/v1/research/runs", served) // research is a staged (alpha) capability
-	app.Get("/v1/iam/keys", served)    // ga, serves without a flag
+	app.Get("/v1/iam/keys", served)      // ga, serves without a flag
 	app.Get("/v1/health", served)
 	return app
 }

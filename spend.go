@@ -339,7 +339,7 @@ var meteredApps = []string{
 	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
 	"risk",         // per-screen fee inside each op.
 	"s3",           // object-storage data plane.
-	"sandbox",    // the lease, gated and debited around the pod (currently priced at zero).
+	"sandbox",      // the lease, gated and debited around the pod (currently priced at zero).
 	"security",     // scan fee.
 	"share",        // one tunnel account provisioned on the fabric; reading it back is free.
 	"seo",          // measurement resold at the vendor's own per-call price.
@@ -347,9 +347,9 @@ var meteredApps = []string{
 	"tools",        // per-tool dispatch.
 	"todo",         // per-project/issue fee.
 	"translate",    // per-character fee.
-	"validator",   // one validator node materialized on the cluster, 200Gi, until deleted.
+	"validator",    // one validator node materialized on the cluster, 200Gi, until deleted.
 	"visor",        // GPU clusters (compute).
-	"wallet",      // ring keygen, threshold signing and Safe proposals; KMS custody is free.
+	"wallet",       // ring keygen, threshold signing and Safe proposals; KMS custody is free.
 	"websearch",    // the bought engines (Brave, Mojeek API); the keyless ones are free.
 	"zen",          // zen SKU token costs (zen self-meters).
 }
@@ -484,15 +484,15 @@ func Reachable(path string) bool {
 // under commerce's own root, which this list already had, so the exemption is a
 // property of where they live rather than a second entry to keep in step.
 var reachableTrees = []string{
-	"/v1/billing/",      // the whole money surface: subscribe, top up, AND the inbound provider webhooks.
-	"/v1/commerce/",     // the checkout, the tenant reads, AND the SuperAdmin plan + catalog CMS.
-	"/v1/iam/",          // IAM login / OAuth token exchange / .well-known OIDC discovery.
-	"/v1/account/",      // keys, csrf, appearance, avatar, embed and the org create + switch.
-	"/v1/admin/",        // platform sudo — including the cockpit that holds this gate's kill switch.
-	"/v1/plan/",         // the plan catalog — WHAT to buy (@hanzo/plans) — and its sub-routes.
-	"/v1/models/",       // the model catalog the shell reads for discovery, and /v1/models/:id.
-	"/v1/waitlist/",     // admission's join API — an un-admitted user must still reach it.
-	"/v1/flags/",        // the guard's public mode read; also how the kill switch is observed.
+	"/v1/billing/",     // the whole money surface: subscribe, top up, AND the inbound provider webhooks.
+	"/v1/commerce/",    // the checkout, the tenant reads, AND the SuperAdmin plan + catalog CMS.
+	"/v1/iam/",         // IAM login / OAuth token exchange / .well-known OIDC discovery.
+	"/v1/account/",     // keys, csrf, appearance, avatar, embed and the org create + switch.
+	"/v1/admin/",       // platform sudo — including the cockpit that holds this gate's kill switch.
+	"/v1/plan/",        // the plan catalog — WHAT to buy (@hanzo/plans) — and its sub-routes.
+	"/v1/models/",      // the model catalog the shell reads for discovery, and /v1/models/:id.
+	"/v1/waitlist/",    // admission's join API — an un-admitted user must still reach it.
+	"/v1/flags/",       // the guard's public mode read; also how the kill switch is observed.
 	"/v1/entitlement/", // per-org enablement reads/writes that sit beside the projection.
 }
 
