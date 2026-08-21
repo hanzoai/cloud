@@ -46,21 +46,44 @@ const (
 // stored row. Secret is returned ONLY on create (json omitempty + cleared elsewhere),
 // so the signing key leaves the server exactly once.
 type Endpoint struct {
-	ID          string   `json:"id"`
-	Org         string   `json:"org"`
-	URL         string   `json:"url"`
-	Events      []string `json:"events"`
-	Secret      string   `json:"secret,omitempty"`
-	Status      string   `json:"status"`
-	Description string   `json:"description,omitempty"`
-	CreatedAt   string   `json:"created"`
-	UpdatedAt   string   `json:"updated"`
+	// ID is the endpoint's handle, server-minted and stable for its life. It is what
+	// every other route here addresses.
+	ID string `json:"id"`
+	// Org is the tenant that owns the endpoint, taken from the validated principal
+	// rather than from any request field.
+	Org string `json:"org"`
+	// URL is where the POST goes. Changing it is the one edit that redirects an
+	// org's events, which is why it is never bindable from a query string.
+	URL string `json:"url"`
+	// Events are the subject patterns this endpoint subscribes to
+	// ("commerce.order.>"). An EMPTY list means every event, not none.
+	Events []string `json:"events"`
+	// Secret is the HMAC-SHA256 signing key a subscriber recomputes the signature
+	// with. It is returned exactly ONCE, on create: a later read of the endpoint
+	// omits it, so a lost secret is replaced rather than recovered.
+	Secret string `json:"secret,omitempty"`
+	// Status is "active" or "disabled" — nothing else is accepted. A disabled
+	// endpoint keeps its subscription and receives no deliveries, except a manual
+	// test send, which goes out anyway.
+	Status string `json:"status"`
+	// Description is the operator's own label for the endpoint. Never sent anywhere.
+	Description string `json:"description,omitempty"`
+	// CreatedAt is when the endpoint was registered, RFC3339 in UTC — stored in that
+	// spelling because it sorts as a string.
+	CreatedAt string `json:"created"`
+	// UpdatedAt is when its url, events, status or description last changed.
+	UpdatedAt string `json:"updated"`
 
-	// Deliveries7d / Failures7d are cheap usage counters computed from the delivery log
-	// over usageWindow (not stored columns) and populated ONLY on list/get. They are 0
-	// when there is no delivery history — never omitempty, so the console always sees them.
+	// Deliveries7d is how many deliveries SETTLED in the trailing 7 days — the
+	// attempts that ended ok or failed, so a delivery still retrying is in neither
+	// counter yet. It is counted from the log at read time rather than stored, and
+	// it is filled only on a list or a get; a create answers 0 because there is no
+	// history, which is why it is never omitted.
 	Deliveries7d int `json:"deliveries7d"`
-	Failures7d   int `json:"failures7d"`
+	// Failures7d is how many of those settled as failed — the subscriber never
+	// accepted it and no further attempt will be made. It is the numerator to
+	// Deliveries7d, over the same window.
+	Failures7d int `json:"failures7d"`
 }
 
 // DeliveryRow is one recorded delivery attempt: the /:id/deliveries wire model AND the
@@ -68,23 +91,44 @@ type Endpoint struct {
 // attempt, all sharing a Delivery id; Status is "ok" | "retrying" | "failed". HTTPStatus
 // is 0 on a network/timeout error, Error is empty on success.
 type DeliveryRow struct {
+	// EndpointID is which subscriber this attempt was for.
 	EndpointID string `json:"endpoint"`
+	// DeliveryID groups the attempts for ONE event to ONE endpoint. Rows sharing it
+	// are the same delivery being retried, not separate events.
 	DeliveryID string `json:"delivery"`
-	Subject    string `json:"subject"`
-	Attempt    int    `json:"attempt"`
-	Status     string `json:"status"`
-	HTTPStatus int    `json:"httpStatus"`
-	Error      string `json:"error,omitempty"`
-	DurationMs int64  `json:"durationMs"`
-	Created    string `json:"created"`
+	// Subject is the event that was delivered ("commerce.order.created"). A manual
+	// test send carries "webhook.test".
+	Subject string `json:"subject"`
+	// Attempt is which try this row is, starting at 1. The ladder waits 1s, then 5s,
+	// then 25s before the next one.
+	Attempt int `json:"attempt"`
+	// Status is "ok" when the subscriber accepted it, "retrying" while a further
+	// attempt will follow, and "failed" when none will. Exactly one row of a delivery
+	// is terminal.
+	Status string `json:"status"`
+	// HTTPStatus is what the subscriber answered. ZERO means it never answered — a
+	// refused connection, a DNS failure or a timeout — which is why a zero here is
+	// not a 200.
+	HTTPStatus int `json:"httpStatus"`
+	// Error says what went wrong on a non-ok attempt. Empty on success.
+	Error string `json:"error,omitempty"`
+	// DurationMs is how long this attempt took end to end, in MILLISECONDS.
+	DurationMs int64 `json:"durationMs"`
+	// Created is when the attempt was made, RFC3339 in UTC.
+	Created string `json:"created"`
 }
 
 // testResult is the inline outcome of a synchronous /:id/test send.
 type testResult struct {
-	Delivered  bool   `json:"delivered"`
-	HTTPStatus int    `json:"httpStatus"`
-	DurationMs int64  `json:"durationMs"`
-	Error      string `json:"error,omitempty"`
+	// Delivered is whether the subscriber accepted the test POST. It is the whole
+	// answer: the send is synchronous and is not retried.
+	Delivered bool `json:"delivered"`
+	// HTTPStatus is what the subscriber answered, or 0 if it never answered.
+	HTTPStatus int `json:"httpStatus"`
+	// DurationMs is how long the single attempt took, in MILLISECONDS.
+	DurationMs int64 `json:"durationMs"`
+	// Error says what stopped it. Empty when delivered.
+	Error string `json:"error,omitempty"`
 }
 
 // endpointRef addresses one of the caller org's endpoints. The id is the path
