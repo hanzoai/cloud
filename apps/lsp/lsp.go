@@ -90,10 +90,18 @@ type Query struct {
 // populated, so a client reads the field its op names and never discriminates a
 // union.
 type Answer struct {
-	Op   string `json:"op"`
+	// Op is the question that was asked: hover, locate, symbols, diagnostics or
+	// complete. It names which result field below is the populated one.
+	Op string `json:"op"`
+	// Lang is the language the server that answered speaks ("go"), as the daemon
+	// reports it. Empty when the daemon named none.
 	Lang string `json:"lang"`
+	// Repo is the repository the question was about, echoed back.
 	Repo string `json:"repo"`
-	Rev  string `json:"rev"`
+	// Rev is the RESOLVED commit sha, never the branch or tag that was asked for.
+	// It is what makes an answer re-askable: a branch moves, this does not.
+	Rev string `json:"rev"`
+	// Path is the repo-relative file the question was about, echoed back.
 	Path string `json:"path"`
 
 	// Cold reports that this request paid to PREPARE the revision — the tree
@@ -101,10 +109,20 @@ type Answer struct {
 	// the billed event, surfaced so a caller can see what it was charged for.
 	Cold bool `json:"cold"`
 
-	Locations   []Location   `json:"locations,omitempty"`
-	Hover       string       `json:"hover,omitempty"`
-	Symbols     []Symbol     `json:"symbols,omitempty"`
+	// Locations is locate's answer: where the symbol is defined, referenced, typed
+	// or implemented, per the relation asked for. Empty means the server resolved
+	// nothing there, which is an answer.
+	Locations []Location `json:"locations,omitempty"`
+	// Hover is hover's answer: the type and documentation as the language server
+	// itself renders them, so it is prose meant to be shown, not parsed.
+	Hover string `json:"hover,omitempty"`
+	// Symbols is symbols' answer: the file's whole outline, position ignored.
+	Symbols []Symbol `json:"symbols,omitempty"`
+	// Completions is complete's answer: the candidates at the position, typed and
+	// resolved through the repository's dependencies rather than guessed from text.
 	Completions []Completion `json:"completions,omitempty"`
+	// Diagnostics is diagnostics' answer: every problem the server finds in the
+	// whole file, position ignored. Empty means it found none.
 	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
 }
 
@@ -113,46 +131,78 @@ type Answer struct {
 // coordinate it landed in ("golang.org/x/mod@v0.14.0/semver/semver.go"), which is
 // the whole reason this service exists.
 type Location struct {
-	Path     string `json:"path"`
-	External bool   `json:"external,omitempty"`
-	Range    Range  `json:"range"`
+	// Path is repo-relative while External is false, and the module coordinate
+	// ("golang.org/x/mod@v0.14.0/semver/semver.go") once it is true.
+	Path string `json:"path"`
+	// External is true when the answer left the repository — the case a static index
+	// cannot answer, and the reason this service resolves through dependencies.
+	External bool `json:"external,omitempty"`
+	// Range is the span inside that file, in LSP positions.
+	Range Range `json:"range"`
 }
 
 // Position is the LSP's: 0-based line, 0-based UTF-16 character.
 type Position struct {
-	Line      int `json:"line"`
+	// Line is 0-BASED, per the LSP specification — one less than the line an editor
+	// shows a human.
+	Line int `json:"line"`
+	// Character is a 0-based UTF-16 code-unit offset within Line, per the LSP
+	// specification: not a byte offset and not a rune index. An emoji before the
+	// cursor counts as one here and as two in Go's arithmetic.
 	Character int `json:"character"`
 }
 
 // Range is a half-open span between two positions.
 type Range struct {
+	// Start is the first position in the span, included.
 	Start Position `json:"start"`
-	End   Position `json:"end"`
+	// End is the position just past the span, excluded — the range is half-open, so
+	// an empty range has Start equal to End.
+	End Position `json:"end"`
 }
 
 // Symbol is one entry in a file's outline.
 type Symbol struct {
-	Name   string `json:"name"`
-	Kind   int    `json:"kind"`
+	// Name is the declared identifier.
+	Name string `json:"name"`
+	// Kind is the LSP SymbolKind number (5 class, 6 method, 12 function, 23 struct,
+	// …), passed through rather than translated to a word — these callers already
+	// speak LSP, and inventing a second vocabulary is how the two drift.
+	Kind int `json:"kind"`
+	// Detail is the server's short elaboration, typically the signature. Absent when
+	// it offered none.
 	Detail string `json:"detail,omitempty"`
-	Range  Range  `json:"range"`
+	// Range is the declaration's span in the file.
+	Range Range `json:"range"`
 }
 
 // Completion is one candidate at a position.
 type Completion struct {
-	Label  string `json:"label"`
-	Kind   int    `json:"kind,omitempty"`
+	// Label is the text a client would insert, and what an editor lists.
+	Label string `json:"label"`
+	// Kind is the LSP CompletionItemKind number (2 method, 3 function, 5 field, 6
+	// variable, …), passed through as the protocol spells it.
+	Kind int `json:"kind,omitempty"`
+	// Detail is the server's short elaboration, typically the type or signature.
 	Detail string `json:"detail,omitempty"`
 }
 
 // Diagnostic is one problem the server reported. Severity is the LSP's: 1 error,
 // 2 warning, 3 information, 4 hint.
 type Diagnostic struct {
-	Range    Range  `json:"range"`
-	Severity int    `json:"severity,omitempty"`
-	Code     any    `json:"code,omitempty"`
-	Source   string `json:"source,omitempty"`
-	Message  string `json:"message"`
+	// Range is the span the problem is about.
+	Range Range `json:"range"`
+	// Severity is the LSP's: 1 error, 2 warning, 3 information, 4 hint. A file with
+	// only 3s and 4s still compiles.
+	Severity int `json:"severity,omitempty"`
+	// Code is the checker's own identifier for the rule, a string or a number
+	// depending on the server. Absent when it published none.
+	Code any `json:"code,omitempty"`
+	// Source is which checker reported it ("compiler", "go vet", a linter's name),
+	// which is what separates a build error from a style opinion.
+	Source string `json:"source,omitempty"`
+	// Message is the problem in the server's own words, meant to be shown.
+	Message string `json:"message"`
 }
 
 // The two shapes a caller may name, narrowed HERE so a malformed one costs no
