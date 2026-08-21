@@ -466,6 +466,11 @@ func toolsCall(t *testing.T, app *zip.App, org, op, args string) (string, bool) 
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
+	// `error` is decoded beside `result`, and it is load-bearing. A JSON-RPC
+	// error frame carries NO `result`, so `Result.IsError` decodes to FALSE —
+	// indistinguishable from a success. A caller asking this helper "was that
+	// refused?" would read -32602 "no such tool" as permission granted, so a
+	// gate would look green because the name it guards does not exist.
 	var env struct {
 		Result struct {
 			Content []struct {
@@ -473,9 +478,17 @@ func toolsCall(t *testing.T, app *zip.App, org, op, args string) (string, bool) 
 			} `json:"content"`
 			IsError bool `json:"isError"`
 		} `json:"result"`
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &env); err != nil {
 		t.Fatalf("tools/call %s: %v (%s)", op, err, raw)
+	}
+	if env.Error != nil {
+		t.Fatalf("tools/call %s: protocol error, so the op never ran and nothing was "+
+			"gated: %d %s", op, env.Error.Code, env.Error.Message)
 	}
 	if len(env.Result.Content) == 0 {
 		t.Fatalf("tools/call %s returned no content: %s", op, raw)
