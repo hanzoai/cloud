@@ -97,9 +97,11 @@ type orgsOut struct {
 type orgsIn struct {
 	// Page is the 1-based page number. Defaults to "1".
 	Page string `json:"p"`
-	// PageSize is rows per page. Defaults to "200", the shared admin page size.
-	// It bounds the fan-out: the page decides how many per-org reads happen, so
-	// the directory costs the same at eighty tenants and at eight thousand.
+	// PageSize is rows per page: 20 by default, 100 at most. It is deliberately
+	// below the 200 the rest of the admin surface uses, because a row here is not
+	// a row of text — each one still costs its own wallet read. The page size IS
+	// the fan-out width, so the directory costs the same at eighty tenants and at
+	// eight thousand.
 	PageSize string `json:"pageSize"`
 }
 
