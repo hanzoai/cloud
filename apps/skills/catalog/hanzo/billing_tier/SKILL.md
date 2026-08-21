@@ -1,7 +1,7 @@
 ---
 name: billing_tier
 version: "8.0.0"
-description: "Read billing tier: The subject's plan tier and the balance a metered call is admitted on."
+description: "Read billing tier: Answers which tier the caller is on, what it allows, and what is left to spend.."
 ---
 
 # Hanzo · BILLING · tier
@@ -14,11 +14,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/billing/tier` — The subject's plan tier and the balance a metered call is admitted on
+- `GET https://api.hanzo.ai/v1/billing/tier` — Answers which tier the caller is on, what it allows, and what is left to spend.
 
 ## Response
 
-- `/v1/billing/tier` → JSON object.
+- `/v1/billing/tier` → `Tier` object with fields: `balance`, `tier`, `user`, `windows`.
 
 ## Example
 

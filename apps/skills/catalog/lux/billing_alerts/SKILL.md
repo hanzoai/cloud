@@ -1,7 +1,7 @@
 ---
 name: billing_alerts
 version: "8.0.0"
-description: "Read billing alerts: List your org's spend caps and rate limits, The per-request spend-cap verdict the metering gate consumes."
+description: "Read billing alerts: Lists this org's spend caps: the ceiling, its scope, whether it enforces, and how much of it has been spent this period., Answers whether one proposed spend fits inside this org's caps.."
 ---
 
 # Lux · BILLING · alerts
@@ -14,13 +14,22 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/billing/alerts` — List your org's spend caps and rate limits
-- `GET https://api.lux.network/v1/billing/alerts/authorize` — The per-request spend-cap verdict the metering gate consumes
+- `GET https://api.lux.network/v1/billing/alerts` — Lists this org's spend caps: the ceiling, its scope, whether it enforces, and how much of it has been spent this period.
+- `GET https://api.lux.network/v1/billing/alerts/authorize` — Answers whether one proposed spend fits inside this org's caps.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+|---|---|---|---|---|
+| `amount` | query | no | string | Amount is the proposed spend in cents. |
+| `project` | query | no | string | Project narrows the verdict to one project's caps. Empty is the org-wide row. |
+| `pv` | query | no | string | PV is "1" when the caller ESTABLISHED the project rather than merely carrying a claim of one. An unproven project may not deny traffic. |
+| `service` | query | no | string | Service narrows it to one service's caps. Empty is every service. |
 
 ## Response
 
-- `/v1/billing/alerts` → JSON object.
-- `/v1/billing/alerts/authorize` → JSON object.
+- `/v1/billing/alerts` → JSON array of `Alert`.
+- `/v1/billing/alerts/authorize` → `CapVerdict` object with fields: `allow`, `capCents`, `reason`, `spentCents`, `warnPct`.
 
 ## Example
 

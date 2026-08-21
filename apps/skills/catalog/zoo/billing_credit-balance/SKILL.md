@@ -1,7 +1,7 @@
 ---
 name: billing_credit-balance
 version: "8.0.0"
-description: "Read billing credit balance: What is left of your credit, as one number, What is left of your credit, grouped by where it came from."
+description: "Read billing credit balance: Answers what the caller can spend right now, one entry per currency., Answers that same spendable credit split by grant tag, with the earliest expiry under each and the total across all of them.."
 ---
 
 # Zoo · BILLING · credit balance
@@ -14,12 +14,12 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/billing/credit-balance` — What is left of your credit, as one number
-- `GET https://api.zoo.ngo/v1/billing/credit-balance/breakdown` — What is left of your credit, grouped by where it came from
+- `GET https://api.zoo.ngo/v1/billing/credit-balance` — Answers what the caller can spend right now, one entry per currency.
+- `GET https://api.zoo.ngo/v1/billing/credit-balance/breakdown` — Answers that same spendable credit split by grant tag, with the earliest expiry under each and the total across all of them.
 
 ## Response
 
-- `/v1/billing/credit-balance` → JSON object.
+- `/v1/billing/credit-balance` → `CreditBalance` object with fields: `balances`, `userId`.
 - `/v1/billing/credit-balance/breakdown` → JSON object.
 
 ## Example
