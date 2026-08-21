@@ -20,9 +20,17 @@ func main() {
 		Name:  "commerce",
 		Price: cloud.Free,
 		Mount: commerce.Mount,
-		// commerce wraps ALL of /v1 (mount.go: app.Group("/v1").Use(...)), so the
-		// grant is real and stated, not inherited from a signature.
+		// The embedded module installs its identity boundary at the ROOT of the
+		// shared app — EdgeAuth, the events local and the require gate are each
+		// an app.Router.Use (hanzoai/commerce server.go) — so the grant is real
+		// and stated, not inherited from a signature.
 		Global: true,
+		// The liveness probe is commerce's own typed op (mount.go), registered
+		// before the module embed boots so it still answers when the embed
+		// failed and every business route serves the fail-closed 503. Declared
+		// here so serve.go's generic always-ok /v1/commerce/health steps aside;
+		// two declarations of one address is a boot refusal, not a merge.
+		OwnsHealth: true,
 	}}, []string{"commerce"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

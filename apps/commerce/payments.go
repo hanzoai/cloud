@@ -129,7 +129,7 @@ type paymentOps struct{}
 // exposePayments publishes the payment surface. Mount calls it.
 //
 // Neither op is registered on a group at its own address with an empty leaf: joining
-// a "/v1/payments" group with "" yields "/v1/payments/", a different route from the
+// a "/v1/commerce/payments" group with "" yields "/v1/commerce/payments/", a different route from the
 // one an agent will call. The read is therefore declared on the APP with its whole
 // path, and the write on a "/v1" group carrying the screen (below) — same two
 // addresses either way. The app-wide cloud.Bridge (serve.go) is what parks the
@@ -191,12 +191,12 @@ func exposePayments(app *zip.App, s screen) {
 	// registration by taking the doc comment off `build`, which is where the operation
 	// is described and where "a payment is RISK-SCREENED before the card is charged"
 	// has always been written.
-	zip.Post(app, "/v1/payments", o.take(s),
+	zip.Post(app, "/v1/commerce/payments", o.take(s),
 		zip.WithOperationID("takePayment"),
 		zip.WithSummary("Take a card payment and credit the org's balance"),
 		zip.WithTags("payments"),
 		zip.WithStatus(http.StatusCreated))
-	zip.Get(app, "/v1/payments/:id", o.get,
+	zip.Get(app, "/v1/commerce/payments/:id", o.get,
 		zip.WithOperationID("getPayment"),
 		zip.WithSummary("Read one settled payment by its id"),
 		zip.WithTags("payments"))
@@ -322,6 +322,6 @@ func payingOrg(ctx context.Context, op string) (*organization.Organization, erro
 // paymentsPrefix is the subtree the payment ops own. It is declared in Prefixes
 // (mount.go) and, by hand, in manifest/apps.go — the light host must not import
 // an app package, so the two copies are kept equal deliberately.
-const paymentsPrefix = "/v1/payments"
+const paymentsPrefix = "/v1/commerce/payments"
 
 var _ = cloud.Bridge // payments read identity through the app-wide bridge

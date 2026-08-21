@@ -128,15 +128,15 @@ func TestAdminCatalog_HTTP(t *testing.T) {
 	single := modelFrom(t, do, func(id string) bool { return id != slashID && !slashed(id) })
 
 	// --- gating of the admin surface itself ---------------------------------
-	if resp, _ := do("PATCH", "/v1/admin/catalog/models/"+slashID, `{"enabled":false}`, nil); resp.StatusCode != http.StatusForbidden {
+	if resp, _ := do("PATCH", "/v1/admin/pricing/catalog/models/"+slashID, `{"enabled":false}`, nil); resp.StatusCode != http.StatusForbidden {
 		t.Errorf("non-admin PATCH must be 403, got %d", resp.StatusCode)
 	}
-	if resp, _ := do("GET", "/v1/admin/catalog", "", acme); resp.StatusCode != http.StatusForbidden {
-		t.Errorf("non-admin GET /v1/admin/catalog must be 403, got %d", resp.StatusCode)
+	if resp, _ := do("GET", "/v1/admin/pricing/catalog", "", acme); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("non-admin GET /v1/admin/pricing/catalog must be 403, got %d", resp.StatusCode)
 	}
 
 	// --- admin disables a slashed-id model (verifies wildcard routing) ------
-	resp, body := do("PATCH", "/v1/admin/catalog/models/"+slashID, `{"enabled":false}`, admin)
+	resp, body := do("PATCH", "/v1/admin/pricing/catalog/models/"+slashID, `{"enabled":false}`, admin)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("admin PATCH must be 200 (wildcard route), got %d: %s", resp.StatusCode, body)
 	}
@@ -157,7 +157,7 @@ func TestAdminCatalog_HTTP(t *testing.T) {
 	}
 
 	// --- per-customer beta: add acme, only acme sees it ---------------------
-	if resp, _ := do("PATCH", "/v1/admin/catalog/models/"+slashID, `{"betaOrgs":["acme"]}`, admin); resp.StatusCode != http.StatusOK {
+	if resp, _ := do("PATCH", "/v1/admin/pricing/catalog/models/"+slashID, `{"betaOrgs":["acme"]}`, admin); resp.StatusCode != http.StatusOK {
 		t.Fatalf("admin PATCH betaOrgs must be 200, got %d", resp.StatusCode)
 	}
 	if _, lbeta := do("GET", "/v1/pricing/models", "", acme); !modelsContain(lbeta, slashID) {
@@ -185,12 +185,12 @@ func TestAdminCatalog_HTTP(t *testing.T) {
 
 	// --- FIX #5: oversized / over-deep overrides are rejected at the boundary
 	deep := `{"betaOrgs":[],"overrides":` + strings.Repeat(`{"a":`, 40) + "1" + strings.Repeat("}", 40) + `}`
-	if resp, _ := do("PATCH", "/v1/admin/catalog/models/"+single, deep, admin); resp.StatusCode != http.StatusBadRequest {
+	if resp, _ := do("PATCH", "/v1/admin/pricing/catalog/models/"+single, deep, admin); resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("FIX#5: over-deep override must be 400, got %d", resp.StatusCode)
 	}
 
 	// --- single-model gate (single-segment id) 404s without an oracle ------
-	if resp, _ := do("PATCH", "/v1/admin/catalog/models/"+single, `{"enabled":false}`, admin); resp.StatusCode != http.StatusOK {
+	if resp, _ := do("PATCH", "/v1/admin/pricing/catalog/models/"+single, `{"enabled":false}`, admin); resp.StatusCode != http.StatusOK {
 		t.Fatalf("admin PATCH %s must be 200, got %d", single, resp.StatusCode)
 	}
 	if resp, _ := do("GET", "/v1/pricing/model/"+single, "", acme); resp.StatusCode != http.StatusNotFound {
@@ -201,9 +201,9 @@ func TestAdminCatalog_HTTP(t *testing.T) {
 	}
 
 	// --- admin catalog returns annotated entries ----------------------------
-	resp, ab := do("GET", "/v1/admin/catalog", "", admin)
+	resp, ab := do("GET", "/v1/admin/pricing/catalog", "", admin)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("admin GET /v1/admin/catalog must be 200, got %d", resp.StatusCode)
+		t.Fatalf("admin GET /v1/admin/pricing/catalog must be 200, got %d", resp.StatusCode)
 	}
 	var ac struct {
 		Models []Model `json:"models"`

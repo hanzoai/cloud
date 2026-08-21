@@ -860,7 +860,7 @@ func (s *Store) ReferralCountsByAffiliate(ctx context.Context) (map[string]int, 
 	return out, rows.Err()
 }
 
-// ── analytics (the /v1/admin/referrals cross-tenant board) ─────────────────────
+// ── analytics (the /v1/admin/affiliates/referrals cross-tenant board) ─────────────────────
 
 // ReferredOrgCounts returns the total number of distinct referred orgs and the
 // number that have CONVERTED (produced at least one positive commission accrual) —

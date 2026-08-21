@@ -796,11 +796,11 @@ func TestAdminReferralsAnalytics(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
 
 	// Non-admin is refused.
-	if st, _ := req(t, app, http.MethodGet, "/v1/admin/referrals", "orgA", false, nil); st != http.StatusForbidden {
-		t.Fatalf("non-admin /v1/admin/referrals want 403, got %d", st)
+	if st, _ := req(t, app, http.MethodGet, "/v1/admin/affiliates/referrals", "orgA", false, nil); st != http.StatusForbidden {
+		t.Fatalf("non-admin /v1/admin/affiliates/referrals want 403, got %d", st)
 	}
 
-	code, body := req(t, app, http.MethodGet, "/v1/admin/referrals", "admin", true, nil)
+	code, body := req(t, app, http.MethodGet, "/v1/admin/affiliates/referrals", "admin", true, nil)
 	if code != http.StatusOK {
 		t.Fatalf("admin referrals want 200, got %d (%s)", code, body)
 	}

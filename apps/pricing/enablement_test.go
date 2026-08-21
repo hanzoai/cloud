@@ -143,20 +143,20 @@ func TestEnablement_GlobalSetIsAdminOnly(t *testing.T) {
 	cust := map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"} // org-level, NOT SuperAdmin
 
 	// A customer cannot LIST the global registry.
-	if resp, _ := do("GET", "/v1/admin/enablement", "", cust); resp.StatusCode != http.StatusForbidden {
-		t.Errorf("customer GET /v1/admin/enablement = %d, want 403", resp.StatusCode)
+	if resp, _ := do("GET", "/v1/admin/pricing/enablement", "", cust); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("customer GET /v1/admin/pricing/enablement = %d, want 403", resp.StatusCode)
 	}
 	// A customer cannot SET global state (even forging X-Org-Id: admin, which the
 	// gateway strips — here no X-User-IsAdmin means not global).
 	body := `{"kind":"feature","id":"labs","state":"ga"}`
-	if resp, _ := do("PUT", "/v1/admin/enablement", body, cust); resp.StatusCode != http.StatusForbidden {
-		t.Errorf("customer PUT /v1/admin/enablement = %d, want 403", resp.StatusCode)
+	if resp, _ := do("PUT", "/v1/admin/pricing/enablement", body, cust); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("customer PUT /v1/admin/pricing/enablement = %d, want 403", resp.StatusCode)
 	}
 	// Even a forged X-User-IsAdmin from a customer is moot here because the gateway
 	// mints it only for owner==admin; simulate that the customer canNOT set it by
 	// confirming the state never changed: an admin list shows no 'labs' row.
 	admin := map[string]string{"X-User-IsAdmin": "true"}
-	_, lb := do("GET", "/v1/admin/enablement", "", admin)
+	_, lb := do("GET", "/v1/admin/pricing/enablement", "", admin)
 	if strings.Contains(string(lb), `"id":"labs"`) {
 		t.Error("a customer PUT must NOT have created the labs item")
 	}
@@ -194,7 +194,7 @@ func TestEnablement_FullFlow(t *testing.T) {
 	}
 
 	// Admin sets it to BETA.
-	if resp, b := do("PUT", "/v1/admin/enablement", `{"kind":"model","id":"`+model+`","state":"beta"}`, admin); resp.StatusCode != 200 {
+	if resp, b := do("PUT", "/v1/admin/pricing/enablement", `{"kind":"model","id":"`+model+`","state":"beta"}`, admin); resp.StatusCode != 200 {
 		t.Fatalf("admin set beta: %d (%s)", resp.StatusCode, b)
 	}
 	// Now NEITHER org sees it (beta, nobody opted in).
@@ -202,13 +202,13 @@ func TestEnablement_FullFlow(t *testing.T) {
 		t.Fatalf("after beta: no org should see it yet (acme=%v other=%v)", sees(acme), sees(other))
 	}
 	// acme sees it in its enablement view as a beta it can opt into.
-	_, ev := do("GET", "/v1/enablement", "", acme)
+	_, ev := do("GET", "/v1/pricing/enablement", "", acme)
 	if !strings.Contains(string(ev), `"canOptIn":true`) {
-		t.Errorf("acme /v1/enablement must offer the beta to opt into: %s", ev)
+		t.Errorf("acme /v1/pricing/enablement must offer the beta to opt into: %s", ev)
 	}
 
 	// acme OPTS IN.
-	if resp, b := do("POST", "/v1/enablement/optin", `{"kind":"model","id":"`+model+`"}`, acme); resp.StatusCode != 200 {
+	if resp, b := do("POST", "/v1/pricing/enablement/optin", `{"kind":"model","id":"`+model+`"}`, acme); resp.StatusCode != 200 {
 		t.Fatalf("acme opt-in: %d (%s)", resp.StatusCode, b)
 	}
 	// acme NOW sees it; other STILL does not (per-org isolation).
@@ -220,13 +220,13 @@ func TestEnablement_FullFlow(t *testing.T) {
 	}
 
 	// Admin sets GA → everyone sees.
-	do("PUT", "/v1/admin/enablement", `{"kind":"model","id":"`+model+`","state":"ga"}`, admin)
+	do("PUT", "/v1/admin/pricing/enablement", `{"kind":"model","id":"`+model+`","state":"ga"}`, admin)
 	if !sees(acme) || !sees(other) {
 		t.Errorf("after ga: everyone must see it (acme=%v other=%v)", sees(acme), sees(other))
 	}
 
 	// Admin sets OFF → nobody sees, even the opted-in acme.
-	do("PUT", "/v1/admin/enablement", `{"kind":"model","id":"`+model+`","state":"off"}`, admin)
+	do("PUT", "/v1/admin/pricing/enablement", `{"kind":"model","id":"`+model+`","state":"off"}`, admin)
 	if sees(acme) || sees(other) {
 		t.Errorf("after off: NOBODY may see it, even opted-in acme (acme=%v other=%v)", sees(acme), sees(other))
 	}
@@ -240,19 +240,19 @@ func TestEnablement_OptInScopedToCaller(t *testing.T) {
 	admin := map[string]string{"X-User-IsAdmin": "true"}
 	acme := map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}
 
-	do("PUT", "/v1/admin/enablement", `{"kind":"feature","id":"labs","state":"beta"}`, admin)
+	do("PUT", "/v1/admin/pricing/enablement", `{"kind":"feature","id":"labs","state":"beta"}`, admin)
 
 	// An unauthenticated caller (no org) cannot opt in.
-	if resp, _ := do("POST", "/v1/enablement/optin", `{"kind":"feature","id":"labs"}`, nil); resp.StatusCode != http.StatusUnauthorized {
+	if resp, _ := do("POST", "/v1/pricing/enablement/optin", `{"kind":"feature","id":"labs"}`, nil); resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("anon opt-in = %d, want 401", resp.StatusCode)
 	}
 
 	// acme opts in — even if the body tried to name another org, only c.Org() counts
 	// (there is no org field; the subject is the sanitized header).
-	do("POST", "/v1/enablement/optin", `{"kind":"feature","id":"labs","org":"victim"}`, acme)
+	do("POST", "/v1/pricing/enablement/optin", `{"kind":"feature","id":"labs","org":"victim"}`, acme)
 
 	// The admin registry shows ONLY acme granted — never "victim".
-	_, lb := do("GET", "/v1/admin/enablement", "", admin)
+	_, lb := do("GET", "/v1/admin/pricing/enablement", "", admin)
 	if !strings.Contains(string(lb), `"acme"`) {
 		t.Errorf("acme must be the granted org: %s", lb)
 	}
@@ -268,12 +268,12 @@ func TestEnablement_CannotOptIntoOff(t *testing.T) {
 	admin := map[string]string{"X-User-IsAdmin": "true"}
 	acme := map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}
 
-	do("PUT", "/v1/admin/enablement", `{"kind":"feature","id":"kill","state":"off"}`, admin)
-	if resp, _ := do("POST", "/v1/enablement/optin", `{"kind":"feature","id":"kill"}`, acme); resp.StatusCode != http.StatusBadRequest {
+	do("PUT", "/v1/admin/pricing/enablement", `{"kind":"feature","id":"kill","state":"off"}`, admin)
+	if resp, _ := do("POST", "/v1/pricing/enablement/optin", `{"kind":"feature","id":"kill"}`, acme); resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("opt-in into off = %d, want 400", resp.StatusCode)
 	}
 	// acme's enablement view must show it NOT effective and NOT opt-in-able.
-	_, ev := do("GET", "/v1/enablement", "", acme)
+	_, ev := do("GET", "/v1/pricing/enablement", "", acme)
 	if strings.Contains(string(ev), `"id":"kill","state":"off","effective":true`) {
 		t.Error("an off item must never be effective for a customer")
 	}
