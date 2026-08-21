@@ -799,11 +799,19 @@ type Subs struct {
 // than being inferred at the far end: a reader that posts test rows into real
 // revenue has restated the company's income, and nothing downstream can tell.
 //
-// Limit is a page size; 0 takes the ledger's own default. There is no org and
-// no subject, for the usual reason — the tenant rides the caller.
+// Limit is a page size; 0 takes the ledger's own default.
+//
+// Subject names the WALLET whose entries to read, exactly as [BalanceIn] names
+// the wallet whose balance to read — one vocabulary, so the movement list and
+// the standing balance answer for the same account. It is NOT an org: the
+// tenant rides the caller, and a subject can only ever address a wallet inside
+// the ledger that caller's identity already pinned. Empty reads every wallet in
+// the org, which is what the revenue ingest wants and what a pooled org's own
+// subject resolves to anyway.
 type TxnsIn struct {
-	Test  bool `json:"test,omitempty"`
-	Limit int  `json:"limit,omitempty"`
+	Test    bool   `json:"test,omitempty"`
+	Limit   int    `json:"limit,omitempty"`
+	Subject string `json:"subject,omitempty"`
 }
 
 // Txns is a page of ledger entries.
