@@ -17,67 +17,10 @@
   ],
   "tags": [
     {
-      "name": "agent"
-    },
-    {
       "name": "agents"
     }
   ],
   "paths": {
-    "/v1/agent": {
-      "post": {
-        "operationId": "post_agent",
-        "summary": "Run one tool-calling round against your org's own tools",
-        "description": "Answers one turn of a conversation with four things: the model's `reply`, the `actions` the server executed on the caller's behalf, the `ops` the client must apply itself, and the `conversationId` the turn was recorded under.\n\nThe split between actions and ops is the rule most easily got wrong. A tool call is executed HERE only when the chosen preset is server-executing AND the tool resolves in the caller's own scope; every other call is handed back as an op for the client to apply to its own graph or UI. A tool that fails still comes back as an action, carrying its error rather than failing the round.\n\n`preset` selects the system prompt and the tool set (`capability` is a legacy alias for it); an unknown one is refused. `conversationId` continues an existing thread, and its absence starts one. A validated principal with a non-empty org is required — the org is the sole authority for both persistence and tool scope, and is NEVER read from the body.\n\nA completion refused for the caller's own reason — 402 insufficient balance, 429, 403 — is relayed with its own status and body verbatim, so the real billing message reaches the client instead of an opaque gateway error. Only a genuine upstream fault becomes a 502.",
-        "tags": [
-          "agent"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/agent/conversations": {
-      "get": {
-        "operationId": "get_agent_conversations",
-        "summary": "List the agent threads in your org",
-        "description": "Returns a summary of every agent conversation in the caller's org — id, derived title, and when it was last appended to — for populating a thread list.\n\nScoped to the caller's org and nothing else, and that isolation is structural rather than a filter: conversations are persisted in a store opened PER ORG, so there is no query in which another tenant's threads could appear. A validated principal with a non-empty org is required; 403 without one.",
-        "tags": [
-          "agent"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/agent/conversations/{id}": {
-      "get": {
-        "operationId": "get_agent_conversations_by_id",
-        "summary": "Read one agent thread in full",
-        "description": "Returns every message of one conversation in order — role, content, the assistant's tool calls where it made any, and each message's creation time — which is the transcript a client replays to resume a thread.\n\nThe lookup happens inside the caller's OWN per-org store, so an id belonging to another tenant is not refused, it is simply absent: the answer is 200 with an empty message list. Read it as \"no such conversation for you\" rather than as an empty thread. A validated principal with a non-empty org is required; 403 without one.",
-        "tags": [
-          "agent"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/agent/presets": {
-      "get": {
-        "operationId": "get_agent_presets",
-        "summary": "List the agent presets available to a caller",
-        "description": "Returns the preset catalog: each entry's id, its description and whether it is server-executing — the flag that decides if a preset's tool calls run here or come back for the client to apply. The ids are what POST /v1/agent accepts in `preset`.\n\nThe catalog is compiled into the build, identical for every caller, and this is the one read in the group that needs no principal.",
-        "tags": [
-          "agent"
-        ],
-        "x-public": true
-      }
-    },
     "/v1/agents": {
       "get": {
         "operationId": "get_agents",
@@ -242,6 +185,60 @@
         },
         "x-public": true,
         "x-tool": true
+      }
+    },
+    "/v1/agents/chat": {
+      "post": {
+        "operationId": "post_agents_chat",
+        "summary": "Run one tool-calling round against your org's own tools",
+        "description": "Answers one turn of a conversation with four things: the model's `reply`, the `actions` the server executed on the caller's behalf, the `ops` the client must apply itself, and the `conversationId` the turn was recorded under.\n\nThe split between actions and ops is the rule most easily got wrong. A tool call is executed HERE only when the chosen preset is server-executing AND the tool resolves in the caller's own scope; every other call is handed back as an op for the client to apply to its own graph or UI. A tool that fails still comes back as an action, carrying its error rather than failing the round.\n\n`preset` selects the system prompt and the tool set (`capability` is a legacy alias for it); an unknown one is refused. `conversationId` continues an existing thread, and its absence starts one. A validated principal with a non-empty org is required — the org is the sole authority for both persistence and tool scope, and is NEVER read from the body.\n\nA completion refused for the caller's own reason — 402 insufficient balance, 429, 403 — is relayed with its own status and body verbatim, so the real billing message reaches the client instead of an opaque gateway error. Only a genuine upstream fault becomes a 502.",
+        "tags": [
+          "agents"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/agents/chat/conversations": {
+      "get": {
+        "operationId": "get_agents_chat_conversations",
+        "summary": "List the agent threads in your org",
+        "description": "Returns a summary of every agent conversation in the caller's org — id, derived title, and when it was last appended to — for populating a thread list.\n\nScoped to the caller's org and nothing else, and that isolation is structural rather than a filter: conversations are persisted in a store opened PER ORG, so there is no query in which another tenant's threads could appear. A validated principal with a non-empty org is required; 403 without one.",
+        "tags": [
+          "agents"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/agents/chat/conversations/{id}": {
+      "get": {
+        "operationId": "get_agents_chat_conversations_by_id",
+        "summary": "Read one agent thread in full",
+        "description": "Returns every message of one conversation in order — role, content, the assistant's tool calls where it made any, and each message's creation time — which is the transcript a client replays to resume a thread.\n\nThe lookup happens inside the caller's OWN per-org store, so an id belonging to another tenant is not refused, it is simply absent: the answer is 200 with an empty message list. Read it as \"no such conversation for you\" rather than as an empty thread. A validated principal with a non-empty org is required; 403 without one.",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/agents/chat/presets": {
+      "get": {
+        "operationId": "get_agents_chat_presets",
+        "summary": "List the agent presets available to a caller",
+        "description": "Returns the preset catalog: each entry's id, its description and whether it is server-executing — the flag that decides if a preset's tool calls run here or come back for the client to apply. The ids are what the round accepts in `preset`.\n\nThe catalog is compiled into the build, identical for every caller, and this is the one read in the group that needs no principal.",
+        "tags": [
+          "agents"
+        ],
+        "x-public": true
       }
     },
     "/v1/agents/coding": {

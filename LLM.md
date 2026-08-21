@@ -1358,12 +1358,20 @@ Two facts a fold has to carry beyond the router:
   model calls as surely as it renames the URL. `plugin/agents/coding_test.go` pins
   that string, which is the only gate that can see it — a router test cannot.
 
-`/v1/agent` is the one line of the four that did NOT close, and it is upstream's:
-`hanzoai/agent`'s `Mount` registers those four routes at that literal path, its
-handlers are unexported and it takes the concrete `*zip.App`, so cloud has no
-prefix to hand it. The target address is not free either — `POST /v1/agents` is
-already the typed create — so the fold needs a release that gives hz.Mount a
-prefix AND gives the round an address the collection root is not.
+`/v1/agent` was the one line of the four that did not close, and the blocker was
+ours: `hanzoai/agent`'s `Mount` registered those four routes at that literal
+path, so cloud had no address to hand it. **v1.0.6 gives it one** — the routes
+compose off a single prefix, `MountAt(app, prefix, ...)` takes it and
+`Mount(app, ...)` is `MountAt` at `DefaultPrefix`, so the standalone daemon is
+unchanged and the composer decides. Cloud mounts the round at
+**`/v1/agents/chat`** (`apps/agents/conversation.go`, const `chat`): under the
+collection root, not at it, because `POST /v1/agents` is already the typed
+create. The manifest row is one prefix again and the ratchet line is gone.
+
+The upstream release was the whole cost. Nothing in the round reads the prefix,
+so no handler, no store and no seam changed — which is the test to run before
+believing any other "upstream must move first" line here: ask whether the thing
+that must move is a VALUE the caller could supply.
 
 ### What the projections MEASURE, asked of the running deployment
 
@@ -2050,15 +2058,18 @@ operation in `plugin/<name>/openapi.json` carrying neither `description` nor
    and `plugin/gen-app-cmds` does not actually emit them.
 
 `agent`'s four are refused for a reason no cloud edit can reach: they are
-registered by **github.com/hanzoai/agent v0.1.3** (`agent.go:166-169`), not by
-cloud — `apps/agent` calls `hz.Mount` and registers no route of its own, the
-apps/tasks situation one module over. Two facts have to move upstream with them,
-both named at the mount point: every handler resolves its caller through a
-`func(*zip.Ctx) (Principal, bool)` and `POST /v1/agent` dispatches tools with the
-LIVE `*zip.Ctx`, so hanzoai/agent needs a per-request bridge of its own (it
-deliberately imports neither cloud nor ai); and that same route relays an upstream
-4xx's status AND body verbatim (`round.go:104-110`), which is the apps/ml refusal
-class and stays untyped even after the bridge lands.
+registered by **github.com/hanzoai/agent v1.0.6** (`agent.go:181-184`), not by
+cloud — `apps/agents` calls `hz.MountAt` and registers no route of its own, the
+apps/tasks situation one module over. That is about TYPING and survived the
+address fold: the four moved to `/v1/agents/chat` and are still untyped, because
+two facts have to move upstream with them, both named at the mount point. Every
+handler resolves its caller through a `func(*zip.Ctx) (Principal, bool)` and the
+round dispatches tools with the LIVE `*zip.Ctx`, so hanzoai/agent needs a
+per-request bridge of its own (it deliberately imports neither cloud nor ai) —
+a per-REQUEST hole, indifferent to the path the request arrived on, which is why
+moving the address did not touch it. And that same route relays an upstream 4xx's
+status AND body verbatim (`round.go:104-110`), which is the apps/ml refusal class
+and stays untyped even after the bridge lands.
 
 **The earlier six-plugin pass (ai, destinations, dns, licensing, runtime, templates):
 

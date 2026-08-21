@@ -992,8 +992,8 @@ github.com/hanzo-ds/sqlparser v0.4.17 h1:yTBikkYx2NI2Fpd6lCp4GVEj/rMaV7w6N4R7PLJ
 github.com/hanzo-ds/sqlparser v0.4.17/go.mod h1:b+9oCGF3WYGz4FfVo9eZ4wJiF7fiLa9aCWFGCcbqQbY=
 github.com/hanzoai/account v0.3.3 h1:Kn45AOIQVS7BuYDKuM1OWsxlPj4EbOSVWTrMknjHVQA=
 github.com/hanzoai/account v0.3.3/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
-github.com/hanzoai/agent v1.0.5 h1:RWe4cSyie+5wAt2s0kAIqxQ4m6ID5JlqI/xUEUxhFEI=
-github.com/hanzoai/agent v1.0.5/go.mod h1:3bqSx+EkF4Lm0BxJEEb7TbV0Ck1EsBgt6tteHJmX1nk=
+github.com/hanzoai/agent v1.0.6 h1:fOTziUUcwdP82BU0+UfiCy3x7YMpcjwgSdiyebNltYI=
+github.com/hanzoai/agent v1.0.6/go.mod h1:3bqSx+EkF4Lm0BxJEEb7TbV0Ck1EsBgt6tteHJmX1nk=
 github.com/hanzoai/ai v1.833.107 h1:VdkF9LqTWbbA89lGmjsO1yjf5gyUhe9rEQndWvOjZ/c=
 github.com/hanzoai/ai v1.833.107/go.mod h1:9UYah2Q6NxhTbXpX76frIo9o8NUeWvLMU0uyTqQEfhI=
 github.com/hanzoai/authz v1.10.31 h1:kWq4iCF+XR6ZLnG5OJ4mlathKU2F68+YmKgsD6s44n0=
