@@ -228,7 +228,7 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 // the whole decoded document alive for the life of the process, and this host is
 // the one that has been evicted for the memory it holds.
 func MountIndex(app *zip.App, subsets func() ([]Part, error)) {
-	render := sync.OnceValues(func() (map[string][]byte, error) {
+	render := sync.OnceValues(func() (*rendered, error) {
 		parts, err := subsets()
 		if err != nil {
 			return nil, err
@@ -247,17 +247,21 @@ func MountIndex(app *zip.App, subsets func() ([]Part, error)) {
 				return nil, err
 			}
 		}
-		return out, nil
+		return &rendered{doors: out, known: addressesOf(d)}, nil
 	})
 
 	app.Use(zip.H(func(c *zip.Ctx) error {
-		if body, mine := answer(c, render); mine {
+		// A deployment that cannot weave its own document still answers the
+		// request the caller actually made. It answers without the links it could
+		// not derive, which is why everything below reads through a nil receiver.
+		r, _ := render()
+		if body, mine := answer(c, r); mine {
 			c.SetHeader("Content-Type", "application/json")
-			refer(c)
+			refer(c, r)
 			return c.Bytes(http.StatusOK, body)
 		}
 		err := c.Next()
-		refer(c)
+		refer(c, r)
 		return err
 	}))
 }
@@ -267,23 +271,18 @@ func MountIndex(app *zip.App, subsets func() ([]Part, error)) {
 //
 // Only a GET, and only at the root or one segment under it — everything deeper
 // belongs to the capability that owns the subtree, and this never looks at it.
-func answer(c *zip.Ctx, render func() (map[string][]byte, error)) ([]byte, bool) {
-	if c.Method() != http.MethodGet {
+func answer(c *zip.Ctx, r *rendered) ([]byte, bool) {
+	// A nil r is a deployment that could not describe itself. That is not a
+	// reason to refuse the request — the address may be a capability's own — so
+	// this yields rather than answering 500 on a path it does not own.
+	if c.Method() != http.MethodGet || r == nil {
 		return nil, false
 	}
 	path := c.Path()
 	if path != RootPath && leaf(path) == "" {
 		return nil, false
 	}
-	index, err := render()
-	if err != nil {
-		// The document could not be woven, which is a deployment that cannot
-		// describe itself. It is not a reason to refuse the request the caller
-		// actually made — the address may be a capability's own — so this yields
-		// rather than answering 500 on a path it does not own.
-		return nil, false
-	}
-	body, mine := index[path]
+	body, mine := r.doors[path]
 	return body, mine
 }
 
@@ -296,7 +295,7 @@ func answer(c *zip.Ctx, render func() (map[string][]byte, error)) ([]byte, bool)
 //
 // After the handler, because a proxied answer is written by the far end into
 // this very response: anything stamped before the hop is overwritten by it.
-func refer(c *zip.Ctx) {
+func refer(c *zip.Ctx, r *rendered) {
 	if !under(c.Path()) {
 		return
 	}
@@ -306,6 +305,30 @@ func refer(c *zip.Ctx) {
 	}
 	h.Add("Link", "<"+Path+`>; rel="describedby"`)
 	h.Add("Link", "<"+RootPath+`>; rel="index"`)
+
+	a, ok := r.at(c.Path())
+	if !ok {
+		return
+	}
+	// What this address accepts. A caller cannot read that off a body, and RFC
+	// 9110 §10.2.1 already has the field for it. Never over a capability that
+	// answered the question itself.
+	if a.allow != "" && len(h.Peek("Allow")) == 0 {
+		h.Set("Allow", a.allow)
+	}
+	// The address ABOVE, spelled from the request rather than from the template,
+	// so what a caller follows is an address and not a pattern with a hole in it.
+	// A member's parent is the collection it belongs to (RFC 6573); anything
+	// else's parent is simply up.
+	if a.hasUp {
+		if up := above(c.Path()); up != "" {
+			rel := "up"
+			if a.member {
+				rel = "collection"
+			}
+			h.Add("Link", "<"+up+`>; rel="`+rel+`"`)
+		}
+	}
 }
 
 // under reports whether path is inside the contract's one namespace: /v1 itself
@@ -325,6 +348,113 @@ func leaf(path string) string {
 		return ""
 	}
 	return rest
+}
+
+// rendered is what one weave of the fleet document leaves behind: the bodies of
+// the two index doors, and what the contract says about every other address.
+//
+// The document itself is dropped — see [MountIndex] — and this is deliberately
+// the small residue of it. Per address that is a method list and two booleans.
+type rendered struct {
+	doors map[string][]byte
+	known *addresses
+}
+
+// at reports what the contract says about the address this path matched.
+func (r *rendered) at(path string) (address, bool) {
+	if r == nil || r.known == nil {
+		return address{}, false
+	}
+	return r.known.at(path)
+}
+
+// address is one row of the contract as the links need it.
+type address struct {
+	segs   []string // the template's segments; one beginning with '{' matches anything
+	allow  string   // "DELETE, GET, POST" — the public methods registered here
+	member bool     // the last segment is a parameter, so the address above is a collection
+	hasUp  bool     // the address above is itself in the contract
+}
+
+// addresses recovers an operation's template from a concrete request path.
+//
+// It exists because the front door PROXIES: the fiber route a request matched
+// here is the proxy's own, not the operation's, so the template cannot be read
+// off the route and has to be found by shape. Templates are bucketed by segment
+// count, so a lookup compares only the candidates that could possibly match —
+// on this tree that is a few dozen of seventeen hundred.
+type addresses struct {
+	byDepth map[int][]address
+}
+
+func addressesOf(d *Document) *addresses {
+	known := make(map[string]bool, len(d.Paths))
+	for path := range d.Paths {
+		known[path] = true
+	}
+	a := &addresses{byDepth: map[int][]address{}}
+	for path, item := range d.Paths {
+		var methods []string
+		for _, m := range sortedKeys(item) {
+			if op := item[m]; op != nil && op.Public {
+				methods = append(methods, strings.ToUpper(m))
+			}
+		}
+		segs := strings.Split(strings.TrimPrefix(path, "/"), "/")
+		a.byDepth[len(segs)] = append(a.byDepth[len(segs)], address{
+			segs:   segs,
+			allow:  strings.Join(methods, ", "),
+			member: strings.HasPrefix(segs[len(segs)-1], "{"),
+			hasUp:  known[above(path)],
+		})
+	}
+	return a
+}
+
+// at matches a concrete path against the templates of its own depth. A template
+// made only of literals wins outright — /v1/nodes/peer is an address in its own
+// right and is not the /v1/nodes/{id} whose shape it also fits.
+func (a *addresses) at(path string) (address, bool) {
+	segs := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	var hit address
+	var found bool
+	for _, cand := range a.byDepth[len(segs)] {
+		exact := true
+		fits := true
+		for i, s := range cand.segs {
+			if strings.HasPrefix(s, "{") {
+				exact = false
+			} else if s != segs[i] {
+				fits = false
+				break
+			}
+		}
+		if !fits {
+			continue
+		}
+		if exact {
+			return cand, true
+		}
+		if !found {
+			hit, found = cand, true
+		}
+	}
+	return hit, found
+}
+
+// above is the address one segment up, or "" when there is none worth naming:
+// outside the namespace, or the root, which every answer already links as the
+// index and would otherwise carry twice under two relations.
+func above(path string) string {
+	i := strings.LastIndex(path, "/")
+	if i <= 0 {
+		return ""
+	}
+	p := path[:i]
+	if p == RootPath || !under(p) {
+		return ""
+	}
+	return p
 }
 
 // here is the request's own address as a Link header may carry it, or "" when
