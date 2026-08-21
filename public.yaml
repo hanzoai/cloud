@@ -659,71 +659,6 @@ components:
             type: string
           type: array
       type: object
-    Attempt:
-      properties:
-        answer:
-          description: |-
-            Answer is what the model answered, after the harness extracted it from the
-            raw generation.
-          type: string
-        benchmark:
-          description: |-
-            Benchmark is the suite the item belongs to — gpqa_diamond, livecodebench.
-            Part of the stable id (project, benchmark, item, model). Required on ingest.
-          type: string
-        correct:
-          description: |-
-            Correct is the producer's grade of Answer against Gold. This plane records
-            the verdict and re-grades nothing, so it is only ever as good as the
-            harness that sent it.
-          type: boolean
-        gold:
-          description: Gold is the expected answer for the item, as the benchmark
-            states it.
-          type: string
-        item:
-          description: |-
-            Item is the one question or case that was scored, by the benchmark's own
-            id for it. Part of the stable id. Required on ingest.
-          type: string
-        model:
-          description: Model is what answered the item. Part of the stable id. Required
-            on ingest.
-          type: string
-        response:
-          description: |-
-            Response is the raw generation the model produced. It is its own retention
-            class — it may carry personal or licensed material — and it is part of the
-            version's content identity, so a re-run that produced different text is a
-            new retained version.
-          type: string
-        revision:
-          description: |-
-            Revision is the producer's declared kind of this version: original,
-            corrected or retracted. Anything else, including empty, is read as
-            original. A retracted latest version withdraws the item's canonical answer;
-            every earlier version stays retained.
-          type: string
-        source:
-          description: |-
-            Source names who measured this attempt. Empty is recorded as
-            hanzo-measured; any other value is stored as sent, so an imported
-            third-party score is distinguishable from one this fleet ran.
-          type: string
-        status:
-          description: |-
-            Status is this attempt's execution state, the same vocabulary a run uses:
-            empty is complete, faulted retains a negative result, and an unrecognized
-            value is kept verbatim. faulted and failed are excluded from the answered
-            counts but never dropped.
-          type: string
-        ts:
-          description: |-
-            TS is when the attempt was measured, unix SECONDS. Display-only: a
-            server-assigned append clock, not this, decides which version is canonical.
-            0 means the producer sent none.
-          type: integer
-      type: object
     Audience:
       properties:
         createdAt:
@@ -3564,146 +3499,6 @@ components:
         type:
           type: string
       type: object
-    Experiment:
-      properties:
-        canonical:
-          description: |-
-            Canonical is DERIVED on read, never stored and never taken from an upload:
-            a version is canonical when it is the latest-appended non-retracted version
-            of its stable id. The listing returns only canonical versions, so it is
-            true on every row it answers with.
-          type: boolean
-        cost_usd:
-          description: |-
-            CostUSD is what the run cost in US DOLLARS (not cents), as the producer
-            reports it. It is summed as-is into the per-project and per-kind totals.
-          type: number
-        endpoint:
-          description: |-
-            Endpoint is the optional BYO URL naming the arm the run measured. It is
-            checked at ingest — https only, and every address the host resolves to must
-            be publicly routable — and then dropped: nothing stores it, no read returns
-            it, and this plane never dials it.
-          type: string
-        git_branch:
-          description: GitBranch is the branch that commit was on.
-          type: string
-        git_dirty:
-          description: |-
-            GitDirty says the working tree carried uncommitted changes, so GitSHA does
-            not fully describe what ran.
-          type: boolean
-        git_sha:
-          description: |-
-            GitSHA is the commit the run was measured at. Provenance is part of the
-            version's content identity, so the same number measured on a different
-            commit is a new RETAINED version rather than an idempotent no-op.
-          type: string
-        id:
-          description: |-
-            ID is the run's stable id, `<kind>:<subject>:<task>` by convention. It is
-            the key versions accrue under: a correction re-sent with this same id
-            appends a new version beside the old one rather than replacing it.
-            Required on ingest.
-          type: string
-        kind:
-          description: |-
-            Kind is the discriminator the whole plane is partitioned by: benchmark,
-            kernel-perf, training, ablation, policy-eval, or ab for an A/B trial's
-            per-arm evidence. Required on ingest, and open — an unknown kind is stored,
-            not refused.
-          type: string
-        lib_versions:
-          description: |-
-            LibVersions is the libraries in force, as a JSON object of name → version
-            ({"harness":"0.1.0"}). It is a queryable column and part of the content
-            identity, which is what makes "which lib version regressed this task"
-            answerable over the longitudinal record. Absent is {}.
-        meta:
-          description: |-
-            Meta is whatever else the producer wants to carry, as a JSON object — the
-            A/B rows put lift, z and p here. It is part of the version's content
-            identity, canonicalized (sorted keys, no whitespace) first so that a
-            re-serialization of the same object does not mint a spurious version.
-            Absent or unparseable is stored as {}.
-        metric:
-          description: |-
-            Metric names the quantity Value carries — accuracy, tok/s, a conversion
-            event. It is the only place Value's unit is stated; this plane declares no
-            vocabulary of metrics.
-          type: string
-        "n":
-          description: |-
-            N is the sample size behind Value — items scored, or exposures for an A/B
-            arm.
-          type: integer
-        n_total:
-          description: |-
-            NTotal is the denominator the producer reports N against — the size of the
-            set N was drawn from. The plane derives neither from the other, so a
-            producer that reports only N leaves this 0.
-          type: integer
-        project:
-          description: |-
-            Project is the sub-scope inside the org this run is filed under. On ingest
-            it is the SERVER's value — the caller's project scope — and a project sent
-            in the body is ignored; on a read it is the value the run was filed under.
-          type: string
-        publishable:
-          description: |-
-            Publishable is consent to publish this run to the commons. Ingest forces
-            false; only a grant sets it.
-          type: boolean
-        revision:
-          description: |-
-            Revision is the producer's declared kind of this version: original,
-            corrected or retracted. Anything else, including empty, is read as
-            original. A retracted latest version WITHDRAWS the id — it has no canonical
-            version at all — and every earlier version is still retained.
-          type: string
-        status:
-          description: |-
-            Status is the run's execution state: planning, running, complete or
-            faulted. Empty is complete (a backfilled historic run). An unrecognized
-            value is kept verbatim rather than flattened, so a producer's own failure
-            label is never displayed as a success. faulted and failed runs are retained
-            but are left out of the answered headline counts.
-          type: string
-        subject:
-          description: |-
-            Subject is what was measured: the model, the engine, the A/B arm. Required
-            on ingest.
-          type: string
-        task:
-          description: |-
-            Task is what it was measured ON — gpqa_diamond, livecodebench, prefill, or
-            the trial's id for A/B evidence.
-          type: string
-        trainable:
-          description: |-
-            Trainable is consent to train on this run. Ingest forces false; only a
-            grant sets it. An upload conveys no training right.
-          type: boolean
-        ts:
-          description: |-
-            TS is when the run was measured, unix SECONDS. It is display-only and it
-            does NOT decide supersession — a server-assigned append clock does, so a
-            live correction that sends no ts still supersedes a backfill that stamped
-            one. 0 means the producer sent none.
-          type: integer
-        value:
-          description: |-
-            Value is the measurement, in whatever unit Metric names. It is NEVER
-            normalized: one producer files accuracy as 0.81 and another as 94.3 and
-            both are stored as sent, so compare values only within one (subject, task,
-            metric).
-          type: number
-        visibility:
-          description: |-
-            Visibility is private, org or public. Ingest forces private whatever the
-            body says; only a grant moves it.
-          type: string
-      type: object
     Extracted:
       properties:
         category:
@@ -4438,43 +4233,6 @@ components:
             Installed.
           type: string
       type: object
-    GrantRequest:
-      properties:
-        id:
-          description: |-
-            ID addresses an experiment (run) by its stable id. The grant lands on EVERY
-            retained version of that id, because the decision is about the run and not
-            about one version of it.
-          type: string
-        project:
-          description: |-
-            Project locates WHICH project inside the caller's org holds the target;
-            empty is the caller's own project scope. It is not a tenant key — the org
-            comes from the validated principal — so naming a project can only ever
-            address a record the caller's org already owns.
-          type: string
-        publishable:
-          description: |-
-            Publishable is consent to publish the run to the commons. Null leaves it
-            unchanged; an artifact grant ignores it.
-          type: boolean
-        sha256:
-          description: |-
-            SHA256 addresses an artifact by its content hash instead, and an artifact
-            grant sets visibility only. One of ID and SHA256 is required; when both are
-            sent SHA256 wins and the run is untouched.
-          type: string
-        trainable:
-          description: |-
-            Trainable is consent to train on the run's records. Null leaves it
-            unchanged; an artifact grant ignores it.
-          type: boolean
-        visibility:
-          description: |-
-            Visibility is private, org or public. Null leaves it unchanged, and it is
-            the one field an artifact grant requires.
-          type: string
-      type: object
     Health:
       properties:
         status:
@@ -4644,24 +4402,6 @@ components:
           type: array
         stage:
           type: string
-      type: object
-    IngestRequest:
-      properties:
-        attempts:
-          description: |-
-            Attempts are the per-item attempt versions. Each needs a benchmark, an item
-            and a model. The two arrays may not BOTH be empty, and they hold at most
-            20000 members between them — split a larger upload.
-          items:
-            $ref: '#/components/schemas/Attempt'
-          type: array
-        experiments:
-          description: |-
-            Experiments are the run versions in this batch. Each needs an id, a kind
-            and a subject. Re-sending byte-identical content appends nothing.
-          items:
-            $ref: '#/components/schemas/Experiment'
-          type: array
       type: object
     Install:
       properties:
@@ -4845,24 +4585,6 @@ components:
             Tool, when set, names the MCP tool the Business AI runs for "do it for me".
             A step with no tool can only be completed by a person; it is the field the
             `automatable` flag on every projection of this step is derived from.
-          type: string
-      type: object
-    KindTotal:
-      properties:
-        cost_usd:
-          description: CostUSD is US DOLLARS (not cents) summed over those same runs.
-          type: number
-        experiments:
-          description: |-
-            Experiments counts the canonical answered runs of this kind — the same
-            predicate as the headline count, sliced.
-          type: integer
-        kind:
-          description: |-
-            Kind is the discriminator this row aggregates: benchmark, kernel-perf,
-            training, ablation, policy-eval, ab. A kind appears as soon as any RETAINED
-            version carries it, so a kind whose every run was retracted or faulted is
-            listed with zero experiments rather than dropped.
           type: string
       type: object
     LLM:
@@ -6681,57 +6403,6 @@ components:
           description: Website is the applicant's website as submitted.
           type: string
       type: object
-    ProjectSummary:
-      properties:
-        attempts:
-          description: |-
-            Attempts counts the CANONICAL answered attempts, one per (benchmark, item,
-            model).
-          type: integer
-        attempts_retained:
-          description: |-
-            AttemptsRetained counts every attempt version held, on the same terms as
-            ExperimentsRetained.
-          type: integer
-        benchmarks:
-          description: Benchmarks is how many DISTINCT benchmarks those same attempts
-            cover.
-          type: integer
-        cost_usd:
-          description: |-
-            CostUSD is US DOLLARS (not cents) summed over the canonical answered runs,
-            so it is what the deduped view cost and not what the history cost.
-          type: number
-        experiments:
-          description: |-
-            Experiments counts the CANONICAL answered runs: one per stable id, the
-            latest non-retracted version, faulted and failed left out.
-          type: integer
-        experiments_retained:
-          description: |-
-            ExperimentsRetained counts every run version the store holds for the
-            project — superseded and retracted included. Retained is always ≥
-            canonical, and the gap is history rather than loss.
-          type: integer
-        kinds:
-          description: |-
-            Kinds are the discriminators seen in the project, sorted, over ALL retained
-            versions — so a kind stays listed after its runs are superseded or
-            retracted, even when it contributes nothing to Experiments.
-          items:
-            type: string
-          type: array
-        models:
-          description: |-
-            Models is how many DISTINCT models appear across the canonical answered
-            attempts.
-          type: integer
-        project:
-          description: |-
-            Project is the project these totals cover. Rows are one per project the org
-            has evidence under, sorted by this.
-          type: string
-      type: object
     Promo:
       properties:
         active:
@@ -7792,131 +7463,6 @@ components:
         query:
           description: Query is the natural-language or keyword query. Required.
           type: string
-      type: object
-    ResearchArtifact:
-      properties:
-        content:
-          description: |-
-            Content is the artifact's bytes, base64, on WRITE only, at most 16 MiB.
-            Never returned: a read answers metadata and the address, and the bytes come
-            from GET /v1/research/artifacts/{sha256}.
-          type: string
-        git_branch:
-          description: GitBranch is the branch that commit was on.
-          type: string
-        git_dirty:
-          description: GitDirty says the working tree carried uncommitted changes.
-          type: boolean
-        git_sha:
-          description: |-
-            GitSHA is the commit that produced the artifact. Unlike a run's, an
-            artifact's provenance is NOT part of its identity: the bytes are.
-          type: string
-        kind:
-          description: |-
-            Kind is snapshot or report, and nothing else is accepted. It decides how
-            the bytes are served: image/png for a snapshot, application/octet-stream
-            for a report — from the recorded kind, never from sniffing the bytes.
-          type: string
-        lib_versions:
-          description: |-
-            LibVersions is the libraries in force, as a JSON object of name → version.
-            Absent is {}.
-        project:
-          description: |-
-            Project is the project the artifact is filed under — the SERVER's value on
-            write. It is part of the read predicate too: fetching a hash from the wrong
-            project is the same 404 as a hash that was never recorded.
-          type: string
-        ref:
-          description: |-
-            Ref is the content address, "sha256:<hash>", composed by the server from
-            the same bytes. A ref sent in the body is discarded, so it can never name
-            somewhere else.
-          type: string
-        retention_class:
-          description: |-
-            RetentionClass is the retention bucket the bytes fall in. Every write is
-            recorded as raw-artifact — the class for material that may be personal or
-            licensed — so it is the server's word, not the caller's.
-          type: string
-        run_id:
-          description: |-
-            RunID is the experiment stable id this artifact belongs to, which is what
-            the diary feed's ?run= filters on. It is free text: nothing checks that the
-            run exists.
-          type: string
-        sha256:
-          description: |-
-            SHA256 is the SERVER's hash of the submitted bytes, hex, and the artifact's
-            identity — the key the blob route is addressed by. A caller MAY send one;
-            it is not trusted, only checked, and a mismatch with the bytes refuses the
-            write.
-          type: string
-        ts:
-          description: |-
-            TS is when the artifact was recorded, unix SECONDS, as the caller gives it
-            — it is what the feed sorts newest-first on and what ?since= is compared
-            against. 0 leaves the run unordered against timestamped siblings.
-          type: integer
-        visibility:
-          description: |-
-            Visibility is private, org or public. A write forces private; only a grant
-            by sha256 moves it.
-          type: string
-      type: object
-    ResearchTotals:
-      properties:
-        attempts:
-          description: |-
-            Attempts counts the CANONICAL answered attempts, one per (benchmark, item,
-            model).
-          type: integer
-        attempts_retained:
-          description: |-
-            AttemptsRetained counts every attempt version held, on the same terms as
-            ExperimentsRetained.
-          type: integer
-        benchmarks:
-          description: Benchmarks is how many DISTINCT benchmarks those same attempts
-            cover.
-          type: integer
-        by_kind:
-          description: ByKind is the same headline split per discriminator, ordered
-            by kind.
-          items:
-            $ref: '#/components/schemas/KindTotal'
-          type: array
-        cost_usd:
-          description: CostUSD is US DOLLARS (not cents) summed over the canonical
-            answered runs.
-          type: number
-        experiments:
-          description: |-
-            Experiments counts the CANONICAL answered runs: one per stable id, the
-            latest non-retracted version, faulted and failed left out.
-          type: integer
-        experiments_retained:
-          description: |-
-            ExperimentsRetained counts every run version held — superseded and
-            retracted included. Retained is always ≥ canonical, and the gap is history
-            rather than loss, which is why both travel together.
-          type: integer
-        models:
-          description: |-
-            Models is how many DISTINCT models appear across the canonical answered
-            attempts.
-          type: integer
-        project:
-          description: |-
-            Project echoes the project the aggregate was narrowed to. Absent means the
-            figures below span the whole org.
-          type: string
-        projects:
-          description: |-
-            Projects is how many DISTINCT projects the counted evidence spans, so it is
-            1 whenever Project narrows to one.
-          type: integer
       type: object
     ResolveReferenceIn:
       properties:
@@ -12535,35 +12081,6 @@ components:
           items:
             $ref: '#/components/schemas/argoNode'
           type: array
-      type: object
-    artifactOut:
-      properties:
-        created:
-          description: Created is false when these exact bytes were already recorded
-            — the write is a no-op.
-          type: boolean
-        ref:
-          description: Ref is the content address, "sha256:<hash>".
-          type: string
-        rolled_up:
-          description: RolledUp is false when the OLAP roll-up was skipped; the SQLite
-            write still stands.
-          type: boolean
-        sha256:
-          description: SHA256 is the SERVER's hash of the bytes — the artifact's identity.
-          type: string
-      type: object
-    artifactsOut:
-      properties:
-        data:
-          description: Data are the artifacts, newest first. Content bytes are never
-            returned here.
-          items:
-            $ref: '#/components/schemas/ResearchArtifact'
-          type: array
-        total:
-          description: Total is len(data).
-          type: integer
       type: object
     askPostIn:
       properties:
@@ -18607,18 +18124,6 @@ components:
           description: Total is how many rows Data holds.
           type: integer
       type: object
-    experimentsOut:
-      properties:
-        data:
-          description: Data are the canonical experiment versions.
-          items:
-            $ref: '#/components/schemas/Experiment'
-          type: array
-        total:
-          description: Total is len(data) — the rows in this answer, not the store's
-            history.
-          type: integer
-      type: object
     fileContent:
       properties:
         content:
@@ -19799,13 +19304,6 @@ components:
             Status is the HOST MACHINE's lifecycle state, because nothing upstream
             reports a card's own health. A card reads running because its machine does.
           type: string
-      type: object
-    grantOut:
-      properties:
-        updated:
-          description: Updated is the number of records the grant applied to. Zero
-            is a 404, never a silent no-op.
-          type: integer
       type: object
     graphEdge:
       properties:
@@ -23600,40 +23098,6 @@ components:
         version:
           description: Version is the broker's server version.
           type: string
-      type: object
-    ingestOut:
-      properties:
-        attempts_ingested:
-          description: AttemptsIngested is how many attempt versions this call appended.
-          type: integer
-        attempts_retained:
-          description: AttemptsRetained is the full versioned attempt history the
-            store now holds.
-          type: integer
-        canonical_attempts:
-          description: CanonicalAttempts is the deduped attempt count the store now
-            holds.
-          type: integer
-        canonical_experiments:
-          description: CanonicalExperiments is the deduped experiment count the store
-            now holds.
-          type: integer
-        experiments_ingested:
-          description: ExperimentsIngested is how many experiment versions this call
-            appended.
-          type: integer
-        experiments_retained:
-          description: ExperimentsRetained is the full versioned experiment history
-            the store now holds.
-          type: integer
-        project:
-          description: Project is the project the batch was filed under — the SERVER's
-            value, never the body's.
-          type: string
-        rolled_up:
-          description: RolledUp is false when the OLAP roll-up was skipped; the SQLite
-            write still stands.
-          type: boolean
       type: object
     ingestReq:
       properties:
@@ -39745,17 +39209,6 @@ components:
             sibling slugs on, so it is expressed here, where the user's preference is.
           type: string
       type: object
-    projectsOut:
-      properties:
-        data:
-          description: Data are the org's projects with canonical + retained counts.
-          items:
-            $ref: '#/components/schemas/ProjectSummary'
-          type: array
-        total:
-          description: Total is len(data).
-          type: integer
-      type: object
     projectsProject:
       properties:
         analytics:
@@ -47787,27 +47240,6 @@ components:
           description: Since is when the formation was last touched, as a unix second.
           type: integer
       type: object
-    waitlistModeView:
-      properties:
-        host:
-          description: Host is the queried host, normalized (lowercased, port stripped).
-          type: string
-        known:
-          description: |-
-            Known is false when no registered service claims this host, or when the
-            registry is unavailable — the guard then lets the request through, which is
-            why the two cases answer alike.
-          type: boolean
-        service:
-          description: Service is the registered service that governs this host, empty
-            when none does.
-          type: string
-        waitlistMode:
-          description: |-
-            WaitlistMode is true when the service is GATED to approved users, false when
-            it is open. Always false for an ungoverned host.
-          type: boolean
-      type: object
     walletList:
       properties:
         wallets:
@@ -48348,41 +47780,6 @@ paths:
       tags:
       - account
       x-app: account
-      x-public: true
-      x-tool: true
-  /v1/admission/waitlist:
-    get:
-      description: |-
-        Reports whether ONE host is currently gated by the launch waitlist.
-        It resolves the host to the service that governs it and reads that service's
-        waitlist switch, so a guard sitting in front of a hosted surface can decide in one
-        call whether to show the waitlist or the product. It answers for the ONE host
-        asked about and never enumerates the registry, which is why it needs no
-        credential. It FAILS OPEN: an unregistered host, an unmounted registry and a store
-        fault all answer known=false with mode=false, so a request is never gated pre-boot
-        or on a registry fault.
-      operationId: get_admission_waitlist
-      parameters:
-      - description: |-
-          Host is the host to resolve, e.g. "chat.hanzo.ai". Defaults to the request's
-          own Host header when omitted, which is what lets a guard running on the
-          governed host ask about itself with no argument.
-        in: query
-        name: host
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/waitlistModeView'
-          description: ok
-      summary: Reports whether ONE host is currently gated by the launch waitlist.
-      tags:
-      - admission
-      x-app: admission
       x-public: true
       x-tool: true
   /v1/ads/campaigns:
@@ -104492,274 +103889,6 @@ paths:
       - ai
       x-app: ai
       x-public: true
-  /v1/research/artifacts:
-    get:
-      description: |-
-        Returns the caller org's research-diary feed newest-first —
-        the snapshots and reports tied to its runs, as metadata and content addresses;
-        the bytes themselves are fetched by hash. ?run= narrows to one run, ?project=
-        to one project (default the caller's project scope), and ?since= to a unix second.
-      operationId: get_research_artifacts
-      parameters:
-      - description: Project narrows to one project. Empty takes the caller's project
-          scope.
-        in: query
-        name: project
-        required: false
-        schema:
-          type: string
-      - description: Run narrows to one run's artifacts by its stable id.
-        in: query
-        name: run
-        required: false
-        schema:
-          type: string
-      - description: Since bounds the feed to artifacts recorded at or after this
-          unix second.
-        in: query
-        name: since
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/artifactsOut'
-          description: ok
-      summary: Returns the caller org's research-diary feed newest-first — the snapshots
-        and reports tied to its runs, as metadata and content addresses; the bytes
-        themselves are fetched by hash.
-      tags:
-      - research
-      x-app: research
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Records one research-diary artifact — a board snapshot or a
-        generated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits
-        the bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity
-        and the ref, so the address can never be poisoned by a client-asserted one. A
-        client-supplied sha256, if present, must match the bytes. The project is the
-        SERVER's value and visibility is forced private. Re-posting the same bytes is a
-        no-op that reports created=false.
-      operationId: post_research_artifacts
-      requestBody:
-        content:
-          application/json:
-            example:
-              content: iVBORw0KGgo=
-              kind: snapshot
-              run_id: benchmark:zen-1:mmlu
-            schema:
-              $ref: '#/components/schemas/ResearchArtifact'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/artifactOut'
-          description: ok
-      summary: Records one research-diary artifact — a board snapshot or a generated
-        report — CONTENT-ADDRESSED inside the trust boundary.
-      tags:
-      - research
-      x-app: research
-      x-public: true
-      x-tool: true
-  /v1/research/artifacts/{sha256}:
-    get:
-      description: |-
-        Streams the artifact's stored bytes — the retrieval half of hash-addressing, where the diary feed hands out hashes and this hands back what they name. The Content-Type is image/png when the artifact was recorded as a snapshot and application/octet-stream otherwise; it comes from the recorded KIND, not from sniffing the bytes, so an artifact filed as a report always arrives as opaque bytes.
-
-        The hash is an address, and the read is NOT global. The store file IS the org, so the same bytes recorded by two tenants are two artifacts, and a hash that exists but belongs to somebody else is a 404 exactly like one that was never recorded — knowing a content hash is never enough to read it. A caller with no validated org is refused 403 outright.
-
-        Project narrows further INSIDE that org: the artifact's project must equal the caller's, which is `?project=` when given and otherwise the caller's own project scope, defaulting to the default project. So an artifact filed under a named project is not found until the caller names that project — a mismatch is the same 404 an unknown hash gets, never a distinguishable refusal.
-
-        The address can be trusted because the WRITE derived it: the server hashes the bytes it stores, inside the trust boundary, and refuses a client-supplied sha256 that disagrees with them, so poisoning a first write would take a preimage. This read does not re-hash — it looks the hash up as a key.
-
-        One shape to expect: this route writes its errors IN-BAND as {"error": …} at the real status code, not the {status, error} envelope the typed ops beside it return. It is mounted under an error-flattening filter that would otherwise rewrite its 4xx, so the body is written before that filter runs. A store that cannot be opened is a 500.
-      operationId: get_research_artifacts_by_sha256
-      parameters:
-      - in: path
-        name: sha256
-        required: true
-        schema:
-          type: string
-      summary: Fetch one recorded artifact's bytes by its content hash.
-      tags:
-      - research
-      x-app: research
-      x-public: true
-  /v1/research/experiments:
-    get:
-      description: |-
-        Returns the caller org's CANONICAL experiments — the deterministic
-        deduped view over the versioned history. With no ?project= it reads the org's
-        whole set across projects (the ops board's cross-project view, since a project is
-        a sub-scope of the one tenant); ?project= narrows to one and ?kind= to one
-        discriminator.
-      operationId: get_research_experiments
-      parameters:
-      - description: Project narrows to one project. Empty reads the org's whole set
-          across projects.
-        in: query
-        name: project
-        required: false
-        schema:
-          type: string
-      - description: 'Kind narrows to one discriminator: benchmark, kernel-perf, training,
-          ablation or policy-eval.'
-        in: query
-        name: kind
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/experimentsOut'
-          description: ok
-      summary: Returns the caller org's CANONICAL experiments — the deterministic
-        deduped view over the versioned history.
-      tags:
-      - research
-      x-app: research
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Appends one batch of experiment and attempt versions to the
-        caller org's evidence store, idempotently by content, then rolls it up to the
-        analytics plane best-effort. The project is the SERVER's value and visibility is
-        forced private — an upload grants no training or publication right, which is a
-        separate call. A run carrying a BYO endpoint is SSRF-checked before the store is
-        touched. The answer carries BOTH the canonical (deduped) and retained (full
-        history) counts, so a caller sees the versioned truth rather than a dedup that
-        reads as loss.
-      operationId: post_research_experiments
-      requestBody:
-        content:
-          application/json:
-            example:
-              attempts: []
-              experiments:
-              - id: benchmark:zen-1:mmlu
-                kind: benchmark
-                metric: accuracy
-                subject: zen-1
-                ts: 1750000000
-                value: 0.81
-            schema:
-              $ref: '#/components/schemas/IngestRequest'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ingestOut'
-          description: ok
-      summary: Appends one batch of experiment and attempt versions to the caller
-        org's evidence store, idempotently by content, then rolls it up to the analytics
-        plane best-effort.
-      tags:
-      - research
-      x-app: research
-      x-public: true
-      x-tool: true
-  /v1/research/grants:
-    post:
-      description: |-
-        Records the SEPARATE authorization an upload never
-        implies: a record's visibility (private, org or public) and, for a run, its
-        training and commons-publication consent. Address a run by its stable id or an
-        artifact by its sha256; an artifact grant sets visibility only. The ORG is the
-        tenant boundary and comes from the validated principal, so a caller can only ever
-        grant within its own org; `project` locates WHICH record inside it and defaults to
-        the caller's project scope.
-      operationId: post_research_grants
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: benchmark:zen-1:mmlu
-              trainable: true
-              visibility: public
-            schema:
-              $ref: '#/components/schemas/GrantRequest'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/grantOut'
-          description: ok
-      summary: 'Records the SEPARATE authorization an upload never implies: a record''s
-        visibility (private, org or public) and, for a run, its training and commons-publication
-        consent.'
-      tags:
-      - research
-      x-app: research
-      x-public: true
-      x-tool: true
-  /v1/research/projects:
-    get:
-      description: |-
-        Returns every research project in the caller's org with its
-        real totals — canonical and retained side by side — which is the ops board's
-        "every project + real totals" view.
-      operationId: get_research_projects
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/projectsOut'
-          description: ok
-      summary: Returns every research project in the caller's org with its real totals
-        — canonical and retained side by side — which is the ops board's "every project
-        + real totals" view.
-      tags:
-      - research
-      x-app: research
-      x-public: true
-      x-tool: true
-  /v1/research/totals:
-    get:
-      description: |-
-        Returns the caller org's headline aggregate plus a per-kind
-        breakdown — the observatory's poll target. Canonical and retained counts travel
-        together, so a deduped view never reads as loss. ?project= narrows to one project.
-      operationId: get_research_totals
-      parameters:
-      - description: Project narrows the aggregate to one project. Empty aggregates
-          the whole org.
-        in: query
-        name: project
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResearchTotals'
-          description: ok
-      summary: Returns the caller org's headline aggregate plus a per-kind breakdown
-        — the observatory's poll target.
-      tags:
-      - research
-      x-app: research
-      x-public: true
-      x-tool: true
   /v1/responses:
     post:
       description: |-
@@ -112118,9 +111247,6 @@ tags:
 - description: 'Package account is your own account: API keys you mint and revoke,
     and org onboarding.'
   name: account
-- description: Package admission is the launch-control GATE for Hanzo's hosted services
-    — the COMPLETE waitlist feature, COMPOSING the ONE flag engine (apps/flags) one-way.
-  name: admission
 - description: Package ads is your paid ad campaigns, launched and paused from one
     place.
   name: ads
@@ -112377,8 +111503,6 @@ tags:
 - description: 'Package registry is your container and package registry: push images,
     pull them back, see what you store.'
   name: registry
-- description: Package research is every experiment you have ever run, kept and comparable.
-  name: research
 - description: 'Package risk is HANZO RISK''s model plane: the per-organisation feature
     surface and the per-organisation models trained on it.'
   name: risk
