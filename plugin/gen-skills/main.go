@@ -479,7 +479,6 @@ type index struct {
 	GeneratedBy string  `json:"generated_by"`
 	Issuer      string  `json:"issuer"`
 	Schema      string  `json:"schema"`
-	Scope       string  `json:"scope"`
 	SkillCount  int     `json:"skill_count"`
 	Skills      []entry `json:"skills"`
 	SpecVersion string  `json:"spec_version"`
@@ -600,7 +599,6 @@ func main() {
 			GeneratedBy: generatedBy,
 			Issuer:      brand.For(id).IAMIssuer,
 			Schema:      schemaID,
-			Scope:       "master",
 			SkillCount:  len(entries),
 			Skills:      entries,
 			SpecVersion: specVersion,
