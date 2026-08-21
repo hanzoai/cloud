@@ -24,7 +24,19 @@ API="${REVIEW_API:-https://api.hanzo.ai}"
 # gate then answered 401 on every push and nothing shipped for a day. Whatever
 # stands here must be PAID and private: never the `free` pool, which is
 # data-shared, and this reviewer is handed the diff of a private repository.
-MODEL="${REVIEW_MODEL:-fireworks/gpt-oss-120b}"
+#
+# AND IT MUST BE A MODEL THE CATALOG ACTUALLY SERVES, which is the same failure
+# again: `fireworks/gpt-oss-120b` appears in no entry of GET /v1/models, so every
+# review call failed, the gate refused as it is built to, and nothing shipped —
+# for far longer than a day. Check the id against the live catalog before
+# changing it, because a name that merely reads plausibly refuses every release:
+#
+#   curl -s https://api.hanzo.ai/v1/models | jq -r '.data[].id' | grep gpt-oss
+#
+# openai/gpt-oss-120b is served, premium (so not the shared free pool) and
+# declares a 131072 context — the diff bound above is 400 KB, so the window is
+# part of what makes it a fit rather than a coincidence.
+MODEL="${REVIEW_MODEL:-openai/gpt-oss-120b}"
 
 # An IAM access token, minted for this run by whoever invokes the reviewer.
 # There is no API key here and there is not meant to be one: IAM issues tokens,
