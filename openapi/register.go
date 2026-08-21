@@ -65,7 +65,6 @@ type registration struct {
 	// two routes cannot share an address. The exception is an address the
 	// derivation cannot name at all — see [identify].
 	id string
-
 }
 
 // opKey addresses a registration the same way the router addresses a route:

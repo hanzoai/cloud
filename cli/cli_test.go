@@ -260,7 +260,7 @@ func TestConfigFieldGetSet(t *testing.T) {
 // updating this list fails here instead of in a user's shell.
 var servedVerbs = []string{
 	"agent", "apps", "auth", "bots", "build", "cluster", "clusters", "completion",
-	"config", "deploy", "engine", "help", "link", "login", "logout", "run",
+	"config", "deploy", "engine", "help", "links", "login", "logout", "run",
 	"runner", "security", "unlink", "version", "whoami",
 }
 
@@ -277,7 +277,7 @@ var servedVerbs = []string{
 // Registering a `status` command here again re-forks the fleet view, so this entry
 // keeps it delegated.
 var delegatedVerbs = []string{
-	"code", "k8s", "node", "dev", "wallet", "network",
+	"code", "k8s", "node", "dev", "wallet", "networks",
 	"iam", "kms", "cloud", "gateway", "datastore", "status", "nope",
 }
 

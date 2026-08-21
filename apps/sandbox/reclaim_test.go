@@ -73,11 +73,11 @@ func TestReclaim(t *testing.T) {
 	cold := diskCold + 48*time.Hour
 
 	for _, c := range []struct {
-		name  string
-		disk  *unstructured.Unstructured
-		pods  []k8sruntime.Object
-		gone  bool
-		why   string
+		name string
+		disk *unstructured.Unstructured
+		pods []k8sruntime.Object
+		gone bool
+		why  string
 	}{
 		{
 			name: "cold and unmounted", disk: disk("m-acme-site-a1", day(cold)), gone: true,

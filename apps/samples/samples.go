@@ -14,7 +14,7 @@
 // It is deliberately a LEAF. It depends on the datastore seam (ai/object) and the
 // tenancy vocabulary (apps/principal) and nothing else in cloud, so every
 // compute source — apps/agents, apps/visor, ml — can import it without a
-// cycle (apps/link imports apps/agents, and apps/agents imports this).
+// cycle (apps/links imports apps/agents, and apps/agents imports this).
 //
 //   - Record(ctx, Sample)  append one utilization sample (samples.go)
 //   - Series(ctx, Query)   an org's samples over a bounded window (read.go)

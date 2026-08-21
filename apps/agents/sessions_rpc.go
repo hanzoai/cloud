@@ -13,7 +13,7 @@ import (
 //
 // The SESSIONS are this app's. The REVOKE is link's — it owns the credential row
 // and is the surface a human logs out from — and agents ships as its own binary,
-// so the direct call in apps/link/adapters.go reached a package that was never
+// so the direct call in apps/links/adapters.go reached a package that was never
 // mounted in the link process. StopSessions answered (0, nil) for that, the
 // revoke handler read it as "there were none", and every credential revoke on
 // the fleet returned 200 {"sessionsStopped":0} while the sessions it was meant

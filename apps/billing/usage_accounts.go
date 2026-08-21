@@ -20,14 +20,14 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hanzoai/cloud/apps/link"
+	"github.com/hanzoai/cloud/apps/links"
 	"github.com/zap-proto/zip"
 )
 
 // accounts is the GET /v1/billing/usage/accounts answer — link's breakdown
 // re-declared here so a per-tenant money answer can state its cache directive
-// (zip.HeaderCoder); the JSON is link.AccountsUsage's, byte for byte.
-type accounts link.AccountsUsage
+// (zip.HeaderCoder); the JSON is links.AccountsUsage's, byte for byte.
+type accounts links.AccountsUsage
 
 func (accounts) ResponseHeaders() map[string]string { return noStore() }
 
@@ -54,7 +54,7 @@ func (o ops) usageAccounts(ctx context.Context, _ *noInput) (*accounts, error) {
 	if err != nil {
 		return nil, err
 	}
-	view, ok := link.RoutedBreakdown(ctx, org, user)
+	view, ok := links.RoutedBreakdown(ctx, org, user)
 	if !ok {
 		// The linked-account plane is not co-resident (a split deploy). Honest
 		// "unavailable" — never a fabricated empty breakdown that reads as "no usage".
