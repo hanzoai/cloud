@@ -23,8 +23,9 @@ package label
 //     assertion of one.
 
 import (
-	"sort"
 	"time"
+
+	"github.com/hanzoai/cloud/claim"
 )
 
 // Window is the observation a caller is resolving under, and it is the whole of
@@ -37,25 +38,7 @@ import (
 // Both are values on the request, not globals, because a backtest that could not
 // move Now would be a backtest that resolves labels with today's knowledge and
 // reports a score no live model could ever have earned.
-type Window struct {
-	Now     time.Time
-	Horizon time.Duration
-}
-
-// Matured reports whether an event at `at` has aged past the horizon. A row that
-// has not may still be scored — the density model does not need a label — but it
-// must not be admitted to a supervised training set as a negative, because the
-// chargeback that would make it a positive has not had time to arrive.
-func (w Window) Matured(at time.Time) bool { return !at.Add(w.Horizon).After(w.Now) }
-
-// AsOf is the instant an event at `at` observes its labels at: the moment its
-// horizon closes. A label seen after it is a label that did not exist when the
-// model would have had to act, and it is invisible here.
-func (w Window) AsOf(at time.Time) time.Time { return at.Add(w.Horizon) }
-
-// visible reports whether an assertion was knowable to THIS PLANE at an instant.
-// It reads the derived Knowable and never the declared Seen — see Fact.Knowable.
-func visible(f Fact, asOf time.Time) bool { return !f.Knowable.After(asOf) }
+type Window = claim.Window
 
 // Resolved is the answer: what is in force, and what disagreed.
 type Resolved struct {
@@ -91,72 +74,41 @@ func (r Resolved) Disposition() Disposition { return r.Winner.Disposition }
 // not an error. "No label yet" is the ordinary state of a fresh transaction, and
 // a plane that answered Unproductive there would be manufacturing negatives.
 func Resolve(facts []Fact, asOf time.Time) (Resolved, bool) {
-	seen := make([]Fact, 0, len(facts))
-	for _, f := range facts {
-		if visible(f, asOf) {
-			seen = append(seen, f)
-		}
+	ords := make([]ord, len(facts))
+	for i, f := range facts {
+		ords[i] = ord{f}
 	}
-	if len(seen) == 0 {
+	w, losers, contested, ok := claim.Resolve(ords, asOf,
+		func(a, b ord) bool { return a.Fact.Disposition == b.Fact.Disposition })
+	if !ok {
 		return Resolved{}, false
 	}
-	sort.SliceStable(seen, func(i, j int) bool { return stronger(seen[i], seen[j]) })
-
 	out := Resolved{
-		Kind:    seen[0].Kind,
-		Subject: seen[0].Subject,
-		At:      seen[0].At,
-		AsOf:    asOf,
-		Winner:  seen[0],
+		Kind:      w.Fact.Kind,
+		Subject:   w.Fact.Subject,
+		At:        w.Fact.At,
+		AsOf:      asOf,
+		Winner:    w.Fact,
+		Contested: contested,
 	}
-	if len(seen) > 1 {
-		out.Conflicts = seen[1:]
-	}
-	for _, f := range out.Conflicts {
-		if f.Disposition != out.Winner.Disposition {
-			out.Contested = true
-			break
-		}
+	for _, l := range losers {
+		out.Conflicts = append(out.Conflicts, l.Fact)
 	}
 	return out, true
 }
 
-// stronger is the TOTAL ORDER, and every term of it is deliberate:
+// ord adapts a Fact to the shared order. The four questions claim.Stronger
+// asks are answered here and nowhere else; rank is the ONE term this plane
+// contributes, and it is the fraud vocabulary's own adjudication weight.
 //
-//  1. RANK. Adjudication weight, declared once in fact.go's precedence map. A
-//     card network's chargeback outranks an analyst's hunch because a different
-//     amount of process stands behind it.
-//  2. LATER Knowable. Within one rank, the most recently knowable claim wins —
-//     which is exactly how a SOURCE CORRECTING ITSELF works: the correction is a
-//     new assertion, it wins from the moment it became knowable, and the original
-//     still wins for every observation instant BEFORE that. A correction
-//     therefore cannot retroactively change what a past decision knew. It is the
-//     DERIVED instant here for the same reason it is in visible(): the term that
-//     decides which of two equally-ranked claims is in force must not be one a
-//     caller can set to any value it likes.
-//  3. HIGHER Confidence. A stated confidence is only ever a tie-breaker; it
-//     cannot lift a weak source above a strong one, or every caller would send 1.
-//  4. LOWER ID. The content digest, so a tie is broken by a value both sides
-//     compute identically rather than by whichever row the storage engine
-//     happened to return. Determinism here is what makes a materialisation
-//     reproducible.
-//
-// A total order matters more than any single term of it: two runs over one set of
-// assertions must produce one training set, or nothing downstream is comparable.
-func stronger(a, b Fact) bool {
-	ra, _ := rank(a.Source)
-	rb, _ := rank(b.Source)
-	if ra != rb {
-		return ra < rb
-	}
-	if !a.Knowable.Equal(b.Knowable) {
-		return a.Knowable.After(b.Knowable)
-	}
-	if a.Confidence != b.Confidence {
-		return a.Confidence > b.Confidence
-	}
-	return a.ID < b.ID
-}
+// The methods shadow the promoted fields of the same name, which is the point:
+// the field is the value, the method is the answer the order reads.
+type ord struct{ Fact }
+
+func (o ord) Knowable() time.Time { return o.Fact.Knowable }
+func (o ord) Confidence() float64 { return o.Fact.Confidence }
+func (o ord) Digest() string      { return o.Fact.ID }
+func (o ord) Rank() int           { r, _ := rank(o.Fact.Source); return r }
 
 // Cohort is one MATURED event and what was knowable about it by its own as-of.
 //
