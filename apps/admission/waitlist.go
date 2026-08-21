@@ -68,17 +68,35 @@ type SeedService struct {
 // ServiceInput is the admin onboard/edit payload for /v1/admin/services. WaitlistMode
 // sets the launch switch for a NEW service; a re-register PRESERVES the live switch.
 type ServiceInput struct {
-	Service      string   `json:"service"`
-	DisplayName  string   `json:"displayName"`
-	Description  string   `json:"description"`
-	Hosts        []string `json:"hosts"`
-	WaitlistMode bool     `json:"waitlistMode"`
+	// Service is the slug to onboard or edit, lowercased on the way in. Required.
+	// It is the registry key and it names the switch — waitlist.<service> — so a
+	// slug that already exists edits that service rather than creating a second.
+	Service string `json:"service"`
+	// DisplayName is the name the launch board shows. It also titles the switch
+	// ("Waitlist · <displayName>") the first time the service is registered.
+	DisplayName string `json:"displayName"`
+	// Description is one line saying what the service is, for the board.
+	Description string `json:"description"`
+	// Hosts is every request host this service governs — "chat.hanzo.ai",
+	// "hanzo.chat". Each is normalized (lowercased, port stripped) and the set
+	// REPLACES the stored one, so an edit that omits a host stops governing it. A
+	// host another service already claims is skipped: first claim wins.
+	Hosts []string `json:"hosts"`
+	// WaitlistMode is the launch mode for a NEW service: true gates it to approved
+	// users, false opens it. On a re-register it is IGNORED — the live switch is
+	// preserved, so editing the hosts of an opened service never silently closes it.
+	WaitlistMode bool `json:"waitlistMode"`
 }
 
 // ServiceView is one service as the admin board renders it: the registry row plus its
 // LIVE waitlist mode (the waitlist.<svc> switch evaluated through the engine).
 type ServiceView struct {
 	ServiceRow
+	// WaitlistMode is the mode IN FORCE: true means the service is gated to
+	// approved users, false means it is open to anyone. It is read from the
+	// waitlist.<service> switch at the moment of the read, not stored on the
+	// registry row, so it reflects a flip made anywhere in the fleet within one
+	// evaluation TTL.
 	WaitlistMode bool `json:"waitlistMode"`
 }
 
