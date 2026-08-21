@@ -231,6 +231,11 @@ type projectsProject struct {
 	Hidden bool `json:"hidden"`
 	// HiddenReason is why moderation hid it. Absent when it is not hidden.
 	HiddenReason string `json:"hiddenReason,omitempty"`
+	// Starred is THIS CALLER's star, not a property of the project — two people
+	// in the same org see different values for the same row, which is the whole
+	// point of it. Always present so a client can tell "not starred" from "this
+	// API is too old to say", the same reason visibility and hidden are.
+	Starred bool `json:"starred"`
 	// Upstream credits the third-party work this project was published from — a
 	// free-text line, because the honest answer is a name and a title that no enum
 	// could hold. Absent means NOBODY HAS SAID, not that there is nothing to say.
@@ -840,7 +845,7 @@ func loadProject(s *cloud.Service[state], ctx context.Context, org, slug string)
 // behind both. It requires a validated principal (403 without one) and is keyed
 // by that principal's org, so it never contains another tenant's project.
 func (o ops) list(ctx context.Context, _ *void) (*projectsProjects, error) {
-	_, org, err := o.callerOf(ctx)
+	c, org, err := o.callerOf(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -848,9 +853,19 @@ func (o ops) list(ctx context.Context, _ *void) (*projectsProjects, error) {
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
+	// ONE query for every star this person holds, not one per row: a list of
+	// forty projects asking the database forty-one questions is how a page gets
+	// slow for a reason nobody can see. A failure here is not fatal — the list is
+	// the answer, and rendering it unstarred beats refusing to render it at all.
+	starred, err := o.s.State.store.StarredBy(ctx, org, c.User())
+	if err != nil {
+		starred = map[string]bool{}
+	}
 	out := make(projectsProjects, 0, len(rows))
 	for _, p := range rows {
-		out = append(out, toProject(p))
+		v := toProject(p)
+		v.Starred = starred[p.ID]
+		out = append(out, v)
 	}
 	return &out, nil
 }
@@ -862,11 +877,17 @@ func (o ops) list(ctx context.Context, _ *void) (*projectsProjects, error) {
 // keyed by (org, slug), so another tenant's slug is a 404 exactly like a
 // nonexistent one.
 func (o ops) get(ctx context.Context, in *projectsRef) (*projectsProject, error) {
-	_, _, p, err := o.siteOf(ctx, in.Slug)
+	c, org, p, err := o.siteOf(ctx, in.Slug)
 	if err != nil {
 		return nil, err
 	}
 	out := toProject(p)
+	// One project, so one lookup — and the same non-fatal rule the list follows:
+	// an unreadable star is reported as "not starred" rather than losing the
+	// project the caller actually asked for.
+	if starred, err := o.s.State.store.StarredBy(ctx, org, c.User()); err == nil {
+		out.Starred = starred[p.ID]
+	}
 	return &out, nil
 }
 
