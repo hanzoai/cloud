@@ -59,12 +59,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"flow_1"}`),
 	})
-	zip.Describe("GET /v1/auto/pieces", zip.Doc{
-		Description: "Pieces is the retired-name alias of the connector catalogue. It serves exactly\nwhat GET /v1/auto/connectors serves, under the name this surface used\nbefore \"piece\" (the ActivePieces term) became \"connector\", and stays valid for\nclients pinned to the old path. Prefer /connectors.",
-		Fields: map[string]string{
-			"PropSpec.type": "string|number|boolean|object|array",
-		},
-	})
 	zip.Describe("GET /v1/auto/runs", zip.Doc{
 		Description: "Returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page.",
 		Fields: map[string]string{

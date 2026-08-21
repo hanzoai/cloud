@@ -1,7 +1,6 @@
 package auto
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -60,10 +59,12 @@ func TestConnectorsCatalog(t *testing.T) {
 		t.Fatalf("slack auth descriptor wrong: %+v", byName["slack"].Auth)
 	}
 
-	// Back-compat: the retired /pieces path is a pure alias — same 200, same body.
-	alias := req(t, app, http.MethodGet, "/v1/auto/pieces", "acme", nil)
-	if alias.Code != http.StatusOK || !bytes.Equal(alias.Body, r.Body) {
-		t.Fatalf("/pieces alias must mirror /connectors: code=%d bodyEqual=%v", alias.Code, bytes.Equal(alias.Body, r.Body))
+	// The retired /pieces path is GONE, not aliased. An alias is how a second
+	// name survives a rename, and this one had outlived its argument: it forwarded
+	// verbatim to /connectors, so every client reading the document saw one
+	// capability at two addresses and had to pick.
+	if gone := req(t, app, http.MethodGet, "/v1/auto/pieces", "acme", nil); gone.Code != http.StatusNotFound {
+		t.Fatalf("/pieces answered %d — the retired name is back", gone.Code)
 	}
 }
 
