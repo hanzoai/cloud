@@ -319,6 +319,13 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 	// Additive column migrations for existing databases. SQLite has no
 	// ADD COLUMN IF NOT EXISTS, so attempt each and ignore the duplicate-column
 	// error — the idempotent forward-only migration pattern.
+	// Stars live in their OWN table, not a column: a star is per-person and a
+	// project row is per-org, so a column could only hold one person's answer.
+	// See stars.go.
+	if _, err := s.db.Exec(starsDDL); err != nil {
+		return err
+	}
+
 	for _, alter := range []string{
 		`ALTER TABLE projects ADD COLUMN cache_control TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE projects ADD COLUMN last_purge_at INTEGER NOT NULL DEFAULT 0`,
