@@ -114,7 +114,7 @@ func TestGroupWithLaterUseComposes(t *testing.T) {
 // is what a group IS — down BOTH paths, because a subsystem uses both:
 //
 //	v1.Get("/x", h)              // the route method
-//	zip.Get(v1, "/bots", op)     // OpScope — apps/bots and apps/entitlements
+//	zip.Get(v1, "/bots", op)     // OpScope — apps/bot and apps/entitlements
 //
 // and it must leave an absolute path registered at the subsystem ROOT alone,
 // which is what every other subsystem writes.

@@ -25,8 +25,8 @@
 //     footprint) debits this ONE ledger with a category tag, so it is already the
 //     unified cost source — this endpoint is the categorizing lens over it.
 //   - LLM usage totals: hanzo.cloud_usage, the per-org warehouse ledger (the same
-//     table /v1/analytics/* and the o11y board read). Totals only here — the
-//     per-model / timeseries detail stays at /v1/analytics/*.
+//     table /v1/event/* and the o11y board read). Totals only here — the
+//     per-model / timeseries detail stays at /v1/event/*.
 //   - The account board: the caller's OWN linked provider accounts (a Claude Max
 //     plan's window %, metered from the provider's own login) beside the org's
 //     Hanzo-routed usage, every row labelled by source/scope and NEVER summed. This
@@ -146,7 +146,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 }
 
 // usageWindowQuery is the window every money read shares: the SAME grammar
-// /v1/analytics/* uses, so the two surfaces cannot drift.
+// /v1/event/* uses, so the two surfaces cannot drift.
 type usageWindowQuery struct {
 	// Range is the window: a count and a unit — 24h, 7d, 90d, any <N>h or <N>d —
 	// or day, week, month, all, custom. Empty means 24h. A label this surface

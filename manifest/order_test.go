@@ -23,21 +23,21 @@ import "testing"
 var frozen = []string{
 	"pubsub", "kafka", "mq", "skills", "flags", "kms", "metrics",
 	"ingress", "account", "iam", "base", "o11y", "authz",
-	"commerce", "licensing", "plan", "pricing", "storage", "provisioning",
+	"commerce", "licensing", "plan", "pricing", "s3", "provisioning",
 	"billing", "rollingcap", "allowance", "platform", "projects",
 	"dns", "domain", "prompts", "agents", "link", "wallets",
 	"x402", "deploy", "functions", "todo", "templates", "blueprint",
 	"framework", "knowledge", "graph", "help", "content", "catalogsync", "webhooks",
 	"ml", "label", "reference", "risk", "dataset", "usage", "leaderboard", "crm", "marketing", "ads",
-	"campaign", "validators", "social", "analytics", "git", "sync",
-	"visor", "captable", "code", "lsp", "zt", "share",
+	"campaign", "validators", "social", "event", "git", "sync",
+	"visor", "captable", "code", "lsp", "network", "share",
 	"dataroom", "explorer", "security", "integrations", "destinations", "cloudflare",
 	"sbom", "team", "meet", "settings", "prefs", "notify",
 	"channels", "gateway", "entitlements", "exec", "sandboxes", "websearch", "crawl", "seo",
 	"index", "catalog", "taxonomy", "world", "web3", "bot", "authors",
-	"bots", "audit", "affiliates", "esign", "search", "evals",
+	"audit", "affiliates", "esign", "search", "evals",
 	"benchmark", "research", "experiments", "books", "treasury", "admin",
-	"admission", "tasks", "tel", "automations", "flow", "engine", "registry", "tools", "marketplace", "referrals",
+	"admission", "tasks", "tel", "auto", "flow", "engine", "registry", "tools", "marketplace", "referrals",
 	// `agent` is GONE from this sequence on purpose: it was a second app beside
 	// `agents`, one concept with two plugins and a pair of names differing by an
 	// `s`. Its surface (/v1/agent and its presets/conversations) is mounted by

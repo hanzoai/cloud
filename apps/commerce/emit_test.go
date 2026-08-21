@@ -269,7 +269,7 @@ func TestRecordStatesTheSaleEvenWhenTheCreditRefuses(t *testing.T) {
 // custom event no platform optimises on.
 func TestOrderCompletedIsTheTranslatorsOwnName(t *testing.T) {
 	if orderCompleted != "order_completed" {
-		t.Errorf("the sale is named %q — apps/destinations maps %q onto Purchase, and /v1/insights "+
+		t.Errorf("the sale is named %q — apps/destinations maps %q onto Purchase, and /v1/event/insights "+
 			"counts it as an order", orderCompleted, "order_completed")
 	}
 	if strings.TrimSpace(orderCompleted) != orderCompleted {

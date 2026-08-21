@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/commerce/events"
 	"github.com/hanzoai/commerce/infra"
@@ -29,7 +29,7 @@ import (
 // TestOneStreamBindsEventSubjects is the regression that names the defect: JetStream
 // refuses a stream whose subjects overlap an existing one, so two subsystems each
 // declaring a stream over event.> is not a style problem — it is an outage. The plane
-// analytics owns is created FIRST (exactly as analytics.PublishEvents does it), and
+// analytics owns is created FIRST (exactly as event.PublishEvents does it), and
 // then every stream this dispatcher consumes must survive being ensured against it.
 //
 // Before the fix, webhooks' own EVENTS/event.> row failed here with an overlap error.
@@ -48,7 +48,7 @@ func TestOneStreamBindsEventSubjects(t *testing.T) {
 	defer func() { _ = cl.Close() }()
 
 	// The owner creates the plane. This is the analytics stream, under its name.
-	if err := analytics.EnsureEventStream(ctx, cl); err != nil {
+	if err := event.EnsureEventStream(ctx, cl); err != nil {
 		t.Fatalf("analytics must be able to create its own stream: %v", err)
 	}
 
@@ -65,10 +65,10 @@ func TestOneStreamBindsEventSubjects(t *testing.T) {
 	// a name of its own. Consuming analytics' stream is by NAME, never by re-binding.
 	for _, s := range streams {
 		for _, sub := range s.subjects {
-			if strings.HasPrefix(sub, "event.") && s.stream != analytics.EventStream {
-				t.Fatalf("stream %q binds %q — the event plane is analytics.EventStream (%q); "+
+			if strings.HasPrefix(sub, "event.") && s.stream != event.EventStream {
+				t.Fatalf("stream %q binds %q — the event plane is event.EventStream (%q); "+
 					"webhooks must consume it, not declare a second owner",
-					s.stream, sub, analytics.EventStream)
+					s.stream, sub, event.EventStream)
 			}
 		}
 	}
@@ -116,7 +116,7 @@ func TestAnalyticsEventReachesWebhook(t *testing.T) {
 	d.start()
 	defer d.stop()
 
-	batch := []analytics.SinkEvent{{
+	batch := []event.SinkEvent{{
 		MessageID:  "m1",
 		Name:       "$pageview",
 		DistinctID: "d1",
@@ -128,10 +128,10 @@ func TestAnalyticsEventReachesWebhook(t *testing.T) {
 	defer tick.Stop()
 	for {
 		// The publisher is ANALYTICS. webhooks holds no publish path at all.
-		analytics.PublishEvents("acme", batch)
+		event.PublishEvents("acme", batch)
 		select {
 		case body := <-received:
-			var env analytics.EventEnvelope
+			var env event.EventEnvelope
 			if err := json.Unmarshal(body, &env); err != nil {
 				t.Fatalf("delivered body is not the analytics envelope: %v (%s)", err, body)
 			}
@@ -200,7 +200,7 @@ func TestWarehouseFactsAreNotDeliveredAsEnvelopes(t *testing.T) {
 // analyticsSource is the streams row carrying event.> — the plane analytics owns.
 func analyticsSource() streamSource {
 	for _, s := range streams {
-		if s.stream == analytics.EventStream {
+		if s.stream == event.EventStream {
 			return s
 		}
 	}

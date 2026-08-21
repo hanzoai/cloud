@@ -3,7 +3,7 @@
 //
 // Both are built from the one shared admin credential (S3_ADMIN_*).
 //
-// Its consumers are apps/storage (the /v1/s3 object plane), apps/projects (the
+// Its consumers are apps/s3 (the /v1/s3 object plane), apps/projects (the
 // deploy blob store), apps/sites (static site serving), clients/s3vfs (deps.VFS,
 // team blobs) and build.go. One credential source, one endpoint, one connect
 // path — but NOT yet the only construction site: apps/provisioning builds its own

@@ -25,7 +25,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	contract "github.com/hanzoai/cloud/plane"
-	peer "github.com/hanzoai/cloud/plane/analytics"
+	peer "github.com/hanzoai/cloud/plane/event"
 )
 
 // filed is one emit as the plane received it: what was said, and whom it was said
