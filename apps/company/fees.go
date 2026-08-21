@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // WHAT A FORMATION COSTS, ITEMISED.
@@ -17,13 +18,16 @@ import (
 // a payer is agreeing to, and a quote that cannot be itemised is a quote nobody
 // can check.
 //
-// STATE FEES ARE NOT WRITTEN DOWN HERE, DELIBERATELY. Delaware's and Wyoming's
-// filing fees are published numbers set by those states and revised by them —
-// a figure compiled in here would be right until the day it silently was not,
-// and the way that surfaces is a customer charged the wrong amount for a filing
-// we already submitted. They are configured per deployment, and a jurisdiction
-// with no configured fee REFUSES to quote rather than guessing. That is the same
-// direction every other gate in this repo fails in.
+// A STATE FEE SHIPS WITH ITS PROVENANCE, because the failure mode is silence.
+// Delaware's and Wyoming's filing fees are set by those states and revised by
+// them, so a bare constant is right until the day it quietly is not — and that
+// surfaces as a customer charged the wrong amount for a filing already
+// submitted. Nobody reviewing a number can tell how old it is.
+//
+// So each one carries WHERE it came from and WHEN it was last checked, the
+// deployment can override it, and `stale` reports any figure older than the
+// review window. The number works out of the box; the staleness is legible
+// instead of invisible.
 //
 // Ours are different in kind: the service fee and the agent fee are prices we
 // set, so they have defaults and live in code.
@@ -40,6 +44,14 @@ type Charge struct {
 	// fee is not our revenue, and a quote that hides that is a quote that reads
 	// as a bigger margin than it is.
 	PassThrough bool `json:"passThrough,omitempty"`
+	// Source names who publishes this amount, for a line we merely pass through.
+	// Empty for a price of ours, which needs no external authority.
+	Source string `json:"source,omitempty"`
+	// AsOf is when a pass-through amount was last checked against its source.
+	AsOf string `json:"asOf,omitempty"`
+	// Stale reports that AsOf is older than the review window — the figure may
+	// have moved and nobody has looked. It does not block; it tells.
+	Stale bool `json:"stale,omitempty"`
 	// Recurring marks a line that repeats. An agent of record is billed every
 	// year for as long as the entity stands, and a payer agreeing to a one-time
 	// total is not agreeing to that.
@@ -94,11 +106,77 @@ func envCents(key string) (int64, bool) {
 	return n, true
 }
 
-// stateFeeCents is the jurisdiction's own filing fee, in cents, or not-configured.
-// The key carries the jurisdiction so one deployment can serve both without the
-// two ever being confused for each other.
-func stateFeeCents(j Jurisdiction) (int64, bool) {
-	return envCents("CLOUD_COMPANY_STATE_FEE_CENTS_" + strings.ToUpper(string(j)))
+// StateFee is a jurisdiction's filing fee AND the receipt for where it came from.
+type StateFee struct {
+	// AmountCents is what that state charges to file.
+	AmountCents int64 `json:"amountCents"`
+	// Source names the authority that publishes it, so a reviewer can check the
+	// figure without first having to work out who would know.
+	Source string `json:"source"`
+	// AsOf is when this figure was last checked against that authority, RFC 3339
+	// date. It is what makes a stale price visible rather than merely wrong.
+	AsOf string `json:"asOf"`
+	// Structure narrows the fee when a state charges differently per entity; empty
+	// means the figure applies to every structure this state forms.
+	Structure Structure `json:"structure,omitempty"`
+}
+
+// stateFees are the shipped defaults. Overridable per deployment, and every one
+// of them is a figure some human checked on the date it carries.
+var stateFees = map[Jurisdiction][]StateFee{
+	JurisdictionDE: {
+		{Structure: StructureLLC, AmountCents: 11000, Source: "Delaware Division of Corporations", AsOf: "2026-08-21"},
+		{Structure: StructureDAOLLC, AmountCents: 11000, Source: "Delaware Division of Corporations", AsOf: "2026-08-21"},
+		{Structure: StructureCCorp, AmountCents: 8900, Source: "Delaware Division of Corporations", AsOf: "2026-08-21"},
+	},
+	JurisdictionWY: {
+		{AmountCents: 10000, Source: "Wyoming Secretary of State", AsOf: "2026-08-21"},
+	},
+}
+
+// stateFee resolves the filing fee for one structure in one jurisdiction.
+//
+// An ops override wins outright and is reported with no source, because a figure
+// this deployment was told is not a figure anyone here checked — saying otherwise
+// would launder a local value as a verified one.
+func stateFee(s Structure, j Jurisdiction) (StateFee, bool) {
+	if n, ok := envCents("CLOUD_COMPANY_STATE_FEE_CENTS_" + strings.ToUpper(string(j))); ok {
+		return StateFee{AmountCents: n, Source: "deployment override", AsOf: ""}, true
+	}
+	rows, ok := stateFees[j]
+	if !ok {
+		return StateFee{}, false
+	}
+	var fallback StateFee
+	var haveFallback bool
+	for _, r := range rows {
+		if r.Structure == s {
+			return r, true
+		}
+		if r.Structure == "" {
+			fallback, haveFallback = r, true
+		}
+	}
+	return fallback, haveFallback
+}
+
+// feeReviewWindow is how long a published figure is trusted before it wants
+// re-checking. States revise annually at most, so a year is generous and a figure
+// older than one is a figure nobody has looked at in longer than that.
+const feeReviewWindow = 365 * 24 * time.Hour
+
+// Stale reports that this figure has not been checked inside the review window.
+// An override has no AsOf and is never called stale: it is the deployment's to
+// keep current, and nagging about it would train a reader to ignore the flag.
+func (f StateFee) Stale(now time.Time) bool {
+	if f.AsOf == "" {
+		return false
+	}
+	t, err := time.Parse("2006-01-02", f.AsOf)
+	if err != nil {
+		return true // an unparseable date is not a date anyone checked
+	}
+	return now.Sub(t) > feeReviewWindow
 }
 
 // agentFeeCents is what we charge to be the agent of record, per year.
@@ -129,15 +207,15 @@ const (
 // as the whole bill, and the customer would meet the rest of it after we had
 // already filed — which is the moment it is least fixable.
 func TariffFor(s Structure, j Jurisdiction, o Options) (*Tariff, error) {
-	state, ok := stateFeeCents(j)
+	sf, ok := stateFee(s, j)
 	if !ok {
-		return nil, fmt.Errorf("company: no filing fee configured for %s — set CLOUD_COMPANY_STATE_FEE_CENTS_%s to that state's published fee; refusing to quote a formation whose cost is unknown", j, strings.ToUpper(string(j)))
+		return nil, fmt.Errorf("company: no filing fee known for %s — set CLOUD_COMPANY_STATE_FEE_CENTS_%s to that state's published fee; refusing to price a formation whose cost is unknown", j, strings.ToUpper(string(j)))
 	}
 
 	q := &Tariff{Structure: s, Jurisdiction: j, Currency: "usd"}
 	q.Lines = append(q.Lines,
 		Charge{Code: "formation", Label: "Formation service", AmountCents: feeCents()},
-		Charge{Code: "state_filing", Label: jurisdictionName(j) + " filing fee", AmountCents: state, PassThrough: true},
+		Charge{Code: "state_filing", Label: jurisdictionName(j) + " filing fee", AmountCents: sf.AmountCents, PassThrough: true, Source: sf.Source, AsOf: sf.AsOf, Stale: sf.Stale(time.Now())},
 	)
 	if o.ExpeditedEIN {
 		q.Lines = append(q.Lines, Charge{Code: "expedited_ein", Label: "Expedited EIN", AmountCents: expeditedEINFeeCents()})
