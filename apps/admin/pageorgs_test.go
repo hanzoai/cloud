@@ -16,24 +16,33 @@ func TestPageOrgsBoundsTheFanOut(t *testing.T) {
 		all[i].Name = string(rune('a' + i%26))
 	}
 
-	if got := len(pageOrgs(all, nil)); got != 200 {
-		t.Errorf("no input = %d rows, want the 200 default — an unpaged default is the bug", got)
+	if got := len(pageOrgs(all, nil)); got != 20 {
+		t.Errorf("no input = %d rows, want the 20 default — an unpaged default is the bug", got)
+	}
+	// A caller may widen it, up to the ceiling.
+	if got := len(pageOrgs(all, &orgsIn{PageSize: "100"})); got != 100 {
+		t.Errorf("pageSize=100 = %d rows, want 100", got)
+	}
+	// And no further: an unbounded page size is the unbounded directory again,
+	// arriving as a query string rather than as a reviewed change.
+	if got := len(pageOrgs(all, &orgsIn{PageSize: "10000"})); got != 100 {
+		t.Errorf("pageSize=10000 = %d rows, want the 100 ceiling", got)
 	}
 	if got := len(pageOrgs(all, &orgsIn{PageSize: "50"})); got != 50 {
 		t.Errorf("pageSize=50 = %d rows", got)
 	}
 	// The last page is short, not padded.
-	if got := len(pageOrgs(all, &orgsIn{Page: "4", PageSize: "200"})); got != 84 {
-		t.Errorf("page 4 of 684@200 = %d rows, want 84", got)
+	if got := len(pageOrgs(all, &orgsIn{Page: "7", PageSize: "100"})); got != 84 {
+		t.Errorf("page 7 of 684@100 = %d rows, want 84", got)
 	}
 	// Walking past the end stops cleanly rather than erroring or wrapping.
-	if got := pageOrgs(all, &orgsIn{Page: "99", PageSize: "200"}); got != nil {
+	if got := pageOrgs(all, &orgsIn{Page: "99", PageSize: "100"}); got != nil {
 		t.Errorf("page 99 = %d rows, want none", len(got))
 	}
 	// Garbage falls back to the defaults instead of returning zero rows, because
 	// a directory that renders empty on a bad query looks like an empty fleet.
-	if got := len(pageOrgs(all, &orgsIn{Page: "abc", PageSize: "-3"})); got != 200 {
-		t.Errorf("garbage input = %d rows, want the 200 default", got)
+	if got := len(pageOrgs(all, &orgsIn{Page: "abc", PageSize: "-3"})); got != 20 {
+		t.Errorf("garbage input = %d rows, want the 20 default", got)
 	}
 }
 
