@@ -7,11 +7,18 @@
 // DNS state of its own, so without this thin head console.hanzo.ai/v1/dns/* 404s
 // and the dashboard shows empty zones.
 //
-// SHAPE. One prefix (/v1/dns/*), every verb, full path passthrough, forwarded to a
-// service whose base URL comes from env (HANZO_DNS_URL) -- the SAME shape and env
-// convention the domain product uses to reach the same plane. It builds a FRESH
-// upstream request and sets only the headers it means to send, so no inbound header
-// (a stray cookie, a forged X-*, an injected Authorization copy) is blindly relayed.
+// SHAPE. One prefix (/v1/dns/*), every verb, full path passthrough, answered by the
+// DNS control plane this deployment selected. It builds a FRESH upstream request and
+// sets only the headers it means to send, so no inbound header (a stray cookie, a
+// forged X-*, an injected Authorization copy) is blindly relayed.
+//
+// WHICH PLANE IS CONFIGURATION, NOT CODE. The plane sits behind Provider
+// (provider.go): the head validates the caller, scopes the path, reads the operation
+// off the address, and hands over a Call. HANZO_DNS_PROVIDER names the adapter and
+// defaults to Hanzo's own plane (hanzo.go, which reads HANZO_DNS_URL). A second plane
+// — Cloudflare, Route 53, anything an org already runs — is a NEW FILE carrying a
+// type, its four methods and a register() in its init(): no edit here, none to the
+// registry, none to the route.
 //
 // UNTYPED, AND THE COUNT IS FIVE. The whole surface is one All() registration on
 // a greedy wildcard, so it publishes five operations (one per method the document
@@ -32,11 +39,9 @@
 package dns
 
 import (
-	"io"
+	"errors"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 
 	luxlog "github.com/luxfi/log"
 
@@ -108,40 +113,19 @@ func init() {
 
 }
 
-// defaultDNSURL is the in-cluster DNS control-plane API -- the operator's
-// DNSConnector default endpoint (the API listens on :8443). Used when HANZO_DNS_URL
-// is unset so a standard cluster deployment forwards without extra config.
-const defaultDNSURL = "http://coredns-hanzodns.dns-system.svc:8443"
-
-// maxDNSBody bounds the upstream response read: zone/record listings are small
-// JSON, so this caps a hostile or runaway upstream body.
-const maxDNSBody = 4 << 20 // 4 MiB
-
-// forwardTimeout bounds a single upstream call so a hung DNS plane cannot wedge a
-// console request. The caller's context deadline (if tighter) still wins.
-const forwardTimeout = 15 * time.Second
-
-type edge struct {
-	base string
-	http *http.Client
-}
+// edge is the head: a validated caller, a scoped path, and the one provider this
+// deployment answers from. It holds no endpoint and no credential — those are the
+// provider's, and only the provider's.
+type edge struct{ p Provider }
 
 // Mount wires the DNS dashboard forward head at /v1/dns/* (all verbs, full path
 // passthrough). Registered as a subsystem in apps.Wire(); on by default.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	e := &edge{
-		base: strings.TrimRight(strings.TrimSpace(dnsURL()), "/"),
-		http: &http.Client{
-			Timeout: forwardTimeout,
-			// Do NOT follow upstream 3xx. Relay the redirect response verbatim
-			// (status + Location) so responses pass through as claimed and a
-			// redirect can never silently re-target the request onto another host
-			// or path under this head's own (fresh-request, bearer-relay) identity.
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
+	p, err := selected()
+	if err != nil {
+		return err
 	}
+	e := &edge{p: p}
 	// UNTYPED BY DESIGN — and it is the only route here, so this whole subsystem
 	// publishes no prose, no MCP tool and no CLI command. Three wire facts make it
 	// untypable as it stands, each on its own sufficient:
@@ -182,17 +166,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// openapi/relay.go.
 	app.Group("/v1/dns").All("/*", e.forward)
 	if luxlog.Default() != nil {
-		luxlog.Default().Info("dns forward head mounted", "upstream", e.base)
+		luxlog.Default().Info("dns forward head mounted", "provider", p.ID())
 	}
 	return nil
-}
-
-// dnsURL is the DNS control-plane base URL, from env with an in-cluster default.
-func dnsURL() string {
-	if v := strings.TrimSpace(os.Getenv("HANZO_DNS_URL")); v != "" {
-		return v
-	}
-	return defaultDNSURL
 }
 
 // forward relays one /v1/dns/* request to the DNS control plane under the CALLER'S
@@ -205,9 +181,6 @@ func (e *edge) forward(c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
 		return c.JSON(http.StatusForbidden, fail("forbidden", "a validated principal is required"))
-	}
-	if e.base == "" {
-		return c.JSON(http.StatusServiceUnavailable, fail("unconfigured", "dns control plane is not configured"))
 	}
 
 	// Path + query pass through verbatim, but ONLY within /v1/dns. uri.Path() is
@@ -231,19 +204,6 @@ func (e *edge) forward(c *zip.Ctx) error {
 	// so a path can never re-target another host: no SSRF.
 	if strings.ContainsRune(p, '%') || strings.Contains(p, "..") {
 		return c.JSON(http.StatusBadRequest, fail("bad_request", "path must be under /v1/dns"))
-	}
-	target := e.base + p
-	if qs := uri.QueryString(); len(qs) > 0 {
-		target += "?" + string(qs)
-	}
-
-	var body io.Reader
-	if b := c.Body(); len(b) > 0 {
-		body = strings.NewReader(string(b))
-	}
-	req, err := http.NewRequestWithContext(c.Context(), c.Method(), target, body)
-	if err != nil {
-		return c.JSON(http.StatusBadGateway, fail("bad_gateway", "dns request failed"))
 	}
 
 	// BEARER RELAY -- the caller's OWN validated bearer, unchanged. The DNS plane
@@ -273,31 +233,38 @@ func (e *edge) forward(c *zip.Ctx) error {
 		return c.JSON(http.StatusUnauthorized, fail("unauthorized",
 			"the DNS plane requires a session bearer; an API key cannot be relayed to it"))
 	}
-	req.Header.Set("Authorization", "Bearer "+bearer)
-	req.Header.Set("X-Org-Id", org)
-	if ct := c.Header("Content-Type"); ct != "" {
-		req.Header.Set("Content-Type", ct)
-	}
-	req.Header.Set("Accept", "application/json")
 
-	res, err := e.http.Do(req)
-	if err != nil {
+	// The address is read ONCE, here, into the operation it names plus the zone and
+	// record it names it on — so an adapter reads values and never a request.
+	call := classify(c.Method(), p)
+	call.Org, call.Bearer = org, bearer
+	call.Query = string(uri.QueryString())
+	call.Body = c.Body()
+	call.ContentType = c.Header("Content-Type")
+
+	a, err := answer(c.Context(), e.p, call)
+	switch {
+	case errors.Is(err, ErrUnconfigured):
+		return c.JSON(http.StatusServiceUnavailable, fail("unconfigured", "dns control plane is not configured"))
+	case errors.Is(err, errNoAddress):
+		return c.JSON(http.StatusNotFound, fail("not_found", "the configured dns plane has no such address"))
+	case err != nil:
+		// The provider's own error stays with the provider: a caller learns that the
+		// plane did not answer, never why, and never an upstream URL.
 		return c.JSON(http.StatusBadGateway, fail("bad_gateway", "dns control plane unavailable"))
 	}
-	defer func() { _ = res.Body.Close() }()
 
-	out, _ := io.ReadAll(io.LimitReader(res.Body, maxDNSBody))
-	ct := res.Header.Get("Content-Type")
+	ct := a.ContentType
 	if ct == "" {
 		ct = "application/json"
 	}
 	c.SetHeader("Content-Type", ct)
-	// Relay Location so an upstream 3xx (never followed -- see CheckRedirect) passes
-	// back verbatim: status + Location, for the caller to act on.
-	if loc := res.Header.Get("Location"); loc != "" {
-		c.SetHeader("Location", loc)
+	// Relay Location so a plane's 3xx (which the adapter never follows) passes back
+	// verbatim: status + Location, for the caller to act on.
+	if a.Location != "" {
+		c.SetHeader("Location", a.Location)
 	}
-	return c.Bytes(res.StatusCode, out)
+	return c.Bytes(a.Status, a.Body)
 }
 
 // fail is the standard cloud-generated error body, matching the DNS plane's
