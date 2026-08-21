@@ -20,7 +20,7 @@ package platform
 //	               caller-supplied, so a tenant key read from one is a cross-tenant
 //	               read the caller asserted for itself. See [ops.caller].
 //	the REQUEST  — this surface does not merely read the caller's identity, it
-//	               SPENDS it: /v1/run bills the caller's own ledger, /v1/runner
+//	               SPENDS it: /v1/platform/run bills the caller's own ledger, /v1/platform/runner
 //	               compares a shared credential in constant time, and every deploy
 //	               writes the actor and request id into the audit log. cloud.Bridge
 //	               parks it; cloud.Request takes it back off.
@@ -58,7 +58,7 @@ import (
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // ops binds the per-tenant platform service to its typed ops. Every route under
-// /v1/platform/projects, plus the flat console reads, /v1/run and /v1/runner, is a
+// /v1/platform/projects, plus the flat console reads, /v1/platform/run and /v1/platform/runner, is a
 // method on this value.
 type ops struct{ s *cloud.Service[state] }
 
@@ -106,7 +106,7 @@ func (o ops) caller(ctx context.Context) (*zip.Ctx, string, error) {
 }
 
 // request is the caller's own request for the ops that authorize on something
-// OTHER than a tenant key: /v1/runner compares a shared build credential. It
+// OTHER than a tenant key: /v1/platform/runner compares a shared build credential. It
 // resolves no org, so asking for one would refuse a legitimate machine caller that
 // carries none.
 func (o ops) request(ctx context.Context) (*zip.Ctx, error) {

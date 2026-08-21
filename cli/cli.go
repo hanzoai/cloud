@@ -475,10 +475,11 @@ func (e *Env) platformToken(flagVal string) string {
 }
 
 // buildToken resolves the bearer `hanzo build` sends to the platform build
-// enqueue (/v1/runner). Same unify-infra contract as platformToken: a dedicated
-// build token wins when present, but a plain IAM login is the FINAL fallback, so
-// `hanzo build` works off the one identity with no separate --build-token — the
-// platform verifies the IAM JWT and authorizes the build by org + role.
+// enqueue (/v1/platform/runner). Same unify-infra contract as platformToken: a
+// dedicated build token wins when present, but a plain IAM login is the FINAL
+// fallback, so `hanzo build` works off the one identity with no separate
+// --build-token — the platform verifies the IAM JWT and authorizes the build by
+// org + role.
 func (e *Env) buildToken(flagVal string) string {
 	return cmp.Or(
 		flagVal,

@@ -129,7 +129,7 @@ func siteURL(s *cloud.Service[state], _org, slug string) string {
 // target project, it versions and records a deployment, uploads the files to S3,
 // flips the deployment and project "live" at the pretty <slug>.<apex> host, and
 // runs the go-live side effects (first-come host binding + edge purge). Every
-// deploy write-path — the tar-artifact path (deployArtifact) and both /v1/sites
+// deploy write-path — the tar-artifact path (deployArtifact) and both /v1/projects/sites
 // paths — funnels through here, so versioning, the S3 write, host binding, the
 // lifecycle emit, and the status transitions live in exactly one place (DRY).
 // source records how the artifact was produced ("upload" | "generated" | "deploy").
