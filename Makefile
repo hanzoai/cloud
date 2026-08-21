@@ -357,28 +357,7 @@ zipdoc-check: ## Regenerate the lifted prose FROM SOURCE and fail on any diff.
 	# same command on the same sha reported every file current locally. A gate
 	# that cannot say why it refused sends the next reader to regenerate files
 	# that are already correct — which is what I did, and it changed nothing.
-	@why=$$(mktemp -d); bin="$$why/zipdoc"; \
-	$(GO) build -o "$$bin" github.com/zap-proto/zip/cmd/zipdoc || { echo "zipdoc: the generator itself does not build"; exit 1; }; \
-	grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | grep -v '/\.' | xargs -n1 dirname | sed 's|^\./||' | sort -u \
-	  | xargs -P "$$(nproc)" -I{} sh -c 'cd "{}" && "$$0" -check > "$$1/$$(echo {} | tr / _).out" 2>&1 || echo {} >> "$$1/stale"' "$$bin" "$$why"; \
-	stale=$$(cat "$$why/stale" 2>/dev/null | tr '\n' ' '); \
-	if [ -n "$$stale" ]; then \
-	  echo ""; \
-	  echo "STALE: the lifted prose no longer matches the source it was lifted from."; \
-	  echo "Go drops comments at compile time, so zipdoc_gen.go is the ONLY path from a"; \
-	  echo "typed handler's doc comment to /v1/openapi.json — a stale lift ships a binary"; \
-	  echo "that describes itself wrongly."; \
-	  echo ""; \
-	  for d in $$stale; do \
-	    echo "    $$d/zipdoc_gen.go"; \
-	    sed -e 's/^/        /' "$$why/$$(echo $$d | tr / _).out" 2>/dev/null | tail -8; \
-	  done; \
-	  echo ""; \
-	  echo "  fix:"; \
-	  printf '    go generate -run zipdoc'; for d in $$stale; do printf ' ./%s/...' "$$d"; done; echo ""; \
-	  echo ""; \
-	  exit 1; \
-	fi
+	@sh mk/zipdoc.sh check
 	@echo ">> zipdoc: every lifted file matches its source"
 
 # WHAT EACH DOCUMENT WAS GENERATED FROM, and whether that has moved.
