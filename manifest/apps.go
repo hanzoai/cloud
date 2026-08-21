@@ -126,12 +126,17 @@ var Apps = []App{
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}, Stage: Beta},
 	{Name: "plan", Prefixes: []string{"/v1/plan"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/pricing", "/v1/pricing"}},
-	// storage is the S3 DATA plane (buckets, objects, health). It shared this root
+	// s3 is the S3 DATA plane (buckets, objects, health). It shared this root
 	// with provisioning, which PROVISIONS an s3 resource: both rows once read
 	// "/v1/s3" — one prefix, two owners — so whichever mounted first took the
 	// other's routes with it. Allocation has since folded under its own name, so
-	// the two no longer meet and only storage answers here.
-	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
+	// the two no longer meet and only this row answers here.
+	//
+	// The app answered to "storage" until the address took the name back. Every
+	// route it has ever served is under /v1/s3, s3 is a word HIP-0139 §2.5 admits
+	// and the one every client already speaks, and a package called one thing
+	// while its whole surface says another is the pair §7.3 closes by rename.
+	{Name: "s3", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
 	// provisioning allocates a store of one of seven kinds and hands back its
 	// connection: one act, one store, one address (HIP-1164 §2). The row carried
 	// three further roots — /v1/s3, /v1/search/query and /v1/vector — that no route
@@ -265,7 +270,7 @@ var Apps = []App{
 	{Name: "campaign", Prefixes: []string{"/v1/campaign"}, Stage: Beta},
 	{Name: "validators", Prefixes: []string{"/v1/validators"}, Stage: Beta},
 	{Name: "social", Prefixes: []string{"/v1/social"}, Stage: Beta},
-	// The INGESTION door is load-bearing, not decorative: apps/analytics/event.go's
+	// The INGESTION door is load-bearing, not decorative: apps/event/event.go's
 	// `doors` table serves /v1/event, and every beacon the products emit lands on it.
 	// Listing only the read endpoints (as this row did) sent every write to commerce's
 	// bare "/v1" catch-all, which does not serve them — 405, silently, for every event
@@ -273,30 +278,32 @@ var Apps = []App{
 	// became the router when the mega-build died, so a missing prefix is now an outage.
 	//
 	// "/v1/event" is the ONE canonical ingest door — the product, team, PostHog and
-	// Sentry-envelope wires ALL arrive on it, dispatched by SHAPE. The PostHog wire's
-	// own path is gone: insights.hanzo.ai's /e, /batch and /capture rewrite onto
-	// /v1/event, so no caller moved. "/v1/insights/e" is gone from this row with it.
-	// A prefix here is a claim that this app ANSWERS the path, and analytics does not
-	// — the door is retired (retiredDoors, apps/analytics/doors_test.go), which that
-	// package defines as absent from EVERY surface. Listing it bought a stale beacon
-	// nothing it can use: the path 404s either way, and the row's only other effect
-	// was to keep the retirement invisible in the one table that states what the
-	// fleet serves. The other four prefixes are READ ONLY: bare "/v1/analytics" now
-	// carries only the four lenses (overview, timeseries, top, health) — the ingest
-	// aliases under it are retired — and /v1/errors, /v1/insights/events and
-	// /v1/insights/health are GET lenses. /v1/todo is NOT here and never was:
-	// the todo product owns that name (its row is above, and it wins the prefix).
+	// Sentry-envelope wires ALL arrive on it, dispatched by SHAPE — and it is the
+	// address this app is now NAMED for. It answered to analytics and served six
+	// stems; the ingest door is the one every client hard-codes (@hanzo/event's
+	// EVENT_PATH, the hosted tag, HIP-0132's one telemetry ingest), so HIP-0139 §7.3
+	// gives the app that word and §3.1 folds the rest under it, byte-identically for
+	// the door itself:
 	//
-	// "/v1/event.js" is its OWN prefix and cannot be folded into "/v1/event": a
-	// prefix owns segments, and ".js" is part of this one's single segment rather
-	// than a child of it, so the ingest door's claim stops short of the tag. It is
-	// the hosted tag — the script every instrumented surface loads before it can
-	// emit a single beacon — and unclaimed it fell to ai's bare "/v1", which answers
-	// a 404 that reads to a browser as a broken script tag rather than as a routing
-	// mistake. That was invisible for as long as plugin/analytics/openapi.json went
-	// unregenerated: the path was in the router and not in the artifact this table
-	// is checked against, so the check had nothing to disagree with.
-	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/replay", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
+	//	/v1/analytics/{overview,timeseries,top,health} -> /v1/event/…
+	//	/v1/errors                                     -> /v1/event/errors
+	//	/v1/insights/{events,health}                   -> /v1/event/insights/…
+	//	/v1/replay                                     -> /v1/event/replay
+	//	/v1/event.js                                   -> /v1/event/tag.js
+	//
+	// The tag move is the one that costs: ".js" is part of a single segment rather
+	// than a child of it, so "/v1/event.js" could never be a child of the ingest
+	// door's prefix and had to be its own row — and unclaimed it fell to ai's bare
+	// "/v1", a 404 that reads to a browser as a broken script tag. As a real child
+	// it needs no row, and the price is every page that embedded the old src and is
+	// never re-embedded. No alias: §7 has no fourth way.
+	//
+	// The PostHog wire's own path stays gone: insights.hanzo.ai's /e, /batch and
+	// /capture rewrite onto /v1/event, so no caller moved, and "/v1/insights/e" is
+	// not claimed here — a prefix is a claim that this app ANSWERS the path, and the
+	// door is retired (retiredDoors, apps/event/doors_test.go). /v1/todo is NOT here
+	// and never was: the todo product owns that name.
+	{Name: "event", Prefixes: []string{"/v1/event"}},
 	{Name: "git", Prefixes: []string{"/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/visor"}},
@@ -311,15 +318,23 @@ var Apps = []App{
 	// it; the two are cross-referenced instead, which is what a reader actually
 	// follows. Adjacency in this list is documentation.
 	{Name: "lsp", Prefixes: []string{"/v1/lsp"}},
-	// zt held "/v1/edge/nodes" — a top-level name for something that was never a
+	// This row held "/v1/edge/nodes" — a top-level name for something that was never a
 	// product. Four unrelated things wore "edge": the on-device inference runtime
 	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud
 	// prefix and never should), the public catalogue cache, the gateway's policy role,
 	// and THESE — ZT fabric edge-routers, which are the nodes of an overlay network and
-	// are now addressed as such at "/v1/networks/routers". A prefix belongs to a product
+	// are now addressed as such at "/v1/network/routers". A prefix belongs to a product
 	// a customer calls, so "edge" gets none: /v1/edge 404s at every depth, and that is
 	// the right answer rather than a missing product.
-	{Name: "zt", Prefixes: []string{"/v1/mesh/services", "/v1/networks"}},
+	//
+	// The app was called zt and answered on two stems, /v1/networks and /v1/mesh.
+	// "zt" abbreviates the UPSTREAM controller and is not a word anyone says for the
+	// thing, so HIP-0139 §7.3 renames the app to the address's word — singular by
+	// §2.2, because an org has one overlay — and §3.1 folds the second stem under
+	// it: a mesh row IS an edge service of this network, exactly as an edge-router
+	// is one of its nodes. ONE prefix now, and the /v1/<name> convention covers it,
+	// so plugin/network states no Prefixes at all.
+	{Name: "network", Prefixes: []string{"/v1/network"}},
 	{Name: "share", Prefixes: []string{"/v1/share"}, Stage: Beta},
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}, Stage: Beta},
 	{Name: "explorer", Prefixes: []string{"/v1/explorer"}, Stage: Beta},
@@ -378,19 +393,22 @@ var Apps = []App{
 	// /v1/<name> default would cover nothing it registers — the apps/plan defect.
 	// The three prefixes are its whole surface (chains, rpc, tokens).
 	{Name: "web3", Prefixes: []string{"/v1/web3"}, Stage: Beta},
-	{Name: "bot", Prefixes: []string{"/v1/bot/connect", "/v1/bot/nodes", "/v1/bot/peer/invoke"}, Stage: Beta},
-	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}, Stage: Beta},
-	// bots is the headless bot: the run control plane at /v1/bots AND the door to
-	// @hanzo/bot, the service that executes a run, whose own ops paths it relays at
-	// /v1/bot. Those were two apps (bots, runtime) until the split was measured for
-	// what it was — a LANGUAGE boundary (Go surface, TS executor), not a product
-	// boundary. One product answers for one thing, so it holds both prefixes.
+	// ONE ROW, because bot and bots were one capability wearing two names.
+	// HIP-0139 §2.4 refuses a pair differing only in number and keeps the singular,
+	// and §1 puts one capability in bijection with one package and one plugin — so
+	// two rows both serving /v1/bot were a collision, not a convention. The two
+	// halves are three route families under one prefix now:
 	//
-	// /v1/bot here is the BARE prefix: bot's three deeper prefixes above still win
-	// on it by specificity, which is the only reason two apps could ever share it.
-	// That sharing is the remaining defect, and it is bot's to fix by vacating —
-	// its product is connected machines, not a bot.
-	{Name: "bots", Prefixes: []string{"/v1/bot", "/v1/bots"}, Stage: Beta},
+	//	/v1/bot/{connect,nodes,peer/invoke}  the node control plane
+	//	/v1/bot/runs[/{runId}/stop]          the run control plane (was /v1/bots)
+	//	/v1/bot/runtime/*                    @hanzo/bot's own ops paths, relayed
+	//
+	// The relay's greedy wildcard moved under its own segment in the same change.
+	// It was app.All("/v1/bot/*") in the other app, one specificity rule away from
+	// swallowing every sibling above; in one router that would have been a live
+	// hazard rather than a latent one.
+	{Name: "bot", Prefixes: []string{"/v1/bot"}, Stage: Beta},
+	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}, Stage: Beta},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}, Stage: Beta},
 	{Name: "esign", Prefixes: []string{"/v1/esign"}, Stage: Beta},
@@ -410,7 +428,14 @@ var Apps = []App{
 	{Name: "admission", Prefixes: []string{"/v1/admission"}},
 	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},
 	{Name: "tel", Prefixes: []string{"/v1/tel"}},
-	{Name: "automations", Prefixes: []string{"/v1/auto"}},
+	// The address was already the word: the product is Hanzo Auto, the app has
+	// always served one group at /v1/auto, and HIP-1063's front matter reads
+	// capability: auto. Only the package name was out of step, so HIP-0139 §7.3
+	// closes "/v1/auto automations" by renaming the app and moving no route. What
+	// does NOT move with it: the store's sub name and the ledger product, both
+	// still "automations", because both key rows already written (apps/auto/store.go,
+	// apps/auto/auto.go Mount).
+	{Name: "auto", Prefixes: []string{"/v1/auto"}},
 	{Name: "flow", Prefixes: []string{"/v1/flow"}},
 	{Name: "engine", Prefixes: []string{"/v1/engine"}},
 	{Name: "registry", Prefixes: []string{"/v1/registry"}},

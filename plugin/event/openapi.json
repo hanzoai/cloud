@@ -1,0 +1,1491 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package analytics is product analytics: send an event, read back who did what.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "event"
+    }
+  ],
+  "paths": {
+    "/v1/event": {
+      "post": {
+        "operationId": "post_event",
+        "summary": "Capture product events into your org's warehouse",
+        "description": "Stores pageviews, browser errors, identifies and custom commerce events as rows in the caller's own tenant, and answers a receipt {accepted, dropped} that always totals what was sent — a beacon is never silently discarded.\n\nTHE STATUS SAYS WHETHER ANYTHING LANDED, so a green check can never mean an empty warehouse. 200 means at least one event was stored (or that nothing was sent), and a nonzero `dropped` beside a nonzero `accepted` is a PARTIAL batch, never a failed one — a batch is not refused whole for its worst element. If NOTHING was stored the request is an error, and it names the one thing that fixes it: 401 `ingest_key_required` when every event was refused for want of a credential (the same events land with a key), and 400 `unroutable_events` when the caller HAD capability and the body still named nothing storable.\n\nONE door for every wire a Hanzo surface emits, dispatched by the SHAPE of the body and never by a second path: a bare event object, a bare array of them, the {batch:[…]} / {events:[…]} envelope, the team console's snake_case array, and the PostHog wire (spelled `distinct_id`/`api_key`, which the canonical wire never uses). BATCH IS A BODY, NOT A PATH — there is no /v1/event/batch, because an array already is one.\n\nWHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the door itself grants nothing. A validated bearer or an org API key writes the full event at full fidelity. A PUBLISHABLE key (pk-, on Authorization: Bearer, x-hanzo-ingest-key, or ?ingest_key= for navigator.sendBeacon, which cannot set headers) does the same, and is the credential a browser bundle ships: it is deliberately NOT a secret, it resolves WHICH tenant a beacon belongs to and nothing more. A pk- never authenticates and can READ NOTHING — not this org's errors, not a lens, not any other route on this API — so a leaked one lets a stranger write into your stream, and never lets one read out of it. Reading these rows back always takes a real bearer. A Hanzo Team workspace token resolves its org at REDUCED capability: the signed account names the person, so a `distinctId` in the body cannot pin events on a colleague.\n\nNO CREDENTIAL IS REFUSED: a write the server cannot attribute to a project is 401 `ingest_key_required`, and a credential that IS presented but resolves to no project is 403 `ingest_key_unknown`. Nothing is filed under a shared tenant — events nobody can read are worse than events nobody sent, because the caller is told it succeeded. A browser bundle therefore always ships a pk-, which is what /v1/event/tag.js takes.\n\nA REDUCED principal — a Hanzo Team workspace token — writes through the PROJECTION into its own org: narrowed to what the SERVER can name (pageviews and errors, plus the closed autocapture vocabulary $click, $input, $change, $submit, $view), where every one of those names is resolved through a server-owned table and stored as that table's value, so the name on the wire is never the name in the row. Stripped, too, to the fields the projection names, so revenue, personId, groupId and every property but the element annotation cannot reach a row — and an exception is carried only on an error, never on an interaction, so a click cannot ship a stack trace into a row's attributes. It does NOT name the person: the signed account is the identity, so a `distinctId` in the body cannot pin events on a colleague. Everything refused is counted in `dropped`.\n\nThe projected lane alone is bounded: 413 over 64 KiB, 400 over 50 events, 429 on the per-client-IP and per-peer caps, and a DNT:1 or Sec-GPC:1 request stores nothing and says so in the receipt. Two stored values carry their own bounds on top, because a request cap does not bound one value: an element annotation over 2 KiB (or a trail over 32 steps) and an exception class over 256 bytes are dropped from the row, which still lands. Authenticated bodies are offered to the observability plane first, which claims LLM-observability ingestion batches and declines everything else.",
+        "tags": [
+          "event"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Event"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Event"
+                    }
+                  },
+                  {
+                    "$ref": "#/components/schemas/CaptureBatch"
+                  },
+                  {
+                    "$ref": "#/components/schemas/insightsBody"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResult"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/event/errors": {
+      "get": {
+        "operationId": "get_event_errors",
+        "summary": "Errors returns the caller org's most recently captured errors, newest first.",
+        "description": "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over event.error — the plane table the write core's error\nfacts land in (errors are DELIBERATELY not on event.event) — each with its captured\nexception surfaced from the attributes map as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows to return, newest first. Default 50, maximum 200; a\nvalue at or below zero, or one that is not a number, takes the default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/event/health": {
+      "get": {
+        "operationId": "get_event_health",
+        "summary": "Health reports whether the event plane can take a write and the warehouse can answer a read.",
+        "description": "Health reports whether the event plane can take a write and the warehouse can\nanswer a read.\n\nIt reports the analytics subsystem's own liveness in BOTH directions: plane is\nthe event plane it WRITES (the bus and the JetStream stream every accepted\nevent is published to, both named in the report), and datastore is the\nwarehouse it READS, with each read lens's table reported as it is provisioned\n(the LLM usage ledger and the product-event table).\n\nEITHER ONE DOWN IS A 503, and the report says WHICH — they are probed\nindependently and never collapse into a single bit. This endpoint used to\nreport the read half only, and answered 200/ok while every POST /v1/event\nfailed on a stream that could not bind: a total ingest outage behind a green\nprobe. A readiness gate here now gates on the write path too.\n\nplane.ready IS A REAL PROBE and walks the ingest path itself — the same\nconnection and the same stream a publish uses — so it cannot answer ready while\na publish would 503. plane.reason carries the plane's own error text when it is\nfalse.\n\ndatastore IS NOT PROBED WITH A QUERY. It is the state of the process's own\nshared client — established, and not since closed — so a warehouse accepting\nconnections and failing reads still reports true. Degraded CARRIES the report\n(status, the failing half, reason) as its body rather than an error envelope,\nso a gate reads the cause off the same object it got at 200.\n\nA MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens\nreported available:false answers honest-empty rather than erroring, so a fresh\ndeployment whose collector has not emitted yet is legitimately 200 with the\nproduct-event lens unavailable. The lens block is reported whenever the\nwarehouse is REACHABLE — including on a report degraded by the plane, where the\ntables genuinely were probed — and is absent only when the warehouse is not,\nhaving nothing to say about tables it could not reach.\n\nUnauthenticated on purpose — liveness has to be probe-able — and it reads NO\ntenant data: table existence and stream presence only, never a row and never an\nevent.",
+        "tags": [
+          "event"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/healthReport"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/healthReport"
+                }
+              }
+            },
+            "description": "service unavailable"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/event/insights/events": {
+      "get": {
+        "operationId": "get_event_insights_events",
+        "summary": "Returns the caller org's most recent product events, newest first.",
+        "description": "Returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows to return, newest first. Default 50, maximum 200; a\nvalue at or below zero, or one that is not a number, takes the default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/eventList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/event/insights/health": {
+      "get": {
+        "operationId": "get_event_insights_health",
+        "summary": "Reports that the unified insights surface is serving.",
+        "description": "Reports that the unified insights surface is serving. It reads no\ntenant data and consults no dependency, so it answers 200 unconditionally and needs\nno principal — liveness must be probe-able. The warehouse-connectivity probe is a\ndifferent question and lives at GET /v1/event/health.",
+        "tags": [
+          "event"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/insightsStatus"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/event/overview": {
+      "get": {
+        "operationId": "get_event_overview",
+        "summary": "Overview returns the caller org's analytics KPIs for one time window.",
+        "description": "Overview returns the caller org's analytics KPIs for one time window. Three lenses\nover one warehouse: llm is the live per-org LLM usage ledger (requests, tokens,\nspend, models, providers, errors) and is always real; web (pageviews, visitors,\nsessions) and commerce (orders, revenue, AOV) read the product-event table and\nreport available=false rather than fabricating zeros when it holds nothing yet.\n\nThe org is the validated principal's — never a parameter — so a caller can only\never read its own tenant. 403 without a validated bearer, 400 on an unknown range,\n503 when the warehouse is unreachable.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is a relative window: a count and a unit — 24h, 7d, 90d, any \u003cN\u003eh or\n\u003cN\u003ed — or day, week, month, all. Default 24h. Ignored when both start and\nend are given. An unknown value, or one past the 730-day horizon, is a 400.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the inclusive lower bound of a custom window, RFC3339. Requires end.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the exclusive upper bound of a custom window, RFC3339. Requires start.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/event/replay": {
+      "post": {
+        "operationId": "post_event_replay",
+        "summary": "Record a session-replay snapshot batch",
+        "description": "Accepts a batch of rrweb events from a browser recorder and hands it to the session-replay pipeline, which stores the recording and derives the session summary a player reads back.\n\nONE REQUEST IS ONE BATCH, and it is all-or-nothing: the recording is made durable before this answers, so a 200 {\"accepted\":1} means stored and never \"buffered somewhere\". There is no partial count, because a half-written recording is not a recording.\n\n`sessionId` is REQUIRED and bounded — at most 70 characters of ASCII letters, digits or '-'. It is the key every batch of one visit is grouped and ordered by, so an id outside that grammar is refused 400 here rather than accepted and dropped further down. `windowId` separates two tabs of one session and `distinctId` attributes the recording to a person; both are optional. `events` is the rrweb batch, each element a raw eventWithTime object, carried VERBATIM — the summary (click, keypress and mouse-activity counts, size) is derived downstream from exactly these bytes, so nothing is re-encoded or dropped.\n\nTHE CALLER'S CREDENTIAL DECIDES THE TENANT, and the body never does: the recording lands in the org the presented credential resolves to. It takes the SAME credentials as /v1/event — a validated bearer, an org API key, or a publishable pk- key on Authorization: Bearer, x-hanzo-ingest-key or ?ingest_key= — so a browser bundle already holding a pk- for events needs nothing new to record. A caller that presents nothing is 401 `ingest_key_required`; one whose key resolves to no project is 403 `ingest_key_unknown`; a reduced principal (a Hanzo Team workspace token) is 403 `insufficient_capability`, because a full-fidelity screen recording has no projected form that is safe for a guest to write into a host org.\n\nBOUNDS: 413 over 512 KiB of body, and that is the only bound on one batch — a recorder is expected to chunk a long session rather than send it whole, and the cap is the size one message can carry rather than an arbitrary number. 503 when the pipeline cannot take the batch: honest unavailability the caller can retry, never a 200 over a discarded recording.",
+        "tags": [
+          "event"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/replayBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResult"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/event/tag.js": {
+      "get": {
+        "operationId": "get_event_tag.js",
+        "summary": "The Hanzo event tag — the one-line install for a surface with no bundler",
+        "description": "Serves the browser tag that autocaptures pageviews (initial and SPA) and uncaught errors onto the canonical wire at POST /v1/event.\n\nInstall is one line, and it is the same line for a Hanzo property and for a customer's own page:\n\n    \u003cscript defer src=\"https://api.hanzo.ai/v1/event/tag.js\" data-key=\"pk-…\"\u003e\u003c/script\u003e\n\n`data-key` is the publishable key the project mints; `data-product` optionally names the emitting surface. The key may also ride the src as `?key=` for a host that strips data attributes.\n\nWITHOUT A KEY THE TAG SENDS NOTHING. A keyless beacon is accepted 200 into $public, a reserved tenant the owning org cannot read — so silence is the honest failure, and the tag picks it rather than reporting success into a tenant nobody reads.",
+        "tags": [
+          "event"
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/javascript": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/event/timeseries": {
+      "get": {
+        "operationId": "get_event_timeseries",
+        "summary": "Timeseries returns the caller org's LLM usage over time as an evenly-spaced series.",
+        "description": "Timeseries returns the caller org's LLM usage over time as an evenly-spaced series.\nOne point per hour or per day — the bucket the window implies, 24h giving hours and\n7d/30d giving days — carrying requests, total tokens and spend in cents. Empty\nbuckets are filled with zeros so a client charts a continuous line.\n\nThe org is the validated principal's — never a parameter. 403 without a validated\nbearer, 400 on an unknown range, 503 when the warehouse is unreachable.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is a relative window: a count and a unit — 24h, 7d, 90d, any \u003cN\u003eh or\n\u003cN\u003ed — or day, week, month, all. Default 24h. Ignored when both start and\nend are given. An unknown value, or one past the 730-day horizon, is a 400.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "30d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the inclusive lower bound of a custom window, RFC3339. Requires end.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the exclusive upper bound of a custom window, RFC3339. Requires start.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Timeseries"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/event/top": {
+      "get": {
+        "operationId": "get_event_top",
+        "summary": "Top returns the caller org's ranked lenses for one window, five of them at once.",
+        "description": "Top returns the caller org's ranked lenses for one window, five of them at once.\nmodels ranks LLM models by spend and is always real; products ranks commerce orders\nby revenue; topPages ranks requested paths, topReferrers the external referrer\ndomains (\"(direct)\" for a missing or same-origin one) and topSources the utm_source\ncampaigns (\"(none)\" when absent), each by pageviews. Every lens carries each row's\nshare of the in-window total, so a top-N honestly shows the long tail.\n\nThe four event lenses report available=false rather than fabricating zeros when the\nproduct-event table holds nothing yet. The org is the validated principal's — never\na parameter. 403 without a validated bearer, 400 on an unknown range, 503 when the\nwarehouse is unreachable.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is a relative window: a count and a unit — 24h, 7d, 90d, any \u003cN\u003eh or\n\u003cN\u003ed — or day, week, month, all. Default 24h. Ignored when both start and\nend are given. An unknown value, or one past the 730-day horizon, is a 400.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "7d"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "Start is the inclusive lower bound of a custom window, RFC3339. Requires end.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "description": "End is the exclusive upper bound of a custom window, RFC3339. Requires start.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit bounds every ranked lens in the response. Default 10, maximum 100; a\nvalue at or below zero, or one that is not a number, takes the default.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 25
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Top"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/event/{project}/envelope": {
+      "post": {
+        "operationId": "post_event_by_project_envelope",
+        "summary": "Sentry SDK envelope ingest — errors and traces from an unmodified Sentry client",
+        "description": "Accepts the CURRENT Sentry wire — the framed envelope a modern SDK posts, carrying its items in one request — so an application already instrumented with Sentry reports into Hanzo's error tracking by pointing its DSN here and changing nothing else.\n\nCLOUD ROUTES IT AND READS NONE OF IT. The body is relayed byte-for-byte to the observability plane, which parses the wire, verifies the credential and answers; this door declares no response shape because it does not know one. A deployment with no observability plane mounted answers 503.\n\nTHE CREDENTIAL IS A SENTRY DSN KEY, NOT A HANZO PRINCIPAL. This is one of the few writes on the platform that carries no bearer and no org header by design — a Sentry SDK has neither — and it is exempt from the principal gate for that reason. The observability plane verifies the DSN key itself, fail-closed: a request without a valid one is refused there, never admitted here. Presenting a Hanzo bearer instead does nothing.\n\n`project` IS THE DSN'S PROJECT ID — the identifier in the DSN the SDK was configured with, and what the tenant is derived from. It is NOT a Hanzo IAM project and NOT a todo project key. Only these two ingest paths map through: no observability READ API is reachable by any other suffix under this prefix.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
+    "/v1/event/{project}/store": {
+      "post": {
+        "operationId": "post_event_by_project_store",
+        "summary": "Sentry SDK store ingest — the legacy single-event wire",
+        "description": "Accepts the LEGACY Sentry wire: one event per request, what an SDK predating envelopes sends. Same door, same credential, same destination as the envelope endpoint — kept open so an old client reports without being upgraded first. New instrumentation has no reason to choose it.\n\nCLOUD ROUTES IT AND READS NONE OF IT. The body is relayed byte-for-byte to the observability plane, which parses the wire, verifies the credential and answers; this door declares no response shape because it does not know one. A deployment with no observability plane mounted answers 503.\n\nTHE CREDENTIAL IS A SENTRY DSN KEY, NOT A HANZO PRINCIPAL. This is one of the few writes on the platform that carries no bearer and no org header by design — a Sentry SDK has neither — and it is exempt from the principal gate for that reason. The observability plane verifies the DSN key itself, fail-closed: a request without a valid one is refused there, never admitted here. Presenting a Hanzo bearer instead does nothing.\n\n`project` IS THE DSN'S PROJECT ID — the identifier in the DSN the SDK was configured with, and what the tenant is derived from. It is NOT a Hanzo IAM project and NOT a todo project key. Only these two ingest paths map through: no observability READ API is reachable by any other suffix under this prefix.",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Breakdown": {
+        "properties": {
+          "available": {
+            "description": "Available is false when the product-event table could not be read.",
+            "type": "boolean"
+          },
+          "items": {
+            "description": "Items is the ranked buckets, most pageviews first. Empty rather than absent.",
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "description": "Reason says why the lens is unavailable. Omitted when it is available.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the warehouse table the lens read.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BreakdownRow": {
+        "properties": {
+          "key": {
+            "description": "Key is the bucket: a requested path, a referrer domain (\"(direct)\" for none or\na same-origin one), or a utm_source (\"(none)\" when absent).",
+            "type": "string"
+          },
+          "pageviews": {
+            "description": "Pageviews is how many $pageview events fell in this bucket.",
+            "type": "integer"
+          },
+          "pct": {
+            "description": "Pct is this bucket's share of ALL in-window pageviews, 0..100, one decimal —\nnot of the returned rows, so a top-N shows the long tail honestly.",
+            "type": "number"
+          },
+          "visitors": {
+            "description": "Visitors is how many distinct people they came from.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CaptureBatch": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaptureEvent"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaptureEvent"
+            }
+          }
+        }
+      },
+      "CaptureEvent": {
+        "type": "object",
+        "properties": {
+          "anonymousId": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "clip": {
+            "$ref": "#/components/schemas/ClipBody"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "distinctId": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/Exception"
+          },
+          "event": {
+            "type": "string"
+          },
+          "groupId": {
+            "type": "string"
+          },
+          "groupType": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "library": {
+            "type": "string"
+          },
+          "libraryVersion": {
+            "type": "string"
+          },
+          "log": {
+            "$ref": "#/components/schemas/LogBody"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "metric": {
+            "$ref": "#/components/schemas/MetricBody"
+          },
+          "path": {
+            "type": "string"
+          },
+          "personId": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "refCode": {
+            "type": "string"
+          },
+          "referrer": {
+            "type": "string"
+          },
+          "release": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "service": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "signupWeek": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "span": {
+            "$ref": "#/components/schemas/SpanBody"
+          },
+          "spanId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "utm": {
+            "$ref": "#/components/schemas/UTM"
+          }
+        }
+      },
+      "CaptureResult": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "integer"
+          },
+          "dropped": {
+            "type": "integer"
+          }
+        }
+      },
+      "ClipBody": {
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "duration": {
+            "type": "integer"
+          },
+          "object": {
+            "type": "string"
+          }
+        }
+      },
+      "CommerceOverview": {
+        "properties": {
+          "aov": {
+            "description": "AOV is average order value — Revenue/Orders, rounded to two places. Zero when\nthere were no orders.",
+            "type": "number"
+          },
+          "available": {
+            "description": "Available is false when the product-event table could not be read — the lens is\nreported missing rather than as zeros that look like no sales.",
+            "type": "boolean"
+          },
+          "orders": {
+            "description": "Orders is how many order_completed events landed in the window.",
+            "type": "integer"
+          },
+          "reason": {
+            "description": "Reason says why the lens is unavailable. Omitted when it is available.",
+            "type": "string"
+          },
+          "revenue": {
+            "description": "Revenue is the total those orders carried, in the events' own currency unit.",
+            "type": "number"
+          },
+          "source": {
+            "description": "Source is the warehouse table the lens read.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "distinctId": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "time": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "Exception": {
+        "type": "object",
+        "properties": {
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Frame"
+            }
+          },
+          "handled": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "stack": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "Frame": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "integer"
+          },
+          "file": {
+            "type": "string"
+          },
+          "function": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          }
+        }
+      },
+      "LLMOverview": {
+        "properties": {
+          "available": {
+            "description": "Available is true whenever the ledger answered — including with no usage in the\nwindow, which is honest zeros rather than a missing lens.",
+            "type": "boolean"
+          },
+          "completionTokens": {
+            "description": "CompletionTokens is the output half of Tokens.",
+            "type": "integer"
+          },
+          "errorRate": {
+            "description": "ErrorRate is Errors/Requests, 0..1, rounded to three places. Zero when there\nwere no requests.",
+            "type": "number"
+          },
+          "errors": {
+            "description": "Errors is how many of Requests failed.",
+            "type": "integer"
+          },
+          "models": {
+            "description": "Models is how many distinct models the org called.",
+            "type": "integer"
+          },
+          "promptTokens": {
+            "description": "PromptTokens is the input half of Tokens.",
+            "type": "integer"
+          },
+          "providers": {
+            "description": "Providers is how many distinct providers served them.",
+            "type": "integer"
+          },
+          "requests": {
+            "description": "Requests is how many LLM calls the org made in the window.",
+            "type": "integer"
+          },
+          "source": {
+            "description": "Source is the warehouse table the lens read.",
+            "type": "string"
+          },
+          "spendCents": {
+            "description": "SpendCents is what those calls cost, in cents.",
+            "type": "integer"
+          },
+          "tokens": {
+            "description": "Tokens is prompt plus completion tokens over those calls.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "LogBody": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "severity": {
+            "type": "string"
+          }
+        }
+      },
+      "MetricBody": {
+        "type": "object",
+        "properties": {
+          "labels": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        }
+      },
+      "ModelRow": {
+        "properties": {
+          "model": {
+            "description": "Model is the model id, e.g. zen5-coder.",
+            "type": "string"
+          },
+          "pct": {
+            "description": "Pct is this model's share of the window's returned spend, 0..100, one decimal.",
+            "type": "number"
+          },
+          "provider": {
+            "description": "Provider is who served it.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is how many calls went to this model.",
+            "type": "integer"
+          },
+          "spendCents": {
+            "description": "SpendCents is what they cost, in cents.",
+            "type": "integer"
+          },
+          "tokens": {
+            "description": "Tokens is prompt plus completion tokens over those calls.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Overview": {
+        "properties": {
+          "commerce": {
+            "$ref": "#/components/schemas/CommerceOverview",
+            "description": "Commerce is the orders/revenue lens over product events."
+          },
+          "end": {
+            "description": "End is the window's exclusive upper bound, RFC3339 UTC.",
+            "type": "string"
+          },
+          "interval": {
+            "description": "Interval is the bucket width the window implies: hour or day.",
+            "type": "string"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LLMOverview",
+            "description": "LLM is the LLM usage lens — real per-org data."
+          },
+          "range": {
+            "description": "Range is the window that was actually applied: 24h, 7d, 30d or custom.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope",
+            "description": "Scope names the tenant these numbers belong to."
+          },
+          "start": {
+            "description": "Start is the window's inclusive lower bound, RFC3339 UTC.",
+            "type": "string"
+          },
+          "web": {
+            "$ref": "#/components/schemas/WebOverview",
+            "description": "Web is the web-traffic lens over product events."
+          }
+        },
+        "type": "object"
+      },
+      "ProductRow": {
+        "properties": {
+          "orders": {
+            "description": "Orders is how many order_completed events carried it.",
+            "type": "integer"
+          },
+          "productId": {
+            "description": "ProductID is the product the order events named.",
+            "type": "string"
+          },
+          "revenue": {
+            "description": "Revenue is the total they carried, in the events' own currency unit.",
+            "type": "number"
+          },
+          "units": {
+            "description": "Units is the summed quantity sold.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Scope": {
+        "properties": {
+          "org": {
+            "description": "Org is the IAM org slug the rows were read under: the validated principal's,\nresolved server-side.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SpanBody": {
+        "type": "object",
+        "properties": {
+          "duration": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "trace": {
+            "type": "string"
+          }
+        }
+      },
+      "Timeseries": {
+        "properties": {
+          "end": {
+            "description": "End is the window's exclusive upper bound, RFC3339 UTC.",
+            "type": "string"
+          },
+          "interval": {
+            "description": "Interval is the bucket width: hour or day.",
+            "type": "string"
+          },
+          "range": {
+            "description": "Range is the window that was actually applied: 24h, 7d, 30d or custom.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope",
+            "description": "Scope names the tenant these numbers belong to."
+          },
+          "series": {
+            "description": "Series is one point per bucket, oldest first, with empty buckets zero-filled.",
+            "items": {
+              "$ref": "#/components/schemas/UsagePoint"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "Source is the warehouse table the series read.",
+            "type": "string"
+          },
+          "start": {
+            "description": "Start is the window's inclusive lower bound, RFC3339 UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Top": {
+        "properties": {
+          "end": {
+            "description": "End is the window's exclusive upper bound, RFC3339 UTC.",
+            "type": "string"
+          },
+          "models": {
+            "$ref": "#/components/schemas/TopModels",
+            "description": "Models ranks the window's LLM models by spend — real per-org data."
+          },
+          "products": {
+            "$ref": "#/components/schemas/TopProducts",
+            "description": "Products ranks the window's products by revenue."
+          },
+          "range": {
+            "description": "Range is the window that was actually applied: 24h, 7d, 30d or custom.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope",
+            "description": "Scope names the tenant these rankings belong to."
+          },
+          "start": {
+            "description": "Start is the window's inclusive lower bound, RFC3339 UTC.",
+            "type": "string"
+          },
+          "topPages": {
+            "$ref": "#/components/schemas/Breakdown",
+            "description": "Pages ranks the paths visitors requested, by pageviews."
+          },
+          "topReferrers": {
+            "$ref": "#/components/schemas/Breakdown",
+            "description": "Referrers ranks the external domains visitors arrived from, by pageviews."
+          },
+          "topSources": {
+            "$ref": "#/components/schemas/Breakdown",
+            "description": "Sources ranks the utm_source campaigns visitors arrived on, by pageviews."
+          }
+        },
+        "type": "object"
+      },
+      "TopModels": {
+        "properties": {
+          "available": {
+            "description": "Available is true whenever the ledger answered, including with no rows.",
+            "type": "boolean"
+          },
+          "items": {
+            "description": "Items is the ranked models, highest spend first.",
+            "items": {
+              "$ref": "#/components/schemas/ModelRow"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "Source is the warehouse table the lens read.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TopProducts": {
+        "properties": {
+          "available": {
+            "description": "Available is false when the product-event table could not be read.",
+            "type": "boolean"
+          },
+          "items": {
+            "description": "Items is the ranked products, highest revenue first. Empty rather than absent.",
+            "items": {
+              "$ref": "#/components/schemas/ProductRow"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "description": "Reason says why the lens is unavailable. Omitted when it is available.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the warehouse table the lens read.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UTM": {
+        "type": "object",
+        "properties": {
+          "campaign": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "medium": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "term": {
+            "type": "string"
+          }
+        }
+      },
+      "UsagePoint": {
+        "properties": {
+          "requests": {
+            "description": "Requests is how many LLM calls fell in this bucket.",
+            "type": "integer"
+          },
+          "spendCents": {
+            "description": "SpendCents is what they cost, in cents.",
+            "type": "integer"
+          },
+          "t": {
+            "description": "T is the bucket's start, RFC3339 UTC, aligned to the interval.",
+            "type": "string"
+          },
+          "tokens": {
+            "description": "Tokens is prompt plus completion tokens over those calls.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "WebOverview": {
+        "properties": {
+          "available": {
+            "description": "Available is false when the product-event table could not be read — the lens is\nreported missing rather than as zeros that look like real traffic.",
+            "type": "boolean"
+          },
+          "pageviews": {
+            "description": "Pageviews is how many $pageview events landed in the window.",
+            "type": "integer"
+          },
+          "reason": {
+            "description": "Reason says why the lens is unavailable. Omitted when it is available.",
+            "type": "string"
+          },
+          "sessions": {
+            "description": "Sessions is how many distinct visits they span.",
+            "type": "integer"
+          },
+          "source": {
+            "description": "Source is the warehouse table the lens read.",
+            "type": "string"
+          },
+          "visitors": {
+            "description": "Visitors is how many distinct people those pageviews came from.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "capturedError": {
+        "properties": {
+          "distinctId": {
+            "description": "DistinctID is the person/visitor the error is attributed to. Omitted when the\nrow carries none.",
+            "type": "string"
+          },
+          "event": {
+            "description": "Event is the event name the error was stored under, e.g. $error.",
+            "type": "string"
+          },
+          "exception": {
+            "description": "Exception is the captured error itself — the {type, message, stack, handled}\nobject, already redacted at the fold point. Omitted when the row has none."
+          },
+          "id": {
+            "description": "ID is the row's stable event id — the client's own idempotency id when it sent\none, else the server-minted one.",
+            "type": "string"
+          },
+          "library": {
+            "description": "Library is the client SDK that reported the error. Omitted when absent.",
+            "type": "string"
+          },
+          "libraryVersion": {
+            "description": "LibraryVer is that SDK's version. Omitted when absent.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the URL's path component. Omitted when absent.",
+            "type": "string"
+          },
+          "product": {
+            "description": "Product is the surface that emitted the error. Omitted when absent.",
+            "type": "string"
+          },
+          "properties": {
+            "description": "Properties is the row's whole property bag, returned verbatim as stored — any\nJSON object, $exception included. Omitted when the row carries none or it did\nnot parse."
+          },
+          "sessionId": {
+            "description": "SessionID groups the events of one visit. Omitted when the client sent none.",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Timestamp is when the error was captured, RFC3339 UTC.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the full page address the error fired on. Omitted when absent.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "errorList": {
+        "properties": {
+          "data": {
+            "description": "Data is the errors, newest first. Empty rather than absent when there are none.",
+            "items": {
+              "$ref": "#/components/schemas/capturedError"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "eventList": {
+        "properties": {
+          "data": {
+            "description": "Data is the events, newest first. Empty rather than absent when there are none.",
+            "items": {
+              "$ref": "#/components/schemas/productEvent"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "healthLens": {
+        "properties": {
+          "available": {
+            "description": "Available reports whether that table exists in the warehouse right now.",
+            "type": "boolean"
+          },
+          "table": {
+            "description": "Table is the fully-qualified warehouse table the lens reads.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "healthLenses": {
+        "properties": {
+          "events": {
+            "$ref": "#/components/schemas/healthLens",
+            "description": "Events is the web/commerce lens (event.fact, signal='act'), honest-empty until the\ncollector emits."
+          },
+          "llm": {
+            "$ref": "#/components/schemas/healthLens",
+            "description": "LLM is the live per-org usage ledger lens (hanzo.cloud_usage)."
+          }
+        },
+        "type": "object"
+      },
+      "healthPlane": {
+        "properties": {
+          "bus": {
+            "description": "Bus is the address this process reaches the plane at.",
+            "type": "string"
+          },
+          "ready": {
+            "description": "Ready reports whether an ingest would succeed right now. False is a 503.",
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Reason is the plane's own failure text, present only when Ready is false.",
+            "type": "string"
+          },
+          "stream": {
+            "description": "Stream is the JetStream stream every signal lands on.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "healthReport": {
+        "properties": {
+          "datastore": {
+            "description": "Datastore reports whether the shared warehouse client has a live connection.\nIt is load-bearing for the READ path: false is one of the two ways this\nanswers 503.",
+            "type": "boolean"
+          },
+          "lenses": {
+            "$ref": "#/components/schemas/healthLenses",
+            "description": "Lenses is per-lens table availability, probed only when connected — so it is\nabsent from a degraded report, which has nothing to say about tables it could\nnot reach."
+          },
+          "lost": {
+            "$ref": "#/components/schemas/loss",
+            "description": "Lost is the count of facts the sink irrecoverably dropped since boot\n(warehouse.go). It is reported on the DEGRADED report too, and deliberately: a\nwarehouse that is unreachable is exactly when facts start failing their\ndeliveries, so suppressing the number here would hide it precisely when it\nmoves. ANY NON-ZERO VALUE IS AN ALARM — it counts data the door already\nanswered 200 for."
+          },
+          "plane": {
+            "$ref": "#/components/schemas/healthPlane",
+            "description": "Plane reports the event plane — the bus and the stream every accepted event is\npublished to BEFORE any of it reaches the warehouse. It is load-bearing for the\nWRITE path, and it is here because its absence was a real outage: this endpoint\nanswered 200/ok on warehouse connectivity alone while every POST /v1/event 503'd\non a stream that could not bind, so 100% ingest loss was invisible to monitoring.\nA probe that cannot see the write path cannot report the write path."
+          },
+          "reason": {
+            "description": "Reason is the human-readable cause, present only on a degraded report.",
+            "type": "string"
+          },
+          "service": {
+            "description": "Service names the subsystem answering, so a probe aggregating several health\nendpoints can attribute a degraded one.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is ok or degraded. Degraded is the 503 and means EITHER load-bearing\ndependency is down — the warehouse this subsystem reads, or the event plane it\nwrites. It is not moved by a missing lens table, which is honest-empty.",
+            "type": "string"
+          },
+          "warehouse": {
+            "description": "Warehouse names the datastore database every lens reads.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "insightsBody": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/insightsEvent"
+            }
+          },
+          "distinct_id": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "uuid": {
+            "type": "string"
+          }
+        }
+      },
+      "insightsEvent": {
+        "type": "object",
+        "properties": {
+          "distinct_id": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "uuid": {
+            "type": "string"
+          }
+        }
+      },
+      "insightsStatus": {
+        "properties": {
+          "engine": {
+            "description": "Engine names the engine serving the surface: hanzo-analytics.",
+            "type": "string"
+          },
+          "ok": {
+            "description": "OK is always true — reaching this route is the liveness fact it reports.",
+            "type": "boolean"
+          },
+          "surface": {
+            "description": "Surface is the path prefix this status covers: /v1/event/insights.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "loss": {
+        "properties": {
+          "exhausted": {
+            "description": "Exhausted counts facts the bus abandoned after maxDeliver failed inserts.",
+            "type": "integer"
+          },
+          "undecodable": {
+            "description": "Undecodable counts messages acked without landing because they did not parse.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "productEvent": {
+        "properties": {
+          "distinctId": {
+            "description": "DistinctID is the person/visitor the event is attributed to.",
+            "type": "string"
+          },
+          "event": {
+            "description": "Event is the event name, e.g. page_viewed or signup_completed.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the row's stable event id — the client's own idempotency id when it sent\none, else the server-minted one.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the URL's path component, the key the topPages lens groups by.",
+            "type": "string"
+          },
+          "product": {
+            "description": "Product is the surface that emitted the event. Omitted when absent.",
+            "type": "string"
+          },
+          "properties": {
+            "description": "Properties is the row's attributes map as a JSON object (string values — the\nplane stores Map(String,String), so a nested value the caller sent is a\nJSON-encoded string). Omitted when the row carries none."
+          },
+          "sessionId": {
+            "description": "SessionID groups the events of one visit. Omitted when the client sent none.",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Timestamp is when the event happened, RFC3339 UTC.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the row's kind — the plane's discriminator: page, track, identify or\ngroup. (Errors are not here at all: they land on event.error and are read at\n/v1/event/errors.)",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the full page address the event fired on. Omitted when absent.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "replayBody": {
+        "type": "object",
+        "properties": {
+          "distinctId": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {}
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "windowId": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

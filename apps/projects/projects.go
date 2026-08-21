@@ -61,7 +61,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/base"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/sites"
@@ -376,7 +376,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// This is the whole of "a site with no project stops recording": the door asks
 	// this store which project a beacon's key names, and a key nothing holds is a
 	// refusal.
-	analytics.SetKeyResolver(keyResolver{store: store})
+	event.SetKeyResolver(keyResolver{store: store})
 	setKeyResolverForPlane(keyResolver{store: store})
 	exposeKeys()
 

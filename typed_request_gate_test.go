@@ -110,7 +110,7 @@ var allowedRequestUses = map[string]string{
 		"carries. ONE function, which every op in the package asks; it fails closed off the HTTP path. Two ops " +
 		"then reuse the request it hands back for a second, non-identity reason: the CSRF issuer pins " +
 		"Cache-Control on its response, and embed reads the SuperAdmin claim.",
-	"apps/automations/automations.go": "auditHTTP — the tamper-evident record for an enable/disable is an " +
+	"apps/auto/auto.go": "auditHTTP — the tamper-evident record for an enable/disable is an " +
 		"ATTRIBUTION, and every fact it carries beyond the org (the validated user id, the email, " +
 		"org-admin-ness, the method, the path, the source IP, the request id) rides on the request, " +
 		"which principal.OrgFrom does not. The tenant itself is resolved with principal.OrgFrom " +

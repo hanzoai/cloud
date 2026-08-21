@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/zap-proto/zip"
@@ -426,7 +426,7 @@ func (o ops) metrics(ctx context.Context, in *metricsQuery) (*campaignResults, e
 	// Funnel — the ONE analytics query for a campaign's results (org + campaign
 	// bound POSITIONALLY inside analytics; honest-empty when the events table is
 	// absent). "" = whole-campaign (all creatives).
-	ev, aerr := analytics.CampaignMetrics(ctx, org, camp.ID, "", start, end)
+	ev, aerr := event.CampaignMetrics(ctx, org, camp.ID, "", start, end)
 	if aerr != nil {
 		// A datastore outage is honest-empty here too — the campaign still reports
 		// its spend + channels; the funnel is simply unavailable this read.

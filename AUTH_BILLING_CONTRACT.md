@@ -144,7 +144,7 @@ Metering+gating coverage (each meters its OWN org, debits on success):
 | agents | `agent` | `CLOUD_AGENT_FEE_CENTS` | `apps/agents/agents.go` |
 | compute / GPU | `compute` | provision knobs | `apps/ml/ml.go`, `apps/visor/*` |
 | provisioning (sql/kv/vector/docdb) | `provisioning` | `CLOUD_PROVISION_FEE_CENTS[_KIND]` | `apps/provisioning/*` |
-| automations | `automations` | `CLOUD_AUTOMATIONS_FEE_CENTS` | `apps/automations/automations.go` |
+| auto | `automations` | `CLOUD_AUTO_FEE_CENTS` | `apps/auto/auto.go` |
 | todo | `todo` | fee knob | `apps/todo/todo.go` |
 | security | `security.scan` | — | `apps/security/security.go` |
 
