@@ -17225,21 +17225,40 @@ components:
     buildOut:
       properties:
         bytes:
+          description: Bytes is the size of the bundled CommonJS the runtime will
+            execute.
           type: integer
         generated:
+          description: |-
+            Generated is whether a model wrote the source from a spec, rather than the
+            caller posting the source itself.
           type: boolean
         plugin:
           $ref: '#/components/schemas/AuthoredPlugin'
+          description: Plugin is the plugin as stored, with its derived id and build
+            time.
       type: object
     buildRequest:
       properties:
         name:
+          description: |-
+            Name is the plugin's name: one lowercase path segment (a-z0-9, _ or -),
+            and the id the runtime loads it by.
           type: string
         provider:
+          description: |-
+            Provider is the connectors provider whose credential the plugin reads at
+            run time. Empty for a plugin that needs none.
           type: string
         source:
+          description: Source is TypeScript to build as-is. Exactly one of Source
+            or Spec.
           type: string
         spec:
+          description: |-
+            Spec is API documentation — an OpenAPI document, or prose describing the
+            endpoints — that the generator turns into Source. The generated source is
+            returned in the response, so a caller can read what will run before it runs.
           type: string
       type: object
     buildRow:
@@ -121374,32 +121393,51 @@ paths:
   /v1/tools/plugins/build:
     post:
       description: |-
-        Builds one plugin for the caller's org and answers 201 with the bundle's size, whether a model wrote the source, and the plugin as stored. Post `source` to build TypeScript as-is, or `spec` — an OpenAPI document or plain prose describing the endpoints — to have one generated; the generated source comes back in the answer, so a caller reads what will run before it runs. Exactly one of the two, and `name` must be one lowercase path segment; both or neither is 400.
+        Builds and stores one plugin for the caller's org. The 201 carries
+        the bundle's size, whether a model wrote the source, and the plugin as stored.
 
-        COMPILING IS THE GATE. The source goes through the same pipeline the committed connectors do — esbuild to one CommonJS program, then compiled in the goja runtime that will actually execute it — and anything that fails is rejected and NEVER stored. So a plugin in the store is one this deployment has already loaded once, not one a model claimed was fine. A failed build answers 422 carrying the diagnostics a caller needs to fix it: the bundler's error, the source that failed, and whether the model wrote it — a body outside the declared success shape.
+        Post `source` to build TypeScript as-is, or `spec` — an OpenAPI document or
+        plain prose describing the endpoints — to have one generated; the generated
+        source comes back in the answer, so a caller reads what will run before it
+        runs. Exactly one of the two, and `name` must be one lowercase path segment;
+        both or neither is 400.
 
-        CREDENTIALS ARE NOT PART OF A PLUGIN. A plugin names the connectors `provider` it needs and reads that credential from `ctx.auth` at run time, under KMS custody. Source that contains something shaped like a key is REFUSED rather than silently scrubbed, so a caller who pasted one finds out instead of shipping it — register it as a connector instead.
+        COMPILING IS THE GATE. The source goes through the same pipeline the committed
+        connectors do — esbuild to one CommonJS program, then compiled in the goja
+        runtime that will actually execute it — and anything that fails is rejected and
+        NEVER stored. So a plugin in the store is one this deployment has already
+        loaded once, not one a model claimed was fine. A failed build answers 422
+        carrying the diagnostics a caller needs to fix it: the bundler's error
+        (`detail`), the source that failed, and whether the model wrote it.
 
-        Requires a validated principal; 403 without one. The plugin is stored under that principal's org and is what `/v1/tools/plugins/authored` lists — never `/v1/tools/plugins`, which is this deployment's mounted-subsystem inventory. Source over 512 KiB or a spec over 256 KiB is refused. Posting a `spec` to a deployment with no AI client configured is 503, and a generation that fails upstream is 502.
+        CREDENTIALS ARE NOT PART OF A PLUGIN. A plugin names the connectors `provider`
+        it needs and reads that credential from `ctx.auth` at run time, under KMS
+        custody. Source that carries something key-shaped is REFUSED rather than
+        silently persisted — a scrubbed key looks like it worked.
       operationId: post_tools_plugins_build
       requestBody:
         content:
           application/json:
+            example:
+              name: acme
+              provider: acme
+              spec: POST /v1/things creates a thing
             schema:
               $ref: '#/components/schemas/buildRequest'
+        required: true
       responses:
-        2XX:
+        "201":
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/buildOut'
-          description: Success
-      summary: Build a plugin for your org from TypeScript, or from an API spec a
-        model writes it from
+          description: created
+      summary: Builds and stores one plugin for the caller's org.
       tags:
       - tools
       x-app: tools
       x-public: true
+      x-tool: true
   /v1/tools/skills:
     get:
       description: |-
