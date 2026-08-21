@@ -47,7 +47,7 @@ var intentRefused = map[string]string{
 	// Harbor-shaped management rows the running registries do not have. A
 	// distribution registry has no project table — the namespace IS the org.
 	"/v1/registry/projects/acme":              "a namespace is the IAM org, not a registry row; there is nothing to create, update or delete here",
-	"/v1/registry/webhooks":                   "distribution has no per-tenant webhook API (notifications are static deployment config); the fleet's webhook plane is /v1/webhooks",
+	"/v1/registry/webhooks":                   "distribution has no per-tenant webhook API (notifications are static deployment config); the fleet's webhook plane is /v1/webhook",
 	"/v1/registry/quotas":                     "no quota engine runs in the registry; storage accounting lives with the S3 backend, unexposed",
 	"/v1/registry/projects/acme/repositories": "repository rows live under /v1/registry/images; the Harbor path shape is not served",
 	// Real capabilities of the wire deliberately kept OFF this plane.

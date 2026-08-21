@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hanzoai/cloud/apps/destinations"
+	"github.com/hanzoai/cloud/apps/destination"
 )
 
 // connector_destinations.go registers the "destinations" connector — the ONE MCP tool
@@ -15,7 +15,7 @@ import (
 //
 // The tool provisions NON-SECRET ids only (measurement/pixel id). API secrets are
 // NEVER a tool argument: they would be persisted in the guide's action ledger, so
-// they flow only through the authenticated POST /v1/destinations/{platform} body →
+// they flow only through the authenticated POST /v1/destination/{platform} body →
 // KMS. A destination whose secret is reusable from an existing OAuth connection (Meta
 // CAPI ← the meta_ads token) goes fully live from the ids alone; otherwise the tool
 // reports live=false and the console adds the secret. dispatchTool pins rc.Org to the
@@ -63,7 +63,7 @@ func runDestinationsConnect(ctx context.Context, rc RunContext) (any, error) {
 			cfg[k] = v
 		}
 	}
-	status, err := destinations.Connect(ctx, rc.Org, platform, cfg)
+	status, err := destination.Connect(ctx, rc.Org, platform, cfg)
 	if err != nil {
 		return nil, err
 	}

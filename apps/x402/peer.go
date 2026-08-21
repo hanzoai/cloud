@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/wallets"
+	"github.com/hanzoai/cloud/apps/wallet"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
 )
@@ -114,26 +114,26 @@ func pricePeer(ctx context.Context, resource string) (Terms, bool, error) {
 // only within the org it is asked for, and a wallet outside that org resolves to
 // nothing. A buyer cannot redirect a credit over a socket any more than it could in
 // memory, because the org never came from the buyer either way.
-func payeeOf(ctx context.Context, org, walletID string) (wallets.PaymentTarget, bool) {
-	if target, ok := wallets.ResolvePaymentTarget(ctx, org, walletID); ok {
+func payeeOf(ctx context.Context, org, walletID string) (wallet.PaymentTarget, bool) {
+	if target, ok := wallet.ResolvePaymentTarget(ctx, org, walletID); ok {
 		return target, true
 	}
-	if wallets.Mounted() {
-		return wallets.PaymentTarget{}, false // wallets is HERE and says no such wallet
+	if wallet.Mounted() {
+		return wallet.PaymentTarget{}, false // wallets is HERE and says no such wallet
 	}
 	return payeePeer(org, walletID)
 }
 
-func payeePeer(org, walletID string) (wallets.PaymentTarget, bool) {
+func payeePeer(org, walletID string) (wallet.PaymentTarget, bool) {
 	cctx, cancel := peerCtx(org)
 	defer cancel()
 
 	out, err := cloud.Ask[plane.PayeeIn, plane.Payee](cctx, peerWallets, plane.WalletsPayee,
 		&plane.PayeeIn{WalletID: walletID})
 	if err != nil || out == nil || !out.Found {
-		return wallets.PaymentTarget{}, false
+		return wallet.PaymentTarget{}, false
 	}
-	return wallets.PaymentTarget{Address: out.Address, Org: org, Subject: out.Subject}, true
+	return wallet.PaymentTarget{Address: out.Address, Org: org, Subject: out.Subject}, true
 }
 
 // debitPeer debits the payer through the process that owns the ledger. It is the

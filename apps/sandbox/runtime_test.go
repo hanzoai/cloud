@@ -210,10 +210,10 @@ func TestTheDoorRefusesARuntimeAClientCraftedForItself(t *testing.T) {
 	Routes(app, s)
 	const org = "acme"
 
-	code, body := req(t, app, http.MethodPost, "/v1/sandboxes", org,
+	code, body := req(t, app, http.MethodPost, "/v1/sandbox", org,
 		`{"class":"dev","project":"p","runtime":"kata-fc"}`)
 	if code != http.StatusBadRequest {
-		t.Fatalf("POST /v1/sandboxes with a volume + kata-fc = %d %s, want 400 — "+
+		t.Fatalf("POST /v1/sandbox with a volume + kata-fc = %d %s, want 400 — "+
 			"a client must not be able to obtain a runtime the policy refuses", code, body)
 	}
 	// The reason has to be READABLE, because a person is going to read it. A bare
@@ -224,9 +224,9 @@ func TestTheDoorRefusesARuntimeAClientCraftedForItself(t *testing.T) {
 
 	// And it refused BEFORE building anything: no row, so no sandbox an operator
 	// has to explain and no project slot held against the next honest request.
-	code, body = req(t, app, http.MethodGet, "/v1/sandboxes", org, "")
+	code, body = req(t, app, http.MethodGet, "/v1/sandbox", org, "")
 	if code != http.StatusOK {
-		t.Fatalf("GET /v1/sandboxes = %d %s", code, body)
+		t.Fatalf("GET /v1/sandbox = %d %s", code, body)
 	}
 	var listed struct {
 		Sandboxes []Sandbox `json:"sandboxes"`
@@ -240,7 +240,7 @@ func TestTheDoorRefusesARuntimeAClientCraftedForItself(t *testing.T) {
 
 	// The unknown-runtime refusal is the same shape, and it is the one a typo
 	// produces: without it the pod sits Pending forever with nothing said.
-	if code, body = req(t, app, http.MethodPost, "/v1/sandboxes", org,
+	if code, body = req(t, app, http.MethodPost, "/v1/sandbox", org,
 		`{"class":"exec","runtime":"firecracker"}`); code != http.StatusBadRequest ||
 		!strings.Contains(string(body), "is not one we run") {
 		t.Fatalf("POST with an invented runtime = %d %s, want 400 naming the set we run", code, body)

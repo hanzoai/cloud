@@ -42,6 +42,20 @@
       "sha256": "8d9d69f59567fe4f93a954efdc239ea1578a66257a75ae6cccfc4b08cf504360"
     },
     {
+      "description": "Read ad campaigns: Returns the caller org's ad campaigns, most recently updated first, optionally narrowed to one lifecycle status., Returns one of the caller org's campaigns..",
+      "name": "ad_campaigns",
+      "path": "ad_campaigns/SKILL.md",
+      "service": "ad",
+      "sha256": "a56e76d55edc269cc3f9417bcc8ee2198bbd081856aca75a67ef569c9c977cc5"
+    },
+    {
+      "description": "Read ad summary: Rolls the caller org's ad campaigns up into four numbers: how many campaigns exist, how many are active, and the summed budget and spend across all of them..",
+      "name": "ad_summary",
+      "path": "ad_summary/SKILL.md",
+      "service": "ad",
+      "sha256": "60105e62e15c6b06ecda962420ed481a5ee1458a21e92d96ce8f8f6053c84f8a"
+    },
+    {
       "description": "Read admin affiliate: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents., Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (refe",
       "name": "admin_affiliate",
       "path": "admin_affiliate/SKILL.md",
@@ -313,20 +327,6 @@
       "path": "admission_waitlist/SKILL.md",
       "service": "admission",
       "sha256": "797c3e919dadbb89bc0b3e22958a2feff68ebe81627b59d8ab997341f4d438c0"
-    },
-    {
-      "description": "Read ads campaigns: Returns the caller org's ad campaigns, most recently updated first, optionally narrowed to one lifecycle status., Returns one of the caller org's campaigns..",
-      "name": "ads_campaigns",
-      "path": "ads_campaigns/SKILL.md",
-      "service": "ads",
-      "sha256": "cf356d6c67e1ddadb29c38cae6fb37d45eb340d6148fbcc591f3f877ebae27a1"
-    },
-    {
-      "description": "Read ads summary: Rolls the caller org's ad campaigns up into four numbers: how many campaigns exist, how many are active, and the summed budget and spend across all of them..",
-      "name": "ads_summary",
-      "path": "ads_summary/SKILL.md",
-      "service": "ads",
-      "sha256": "bb588344b29f7139db998abf3c0d70903650d3d90382d12948ff990bc7503911"
     },
     {
       "description": "Read affiliate affiliate: Answers the caller org's OWN affiliate standing: status, referral code and share link, commission rate, how many orgs it has referred, and its lifetime accrued, still-pending and already-paid commission in integer cents, with its payout history..",
@@ -1722,11 +1722,11 @@
       "sha256": "c054874c1afcf9f7afc9800a03907667e0c2c9885238e73d2dab89c5ee70e234"
     },
     {
-      "description": "Read destinations destinations: Reports every destination this deployment can forward to, each with the caller org's connection state: whether it is connected, whether it is enabled, whether a credential resolves right now, and the config fields the console renders for it., Repor",
-      "name": "destinations_destinations",
-      "path": "destinations_destinations/SKILL.md",
-      "service": "destinations",
-      "sha256": "9734a8e62d821e1ad6e440e040c153543c43b1975acb8d5cc8f4c311b6dcd9cd"
+      "description": "Read destination destination: Reports every destination this deployment can forward to, each with the caller org's connection state: whether it is connected, whether it is enabled, whether a credential resolves right now, and the config fields the console renders for it., Reports",
+      "name": "destination_destination",
+      "path": "destination_destination/SKILL.md",
+      "service": "destination",
+      "sha256": "4ed17aea62e7277e62733041ca299a17ab232a049dbfe0aa9999ab7e6d4a12e5"
     },
     {
       "description": "Read dns dns: Read your org's DNS zones and records.",
@@ -4046,25 +4046,25 @@
       "sha256": "d5443afc275528b0dae835935c95c4947feb1b48d76c7c086a1301bd285addee"
     },
     {
-      "description": "Read prompts catalog: Catalog returns the read-only starter prompt library shipped with the binary — reference content every tenant sees the same, NOT the caller's own prompts and never mixed into them..",
-      "name": "prompts_catalog",
-      "path": "prompts_catalog/SKILL.md",
-      "service": "prompts",
-      "sha256": "6dcfa51008e3714257cfd7614b298d7eff670baea02ae05bab538bf79a984662"
+      "description": "Read prompt catalog: Catalog returns the read-only starter prompt library shipped with the binary — reference content every tenant sees the same, NOT the caller's own prompts and never mixed into them..",
+      "name": "prompt_catalog",
+      "path": "prompt_catalog/SKILL.md",
+      "service": "prompt",
+      "sha256": "f5cff3714c8ba21df5a6bb71e81bf1b46e54468790a5bbddc3d880b660d0fa38"
     },
     {
-      "description": "Read prompts metrics: Metrics returns real per-prompt statistics for the caller's org: how many versions each prompt has, which one is current, and when it was created and last changed..",
-      "name": "prompts_metrics",
-      "path": "prompts_metrics/SKILL.md",
-      "service": "prompts",
-      "sha256": "11e386d42c5424f1661b6f406dc13f5c99da156252adfb5e494ac24e337379ec"
+      "description": "Read prompt metrics: Metrics returns real per-prompt statistics for the caller's org: how many versions each prompt has, which one is current, and when it was created and last changed..",
+      "name": "prompt_metrics",
+      "path": "prompt_metrics/SKILL.md",
+      "service": "prompt",
+      "sha256": "4b43b4471876375fca4075ba1b8e6dc4bfddc7b4133901167948b08f533cce34"
     },
     {
-      "description": "Read prompts prompts: List returns the caller org's prompt library as one row per prompt: its name, type, every version number it has, its taxonomy and when it last changed., Get returns one of the caller org's prompts: its CURRENT template text plus the metadata of every version",
-      "name": "prompts_prompts",
-      "path": "prompts_prompts/SKILL.md",
-      "service": "prompts",
-      "sha256": "4fd838244c2077375b77b624b0babf96f24bb6c4eeb5994ad9bc5f619b5273e7"
+      "description": "Read prompt prompt: List returns the caller org's prompt library as one row per prompt: its name, type, every version number it has, its taxonomy and when it last changed., Get returns one of the caller org's prompts: its CURRENT template text plus the metadata of every version i",
+      "name": "prompt_prompt",
+      "path": "prompt_prompt/SKILL.md",
+      "service": "prompt",
+      "sha256": "03875bc3ef7d72681811c31c7bbcd947bcba64c0b2b55bd024fabf9a8691852e"
     },
     {
       "description": "Read provisioning datastore: Lists the caller org's Hanzo Datastore warehouses., Returns one Hanzo Datastore warehouse's metadata..",
@@ -4242,32 +4242,32 @@
       "sha256": "783a30704f25cf55f0dbfabefbfa42aca40e3b1930661dc1adf72500c7a2dc64"
     },
     {
-      "description": "Read sandboxes fs: Read a file, or list a directory.",
-      "name": "sandboxes_fs",
-      "path": "sandboxes_fs/SKILL.md",
-      "service": "sandboxes",
-      "sha256": "bb46e9c1c61acf79d00001030b424c4fccae72c1f5170f0a3817f234a0baa346"
+      "description": "Read sandbox fs: Read a file, or list a directory.",
+      "name": "sandbox_fs",
+      "path": "sandbox_fs/SKILL.md",
+      "service": "sandbox",
+      "sha256": "1d8706dd81d19faedf1f6b83317a8162888f98dee57a60aa368cc88d5d81c3fb"
     },
     {
-      "description": "Read sandboxes sandboxes: The sandboxes this org holds, One sandbox.",
-      "name": "sandboxes_sandboxes",
-      "path": "sandboxes_sandboxes/SKILL.md",
-      "service": "sandboxes",
-      "sha256": "0e3ba15e660701ec6b19118e0c9f63b8aa905949c9f400698f50e189839a98ae"
+      "description": "Read sandbox sandbox: The sandboxes this org holds, One sandbox.",
+      "name": "sandbox_sandbox",
+      "path": "sandbox_sandbox/SKILL.md",
+      "service": "sandbox",
+      "sha256": "78f38f7dd3b0bdf780f360bedc16673e4a59a673e7ec16d08870c2ced6ddf80e"
     },
     {
-      "description": "Read sandboxes screen: The screen, as a page, The screen, as a socket.",
-      "name": "sandboxes_screen",
-      "path": "sandboxes_screen/SKILL.md",
-      "service": "sandboxes",
-      "sha256": "1c9183844ebfd965e52701ba18f4bd8d133c2a9e596103e9092ca6563ee20442"
+      "description": "Read sandbox screen: The screen, as a page, The screen, as a socket.",
+      "name": "sandbox_screen",
+      "path": "sandbox_screen/SKILL.md",
+      "service": "sandbox",
+      "sha256": "9f23b10cdb045fb7f4c8d6140ea2f5e1aba4912b501a3a584facce06049c269d"
     },
     {
-      "description": "Read sandboxes terminal: The terminal, as a page, The terminal, as a socket.",
-      "name": "sandboxes_terminal",
-      "path": "sandboxes_terminal/SKILL.md",
-      "service": "sandboxes",
-      "sha256": "d7b5bb593172be5266ec299241517dd482a28c23d7593afd63a2d83248d7efe6"
+      "description": "Read sandbox terminal: The terminal, as a page, The terminal, as a socket.",
+      "name": "sandbox_terminal",
+      "path": "sandbox_terminal/SKILL.md",
+      "service": "sandbox",
+      "sha256": "e861f056fc090dec0ce8323d3519b84b1127c4c6796a4beb5cae5f4e9305afda"
     },
     {
       "description": "Read sbom health: Health is a pure liveness probe: the service is up; datastore reflects whether the datastore store is connected..",
@@ -4466,11 +4466,11 @@
       "sha256": "95bee204938db61c3062e7ea9a1ebab99d1b3dd1ee120804146f65f7c8442d37"
     },
     {
-      "description": "Read templates templates: Lists the public starter-kit catalog plus, for a validated caller, that org's own private kits., Returns one starter kit: the caller org's own by that slug, else the public catalog's..",
-      "name": "templates_templates",
-      "path": "templates_templates/SKILL.md",
-      "service": "templates",
-      "sha256": "618931cfb981d0508e173535e5b8d0540c7e0fed02a1bc7c6b64dc426ca02406"
+      "description": "Read template template: Lists the public starter-kit catalog plus, for a validated caller, that org's own private kits., Returns one starter kit: the caller org's own by that slug, else the public catalog's..",
+      "name": "template_template",
+      "path": "template_template/SKILL.md",
+      "service": "template",
+      "sha256": "11bc535aaa01697a3b9340165932ceaf8996b804c1a5482718da18d79a31649f"
     },
     {
       "description": "Read todo board: Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
@@ -4648,18 +4648,18 @@
       "sha256": "2c2f42d17675ace27a11100d8519945d38852a3e1368d1b239b04ee2492761b8"
     },
     {
-      "description": "Read wallets accounts: Returns the caller org's wallet accounts, newest first..",
-      "name": "wallets_accounts",
-      "path": "wallets_accounts/SKILL.md",
-      "service": "wallets",
-      "sha256": "3ca5a79f543d00d690dd59ac7811f9e960a519f752cdc56f26b31bcf7eec833a"
+      "description": "Read wallet accounts: Returns the caller org's wallet accounts, newest first..",
+      "name": "wallet_accounts",
+      "path": "wallet_accounts/SKILL.md",
+      "service": "wallet",
+      "sha256": "71166b7657abe5d29786fa741a7a0307c72c40766d46ec40e4a86ccae6571057"
     },
     {
-      "description": "Read wallets wallets: Returns the caller org's wallets, newest first, optionally NARROWED within the org by project, agent or account., Returns one of the caller org's wallets: its scope, custody kind, tier, chain and on-chain address..",
-      "name": "wallets_wallets",
-      "path": "wallets_wallets/SKILL.md",
-      "service": "wallets",
-      "sha256": "3b5d2a6df8f8225a39e7cfd43330adcc92ab1180a125b82dcd1ce19e58393496"
+      "description": "Read wallet wallet: Returns the caller org's wallets, newest first, optionally NARROWED within the org by project, agent or account., Returns one of the caller org's wallets: its scope, custody kind, tier, chain and on-chain address..",
+      "name": "wallet_wallet",
+      "path": "wallet_wallet/SKILL.md",
+      "service": "wallet",
+      "sha256": "185ada6d8372294fdd63fc391e40161fa25357af758362d5c8f916f99db8800a"
     },
     {
       "description": "Read web3 chains: Reports the chains this deployment can reach., Reports one chain and whether its upstream is answering..",
@@ -4676,18 +4676,18 @@
       "sha256": "7e7439a682c9faf3c306d3a38c9453a37932049694af927567b073a2f756523d"
     },
     {
-      "description": "Read webhooks deliveries: Returns one endpoint's per-attempt delivery log, newest first — the record of what was sent, what the subscriber answered, and how long it took..",
-      "name": "webhooks_deliveries",
-      "path": "webhooks_deliveries/SKILL.md",
-      "service": "webhooks",
-      "sha256": "e25fb842056263a786ada3b90cb1c6c77bc7666edbcd13fe49741fbbbff18084"
+      "description": "Read webhook deliveries: Returns one endpoint's per-attempt delivery log, newest first — the record of what was sent, what the subscriber answered, and how long it took..",
+      "name": "webhook_deliveries",
+      "path": "webhook_deliveries/SKILL.md",
+      "service": "webhook",
+      "sha256": "a2911290b9e6e4940be0a7b0a48784d216c4f089d68f8c712e6f1f40066bae8d"
     },
     {
-      "description": "Read webhooks webhooks: Returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts., Returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted..",
-      "name": "webhooks_webhooks",
-      "path": "webhooks_webhooks/SKILL.md",
-      "service": "webhooks",
-      "sha256": "e1232f29f6d0d8d8a6bc08f7775423a2c8cab0a6652108c8f6aefa3ff133fb33"
+      "description": "Read webhook webhook: Returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts., Returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted..",
+      "name": "webhook_webhook",
+      "path": "webhook_webhook/SKILL.md",
+      "service": "webhook",
+      "sha256": "7b213f01a8326992a82494aafc82b58e2e191693450f9ea65167c1b67f6218b7"
     },
     {
       "description": "Read websearch search: Keyless web meta-search, in the SearXNG JSON envelope..",

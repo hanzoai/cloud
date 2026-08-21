@@ -30,7 +30,7 @@ import (
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/tools"
-	"github.com/hanzoai/cloud/apps/wallets"
+	"github.com/hanzoai/cloud/apps/wallet"
 	"github.com/hanzoai/cloud/apps/x402"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/plane"
@@ -111,8 +111,8 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 	// app-wide and fiber runs middleware in REGISTRATION order, so it must be
 	// registered before the tool plane's leaves or a dispatch reaches no parked
 	// request — no attested payer, and every priced tool 424s.
-	if err := wallets.Mount(app, deps); err != nil {
-		t.Fatalf("wallets.Mount: %v", err)
+	if err := wallet.Mount(app, deps); err != nil {
+		t.Fatalf("wallet.Mount: %v", err)
 	}
 	if err := x402.Mount(app, deps); err != nil {
 		t.Fatalf("x402.Mount: %v", err)
@@ -138,7 +138,7 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 		_ = Shutdown(context.Background())
 		_ = tools.Shutdown(context.Background())
 		_ = x402.Shutdown()
-		_ = wallets.Shutdown()
+		_ = wallet.Shutdown()
 		finance.Publish(nil)
 		tools.Default().SetActivation(nil)
 	})
@@ -153,14 +153,14 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 // wallet a monetized listing names.
 func (m *market) createWallet(org string) string {
 	m.t.Helper()
-	_, b, _ := m.req(http.MethodPost, "/v1/wallets/accounts", org, "", `{"name":"payee"}`)
+	_, b, _ := m.req(http.MethodPost, "/v1/wallet/accounts", org, "", `{"name":"payee"}`)
 	var acct struct {
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(b, &acct); err != nil || acct.ID == "" {
 		m.t.Fatalf("create account: %v (%s)", err, b)
 	}
-	code, b, _ := m.req(http.MethodPost, "/v1/wallets", org, "",
+	code, b, _ := m.req(http.MethodPost, "/v1/wallet", org, "",
 		`{"accountId":"`+acct.ID+`","name":"earnings","custody":"kms","tier":"hot","chain":"eip155:36963"}`)
 	if code != 200 {
 		m.t.Fatalf("create wallet = %d (%s)", code, b)

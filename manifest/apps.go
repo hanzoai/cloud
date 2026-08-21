@@ -189,7 +189,7 @@ var Apps = []App{
 	{Name: "projects", Prefixes: []string{"/v1/projects"}},
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
-	{Name: "prompts", Prefixes: []string{"/v1/prompts"}},
+	{Name: "prompt", Prefixes: []string{"/v1/prompt"}},
 	// The coding door answers at /v1/agents/coding. A coding run IS an agent run:
 	// the engine is in this process because it needs the live session store the
 	// run streams into, the durable tasks engine and the in-memory mailbox a routed
@@ -203,12 +203,12 @@ var Apps = []App{
 	// already the typed create. One name, one root (HIP-1210).
 	{Name: "agents", Prefixes: []string{"/v1/agents"}},
 	{Name: "link", Prefixes: []string{"/v1/link"}},
-	{Name: "wallets", Prefixes: []string{"/v1/wallets"}},
+	{Name: "wallet", Prefixes: []string{"/v1/wallet"}},
 	{Name: "x402", Prefixes: []string{"/v1/x402"}},
 	{Name: "deploy", Prefixes: []string{"/v1/deploy/account/can-i", "/v1/deploy/applications", "/v1/deploy/callback", "/v1/deploy/clusters", "/v1/deploy/gitops", "/v1/deploy/health", "/v1/deploy/login", "/v1/deploy/logout", "/v1/deploy/projects", "/v1/deploy/reconcile", "/v1/deploy/session/userinfo", "/v1/deploy/settings", "/v1/deploy/stream/applications", "/v1/deploy/version"}},
 	{Name: "functions", Prefixes: []string{"/v1/functions"}},
 	{Name: "todo", Prefixes: []string{"/v1/todo"}},
-	{Name: "templates", Prefixes: []string{"/v1/templates"}},
+	{Name: "template", Prefixes: []string{"/v1/template"}},
 	{Name: "blueprint", Prefixes: []string{"/v1/blueprint"}},
 	{Name: "framework", Prefixes: []string{"/v1/framework"}},
 
@@ -220,7 +220,7 @@ var Apps = []App{
 	{Name: "help", Prefixes: []string{"/v1/help"}},
 	{Name: "content", Prefixes: []string{"/v1/content"}},
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
-	{Name: "webhooks", Prefixes: []string{"/v1/webhooks"}},
+	{Name: "webhook", Prefixes: []string{"/v1/webhook"}},
 	{Name: "ml", Prefixes: []string{"/v1/ml/health", "/v1/ml/models"}},
 	// risk owns /v1/risk OUTRIGHT — the per-organisation model plane that decides
 	// AND learns. It shares no prefix with the row above: `ml` is model SERVING
@@ -285,7 +285,7 @@ var Apps = []App{
 	{Name: "leaderboard", Prefixes: []string{"/v1/admin/leaderboard", "/v1/leaderboard"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}},
 	{Name: "marketing", Prefixes: []string{"/v1/marketing"}},
-	{Name: "ads", Prefixes: []string{"/v1/ads"}},
+	{Name: "ad", Prefixes: []string{"/v1/ad"}},
 	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
 	{Name: "validator", Prefixes: []string{"/v1/validator"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
@@ -363,7 +363,7 @@ var Apps = []App{
 	// handler and the project store it reads (apps/projects/tagdoor.go); it is under
 	// that app's prefix, so this row does not name it. A prefix must be claimed
 	// exactly once — two apps claiming one panics the host build.
-	{Name: "destinations", Prefixes: []string{"/v1/destinations"}},
+	{Name: "destination", Prefixes: []string{"/v1/destination"}},
 	{Name: "cloudflare", Prefixes: []string{"/v1/cloudflare"}},
 	{Name: "sbom", Prefixes: []string{"/v1/sbom"}},
 	// The collaborator lanes — the Y.js WebSocket and the markup snapshot RPC — are
@@ -393,7 +393,7 @@ var Apps = []App{
 	// so the fold costs a base-URL change and no wire change: a session's files
 	// are the session's, and the session is exec's.
 	{Name: "exec", Prefixes: []string{"/v1/exec"}},
-	{Name: "sandboxes", Prefixes: []string{"/v1/sandboxes"}},
+	{Name: "sandbox", Prefixes: []string{"/v1/sandbox"}},
 	{Name: "websearch", Prefixes: []string{"/v1/websearch"}},
 	{Name: "crawl", Prefixes: []string{"/v1/crawl"}},
 	// Beside the two surfaces that read the web, because it measures the same web

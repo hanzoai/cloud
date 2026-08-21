@@ -259,8 +259,9 @@ func TestMeteredSurfacesHoldAMeter(t *testing.T) {
 	var held int
 	for _, name := range metered {
 		// The packages the ROOT mounts, not apps/<name> — see appDirs. Assuming the
-		// two names match reported apps/sandboxes, which does not exist, as a surface
-		// holding no meter while apps/sandbox held one all along.
+		// two names match once reported a surface as holding no meter because it
+		// looked for a directory spelled the way the ROW was, not the way the
+		// PACKAGE was.
 		var charges, zeroed, priced bool
 		for _, dir := range appDirs(t, filepath.Join("plugin", name, "main.go")) {
 			if c, z, pr := packagePrice(t, dir); c {
@@ -329,7 +330,7 @@ var pricedAtZero = map[string]string{
 	// on a button that worked yesterday. apps/sandbox/api.go's ResourceFee documents
 	// this at the knob (SANDBOX_FEE_CENTS[_EXEC|_DEV|_DESKTOP]) and a test pins it.
 	// Pricing it is a product decision, and a separate one from declaring it.
-	"sandboxes": "every class free since inception; SANDBOX_FEE_CENTS turns it on — a values change, not a wiring gap",
+	"sandbox": "every class free since inception; SANDBOX_FEE_CENTS turns it on — a values change, not a wiring gap",
 }
 
 // meteredByAIWrapper are the surfaces whose spend is INFERENCE, metered once by the
@@ -377,7 +378,7 @@ func packageCharges(t *testing.T, dir string) (charges, allZero bool) {
 //
 // A meter priced at zero posts no ledger entry, so the surface is free while every
 // structural check reads it as metered — the seam is wired, the standing is
-// required, and the debit is a no-op. plugin/sandboxes passed this test that way
+// required, and the debit is a no-op. plugin/sandbox passed this test that way
 // for its whole life. The evidence is the DEFAULT a fee resolves to:
 // cloud.FeeCents(env, kind, 0) is a surface that charges nothing unless an operator
 // types a number, and cloud.ResourceFeeCents (or any non-zero default) is one that

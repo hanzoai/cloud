@@ -46,9 +46,9 @@ func woven(t *testing.T, parts ...openapi.Part) *openapi.Document {
 
 // The stage reaches the operation, from the part, and ga says nothing at all.
 func TestWeaveStampsTheStage(t *testing.T) {
-	d := woven(t, part("ads", manifest.Beta), part("iam", ""))
+	d := woven(t, part("ad", manifest.Beta), part("iam", ""))
 
-	if got := d.Paths["/v1/ads"]["get"].Stage; got != manifest.Beta {
+	if got := d.Paths["/v1/ad"]["get"].Stage; got != manifest.Beta {
 		t.Errorf("x-stage = %q, want %q — the weave is where an operation learns whose app it is", got, manifest.Beta)
 	}
 	if got := d.Paths["/v1/iam"]["get"].Stage; got != "" {
@@ -68,12 +68,12 @@ func TestWeaveStampsTheStage(t *testing.T) {
 
 // A beta capability is in the internal document and in no client.
 func TestBetaIsNotPublic(t *testing.T) {
-	d := woven(t, part("ads", manifest.Beta), part("iam", ""))
+	d := woven(t, part("ad", manifest.Beta), part("iam", ""))
 
 	if !d.Paths["/v1/iam"]["get"].Public {
 		t.Fatal("a ga operation under /v1 is not public — the rule broke on something other than the stage")
 	}
-	if d.Paths["/v1/ads"]["get"].Public {
+	if d.Paths["/v1/ad"]["get"].Public {
 		t.Error("a beta operation is public: it would be in every generated SDK, the CLI and the tool list")
 	}
 
@@ -81,7 +81,7 @@ func TestBetaIsNotPublic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, published := pub.Paths["/v1/ads"]; published {
+	if _, published := pub.Paths["/v1/ad"]; published {
 		t.Error("the public contract carries a beta address")
 	}
 	if _, published := pub.Paths["/v1/iam"]; !published {
@@ -90,7 +90,7 @@ func TestBetaIsNotPublic(t *testing.T) {
 	// And the tag goes with it. A product named in the tag list with no operation
 	// under it is a section every documentation site renders empty.
 	for _, tag := range pub.Tags {
-		if tag.Name == "ads" {
+		if tag.Name == "ad" {
 			t.Error("the public contract names the beta capability in its tag list")
 		}
 	}
@@ -109,8 +109,8 @@ func TestAlphaIsNotPublicEither(t *testing.T) {
 // Promotion is one edit to the row and nothing else: the same parts at ga
 // publish.
 func TestPromotionIsTheOnlyDifference(t *testing.T) {
-	d := woven(t, part("ads", ""))
-	if !d.Paths["/v1/ads"]["get"].Public {
+	d := woven(t, part("ad", ""))
+	if !d.Paths["/v1/ad"]["get"].Public {
 		t.Error("the same operation at ga is not public — something besides the stage is deciding")
 	}
 }

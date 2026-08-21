@@ -27,7 +27,7 @@
 // SEAMS. The marketplace registry (another subsystem) owns the mapping
 // resource→Terms (price + recipient wallet); x402 only enforces it (Registry +
 // Publish). Recipient resolution rides the wallets subsystem
-// (wallets.ResolvePaymentTarget). On-chain broadcast of the authorization is a
+// (wallet.ResolvePaymentTarget). On-chain broadcast of the authorization is a
 // Settler seam; the LIVE default is ledger settlement.
 package x402
 

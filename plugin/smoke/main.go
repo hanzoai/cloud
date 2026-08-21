@@ -77,8 +77,8 @@ var probes = []probe{
 	// ── public (no auth, no balance) ──
 	{"traffic-globe", http.MethodGet, "/v1/traffic/globe", classPublic},
 	{"router-stats-platform", http.MethodGet, "/v1/router/stats?scope=platform", classPublic},
-	{"templates", http.MethodGet, "/v1/templates", classPublic},
-	{"prompts-catalog", http.MethodGet, "/v1/prompts/catalog", classPublic},
+	{"templates", http.MethodGet, "/v1/template", classPublic},
+	{"prompts-catalog", http.MethodGet, "/v1/prompt/catalog", classPublic},
 	{"health", http.MethodGet, "/v1/health", classHealth},
 	{"plans", http.MethodGet, "/v1/plan", classPublic}, // the paywall's own cure URL
 	{"kms-health", http.MethodGet, "/v1/kms/health", classPublic},
@@ -94,7 +94,7 @@ var probes = []probe{
 	{"projects", http.MethodGet, "/v1/projects", classAuthed},
 	{"agents", http.MethodGet, "/v1/agents", classAuthed},
 	{"functions", http.MethodGet, "/v1/functions", classAuthed},
-	{"wallets", http.MethodGet, "/v1/wallets", classAuthed},
+	{"wallets", http.MethodGet, "/v1/wallet", classAuthed},
 	{"integrations", http.MethodGet, "/v1/integrations", classAuthed},
 	{"marketplace", http.MethodGet, "/v1/marketplace/listings", classAuthed},
 	{"o11y", http.MethodGet, "/v1/o11y/status", classAuthed},

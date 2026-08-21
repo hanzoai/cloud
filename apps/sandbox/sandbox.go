@@ -8,16 +8,16 @@
 // Not three subsystems, not three schedulers. One record, one pod spec, one way
 // in. What differs between them is `ttlSec` and whether a volume is attached.
 //
-//	POST   /v1/sandboxes             {kind:"sandbox", class, project?, ttlSec?} -> Sandbox
-//	GET    /v1/sandboxes             ?kind=&project=&status=
-//	GET    /v1/sandboxes/:id
-//	DELETE /v1/sandboxes/:id         ?purge=1 drops the volume too
-//	POST   /v1/sandboxes/:id/exec    {argv|command, stdin?, timeoutSec?} -> {exitCode,stdout,stderr}
-//	GET    /v1/sandboxes/:id/fs      ?path=  read a file, or list a directory
-//	POST   /v1/sandboxes/:id/fs      ?path=  write a file
-//	POST   /v1/sandboxes/:id/terminal/ticket a single-use ticket for one terminal
-//	GET    /v1/sandboxes/:id/terminal        ?ticket=&arg=  the terminal, as a page
-//	GET    /v1/sandboxes/:id/terminal/ws     ?ticket=&arg=  the terminal, as a socket
+//	POST   /v1/sandbox             {kind:"sandbox", class, project?, ttlSec?} -> Sandbox
+//	GET    /v1/sandbox             ?kind=&project=&status=
+//	GET    /v1/sandbox/:id
+//	DELETE /v1/sandbox/:id         ?purge=1 drops the volume too
+//	POST   /v1/sandbox/:id/exec    {argv|command, stdin?, timeoutSec?} -> {exitCode,stdout,stderr}
+//	GET    /v1/sandbox/:id/fs      ?path=  read a file, or list a directory
+//	POST   /v1/sandbox/:id/fs      ?path=  write a file
+//	POST   /v1/sandbox/:id/terminal/ticket a single-use ticket for one terminal
+//	GET    /v1/sandbox/:id/terminal        ?ticket=&arg=  the terminal, as a page
+//	GET    /v1/sandbox/:id/terminal/ws     ?ticket=&arg=  the terminal, as a socket
 //
 // A RUN IS WATCHABLE AND IT IS STOPPABLE. Name a session on a run and the
 // command's output is appended to that session's live log as it is produced, so
@@ -140,7 +140,7 @@ func classNames() []string {
 }
 
 // KindSandbox is the sandbox this package provisions: a gVisor pod in our own
-// cluster. It is a VALUE on the shared /v1/sandboxes resource, beside the kinds
+// cluster. It is a VALUE on the shared /v1/sandbox resource, beside the kinds
 // the compute control plane provisions (droplets, GPUs, bot sandbox), because
 // "a sandbox the org has" is one noun and splitting it by who provisions it
 // would publish two.
@@ -178,9 +178,9 @@ func storeFor(s *cloud.Service[state], org string) (*Store, error) {
 	return s.State.stores.For(ns)
 }
 
-// Mount registers the sandbox-sandbox half of /v1/sandboxes.
+// Mount registers the sandbox-sandbox half of /v1/sandbox.
 //
-// It is composed INTO the app that already owns the /v1/sandboxes prefix rather
+// It is composed INTO the app that already owns the /v1/sandbox prefix rather
 // than claiming a manifest row of its own: zip refuses two owners for one
 // prefix, the compute surface has held that prefix in production for months,
 // and a second `sandbox` noun is exactly the duplication this package exists to
@@ -232,17 +232,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // The collection and member routes used to be left out, on the reasoning that
 // they were "shared with the compute surface" — true while this served
 // /v1/visor/machines, which visor owns and where a second registration of one
-// resource is a conflict. It is /v1/sandboxes now, owned outright, and leaving
+// resource is a conflict. It is /v1/sandbox now, owned outright, and leaving
 // them out meant Create, List, Get and Delete existed as exported functions
 // that no request could ever reach: a caller could exec in a sandbox it had no
 // way to create. The handlers were there, the routes were not, and nothing said
 // so — the same shape as the policy that selected no pod and the installer that
 // installed nothing.
 func Routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/sandboxes", cloud.Handle(s, list))
-	app.Post("/v1/sandboxes", cloud.Handle(s, create))
+	app.Get("/v1/sandbox", cloud.Handle(s, list))
+	app.Post("/v1/sandbox", cloud.Handle(s, create))
 
-	g := app.Group("/v1/sandboxes")
+	g := app.Group("/v1/sandbox")
 	g.Get("/:id", cloud.Handle(s, get))
 	g.Delete("/:id", cloud.Handle(s, del))
 	g.Post("/:id/exec", cloud.Handle(s, execIn))
@@ -269,26 +269,26 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 	// This is what stands between "@hanzo can run code" and "@hanzo can lease a
 	// computer": the run path was built and reachable, and no agent could name it.
 	if reg := cloud.ZipApp(app); reg != nil {
-		zip.Post[plane.LeaseIn, plane.Leased](reg, "/v1/sandboxes/lease", planeLease,
+		zip.Post[plane.LeaseIn, plane.Leased](reg, "/v1/sandbox/lease", planeLease,
 			zip.WithOperationID("lease_sandbox"),
 			zip.WithSummary("Lease a sandbox — a real computer — or resume one you hold"))
-		zip.Post[plane.RunIn, plane.Ran](reg, "/v1/sandboxes/run", planeRun,
+		zip.Post[plane.RunIn, plane.Ran](reg, "/v1/sandbox/run", planeRun,
 			zip.WithOperationID("run_in_sandbox"),
 			zip.WithSummary("Run a command in a sandbox you hold and read its output"))
-		zip.Post[plane.PathIn, plane.Blob](reg, "/v1/sandboxes/read", planeRead,
+		zip.Post[plane.PathIn, plane.Blob](reg, "/v1/sandbox/read", planeRead,
 			zip.WithOperationID("read_sandbox_file"),
 			zip.WithSummary("Read a file from a sandbox you hold"))
-		zip.Post[plane.WriteIn, plane.Wrote](reg, "/v1/sandboxes/write", planeWrite,
+		zip.Post[plane.WriteIn, plane.Wrote](reg, "/v1/sandbox/write", planeWrite,
 			zip.WithOperationID("write_sandbox_file"),
 			zip.WithSummary("Write a file into a sandbox you hold"))
 		// STOP ENDS THE WORK; END ENDS THE RESOURCE. They are two verbs because a
 		// run that has gone wrong is one somebody still wants to look at, and an
 		// agent told to "stop" that deleted the pod would take the checkout, the
 		// logs and the half-written file with it.
-		zip.Post[plane.StopIn, plane.Stopped](reg, "/v1/sandboxes/stop", planeStop,
+		zip.Post[plane.StopIn, plane.Stopped](reg, "/v1/sandbox/stop", planeStop,
 			zip.WithOperationID("stop_run"),
 			zip.WithSummary("Stop what a sandbox is running, and keep the sandbox"))
-		zip.Post[plane.EndIn, struct{}](reg, "/v1/sandboxes/end", planeEnd,
+		zip.Post[plane.EndIn, struct{}](reg, "/v1/sandbox/end", planeEnd,
 			zip.WithOperationID("end_sandbox"),
 			zip.WithSummary("End a sandbox and release it"))
 	}
@@ -298,7 +298,7 @@ func orgOf(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 func idParam(c *zip.Ctx) string       { return strings.TrimSpace(c.Param("id")) }
 
 // Service is the mounted subsystem, handed back to the app that owns the
-// /v1/sandboxes prefix so its collection handlers can dispatch into this one.
+// /v1/sandbox prefix so its collection handlers can dispatch into this one.
 type Service = cloud.Service[state]
 
 // New builds the subsystem without registering anything, for a host that wants
@@ -535,7 +535,7 @@ func atoiOr(s string, def int) int {
 // zip.Ctx rather than being typed ops, so zipdoc has no comment to lift and the
 // document would otherwise publish operationIds and nothing else.
 func init() {
-	openapi.Describe("/v1/sandboxes", http.MethodGet,
+	openapi.Describe("/v1/sandbox", http.MethodGet,
 		"The sandboxes this org holds",
 		"Lists the caller org's sandboxes, newest first. `project` and `status` narrow it, "+
 			"and both are read from the QUERY STRING.\n\n"+
@@ -543,7 +543,7 @@ func init() {
 			"whose pod has since died still appears, carrying the status it was last known to "+
 			"have. That is deliberate: a lease you are being charged for should not vanish "+
 			"from the list because the thing behind it fell over.")
-	openapi.Describe("/v1/sandboxes", http.MethodPost,
+	openapi.Describe("/v1/sandbox", http.MethodPost,
 		"Lease a sandbox",
 		"Creates a sandbox and returns it. `class` is one of `exec`, `dev`, `desktop` or `android`; "+
 			"`dev` and `desktop` are attached to a `project`, which is required for them and "+
@@ -552,19 +552,19 @@ func init() {
 			"This is the ONLY path that creates cluster objects. The isolation boundary is the "+
 			"pod's runtime class, one field, so what a sandbox is confined by is a deployment "+
 			"decision rather than anything this operation negotiates.")
-	openapi.Describe("/v1/sandboxes/:id", http.MethodGet,
+	openapi.Describe("/v1/sandbox/:id", http.MethodGet,
 		"One sandbox",
 		"Returns one of the caller org's sandboxes. An id belonging to another org answers "+
 			"404 and not 403 — a 403 would confirm the id exists, and whether a given sandbox "+
 			"exists is itself a cross-tenant fact.")
-	openapi.Describe("/v1/sandboxes/:id", http.MethodDelete,
+	openapi.Describe("/v1/sandbox/:id", http.MethodDelete,
 		"End a sandbox",
 		"Stops the sandbox's pod and drops the lease. The VOLUME survives by default, so a "+
 			"`dev` or `desktop` sandbox can be leased again over the same project and find its "+
 			"checkout where it left it.\n\n"+
 			"`purge=1` deletes the volume too. It is opt-in because it is the one part of this "+
 			"that cannot be undone.")
-	openapi.Describe("/v1/sandboxes/:id/exec", http.MethodPost,
+	openapi.Describe("/v1/sandbox/:id/exec", http.MethodPost,
 		"Run a command in a sandbox",
 		"Runs a command inside the sandbox and returns its exit code, stdout and stderr. "+
 			"A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status "+
@@ -573,16 +573,16 @@ func init() {
 			"NOTHING RUNS IN cloud. The command is streamed to the Kubernetes exec "+
 			"subresource of the sandbox's pod, which runs under the gVisor runtime class. "+
 			"The sandbox is addressed by pod NAME through the apiserver, never by address.")
-	openapi.Describe("/v1/sandboxes/:id/fs", http.MethodGet,
+	openapi.Describe("/v1/sandbox/:id/fs", http.MethodGet,
 		"Read a file, or list a directory",
 		"Reads one file from the sandbox's project directory as text, or lists the entries "+
 			"when the path names a directory. Paths resolve under the project root and a path "+
 			"that climbs out is refused rather than rewritten.")
-	openapi.Describe("/v1/sandboxes/:id/fs", http.MethodPost,
+	openapi.Describe("/v1/sandbox/:id/fs", http.MethodPost,
 		"Write a file",
 		"Writes the request body to one file in the sandbox's project directory, creating "+
 			"parent directories. Same confinement as the read above.")
-	openapi.Describe("/v1/sandboxes/:id/terminal/ticket", http.MethodPost,
+	openapi.Describe("/v1/sandbox/:id/terminal/ticket", http.MethodPost,
 		"Open a terminal",
 		"Mints a SINGLE-USE ticket for one interactive terminal in this sandbox and returns "+
 			"`{ticket, expiresIn, url}`, where url is the terminal PAGE with the ticket already "+
@@ -594,7 +594,7 @@ func init() {
 			"long-lived bearer in a query string would instead be written into every access log "+
 			"on the path.\n\n"+
 			"Mint one per terminal, and mint a fresh one to reconnect.")
-	openapi.Describe("/v1/sandboxes/:id/terminal", http.MethodGet,
+	openapi.Describe("/v1/sandbox/:id/terminal", http.MethodGet,
 		"The terminal, as a page",
 		"A complete, self-contained terminal — xterm inline, no other origin — that opens its "+
 			"own socket and runs a shell in this sandbox. Embed it in an iframe and there is "+
@@ -606,7 +606,7 @@ func init() {
 			"When the terminal is up it posts `{source:\"hanzo-term\", ready:true}` to its parent "+
 			"frame, so a host can tell a live terminal from a page that failed into something "+
 			"else. `frame-ancestors` admits our own brands' hosts and nothing further.")
-	openapi.Describe("/v1/sandboxes/:id/terminal/ws", http.MethodGet,
+	openapi.Describe("/v1/sandbox/:id/terminal/ws", http.MethodGet,
 		"The terminal, as a socket",
 		"Upgrades to a WebSocket carrying a login shell on a pseudo-terminal inside the "+
 			"sandbox — for a host that brings its own emulator. Requires `ticket`; a missing, "+
@@ -630,7 +630,7 @@ func init() {
 	// routes are registered on the GROUP (`/:id/screen/ws`) while this document
 	// addresses them as the fleet routes them, so the lift landed under a key
 	// nothing asks for. Stated here, at the address, exactly as the terminal's are.
-	openapi.Describe("/v1/sandboxes/:id/screen/ticket", http.MethodPost,
+	openapi.Describe("/v1/sandbox/:id/screen/ticket", http.MethodPost,
 		"Open a screen",
 		"Mints a SINGLE-USE ticket for this sandbox's DISPLAY and returns "+
 			"`{ticket, expiresIn, url}`, where url is the desktop PAGE with the ticket already "+
@@ -639,7 +639,7 @@ func init() {
 			"views of one machine: a caller who may type in a sandbox may look at it. What the "+
 			"door decides is the URL handed back, which is the only part that differs.\n\n"+
 			"Mint one per screen, and mint a fresh one to reconnect.")
-	openapi.Describe("/v1/sandboxes/:id/screen", http.MethodGet,
+	openapi.Describe("/v1/sandbox/:id/screen", http.MethodGet,
 		"The screen, as a page",
 		"A complete, self-contained desktop — noVNC inline, no other origin — that opens its "+
 			"own socket and draws this sandbox's display. Embed it in an iframe and there is "+
@@ -653,7 +653,7 @@ func init() {
 			"image, and a sandbox with no VNC server already fails exactly — the connection is "+
 			"refused and the page says so — where a check here would be a second opinion about "+
 			"what is running inside a pod, formed from a label rather than from the pod.")
-	openapi.Describe("/v1/sandboxes/:id/screen/ws", http.MethodGet,
+	openapi.Describe("/v1/sandbox/:id/screen/ws", http.MethodGet,
 		"The screen, as a socket",
 		"Upgrades to a WebSocket carrying RFB — the VNC wire protocol — from the sandbox's "+
 			"display, for a host that brings its own client. Requires `ticket`; a missing, "+

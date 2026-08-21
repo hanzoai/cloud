@@ -37,37 +37,37 @@
    "doc": "Onboard creates the caller's organization. Two flows, keyed on whether the caller\nalready has a home org (mirrors app/onboard/route.ts):\n\n  - FIRST-RUN (no home org): create + MOVE the user in as admin, so their next\n    JWT carries the new owner and the cloud scopes everything to it. This is the\n    path a fresh OAuth sign-up takes, from the sign-up application's org.\n  - ADDITIONAL (owner set): create the org but do NOT move the user — a move\n    changes their IAM owner (stripping a SuperAdmin's status + orphaning their\n    current org). They reach the new org via the OrgSwitcher, which re-scopes\n    X-Org-Id without touching IAM membership. A personal-org request from someone\n    who already has an org is meaningless → 409."
   }
  ],
- "admin": [],
- "admission": [],
- "ads": [
+ "ad": [
   {
-   "id": "delete_ads_campaigns_by_id",
+   "id": "delete_ad_campaigns_by_id",
    "doc": "Removes one of the caller org's campaigns and answers 204 with\nno body. It deletes the stored record only: a campaign already launched keeps\nrunning on the ad network, which must be stopped there. An id another org owns\nreads as not found."
   },
   {
-   "id": "get_ads_campaigns",
+   "id": "get_ad_campaigns",
    "doc": "Returns the caller org's ad campaigns, most recently updated\nfirst, optionally narrowed to one lifecycle status. The listing is bounded by\nthe org: another tenant's campaigns are not reachable from here at all.",
    "read": true
   },
   {
-   "id": "get_ads_campaigns_by_id",
+   "id": "get_ad_campaigns_by_id",
    "doc": "Returns one of the caller org's campaigns. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
    "read": true
   },
   {
-   "id": "get_ads_summary",
+   "id": "get_ad_summary",
    "doc": "Rolls the caller org's ad campaigns up into four numbers: how many\ncampaigns exist, how many are active, and the summed budget and spend across\nall of them. Budget and spend are MINOR units (cents), the same units the\ncampaign rows carry. It counts only this org's campaigns.",
    "read": true
   },
   {
-   "id": "post_ads_campaigns",
-   "doc": "Registers a new ad campaign for the caller's org and answers\n201 with the stored row. It only records the campaign — nothing is sent to the\nad network until POST /v1/ads/campaigns/{id}/launch runs it. The org is\nstamped by the server from the validated principal, so a body can never place\na campaign in another tenant."
+   "id": "post_ad_campaigns",
+   "doc": "Registers a new ad campaign for the caller's org and answers\n201 with the stored row. It only records the campaign — nothing is sent to the\nad network until POST /v1/ad/campaigns/{id}/launch runs it. The org is\nstamped by the server from the validated principal, so a body can never place\na campaign in another tenant."
   },
   {
-   "id": "put_ads_campaigns_by_id",
+   "id": "put_ad_campaigns_by_id",
    "doc": "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution."
   }
  ],
+ "admin": [],
+ "admission": [],
  "affiliate": [
   {
    "id": "get_affiliate",
@@ -326,6 +326,10 @@
   {
    "id": "patch_auto_flows_by_id",
    "doc": "Updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow."
+  },
+  {
+   "id": "post_auto_connectors_by_id_run",
+   "doc": "Run executes one connector action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the connector does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown connector is 404 and a\nmissing action 422."
   },
   {
    "id": "post_auto_flows",
@@ -1446,23 +1450,23 @@
    "read": true
   }
  ],
- "destinations": [
+ "destination": [
   {
-   "id": "delete_destinations_by_platform",
+   "id": "delete_destination_by_platform",
    "doc": "Forgets a destination for the caller's org: every credential held in\nKMS, then the stored config. Idempotent, and it requires org admin."
   },
   {
-   "id": "get_destinations",
+   "id": "get_destination",
    "doc": "Reports every destination this deployment can forward to, each with the\ncaller org's connection state: whether it is connected, whether it is enabled,\nwhether a credential resolves right now, and the config fields the console\nrenders for it.",
    "read": true
   },
   {
-   "id": "get_destinations_by_platform",
+   "id": "get_destination_by_platform",
    "doc": "Reports one destination's card for the caller's org — its config fields,\nits connection state, and whether a credential resolves right now. A platform\nthis deployment does not carry is not found.",
    "read": true
   },
   {
-   "id": "post_destinations_by_platform_test",
+   "id": "post_destination_by_platform_test",
    "doc": "Sends ONE synthetic pageview through the connected destination end to end\nand reports what the platform said. A send the platform refuses is reported as\ndata — {\"ok\": false, \"error\": …} at 200 — so the console shows the platform's\nown words rather than an error about Hanzo. It requires org admin."
   }
  ],
@@ -5646,33 +5650,33 @@
    "doc": "Deploys a caller-supplied file manifest — the deploy_site\ncapability an agent calls — and answers with where it went live.\n\n`files` is a list of {path, content} pairs, the same shape the brief build\nemits, and it runs through the SAME guards: index.html required at the root,\nabsolute and traversal paths rejected, per-file and total size capped, and a\nmobile viewport meta tag injected into every HTML document that lacks one — so\na hand-built site is exactly as safe and as responsive as a generated one.\n`slug` and `name` are optional; a slug is derived from the name or minted.\n\nIt writes into the SAME org-scoped store as /v1/projects, ensuring a project\n(framework `static`) for the resolved slug and recording a deployment. The\nhosting gate runs before the upload and the debit lands once, after the site\nis live — a failed upload is never billed. Answers 503 when object storage is\nunconfigured.\n\nScope: a validated principal is required (403 without one) and the site is\npublished into THAT principal's org."
   }
  ],
- "prompts": [
+ "prompt": [
   {
-   "id": "delete_prompts_by_name",
+   "id": "delete_prompt_by_name",
    "doc": "Delete removes one of the caller org's prompts and every version of it, answering\n204. It is scoped to the caller's org, so a name another tenant owns is the same\n404 an unknown name gives. There is no undo: the version history goes with it."
   },
   {
-   "id": "get_prompts",
+   "id": "get_prompt",
    "doc": "List returns the caller org's prompt library as one row per prompt: its name,\ntype, every version number it has, its taxonomy and when it last changed. The\ntemplate bodies are deliberately absent — fetch one prompt to read its text.",
    "read": true
   },
   {
-   "id": "get_prompts_by_name",
+   "id": "get_prompt_by_name",
    "doc": "Get returns one of the caller org's prompts: its CURRENT template text plus the\nmetadata of every version it has had. The history carries version numbers, types\nand timestamps only — not each version's body — so a long history cannot inflate\nthis response. A name the caller's org does not own is 404, whoever owns it.",
    "read": true
   },
   {
-   "id": "get_prompts_catalog",
-   "doc": "Catalog returns the read-only starter prompt library shipped with the binary —\nreference content every tenant sees the same, NOT the caller's own prompts and\nnever mixed into them. An org's library stays honestly empty until someone\nexplicitly imports a starter, which is an ordinary POST /v1/prompts. Entries that\nwould fail the create guards are dropped, so everything offered here can actually\nbe imported.",
+   "id": "get_prompt_catalog",
+   "doc": "Catalog returns the read-only starter prompt library shipped with the binary —\nreference content every tenant sees the same, NOT the caller's own prompts and\nnever mixed into them. An org's library stays honestly empty until someone\nexplicitly imports a starter, which is an ordinary POST /v1/prompt. Entries that\nwould fail the create guards are dropped, so everything offered here can actually\nbe imported.",
    "read": true
   },
   {
-   "id": "get_prompts_metrics",
+   "id": "get_prompt_metrics",
    "doc": "Metrics returns real per-prompt statistics for the caller's org: how many versions\neach prompt has, which one is current, and when it was created and last changed.\nEvery number is counted from the store — nothing here is estimated or fabricated.",
    "read": true
   },
   {
-   "id": "post_prompts",
+   "id": "post_prompt",
    "doc": "Create records a prompt for the caller's org and answers 201 with it. A name the\norg already uses is NOT an error and NOT an overwrite: it appends a new version,\nso the library keeps real, inspectable history and the response carries the whole\nversion list. The name is also the URL segment the prompt is fetched by, which is\nwhy its shape is constrained and a handful of names are reserved."
   }
  ],
@@ -5905,7 +5909,7 @@
  ],
  "rollingcap": [],
  "s3": [],
- "sandboxes": [
+ "sandbox": [
   {
    "id": "end_sandbox",
    "doc": "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too."
@@ -6250,27 +6254,27 @@
    "doc": "Provisions with the carrier FIRST and records second. The other order\nrecords a holding that may not exist, and a number the platform believes it owns\nbut cannot use is worse than one it failed to buy."
   }
  ],
- "templates": [
+ "template": [
   {
-   "id": "delete_templates_by_slug",
+   "id": "delete_template_by_slug",
    "doc": "Deletes the caller org's OWN starter kit. A slug they do not own is a\n404, never a delete: the DELETE binds org."
   },
   {
-   "id": "get_templates",
+   "id": "get_template",
    "doc": "Lists the public starter-kit catalog plus, for a validated caller, that\norg's own private kits. No request field can widen the scope: the org comes\nfrom the validated principal, so an anonymous or cross-org caller structurally\nsees the public catalog only.",
    "read": true
   },
   {
-   "id": "get_templates_by_slug",
+   "id": "get_template_by_slug",
    "doc": "Returns one starter kit: the caller org's own by that slug, else the public\ncatalog's. A slug another org owns reads as not found.",
    "read": true
   },
   {
-   "id": "post_templates",
+   "id": "post_template",
    "doc": "Creates a starter kit PRIVATE to the caller's org and answers 201 with\nthe stored kit. The owner is stamped by the server, so a body \"org\" is never\ntrusted; publishing over a public-catalog slug is 409, so a slug still names\nexactly one kit."
   },
   {
-   "id": "put_templates_by_slug",
+   "id": "put_template_by_slug",
    "doc": "Overwrites the caller org's OWN starter kit at the path slug, answering\nthe stored kit. A slug they do not own is 404, never a create: the UPDATE binds\norg, so a PUT can never reach another org's kit."
   }
  ],
@@ -6609,40 +6613,40 @@
    "doc": "Detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204."
   }
  ],
- "wallets": [
+ "wallet": [
   {
-   "id": "get_wallets",
+   "id": "get_wallet",
    "doc": "Returns the caller org's wallets, newest first, optionally NARROWED\nwithin the org by project, agent or account. The org is always the bound\nisolation boundary — the filters only ever narrow inside it, so a caller can\nnever widen past its own org.",
    "read": true
   },
   {
-   "id": "get_wallets_accounts",
+   "id": "get_wallet_accounts",
    "doc": "Returns the caller org's wallet accounts, newest first. Accounts\nare physically org-scoped, so another tenant's are not reachable from here.",
    "read": true
   },
   {
-   "id": "get_wallets_by_id",
+   "id": "get_wallet_by_id",
    "doc": "Returns one of the caller org's wallets: its scope, custody kind,\ntier, chain and on-chain address. The custody handle to the signing material is\nnever part of the answer. A wallet id another org owns reads as not found, so\nthe response cannot confirm that it exists.",
    "read": true
   },
   {
-   "id": "post_wallets",
+   "id": "post_wallet",
    "doc": "Provisions a new signing identity under one of the caller org's\naccounts and answers the stored wallet including its on-chain address. The\ncustody backend generates the key material — a KMS-sealed secp256k1 key, an\nMPC threshold key on the ring, or a Safe smart wallet owned by one — and the\nHANDLE to it is kept server-side and never returned. A custody kind the\ndeployment has not wired fails CLOSED with 503: a signature is never\nfabricated. The wallet is scoped to the org, the caller's ambient project, and\noptionally an agent and the named account; those narrowings are what its key\nref is derived from, so each must be a url-safe segment."
   },
   {
-   "id": "post_wallets_accounts",
+   "id": "post_wallet_accounts",
    "doc": "Opens a named wallet account for the caller's org. An account is\na GROUPING of wallets, not a key or a balance: wallets are created under one\nand can be listed by it. The org is stamped by the server from the validated\nprincipal, so a request can never open an account in another tenant."
   },
   {
-   "id": "post_wallets_by_id_keys",
+   "id": "post_wallet_by_id_keys",
    "doc": "Rolls one wallet's signing material through its own custody backend\nand answers the wallet with whatever address that produced. For KMS custody a\nfresh secp256k1 key is generated and sealed, which CHANGES the address — funds\nand approvals at the old address do not move. For a Safe the address is\ncounterfactual and the owner shares are ring-managed, so rotation is a no-op\nand the address is unchanged. A backend that is not configured fails closed\nwith 503 rather than leaving the wallet half-rotated."
   },
   {
-   "id": "post_wallets_by_id_sign",
+   "id": "post_wallet_by_id_sign",
    "doc": "Produces a secp256k1 signature from one of the caller org's wallets over\na 32-byte digest, through whichever custody backend that wallet uses. Give it\neither a `digest` (32 bytes as hex, signed verbatim) or a `message` (hashed\nwith Keccak256 first) — exactly one is required. The private key never leaves\nits backend: KMS custody opens the sealed key in-process, MPC custody produces\na threshold signature on the ring. The answer carries the digest that was\nsigned alongside the signature, so a caller can verify what it got."
   },
   {
-   "id": "post_wallets_by_id_transactions",
+   "id": "post_wallet_by_id_transactions",
    "doc": "Composes a Safe transaction on the MPC ring and answers its\nEIP-712 hash together with the owner approval the ring's threshold signature\nproduced. Only a wallet whose custody is \"safe\" can do this — any other custody\nis a 400, because the backend itself is asked whether it can propose rather\nthan the kind being switched on. The ring computes the Safe-tx hash bound to\nthe Safe contract and the chain id, so the hash a caller gets back is the one\nthe Safe will verify. This PROPOSES: it does not execute the transaction."
   }
  ],
@@ -6667,41 +6671,41 @@
    "doc": "Forwards a JSON-RPC call to the named chain and returns its answer\nunchanged. Only declared chains are reachable, and only to a caller with a\nvalidated principal — this is the deployment's upstream, not an open relay."
   }
  ],
- "webhooks": [
+ "webhook": [
   {
-   "id": "delete_webhooks_by_id",
+   "id": "delete_webhook_by_id",
    "doc": "Removes one of the caller org's webhook endpoints and answers\n204 with no body. Delivery stops immediately and the endpoint's signing secret\nis gone with it; its recorded delivery history goes too. An id another org owns\nreads as not found."
   },
   {
-   "id": "get_webhooks",
+   "id": "get_webhook",
    "doc": "Returns every webhook endpoint the caller's org has registered,\nnewest first, each with its 7-day delivery and failure counts. Signing secrets\nare redacted here — a secret leaves the server only on create and on rotate.\nThe listing is physically org-scoped, so another tenant's endpoints are not\nreachable from this route at all.",
    "read": true
   },
   {
-   "id": "get_webhooks_by_id",
+   "id": "get_webhook_by_id",
    "doc": "Returns one of the caller org's webhook endpoints with its 7-day\ndelivery and failure counts, signing secret redacted. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
    "read": true
   },
   {
-   "id": "get_webhooks_by_id_deliveries",
+   "id": "get_webhook_by_id_deliveries",
    "doc": "Returns one endpoint's per-attempt delivery log, newest first —\nthe record of what was sent, what the subscriber answered, and how long it\ntook. One event that retried three times appears as three rows sharing a\ndelivery id. It is org-scoped exactly like every other route here: the endpoint\nlookup only ever finds THIS org's endpoint, so another org's id is a 404 and\nnever a window onto its logs.",
    "read": true
   },
   {
-   "id": "post_webhooks",
+   "id": "post_webhook",
    "doc": "Registers a new webhook subscription for the caller's org and\nanswers 201 with the endpoint INCLUDING its freshly minted signing secret.\nThis is one of only two responses that ever carry that secret (the other is\nrotate) — store it now, because no later read returns it. The org is stamped by\nthe server from the validated principal, so a body can never register an\nendpoint in another tenant."
   },
   {
-   "id": "post_webhooks_by_id_secret",
+   "id": "post_webhook_by_id_secret",
    "doc": "Mints a NEW HMAC signing secret for the endpoint and answers the\nendpoint WITH it — the only other response besides create that ever carries a\nsecret. The old secret stops working the instant this returns: every subsequent\ndelivery signs with the new one, with no overlap window. Call it when the\nsubscriber is ready to swap the value on its side, not before."
   },
   {
-   "id": "post_webhooks_by_id_test",
+   "id": "post_webhook_by_id_test",
    "doc": "Sends ONE signed test event to the endpoint right now and answers\nthe outcome inline, so the console can show whether the subscriber is reachable\nwithout waiting for real traffic. It takes the same attempt path the bus\ndispatcher takes — one attempt, 10s timeout, no retry ladder — and records the\nresult in the endpoint's delivery log. It works on a DISABLED endpoint too:\nvalidating one you have paused is the whole point."
   },
   {
-   "id": "put_webhooks_by_id",
-   "doc": "Replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhooks/{id}/secret."
+   "id": "put_webhook_by_id",
+   "doc": "Replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhook/{id}/secret."
   }
  ],
  "websearch": [

@@ -286,7 +286,7 @@ func open(door string) func(*Service, *zip.Ctx) error {
 			// It names the PAGE, because that is what a caller embeds; the page finds
 			// its own socket. A caller that wants the raw socket adds `/ws`, which is
 			// exactly what the page does.
-			"url": "/v1/sandboxes/" + m.ID + "/" + door + "?ticket=" + tok,
+			"url": "/v1/sandbox/" + m.ID + "/" + door + "?ticket=" + tok,
 		})
 	}
 }

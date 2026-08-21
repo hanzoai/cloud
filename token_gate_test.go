@@ -79,11 +79,11 @@ var allowedTokenPrimitives = map[string]string{
 		"and let a workspace claim be its own authorization, is gone. A caller arrives with an IAM " +
 		"identity or is refused, and what that identity may do is asked of the process that owns the " +
 		"membership rows.",
-	"apps/wallets/safeclient.go": "speaks the mpc ring's CURRENT wire: the ring (iss=mpc.lux.network, " +
+	"apps/wallet/safeclient.go": "speaks the mpc ring's CURRENT wire: the ring (iss=mpc.lux.network, " +
 		"aud=mpc-api) accepts an HS256 bearer under a shared MPC_JWT_SECRET, so cloud signs what the " +
 		"server demands. That authority contract is the ring's own debt — retiring it means the ring " +
 		"verifying IAM tokens through authz/edge, a cross-repo cutover like team's.",
-	"apps/destinations/x.go": "OAuth 1.0a request signing — HMAC-SHA1 over the " +
+	"apps/destination/x.go": "OAuth 1.0a request signing — HMAC-SHA1 over the " +
 		"method+URL+params base string under consumerSecret&accessSecret, X's contract. It " +
 		"signs an OUTBOUND call under credentials the tenant configured; it mints nothing " +
 		"this deployment would honour, exactly like venue/aws_sigv4.go.",
@@ -109,7 +109,7 @@ var allowedTokenPrimitives = map[string]string{
 		"unforgeable opt-out link, constant-time checked; opens no surface but the suppression it names.",
 	"apps/share/client.go": "deterministic per-org zrok credential derivation — HMAC as a KDF so " +
 		"provisioning is stateless and collision-free; nothing is signed or verified.",
-	"apps/webhooks/dispatch.go": "outbound delivery signatures — signs what WE deliver " +
+	"apps/webhook/dispatch.go": "outbound delivery signatures — signs what WE deliver " +
 		"(Stripe-style t=,v1= over timestamp+body) so subscribers can verify us.",
 }
 
