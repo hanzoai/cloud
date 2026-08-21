@@ -30,8 +30,18 @@ type Repo struct {
 	DefaultBranch string
 	Public        bool // public repos allow ANONYMOUS read (upload-pack); writes stay org-authed
 	SizeBytes     int64
-	CreatedAt     int64
-	UpdatedAt     int64
+	// Origin is the URL this repo's objects can be fetched from again, recorded
+	// by the mirror that brought them in. Empty means NOBODY KNOWS where these
+	// bytes came from, and that is the whole of the eviction rule in reclaim.go:
+	// a copy with an origin can be made again, so releasing it costs a refetch;
+	// a copy without one is the only copy there is.
+	//
+	// It lives on the ROW and not in the repo's git config because eviction
+	// deletes the directory the config is in. A fact that dies with the thing it
+	// describes cannot be the reason it was safe to delete it.
+	Origin    string
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 // Store is one org's repo-metadata database — ONE SQLite file per org at
@@ -66,6 +76,7 @@ CREATE TABLE IF NOT EXISTS repos (
   default_branch TEXT NOT NULL DEFAULT 'main',
   public         INTEGER NOT NULL DEFAULT 0,
   size_bytes     INTEGER NOT NULL DEFAULT 0,
+  origin         TEXT NOT NULL DEFAULT '',
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
 );
@@ -160,18 +171,26 @@ CREATE INDEX IF NOT EXISTS ix_pulls_repo ON pulls(org, project, repo, state);
 		!strings.Contains(err.Error(), "duplicate column") {
 		return fmt.Errorf("migrate public column: %w", err)
 	}
+	// origin: added with the bound in reclaim.go. It defaults EMPTY, so every
+	// repo that predates this column is pinned until somebody says where it came
+	// from — which is the safe direction, and the only one available: the bytes
+	// on disk carry no remote, so the migration cannot infer an answer.
+	if _, err := s.db.Exec(`ALTER TABLE repos ADD COLUMN origin TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate origin column: %w", err)
+	}
 	return nil
 }
 
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const repoCols = `id,org,project,name,description,default_branch,public,size_bytes,created_at,updated_at`
+const repoCols = `id,org,project,name,description,default_branch,public,size_bytes,origin,created_at,updated_at`
 
 func scanRepo(sc interface{ Scan(...any) error }) (Repo, error) {
 	var r Repo
 	err := sc.Scan(&r.ID, &r.Org, &r.Project, &r.Name, &r.Description,
-		&r.DefaultBranch, &r.Public, &r.SizeBytes, &r.CreatedAt, &r.UpdatedAt)
+		&r.DefaultBranch, &r.Public, &r.SizeBytes, &r.Origin, &r.CreatedAt, &r.UpdatedAt)
 	return r, err
 }
 
@@ -179,9 +198,9 @@ func scanRepo(sc interface{ Scan(...any) error }) (Repo, error) {
 // already exists in the org.
 func (s *Store) Create(ctx context.Context, r Repo) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO repos (`+repoCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO repos (`+repoCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		r.ID, r.Org, r.Project, r.Name, r.Description, r.DefaultBranch,
-		r.Public, r.SizeBytes, r.CreatedAt, r.UpdatedAt)
+		r.Public, r.SizeBytes, r.Origin, r.CreatedAt, r.UpdatedAt)
 	if err != nil {
 		if isUnique(err) {
 			return errConflict
@@ -273,6 +292,27 @@ func (s *Store) SetSize(ctx context.Context, org, project, name string, sizeByte
 		sizeBytes, updatedAt, org, project, name)
 	if err != nil {
 		return fmt.Errorf("set size: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// SetOrigin records where a repo's objects can be fetched from again. It does
+// NOT bump updated_at: recording an origin is a statement about the copy, not a
+// change to the repository, and updated_at orders what callers see as activity.
+//
+// Written by a mirror that SUCCEEDED, never by one that was merely asked for, so
+// the claim "this can be fetched again" is one that was just demonstrated rather
+// than one a caller made. That is the difference between a cache entry and a
+// hope.
+func (s *Store) SetOrigin(ctx context.Context, org, project, name, origin string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE repos SET origin=? WHERE org=? AND project=? AND name=?`,
+		origin, org, project, name)
+	if err != nil {
+		return fmt.Errorf("set origin: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return errNotFound
