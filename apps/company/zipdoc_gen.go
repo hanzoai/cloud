@@ -373,7 +373,7 @@ func init() {
 		Example: json.RawMessage(`{"founders":[{"name":"Ada","email":"ada@acme.com","equityBps":10000}]}`),
 	})
 	zip.Describe("POST /v1/company/fundraise/deck", zip.Doc{
-		Description: "Shares a pitch deck in the org's data room. It is the second\naction on this surface that is NOT a typed op: the deck is the raw request\nBODY (any content type, named by ?name=), not a JSON document, so a typed In\nwould declare a request shape the route does not take — see routes(). Its byte\nrequest and this response ARE declared, through openapi.Register (see init).",
+		Description: "Shares a pitch deck in the org's data room. It is the ONE action\non this surface that is not a typed op: the deck is the raw request\nBODY (any content type, named by ?name=), not a JSON document, so a typed In\nwould declare a request shape the route does not take — see routes(). Its byte\nrequest and this response ARE declared, through openapi.Register (see init).",
 	})
 	zip.Describe("POST /v1/company/fundraise/round", zip.Doc{
 		Description: "Records a fundraising round on the org's canonical cap table.\nAvailable only after incorporation (stage company); roundType defaults to\nPRICED.",
@@ -679,7 +679,48 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/company/payment", zip.Doc{
-		Description: "Charges the one-time formation fee. It is the one action on this surface\nthat is NOT a typed op: a denial answers the fleet-wide billing contract\n(cloud.DenyResource — 402 insufficient_balance / spend_cap_exceeded, 503\nbalance_unavailable, each a {\"error\":{\"code\",\"message\"}} body), and zip's error\ntype renders a flat {status,code,error}. Typing it would reshape that error for\nevery metered client, so it stays a raw handler — see routes().\n\nThe gate is the LAST thing it does, after the stage check and the paid\nshort-circuit, so a caller the machine is about to refuse is never charged.\nThat ordering is why the gate cannot lift into middleware, where it would run\nfirst. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.",
+		Description: "Charges the caller's own org the one-time Hanzo Company formation fee.\n\nIt is $999 unless the deployment sets another, and the answer is the formation\nrecord carrying its paid flag and the charge reference. It takes no body: the org is the validated tenant and the amount is the\nplatform's, never the caller's to assert.\n\nIDEMPOTENT on the formation rather than on the request: an already-paid\nformation answers 200 with the same record and is not charged again, so a\nretry or a double-clicked button costs nothing. Available only at the\n`payment` stage (409 anywhere else) and only for an org that has begun a\nformation (404 otherwise).\n\nA denial answers the fleet-wide billing contract — 402 insufficient_balance,\n402 spend_cap_exceeded, 503 balance_unavailable — carried by cloud.Denied,\nwhich is the money wire's own {\"error\":{\"code\",\"message\"}} body rather than a\nsecond vocabulary invented for this surface.\n\nThe gate is the LAST thing it does, after the stage check and the paid\nshort-circuit, so a caller the machine is about to refuse is never charged.\nThat ordering is why the gate cannot lift into middleware, where it would run\nfirst. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.",
+		Fields: map[string]string{
+			"Filing.at":                     "At is the unix second the filing record was written.",
+			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
+			"Filing.provider":               "Provider is the filing partner that performed the filing, or \"manual\" when no\npartner is wired.",
+			"Filing.ref":                    "Ref is the partner's or the state's filing reference. Empty when nothing was\nactually filed — no filing id is ever fabricated.",
+			"Filing.status":                 "Status is manual (no partner wired — a registered agent files out-of-band),\nsubmitted (the partner accepted it, awaiting the state), filed (the state\naccepted it) or rejected.",
+			"Formation.alreadyIncorporated": "AlreadyIncorporated declares an org that already has a legal entity, which\ntakes the import path (structure → import → company) instead of forming one.",
+			"Formation.capTableImported":    "CapTableImported reports whether the existing company's cap table has been\nimported onto the canonical cap table.",
+			"Formation.createdAt":           "CreatedAt is the unix second the formation was opened.",
+			"Formation.documentIds":         "DocumentIDs are the data room ids of the GENERATED formation documents.",
+			"Formation.esignRef":            "EsignRef is the e-signature provider's reference for the signature request.",
+			"Formation.filing":              "Filing is the state-of-incorporation filing record, once documents exist.",
+			"Formation.founders":            "Founders is every founding stakeholder, with its equity split and KYC state.",
+			"Formation.genesis":             "Genesis is the cap-table equity genesis, once recorded.",
+			"Formation.imported":            "Imported reports whether the existing company's corporate documents have been\ningested into the org's data room.",
+			"Formation.importedDocs":        "ImportedDocs are the data room ids of the documents ingested from Drive.",
+			"Formation.jurisdiction":        "Jurisdiction is the state of formation: DE or WY.",
+			"Formation.name":                "Name is the company name the entity is being formed under.",
+			"Formation.org":                 "Org is the owning org — the tenant key, and the reason there is exactly one\nformation per org.",
+			"Formation.paid":                "Paid reports whether the one-time formation fee has been charged.",
+			"Formation.paymentRef":          "PaymentRef is the billing reference recorded for the charged formation fee on\nthe org's own ledger.",
+			"Formation.signed":              "Signed reports whether the formation documents have come back signed — the\ne-signature provider's answer, which a real provider's webhook drives.",
+			"Formation.stage":               "Stage is the machine's current state: structure, founders, payment, documents,\nesign or genesis on the formation path, import on the skip path, and company\nat the terminal.",
+			"Formation.structure":           "Structure is the legal entity being formed: c-corp, llc or dao-llc.",
+			"Formation.updatedAt":           "UpdatedAt is the unix second of the most recent write to the formation.",
+			"Founder.decidedBy":             "DecidedBy is who settled a terminal KYC status: the provider name, or a\nreviewer's user id.",
+			"Founder.email":                 "Email is the founder's email, and the key a KYC decision addresses a founder\nby — POST /v1/company/kyc/decision matches on it.",
+			"Founder.equityBps":             "EquityBps is the founder's ownership in basis points, 0–10000 (1% == 100 bps,\nso 10000 is the whole company). The founders' shares seed the cap-table genesis.",
+			"Founder.kycRef":                "KYCRef is the idv provider's session reference for this founder.",
+			"Founder.kycStatus":             "KYCStatus is the founder's identity-verification state: pending, verified (a\nreal idv provider reported a pass), reviewer_confirmed (a privileged reviewer\nconfirmed out-of-band) or failed. The payment stage is unreachable until every\nfounder passes.",
+			"Founder.name":                  "Name is the founder's full legal name, as it appears on the formation documents.",
+			"Genesis.at":                    "At is the unix second the genesis root was computed.",
+			"Genesis.block":                 "Block is the L1 block the anchoring transaction landed in. Set only once the\nreceipt has been read; absent otherwise.",
+			"Genesis.chainId":               "ChainID is the EVM chain the root is committed to — the Hanzo L1 by default.",
+			"Genesis.note":                  "Note explains an unanchored genesis honestly — anchor wiring absent, or the\nsubmit error — rather than reporting a commit that did not happen.",
+			"Genesis.root":                  "Root is the 0x-prefixed keccak256 root of the founding allocation. It is\nALWAYS computed, whether or not the on-chain anchor is wired, because the root\nis the tamper-evident witness.",
+			"Genesis.status":                "Status is pending (root computed, not yet on-chain) or anchored (committed).",
+			"Genesis.txHash":                "TxHash is the L1 transaction hash of the anchoring commit. Empty until anchored.",
+			"formationView.formation":       "Formation is the org's one incorporation record.",
+			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
+		},
 	})
 	zip.Describe("POST /v1/company/skip", zip.Doc{
 		Description: "Skip marks the org as already incorporated and moves it onto the import path,\nso an existing company brings its documents and cap table in instead of forming\na new entity. Available only at the structure stage.",

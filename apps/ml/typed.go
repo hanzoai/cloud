@@ -17,12 +17,16 @@ package ml
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // zipdoc lifts the doc comment off each typed op and off every In/Out field into
@@ -187,6 +191,97 @@ func (o ops) deleteOf(ctx context.Context, k resourceKind, in *mlRef) (*struct{}
 	return nil, nil
 }
 
+// mlCreate is what a create takes: a DNS-1123 name, the resource's own spec, and
+// optional labels. The spec is carried as raw JSON because it is the KUBERNETES
+// object's spec, whose shape belongs to the CRD rather than to this API — a Go
+// struct here would publish a schema this surface does not own and could not keep
+// current. zip publishes a json.RawMessage as `{}`, "any JSON", which is the true
+// statement.
+type mlCreate struct {
+	// Name is the resource's name: a DNS-1123 label
+	// (^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$), lowercased and trimmed. It is the
+	// name the resource answers to for the life of the caller's org.
+	Name string `json:"name" url:"-"`
+	// Spec is the resource's own spec, passed to Kubernetes unchanged. Required —
+	// an empty spec is 400 rather than an empty resource.
+	Spec json.RawMessage `json:"spec" url:"-"`
+	// Labels are extra labels to set on the object, merged UNDER the tenancy
+	// labels this plane derives from the validated principal — so a label naming
+	// another org's scope cannot displace the real one.
+	Labels map[string]string `json:"labels,omitempty" url:"-"`
+}
+
+// createOf provisions one object of kind k in the caller's tenant namespace, and
+// is the whole preamble the per-kind ops share: readiness, tenancy, validation,
+// the pre-create balance gate, the namespace, the Create, and the debit.
+//
+// THE GATE IS THE LAST CHECK BEFORE THE WRITE and it stays there. Lifting it into
+// middleware would run it before the body is decoded, turning today's 400 on a
+// malformed spec into a 402 — a caller told they cannot afford a request that was
+// never valid. The refusal itself is cloud.Denied, which carries the fleet-wide
+// {"error":{"code","message"}} money contract rather than a second vocabulary
+// this surface would have to invent.
+func (o ops) createOf(ctx context.Context, k resourceKind, in *mlCreate) (*mlResource, error) {
+	if err := ready(o.s); err != nil {
+		return nil, err
+	}
+	ns, org, project, err := tenantFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return nil, zip.ErrForbidden("no validated principal")
+	}
+	name := normName(in.Name)
+	if !nameRE.MatchString(name) {
+		return nil, zip.ErrBadRequest("'name' must be a DNS-1123 label: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+	}
+	if len(in.Spec) == 0 {
+		return nil, zip.ErrBadRequest("'spec' is required (the " + k.kind + " spec)")
+	}
+	var spec map[string]any
+	if err := json.Unmarshal(in.Spec, &spec); err != nil {
+		return nil, zip.Errorf(http.StatusBadRequest, "invalid 'spec': %v", err)
+	}
+
+	fee := cloud.ResourceFeeCents(computeFeeEnvPrefix, k.kind)
+	_, projectValidated := principal.ValidatedProject(c)
+	if err := o.s.State.bill.Gate(ctx, principal.Ledger(c), project, projectValidated, k.kind, fee); err != nil {
+		return nil, cloud.Denied(err)
+	}
+
+	if err := ensureNamespace(o.s, ctx, ns, org, project); err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "ensure tenant namespace: %v", err)
+	}
+	obj := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": k.apiVersion,
+		"kind":       k.kind,
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": ns,
+			"labels":    labelsFor(org, project, in.Labels),
+		},
+		"spec": spec,
+	}}
+	out, err := o.s.State.dyn.Resource(k.gvr).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
+	if err != nil {
+		switch {
+		case apierrors.IsAlreadyExists(err):
+			return nil, zip.ErrConflict(k.kind + " already exists")
+		case apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
+			return nil, zip.Errorf(http.StatusUnprocessableEntity, "%s rejected by kubernetes: %v", k.kind, err)
+		default:
+			return nil, k8sErr(o.s, k, "create", err)
+		}
+	}
+	// Created — debit the caller's org ledger for the compute submission (per-org,
+	// env-attributed, async best-effort, so a debit failure never corrupts a 201).
+	o.s.State.bill.Meter(principal.Ledger(c), project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
+	v := view(out, true)
+	return &v, nil
+}
+
 // ── models (kserve InferenceService) ─────────────────────────────────────────
 
 // ListModels lists the inference models deployed in the caller's org. Each entry
@@ -195,6 +290,19 @@ func (o ops) deleteOf(ctx context.Context, k resourceKind, in *mlRef) (*struct{}
 // an empty list.
 func (o ops) listModels(ctx context.Context, _ *mlNoInput) (*mlResourceList, error) {
 	return o.listOf(ctx, modelKind)
+}
+
+// CreateModel deploys one inference model for the caller's org, and answers 201
+// with the model as Kubernetes admitted it.
+//
+// The `spec` is a kserve InferenceService spec, passed through unchanged — this
+// plane owns the tenancy, the billing and the namespace, and kserve owns what a
+// model IS. An unfunded org is refused BEFORE anything is created, so nobody runs
+// free GPU compute and nobody is charged for a resource that was never made.
+//
+// Example: {"name":"sentiment","spec":{"predictor":{"model":{"modelFormat":{"name":"sklearn"},"storageUri":"s3://models/sentiment"}}}}
+func (o ops) createModel(ctx context.Context, in *mlCreate) (*mlResource, error) {
+	return o.createOf(ctx, modelKind, in)
 }
 
 // GetModel returns one deployed inference model. Its spec comes with it, and

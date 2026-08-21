@@ -49,22 +49,6 @@ var untypedByDesign = map[string]string{
 		"path unconditionally jsonenc.Unmarshals every non-empty body (typed.go:232), so a typed In would " +
 		"turn this route's 201 into 400 on the PDF it exists to accept, and v1.18.6 has no binary request " +
 		"declaration to decline the decode.",
-
-	// A formation-fee denial answers the FLEET-WIDE billing contract: 402
-	// insufficient_balance, 402 spend_cap_exceeded, 503 balance_unavailable,
-	// each a body that NESTS {code,message} under "error" (cloud.DenyResource,
-	// resource_billing.go). zip's error type is a FLAT {status,code,error}
-	// (zip@v1.18.6 ctx.go:201) and errorHandler is the only path a typed op's
-	// error can take (ctx.go:223) — it re-marshals whatever it is handed into
-	// that flat shape. Writing the nested body from inside the op does not help
-	// either: returning a nil Out makes zip stamp `cmp.Or(op.Status, 204)` over
-	// the 402 (typed.go:298), and returning an error makes errorHandler replace
-	// the body. So there is no way to type this route without reshaping the
-	// money-path error for every metered client. Pinned by TestPaymentDenialWire.
-	"POST /v1/company/payment": "a billing denial answers the fleet-wide nested {\"error\":{code,message}} " +
-		"contract at 402/503 (cloud.DenyResource); zip's error type is a flat {status,code,error} and " +
-		"errorHandler is the only path a typed op's error takes, so typing this silently reshapes the " +
-		"money wire for every metered client. Needs zip errors that can carry a body.",
 }
 
 // companyOps reads BOTH projections of the live router at their one shared
@@ -174,19 +158,6 @@ func TestTheUntypedRoutesStillDeclareTheirBodies(t *testing.T) {
 	}
 	assertSuccessBody(t, "POST /v1/company/fundraise/deck", deck.Responses)
 
-	// Payment takes NO body (pay never reads one), so the absence of a request
-	// declaration here is the true statement, not a missing one. Its success shape
-	// is the formation view every other action on this surface answers with.
-	pay := doc.Paths["/v1/company/payment"]["post"]
-	if pay == nil {
-		t.Fatal("POST /v1/company/payment is not served — the ledger is stale")
-	}
-	if pay.RequestBody != nil {
-		t.Errorf("POST /v1/company/payment declares a request body, but the handler never reads "+
-			"one — declaring a body it ignores would be invention; have %v",
-			sortedKeys(decodeBody(t, pay.RequestBody).Content))
-	}
-	assertSuccessBody(t, "POST /v1/company/payment", pay.Responses)
 }
 
 // body is the shape of a requestBody/response object this test reads. The Document

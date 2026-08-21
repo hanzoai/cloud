@@ -1104,6 +1104,10 @@
    "doc": "RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the\nPULL path to a provider-reported terminal status. For the manual provider the\ncheck stays pending; for a real provider it reflects the settled decision,\nATTRIBUTED to the provider.\n\nIt NEVER trusts a client-asserted status — the status comes from the provider\nseam — so a client cannot force a pass here, and an already-passing founder\n(e.g. a reviewer confirmation) is left untouched."
   },
   {
+   "id": "post_company_payment",
+   "doc": "Charges the caller's own org the one-time Hanzo Company formation fee.\n\nIt is $999 unless the deployment sets another, and the answer is the formation\nrecord carrying its paid flag and the charge reference. It takes no body: the org is the validated tenant and the amount is the\nplatform's, never the caller's to assert.\n\nIDEMPOTENT on the formation rather than on the request: an already-paid\nformation answers 200 with the same record and is not charged again, so a\nretry or a double-clicked button costs nothing. Available only at the\n`payment` stage (409 anywhere else) and only for an org that has begun a\nformation (404 otherwise).\n\nA denial answers the fleet-wide billing contract — 402 insufficient_balance,\n402 spend_cap_exceeded, 503 balance_unavailable — carried by cloud.Denied,\nwhich is the money wire's own {\"error\":{\"code\",\"message\"}} body rather than a\nsecond vocabulary invented for this surface.\n\nThe gate is the LAST thing it does, after the stage check and the paid\nshort-circuit, so a caller the machine is about to refuse is never charged.\nThat ordering is why the gate cannot lift into middleware, where it would run\nfirst. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast."
+  },
+  {
    "id": "post_company_skip",
    "doc": "Skip marks the org as already incorporated and moves it onto the import path,\nso an existing company brings its documents and cap table in instead of forming\na new entity. Available only at the structure stage."
   },
@@ -3439,6 +3443,10 @@
    "id": "get_ml_models_by_name",
    "doc": "Returns one deployed inference model. Its spec comes with it, and\nkserve's live status, which is where readiness and the serving address appear.\nA name the caller's org does not own answers 404, exactly as an unknown name\ndoes, so a probe learns nothing about another tenant's models.",
    "read": true
+  },
+  {
+   "id": "post_ml_models",
+   "doc": "Deploys one inference model for the caller's org, and answers 201\nwith the model as Kubernetes admitted it.\n\nThe `spec` is a kserve InferenceService spec, passed through unchanged — this\nplane owns the tenancy, the billing and the namespace, and kserve owns what a\nmodel IS. An unfunded org is refused BEFORE anything is created, so nobody runs\nfree GPU compute and nobody is charged for a resource that was never made."
   }
  ],
  "mq": [
