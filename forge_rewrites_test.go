@@ -404,3 +404,80 @@ func TestForgeRewrites_GitHubSurvivesTheRetry(t *testing.T) {
 		t.Errorf("the retry rewrote the store and took GitHub's credential with it:\n%s", store)
 	}
 }
+
+// ONE NAME MUST NOT SWALLOW A LONGER ONE THAT MERELY STARTS THE SAME WAY.
+//
+// `insteadOf` is a plain PREFIX match and git dials the LONGEST rule that matches. go.mod
+// names both hanzoai/pubsub and hanzoai/pubsub-go, and the forge serves only the first —
+// so a rewrite written for `pubsub` also matched https://github.com/hanzoai/pubsub-go and
+// sent it to a forge that answers 404 for it. The sweep then reported a COMPILE failure,
+// `could not import github.com/hanzoai/pubsub-go/jetstream (invalid package name: "")`,
+// which names neither the address nor the rule that produced it.
+func TestForgeRewrites_AShorterNameDoesNotSwallowALongerOne(t *testing.T) {
+	srv, _, _ := iamStub(t, "tok")
+
+	// This forge serves `pubsub` and denies `pubsub-go`, which is the real shape.
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/pubsub") {
+			w.WriteHeader(200)
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer forge.Close()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".hanzo", "ci"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.ReadFile(".hanzo/ci/forge-rewrites.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(root, ".hanzo", "ci", "forge-rewrites.sh")
+	if err := os.WriteFile(script, src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gomod := "module example.com/x\n\ngo 1.25\n\nrequire (\n\tgithub.com/hanzoai/pubsub v1.4.6\n\tgithub.com/hanzoai/pubsub-go v1.53.0\n)\n"
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte(gomod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(root, "gitconfig")
+	cmd := exec.Command("bash", script)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL="+cfg, "GIT_CONFIG_NOSYSTEM=1",
+		"IAM_ISSUER="+srv.URL, "IAM_CLIENT_ID=cid", "IAM_CLIENT_SECRET=csec",
+		"GIT_TOKEN=", "FORGE_URL="+forge.URL, "GH_PAT=pat")
+	out, _ := cmd.CombinedOutput()
+	if !strings.Contains(string(out), "forge serves -> pubsub") {
+		t.Fatalf("the forge did not serve pubsub, so there is no swallowing to judge:\n%s", out)
+	}
+
+	// Ask GIT, not the file: the question is which URL git actually dials, and only git
+	// applies the longest-match rule that caused this.
+	dialed := func(url string) string {
+		t.Helper()
+		c := exec.Command("git", "config", "--get-urlmatch", "url.insteadOf", url)
+		c.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+cfg, "GIT_CONFIG_NOSYSTEM=1")
+		b, _ := c.Output()
+		return strings.TrimSpace(string(b))
+	}
+	_ = dialed // config cannot resolve the rewrite; ls-remote below is what git really does.
+
+	trace := func(url string) string {
+		t.Helper()
+		c := exec.Command("git", "ls-remote", url, "HEAD")
+		c.Env = append(os.Environ(),
+			"GIT_CONFIG_GLOBAL="+cfg, "GIT_CONFIG_NOSYSTEM=1",
+			"GIT_TRACE=1", "GIT_TERMINAL_PROMPT=0")
+		b, _ := c.CombinedOutput()
+		return string(b)
+	}
+	// pubsub-go must be dialled at github.com. The forge stand-in is a 127.0.0.1 address,
+	// so its appearance in the trace for pubsub-go IS the bug.
+	tr := trace("https://github.com/hanzoai/pubsub-go")
+	if strings.Contains(tr, forge.URL+"/hanzoai/pubsub-go") {
+		t.Errorf("pubsub-go was routed to the forge by the rewrite written for pubsub:\n%s", tr)
+	}
+}
