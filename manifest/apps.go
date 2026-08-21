@@ -355,13 +355,13 @@ var Apps = []App{
 	// reached no app at all. Under one prefix that cannot happen again, and the front
 	// names the new address in the one config value it already reads.
 	{Name: "team", Prefixes: []string{"/v1/team"}},
-	// /meet is the native call client, embedded in meet's own binary and served
-	// from the same origin as its API — the same one-binary/one-origin shape
-	// tasks has just above. The API side is the whole /v1/meet subtree now that
-	// there are three routes under it and the client reads two of them; naming
-	// each leaf was a list that had to be edited every time a route was added,
-	// and an unnamed leaf falls to whichever row holds the bare remainder.
-	{Name: "meet", Prefixes: []string{"/meet", "/v1/meet"}},
+	// One prefix, because the call client is not here any more: it is its own
+	// image on its own host (ghcr.io/hanzoai/meet at meet.hanzo.ai) and this row
+	// used to claim /meet for the //go:embed copy. What is left is the whole
+	// /v1/meet subtree rather than its leaves — naming each leaf was a list that
+	// had to be edited every time a route was added, and an unnamed leaf falls to
+	// whichever row holds the bare remainder.
+	{Name: "meet", Prefixes: []string{"/v1/meet"}},
 	{Name: "settings", Prefixes: []string{"/v1/settings"}},
 	{Name: "prefs", Prefixes: []string{"/v1/prefs"}},
 	{Name: "notify", Prefixes: []string{"/v1/notify"}},
@@ -426,7 +426,12 @@ var Apps = []App{
 	{Name: "treasury", Prefixes: []string{"/v1/admin/treasury", "/v1/treasury"}},
 	{Name: "admin", Prefixes: []string{"/v1/admin"}},
 	{Name: "admission", Prefixes: []string{"/v1/admission"}},
-	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},
+	// One prefix, because the studio is not here any more: it is its own image on
+	// its own host (ghcr.io/hanzoai/admin-tasks at tasks.hanzo.ai) and this row used to
+	// claim /tasks for the //go:embed copy. The studio still reads this surface
+	// same-origin — the edge serves the bundle at that host's root and hands
+	// /v1/tasks here, so one origin survives the split.
+	{Name: "tasks", Prefixes: []string{"/v1/tasks"}},
 	{Name: "tel", Prefixes: []string{"/v1/tel"}},
 	// The address was already the word: the product is Hanzo Auto, the app has
 	// always served one group at /v1/auto, and HIP-1063's front matter reads
