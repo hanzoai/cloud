@@ -1,9 +1,9 @@
 // Package pubsub is your message bus: publish, subscribe, and durable streams
 // your apps read at their own pace.
 //
-// It is the platform message bus: publish/subscribe messaging, durable JetStream
-// streams and consumers, and a key-value store, served to tenants at /v1/pubsub
-// over the embedded Hanzo PubSub (NATS + JetStream) node this same package runs.
+// It is the platform message bus: publish/subscribe messaging and durable
+// JetStream streams, served to tenants at /v1/pubsub over the embedded Hanzo
+// PubSub (NATS + JetStream) node this same package runs.
 //
 // The node binds the NATS client port (default :4222) and serves JetStream
 // over the cloud data dir — the ONE durable log every other app publishes
@@ -13,13 +13,15 @@
 // or etcd in the path (Lux consensus only; the optional Quasar PQ control
 // plane is a follow-up, see github.com/hanzoai/pubsub/embed).
 //
-// ONE bus, TWO doors. The NATS port is the cluster's door: in-process apps and
-// in-cluster clients, unscoped. /v1/pubsub is the tenant's door: eighteen
-// typed ops (typed.go) that publish, request, manage streams and consumers,
-// pull batches and keep key-value state — each org confined to its own
-// namespace by the validated principal, never by anything a caller asserts.
-// Cloud's generic per-subsystem liveness route answers /v1/pubsub/health, and
-// the K8s Service TCP-probes :4222 directly.
+// ONE bus, MANY doors. The NATS port is the cluster's door: in-process apps and
+// in-cluster clients, unscoped. /v1/pubsub is this app's tenant door: publish
+// and request/reply (typed.go), each org confined to its own namespace by the
+// validated principal, never by anything a caller asserts. apps/kv is a second
+// tenant door on the SAME plane — a bucket is not a message, so it answers
+// under its own name — and it rides the four calls under "riding the plane"
+// below rather than opening a bus of its own. Cloud's generic per-subsystem
+// liveness route answers /v1/pubsub/health, and the K8s Service TCP-probes
+// :4222 directly.
 //
 // It ALWAYS serves. The staged cutover it was gated behind is over — the
 // standalone nats StatefulSet and the pubsub App are retired, so this is the ONE
@@ -56,16 +58,23 @@ package pubsub
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	luxlog "github.com/luxfi/log"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/environ"
 	psembed "github.com/hanzoai/pubsub/embed"
 )
@@ -237,3 +246,179 @@ func Shutdown(_ context.Context) error {
 	}
 	return nil
 }
+
+// ----- riding the plane -----------------------------------------------------
+//
+// ONE plane, more than one product on it. Everything below is what an app on
+// this plane needs and nothing else: how to REACH it, WHO is asking, what the
+// caller's name is called out there, and what a refusal from it means on the
+// wire. Four calls, four separate questions.
+//
+// They are exported because apps/kv is the second tenant door on this same
+// plane. Key-value is not messaging — a bucket holds values and answers reads;
+// nothing about it publishes, subscribes or waits for a reply — so it is its own
+// capability at its own address under its own name. But it is the same bus: it
+// dials the server THIS package runs, through the dialer below, rather than
+// starting a second one. The alternative was a second copy of the tenancy rule
+// and a second connection policy, free to drift from these on the day one of
+// them changed.
+
+// door holds this process's ONE client connection to the plane, dialed on first
+// use and reused by every product riding it. Guarded so a burst of concurrent
+// first requests dials once; re-dials after a close rather than latching.
+var door struct {
+	mu sync.Mutex
+	nc *nats.Conn
+}
+
+// Bus returns the live JetStream handle and connection on THE one plane.
+//
+// It answers 503 rather than an error the caller has to translate, because
+// every caller is a typed op and there is one honest answer to "the bus is not
+// reachable": the door is open, the plane behind it is not.
+func Bus() (jetstream.JetStream, *nats.Conn, error) {
+	door.mu.Lock()
+	defer door.mu.Unlock()
+	if door.nc == nil || door.nc.IsClosed() {
+		nc, err := dial()
+		if err != nil {
+			return nil, nil, zip.Errorf(http.StatusServiceUnavailable, "bus unreachable: %v", err)
+		}
+		door.nc = nc
+	}
+	js, err := jetstream.New(door.nc)
+	if err != nil {
+		return nil, nil, zip.Errorf(http.StatusServiceUnavailable, "bus unreachable: %v", err)
+	}
+	return js, door.nc, nil
+}
+
+// dial opens that connection. In-process when THIS process runs the embedded
+// server — no TCP, and correct even when a test binds an ephemeral port. Over
+// [URL] when it does not, which is every product that rides the plane from its
+// own binary: one server, dialed at the one address the knob names.
+//
+// An explicit CLOUD_PUBSUB_URL wins over the in-process server, because setting
+// it is how a deployment says the plane is somewhere else.
+func dial() (*nats.Conn, error) {
+	// The connection's name is what an operator reads in connz, so it is the
+	// binary asking rather than a literal that would say "pubsub" for kv.
+	opts := []nats.Option{nats.Name(filepath.Base(os.Args[0])), nats.MaxReconnects(-1)}
+	if srv != nil && strings.TrimSpace(os.Getenv(urlEnv)) == "" {
+		return nats.Connect("", append(opts, nats.InProcessServer(srv.NATS()))...)
+	}
+	return nats.Connect(URL(), opts...)
+}
+
+// closeDoor releases the connection on Shutdown, so a remount dials the new
+// server instead of a dead pipe.
+func closeDoor() {
+	door.mu.Lock()
+	defer door.mu.Unlock()
+	if door.nc != nil {
+		door.nc.Close()
+		door.nc = nil
+	}
+}
+
+// TenantPrefix marks every tenant-created stream and KV bucket, keeping the
+// tenant plane disjoint by construction from the platform's own streams (EVENT
+// et al.), which never carry it.
+//
+// It is EXPORTED for the one question a platform subsystem must be able to ask
+// before it removes a stream it did not create: is this a tenant's? Asking the
+// prefix's OWNER is what keeps that check from becoming a second "t-" literal
+// somewhere else, which is how the two would drift apart.
+const TenantPrefix = "t-"
+
+// Org resolves the VALIDATED org — the tenant-isolation key — from the context
+// cloud.Bridge parked it on. It is never an In field: an In field is
+// caller-supplied, so a tenant key read from one would be a cross-tenant read
+// the caller asserted for itself. Fails closed off the HTTP path with the same
+// 403 every data plane answers.
+//
+// The org id must also be usable as a NATS subject token and name fragment; one
+// that is not (outside [A-Za-z0-9_-], or over 64 bytes) is refused rather than
+// mangled — a mangling could collide two orgs onto one namespace.
+func Org(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("valid bearer required")
+	}
+	if !token(org, true) {
+		return "", zip.ErrForbidden("org id is not addressable on the bus")
+	}
+	return org, nil
+}
+
+// Qualify is the plane-wide name of one org's stream or bucket, and reports
+// whether the caller's name can have one.
+//
+// The two answers are one call because they are one rule: the physical name is
+// "t-<org>-<name>", so it decodes to exactly one (org, name) pair ONLY while the
+// caller's half carries no dash. Splitting them into a validator and a formatter
+// is how a caller ends up formatting a name it never checked. What the refusal
+// MEANS is the caller's to choose — 400 on a create, 404 on a read, so a bad
+// name never tells one org that another org's bucket exists.
+func Qualify(org, name string) (string, bool) {
+	if !token(name, false) {
+		return "", false
+	}
+	return phys(org, name), true
+}
+
+// Err maps the plane's own refusals onto the wire honestly: absence is 404, a
+// name already taken is 409, a config JetStream refuses is the 4xx it reports,
+// and only a genuinely broken bus is a 5xx.
+func Err(err error) error {
+	var apiErr *jetstream.APIError
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, jetstream.ErrStreamNotFound):
+		return zip.ErrNotFound("stream not found")
+	case errors.Is(err, jetstream.ErrConsumerNotFound):
+		return zip.ErrNotFound("consumer not found")
+	case errors.Is(err, jetstream.ErrBucketNotFound):
+		return zip.ErrNotFound("bucket not found")
+	case errors.Is(err, jetstream.ErrKeyNotFound):
+		return zip.ErrNotFound("key not found")
+	case errors.Is(err, jetstream.ErrStreamNameAlreadyInUse):
+		return zip.Errorf(http.StatusConflict, "stream name already in use")
+	case errors.Is(err, jetstream.ErrConsumerExists):
+		return zip.Errorf(http.StatusConflict, "consumer already exists")
+	case errors.Is(err, jetstream.ErrBucketExists):
+		return zip.Errorf(http.StatusConflict, "bucket already exists")
+	case errors.As(err, &apiErr):
+		if apiErr.Code >= 400 && apiErr.Code < 500 {
+			return zip.Errorf(apiErr.Code, "%s", apiErr.Description)
+		}
+		return zip.Errorf(http.StatusInternalServerError, "bus: %s", apiErr.Description)
+	case errors.Is(err, context.DeadlineExceeded):
+		return zip.Errorf(http.StatusGatewayTimeout, "bus timeout")
+	default:
+		return zip.Errorf(http.StatusInternalServerError, "bus: %v", err)
+	}
+}
+
+// token reports whether s is 1–64 bytes of [A-Za-z0-9_], plus '-' when dash is
+// allowed. Stream and bucket names refuse the dash so the physical name
+// "t-<org>-<name>" splits at its LAST dash into exactly one (org, name) pair.
+func token(s string, dash bool) bool {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_':
+		case c == '-' && dash:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// phys is the physical (whole-plane) name of an org's stream or bucket.
+func phys(org, name string) string { return TenantPrefix + org + "-" + name }

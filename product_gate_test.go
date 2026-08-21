@@ -60,7 +60,16 @@ var unextracted = []string{
 	"controlplane", "crawl", "crm", "cron", "datasets", "graph",
 	"destinations", "domain", "entitlements", "erp", "esign", "exec",
 	"experiments", "explorer", "finance", "fleet", "flow", "goja", "guide",
-	"help", "index", "integrations", "k8s", "knowledge", "label",
+	"help", "index", "integrations", "k8s", "knowledge",
+	// kv is the key-value door. The STORE is hanzoai/pubsub's — one embedded
+	// JetStream node, reached through apps/pubsub — so nothing here duplicates a
+	// product; what lives here is the tenant-scoped door onto it, and no
+	// hanzoai/kv exists to mount. Of the two branches this bucket names, the
+	// second is the likelier: a door that qualifies bucket names by org and
+	// translates the plane's refusals is cloud's own machinery, not a forkable
+	// product with a daemon of its own.
+	"kv",
+	"label",
 	"leaderboard", "legal", "links", "lsp", "marketplace", "meet", "membership",
 	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
 	"projects", "prompts", "provisioning", "reference",

@@ -7,5 +7,4 @@
 #
 # Exempt by rule, never listed: /.well-known/* (RFC 8615), the OpenAI- and
 # Anthropic-compatible wire served by ai, and /v1/admin/<app> served by <app>.
-/v1/kv pubsub
 /v1/nodes bots
