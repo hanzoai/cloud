@@ -5751,7 +5751,7 @@ components:
           description: |-
             Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the
             registration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in
-            BYTES — the same fields a code-linked run-target carries, so the /v1/fleet
+            BYTES — the same fields a code-linked run-target carries, so the /v1/visor/fleet
             board renders a linked node's arch + cores + RAM like any other unit.
           type: string
         capabilities:
@@ -39252,244 +39252,6 @@ paths:
       x-app: cloudflare
       x-public: true
       x-tool: true
-  /v1/clusters:
-    get:
-      description: |-
-        Returns the caller org's clusters from both sources: the managed
-        clusters projected from Visor's node pools, and the BYO clusters attached to the
-        caller's project. A Visor outage costs the managed half only — the BYO half
-        still lists, because a page that 502s on an optional provider is worse than a
-        page that shows what it can.
-      operationId: listClusters
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                clusters:
-                - doksClusterId: cl-1
-                  kind: managed
-                  name: prod
-                  nodeCount: 2
-                  nodePools:
-                  - count: 2
-                    name: gpu
-                    poolId: p-1
-                    size: gpu-h100x8-640gb
-                  nodeSize: gpu-h100x8-640gb
-                  status: running
-              schema:
-                $ref: '#/components/schemas/clusterList'
-          description: ok
-      summary: 'Returns the caller org''s clusters from both sources: the managed
-        clusters projected from Visor''s node pools, and the BYO clusters attached
-        to the caller''s project.'
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Attaches a BYO cluster to the caller's org — the kubeconfig is
-        validated, KMS-sealed and added to the fleet — and answers 201 with the cluster
-        as it now appears on GET /v1/clusters. Billed the nominal management fee: the
-        customer brings the compute, Hanzo meters the management plane.
-      operationId: attachCluster
-      requestBody:
-        content:
-          application/json:
-            example:
-              default: false
-              kubeconfig: |-
-                apiVersion: v1
-                kind: Config
-                ...
-              name: lab
-              provider: on-prem
-            schema:
-              $ref: '#/components/schemas/clusterAttach'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                kind: byo
-                name: lab
-                nodeCount: 3
-                nodePools: []
-                nvidiaGpu: 2
-                region: on-prem
-                status: attached
-              schema:
-                $ref: '#/components/schemas/clusterView'
-          description: ok
-      summary: Attaches a BYO cluster to the caller's org — the kubeconfig is validated,
-        KMS-sealed and added to the fleet — and answers 201 with the cluster as it
-        now appears on GET /v1/clusters.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/clusters/{clusterId}/pools:
-    post:
-      description: |-
-        Adds a node pool to one of the caller org's clusters and answers 201
-        with the created pool. Only the CreateNodePoolSpec fields are forwarded;
-        owner/provider/clusterId ride in the query exactly as Visor expects them.
-      operationId: createNodePool
-      parameters:
-      - description: ClusterID is the cluster to add the pool to, from the URL path.
-        in: path
-        name: clusterId
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              autoScale: false
-              count: 2
-              name: gpu
-              provider: digitalocean
-              size: gpu-h100x8-640gb
-            schema:
-              $ref: '#/components/schemas/poolCreate'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                count: 2
-                name: gpu
-                poolId: p-1
-                size: gpu-h100x8-640gb
-              schema:
-                $ref: '#/components/schemas/nodePoolView'
-          description: ok
-      summary: Adds a node pool to one of the caller org's clusters and answers 201
-        with the created pool.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/clusters/{clusterId}/pools/{poolId}:
-    delete:
-      description: |-
-        Removes a node pool from one of the caller org's clusters. The owner
-        scopes the delete to the caller's tenant; provider+clusterId drive the
-        provider-side removal. Answers 204.
-      operationId: deleteNodePool
-      parameters:
-      - description: ClusterID and PoolID address the pool, from the URL path.
-        in: path
-        name: clusterId
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: poolId
-        required: true
-        schema:
-          type: string
-      - description: Provider is the cloud the cluster lives on, from ?provider=.
-          Required.
-        in: query
-        name: provider
-        required: false
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes a node pool from one of the caller org's clusters.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/clusters/{clusterId}/pools/{poolId}/scale:
-    post:
-      description: |-
-        Resizes a node pool to an absolute node count and returns the pool as
-        Visor reports it after the change.
-      operationId: scaleNodePool
-      parameters:
-      - description: ClusterID and PoolID address the pool, from the URL path.
-        in: path
-        name: clusterId
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: poolId
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              count: 4
-              provider: digitalocean
-            schema:
-              $ref: '#/components/schemas/poolScale'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                count: 4
-                name: gpu
-                poolId: p-1
-                size: gpu-h100x8-640gb
-              schema:
-                $ref: '#/components/schemas/nodePoolView'
-          description: ok
-      summary: Resizes a node pool to an absolute node count and returns the pool
-        as Visor reports it after the change.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/clusters/{id}:
-    delete:
-      description: |-
-        Removes a BYO cluster from the caller org's fleet. It only ever
-        touches BYO clusters — a managed cluster's nodes are removed through the node-pool
-        routes — and answers 404 when the name is not in this org's fleet.
-      operationId: detachCluster
-      parameters:
-      - description: |-
-          ID is the cluster's fleet name (the `name` it was attached under), matched
-          lower-cased.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                detached: lab
-              schema:
-                $ref: '#/components/schemas/clusterDetached'
-          description: ok
-      summary: Removes a BYO cluster from the caller org's fleet.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
   /v1/code/ask:
     get:
       description: |-
@@ -43339,170 +43101,6 @@ paths:
       - ai
       x-app: ai
       x-public: true
-  /v1/compute/bots:
-    get:
-      description: |-
-        Returns the caller org's bot machines — the kind=bot machines — each
-        joined with the agent binding that says which cloud Agent it runs.
-
-        The bindings are read ONCE and joined by machine id, so the list is O(1) upstream
-        calls, not N+1. A bindings read that fails only costs the reconciled status: a bot
-        still lists without it.
-      operationId: listBots
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                bots:
-                - agent: bot-a
-                  binding:
-                    agentName: bot-a
-                    machineId: drop-a
-                    status: running
-                  id: drop-a
-                  name: bot-a
-                  status: running
-              schema:
-                $ref: '#/components/schemas/botList'
-          description: ok
-      summary: Returns the caller org's bot machines — the kind=bot machines — each
-        joined with the agent binding that says which cloud Agent it runs.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/compute/bots/{id}:
-    delete:
-      description: |-
-        Tears down both halves of a bot: it unbinds the agent (best-effort — a
-        bot with no binding still deletes), then terminates the machine. Answers 204.
-      operationId: deleteBot
-      parameters:
-      - description: |-
-          ID is the bot machine's id — the same id the machines surface addresses it
-          by. Scoped to the caller's org upstream, so another tenant's id is 404.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: 'Tears down both halves of a bot: it unbinds the agent (best-effort
-        — a bot with no binding still deletes), then terminates the machine.'
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one of the caller org's bot machines with its agent binding.
-
-        A machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent
-        binding — either signal is authoritative, so a bot resolves even before its
-        cloud-init has stamped every tag. A machine that is neither is 404: this route
-        answers for bots, not for machines.
-      operationId: getBot
-      parameters:
-      - description: |-
-          ID is the bot machine's id — the same id the machines surface addresses it
-          by. Scoped to the caller's org upstream, so another tenant's id is 404.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                agent: bot-a
-                binding:
-                  agentName: bot-a
-                  machineId: drop-a
-                  status: running
-                id: drop-a
-                name: bot-a
-                status: running
-              schema:
-                $ref: '#/components/schemas/botView'
-          description: ok
-      summary: Returns one of the caller org's bot machines with its agent binding.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/compute/bots/{id}/{action}:
-    post:
-      description: |-
-        Dispatches one verb against a bot the caller's org owns. `message` runs the bot's bound agent with the request body as the message and streams the agent's answer back VERBATIM — the upstream body, its content type and its status — so a message is a real agent run, recorded, billed and traced exactly like any other, under the caller's own identity rather than a fabricated one. `stop` and `pause` are the same single honest capability: they halt the runtime by unbinding the agent while LEAVING THE MACHINE UP, so the bot stops answering but keeps costing — rebind to resume, or delete the bot to tear it down. Stopping is idempotent; a bot with no binding still reports stopped.
-
-        Org-scoped and fails closed: a validated principal is required (403 without one) and the bot is addressed under the caller's OWN org, so another tenant's id is not reachable. An unknown action is a clean 400 naming the three it accepts, never a silent no-op, and messaging a bot with no bound agent is a 400.
-      operationId: post_compute_bots_by_id_by_action
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: action
-        required: true
-        schema:
-          type: string
-      summary: Message a bot, or stop it, by naming the action in the path
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-  /v1/compute/bots/launch:
-    post:
-      description: |-
-        Creates BOTH halves of a bot in one call and answers 201 with the bot: the cloud agent it runs, then a bot-kind machine bootstrapped with the bot runtime, then the binding between them, so a launched bot is immediately messageable. Send `dryRun: true` for a price quote instead — 200 with the upstream quote verbatim, no agent created, no machine launched, nothing spent.
-
-        The agent is created FIRST and on purpose: it is create-if-absent (an agent that already exists is reused, so a relaunch is fine and several bots may share one explicit `agent`), and doing it before the machine means a bad request — a model that is not in the catalog, say — fails with the real reason BEFORE any metered machine is provisioned. `agent` defaults to the bot's name and an empty `model` takes the deployment default.
-
-        Org-scoped and fails closed: a validated principal is required (403 without one), the owning org is that principal's and never a body field, `size` is required (400), and `name` is required for a real launch though not for a quote.
-      operationId: post_compute_bots_launch
-      summary: Launch a bot machine — an agent plus the machine that runs it — or
-        price one
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-  /v1/compute/regions:
-    get:
-      description: 'Lists the launch regions the compute catalog offers, passed through
-        verbatim from the provider so the shape stays the provider''s single source
-        of truth. The catalog is GLOBAL, not per-tenant: no owner is forwarded and
-        every org sees the same list. It is still gated — a validated principal is
-        required, 403 without one — because the catalog is what backs the launch drawer,
-        not public marketing copy.'
-      operationId: get_compute_regions
-      summary: The regions a machine or GPU can be launched into
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-  /v1/compute/sizes:
-    get:
-      description: 'Lists the instance sizes the compute catalog offers, passed through
-        verbatim from the provider so the shape stays the provider''s single source
-        of truth. These are the values `size` accepts on a launch. The catalog is
-        GLOBAL, not per-tenant: no owner is forwarded and every org sees the same
-        list. It is still gated — a validated principal is required, 403 without one.'
-      operationId: get_compute_sizes
-      summary: The machine and GPU sizes that can be launched
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
   /v1/connectors:
     get:
       description: |-
@@ -46636,275 +46234,6 @@ paths:
       x-app: admission
       x-public: true
       x-tool: true
-  /v1/fleet:
-    get:
-      description: |-
-        Returns every compute unit the caller's org has, from every source, each
-        carrying its latest utilization: agent run-targets, the BYO machines that dialed
-        in, attached BYO clusters and Visor-provisioned machines.
-
-        A unit with a live snapshot of its own keeps it; the rest are overlaid from the
-        utilization series, and only when the sample agrees about the SOURCE — two planes
-        could mint the same unit id, and a board must never show one machine's load on
-        another's row. BYO GPU units also carry their gpu-jobs queue depth. Every source
-        is folded in independently: a broken one costs its own rows and nothing else.
-      operationId: listFleet
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                units:
-                - host: spark
-                  kind: worker
-                  label: spark
-                  metrics:
-                    at: "2026-07-27T09:00:00Z"
-                    gpuUtil: 0.42
-                  queued: 2
-                  running: 1
-                  sessions: 0
-                  source: byo
-                  spec:
-                    arch: arm64
-                    cpus: 20
-                    gpuModel: NVIDIA GB10
-                    gpus: 1
-                    os: linux
-                  status: online
-                  unit: spark
-              schema:
-                $ref: '#/components/schemas/fleetBoard'
-          description: ok
-      summary: 'Returns every compute unit the caller''s org has, from every source,
-        each carrying its latest utilization: agent run-targets, the BYO machines
-        that dialed in, attached BYO clusters and Visor-provisioned machines.'
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/fleet/jobs:
-    get:
-      description: |-
-        Returns the caller org's gpu-jobs render queue, each row tagged with
-        the GPU it targets (empty = the shared any-GPU lane) and the node claiming it,
-        optionally narrowed to one GPU's queue and/or one status.
-
-        A job whose worker died — STARTED with an elapsed lease and not yet reclaimed —
-        reads "stalled", not "running". Fail-soft: an unavailable tasks engine yields an
-        empty queue rather than an error.
-      operationId: listFleetJobs
-      parameters:
-      - description: |-
-          GPU selects one node's lane: jobs TARGETED at it (gpu:<node>) or CLAIMED by
-          it. The literal "shared" selects the any-GPU lane — no target, no claimant.
-          Matched case-insensitively.
-        in: query
-        name: gpu
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Status selects one lifecycle state: queued, running, stalled, completed,
-          failed or canceled.
-        in: query
-        name: status
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                jobs:
-                - attempt: 1
-                  gpu: spark
-                  id: job-1
-                  label: hero
-                  runId: job-1
-                  status: running
-                  type: studio.render
-                  worker: spark
-              schema:
-                $ref: '#/components/schemas/jobList'
-          description: ok
-      summary: Returns the caller org's gpu-jobs render queue, each row tagged with
-        the GPU it targets (empty = the shared any-GPU lane) and the node claiming
-        it, optionally narrowed to one GPU's queue and/or one status.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/fleet/jobs/{id}/cancel:
-    post:
-      description: |-
-        Cancels a queued or running render in the caller's org. The engine
-        cancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in
-        another tenant's shard is 404, exactly like one that never existed. An
-        already-finished job is 409.
-      operationId: cancelFleetJob
-      parameters:
-      - description: ID is the job (activity) id, from the URL path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              reason: superseded
-            schema:
-              $ref: '#/components/schemas/jobCancel'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                canceled: job-1
-                run: job-1
-              schema:
-                $ref: '#/components/schemas/jobCanceled'
-          description: ok
-      summary: Cancels a queued or running render in the caller's org.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/fleet/samples:
-    get:
-      description: |-
-        Returns the caller org's utilization series, oldest first.
-
-        A rejected narrower is a 400 carrying its own reason (the vocabulary is ours and
-        safe to echo); a warehouse failure is logged and answered 503 "unavailable",
-        because a chart that silently reads "no load" when the truth is "we cannot tell"
-        is worse than one that says so. An ABSENT warehouse is different again: it returns
-        an empty series, which renders honestly as "no samples yet".
-      operationId: listFleetSamples
-      parameters:
-      - description: Unit selects one compute unit's series by its source-local id.
-        in: query
-        name: unit
-        required: false
-        schema:
-          type: string
-      - description: 'Source selects one plane: "agent", "byo" or "visor".'
-        in: query
-        name: source
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Range is the lookback window (e.g. "1h", "24h", "7d"); empty takes the
-          warehouse default.
-        in: query
-        name: range
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                samples:
-                - at: "2026-07-27T09:00:00Z"
-                  gpuModel: GB10
-                  gpuUtil: 0.42
-                  gpus: 1
-                  host: spark
-                  kind: worker
-                  source: byo
-                  unit: spark
-              schema:
-                $ref: '#/components/schemas/sampleList'
-          description: ok
-      summary: Returns the caller org's utilization series, oldest first.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Records a BYO worker's live GPU utilization into the SAME series the
-        fleet board overlays. The org is the validated principal and source/kind are fixed
-        server-side, so a worker names only its own metrics — never another tenant or
-        another source. Answers 202: the warehouse write is DETACHED (its own bounded
-        context, never in the response path), so a slow or absent warehouse cannot stall a
-        heartbeat.
-      operationId: recordFleetSample
-      requestBody:
-        content:
-          application/json:
-            example:
-              gpuModel: GB10
-              gpuUtil: 0.42
-              gpus: 1
-              host: spark
-              memFree: 200
-              memUsed: 100
-              unit: spark
-            schema:
-              $ref: '#/components/schemas/sampleIngest'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                recorded: true
-              schema:
-                $ref: '#/components/schemas/sampleAccepted'
-          description: ok
-      summary: Records a BYO worker's live GPU utilization into the SAME series the
-        fleet board overlays.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/fleet/workers:
-    get:
-      description: |-
-        Returns the caller org's BYO machines — the ones that dialed in
-        via `hanzo link` — with everything each host reported about itself. The Machines
-        and GPUs pages fold the same data into their normalized shapes; this is the
-        canonical raw list a fleet view (or the CLI's `status`) reads.
-      operationId: listFleetWorkers
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                workers:
-                - arch: arm64
-                  cpus: 20
-                  gpus:
-                  - memoryTotal: 122880 MiB
-                    name: NVIDIA GB10
-                  hostname: spark
-                  id: spark
-                  location: on-prem
-                  provider: byo
-                  status: online
-              schema:
-                $ref: '#/components/schemas/workerList'
-          description: ok
-      summary: Returns the caller org's BYO machines — the ones that dialed in via
-        `hanzo link` — with everything each host reported about itself.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
   /v1/flow/runs:
     get:
       description: |-
@@ -48978,64 +48307,6 @@ paths:
       - git
       x-app: git
       x-public: true
-  /v1/gpus:
-    get:
-      description: |-
-        Returns one row per physical accelerator the caller's org has, derived
-        from its real GPU machines (the size slug says how many cards a node holds) and
-        from the accelerators BYO workers report through nvidia-smi.
-
-        Live telemetry is absent on Visor rows because Visor's machine object carries
-        none — an honest omission the console renders as "—", never a fabricated 0.
-      operationId: listGpus
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                gpus:
-                - id: gpu-1#0
-                  machine: gpu-1
-                  model: H100
-                  name: gpu-1
-                  provider: digitalocean
-                  region: nyc2
-                  status: running
-              schema:
-                $ref: '#/components/schemas/gpuList'
-          description: ok
-      summary: Returns one row per physical accelerator the caller's org has, derived
-        from its real GPU machines (the size slug says how many cards a node holds)
-        and from the accelerators BYO workers report through nvidia-smi.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/gpus/alerts:
-    get:
-      description: |-
-        Is an HONEST empty surface: Visor exposes no GPU alert inventory, so
-        this returns [] rather than fabricating alerts. It stays a real, tenant-gated
-        route so the console's alerts fetch resolves (200 [], not a 404) — an honest
-        "no alerts", the same discipline the rest of the surface follows.
-      operationId: listGpuAlerts
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                alerts: []
-              schema:
-                $ref: '#/components/schemas/gpuAlertList'
-          description: ok
-      summary: 'Is an HONEST empty surface: Visor exposes no GPU alert inventory,
-        so this returns [] rather than fabricating alerts.'
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
   /v1/help/articles:
     get:
       description: |-
@@ -56447,180 +55718,6 @@ paths:
       - integrations
       x-app: integrations
       x-public: true
-  /v1/k8s/clusters:
-    get:
-      description: |-
-        Lists the org's DOKS clusters (Visor, house account) folded with
-        the org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor
-        outage is logged and skipped so a down optional provider never hides the BYO list.
-      operationId: listKubernetesClusters
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                clusters:
-                - doClusterId: cl-1
-                  doksClusterId: cl-1
-                  kind: managed
-                  name: prod
-                  nodeCount: 0
-                  nodePools: []
-                  region: nyc3
-                  status: running
-              schema:
-                $ref: '#/components/schemas/clusterList'
-          description: ok
-      summary: Lists the org's DOKS clusters (Visor, house account) folded with the
-        org's BYO clusters — ONE fleet cluster view under the unified k8s noun.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Provisions a DOKS cluster for the caller's org and answers 201.
-        ADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because
-        provisioning spends real infrastructure on the house account. The request is
-        validated at this boundary, then Visor owns provisioning and the hanzo-org
-        ownership tag.
-      operationId: createKubernetesCluster
-      requestBody:
-        content:
-          application/json:
-            example:
-              name: prod
-              nodePool:
-                count: 2
-                name: gpu
-                size: gpu-h100x8-640gb
-              region: nyc3
-            schema:
-              $ref: '#/components/schemas/createClusterReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                doClusterId: cl-1
-                doksClusterId: cl-1
-                kind: managed
-                name: prod
-                nodeCount: 0
-                nodePools: []
-                region: nyc3
-                status: provisioning
-              schema:
-                $ref: '#/components/schemas/clusterView'
-          description: ok
-      summary: Provisions a DOKS cluster for the caller's org and answers 201.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/k8s/clusters/{id}:
-    delete:
-      description: |-
-        Destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like
-        create. Visor scopes the delete to the org (refuses a foreign id), so this can
-        only ever remove the caller org's own cluster.
-      operationId: deleteKubernetesCluster
-      parameters:
-      - description: |-
-          ID is the provider's DOKS cluster id. Visor scopes the lookup to the caller's
-          org, so another tenant's id resolves to not-found rather than their cluster.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Destroys a DOKS cluster by id and answers 204.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one cluster's detail: node pools + worker nodes. Visor scopes
-        the lookup to the org (a foreign or missing id resolves to not-found), so a tenant
-        can never read another tenant's cluster by guessing an id.
-      operationId: getKubernetesCluster
-      parameters:
-      - description: |-
-          ID is the provider's DOKS cluster id. Visor scopes the lookup to the caller's
-          org, so another tenant's id resolves to not-found rather than their cluster.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                doksClusterId: cl-1
-                kind: managed
-                name: prod
-                nodeCount: 1
-                nodePools:
-                - count: 1
-                  name: gpu
-                  poolId: p-1
-                  size: gpu-h100x8-640gb
-                nodeSize: gpu-h100x8-640gb
-                nodes:
-                - id: node-1
-                  name: node-1
-                  status: active
-                region: nyc3
-                status: running
-              schema:
-                $ref: '#/components/schemas/clusterDetailView'
-          description: ok
-      summary: 'Returns one cluster''s detail: node pools + worker nodes.'
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/k8s/nodes:
-    get:
-      description: |-
-        Returns every DOKS worker node in the org's clusters as a machine —
-        the SAME set the fleet folds in (managedMachines), exposed directly under the k8s
-        noun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.
-      operationId: listKubernetesNodes
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                nodes:
-                - id: node-1
-                  name: node-1
-                  region: nyc3
-                  status: active
-                  type: s-4vcpu-8gb
-                  vcpu: 4
-              schema:
-                $ref: '#/components/schemas/nodeList'
-          description: ok
-      summary: Returns every DOKS worker node in the org's clusters as a machine —
-        the SAME set the fleet folds in (managedMachines), exposed directly under
-        the k8s noun.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
   /v1/kb/connectors:
     get:
       description: |-
@@ -57114,238 +56211,6 @@ paths:
       - metrics
       x-app: metrics
       x-public: true
-  /v1/machines:
-    get:
-      description: |-
-        Returns every machine the caller's org has — Visor's registry, the
-        live DigitalOcean droplets and the DOKS worker nodes (deduped into one union),
-        plus the BYO machines that dialed in via `hanzo link` (provider "byo").
-
-        A source Visor cannot answer for is logged and skipped, never an error: one
-        wedged upstream must not hide the machines the other sources can see.
-      operationId: listMachines
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                machines:
-                - id: web-1
-                  mem: 4 GB
-                  name: Web 1
-                  provider: digitalocean
-                  publicIp: 1.2.3.4
-                  region: sfo3
-                  status: running
-                  type: s-2vcpu-4gb
-                  vcpu: 2
-              schema:
-                $ref: '#/components/schemas/machineList'
-          description: ok
-      summary: Returns every machine the caller's org has — Visor's registry, the
-        live DigitalOcean droplets and the DOKS worker nodes (deduped into one union),
-        plus the BYO machines that dialed in via `hanzo link` (provider "byo").
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Provisions a machine owned by the caller's org and answers 201 with the machine. Send `dryRun: true` to get a PRICE QUOTE instead: 200 with the upstream quote passed through verbatim, nothing launched and nothing spent. Two response shapes on one address is the rule to know, and it is why this is not a typed op.
-
-        Metering is not this plane's: the launch fronts the compute provider's resell endpoint, which owns the balance gate and the per-hour meter, and cloud only forwards the tenant. Ownership is the validated principal's org and is never read from the body, so a launch always lands in the caller's OWN tenant and the machine it creates is only ever visible to that tenant. Fails closed: a validated principal is required (403 without one) and `size` (or its `instanceType` alias) is required (400).
-      operationId: post_machines
-      summary: Launch a metered machine for your org, or price one first with dryRun
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-  /v1/machines/{id}:
-    delete:
-      description: |-
-        Terminates one of the caller org's machines. Visor takes the
-        machine identity as owner+name, and the owner is the validated principal, so a
-        caller can only ever terminate its own tenant's machine. Answers 204.
-      operationId: deleteMachine
-      parameters:
-      - description: |-
-          ID is the machine's org-scoped NAME — the stable key Visor addresses a
-          machine by (owner/name), not the ephemeral provider id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Terminates one of the caller org's machines.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one of the caller org's machines by its org-scoped name.
-        Visor keys the lookup by owner/name, so an id belonging to another tenant
-        resolves to not-found rather than another org's machine.
-      operationId: getMachine
-      parameters:
-      - description: |-
-          ID is the machine's org-scoped NAME — the stable key Visor addresses a
-          machine by (owner/name), not the ephemeral provider id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                id: web-1
-                name: Web 1
-                publicIp: 1.2.3.4
-                region: sfo3
-                status: running
-                type: s-2vcpu-4gb
-                vcpu: 2
-              schema:
-                $ref: '#/components/schemas/machineView'
-          description: ok
-      summary: Returns one of the caller org's machines by its org-scoped name.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/machines/{id}/agent:
-    delete:
-      description: |-
-        Detaches the agent runtime from one of the caller org's
-        machines. The machine stays — this halts the bot, it does not terminate the
-        compute. Answers 204.
-      operationId: unbindMachineAgent
-      parameters:
-      - description: |-
-          ID is the machine's org-scoped NAME — the stable key Visor addresses a
-          machine by (owner/name), not the ephemeral provider id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Detaches the agent runtime from one of the caller org's machines.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns the agent binding of one of the caller org's
-        machines, or 404 when the machine runs no bot runtime.
-      operationId: getMachineAgent
-      parameters:
-      - description: |-
-          ID is the machine's org-scoped NAME — the stable key Visor addresses a
-          machine by (owner/name), not the ephemeral provider id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                agentName: bot-a
-                botVersion: 1.4.0
-                machineId: drop-a
-                status: running
-              schema:
-                $ref: '#/components/schemas/agentBinding'
-          description: ok
-      summary: Returns the agent binding of one of the caller org's machines, or 404
-        when the machine runs no bot runtime.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-    put:
-      description: |-
-        Binds a cloud Agent to one of the caller org's machines: the
-        machine is recorded as running that Agent's @hanzo/bot runtime. The owning org is
-        the validated tenant, never a client field.
-      operationId: bindMachineAgent
-      parameters:
-      - description: ID is the machine to bind, from the URL path.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              agentName: bot-a
-              botVersion: 1.4.0
-            schema:
-              $ref: '#/components/schemas/bindAgentReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                agentName: bot-a
-                machineId: drop-a
-                status: binding
-              schema:
-                $ref: '#/components/schemas/agentBinding'
-          description: ok
-      summary: 'Binds a cloud Agent to one of the caller org''s machines: the machine
-        is recorded as running that Agent''s @hanzo/bot runtime.'
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
-  /v1/machines/agents:
-    get:
-      description: |-
-        Returns every agent↔machine binding in the caller's org — which
-        machines are running which cloud Agent, with vm's own reconciled status.
-      operationId: listMachineAgents
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                agentBindings:
-                - agentName: bot-a
-                  machineId: drop-a
-                  publicIp: 1.2.3.4
-                  status: running
-              schema:
-                $ref: '#/components/schemas/bindingList'
-          description: ok
-      summary: Returns every agent↔machine binding in the caller's org — which machines
-        are running which cloud Agent, with vm's own reconciled status.
-      tags:
-      - visor
-      x-app: visor
-      x-public: true
-      x-tool: true
   /v1/mcp:
     post:
       description: 'Model Context Protocol over JSON-RPC 2.0 — one POST per message,
@@ -80535,6 +79400,1141 @@ paths:
       - ai
       x-app: ai
       x-public: true
+  /v1/visor/clusters:
+    get:
+      description: |-
+        Returns the caller org's clusters from both sources: the managed
+        clusters projected from Visor's node pools, and the BYO clusters attached to the
+        caller's project. A Visor outage costs the managed half only — the BYO half
+        still lists, because a page that 502s on an optional provider is worse than a
+        page that shows what it can.
+      operationId: listClusters
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                clusters:
+                - doksClusterId: cl-1
+                  kind: managed
+                  name: prod
+                  nodeCount: 2
+                  nodePools:
+                  - count: 2
+                    name: gpu
+                    poolId: p-1
+                    size: gpu-h100x8-640gb
+                  nodeSize: gpu-h100x8-640gb
+                  status: running
+              schema:
+                $ref: '#/components/schemas/clusterList'
+          description: ok
+      summary: 'Returns the caller org''s clusters from both sources: the managed
+        clusters projected from Visor''s node pools, and the BYO clusters attached
+        to the caller''s project.'
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Attaches a BYO cluster to the caller's org — the kubeconfig is
+        validated, KMS-sealed and added to the fleet — and answers 201 with the cluster
+        as it now appears on GET /v1/visor/clusters. Billed the nominal management fee: the
+        customer brings the compute, Hanzo meters the management plane.
+      operationId: attachCluster
+      requestBody:
+        content:
+          application/json:
+            example:
+              default: false
+              kubeconfig: |-
+                apiVersion: v1
+                kind: Config
+                ...
+              name: lab
+              provider: on-prem
+            schema:
+              $ref: '#/components/schemas/clusterAttach'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                kind: byo
+                name: lab
+                nodeCount: 3
+                nodePools: []
+                nvidiaGpu: 2
+                region: on-prem
+                status: attached
+              schema:
+                $ref: '#/components/schemas/clusterView'
+          description: ok
+      summary: Attaches a BYO cluster to the caller's org — the kubeconfig is validated,
+        KMS-sealed and added to the fleet — and answers 201 with the cluster as it
+        now appears on GET /v1/visor/clusters.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/clusters/{clusterId}/pools:
+    post:
+      description: |-
+        Adds a node pool to one of the caller org's clusters and answers 201
+        with the created pool. Only the CreateNodePoolSpec fields are forwarded;
+        owner/provider/clusterId ride in the query exactly as Visor expects them.
+      operationId: createNodePool
+      parameters:
+      - description: ClusterID is the cluster to add the pool to, from the URL path.
+        in: path
+        name: clusterId
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              autoScale: false
+              count: 2
+              name: gpu
+              provider: digitalocean
+              size: gpu-h100x8-640gb
+            schema:
+              $ref: '#/components/schemas/poolCreate'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                count: 2
+                name: gpu
+                poolId: p-1
+                size: gpu-h100x8-640gb
+              schema:
+                $ref: '#/components/schemas/nodePoolView'
+          description: ok
+      summary: Adds a node pool to one of the caller org's clusters and answers 201
+        with the created pool.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/clusters/{clusterId}/pools/{poolId}:
+    delete:
+      description: |-
+        Removes a node pool from one of the caller org's clusters. The owner
+        scopes the delete to the caller's tenant; provider+clusterId drive the
+        provider-side removal. Answers 204.
+      operationId: deleteNodePool
+      parameters:
+      - description: ClusterID and PoolID address the pool, from the URL path.
+        in: path
+        name: clusterId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: poolId
+        required: true
+        schema:
+          type: string
+      - description: Provider is the cloud the cluster lives on, from ?provider=.
+          Required.
+        in: query
+        name: provider
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Removes a node pool from one of the caller org's clusters.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/clusters/{clusterId}/pools/{poolId}/scale:
+    post:
+      description: |-
+        Resizes a node pool to an absolute node count and returns the pool as
+        Visor reports it after the change.
+      operationId: scaleNodePool
+      parameters:
+      - description: ClusterID and PoolID address the pool, from the URL path.
+        in: path
+        name: clusterId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: poolId
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              count: 4
+              provider: digitalocean
+            schema:
+              $ref: '#/components/schemas/poolScale'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                count: 4
+                name: gpu
+                poolId: p-1
+                size: gpu-h100x8-640gb
+              schema:
+                $ref: '#/components/schemas/nodePoolView'
+          description: ok
+      summary: Resizes a node pool to an absolute node count and returns the pool
+        as Visor reports it after the change.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/clusters/{id}:
+    delete:
+      description: |-
+        Removes a BYO cluster from the caller org's fleet. It only ever
+        touches BYO clusters — a managed cluster's nodes are removed through the node-pool
+        routes — and answers 404 when the name is not in this org's fleet.
+      operationId: detachCluster
+      parameters:
+      - description: |-
+          ID is the cluster's fleet name (the `name` it was attached under), matched
+          lower-cased.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                detached: lab
+              schema:
+                $ref: '#/components/schemas/clusterDetached'
+          description: ok
+      summary: Removes a BYO cluster from the caller org's fleet.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/compute/bots:
+    get:
+      description: |-
+        Returns the caller org's bot machines — the kind=bot machines — each
+        joined with the agent binding that says which cloud Agent it runs.
+
+        The bindings are read ONCE and joined by machine id, so the list is O(1) upstream
+        calls, not N+1. A bindings read that fails only costs the reconciled status: a bot
+        still lists without it.
+      operationId: listBots
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                bots:
+                - agent: bot-a
+                  binding:
+                    agentName: bot-a
+                    machineId: drop-a
+                    status: running
+                  id: drop-a
+                  name: bot-a
+                  status: running
+              schema:
+                $ref: '#/components/schemas/botList'
+          description: ok
+      summary: Returns the caller org's bot machines — the kind=bot machines — each
+        joined with the agent binding that says which cloud Agent it runs.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/compute/bots/{id}:
+    delete:
+      description: |-
+        Tears down both halves of a bot: it unbinds the agent (best-effort — a
+        bot with no binding still deletes), then terminates the machine. Answers 204.
+      operationId: deleteBot
+      parameters:
+      - description: |-
+          ID is the bot machine's id — the same id the machines surface addresses it
+          by. Scoped to the caller's org upstream, so another tenant's id is 404.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: 'Tears down both halves of a bot: it unbinds the agent (best-effort
+        — a bot with no binding still deletes), then terminates the machine.'
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one of the caller org's bot machines with its agent binding.
+
+        A machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent
+        binding — either signal is authoritative, so a bot resolves even before its
+        cloud-init has stamped every tag. A machine that is neither is 404: this route
+        answers for bots, not for machines.
+      operationId: getBot
+      parameters:
+      - description: |-
+          ID is the bot machine's id — the same id the machines surface addresses it
+          by. Scoped to the caller's org upstream, so another tenant's id is 404.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                agent: bot-a
+                binding:
+                  agentName: bot-a
+                  machineId: drop-a
+                  status: running
+                id: drop-a
+                name: bot-a
+                status: running
+              schema:
+                $ref: '#/components/schemas/botView'
+          description: ok
+      summary: Returns one of the caller org's bot machines with its agent binding.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/compute/bots/{id}/{action}:
+    post:
+      description: |-
+        Dispatches one verb against a bot the caller's org owns. `message` runs the bot's bound agent with the request body as the message and streams the agent's answer back VERBATIM — the upstream body, its content type and its status — so a message is a real agent run, recorded, billed and traced exactly like any other, under the caller's own identity rather than a fabricated one. `stop` and `pause` are the same single honest capability: they halt the runtime by unbinding the agent while LEAVING THE MACHINE UP, so the bot stops answering but keeps costing — rebind to resume, or delete the bot to tear it down. Stopping is idempotent; a bot with no binding still reports stopped.
+
+        Org-scoped and fails closed: a validated principal is required (403 without one) and the bot is addressed under the caller's OWN org, so another tenant's id is not reachable. An unknown action is a clean 400 naming the three it accepts, never a silent no-op, and messaging a bot with no bound agent is a 400.
+      operationId: post_visor_compute_bots_by_id_by_action
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: action
+        required: true
+        schema:
+          type: string
+      summary: Message a bot, or stop it, by naming the action in the path
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+  /v1/visor/compute/bots/launch:
+    post:
+      description: |-
+        Creates BOTH halves of a bot in one call and answers 201 with the bot: the cloud agent it runs, then a bot-kind machine bootstrapped with the bot runtime, then the binding between them, so a launched bot is immediately messageable. Send `dryRun: true` for a price quote instead — 200 with the upstream quote verbatim, no agent created, no machine launched, nothing spent.
+
+        The agent is created FIRST and on purpose: it is create-if-absent (an agent that already exists is reused, so a relaunch is fine and several bots may share one explicit `agent`), and doing it before the machine means a bad request — a model that is not in the catalog, say — fails with the real reason BEFORE any metered machine is provisioned. `agent` defaults to the bot's name and an empty `model` takes the deployment default.
+
+        Org-scoped and fails closed: a validated principal is required (403 without one), the owning org is that principal's and never a body field, `size` is required (400), and `name` is required for a real launch though not for a quote.
+      operationId: post_visor_compute_bots_launch
+      summary: Launch a bot machine — an agent plus the machine that runs it — or
+        price one
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+  /v1/visor/compute/regions:
+    get:
+      description: 'Lists the launch regions the compute catalog offers, passed through
+        verbatim from the provider so the shape stays the provider''s single source
+        of truth. The catalog is GLOBAL, not per-tenant: no owner is forwarded and
+        every org sees the same list. It is still gated — a validated principal is
+        required, 403 without one — because the catalog is what backs the launch drawer,
+        not public marketing copy.'
+      operationId: get_visor_compute_regions
+      summary: The regions a machine or GPU can be launched into
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+  /v1/visor/compute/sizes:
+    get:
+      description: 'Lists the instance sizes the compute catalog offers, passed through
+        verbatim from the provider so the shape stays the provider''s single source
+        of truth. These are the values `size` accepts on a launch. The catalog is
+        GLOBAL, not per-tenant: no owner is forwarded and every org sees the same
+        list. It is still gated — a validated principal is required, 403 without one.'
+      operationId: get_visor_compute_sizes
+      summary: The machine and GPU sizes that can be launched
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+  /v1/visor/fleet:
+    get:
+      description: |-
+        Returns every compute unit the caller's org has, from every source, each
+        carrying its latest utilization: agent run-targets, the BYO machines that dialed
+        in, attached BYO clusters and Visor-provisioned machines.
+
+        A unit with a live snapshot of its own keeps it; the rest are overlaid from the
+        utilization series, and only when the sample agrees about the SOURCE — two planes
+        could mint the same unit id, and a board must never show one machine's load on
+        another's row. BYO GPU units also carry their gpu-jobs queue depth. Every source
+        is folded in independently: a broken one costs its own rows and nothing else.
+      operationId: listFleet
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                units:
+                - host: spark
+                  kind: worker
+                  label: spark
+                  metrics:
+                    at: "2026-07-27T09:00:00Z"
+                    gpuUtil: 0.42
+                  queued: 2
+                  running: 1
+                  sessions: 0
+                  source: byo
+                  spec:
+                    arch: arm64
+                    cpus: 20
+                    gpuModel: NVIDIA GB10
+                    gpus: 1
+                    os: linux
+                  status: online
+                  unit: spark
+              schema:
+                $ref: '#/components/schemas/fleetBoard'
+          description: ok
+      summary: 'Returns every compute unit the caller''s org has, from every source,
+        each carrying its latest utilization: agent run-targets, the BYO machines
+        that dialed in, attached BYO clusters and Visor-provisioned machines.'
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/fleet/jobs:
+    get:
+      description: |-
+        Returns the caller org's gpu-jobs render queue, each row tagged with
+        the GPU it targets (empty = the shared any-GPU lane) and the node claiming it,
+        optionally narrowed to one GPU's queue and/or one status.
+
+        A job whose worker died — STARTED with an elapsed lease and not yet reclaimed —
+        reads "stalled", not "running". Fail-soft: an unavailable tasks engine yields an
+        empty queue rather than an error.
+      operationId: listFleetJobs
+      parameters:
+      - description: |-
+          GPU selects one node's lane: jobs TARGETED at it (gpu:<node>) or CLAIMED by
+          it. The literal "shared" selects the any-GPU lane — no target, no claimant.
+          Matched case-insensitively.
+        in: query
+        name: gpu
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Status selects one lifecycle state: queued, running, stalled, completed,
+          failed or canceled.
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                jobs:
+                - attempt: 1
+                  gpu: spark
+                  id: job-1
+                  label: hero
+                  runId: job-1
+                  status: running
+                  type: studio.render
+                  worker: spark
+              schema:
+                $ref: '#/components/schemas/jobList'
+          description: ok
+      summary: Returns the caller org's gpu-jobs render queue, each row tagged with
+        the GPU it targets (empty = the shared any-GPU lane) and the node claiming
+        it, optionally narrowed to one GPU's queue and/or one status.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/fleet/jobs/{id}/cancel:
+    post:
+      description: |-
+        Cancels a queued or running render in the caller's org. The engine
+        cancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in
+        another tenant's shard is 404, exactly like one that never existed. An
+        already-finished job is 409.
+      operationId: cancelFleetJob
+      parameters:
+      - description: ID is the job (activity) id, from the URL path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              reason: superseded
+            schema:
+              $ref: '#/components/schemas/jobCancel'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                canceled: job-1
+                run: job-1
+              schema:
+                $ref: '#/components/schemas/jobCanceled'
+          description: ok
+      summary: Cancels a queued or running render in the caller's org.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/fleet/samples:
+    get:
+      description: |-
+        Returns the caller org's utilization series, oldest first.
+
+        A rejected narrower is a 400 carrying its own reason (the vocabulary is ours and
+        safe to echo); a warehouse failure is logged and answered 503 "unavailable",
+        because a chart that silently reads "no load" when the truth is "we cannot tell"
+        is worse than one that says so. An ABSENT warehouse is different again: it returns
+        an empty series, which renders honestly as "no samples yet".
+      operationId: listFleetSamples
+      parameters:
+      - description: Unit selects one compute unit's series by its source-local id.
+        in: query
+        name: unit
+        required: false
+        schema:
+          type: string
+      - description: 'Source selects one plane: "agent", "byo" or "visor".'
+        in: query
+        name: source
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Range is the lookback window (e.g. "1h", "24h", "7d"); empty takes the
+          warehouse default.
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                samples:
+                - at: "2026-07-27T09:00:00Z"
+                  gpuModel: GB10
+                  gpuUtil: 0.42
+                  gpus: 1
+                  host: spark
+                  kind: worker
+                  source: byo
+                  unit: spark
+              schema:
+                $ref: '#/components/schemas/sampleList'
+          description: ok
+      summary: Returns the caller org's utilization series, oldest first.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Records a BYO worker's live GPU utilization into the SAME series the
+        fleet board overlays. The org is the validated principal and source/kind are fixed
+        server-side, so a worker names only its own metrics — never another tenant or
+        another source. Answers 202: the warehouse write is DETACHED (its own bounded
+        context, never in the response path), so a slow or absent warehouse cannot stall a
+        heartbeat.
+      operationId: recordFleetSample
+      requestBody:
+        content:
+          application/json:
+            example:
+              gpuModel: GB10
+              gpuUtil: 0.42
+              gpus: 1
+              host: spark
+              memFree: 200
+              memUsed: 100
+              unit: spark
+            schema:
+              $ref: '#/components/schemas/sampleIngest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                recorded: true
+              schema:
+                $ref: '#/components/schemas/sampleAccepted'
+          description: ok
+      summary: Records a BYO worker's live GPU utilization into the SAME series the
+        fleet board overlays.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/fleet/workers:
+    get:
+      description: |-
+        Returns the caller org's BYO machines — the ones that dialed in
+        via `hanzo link` — with everything each host reported about itself. The Machines
+        and GPUs pages fold the same data into their normalized shapes; this is the
+        canonical raw list a fleet view (or the CLI's `status`) reads.
+      operationId: listFleetWorkers
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                workers:
+                - arch: arm64
+                  cpus: 20
+                  gpus:
+                  - memoryTotal: 122880 MiB
+                    name: NVIDIA GB10
+                  hostname: spark
+                  id: spark
+                  location: on-prem
+                  provider: byo
+                  status: online
+              schema:
+                $ref: '#/components/schemas/workerList'
+          description: ok
+      summary: Returns the caller org's BYO machines — the ones that dialed in via
+        `hanzo link` — with everything each host reported about itself.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/gpus:
+    get:
+      description: |-
+        Returns one row per physical accelerator the caller's org has, derived
+        from its real GPU machines (the size slug says how many cards a node holds) and
+        from the accelerators BYO workers report through nvidia-smi.
+
+        Live telemetry is absent on Visor rows because Visor's machine object carries
+        none — an honest omission the console renders as "—", never a fabricated 0.
+      operationId: listGpus
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                gpus:
+                - id: gpu-1#0
+                  machine: gpu-1
+                  model: H100
+                  name: gpu-1
+                  provider: digitalocean
+                  region: nyc2
+                  status: running
+              schema:
+                $ref: '#/components/schemas/gpuList'
+          description: ok
+      summary: Returns one row per physical accelerator the caller's org has, derived
+        from its real GPU machines (the size slug says how many cards a node holds)
+        and from the accelerators BYO workers report through nvidia-smi.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/gpus/alerts:
+    get:
+      description: |-
+        Is an HONEST empty surface: Visor exposes no GPU alert inventory, so
+        this returns [] rather than fabricating alerts. It stays a real, tenant-gated
+        route so the console's alerts fetch resolves (200 [], not a 404) — an honest
+        "no alerts", the same discipline the rest of the surface follows.
+      operationId: listGpuAlerts
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                alerts: []
+              schema:
+                $ref: '#/components/schemas/gpuAlertList'
+          description: ok
+      summary: 'Is an HONEST empty surface: Visor exposes no GPU alert inventory,
+        so this returns [] rather than fabricating alerts.'
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/k8s/clusters:
+    get:
+      description: |-
+        Lists the org's DOKS clusters (Visor, house account) folded with
+        the org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor
+        outage is logged and skipped so a down optional provider never hides the BYO list.
+      operationId: listKubernetesClusters
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                clusters:
+                - doClusterId: cl-1
+                  doksClusterId: cl-1
+                  kind: managed
+                  name: prod
+                  nodeCount: 0
+                  nodePools: []
+                  region: nyc3
+                  status: running
+              schema:
+                $ref: '#/components/schemas/clusterList'
+          description: ok
+      summary: Lists the org's DOKS clusters (Visor, house account) folded with the
+        org's BYO clusters — ONE fleet cluster view under the unified k8s noun.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Provisions a DOKS cluster for the caller's org and answers 201.
+        ADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because
+        provisioning spends real infrastructure on the house account. The request is
+        validated at this boundary, then Visor owns provisioning and the hanzo-org
+        ownership tag.
+      operationId: createKubernetesCluster
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: prod
+              nodePool:
+                count: 2
+                name: gpu
+                size: gpu-h100x8-640gb
+              region: nyc3
+            schema:
+              $ref: '#/components/schemas/createClusterReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                doClusterId: cl-1
+                doksClusterId: cl-1
+                kind: managed
+                name: prod
+                nodeCount: 0
+                nodePools: []
+                region: nyc3
+                status: provisioning
+              schema:
+                $ref: '#/components/schemas/clusterView'
+          description: ok
+      summary: Provisions a DOKS cluster for the caller's org and answers 201.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/k8s/clusters/{id}:
+    delete:
+      description: |-
+        Destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like
+        create. Visor scopes the delete to the org (refuses a foreign id), so this can
+        only ever remove the caller org's own cluster.
+      operationId: deleteKubernetesCluster
+      parameters:
+      - description: |-
+          ID is the provider's DOKS cluster id. Visor scopes the lookup to the caller's
+          org, so another tenant's id resolves to not-found rather than their cluster.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Destroys a DOKS cluster by id and answers 204.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one cluster's detail: node pools + worker nodes. Visor scopes
+        the lookup to the org (a foreign or missing id resolves to not-found), so a tenant
+        can never read another tenant's cluster by guessing an id.
+      operationId: getKubernetesCluster
+      parameters:
+      - description: |-
+          ID is the provider's DOKS cluster id. Visor scopes the lookup to the caller's
+          org, so another tenant's id resolves to not-found rather than their cluster.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                doksClusterId: cl-1
+                kind: managed
+                name: prod
+                nodeCount: 1
+                nodePools:
+                - count: 1
+                  name: gpu
+                  poolId: p-1
+                  size: gpu-h100x8-640gb
+                nodeSize: gpu-h100x8-640gb
+                nodes:
+                - id: node-1
+                  name: node-1
+                  status: active
+                region: nyc3
+                status: running
+              schema:
+                $ref: '#/components/schemas/clusterDetailView'
+          description: ok
+      summary: 'Returns one cluster''s detail: node pools + worker nodes.'
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/k8s/nodes:
+    get:
+      description: |-
+        Returns every DOKS worker node in the org's clusters as a machine —
+        the SAME set the fleet folds in (managedMachines), exposed directly under the k8s
+        noun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.
+      operationId: listKubernetesNodes
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                nodes:
+                - id: node-1
+                  name: node-1
+                  region: nyc3
+                  status: active
+                  type: s-4vcpu-8gb
+                  vcpu: 4
+              schema:
+                $ref: '#/components/schemas/nodeList'
+          description: ok
+      summary: Returns every DOKS worker node in the org's clusters as a machine —
+        the SAME set the fleet folds in (managedMachines), exposed directly under
+        the k8s noun.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/machines:
+    get:
+      description: |-
+        Returns every machine the caller's org has — Visor's registry, the
+        live DigitalOcean droplets and the DOKS worker nodes (deduped into one union),
+        plus the BYO machines that dialed in via `hanzo link` (provider "byo").
+
+        A source Visor cannot answer for is logged and skipped, never an error: one
+        wedged upstream must not hide the machines the other sources can see.
+      operationId: listMachines
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                machines:
+                - id: web-1
+                  mem: 4 GB
+                  name: Web 1
+                  provider: digitalocean
+                  publicIp: 1.2.3.4
+                  region: sfo3
+                  status: running
+                  type: s-2vcpu-4gb
+                  vcpu: 2
+              schema:
+                $ref: '#/components/schemas/machineList'
+          description: ok
+      summary: Returns every machine the caller's org has — Visor's registry, the
+        live DigitalOcean droplets and the DOKS worker nodes (deduped into one union),
+        plus the BYO machines that dialed in via `hanzo link` (provider "byo").
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Provisions a machine owned by the caller's org and answers 201 with the machine. Send `dryRun: true` to get a PRICE QUOTE instead: 200 with the upstream quote passed through verbatim, nothing launched and nothing spent. Two response shapes on one address is the rule to know, and it is why this is not a typed op.
+
+        Metering is not this plane's: the launch fronts the compute provider's resell endpoint, which owns the balance gate and the per-hour meter, and cloud only forwards the tenant. Ownership is the validated principal's org and is never read from the body, so a launch always lands in the caller's OWN tenant and the machine it creates is only ever visible to that tenant. Fails closed: a validated principal is required (403 without one) and `size` (or its `instanceType` alias) is required (400).
+      operationId: post_visor_machines
+      summary: Launch a metered machine for your org, or price one first with dryRun
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+  /v1/visor/machines/{id}:
+    delete:
+      description: |-
+        Terminates one of the caller org's machines. Visor takes the
+        machine identity as owner+name, and the owner is the validated principal, so a
+        caller can only ever terminate its own tenant's machine. Answers 204.
+      operationId: deleteMachine
+      parameters:
+      - description: |-
+          ID is the machine's org-scoped NAME — the stable key Visor addresses a
+          machine by (owner/name), not the ephemeral provider id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Terminates one of the caller org's machines.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one of the caller org's machines by its org-scoped name.
+        Visor keys the lookup by owner/name, so an id belonging to another tenant
+        resolves to not-found rather than another org's machine.
+      operationId: getMachine
+      parameters:
+      - description: |-
+          ID is the machine's org-scoped NAME — the stable key Visor addresses a
+          machine by (owner/name), not the ephemeral provider id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                id: web-1
+                name: Web 1
+                publicIp: 1.2.3.4
+                region: sfo3
+                status: running
+                type: s-2vcpu-4gb
+                vcpu: 2
+              schema:
+                $ref: '#/components/schemas/machineView'
+          description: ok
+      summary: Returns one of the caller org's machines by its org-scoped name.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/machines/{id}/agent:
+    delete:
+      description: |-
+        Detaches the agent runtime from one of the caller org's
+        machines. The machine stays — this halts the bot, it does not terminate the
+        compute. Answers 204.
+      operationId: unbindMachineAgent
+      parameters:
+      - description: |-
+          ID is the machine's org-scoped NAME — the stable key Visor addresses a
+          machine by (owner/name), not the ephemeral provider id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Detaches the agent runtime from one of the caller org's machines.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns the agent binding of one of the caller org's
+        machines, or 404 when the machine runs no bot runtime.
+      operationId: getMachineAgent
+      parameters:
+      - description: |-
+          ID is the machine's org-scoped NAME — the stable key Visor addresses a
+          machine by (owner/name), not the ephemeral provider id.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                agentName: bot-a
+                botVersion: 1.4.0
+                machineId: drop-a
+                status: running
+              schema:
+                $ref: '#/components/schemas/agentBinding'
+          description: ok
+      summary: Returns the agent binding of one of the caller org's machines, or 404
+        when the machine runs no bot runtime.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Binds a cloud Agent to one of the caller org's machines: the
+        machine is recorded as running that Agent's @hanzo/bot runtime. The owning org is
+        the validated tenant, never a client field.
+      operationId: bindMachineAgent
+      parameters:
+      - description: ID is the machine to bind, from the URL path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              agentName: bot-a
+              botVersion: 1.4.0
+            schema:
+              $ref: '#/components/schemas/bindAgentReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                agentName: bot-a
+                machineId: drop-a
+                status: binding
+              schema:
+                $ref: '#/components/schemas/agentBinding'
+          description: ok
+      summary: 'Binds a cloud Agent to one of the caller org''s machines: the machine
+        is recorded as running that Agent''s @hanzo/bot runtime.'
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
+  /v1/visor/machines/agents:
+    get:
+      description: |-
+        Returns every agent↔machine binding in the caller's org — which
+        machines are running which cloud Agent, with vm's own reconciled status.
+      operationId: listMachineAgents
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                agentBindings:
+                - agentName: bot-a
+                  machineId: drop-a
+                  publicIp: 1.2.3.4
+                  status: running
+              schema:
+                $ref: '#/components/schemas/bindingList'
+          description: ok
+      summary: Returns every agent↔machine binding in the caller's org — which machines
+        are running which cloud Agent, with vm's own reconciled status.
+      tags:
+      - visor
+      x-app: visor
+      x-public: true
+      x-tool: true
   /v1/webhooks:
     get:
       description: |-

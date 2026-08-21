@@ -90,16 +90,16 @@ string prefix.
 | `/v1/registry` | Hanzo Registry: management plane over the running registries — oci.hanzo.ai (distribution, IAM token auth) + pkg.hanzo.ai (verdaccio); org-namespace listings + pull-token mint; control-plane only, the OCI wire stays on oci.hanzo.ai; Harbor-shaped authored intent stays refused in `apps/registry/typed_wire_test.go` | `apps/registry` | Shipped — 6 ops |
 | `/v1/auto` | Hanzo Auto: durable workflow automation (typed passthrough to the hanzoai/auto v2 service; flows CRUD + publish + durable runs on the tasks plane + piece catalog, org-scoped by the product's gateway-header contract; the rest of the 50-path authored intent stays refused in `apps/auto/typed_wire_test.go`) | `apps/auto` | Shipped — 11 ops |
 | `/v1/bots` | A bot RUN on a surface | `apps/bots` | Shipped — 4 ops |
-| `/v1/compute/bots` | A bot MACHINE (kind=bot + agent binding) | `apps/visor` — NOT `apps/bots` | Shipped — 5 ops |
+| `/v1/visor/compute/bots` | A bot MACHINE (kind=bot + agent binding) | `apps/visor` — NOT `apps/bots` | Shipped — 5 ops |
 | `/v1/tasks` | Durable engine | `apps/tasks` | Shipped — 11 ops |
-| `/v1/machines` `/v1/gpus` `/v1/fleet` `/v1/clusters` `/v1/k8s` `/v1/compute` | Compute: provisioned + BYO machines, GPUs, k8s clusters | `apps/visor` (+ `apps/fleet` registry) | Shipped — 33 ops |
+| `/v1/visor` | Compute you rent: provisioned + BYO machines, GPUs, k8s clusters, the fleet board | `apps/visor` (+ `apps/fleet` registry) | Shipped — 33 ops |
 | `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `apps/blueprint` | Shipped — 3 ops |
 | `/v1/templates` | Starter kits: ONE entry per template, shapes as variants | `apps/templates` | Shipped — 2 ops |
 | `/v1/iam` | Identity: users, orgs, roles | `apps/iam` | Shipped — GRAFTED (155 paths / 182 ops / 94 typed with schema; see below) |
 | `/v1/kms` | Secret custody: sealed secrets | `apps/kms` | Shipped — 7 ops |
 
-`/v1/bots` and `/v1/compute/bots` are two nouns with two owners; the row above
-pairs each with the package that REGISTERS it. Pairing `/v1/compute/bots` with
+`/v1/bots` and `/v1/visor/compute/bots` are two nouns with two owners; the row
+above pairs each with the package that REGISTERS it. Pairing the bot machine with
 `apps/bots` is the merge "Bot is three values" (below) exists to forbid.
 
 Custody invariants: secrets sealed in KMS, never in SQLite rows; verify before
@@ -116,14 +116,21 @@ Transport invariants: typed actions (`command|url|select|approval`), no raw
 string sniffing; pairing codes 8 chars, 1h TTL, max 3 pending per account,
 owner bootstrap on first approval.
 
-**`visor` is an agent name, not a query surface.** `apps/visor` OWNS the
-compute plane, but it serves it at the nouns above (`/v1/machines`,
-`/v1/clusters`, `/v1/gpus`, `/v1/fleet`, `/v1/k8s`, `/v1/compute`) — never under
-`/v1/visor`. The only live `/v1/visor` route is `GET /v1/visor/health`, and that
-one is not visor's: `serve.go` auto-mounts `/v1/<name>/health` for every
-subsystem that does not set `OwnsHealth`. So do not look for the fleet under
-`/v1/visor/*` and do not mount anything there — the node-side agent reports
-presence, and presence is read back at `/v1/fleet`.
+**The whole compute plane answers under `/v1/visor`.** `apps/visor` owns it and
+serves every noun of it one segment down: `/v1/visor/machines`,
+`/v1/visor/gpus`, `/v1/visor/clusters`, `/v1/visor/fleet`, `/v1/visor/k8s`,
+`/v1/visor/compute`. The six top-level roots those nouns used to sit at are
+GONE — six lines of `openapi/misfiled.txt` closed by fold (HIP-0139 §7.1), no
+aliases left behind — so an address that starts anywhere else is not visor's.
+The capability's name is the address and the package alike, which is what makes
+`VisorApi`, the `visor` MCP tool and `hanzo visor …` one name in nine
+projections (HIP-0139 §1, HIP-1172).
+
+The upstream service keeps its own spelling: cloud reads Visor at
+`/v1/machines`, `/v1/machines/launch`, `/v1/k8s/clusters`, `/v1/k8s/nodes` and
+friends through `apps/visor/client.go`. Those literals are the WIRE to
+`visor.hanzo.svc` and never move with our address — a `cl.call`/`cl.op` path in
+this package is upstream's, a `zip.Get(reg, …)` path is ours.
 
 Container boundary is permanent for native-module, host-filesystem, loop-state,
 and vendor-Node work (agent loop, exec/PTY, harnesses, browser, voice, codecs,
@@ -3352,7 +3359,7 @@ semantic is identical — fail closed once armed, allow before.
   (1) A bot RUN — a task the executor performs on a surface — is `apps/bots` at
   `/v1/bots` (3 ops: a 501 launch, list, stop). (2) A bot MACHINE — a
   visor-provisioned kind=bot machine plus its agent binding — is `apps/visor` at
-  `/v1/compute/bots` (apps/visor/bots.go); what it rents you is compute, so it
+  `/v1/visor/compute/bots` (apps/visor/bots.go); what it rents you is compute, so it
   nests in visor's domain. (3) The executor's own OPS FACE — the TS bot
   (channels/skills), never reimplemented in Go — is `apps/bots` at `/v1/bot/*`
   (apps/bots/relay.go), a verbatim relay carrying base address, identity, framing
@@ -3410,8 +3417,9 @@ semantic is identical — fail closed once armed, allow before.
   an `AgentBinding`'s own `status:"Pending"` as an envelope status, decides the
   upstream failed, and answers 502. Converted so far: a machine's AGENT
   (`GET /v1/machines/agents`, `PUT|GET|DELETE /v1/machines/:id/agent` — one
-  address, the method carrying the verb, the SAME address cloud publishes, so
-  there is no translation left to keep in step). `call` shrinks to zero as the
+  address, the method carrying the verb, the SAME shape cloud publishes one
+  segment down at `/v1/visor/machines/…`, so there is no translation left to
+  keep in step). `call` shrinks to zero as the
   migration finishes and goes with the last noun. Converting a visor route is a
   WIRE BREAK and lands with its cloud caller in the same change; visor's `LLM.md`
   ("Typed ops") is the other half of this note.
@@ -4448,7 +4456,7 @@ registration, and `TestRouterMatchesCommandTree` fails the moment the two disagr
 
 `hanzo status` is DELEGATED, and not by accident: it was implemented twice and the
 two disagreed. This binary's `newStatusCmd`/`runFleetStatus` called one endpoint,
-`GET /v1/fleet/workers` — whose server side (apps/visor `byoWorkers`) returns only
+`GET /v1/visor/fleet/workers` — whose server side (apps/visor `byoWorkers`) returns only
 BYO machines that dialled in — so it showed two laptops and none of the org's
 clusters or deployed applications; the fabric CLI's composes clusters +
 applications + workers, leads with whatever is unhealthy, and renders the same
