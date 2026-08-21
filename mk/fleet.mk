@@ -79,15 +79,16 @@ app = $(if $(wildcard $(ROOT)/apps/$1/Makefile), \
         $(MAKE) --no-print-directory -C $(ROOT)/apps/$1, \
         $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$1)
 
-# Apps that cannot project their own document without a live dependency. kafka's
-# Mount is fail-closed on a pubsub broker (apps/kafka/kafka.go), and a document is
-# a projection of ROUTES — it should not need a running message bus — so this is a
-# defect in the app, not a property of the gate. It is exempt BY NAME and prints
-# itself when skipped, rather than being silently passed over, and the exemption
-# is cheap to hold honest: kafka's subset declares zero paths, so it contributes
-# nothing to the fleet spec and has no drift it could hide. It goes away when the
-# adaptor moves out to hanzoai/stream.
-OPENAPI_NEEDS_BROKER := kafka
+# Apps that cannot project their own document without a live dependency. Both
+# wire adaptors are fail-closed on a pubsub broker at Mount (apps/kafka/kafka.go,
+# apps/amqp/amqp.go), and a document is a projection of ROUTES — it should not
+# need a running message bus — so this is a defect in the app, not a property of
+# the gate. They are exempt BY NAME and print themselves when skipped, rather
+# than being silently passed over, and the exemption is cheap to hold honest:
+# both subsets declare zero paths, so they contribute nothing to the fleet spec
+# and have no drift they could hide. It goes away when the adaptors move out to
+# hanzoai/stream.
+OPENAPI_NEEDS_BROKER := kafka amqp
 
 # Apps with NO STANDALONE MOUNT, DERIVED from the manifest rather than named.
 #
