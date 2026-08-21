@@ -6,9 +6,11 @@
 // serves goes red too, and the two ledgers must sum to the surface the live router
 // actually serves.
 //
-// ONE gate, because there is one capability. The node plane and the run plane each
-// carried their own copy of this file while they were two apps, which meant each
-// measured half a surface and neither could see a route that landed in the gap.
+// ONE gate over the WHOLE capability, which is what makes it a gate: the run
+// plane and the relay each measuring half a surface is how a route lands in the
+// gap between two ledgers and is counted by neither. The MACHINE plane is not
+// half of this one — it is a different capability with a gate of its own
+// (apps/nodes), which is the same argument, applied to the right boundary.
 package bots
 
 import (
@@ -29,27 +31,6 @@ import (
 // written the way the DOCUMENT writes them, which is the identity every projection
 // keys on.
 var untypedByDesign = map[string]string{
-	"GET /v1/nodes/connect": "a WebSocket UPGRADE. It answers 101 and the connection then carries " +
-		"duplex frames for the life of the node (NodeWS, ws.go). A typed op answers one marshalled " +
-		"value at one declared success status, and zip's WithStatus refuses a non-2xx — there is no " +
-		"Out that can express a socket.",
-
-	"POST /v1/nodes/{id}/invoke": "a refusal here is a 403 carrying a DOMAIN body — " +
-		"{\"error\":\"denied\",\"code\":…,\"reason\":…} — that a client switches on, returned both for " +
-		"the pre-flight system.run sanitize and for the node's own denial. A typed op's only refusal is " +
-		"a RETURNED error, which zip renders as its flat {status,code,error}; writing the body from " +
-		"inside the op does not escape it either, because a nil Out is stamped cmp.Or(op.Status, 204) " +
-		"over the 403. Same class as apps/ml's in-band 402 and task #78's multi-status responses. It " +
-		"also reads the caller's X-Device-Id (callerOf), which no In field may carry: a caller that " +
-		"could name its own device could pre-approve its own system.run.",
-
-	"POST /v1/nodes/peer/invoke": "a replica-to-replica machine hop served by a net/http handler " +
-		"(Registry.PeerHandler, registry.go). Its refusals are text/plain — 503 \"peer forwarding " +
-		"disabled\", 403 \"forbidden\", 405, 400 — while every zip error is JSON; it caps the forwarded " +
-		"body with http.MaxBytesReader, a bound a typed op cannot see; and its ORG arrives in the body, " +
-		"which is correct for a hop authenticated by a shared token and is exactly what an In field must " +
-		"never be on a caller-facing route.",
-
 	// The launch stub. Two facts, either one sufficient, and both re-read against
 	// the PINNED zip (v1.18.12) rather than inherited as prose.
 	//

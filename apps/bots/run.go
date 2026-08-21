@@ -1,4 +1,4 @@
-// run.go is a bot doing your work on a real desktop, live, while you watch.
+// Package bots is a bot doing your work on a real desktop, live, while you watch.
 //
 // It is the whole cloud side of the headless bot: the CONTROL PLANE for a bot run
 // — a task executed on a surface (a desktop or terminal sandbox the bot drives)
@@ -19,7 +19,8 @@
 // listing runs that do not exist and stopping runs never started.
 //
 // A bot run is ONE value with ONE home. It is not the bot MACHINE that hosts an
-// executor (/v1/visor/compute/bots — a machine you rent).
+// executor (/v1/visor/compute/bots — a machine you rent), and it is not a NODE
+// you already own and connect (apps/nodes, /v1/nodes).
 //
 // Isolation: the org is the gateway-minted X-Org-Id (HIP-0026) resolved via
 // principal.Org, NEVER a request field, and it is what cloud sends the executor,
@@ -47,6 +48,9 @@
 // over ZAP, and that swap is meant to be a change to transport.go plus each
 // caller's one stub, not a rewrite. apps/coding dispatches its coding tasks to the
 // same executor and uses the same Call.
+//
+// run.go is the run plane and this package's Mount; relay.go is the executor's
+// ops face; transport.go moves the bytes between them.
 package bots
 
 import (
@@ -170,18 +174,32 @@ type stopBotIn struct {
 // noArgs is the input of an op that takes none: no body, no query, no path param.
 type noArgs struct{}
 
+// Mount registers the whole /v1/bots surface: the run control plane, then the
+// relay. Order matters and specificity does not decide it for us — the run family
+// is static leaves and the relay is a greedy wildcard, so the wildcard goes last
+// and under its own segment, where it can never shadow a sibling above it.
+//
+// The MACHINE half is gone from here: a node is not a kind of bot, and it answers
+// under its own name in apps/nodes.
+func Mount(app cloud.Router, deps cloud.Deps) error {
+	if err := mountRunPlane(app, deps); err != nil {
+		return err
+	}
+	return mountRelay(app, deps)
+}
+
 // mountRunPlane wires the run control plane onto app. Mount (node.go) calls it:
 // one capability, three families, one entry point.
 func mountRunPlane(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("bot.Mount: nil app")
+		return fmt.Errorf("bots.Mount: nil app")
 	}
 	s := &cloud.Service[executor]{
-		Base:  cloud.NewBase(deps, "bot"),
+		Base:  cloud.NewBase(deps, "bots"),
 		State: executor{gateway: gatewayBase(), runtime: wire{}},
 	}
 	mountRuns(app, s)
-	s.Log.Info("bot run plane mounted", "gateway", s.State.gateway, "brand", deps.Brand)
+	s.Log.Info("run plane mounted", "gateway", s.State.gateway, "brand", deps.Brand)
 	return nil
 }
 

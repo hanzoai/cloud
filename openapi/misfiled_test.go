@@ -6,6 +6,7 @@ package openapi_test
 import (
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -109,8 +110,34 @@ func TestNoOperationIsMisfiled(t *testing.T) {
 		t.Logf("wrote %s (%d misfiled address/app pairs, was %d)", misfiledPath, len(kept), len(was))
 		return
 	}
-	if !reflect.DeepEqual([]string(was), []string(kept)) {
+	// slices.Equal, not reflect.DeepEqual: the two carry the same LINES or they
+	// do not, and a nil slice and an empty one are the same set of lines. DeepEqual
+	// says otherwise, and the one state where that difference exists is the state
+	// this ratchet is FOR — an empty file reads back as nil, a clean document
+	// measures as an empty slice, and the gate failed "carries 0 line(s)" the first
+	// time the fleet reached zero. A gate that cannot pass at its own goal is a
+	// gate that would have been switched off there.
+	if !slices.Equal(was, kept) {
 		t.Fatalf("%s carries %d line(s) the document no longer has — run `make openapi` and commit it:\n  %s",
 			misfiledPath, len(was)-len(kept), strings.Join(was, "\n  "))
+	}
+}
+
+// TestTheRatchetPassesAtZero pins the terminal state directly, because it is the
+// one the fleet is now IN and the one the gate has the least practice at: no
+// misfiled pairs measured, and a committed file that is all header. Both sides of
+// that comparison arrive by a different route to the same emptiness.
+func TestTheRatchetPassesAtZero(t *testing.T) {
+	clean, err := (openapi.Misfiled)(nil).Shrink(openapi.Misfile(filed(map[string]string{
+		"/v1/todo/projects": "todo",
+	})))
+	if err != nil {
+		t.Fatalf("a document with nothing misfiled was refused: %v", err)
+	}
+	if len(clean) != 0 {
+		t.Fatalf("Shrink = %v, want nothing", clean)
+	}
+	if !slices.Equal(openapi.Misfiled(nil), clean) {
+		t.Fatal("an empty file and a clean document compare unequal — the ratchet cannot reach zero")
 	}
 }
