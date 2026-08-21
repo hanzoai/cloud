@@ -5,7 +5,7 @@
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 675,
+  "skill_count": 676,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
@@ -1371,6 +1371,13 @@
       "path": "commerce_product/SKILL.md",
       "service": "commerce",
       "sha256": "879f195b3e64768519e47a212ff3d1a76cd0932599dfb9d46fc6e3298af2add6"
+    },
+    {
+      "description": "Read commerce rates: Every rate in the authority, or one product's.",
+      "name": "commerce_rates",
+      "path": "commerce_rates/SKILL.md",
+      "service": "commerce",
+      "sha256": "de6a89e8f81ac17a44eac0ca6546979ac9f2121d29f84146ec79f638a3d3b264"
     },
     {
       "description": "Read commerce return: List your org's returns, as a page, Fetch one return.",
