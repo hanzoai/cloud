@@ -1,0 +1,1155 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package link is the unified AI login manager's registry: the org+user-scoped record of WHICH provider accounts (Claude Max, ChatGPT Plus, a Hanzo API key, a raw provider key) a developer has signed into, ON WHICH MACHINES, with each account's latest usage snapshot.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "links"
+    }
+  ],
+  "paths": {
+    "/v1/links": {
+      "get": {
+        "operationId": "get_links",
+        "summary": "Lists your linked accounts and the devices they sit on.",
+        "description": "Lists your linked accounts and the devices they sit on.\n\nIt answers the caller's own links plus a devices projection of the same rows\nfolded per machine — the cross-machine \"AI Providers / Accounts\" view. A\ndevice is a projection, not a stored entity: its labels come from its\nmost-recently-seen account, so there is no device to create and none to\ngarbage-collect. Revoked links are INCLUDED rather than dropped, because a\nlogged-out account keeps its usage history and audit trail. Scoped to the\ncaller: a validated principal and a non-empty org, else 403.",
+        "tags": [
+          "links"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/linkList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_links",
+        "summary": "Registers a signed-in AI provider account on a machine.",
+        "description": "Registers a signed-in AI provider account on a machine.\n\nIt records that a developer has signed into one provider account on one\nmachine — a Claude Max or ChatGPT Plus subscription, a Hanzo key, a raw\nprovider key — and answers 201 with the stored link. Re-reporting the same\n(machine, provider, account) UPDATES that link rather than creating a second,\nso a collector may call this on every heartbeat. machine and provider are\nrequired (400 otherwise), as is a valid kind, and every field is\nlength-bounded. Scoped to the caller: a validated principal and a non-empty\norg, else 403, so a caller writes only their OWN accounts within their own org.",
+        "tags": [
+          "links"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/enrollReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/linkView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/links/devices/{machine}": {
+      "get": {
+        "operationId": "get_links_devices_by_machine",
+        "summary": "Shows one machine: its accounts, usage and live sessions.",
+        "description": "Shows one machine: its accounts, usage and live sessions.\n\nIt answers one device — its host and OS labels, every account the caller has\nsigned in on that machine with its latest usage, and how many agent sessions\nthe caller currently has running on it. The device labels come from the\nmost-recently-seen account, since a device is a projection of its links rather\nthan a row of its own. A machine with none of the caller's accounts is 404,\nwhich is also the answer when the machine belongs to someone else — the scope\nmakes the two indistinguishable, deliberately. The session count reports 0\nwhere the agent plane is not mounted rather than failing the read.",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "description": "Machine is the machine to act on, from the path. It is scoped to the\ncaller, so a machine with none of the caller's accounts is a 404.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deviceView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/links/devices/{machine}/revoke": {
+      "post": {
+        "operationId": "post_links_devices_by_machine_revoke",
+        "summary": "Logs out every account on one machine and stops its sessions.",
+        "description": "Logs out every account on one machine and stops its sessions.\n\nIt revokes every one of the caller's accounts on one machine and stops the\nagent sessions they were running, answering with how many of each. This is the\n\"I lost that laptop\" button. Revoked links are RETAINED, not deleted, so usage\nhistory and the audit trail survive a log-out — the rows come back in the\nresponse with their new status. The session stop reaches only the REVOKING\nuser's own sessions, so a shared machine name can never be used to stop a\nco-tenant's work, and a stop that fails does not fail the revoke: the revoked\nrow is the durable truth and the count then honestly reports fewer. A machine\nwith nothing left to revoke is 404.",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "description": "Machine is the machine to act on, from the path. It is scoped to the\ncaller, so a machine with none of the caller's accounts is a 404.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/revokeResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/links/route": {
+      "get": {
+        "operationId": "get_links_route",
+        "summary": "Gets the failover order across your linked accounts.",
+        "description": "Gets the failover order across your linked accounts.\n\nIt answers an ordered redundancy plan over the caller's LINKED (not revoked)\naccounts: each candidate with its remaining rate-limit headroom, whether it is\nroutable right now, how it BILLS (plan or commerce), and a reason when it is\nnot — plus the primary to try first. It is what lets a router fail over from\none subscription to another and fall back to the metered API as the\nalways-available backstop, knowing the cost consequence before it dials.\n\nIt is POLICY, not execution: the plan is computed purely from the usage\nsnapshots already in the registry, never by probing a provider, so it is a\ntotal function of the links and costs nothing to ask for. Actually dialing,\ndetecting a live 429 and advancing to the next candidate belongs to the\ncaller. A link with no snapshot counts as full headroom.",
+        "tags": [
+          "links"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutePlan"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/links/usage": {
+      "get": {
+        "operationId": "get_links_usage",
+        "summary": "Shows one provider account's own usage dashboard.",
+        "description": "Shows one provider account's own usage dashboard.\n\nIt answers the time series for a SINGLE provider account — the windows in\nrange plus the currently-open ones — as that provider's own meter reported it:\n\"my plan is 47% through its 6h window, resets at 14:20\". current is the newest\ninstance of each lane (the headline); windows is the history behind it, both\ncomputed from ONE deduped read. provider is required; an unknown window class\nor range is 400, never a quiet fallback to a different one. When no series is\navailable the response is a 200 with available:false and empty lists — an\nhonest \"we have no data\", which is a different claim from zero usage.",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "description": "Provider is the provider whose meter to read. Required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "description": "Account narrows to one account when a user has several with the provider.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Window selects a window class: 6h, day, week or month. Empty reads all.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the period, one of 1h, 24h, 7d or 30d; empty means 24h, and an\nunknown label is 400, never a quiet fallback.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/boardResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_links_usage",
+        "summary": "Reports usage samples from the device collector.",
+        "description": "Reports usage samples from the device collector.\n\nIt ingests a batch of usage samples and answers with how many were accepted,\nwhether history was durably stored, and the links they refreshed. A report\nalso REFRESHES one link per distinct (machine, provider, account) it names, so\na running collector keeps the accounts overview current without a separate\nregistration call.\n\nA caller can only ever report for THEMSELVES: org and subject come from the\nvalidated bearer, never from the body, so no sample can be attributed to\nanother user or tenant. History is FAIL-SOFT and stored says which happened —\na warehouse outage still accepts the report and refreshes the links rather\nthan failing the device, and answers 202 either way. Send either one sample\ninline or up to 256 in samples; an empty batch or an over-long one is 400, as\nis a provider, window class or kind outside the closed vocabulary — an\nunrecognized window is refused rather than rewritten, because a silently\nreclassified sample would fill a dashboard with a class nobody reported.",
+        "tags": [
+          "links"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ingestReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ingestResp"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/links/usage/accounts": {
+      "get": {
+        "operationId": "get_links_usage_accounts",
+        "summary": "Breaks down what the gateway routed through each of your accounts.",
+        "description": "Breaks down what the gateway routed through each of your accounts.\n\nIt answers one row per linked account the GATEWAY actually routed through,\nplus their total — requests, prompt and completion tokens, and cost. This is\nthe routed ledger, the read twin of the counter the router writes, and it is\ndistinct from both of its neighbours: not the device collector's plan\nsnapshots, and not the org money ledger. The source and scope fields on the\nresponse say so on every payload. The same shape answers in the billing\nnamespace, from one shaping function, so the two mounts cannot drift.",
+        "tags": [
+          "links"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsUsage"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/links/usage/summary": {
+      "get": {
+        "operationId": "get_links_usage_summary",
+        "summary": "Shows plan consumption and Hanzo spend side by side.",
+        "description": "Shows plan consumption and Hanzo spend side by side.\n\nIt answers the global usage board over one window: the caller's own linked\naccounts, metered from each provider's own login, alongside their org's\nHanzo-routed inference. These come from different ledgers and mean different\nthings, so every row is LABELLED by source, by scope and by availability, and\nTHE TWO ARE NEVER SUMMED — a plan's percentage is not money, and a provider's\nown spend is not a Hanzo charge. The rows sit side by side and say what they\nare.\n\nOne resolver fixes the window for both halves, so the two sets always cover\nthe same period. range is one of 1h, 24h, 7d or 30d and defaults to 24h;\nanything else is 400 rather than a silent substitution. A ledger that cannot\nanswer reports available:false instead of a zero that would read as \"no usage\".",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the period, one of 1h, 24h, 7d or 30d; empty means 24h, and an\nunknown label is 400, never a silent substitution.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/summaryResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/links/{id}": {
+      "delete": {
+        "operationId": "delete_links_by_id",
+        "summary": "Logs out one account and stops the sessions it was running.",
+        "description": "Logs out one account and stops the sessions it was running.\n\nIt revokes a single linked account and stops the agent sessions that ran under\nit, answering with the revoked row and how many sessions stopped. The link is\nRETAINED with a revoked status rather than deleted, so its usage history and\nthe audit trail survive the log-out — which also means a revoked account still\nappears in the list, and is excluded from the route plan rather than absent\nfrom it. The session stop is narrowed to the revoking user's own sessions on\nthat device, provider and account, and a stop that fails does not fail the\nrevoke: the revoked row is the durable truth. An id that does not exist, or\nbelongs to another user or org, is the same 404.",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the link to act on, from the path. It is scoped to the caller, so\nanother user's or org's id is a 404.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/revokeResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_links_by_id",
+        "summary": "Reads one linked account.",
+        "description": "Reads one linked account.\n\nIt answers a single link — its device, provider, account, plan, how it bills,\nits status and its latest usage snapshot. An id that does not exist, or\nbelongs to another user or org, is the same 404: the scope is a bound\npredicate on the read, so a wrong id and a foreign id are indistinguishable\nand neither confirms the other's existence. The static paths on this\ncollection — route, usage, devices — register before this one and win\nfirst-match, so a link whose id collided with one of those words could not be\naddressed here.",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the link to act on, from the path. It is scoped to the caller, so\nanother user's or org's id is a 404.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/linkView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccountsTotal": {
+        "properties": {
+          "accounts": {
+            "description": "Accounts is how many linked accounts the total folds.",
+            "type": "integer"
+          },
+          "completionTokens": {
+            "description": "CompletionTokens is the total completion-token count.",
+            "type": "integer"
+          },
+          "costCents": {
+            "description": "CostCents is the total cost in cents.",
+            "type": "integer"
+          },
+          "promptTokens": {
+            "description": "PromptTokens is the total prompt-token count.",
+            "type": "integer"
+          },
+          "requests": {
+            "description": "Requests is the total request count the gateway routed.",
+            "type": "integer"
+          },
+          "totalTokens": {
+            "description": "TotalTokens is the total token count.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AccountsUsage": {
+        "properties": {
+          "accounts": {
+            "description": "Accounts is one row per linked account the gateway actually routed through.",
+            "items": {
+              "$ref": "#/components/schemas/RoutedUsage"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "description": "Scope is always \"user\": the caller's own linked accounts.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is always \"routed\": the gateway's own routed ledger.",
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/AccountsTotal",
+            "description": "Total is the honest sum across the rows."
+          }
+        },
+        "type": "object"
+      },
+      "RouteCandidate": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider-side account identifier.",
+            "type": "string"
+          },
+          "available": {
+            "description": "Available reports whether the candidate is routable right now.",
+            "type": "boolean"
+          },
+          "billing": {
+            "description": "Billing is the cost consequence of dialing this candidate: plan (the\nuser's own subscription) or commerce (the metered gateway path).",
+            "type": "string"
+          },
+          "headroomPct": {
+            "description": "HeadroomPct is the remaining rate-limit capacity, 0..100. A link with no\nsnapshot counts as full headroom.",
+            "type": "number"
+          },
+          "host": {
+            "description": "Host is that machine's hostname label.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is how the account authenticates: subscription or apikey.",
+            "type": "string"
+          },
+          "linkId": {
+            "description": "LinkID is the underlying link's opaque handle.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the machine the account is signed in on.",
+            "type": "string"
+          },
+          "plan": {
+            "description": "Plan is the provider plan label the account is on.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the AI provider the candidate account belongs to.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason says why the candidate is not routable, when Available is false.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RoutePlan": {
+        "properties": {
+          "candidates": {
+            "description": "Candidates is every linked account in preference order: subscriptions\nfirst, then metered api-key accounts as the backstop.",
+            "items": {
+              "$ref": "#/components/schemas/RouteCandidate"
+            },
+            "type": "array"
+          },
+          "generatedAt": {
+            "description": "GeneratedAt is when the plan was computed, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "primary": {
+            "$ref": "#/components/schemas/RouteCandidate",
+            "description": "Primary is the first available candidate; absent when every account is\nrate-limited."
+          }
+        },
+        "type": "object"
+      },
+      "RoutedUsage": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider-side account identifier.",
+            "type": "string"
+          },
+          "billing": {
+            "description": "Billing is how the routed inference bills: plan or commerce.",
+            "type": "string"
+          },
+          "completionTokens": {
+            "description": "CompletionTokens is the routed completion-token count.",
+            "type": "integer"
+          },
+          "costCents": {
+            "description": "CostCents is the routed cost in cents.",
+            "type": "integer"
+          },
+          "kind": {
+            "description": "Kind is how the account authenticates: subscription or apikey.",
+            "type": "string"
+          },
+          "promptTokens": {
+            "description": "PromptTokens is the routed prompt-token count.",
+            "type": "integer"
+          },
+          "provider": {
+            "description": "Provider is the AI provider the row's account belongs to.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is how many requests the gateway routed through this account.",
+            "type": "integer"
+          },
+          "totalTokens": {
+            "description": "TotalTokens is the routed total token count.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "boardResp": {
+        "properties": {
+          "account": {
+            "description": "Account is the account the series narrows to, when one was named.",
+            "type": "string"
+          },
+          "available": {
+            "description": "Available reports whether the warehouse answered; false is an honest \"we\nhave no data\", NOT zero usage.",
+            "type": "boolean"
+          },
+          "current": {
+            "description": "Current is the live state of each lane — the dash headline.",
+            "items": {
+              "$ref": "#/components/schemas/readingView"
+            },
+            "type": "array"
+          },
+          "from": {
+            "description": "From is when the resolved window opens, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the provider whose meter answered.",
+            "type": "string"
+          },
+          "range": {
+            "description": "Range is the resolved period label.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope is always \"user\": the caller's own linked accounts.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is always \"account\": the provider's own meter, not a Hanzo charge.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is where it closes, EXCLUSIVE, RFC 3339 UTC — the instant the read was\nserved, so the window walks forward with the clock and two reads a minute\napart do not cover the same period.",
+            "type": "string"
+          },
+          "windows": {
+            "description": "Windows is every window instance in range, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/readingView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "deviceView": {
+        "properties": {
+          "accounts": {
+            "description": "Accounts is every account the caller has signed in on this machine.",
+            "items": {
+              "$ref": "#/components/schemas/linkView"
+            },
+            "type": "array"
+          },
+          "activeSessions": {
+            "description": "ActiveSessions is how many agent sessions the caller currently has running\non this machine; 0 where the agent plane is not mounted.",
+            "type": "integer"
+          },
+          "host": {
+            "description": "Host is the machine's hostname label, from its most-recently-seen account.",
+            "type": "string"
+          },
+          "lastSeen": {
+            "description": "LastSeen is when any account on this machine last reported, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the stable machine identifier.",
+            "type": "string"
+          },
+          "os": {
+            "description": "OS is the machine's operating system label.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "enrollReq": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider-side account identifier.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the machine's human hostname label.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind decides how the account's inference BILLS and defaults to\nsubscription: a subscription account bills the user's own monthly plan and\nis metered here for visibility only, while an apikey account bills through\ncommerce on the gateway path.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the stable machine identifier. Required, length-bounded.",
+            "type": "string"
+          },
+          "os": {
+            "description": "OS is the machine's operating system label.",
+            "type": "string"
+          },
+          "plan": {
+            "description": "Plan is the provider plan label (e.g. \"Claude Max\").",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the AI provider the account belongs to. Required, length-bounded.",
+            "type": "string"
+          },
+          "usage": {
+            "description": "Usage is an optional usage snapshot, clamped and re-serialized to known\nfields; omitting it keeps the last good one."
+          }
+        },
+        "type": "object"
+      },
+      "ingestReq": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "cachedInputTokens": {
+            "type": "integer"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "costLimitCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "inputTokens": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lane": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "outputTokens": {
+            "type": "integer"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "resetsAt": {
+            "type": "string"
+          },
+          "samples": {
+            "description": "Samples is the batch form, up to 256 samples; leave it empty to send one\nsample inline on the same fields.",
+            "items": {
+              "$ref": "#/components/schemas/readingReq"
+            },
+            "type": "array"
+          },
+          "synthetic": {
+            "type": "boolean"
+          },
+          "totalTokens": {
+            "type": "integer"
+          },
+          "usedPct": {
+            "type": "number"
+          },
+          "window": {
+            "type": "string"
+          },
+          "windowMinutes": {
+            "type": "integer"
+          },
+          "windowStart": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ingestResp": {
+        "properties": {
+          "accepted": {
+            "description": "Accepted is how many samples this report landed.",
+            "type": "integer"
+          },
+          "links": {
+            "description": "Links is the link row each distinct (machine, provider, account) in the\nbatch refreshed.",
+            "items": {
+              "$ref": "#/components/schemas/linkView"
+            },
+            "type": "array"
+          },
+          "stored": {
+            "description": "Stored reports whether history was durably written; false means the\nwarehouse was unavailable and only the link rows were refreshed.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "linkList": {
+        "properties": {
+          "devices": {
+            "description": "Devices is the same rows folded per machine — the cross-machine \"AI\nProviders / Accounts\" view.",
+            "items": {
+              "$ref": "#/components/schemas/deviceView"
+            },
+            "type": "array"
+          },
+          "links": {
+            "description": "Links is every link the caller registered, newest first. Revoked links are\nINCLUDED rather than dropped, because a logged-out account keeps its usage\nhistory and audit trail.",
+            "items": {
+              "$ref": "#/components/schemas/linkView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "linkView": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider-side account identifier, when the collector knows it.",
+            "type": "string"
+          },
+          "billing": {
+            "description": "Billing is how this account's inference bills — plan (the user's own\nsubscription, metered here for visibility only) or commerce (the gateway\npath). Derived from Kind, never stored.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the link was first registered, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the machine's human hostname label, from its most recent report.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the link's opaque handle (\"link_\" + 32 hex chars).",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is how the account authenticates: subscription or apikey.",
+            "type": "string"
+          },
+          "lastSeen": {
+            "description": "LastSeen is when the account last reported, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the stable machine identifier the collector reports.",
+            "type": "string"
+          },
+          "os": {
+            "description": "OS is the machine's operating system label.",
+            "type": "string"
+          },
+          "plan": {
+            "description": "Plan is the provider plan label (e.g. \"Claude Max\").",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the AI provider this account belongs to (claude, openai, hanzo…).",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is linked or revoked. Revoked rows are retained for history.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the link was last refreshed, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "usage": {
+            "description": "Usage is the last good usage snapshot, clamped and re-serialized to known\nfields at ingest."
+          },
+          "user": {
+            "description": "User is the owning subject — the validated caller who registered the link.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "readingReq": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider-side account the sample belongs to.",
+            "type": "string"
+          },
+          "cachedInputTokens": {
+            "description": "CachedInputTokens is the window's cached-prompt-token count.",
+            "type": "integer"
+          },
+          "confidence": {
+            "description": "Confidence says how real the counters are, as the meter graded itself.",
+            "type": "string"
+          },
+          "costCents": {
+            "description": "CostCents is the window's spend in cents, as the provider's meter states it.",
+            "type": "integer"
+          },
+          "costLimitCents": {
+            "description": "CostLimitCents is the window's spend cap in cents, when the meter knows one.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the ISO currency the cost fields are stated in.",
+            "type": "string"
+          },
+          "inputTokens": {
+            "description": "InputTokens is the window's prompt-token count.",
+            "type": "integer"
+          },
+          "kind": {
+            "description": "Kind is subscription or apikey; anything else is refused.",
+            "type": "string"
+          },
+          "lane": {
+            "description": "Lane names the meter's own lane label for this measurement.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the machine the collector observed the account on. Required.",
+            "type": "string"
+          },
+          "outputTokens": {
+            "description": "OutputTokens is the window's completion-token count.",
+            "type": "integer"
+          },
+          "plan": {
+            "description": "Plan is the provider plan label the account is on.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the AI provider whose meter reported this sample. Required.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is the window's request count.",
+            "type": "integer"
+          },
+          "resetsAt": {
+            "description": "ResetsAt is when the window resets, RFC 3339, bounded.",
+            "type": "string"
+          },
+          "synthetic": {
+            "description": "Synthetic marks a sample the collector derived rather than observed.",
+            "type": "boolean"
+          },
+          "totalTokens": {
+            "description": "TotalTokens is the window's total token count.",
+            "type": "integer"
+          },
+          "usedPct": {
+            "description": "UsedPct is how much of the window's allowance is consumed, clamped 0..100.",
+            "type": "number"
+          },
+          "window": {
+            "description": "Window is the window class, one of 6h, day, week, month; anything else is\nrefused rather than silently reclassified.",
+            "type": "string"
+          },
+          "windowMinutes": {
+            "description": "WindowMinutes is the window's length as the meter reported it.",
+            "type": "integer"
+          },
+          "windowStart": {
+            "description": "WindowStart is when the measured window opened, RFC 3339, bounded to a\nsane interval around now.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "readingView": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider-side account the sample belongs to.",
+            "type": "string"
+          },
+          "cachedInputTokens": {
+            "description": "CachedInputTokens is the window's cached-prompt-token count.",
+            "type": "integer"
+          },
+          "confidence": {
+            "description": "Confidence says whether the counters that remain mean anything, as the\nmeter graded itself.",
+            "type": "string"
+          },
+          "costCents": {
+            "description": "CostCents is the window's spend in cents, as the provider's meter states it.",
+            "type": "integer"
+          },
+          "costLimitCents": {
+            "description": "CostLimitCents is the window's spend cap in cents, when the meter knows one.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the ISO currency the cost fields are stated in.",
+            "type": "string"
+          },
+          "inputTokens": {
+            "description": "InputTokens is the window's prompt-token count.",
+            "type": "integer"
+          },
+          "lane": {
+            "description": "Lane names the meter's own lane label for this measurement.",
+            "type": "string"
+          },
+          "machine": {
+            "description": "Machine is the machine the collector observed the account on.",
+            "type": "string"
+          },
+          "outputTokens": {
+            "description": "OutputTokens is the window's completion-token count.",
+            "type": "integer"
+          },
+          "plan": {
+            "description": "Plan is the provider plan label the account is on.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is the window's request count.",
+            "type": "integer"
+          },
+          "resetsAt": {
+            "description": "ResetsAt is when the window resets, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "synthetic": {
+            "description": "Synthetic marks a sample the collector derived rather than observed.",
+            "type": "boolean"
+          },
+          "totalTokens": {
+            "description": "TotalTokens is the window's total token count.",
+            "type": "integer"
+          },
+          "usedPct": {
+            "description": "UsedPct is how much of the window's allowance is consumed, 0..100.",
+            "type": "number"
+          },
+          "window": {
+            "description": "Window is the window class: 6h, day, week or month.",
+            "type": "string"
+          },
+          "windowMinutes": {
+            "description": "WindowMinutes is the window's length as the meter reported it.",
+            "type": "integer"
+          },
+          "windowStart": {
+            "description": "WindowStart is when the measured window opened, RFC 3339 UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "revokeResp": {
+        "properties": {
+          "links": {
+            "description": "Links is each revoked row with its new status — retained, not deleted, so\nusage history and the audit trail survive the log-out.",
+            "items": {
+              "$ref": "#/components/schemas/linkView"
+            },
+            "type": "array"
+          },
+          "revoked": {
+            "description": "Revoked is how many links this call revoked.",
+            "type": "integer"
+          },
+          "sessionsStopped": {
+            "description": "SessionsStopped is how many of the caller's own agent sessions stopped. A\nstop that fails does not fail the revoke, so this may honestly report fewer.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sourceState": {
+        "properties": {
+          "available": {
+            "description": "Available reports whether this ledger answered; false is honest\n\"unavailable\", never a zero that would read as no usage.",
+            "type": "boolean"
+          },
+          "note": {
+            "description": "Note says in prose what the ledger's numbers mean.",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Scope is whose usage the ledger measures: user or org.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the table of record behind the ledger.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "summaryResp": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/sourceState",
+            "description": "Account reports the linked-accounts ledger's own availability, so a partial\nanswer never fabricates this half. It is scoped to the CALLER: the accounts\nthey linked, metered from each provider's own login."
+          },
+          "from": {
+            "description": "From is when the window opens, RFC 3339 UTC. ONE resolver fixes it for both\nledgers, so the account rows and the Hanzo rows always cover the same period\n— two resolvers could drift and turn the union into a lie.",
+            "type": "string"
+          },
+          "hanzo": {
+            "$ref": "#/components/schemas/sourceState",
+            "description": "Hanzo reports the same for the Hanzo-routed ledger, which is scoped to the\nORG rather than the caller — a different question over the same window. The\ntwo are independent: either can be unavailable while the other answers, and\nRows then carries only the half that did."
+          },
+          "range": {
+            "description": "Range is the resolved period label.",
+            "type": "string"
+          },
+          "rows": {
+            "description": "Rows is the union of both ledgers, each row labelled by source and scope —\nconcatenated, NEVER summed: a plan's percentage is not money.",
+            "items": {
+              "$ref": "#/components/schemas/totalView"
+            },
+            "type": "array"
+          },
+          "to": {
+            "description": "To is where the window closes, EXCLUSIVE, RFC 3339 UTC — the instant the read\nwas served. Shared by both ledgers, for the reason From gives.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "totalView": {
+        "properties": {
+          "confidence": {
+            "description": "Confidence says how real the row's numbers are.",
+            "type": "string"
+          },
+          "costCents": {
+            "description": "CostCents is the period's spend in cents, in the row's own ledger.",
+            "type": "integer"
+          },
+          "provider": {
+            "description": "Provider is the provider the row totals.",
+            "type": "string"
+          },
+          "requests": {
+            "description": "Requests is the period's request count.",
+            "type": "integer"
+          },
+          "scope": {
+            "description": "Scope is whose usage the row measures: user or org.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is whose meter the row came from: account or hanzo.",
+            "type": "string"
+          },
+          "tokens": {
+            "description": "Tokens is the period's total token count.",
+            "type": "integer"
+          },
+          "usedPct": {
+            "description": "UsedPct is the plan consumption percentage, on the account side.",
+            "type": "number"
+          },
+          "window": {
+            "description": "Window is the window class the row totals, on the account side.",
+            "type": "string"
+          },
+          "windows": {
+            "description": "Windows is how many window instances the row folds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

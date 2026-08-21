@@ -19,7 +19,6 @@
 package benchmark
 
 import (
-	"time"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -29,6 +28,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"

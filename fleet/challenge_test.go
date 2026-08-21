@@ -71,9 +71,9 @@ func TestACredentiallessCallAtTheEdgeIsChallenged(t *testing.T) {
 	// — the door validates nothing. Past the door, the only subsystem is nowhere,
 	// so the answer is the door's own -32602 and a 200.
 	for name, h := range map[string]map[string]string{
-		"a bearer":        {"Authorization": "Bearer x"},
+		"a bearer":         {"Authorization": "Bearer x"},
 		"the alt spelling": {"X-Authorization": "Bearer x"},
-		"a session":       {"Cookie": "session=x"},
+		"a session":        {"Cookie": "session=x"},
 	} {
 		code, _, body := post(t, app, manifest.MCPPath, callWithoutTool, h)
 		if code != 200 || !strings.Contains(body, "-32602") {

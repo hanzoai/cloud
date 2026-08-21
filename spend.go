@@ -325,7 +325,7 @@ var meteredApps = []string{
 	"compliance",   // one identity inquiry opened at the vendor, on the deployment's key.
 	"content",      // studio renders (GPU).
 	"crawl",        // the browser render a thin page escalates to; the static fetch is free.
-	"dataset",      // the scan that materialises a set, priced per source row read.
+	"datasets",     // the scan that materialises a set, priced per source row read.
 	"domain",       // registrations, renewals and transfers, at the registrar's price.
 	"exec",         // one program run in a sandbox.
 	"flow",         // flow executions.
