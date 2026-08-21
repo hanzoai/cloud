@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/manifest"
+	"sigs.k8s.io/yaml"
 )
 
 // TestCatalogIsTheSpecs proves the catalog says what the per-app specs say.
@@ -20,11 +21,18 @@ import (
 // the link between the two: regenerate the specs without regenerating the
 // catalog and the door would publish an operation set the fleet no longer
 // serves — the exact way the hand-kept catalogue this replaced went stale.
+//
+// The AUDIENCE is read off public.yaml and not off the subset, for the reason
+// gen-fleet-catalog states: a subset's x-public is what an app could derive about
+// itself, and the stage (HIP-0139 §8) is a fleet fact it cannot see. Asking the
+// subset here would demand of the catalog every beta operation the contract
+// leaves out.
 func TestCatalogIsTheSpecs(t *testing.T) {
 	specs, err := filepath.Glob(filepath.Join("..", "plugin", "*", "openapi.json"))
 	if err != nil || len(specs) == 0 {
 		t.Skipf("no plugin specs to compare against (%v)", err)
 	}
+	published := contract(t)
 
 	want := map[string][]string{}
 	for _, path := range specs {
@@ -41,9 +49,6 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 				// catalog carries what a child ANSWERS TO, so an unfiltered
 				// `want` reads the dispatchable catalog as permanently stale.
 				Tool bool `json:"x-tool"`
-				// x-public, the audience openapi.stamp derived; the door offers the
-				// public contract and nothing beside it, so the catalog carries only it.
-				Public bool `json:"x-public"`
 			} `json:"paths"`
 		}
 		if err := json.Unmarshal(raw, &doc); err != nil {
@@ -53,7 +58,7 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 		seen := map[string]bool{}
 		for _, methods := range doc.Paths {
 			for method, op := range methods {
-				if method == "parameters" || op.OperationID == "" || !op.Tool || !op.Public || seen[op.OperationID] {
+				if method == "parameters" || op.OperationID == "" || !op.Tool || !published[op.OperationID] || seen[op.OperationID] {
 					continue
 				}
 				seen[op.OperationID] = true
@@ -95,6 +100,40 @@ func TestCatalogIsTheSpecs(t *testing.T) {
 			}
 		}
 	}
+}
+
+// contract is every operationId in the published contract, read off public.yaml
+// — the same set gen-fleet-catalog reads, from the same file, because the two
+// must be asking one question. It is small enough to state twice and the second
+// statement is what makes this a check rather than a restatement of the
+// generator's own bookkeeping.
+func contract(t *testing.T) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "public.yaml"))
+	if err != nil {
+		t.Fatalf("read public.yaml: %v — run `make -f mk/fleet.mk openapi`", err)
+	}
+	var doc struct {
+		Paths map[string]map[string]struct {
+			OperationID string `json:"operationId"`
+		} `json:"paths"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse public.yaml: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, methods := range doc.Paths {
+		for method, op := range methods {
+			if method == "parameters" || op.OperationID == "" {
+				continue
+			}
+			ids[op.OperationID] = true
+		}
+	}
+	if len(ids) == 0 {
+		t.Fatal("public.yaml names no operation — every comparison below would pass by being empty")
+	}
+	return ids
 }
 
 // TestListingStartsNothing is the property the catalog exists for: asking what
