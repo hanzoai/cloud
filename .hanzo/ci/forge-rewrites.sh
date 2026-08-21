@@ -31,6 +31,27 @@
 # must hash to the line already committed, or the build fails loudly.
 set -euo pipefail
 
+# WITHOUT A TOKEN, ASK THE IDENTITY PROVIDER FOR ONE. The forge signs people in
+# through Hanzo IAM and accepts the same identity as a git credential, so a run that
+# already holds a client credential does not need a second, longer-lived secret kept
+# somewhere for this. The token is minted per run, scoped by RFC 8707 `resource` to
+# this forge alone, and never stored: a token naming another application is not a
+# credential here, and this one is not a credential anywhere else.
+if [ -z "${GIT_TOKEN:-}" ] && [ -n "${IAM_CLIENT_ID:-}" ] && [ -n "${IAM_CLIENT_SECRET:-}" ]; then
+  # client_secret_basic, per HIP-0111, the same exchange the reviewer already makes.
+  GIT_TOKEN=$(curl -sS --max-time 20 "${IAM_ISSUER:-https://hanzo.id}/v1/iam/oauth/token" \
+    -u "${IAM_CLIENT_ID}:${IAM_CLIENT_SECRET}" \
+    -d 'grant_type=client_credentials' \
+    -d "resource=${FORGE_AUDIENCE:-hanzo-git}" 2>/dev/null \
+    | jq -r '.access_token // empty' 2>/dev/null || true)
+  if [ -n "${GIT_TOKEN:-}" ]; then
+    echo "::add-mask::${GIT_TOKEN}"
+    echo "forge-rewrites: minted a forge-scoped IAM token for ${FORGE_AUDIENCE:-hanzo-git}"
+  else
+    echo "forge-rewrites: IAM minted no token — modules stay on GitHub"
+  fi
+fi
+
 [ -n "${GIT_TOKEN:-}" ] || { echo "forge-rewrites: no GIT_TOKEN — every module stays on GitHub"; exit 0; }
 
 mods=$(sed -nE 's|^[[:space:]]+github\.com/hanzoai/([A-Za-z0-9._-]+) .*|\1|p' go.mod | sort -u)
@@ -39,7 +60,7 @@ mods=$(sed -nE 's|^[[:space:]]+github\.com/hanzoai/([A-Za-z0-9._-]+) .*|\1|p' go
 on=""; off=""
 for m in $mods; do
   code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
-    -H "Authorization: token ${GIT_TOKEN}" \
+    -u "x:${GIT_TOKEN}" \
     "https://git.hanzo.ai/v1/repos/hanzoai/${m}" 2>/dev/null || echo 000)
   if [ "$code" = "200" ]; then
     git config --global "url.https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/${m}.insteadOf" \
