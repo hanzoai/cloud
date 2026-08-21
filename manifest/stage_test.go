@@ -33,8 +33,11 @@ var staged = map[string]string{
 	// Not customer surface: the R&D evidence plane and the launch-control gate for
 	// Hanzo's own hosted services. Both are ours, so neither belongs in the public
 	// contract, the generated SDKs or the agent tool list.
+	//
+	// graph is no longer here. It is the assertion plane, it carries retention,
+	// and it is a customer capability — so it publishes, and TestStageOfReadsTheRow
+	// below asks a still-staged row instead.
 	"admission": Alpha,
-	"graph":     Alpha,
 	"research":  Alpha,
 }
 
@@ -66,8 +69,11 @@ func TestStagedRowsAreTheOnesDeclared(t *testing.T) {
 // StageOf reads the row, and a name that was never routed here is ga — the same
 // answer the zero value gives, so a caller needs no second branch for it.
 func TestStageOfReadsTheRow(t *testing.T) {
-	if got := StageOf("graph"); got != Alpha {
-		t.Errorf("StageOf(graph) = %q, want %q", got, Alpha)
+	if got := StageOf("research"); got != Alpha {
+		t.Errorf("StageOf(research) = %q, want %q", got, Alpha)
+	}
+	if got := StageOf("graph"); got != "" {
+		t.Errorf("StageOf(graph) = %q, want ga", got)
 	}
 	if got := StageOf("iam"); got != "" {
 		t.Errorf("StageOf(iam) = %q, want ga", got)
