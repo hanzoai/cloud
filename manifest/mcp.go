@@ -14,7 +14,11 @@
 
 package manifest
 
+import "github.com/hanzoai/cloud/manifest/door"
+
 // The fleet's agent door, as ONE fact — for the same reason PrefixesFor exists.
+// The addresses themselves live in the leaf package door, which openapi reads
+// too (neither package may import the other); the doctrine lives here.
 //
 // MCP is not a subsystem and not a service: it is the THIRD projection of the
 // same typed-op registry that yields the REST route and the OpenAPI operation
@@ -52,7 +56,7 @@ const (
 	// — so scoping it under one subsystem's prefix would either shrink it to that
 	// subsystem or file a fleet-wide surface under a name that does not own it.
 	// One fleet, one door.
-	MCPPath = "/v1/mcp"
+	MCPPath = door.Path
 
 	// FrameworkMCPPath is zip's built-in default — where a plugin serves its OWN
 	// door and, therefore, where a host FORWARDS a composed tools/call (zip's
@@ -74,5 +78,13 @@ const (
 	// that non-2xx as an outage for a child that is serving fine. A plugin now
 	// answers here with its OWN door (zip.App.MCP) whether or not a route was
 	// mounted over it, and an empty tool list is a 200.
-	FrameworkMCPPath = "/mcp"
+	FrameworkMCPPath = door.Framework
+
+	// ResourceMetadataPath is where the host publishes RFC 9728 metadata for the
+	// door: which authorization server mints the bearer a tools/call needs. A
+	// client that reaches the door with no credential is sent here by the
+	// WWW-Authenticate header the door answers with (fleet/mcp.go), and the host
+	// serves it (cmd/cloud/oauth.go) — one name, two readers, so the challenge
+	// can never point at an address the host does not answer.
+	ResourceMetadataPath = door.Metadata
 )

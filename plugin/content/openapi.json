@@ -81,6 +81,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -104,6 +105,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -147,6 +149,7 @@
             "description": "payment required"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -170,6 +173,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -207,6 +211,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -267,6 +272,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }

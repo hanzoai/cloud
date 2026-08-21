@@ -55,7 +55,7 @@ func TestScopeAdmits(t *testing.T) {
 // An org admin is NOT platform sudo. This is the pair the platform must never
 // collapse — a customer-org admin holding full authority inside its own org, at
 // a door that guards shared platform state.
-func TestOrgAdminIsNotPlatformSudo(t *testing.T) {
+func TestOrgAdminIsNotSudo(t *testing.T) {
 	orgAdm := cloud.Authority{Validated: true, OrgAdmin: true}
 	if cloud.Super.Admits(orgAdm) {
 		t.Fatal("an org admin was admitted to the Super scope — the two admin scopes are conflated, which is a privilege escalation")

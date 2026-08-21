@@ -24,7 +24,7 @@ package cloud
 // platform sudo, not "admin of my own org". Both facts are decided here, from the
 // signed membership set, through the predicates authz publishes:
 //
-//	X-User-IsAdmin       ⟸ authz.Claims.PlatformSudo — a HUMAN who is a MEMBER of
+//	X-User-IsAdmin       ⟸ authz.Claims.Sudo — a HUMAN who is a MEMBER of
 //	                       the reserved admin org, at ANY position in `orgs`.
 //	X-User-IsOrgAdmin    ⟸ authz.Claims.OrgAdmin(effOrg) — admin/owner role in the
 //	                       org the request ACTS in. Never platform authority.
@@ -201,7 +201,7 @@ var stripped = func() []string {
 //   - ALWAYS delete every header in authorityHeaders (a client copy never
 //     survives — this alone kills X-User-IsAdmin forgery).
 //   - Validate a Bearer / Basic / session-cookie JWT, if present:
-//     SuperAdmin (authz.Claims.PlatformSudo — a human MEMBER of the reserved admin
+//     SuperAdmin (authz.Claims.Sudo — a human MEMBER of the reserved admin
 //     org, at any position in the signed `orgs` set). Membership IS the predicate;
 //     the isAdmin bit is deliberately not a second term, and IAM does not mint one.
 //     This test used to read `homeOrg == adminOrg`, i.e. `Orgs[0].Org` — a
@@ -348,7 +348,7 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 			switch {
 			case owner != "" && platformSudo(claims):
 				// SuperAdmin ⟺ a HUMAN who is a MEMBER of the reserved admin org — asked
-				// through authz.Claims.PlatformSudo, the predicate the ISSUER's own claim
+				// through authz.Claims.Sudo, the predicate the ISSUER's own claim
 				// package publishes. cloud does not re-derive it, because cloud re-deriving
 				// it is what this arm got wrong.
 				//
@@ -379,7 +379,7 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 				// admin-org user whose row carries isAdmin=false, which is a lockout, not a
 				// hardening — TestMasqueradeSpendsOwnBooks pins exactly that principal.
 				//
-				// The HUMAN narrowing lives inside PlatformSudo (Claims.Machine: an App
+				// The HUMAN narrowing lives inside Sudo (Claims.Machine: an App
 				// principal, or an empty membership set — a client_credentials token, which
 				// IAM never mints `orgs` for). It is a POSITIVE human test, not a negated
 				// machine one: this grants the only cross-tenant scope in the system, so an

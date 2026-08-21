@@ -493,11 +493,11 @@ require (
 	github.com/luxfi/consensus v1.36.11
 	github.com/luxfi/container v0.2.2 // indirect
 	github.com/luxfi/corona v0.10.4 // indirect
-	github.com/luxfi/crypto v1.20.2
+	github.com/luxfi/crypto v1.20.5
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
 	github.com/luxfi/geth v1.20.2
 	github.com/luxfi/ids v1.3.2
-	github.com/luxfi/kms v1.12.9
+	github.com/luxfi/kms v1.12.22
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
 	github.com/luxfi/lens v0.2.1 // indirect
 	github.com/luxfi/magnetar v1.2.3 // indirect
@@ -686,9 +686,9 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.5
-	github.com/hanzoai/ai v1.833.103
-	github.com/hanzoai/authz v1.10.30
-	github.com/hanzoai/base v1.5.61
+	github.com/hanzoai/ai v1.833.106
+	github.com/hanzoai/authz v1.10.31
+	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.15
 	github.com/hanzoai/metrics v1.110.6
 	github.com/hanzoai/o11y v1.5.66

@@ -40,6 +40,11 @@ var catalogJSON []byte
 type Op struct {
 	ID  string `json:"id"`
 	Doc string `json:"doc"`
+	// Read says the operation is a GET. A subsystem whose every offered
+	// operation reads is published with readOnlyHint, which is the one MCP
+	// annotation a client acts on — and the only honest place to set it, since a
+	// tool carries a whole subsystem and the hint is per tool.
+	Read bool `json:"read,omitempty"`
 }
 
 var catalog = loadCatalog()

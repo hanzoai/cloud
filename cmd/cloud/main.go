@@ -43,6 +43,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/clientip"
 	"github.com/hanzoai/cloud/fleet"
 	"github.com/hanzoai/cloud/internal/datadir"
@@ -300,6 +301,11 @@ func run(addr, zapAddr string) error {
 	// listening until app.Listen either way, so registration order costs no
 	// availability, only route specificity, and /healthz collides with no prefix.
 	health(app, absent)
+
+	// Where the door's clients sign in — the authorization server is this
+	// deployment's issuer, the value every child validates a token against
+	// (oauth.go). Host-served for the reason /healthz is.
+	protectedResource(app, environ.Or("CLOUD_IAM_ISSUER", brand.IssuerFor(environ.Or("CLOUD_BRAND", brand.Default))))
 
 	// The fleet's own description, at /v1/openapi.json. Same reasoning as
 	// /healthz, and the same layer: it is the HOST's, because it is about the

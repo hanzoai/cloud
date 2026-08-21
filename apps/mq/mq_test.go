@@ -117,7 +117,7 @@ func TestStreamLifecycle(t *testing.T) {
 	app := plane(t)
 	const org = "acme"
 
-	code, body := do(t, app, http.MethodPost, "/v1/mq/streams", org,
+	code, body := do(t, app, http.MethodPost, "/v1/mq/stream", org,
 		map[string]any{"name": "orders", "subjects": []string{"orders.>"}, "max_msgs": 100})
 	if code != http.StatusCreated {
 		t.Fatalf("create: want 201, got %d (%s)", code, body)
@@ -148,7 +148,7 @@ func TestStreamLifecycle(t *testing.T) {
 
 	feed(t, org, "orders.new", "one", "two", "three")
 
-	code, body = do(t, app, http.MethodGet, "/v1/mq/streams/orders", org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/mq/stream/orders", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("get: want 200, got %d (%s)", code, body)
 	}
@@ -157,7 +157,7 @@ func TestStreamLifecycle(t *testing.T) {
 		t.Fatalf("stored messages: want 3, got %d", st.State.Messages)
 	}
 
-	code, body = do(t, app, http.MethodGet, "/v1/mq/streams/orders/messages?seq=2", org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/mq/stream/orders/message?seq=2", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("read by seq: want 200, got %d (%s)", code, body)
 	}
@@ -170,7 +170,7 @@ func TestStreamLifecycle(t *testing.T) {
 		t.Fatalf("payload: want two, got %q", read.Messages[0].Data)
 	}
 
-	code, body = do(t, app, http.MethodGet, "/v1/mq/streams/orders/messages?last_by_subject=orders.new", org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/mq/stream/orders/message?last_by_subject=orders.new", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("last_by_subject: want 200, got %d (%s)", code, body)
 	}
@@ -179,24 +179,24 @@ func TestStreamLifecycle(t *testing.T) {
 		t.Fatalf("last: want three, got %q", data)
 	}
 
-	code, body = do(t, app, http.MethodGet, "/v1/mq/streams/orders/messages?next_by_subject=orders.*&seq=1", org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/mq/stream/orders/message?next_by_subject=orders.*&seq=1", org, nil)
 	_ = json.Unmarshal(body, &read)
 	if code != http.StatusOK || len(read.Messages) != 3 {
 		t.Fatalf("walk: want 3 messages, got %d (code %d)", len(read.Messages), code)
 	}
 
-	if code, body = do(t, app, http.MethodDelete, "/v1/mq/streams/orders/messages/1", org, nil); code != http.StatusNoContent {
+	if code, body = do(t, app, http.MethodDelete, "/v1/mq/stream/orders/message/1", org, nil); code != http.StatusNoContent {
 		t.Fatalf("delete message: want 204, got %d (%s)", code, body)
 	}
 
-	code, body = do(t, app, http.MethodPut, "/v1/mq/streams/orders", org,
+	code, body = do(t, app, http.MethodPut, "/v1/mq/stream/orders", org,
 		map[string]any{"name": "orders", "subjects": []string{"orders.>"}, "max_msgs": 50})
 	_ = json.Unmarshal(body, &st)
 	if code != http.StatusOK || st.Config.MaxMsgs != 50 {
 		t.Fatalf("update: want 200/max_msgs 50, got %d %+v", code, st.Config)
 	}
 
-	code, body = do(t, app, http.MethodPost, "/v1/mq/streams/orders/purge", org, map[string]any{})
+	code, body = do(t, app, http.MethodPost, "/v1/mq/stream/orders/purge", org, map[string]any{})
 	if code != http.StatusOK {
 		t.Fatalf("purge: want 200, got %d (%s)", code, body)
 	}
@@ -206,10 +206,10 @@ func TestStreamLifecycle(t *testing.T) {
 		t.Fatalf("purged: want 2, got %d", purged.Purged)
 	}
 
-	if code, body = do(t, app, http.MethodDelete, "/v1/mq/streams/orders", org, nil); code != http.StatusNoContent {
+	if code, body = do(t, app, http.MethodDelete, "/v1/mq/stream/orders", org, nil); code != http.StatusNoContent {
 		t.Fatalf("delete: want 204, got %d (%s)", code, body)
 	}
-	if code, _ = do(t, app, http.MethodGet, "/v1/mq/streams/orders", org, nil); code != http.StatusNotFound {
+	if code, _ = do(t, app, http.MethodGet, "/v1/mq/stream/orders", org, nil); code != http.StatusNotFound {
 		t.Fatalf("get after delete: want 404, got %d", code)
 	}
 }
@@ -218,11 +218,11 @@ func TestConsumerPullAcksOnDelivery(t *testing.T) {
 	app := plane(t)
 	const org = "acme"
 
-	if code, body := do(t, app, http.MethodPost, "/v1/mq/streams", org,
+	if code, body := do(t, app, http.MethodPost, "/v1/mq/stream", org,
 		map[string]any{"name": "jobs", "subjects": []string{"jobs.*"}}); code != http.StatusCreated {
 		t.Fatalf("create stream: %d (%s)", code, body)
 	}
-	code, body := do(t, app, http.MethodPost, "/v1/mq/streams/jobs/consumers", org,
+	code, body := do(t, app, http.MethodPost, "/v1/mq/stream/jobs/consumer", org,
 		map[string]any{"durable_name": "worker"})
 	if code != http.StatusCreated {
 		t.Fatalf("create consumer: want 201, got %d (%s)", code, body)
@@ -235,7 +235,7 @@ func TestConsumerPullAcksOnDelivery(t *testing.T) {
 
 	feed(t, org, "jobs.a", "j1", "j2")
 
-	code, body = do(t, app, http.MethodPost, "/v1/mq/streams/jobs/consumers/worker/next", org,
+	code, body = do(t, app, http.MethodPost, "/v1/mq/stream/jobs/consumer/worker/next", org,
 		map[string]any{"batch": 10, "expires": "5s"})
 	if code != http.StatusOK {
 		t.Fatalf("next: want 200, got %d (%s)", code, body)
@@ -247,7 +247,7 @@ func TestConsumerPullAcksOnDelivery(t *testing.T) {
 	}
 
 	// Acked on delivery: an immediate no_wait pull sees nothing to redeliver.
-	code, body = do(t, app, http.MethodPost, "/v1/mq/streams/jobs/consumers/worker/next", org,
+	code, body = do(t, app, http.MethodPost, "/v1/mq/stream/jobs/consumer/worker/next", org,
 		map[string]any{"batch": 10, "no_wait": true})
 	_ = json.Unmarshal(body, &pulled)
 	if code != http.StatusOK || len(pulled.Messages) != 0 {
@@ -255,22 +255,22 @@ func TestConsumerPullAcksOnDelivery(t *testing.T) {
 	}
 
 	// An empty wait is the 408 the contract names.
-	if code, _ = do(t, app, http.MethodPost, "/v1/mq/streams/jobs/consumers/worker/next", org,
+	if code, _ = do(t, app, http.MethodPost, "/v1/mq/stream/jobs/consumer/worker/next", org,
 		map[string]any{"expires": "1s"}); code != http.StatusRequestTimeout {
 		t.Fatalf("empty wait: want 408, got %d", code)
 	}
 
-	code, body = do(t, app, http.MethodGet, "/v1/mq/streams/jobs/consumers", org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/mq/stream/jobs/consumer", org, nil)
 	var listing pickOut
 	_ = json.Unmarshal(body, &listing)
 	if code != http.StatusOK || listing.Total != 1 || listing.Consumers[0].AckFloor.Stream != 2 {
 		t.Fatalf("list consumers: want total 1 ack floor 2, got %d (%s)", code, body)
 	}
 
-	if code, body = do(t, app, http.MethodDelete, "/v1/mq/streams/jobs/consumers/worker", org, nil); code != http.StatusNoContent {
+	if code, body = do(t, app, http.MethodDelete, "/v1/mq/stream/jobs/consumer/worker", org, nil); code != http.StatusNoContent {
 		t.Fatalf("delete consumer: want 204, got %d (%s)", code, body)
 	}
-	if code, _ = do(t, app, http.MethodGet, "/v1/mq/streams/jobs/consumers/worker", org, nil); code != http.StatusNotFound {
+	if code, _ = do(t, app, http.MethodGet, "/v1/mq/stream/jobs/consumer/worker", org, nil); code != http.StatusNotFound {
 		t.Fatalf("get after delete: want 404, got %d", code)
 	}
 }
@@ -281,7 +281,7 @@ func TestConsumerPullAcksOnDelivery(t *testing.T) {
 func TestTenancy(t *testing.T) {
 	app := plane(t)
 
-	if code, body := do(t, app, http.MethodPost, "/v1/mq/streams", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/mq/stream", "acme",
 		map[string]any{"name": "orders"}); code != http.StatusCreated {
 		t.Fatalf("create: %d (%s)", code, body)
 	}
@@ -298,24 +298,24 @@ func TestTenancy(t *testing.T) {
 	}
 
 	for org, want := range map[string]int{"acme": 1, "rival": 0} {
-		code, body := do(t, app, http.MethodGet, "/v1/mq/streams", org, nil)
+		code, body := do(t, app, http.MethodGet, "/v1/mq/stream", org, nil)
 		var out Streams
 		_ = json.Unmarshal(body, &out)
 		if code != http.StatusOK || out.Total != want {
 			t.Fatalf("%s sees %d streams (want %d): %s", org, out.Total, want, body)
 		}
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/mq/streams/orders", "rival", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/mq/stream/orders", "rival", nil); code != http.StatusNotFound {
 		t.Fatalf("cross-tenant get: want 404, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/mq/streams/EVENT", "rival", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/mq/stream/EVENT", "rival", nil); code != http.StatusNotFound {
 		t.Fatalf("platform stream by name: want 404, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodDelete, "/v1/mq/streams/orders", "rival", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/mq/stream/orders", "rival", nil); code != http.StatusNotFound {
 		t.Fatalf("cross-tenant delete: want 404, got %d", code)
 	}
 	// No principal, no product.
-	if code, _ := do(t, app, http.MethodGet, "/v1/mq/streams", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/mq/stream", "", nil); code != http.StatusForbidden {
 		t.Fatalf("anonymous: want 403, got %d", code)
 	}
 }
@@ -355,7 +355,7 @@ func TestDegradedIsHonest(t *testing.T) {
 	if code != http.StatusOK || h.Status != "degraded" {
 		t.Fatalf("health: want 200 degraded, got %d (%s)", code, body)
 	}
-	if code, _ = do(t, app, http.MethodGet, "/v1/mq/streams", "acme", nil); code != http.StatusServiceUnavailable {
+	if code, _ = do(t, app, http.MethodGet, "/v1/mq/stream", "acme", nil); code != http.StatusServiceUnavailable {
 		t.Fatalf("list without a plane: want 503, got %d", code)
 	}
 }

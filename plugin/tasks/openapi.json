@@ -132,7 +132,8 @@
         "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
-        ]
+        ],
+        "x-public": true
       },
       "get": {
         "operationId": "get_tasks",
@@ -140,7 +141,8 @@
         "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
-        ]
+        ],
+        "x-public": true
       },
       "patch": {
         "operationId": "patch_tasks",
@@ -148,7 +150,8 @@
         "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_tasks",
@@ -156,7 +159,8 @@
         "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
-        ]
+        ],
+        "x-public": true
       },
       "put": {
         "operationId": "put_tasks",
@@ -164,7 +168,8 @@
         "description": "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.\n\nA 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.",
         "tags": [
           "tasks"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/tasks/{wildcard1}": {

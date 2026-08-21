@@ -28,7 +28,8 @@
         "description": "Returns the org's connected accounts — each one's id, network, handle, status and timestamps. `provider` filters to one network; `limit` bounds the page, defaulting to 200 and capped at 1000.\n\nAn account's provider access token is NEVER included in any response on this surface. Only the publisher reads it.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
         "tags": [
           "social"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_social_accounts",
@@ -36,7 +37,8 @@
         "description": "Records a social account for the org and answers 201 with the stored row, including the generated id later calls address it by.\n\n`provider` must be one of x, facebook, instagram, linkedin, tiktok, youtube or threads, defaulting to x when omitted. `status` is one of connected, disconnected or error, defaulting to connected. The handle is trimmed and bounded at 1024 characters.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
         "tags": [
           "social"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/social/accounts/{id}": {
@@ -56,7 +58,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "get": {
         "operationId": "get_social_accounts_by_id",
@@ -74,7 +77,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "put": {
         "operationId": "put_social_accounts_by_id",
@@ -92,7 +96,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/social/posts": {
@@ -102,7 +107,8 @@
         "description": "Returns the org's posts — content, channel, status, scheduled time, media and timestamps. `status` filters to one of draft, scheduled, published or failed; `limit` bounds the page, defaulting to 200 and capped at 1000.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
         "tags": [
           "social"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_social_posts",
@@ -110,7 +116,8 @@
         "description": "Stores a post for the org and answers 201 with the stored row.\n\nA post created as scheduled for a time that has already passed is published IMMEDIATELY, and the row returned carries that outcome — this is the one behaviour a reader would otherwise miss. A future-scheduled post is left for the scheduler, and a draft is left alone. Publishing never fails the creation: the post is stored either way, and a publish that could not run leaves the row for the scheduler to retry.\n\n`content` is required and bounded at 8192 characters; `channel` is one of the seven supported networks, defaulting to x; `status` is one of draft, scheduled, published or failed, defaulting to draft; up to 10 media URLs are kept, each bounded at 1024 characters.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
         "tags": [
           "social"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/social/posts/{id}": {
@@ -130,7 +137,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "get": {
         "operationId": "get_social_posts_by_id",
@@ -148,7 +156,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       },
       "put": {
         "operationId": "put_social_posts_by_id",
@@ -166,7 +175,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/social/posts/{id}/publish": {
@@ -186,7 +196,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/social/providers": {
@@ -196,7 +207,8 @@
         "description": "Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing.\n\nThis is a live read of the deployment's own configuration, not a static list of networks — it answers \"can I connect this today\", which is what a connect affordance and a pre-cutover checklist both need. It says nothing about whether the caller has connected an account; that is the accounts listing.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
         "tags": [
           "social"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/social/summary": {
@@ -206,7 +218,8 @@
         "description": "Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected. It is the dashboard roll-up, computed over the org's own rows in one read.\n\nA validated principal is required; 403 without one. Every row is keyed by the caller's org taken from that principal and never from the request, so an id belonging to another tenant reads as not found rather than as a refusal.",
         "tags": [
           "social"
-        ]
+        ],
+        "x-public": true
       }
     }
   },
