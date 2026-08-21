@@ -288,9 +288,9 @@ type DeployResult struct {
 }
 
 // ---------------------------------------------------------------------------
-// Build — POST /v1/runner (platform-native CI, no GitHub builders). Authorized off
-// the IAM login exactly like the surfaces above (or a dedicated build token for
-// machine automation). Unchanged wire contract.
+// Build — POST /v1/platform/runner (platform-native CI, no GitHub builders).
+// Authorized off the IAM login exactly like the surfaces above (or a dedicated
+// build token for machine automation). Unchanged wire contract.
 // ---------------------------------------------------------------------------
 
 // BuildBinary is ONE hanzo.yml `binaries:` entry, sent verbatim. The recipe a
@@ -344,5 +344,5 @@ func (p *Platform) EnqueueBuild(ctx context.Context, req BuildReq, buildToken st
 		return nil, fmt.Errorf("not authenticated: run `hanzo login` (an IAM login now authorizes builds; HANZO_BUILD_TOKEN / --build-token still works for machine automation)")
 	}
 	out := &BuildJob{}
-	return out, p.do(ctx, http.MethodPost, "/v1/runner", buildToken, req, out)
+	return out, p.do(ctx, http.MethodPost, "/v1/platform/runner", buildToken, req, out)
 }

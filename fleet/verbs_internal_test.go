@@ -37,7 +37,7 @@ var readings = []struct{ id, want, route string }{
 	{"post_projects_by_slug_purge", "purge_project", "POST /v1/projects/{slug}/purge"},
 	{"post_projects_by_slug_domains_by_host_verify", "verify_project_domain", "POST /v1/projects/{slug}/domains/{host}/verify"},
 	{"post_projects_by_slug_deployments_by_id_complete", "complete_project_deployment", "POST /v1/projects/{slug}/deployments/{id}/complete"},
-	{"post_sites_by_slug_releases_by_release_activate", "activate_site_release", "POST /v1/sites/{slug}/releases/{release}/activate"},
+	{"post_projects_by_slug_releases_by_release_activate", "activate_project_release", "POST /v1/projects/{slug}/releases/{release}/activate"},
 
 	// A singular segment is only an action when a parameter put it after a ROW.
 	// `/v1/commerce/product` is a collection someone spelled singular, and reading
@@ -59,8 +59,8 @@ var readings = []struct{ id, want, route string }{
 	// Spelling that a naive plural rule gets wrong in both directions.
 	{"get_sandboxes", "list_sandboxes", "GET /v1/sandboxes — plural stays plural for a list"},
 	{"get_sandboxes_by_id", "get_sandbox", "GET /v1/sandboxes/{id} — `xes` loses two letters"},
-	{"get_platform_sites_by_slug_releases", "list_platform_site_releases", "GET /v1/platform/sites/{slug}/releases"},
-	{"post_sites_by_slug_releases", "create_site_release", "POST /v1/sites/{slug}/releases — `releases` loses only one"},
+	{"get_projects_sites", "list_project_sites", "GET /v1/projects/sites — the collection under its owner"},
+	{"post_projects_by_slug_releases", "create_project_release", "POST /v1/projects/{slug}/releases — `releases` loses only one"},
 
 	// A DECLARED id is already a verb on an object and is left alone.
 	{"GetUserPreference", "GetUserPreference", "o11y declares its own ids"},

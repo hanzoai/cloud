@@ -11,7 +11,7 @@
 //   - fleet.go       (/v1/platform/fleet) — the ADMIN fleet drift board: observes +
 //     deploys SYSTEM Service CRs across the platform namespaces, SuperAdmin
 //     only. It answers "what is the fleet running, and roll a tag."
-//   - apps/projects (/v1/sites)     — per-org STATIC sites (S3 hosting).
+//   - apps/projects (/v1/projects)  — per-org STATIC sites (S3 hosting).
 //   - apps/platform (/v1/platform)  — THIS: per-org CONTAINER apps. Users
 //     create projects + applications, build them (arcd BuildKit) and deploy them
 //     (operator hanzo.ai/v1 Service CR into their OWN tenant-<org> namespace).
@@ -247,8 +247,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // compose.
 //
 // Registration order is match order, and it is the order these routes have always
-// had: the static collections before the parameterised forms, /v1/run and the flat
-// console reads at order 124 so they bind ahead of the AI /v1/* catch-all (150).
+// had: the static collections before the parameterised forms, /v1/platform/run and
+// the flat console reads at order 124 so they bind ahead of the AI /v1/* catch-all
+// (150).
 //
 // This surface installs no middleware of its own — see ops.go on why the identity
 // bridge belongs to whoever composes the app.
@@ -309,26 +310,25 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// the real reason and whether the CRD was found — rather than the error envelope.
 	zip.Get(app, "/v1/platform/health", o.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
-	// Container-serverless one-shot: POST /v1/run — create-or-update an image app
-	// (in the org's default project) and deploy it via the SAME Service-CR writer,
-	// returning its live URL. A top-level convenience over the project→app→deploy
-	// flow above; org-scoped by the validated identity, never by the body (run.go).
-	zip.Post(app, "/v1/run", o.run, zip.WithStatus(http.StatusAccepted))
+	// Container-serverless one-shot: POST /v1/platform/run — create-or-update an
+	// image app (in the org's default project) and deploy it via the SAME Service-CR
+	// writer, returning its live URL. A shortcut across the project→app→deploy flow
+	// above; org-scoped by the validated identity, never by the body (run.go).
+	zip.Post(app, "/v1/platform/run", o.run, zip.WithStatus(http.StatusAccepted))
 
-	// console aggregates (Environments / Pipelines / Builds / Releases) — flat,
-	// top-level REST DERIVED from the SAME project/app/deploy/build data above
-	// (console.go). GET-only projections: the ONE write path stays POST .../apps
-	// and .../deploy. Every op is org-scoped through the validated identity like the
-	// rest.
-	zip.Get(app, "/v1/environments", o.listEnvironments)
-	zip.Get(app, "/v1/pipelines", o.listPipelines)
-	zip.Get(app, "/v1/builds", o.listBuilds)
-	zip.Get(app, "/v1/releases", o.listReleases)
+	// console aggregates (Environments / Pipelines / Builds / Releases) — REST
+	// DERIVED from the SAME project/app/deploy/build data above (console.go).
+	// GET-only projections: the ONE write path stays POST .../apps and .../deploy.
+	// Every op is org-scoped through the validated identity like the rest.
+	zip.Get(app, "/v1/platform/environments", o.listEnvironments)
+	zip.Get(app, "/v1/platform/pipelines", o.listPipelines)
+	zip.Get(app, "/v1/platform/builds", o.listBuilds)
+	zip.Get(app, "/v1/platform/releases", o.listReleases)
 
 	// Native build API (the no-GitHub-builders trigger, ex-/v1/arcd). Privileged:
 	// token-gated + image-ref allowlisted (runner.go). `hanzo build` and the
 	// git-push-to-deploy hook both POST here.
-	zip.Post(app, "/v1/runner", o.runnerBuild, zip.WithStatus(http.StatusAccepted))
+	zip.Post(app, "/v1/platform/runner", o.runnerBuild, zip.WithStatus(http.StatusAccepted))
 }
 
 // ── tenancy ──────────────────────────────────────────────────────────────────

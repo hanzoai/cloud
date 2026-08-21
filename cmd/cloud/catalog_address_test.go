@@ -98,7 +98,9 @@ func TestCatalogAddressesAreServed(t *testing.T) {
 			"actually delivers, and manifest/apps.go is the one place that decides. Look for "+
 			"where the product WENT before concluding it is gone: /v1/vpc became /v1/vpcs, "+
 			"score-configs became /v1/evals/rubrics, annotation-queues became /v1/o11y/reviews, "+
-			"and /v1/edge was taken away on purpose. When a product genuinely has no API here, "+
+			"builds/environments/pipelines/releases fold under /v1/platform (HIP-0139 §7, one "+
+			"capability one prefix), and /v1/edge was taken away as a top-level address. When a "+
+			"product genuinely has no API here, "+
 			"say so with kind %q or %q instead of pointing at something adjacent — a catalogue "+
 			"that dresses one product as another is worse than one that admits a gap. Fix it in "+
 			"hanzoai/commerce models/catalogentry/seed/hanzo-catalog.json",
