@@ -148,16 +148,16 @@ version of exactly that stack (`xvfb`, `x11vnc`, `novnc`, `websockify`,
 
 ### The three tags
 
-Registry is `registry.hanzo.ai` (self-hosted, S3-backed). Base is
+Registry is `oci.hanzo.ai` (self-hosted, S3-backed). Base is
 `debian:bookworm-slim`, digest-pinned, non-root `sandbox` uid 1000 — lifted
 verbatim from the existing `Dockerfile.sandbox`.
 
 ```
-registry.hanzo.ai/hanzoai/box:base-<ver>      # = Dockerfile.sandbox, unchanged
+oci.hanzo.ai/hanzoai/box:base-<ver>      # = Dockerfile.sandbox, unchanged
   bash ca-certificates curl git jq python3 ripgrep
   useradd sandbox; USER sandbox; CMD ["sleep","infinity"]
 
-registry.hanzo.ai/hanzoai/box:dev-<ver>       # FROM base
+oci.hanzo.ai/hanzoai/box:dev-<ver>       # FROM base
   build-essential pkg-config file unzip
   node 22 + pnpm + bun          (22, not bot's default nodejs — dev's toolchain)
   python3-venv + uv
@@ -165,7 +165,7 @@ registry.hanzo.ai/hanzoai/box:dev-<ver>       # FROM base
   npm i -g @hanzo/dev@<pinned>  <-- THE MISSING PIECE
   COPY boxd                     <-- §3
 
-registry.hanzo.ai/hanzoai/box:desktop-<ver>   # FROM dev  (computer-use variant)
+oci.hanzo.ai/hanzoai/box:desktop-<ver>   # FROM dev  (computer-use variant)
   xvfb x11vnc novnc websockify chromium xdotool scrot fonts-liberation
   EXPOSE 9222 5900 6080
 ```
@@ -201,7 +201,7 @@ jobs:
 
 Root `hanzo.yml` declares the three images (`images:` is a list) with
 `context: .` and the three dockerfiles. CI builds all architectures and pushes
-to GHCR + mirrors to `registry.hanzo.ai`. **Nobody builds these on a laptop.**
+to GHCR + mirrors to `oci.hanzo.ai`. **Nobody builds these on a laptop.**
 Delete `scripts/sandbox-*-setup.sh` once the tags publish, and repoint
 `src/agents/sandbox/constants.ts` at the registry tags so `docker pull` works
 for the local path too — one image, both paths.
@@ -221,7 +221,7 @@ and serves §3.
 The box image consumes it as a published artifact:
 
 ```dockerfile
-COPY --from=registry.hanzo.ai/hanzoai/cloud:<pinned> /usr/local/bin/boxd /usr/local/bin/boxd
+COPY --from=oci.hanzo.ai/hanzoai/cloud:<pinned> /usr/local/bin/boxd /usr/local/bin/boxd
 ```
 
 This is the direction cloud's own Dockerfile already runs — it pulls prebuilt
