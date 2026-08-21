@@ -139,7 +139,7 @@ func TestEntitlements_UnknownPlanErrors(t *testing.T) {
 }
 
 // TestPlans_Ladder pins the commercial model on the surface GET
-// /v1/plans/subscriptions serves: the personal ladder go $9 / dev $19 / pro $49 /
+// /v1/plan/subscriptions serves: the personal ladder go $9 / dev $19 / pro $49 /
 // max $99, and team $25 per-seat with a 2-seat minimum. Stripe lookup keys are part
 // of the contract — each carries its price, so a reprice mints a new key rather than
 // moving an immutable one.

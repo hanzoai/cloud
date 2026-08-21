@@ -9,7 +9,7 @@ package link
 // the same fail-closed tenancy the rest of the plane uses (principal.Org + c.User()).
 //
 // TWO MOUNTS, ONE VIEW. The SAME shaped view answers at:
-//   - GET /v1/links/usage/accounts   — canonical, where the data lives (this file),
+//   - GET /v1/link/usage/accounts   — canonical, where the data lives (this file),
 //   - GET /v1/billing/usage/accounts — the billing namespace the dashboard's usage
 //     panels read (clients/billing, which calls RoutedBreakdown below).
 // One shaping function (routedAccountsView) feeds both, so the two can never drift.
@@ -39,7 +39,7 @@ type AccountsTotal struct {
 
 // AccountsUsage is the per-account breakdown response. Source is always "routed" —
 // this is the gateway's own routed ledger, distinct from the device collector's plan
-// snapshots (/v1/links/usage/summary) and from the org money ledger
+// snapshots (/v1/link/usage/summary) and from the org money ledger
 // (/v1/billing/usage). Scope is always "user": the caller's own linked accounts.
 type AccountsUsage struct {
 	// Scope is always "user": the caller's own linked accounts.

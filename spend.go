@@ -210,11 +210,11 @@ func Billable(method, path string) bool {
 	for _, t := range meteredTrees {
 		if path == strings.TrimSuffix(t, "/") || strings.HasPrefix(path, t) {
 			// Prefixes NEST, and the shorter one here may belong to a different
-			// app than the one that actually serves this path. provisioning is
-			// routed /v1/vector and /v1/search/query; product is routed the more
-			// specific /v1/vector/collections and /v1/search/indexes and declares
-			// cloud.Free. A bare HasPrefix scan bills four of product's surfaces
-			// on provisioning's standing — gating a Free product behind a balance.
+			// app than the one that actually serves this path. A bare HasPrefix
+			// scan then bills the neighbour's surface on this app's standing —
+			// a 402 in front of something nobody charges for. It shipped that
+			// way: product's four Free reads sat under provisioning's metered
+			// /v1/vector and /v1/search/query.
 			//
 			// The router resolves by longest prefix, so ownership does too. If the
 			// app that really serves this path is not metered, nothing is spent and
@@ -446,7 +446,7 @@ var reachableTrees = []string{
 	"/v1/iam/",          // IAM login / OAuth token exchange / .well-known OIDC discovery.
 	"/v1/account/",      // the account surface the shell renders before any purchase decision.
 	"/v1/admin/",        // platform sudo — including the cockpit that holds this gate's kill switch.
-	"/v1/plans/",        // the plans catalog — WHAT to buy (@hanzo/plans) — and its sub-routes.
+	"/v1/plan/",         // the plan catalog — WHAT to buy (@hanzo/plans) — and its sub-routes.
 	"/v1/models/",       // the model catalog the shell reads for discovery, and /v1/models/:id.
 	"/v1/orgs/",         // org read + switch: the shell must resolve which org it is buying for.
 	"/v1/waitlist/",     // admission's join API — an un-admitted user must still reach it.

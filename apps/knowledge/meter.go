@@ -8,7 +8,7 @@ package knowledge
 // auto.hanzo.svc). That is the same capacity apps/auto owns and correctly prices;
 // reaching it by in-cluster URL rather than through its door does not make the
 // pod cheaper, it only makes the charge disappear. A tenant could run pieces all
-// day through /v1/kb and never appear on auto's ledger.
+// day through /v1/knowledge and never appear on auto's ledger.
 //
 // THE CHARGE BELONGS TO THE CALLER, NOT THE ADDRESS. This is the lesson the
 // vendor-credential guard could not have caught: there is no vendor here and no

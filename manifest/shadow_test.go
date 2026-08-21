@@ -17,8 +17,8 @@ import "testing"
 // the serving owner until Coresident+Gates let a middleware mount stop claiming
 // a route. Both fixes changed the table; this keeps a new pair from shipping.
 //
-// NESTED prefixes stay legal — provisioning /v1/vector beside product
-// /v1/vector/collections is longest-match routing (OwnerOf), not shadowing.
+// NESTED prefixes stay legal — code /v1/code beside lsp /v1/code/lsp is
+// longest-match routing (OwnerOf), not shadowing.
 // Gates are exempt by construction: a gate wraps a subtree, it does not claim
 // to serve it, which is exactly what separates the two fields.
 func TestNoShadowedPrefix(t *testing.T) {

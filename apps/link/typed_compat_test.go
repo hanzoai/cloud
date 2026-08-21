@@ -29,7 +29,7 @@ func linkOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
 	}
-	ours := func(p string) bool { return p == "/v1/links" || strings.HasPrefix(p, "/v1/links/") }
+	ours := func(p string) bool { return p == "/v1/link" || strings.HasPrefix(p, "/v1/link/") }
 	served, typed = map[string]bool{}, map[string]string{}
 	for path, item := range doc.Paths {
 		if !ours(path) {
@@ -52,7 +52,7 @@ func linkOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 func TestEveryRouteIsTyped(t *testing.T) {
 	served, typed := linkOps(t)
 	if len(served) == 0 {
-		t.Fatal("the document serves no /v1/links operations at all")
+		t.Fatal("the document serves no /v1/link operations at all")
 	}
 	var untyped []string
 	for key := range served {

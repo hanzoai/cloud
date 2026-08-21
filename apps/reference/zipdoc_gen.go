@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/risk/reference/:set", zip.Doc{
+	zip.Describe("DELETE /v1/reference/:set", zip.Doc{
 		Description: "Removes one of your organisation's overrides.\n\nIt removes an entry your organisation wrote, never a baseline member: the\npublished set is not writable from here, so a removal can only ever restore\nthe baseline's own answer.",
 		Fields: map[string]string{
 			"ClearReferenceOut.cleared":   "Cleared is false when your org held no such override — which is not an\nerror, it is the honest answer to a removal that had nothing to remove.",
@@ -19,7 +19,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"set":"domain","key":"partner.example"}`),
 	})
-	zip.Describe("GET /v1/risk/reference", zip.Doc{
+	zip.Describe("GET /v1/reference", zip.Doc{
 		Description: "Lists every set this plane publishes, with its version and how\nfresh it is.\n\nRead the Stale and Refused lists first: they are the two ways this plane can\nbe quietly wrong, and they are reported rather than inferred. A set in\nRefused answers nothing — it has never loaded, it is held by another\ncomponent, or it names a source we hold no licence for.",
 		Fields: map[string]string{
 			"ReferenceSet.age":         "Age is how long ago that was.",
@@ -49,7 +49,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{}`),
 	})
-	zip.Describe("GET /v1/risk/reference/:set", zip.Doc{
+	zip.Describe("GET /v1/reference/:set", zip.Doc{
 		Description: "Reference describes one set and lists your org's overrides in it.\n\nThe set half is public data about a published list — its version, its\npublishers, their licences and how current each one is. The overrides half is\nyours alone: it is read from your organisation's own store, and no other\norganisation's entries can appear in it.",
 		Fields: map[string]string{
 			"ReferenceIn.after":         "After pages the override listing: the last key of the previous page.",
@@ -86,7 +86,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"set":"domain","limit":50}`),
 	})
-	zip.Describe("POST /v1/risk/reference/refresh", zip.Doc{
+	zip.Describe("POST /v1/reference/refresh", zip.Doc{
 		Description: "Takes a new version of one set. SuperAdmin only.\n\nIt is platform work, not tenant work: it writes the shared baseline every\norganisation reads, so it is gated to the platform's own identity. Nothing\nhere can write an organisation's overrides, and nothing an organisation sends\ncan reach this route.\n\nIdempotent. A version is the content digest of what was taken, so refreshing\nan unchanged publisher writes no rows and reports unchanged. Resumable: a run\nthat died half-way is continued from where it stopped rather than restarted.\n\nA set whose source needs a licence we do not hold is refused with the reason,\nrather than being quietly skipped.",
 		Fields: map[string]string{
 			"ReferenceReceipt.asOf":       "AsOf is when the load happened, RFC 3339. Absent is dated on arrival, which\ncan only make the list look older than it is.",
@@ -111,7 +111,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"set":"domain"}`),
 	})
-	zip.Describe("POST /v1/risk/reference/resolve", zip.Doc{
+	zip.Describe("POST /v1/reference/resolve", zip.Doc{
 		Description: "Looks keys up against the reference plane.\n\nYour organisation's own overrides are consulted FIRST and win outright; the\nshared baseline answers everything they do not cover. Every answer names the\nversion that produced it, when that version was current and whether it is\nstale, so a decision can record exactly what it consulted.\n\nRead Refusal before reading Hit. A set that has never loaded, one held by the\ncomponent that screens against it, and one whose source needs a licence we do\nnot hold all answer with a refusal — and a miss on a refusing set means\nnothing is known, not that the key is clean.",
 		Fields: map[string]string{
 			"ReferenceAnswer.age":           "Age is how old that is, as a duration.",
@@ -141,7 +141,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sets":["domain","net"],"keys":["user@tempbox.example","3.5.140.1"]}`),
 	})
-	zip.Describe("PUT /v1/risk/reference/:set", zip.Doc{
+	zip.Describe("PUT /v1/reference/:set", zip.Doc{
 		Description: "Writes your organisation's own allow and deny entries over a set.\n\nIdempotent on the key: writing the same entry twice is one entry, and writing\nit again replaces the verdict and the note. The whole batch is one\ntransaction, so a batch that would cross the per-set bound writes nothing\nrather than half of itself — a half-applied deny list is worse than a refused\none, because nobody can tell which half applied.\n\nYour entries are held in your organisation's own store and are never visible\nto another organisation, and they never change what any other organisation\nsees. The shared baseline is not writable from here at all.",
 		Fields: map[string]string{
 			"ReferenceOverrideIn.key":     "Key is the member: a domain, a CIDR or address, an issuer prefix, a\ndevice digest. It is matched the same way the baseline is, so a deny on\ntempbox.example also covers mail.tempbox.example.",
