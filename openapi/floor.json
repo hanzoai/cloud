@@ -1,6 +1,6 @@
 {
-  "paths": 1794,
-  "operations": 2441,
+  "paths": 1779,
+  "operations": 2426,
   "products": {
     "account": 10,
     "admin": 56,
@@ -85,7 +85,7 @@
     "pricing": 33,
     "projects": 26,
     "prompts": 6,
-    "provisioning": 28,
+    "provisioning": 30,
     "pubsub": 8,
     "reference": 6,
     "referrals": 4,
@@ -94,7 +94,7 @@
     "risk": 11,
     "sandboxes": 19,
     "sbom": 3,
-    "search": 1,
+    "search": 3,
     "security": 7,
     "seo": 7,
     "settings": 2,
