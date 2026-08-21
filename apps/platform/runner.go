@@ -6,11 +6,13 @@
 //
 // It differs from the tenant path (/v1/platform/.../deploy, which FORCES a
 // per-tenant image ref): a /v1/platform/runner build is PRIVILEGED — the caller supplies
-// the output image — so it is gated two ways:
-//   - a shared build-callback token (constant-time), and
-//   - an image-ref allowlist restricted to the org registries we own,
-//
-// so a leaked token can never push to an arbitrary registry.
+// the output image — so it is bounded three ways:
+//   - a credential: one that NAMES an organization, or the shared build-callback
+//     token compared in constant time,
+//   - an image-ref allowlist restricted to the org registries we own, so a leaked
+//     token can never push to an arbitrary registry, and
+//   - on a credential that names an organization, that organization's own
+//     namespace — so an ordinary build reaches one brand rather than all of them.
 
 package platform
 
@@ -31,6 +33,11 @@ import (
 
 // runnerBuildReq mirrors the CLI BuildReq (cli/platform.go). repo + image are
 // required; the rest are optional build knobs.
+//
+// THERE IS NO ORGANIZATION FIELD. A build belongs to the organization its
+// credential names (runnerOrg), and an attribution a caller can write is worth
+// nothing — checking one merely moves the mistake to whoever forgets the check
+// next. Deleting it leaves nothing to check and nothing to forget.
 //
 // Every field carries `url:"-"`. This is a PRIVILEGED build trigger, and zip's
 // binder fills an In field from the query string as well as the body: without the
@@ -65,10 +72,6 @@ type runnerBuildReq struct {
 	OS string `json:"os,omitempty" url:"-"`
 	// Arch is the target architecture for the artifact lane.
 	Arch string `json:"arch,omitempty" url:"-"`
-	// OrgID attributes the build to an org. On the IAM path it defaults to the
-	// caller's own validated org, and a foreign one is refused unless the caller
-	// is a platform SuperAdmin.
-	OrgID string `json:"organizationId,omitempty" url:"-"`
 	// Binaries selects the ARTIFACT lane (artifact.go): build what the repo's
 	// hanzo.yml `binaries:` block declares — a Go binary, an npm tarball, a Rust
 	// binary — and publish it to hanzoai/s3 instead of pushing an image. It is the
@@ -250,21 +253,43 @@ func runnerTokenOK(c *zip.Ctx) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
-// runnerIAMAdmin reports whether the request carries a validated IAM principal
-// that is an admin (of its own org via the IAM `isAdmin` bit, or a platform
-// SuperAdmin) within a resolvable org. It reads ONLY the principal.* accessors —
-// the output of the ONE identity verifier — which read authority headers that
-// SanitizeIdentity strips on ingress and re-mints solely from a signature-verified
-// JWT, so the signal is unforgeable off-gateway. A validated but non-admin member
-// is refused here; the owned-registry allowlist still bounds the image either way.
-func runnerIAMAdmin(c *zip.Ctx) bool {
-	if !principal.Validated(c) {
-		return false
+// runnerOrg resolves the ORGANIZATION a build is authorized for — read off the
+// caller's credential and nothing the caller stated. It answers "" when the request
+// carries no org-scoped identity at all, which is the only case the shared
+// build-callback token has to cover.
+//
+// It reads ONLY the principal.* accessors — the output of the ONE identity verifier
+// — which read authority headers SanitizeIdentity strips on ingress and re-mints
+// solely from a signature-verified token, so the signal is unforgeable off-gateway.
+//
+// TWO KINDS OF CREDENTIAL NAME AN ORG, and each is entitled differently because
+// they are different things:
+//
+//   - A PERSON must ADMINISTER the org (or hold platform sudo). Publishing into a
+//     brand's registry is not a plain member's to do, so a login is necessary and
+//     not sufficient.
+//   - An APPLICATION acting as itself IS the organization's own machine identity.
+//     Obtaining its token requires that application's client secret, and its org is
+//     the application's own owner, which it cannot choose: IAM mints an app token no
+//     membership set, so the org-switch admits nothing. It holds no admin scope and
+//     needs none — the act is a purpose, and the purpose is bounded below by the
+//     namespace that org owns.
+//
+// The second is what lets a build carry an organization at all. Asking every caller
+// for the admin bit asked a question no non-interactive credential can answer:
+// authz.Claims.OrgAdmin refuses every machine by construction — correctly, since an
+// app is issued for a purpose and not handed an org's self-service surface — so the
+// only credential that still reached this door from a pipeline was the fabric's
+// shared token, which names no org and is therefore wider than any single build.
+func runnerOrg(c *zip.Ctx) string {
+	org, ok := principal.Org(c) // composes principal.Validated
+	if !ok {
+		return ""
 	}
-	if _, ok := principal.Org(c); !ok {
-		return false
+	if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) || principal.IsApp(c) {
+		return org
 	}
-	return principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c)
+	return ""
 }
 
 // runnerBuild triggers a native build — an image, or the binaries a repo declares.
@@ -279,49 +304,52 @@ func runnerIAMAdmin(c *zip.Ctx) bool {
 // to object storage instead; it must carry no `image`, because a build produces
 // binaries or an image, never both.
 //
-// PRIVILEGED, with exactly two credentials and never a third: the shared
-// build-callback token compared in constant time — the machine path, which a user
-// never holds — or a validated IAM principal who is an ADMIN of their org, which is
-// the `hanzo build` user path and means one IAM login authorizes a build with no
-// separate build token. A plain member is refused.
+// PRIVILEGED, and A BUILD BELONGS TO THE ORGANIZATION ITS CREDENTIAL NAMES. Two
+// credentials, never a third:
 //
-// Both paths are bounded the same way: the output must push to a registry the
-// fabric owns, and on the IAM path the image's registry namespace must MATCH the
-// caller's own validated org — so an org admin can only publish into their own
-// brand and can never overwrite another's through the shared push credential. The
-// same confinement applies to the artifact lane's repo owner.
+//   - one that NAMES an organization — a person who administers it (the `hanzo
+//     build` path, so one IAM login authorizes a build with no separate build
+//     token), or that organization's own machine identity (the pipeline path). The
+//     build is attributed to that org and confined to what it owns.
+//   - the shared build-callback token, compared in constant time. It names NO
+//     organization, which is both why the fabric's own release can publish across
+//     brands with it and why anything that CAN name one is read first.
+//
+// Both are bounded by the owned-registry allowlist. The org path is bounded again,
+// by the org: the image's registry namespace must be one that organization owns, so
+// it publishes into its own brand and can never overwrite another's through the
+// shared push credential. The same confinement applies to the artifact lane's repo
+// owner. There is no request field naming an organization — the attribution is read
+// off the credential, so there is nothing for a caller to write it with.
 //
 // The output image is parsed and validated as a single well-formed OCI ref before
 // any authorization decision reads it, so a crafted ref cannot smuggle a
 // build-exporter attribute past the check.
 func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuildResp, error) {
 	s := o.s
-	// The request itself, not a tenant: this route authorizes on a shared
-	// credential or on platform authority, and a machine caller carries no org at
-	// all — so asking for one would refuse the very path this endpoint exists for.
+	// The request itself, not a tenant: this route resolves the organization from
+	// the credential below and accepts a credential that names none, so asking the
+	// seam for a tenant here would refuse the fabric's own build before the route
+	// could decide.
 	c, err := o.request(ctx)
 	if err != nil {
 		return nil, err
 	}
 	req := *body
-	// Auth — ONE of two credentials, never a third:
-	//   (1) the shared build-callback token (constant-time): the MACHINE path
-	//       (git-push-to-deploy, the operator). A user never
-	//       holds it. Or
-	//   (2) a validated IAM principal who is an admin (the IAM `isAdmin` bit, or a
-	//       platform SuperAdmin): the `hanzo build` USER path, so ONE IAM login
-	//       authorizes a build with no separate build token. principal.Validated is
-	//       true ONLY when the identity boundary (the gateway / cloud's own
-	//       SanitizeIdentity) minted X-User-Id from a signature-verified JWT and
-	//       re-minted X-User-IsOrgAdmin from its `isAdmin` claim — every authority
-	//       header is STRIPPED on ingress and re-injected only from validated
-	//       claims, so an off-gateway forge cannot fake it, and a plain member
-	//       (no admin bit) is refused.
-	// Both paths are bounded by the SAME owned-registry allowlist below, so neither
-	// can push outside the registries we own.
-	viaToken := runnerTokenOK(c)
-	viaIAM := !viaToken && runnerIAMAdmin(c)
-	if !viaToken && !viaIAM {
+	// The organization this build belongs to, read off the credential (runnerOrg).
+	// Empty means the caller named none, and the shared build-callback token is then
+	// the only thing that can authorize the build.
+	//
+	// THE CREDENTIAL THAT NAMES AN ORG IS READ FIRST, and that order is the rule
+	// rather than a preference: a caller presenting a real organization is attributed
+	// to it and confined to it, whether or not an ambient shared secret also rode
+	// along. Reading the token first discarded the org the caller had proved in
+	// favour of a secret that proves none — so a request carrying both got
+	// fabric-wide latitude across every brand's registry, and the build recorded
+	// nobody. An ambient secret must not be able to promote an identity out of its
+	// own tenant.
+	org := runnerOrg(c)
+	if org == "" && !runnerTokenOK(c) {
 		return nil, zip.ErrForbidden("invalid build token")
 	}
 
@@ -330,8 +358,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 
 	// EVERY BUILD HERE IS A TENANT'S BUILD, and the allowlist below is what bounds
 	// it: an ordinary build publishes ONE tenant's artifact into the namespace that
-	// tenant owns, so the caller's own org is the right bound and admin of that org
-	// is the right role.
+	// tenant owns, so the organization the credential names is the right bound.
 	//
 	// ghcr.io/hanzoai/cloud — the binary every service in every org runs — is not
 	// published from here at all. Its version numbers are ordered by one branch of
@@ -341,7 +368,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	// honours, so there is one.
 	ref := cmp.Or(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
 	if len(req.Binaries) > 0 {
-		return runnerArtifactBuild(s, ctx, c, req, ref, viaIAM)
+		return runnerArtifactBuild(s, ctx, c, req, ref, org)
 	}
 	if req.Repo == "" || req.Image == "" {
 		return nil, zip.ErrBadRequest("repo and image are required")
@@ -358,33 +385,15 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 		return nil, zip.ErrForbidden("image must push to an owned registry (ghcr.io/{hanzoai,luxfi,zooai}/*)")
 	}
 
-	// H1 — bind the image's registry-org to the caller's VALIDATED org on the IAM
-	// path. imageAllowed proved the image targets an owned registry; this proves
-	// the CALLER owns that registry namespace, so an org-admin can only push into
-	// its own brand and can never overwrite another brand's image via the shared
-	// push credential. A real platform SuperAdmin may cross (disabled in prod); the
-	// machine-token path is fabric-trusted and keeps full owned-registry latitude
-	// (it is how a native push and the operator build).
-	if viaIAM && !principal.IsSuperAdmin(c) {
-		callerOrg, _ := principal.Org(c)
-		if !imageInOrgRegistry(req.Image, callerOrg) {
-			return nil, zip.ErrForbidden("image registry-org must match your organization")
-		}
-	}
-
-	// Attribute the build to an org. On the IAM path the org is the caller's
-	// VALIDATED org, never a client-named one: default organizationId to it, and
-	// refuse a foreign org unless the caller is a platform SuperAdmin (who may act
-	// cross-org). The machine-token path keeps its explicit organizationId.
-	buildOrg := strings.TrimSpace(req.OrgID)
-	if viaIAM {
-		callerOrg, _ := principal.Org(c)
-		switch {
-		case buildOrg == "":
-			buildOrg = callerOrg
-		case buildOrg != callerOrg && !principal.IsSuperAdmin(c):
-			return nil, zip.ErrForbidden("organizationId must be your own org")
-		}
+	// H1 — bind the image's registry namespace to the org the CREDENTIAL names.
+	// imageAllowed proved the image targets a registry the fabric owns; this proves
+	// that organization owns the namespace, so it publishes into its own brand and
+	// can never overwrite another brand's image through the shared push credential.
+	// A real platform SuperAdmin may cross (disabled in prod). The shared token
+	// names no organization, so there is none to confine it to — that, and not a
+	// wider allowlist, is the whole of its extra latitude.
+	if org != "" && !principal.IsSuperAdmin(c) && !imageInOrgRegistry(req.Image, org) {
+		return nil, zip.ErrForbidden("image registry-org must match your organization")
 	}
 
 	bldID := genID("bld")
@@ -394,10 +403,11 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 		return nil, zip.Errorf(deployErrStatus(err), "launch build: %v", err)
 	}
 
-	// Record the build (org "platform" — a fabric-owned direct build, not
-	// tenant-scoped). Best-effort: a record miss must not fail a launched build.
+	// Record the build under the organization its credential named, and under
+	// "platform" when it named none (the fabric's own build). Best-effort: a record
+	// miss must not fail a launched build.
 	now := time.Now().Unix()
-	b := Build{ID: bldID, Org: cmp.Or(buildOrg, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, CreatedAt: now, UpdatedAt: now}
+	b := Build{ID: bldID, Org: cmp.Or(org, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, CreatedAt: now, UpdatedAt: now}
 	if err := s.State.store.InsertBuild(ctx, b); err != nil {
 		s.Log.Warn("runner build record insert failed (build already launched)", "job", jobName, "err", err)
 	}
@@ -410,11 +420,12 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 
 // runnerArtifactBuild serves the ARTIFACT lane of POST /v1/platform/runner: build what the
 // repo's hanzo.yml `binaries:` declares and publish it, rather than push an image.
-// Auth is already settled by the caller; the bounds this lane adds are its own:
-// the repo URL (the same allowlisted-git-host validator the image lane uses), the
-// recipe (binarySpec.validate), and — on the IAM path — the forge owner, which
-// must be one the caller's org owns.
-func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, req runnerBuildReq, ref string, viaIAM bool) (*runnerBuildResp, error) {
+// Auth is already settled by the caller, which hands this lane the organization the
+// credential named ("" for the fabric's own token). The bounds this lane adds are
+// its own: the repo URL (the same allowlisted-git-host validator the image lane
+// uses), the recipe (binarySpec.validate), and the forge owner, which must be one
+// that organization owns.
+func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, req runnerBuildReq, ref, org string) (*runnerBuildResp, error) {
 	if strings.TrimSpace(req.Image) != "" {
 		return nil, zip.ErrBadRequest("a build produces binaries or an image, never both")
 	}
@@ -444,14 +455,11 @@ func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ct
 	if !bucketRE.MatchString(bucket) {
 		return nil, zip.ErrBadRequest("bucket must be a valid object-store bucket name")
 	}
-	// Same H1 confinement the image lane applies to a registry namespace: an IAM
-	// org-admin publishes only its own brand's repos. The machine token is
-	// fabric-trusted (it is how a native push publishes).
-	if viaIAM && !principal.IsSuperAdmin(c) {
-		callerOrg, _ := principal.Org(c)
-		if !repoOwnerInOrg(repoURL, callerOrg) {
-			return nil, zip.ErrForbidden("repo owner must match your organization")
-		}
+	// Same H1 confinement the image lane applies to a registry namespace: an
+	// organization publishes artifacts only for the forge owner it owns. The shared
+	// token names no organization, so there is none to confine it to.
+	if org != "" && !principal.IsSuperAdmin(c) && !repoOwnerInOrg(repoURL, org) {
+		return nil, zip.ErrForbidden("repo owner must match your organization")
 	}
 
 	bldID := genID("bld")
@@ -466,7 +474,7 @@ func runnerArtifactBuild(s *cloud.Service[state], ctx context.Context, c *zip.Ct
 	// records the pushed ref: it is the one URL the artifact is reached by.
 	index := base + "/binaries.json"
 	now := time.Now().Unix()
-	b := Build{ID: bldID, Org: platformBuildOrg, Status: "queued", Image: index, JobName: jobName, CreatedAt: now, UpdatedAt: now}
+	b := Build{ID: bldID, Org: cmp.Or(org, platformBuildOrg), Status: "queued", Image: index, JobName: jobName, CreatedAt: now, UpdatedAt: now}
 	if err := s.State.store.InsertBuild(ctx, b); err != nil {
 		s.Log.Warn("runner artifact build record insert failed (build already launched)", "job", jobName, "err", err)
 	}
