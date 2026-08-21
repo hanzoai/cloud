@@ -85524,7 +85524,7 @@ paths:
       tags:
       - graph
       x-app: graph
-      x-stage: alpha
+      x-public: true
       x-tool: true
     post:
       operationId: graphAssert
@@ -85545,7 +85545,7 @@ paths:
       tags:
       - graph
       x-app: graph
-      x-stage: alpha
+      x-public: true
       x-tool: true
   /v1/graph/neighbors:
     post:
@@ -85567,7 +85567,7 @@ paths:
       tags:
       - graph
       x-app: graph
-      x-stage: alpha
+      x-public: true
       x-tool: true
   /v1/graph/resolve:
     post:
@@ -85589,7 +85589,7 @@ paths:
       tags:
       - graph
       x-app: graph
-      x-stage: alpha
+      x-public: true
       x-tool: true
   /v1/graph/vocabulary:
     get:
@@ -85605,7 +85605,7 @@ paths:
       tags:
       - graph
       x-app: graph
-      x-stage: alpha
+      x-public: true
       x-tool: true
   /v1/guide:
     get:
