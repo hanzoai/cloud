@@ -78,7 +78,7 @@ import (
 
 // CommandPath is the command projection's address. House law: /v1/ only, no
 // /api/ prefix, and never a v2.
-const CommandPath = "/v1/commands"
+const CommandPath = "/v1/openapi/commands"
 
 // catalog is the projection rendered: the bytes and the tag that names them.
 // Both are computed once, together, because the tag is a fact ABOUT the bytes
