@@ -228,7 +228,7 @@
             "name": "clusterId",
             "in": "path",
             "required": true,
-            "description": "ClusterID and PoolID address the pool, from the URL path.",
+            "description": "ClusterID is the cluster holding the pool, from the URL path.",
             "schema": {
               "type": "string"
             }
@@ -237,6 +237,7 @@
             "name": "poolId",
             "in": "path",
             "required": true,
+            "description": "PoolID is the pool to resize, from the URL path — the `poolId` a cluster read\nreports for it. Required.",
             "schema": {
               "type": "string"
             }
@@ -1354,39 +1355,51 @@
       "agentBinding": {
         "properties": {
           "agentName": {
+            "description": "AgentName is the cloud Agent (/v1/agents) this machine runs — the agent a\nmessage to the bot is actually run against. It is the one field that decides\nwhat the bot DOES.",
             "type": "string"
           },
           "botVersion": {
+            "description": "BotVersion pins the @hanzo/bot runtime version the machine runs. Empty means\nthe machine took the default in force when it was bound.",
             "type": "string"
           },
           "createdTime": {
+            "description": "CreatedTime is when the binding was first made.",
             "type": "string"
           },
           "machineId": {
+            "description": "MachineId is the bound machine as vm addresses it, owner-qualified\n(\"\u003corg\u003e/\u003cmachine\u003e\"). The unqualified half is what this surface's :id routes\ntake.",
             "type": "string"
           },
           "message": {
+            "description": "Message is vm's human-readable detail on Status (\"machine provisioning;\n@hanzo/bot runtime not yet confirmed\") — the reason behind the state, not a\nsecond state.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the binding's own key, which is the machine's id: a machine hosts at\nmost one agent, so the binding is named for it. This is the key a bots list\njoins bindings onto machines by.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the Hanzo tenant the binding belongs to.",
             "type": "string"
           },
           "owner": {
+            "description": "Owner is the tenant vm filed the binding under, resolved from the ?owner it\nwas called with — which is the caller's validated org and never a body field.",
             "type": "string"
           },
           "provider": {
+            "description": "Provider is the cloud the bound machine runs on, carried here so a bindings\nlist says where each bot lives without a second read per machine.",
             "type": "string"
           },
           "publicIp": {
+            "description": "PublicIp is the bound machine's public address as vm recorded it on the\nbinding. Empty while the machine has none yet.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the binding's lifecycle in VM's OWN words — \"Pending\" while the\nmachine provisions and the runtime is unconfirmed, \"running\" once vm has\nconfirmed it. The vocabulary is vm's and passes through unmapped, which is\nwhy its capitalization does not match the machine states beside it, and it is\nvm's reconciled reading rather than anything asserted here.",
             "type": "string"
           },
           "updatedTime": {
+            "description": "UpdatedTime is when vm last reconciled it — the age of Status.",
             "type": "string"
           }
         },
@@ -1436,10 +1449,12 @@
       "botView": {
         "properties": {
           "agent": {
+            "description": "Agent is the cloud Agent this machine runs, lifted out of the binding so a\nlist of bots reads without following one. Empty means the machine is a bot\nmachine with nothing bound — it costs money and answers nothing.",
             "type": "string"
           },
           "binding": {
-            "$ref": "#/components/schemas/agentBinding"
+            "$ref": "#/components/schemas/agentBinding",
+            "description": "Binding is the record joining this machine to that agent, carrying vm's own\nreconciled status and its reason. Absent means no runtime is bound, which is\nalso what a stopped bot looks like: stopping unbinds and leaves the machine\nrunning."
           },
           "createdTime": {
             "type": "string"
@@ -1489,18 +1504,19 @@
       "byoGPU": {
         "properties": {
           "arch": {
-            "description": "native target, e.g. \"gfx1151\"",
+            "description": "Arch is the card's native compile target (\"gfx1151\"), which is what a kernel\nhas to be built for. AMD reports one; NVIDIA cards leave it empty.",
             "type": "string"
           },
           "memoryTotal": {
-            "description": "VRAM (or unified pool), e.g. \"122880 MiB\"",
+            "description": "MemoryTotal is the card's VRAM in the units the host reported it in\n(\"122880 MiB\") — a display string, not a byte count. On a unified part it is\nthe shared CPU/GPU pool, so it is not memory reserved for the GPU.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the card's model exactly as its own tooling named it (\"NVIDIA\nGB10\"), never normalized — an operator matches what they see here against\nwhat nvidia-smi tells them on the box.",
             "type": "string"
           },
           "unified": {
-            "description": "unified CPU/GPU memory pool (APU / SoC)",
+            "description": "Unified reports that CPU and GPU share one memory pool (an APU or SoC), so\nMemoryTotal is not private to the GPU and the host competes for it.",
             "type": "boolean"
           }
         },
@@ -1513,73 +1529,89 @@
             "type": "string"
           },
           "capabilities": {
-            "description": "Capabilities the worker advertises (\"studio.render\", \"engine.serve\"); Engine\nis present when it runs a hanzo-engine model server. Both additive + omitempty.",
+            "description": "Capabilities is what this worker offers the org: \"studio.render\" when the\nnode can render, \"engine.serve\" when it serves a model endpoint. A node\nadvertises one only once it can honour it, so an absent list means a node\nthat has dialed in but is not ready to serve any of them yet.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "cpuModel": {
+            "description": "CPUModel is the processor as the host names it (\"Apple M3 Max\"), for display.",
             "type": "string"
           },
           "cpus": {
+            "description": "CPUs is the host's logical core count.",
             "type": "integer"
           },
           "cuda": {
+            "description": "Cuda is the host's CUDA toolkit version. NVIDIA hosts report it.",
             "type": "string"
           },
           "driver": {
+            "description": "Driver is the host's NVIDIA kernel driver version — distinct from Cuda, and\nthe one that bounds which CUDA versions can run on this box.",
             "type": "string"
           },
           "engine": {
-            "$ref": "#/components/schemas/engineAdvertisement"
+            "$ref": "#/components/schemas/engineAdvertisement",
+            "description": "Engine is the hanzo-engine model server this node runs, when it runs one\n(`hanzo link --serve-engine`). Absent means the node takes jobs but serves\nno model endpoint."
           },
           "firstSeen": {
+            "description": "FirstSeen is when this node first dialed in, RFC 3339 — the start of its\npresence record, which `hanzo unlink` ends.",
             "type": "string"
           },
           "gpus": {
+            "description": "GPUs are the accelerators the host found on itself. Empty is a real answer:\na CPU-only machine can dial in and take non-GPU work.",
             "items": {
               "$ref": "#/components/schemas/byoGPU"
             },
             "type": "array"
           },
           "hip": {
+            "description": "Hip is the host's HIP runtime version, the AMD counterpart to Cuda.",
             "type": "string"
           },
           "hostname": {
+            "description": "Hostname is what the host calls itself. It equals ID for any hostname already\nin the [a-z0-9-] alphabet, and differs when sanitizing had to change it.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the node's id in the fleet — the sanitized hostname it registered\nunder, which is also the `unit` its samples and its gpu-jobs lane key on.\nThis is the id to use everywhere else on the compute surface.",
             "type": "string"
           },
           "jobQueue": {
+            "description": "JobQueue is the tasks NAMESPACE this worker claims render jobs out of —\n\"gpu-jobs\" unless `hanzo link` was pointed at another. Within it, a job aimed\nat this node alone rides the task-queue value \"gpu:\u003cid\u003e\".",
             "type": "string"
           },
           "lastHeartbeat": {
+            "description": "LastHeartbeat is the most recent beat this node sent, RFC 3339. It is what\nStatus is computed from, so a reader can check the judgement.",
             "type": "string"
           },
           "location": {
-            "description": "\"on-prem\" (BYO has no cloud region)",
+            "description": "Location is always \"on-prem\" — a machine that dialed in has no cloud region,\nand inventing one would put it somewhere it is not.",
             "type": "string"
           },
           "memory": {
+            "description": "Memory is the host's total RAM in BYTES.",
             "type": "integer"
           },
           "os": {
+            "description": "Os is the host's operating system: linux, darwin or windows.",
             "type": "string"
           },
           "provider": {
-            "description": "always \"byo\"",
+            "description": "Provider is always \"byo\": this machine is the operator's, not one Hanzo\nprovisioned. It exists so a fold into the machines/GPUs pages says which\nrows are rented and which are the customer's own.",
             "type": "string"
           },
           "rocm": {
+            "description": "Rocm is the host's ROCm version. AMD hosts report it; empty otherwise.",
             "type": "string"
           },
           "status": {
-            "description": "online | offline",
+            "description": "Status is \"online\" when the last heartbeat landed within 90s, else\n\"offline\" — so it is a fact about heartbeat freshness, not about the box\nbeing powered on. A worker that has never beaten reads offline.",
             "type": "string"
           },
           "version": {
+            "description": "Version is the `hanzo` CLI version running on the node. It is what to check\nwhen a worker is missing a field a newer registration reports.",
             "type": "string"
           }
         },
@@ -1648,6 +1680,7 @@
             "type": "string"
           },
           "nodes": {
+            "description": "Nodes is every worker node in the cluster, each in the same shape the\nmachines surface uses — a node IS a machine, addressable by its own id. This\nis the individual hardware behind the pool counts above.",
             "items": {
               "$ref": "#/components/schemas/machineView"
             },
@@ -1687,43 +1720,54 @@
       "clusterView": {
         "properties": {
           "amdGpu": {
+            "description": "AmdGPU is the same count for `amd.com/gpu`: AMD accelerators across the BYO\ncluster's nodes, as of the attach.",
             "type": "integer"
           },
           "createdAt": {
+            "description": "CreatedAt is when the cluster started existing: the earliest creation time\namong its pools for a managed cluster, and for a BYO one the RFC 3339 moment\nit was attached. Empty when the source states none.",
             "type": "string"
           },
           "doClusterId": {
+            "description": "DoClusterID carries the SAME id as DoksClusterID. Both names exist because\nthe console's Cluster type reads either one; neither is a second identifier.",
             "type": "string"
           },
           "doksClusterId": {
+            "description": "DoksClusterID is the provider's own id for the cluster, and the value the\n/v1/visor/k8s/clusters/:id routes take. Empty for a BYO cluster: an attached\nkubeconfig was never provisioned, so there is no provider id to state.",
             "type": "string"
           },
           "kind": {
-            "description": "Fleet fields (additive): \"managed\" (Visor-provisioned) vs \"byo\" (attached\nkubeconfig), and the live GPU inventory a BYO cluster reports.",
+            "description": "Kind says which of the two kinds of cluster this row is, and there are only\ntwo: \"managed\" — Visor provisioned it and Hanzo's account pays the provider —\nor \"byo\", an existing cluster the org attached by kubeconfig.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the cluster's name: the provider's for a managed cluster, and for a\nBYO one the lower-cased fleet name it was attached under — which is also how\nthe detach route addresses it.",
             "type": "string"
           },
           "nodeCount": {
+            "description": "NodeCount is how many worker nodes the cluster has — the sum over its pools\nfor a managed cluster, and for a BYO one the node count read off the cluster\nwhen it was attached.",
             "type": "integer"
           },
           "nodePools": {
+            "description": "NodePools is the authoritative node inventory — every pool, each with its own\nsize and count. It is empty in two cases that are not \"no pools\": a row from\nthe /v1/visor/k8s/clusters LIST, which is deliberately lightweight and whose\n:id detail carries them, and a BYO cluster, whose pools were never read.",
             "items": {
               "$ref": "#/components/schemas/nodePoolView"
             },
             "type": "array"
           },
           "nodeSize": {
+            "description": "NodeSize is a display convenience: the size slug of the FIRST pool. A cluster\nmixing sizes has more than one, and NodePools is where they all are.",
             "type": "string"
           },
           "nvidiaGpu": {
+            "description": "NvidiaGPU is how many NVIDIA accelerators the cluster's nodes advertise, the\nsum of `nvidia.com/gpu` allocatable across them. BYO only, and counted ONCE\nwhen the cluster was attached — it is an inventory, not live capacity.",
             "type": "integer"
           },
           "region": {
+            "description": "Region is the provider region slug for a managed cluster. A BYO cluster has\nno region we can read, so it carries the free-form `provider` label the\nattach named it with (\"gke\", \"on-prem\") instead.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the cluster's state: the provider's own word for a managed cluster\n(\"running\", \"provisioning\"), \"unknown\" when the provider stated none, and\nalways \"attached\" for a BYO cluster — that one says the kubeconfig is on\nfile, not that the cluster is reachable this second.",
             "type": "string"
           }
         },
@@ -1736,6 +1780,7 @@
             "type": "string"
           },
           "nodePool": {
+            "description": "NodePool is the ONE pool the cluster is born with — a cluster with no nodes\nruns nothing, so it is not optional. More pools are added afterwards through\nPOST /v1/visor/clusters/:clusterId/pools.",
             "properties": {
               "count": {
                 "type": "integer"
@@ -1763,24 +1808,25 @@
       "engineAdvertisement": {
         "properties": {
           "apis": {
-            "description": "[\"openai\",\"anthropic\"]",
+            "description": "APIs are the wire formats the engine serves on that one port: \"openai\",\n\"anthropic\", or both.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "models": {
-            "description": "ids from the node's GET /v1/models",
+            "description": "Models are the model ids the node's own GET /v1/models answered with — what\nthis GPU can actually be asked for.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "status": {
-            "description": "\"ready\" | \"unreachable\"",
+            "description": "Status is \"ready\" when the node's engine answered, \"unreachable\" when it did\nnot. Advertised is not the same as serving, and this is the difference.",
             "type": "string"
           },
           "url": {
+            "description": "URL is the base address the node advertised its engine on — where a model\ncall to this GPU is sent. The node chose it, so reaching it is a question\nabout the node's network, not about this surface.",
             "type": "string"
           }
         },
@@ -1801,18 +1847,23 @@
       "fleetMetrics": {
         "properties": {
           "at": {
+            "description": "At is when this reading was MEASURED, RFC 3339 in UTC — not when the board\nwas built. A console decides staleness by comparing it to now; the board\ndeliberately does not decide that for it.",
             "type": "string"
           },
           "gpuUtil": {
+            "description": "GPUUtil is aggregate accelerator utilization as a FRACTION of 1 — 0.42 is\n42% busy, never 42. Across all of the unit's cards, not one of them.",
             "type": "number"
           },
           "load1": {
+            "description": "Load1 is the host's 1-minute load average — runnable processes, not a\npercentage, so it is read against the unit's core count and can exceed 1.",
             "type": "number"
           },
           "memFree": {
+            "description": "MemFree is host memory still available, in BYTES. It is what the source\nreported, not fleetSpec.Memory minus MemUsed.",
             "type": "integer"
           },
           "memUsed": {
+            "description": "MemUsed is host memory in use, in BYTES.",
             "type": "integer"
           }
         },
@@ -1821,21 +1872,27 @@
       "fleetSpec": {
         "properties": {
           "arch": {
+            "description": "Arch is the CPU architecture, amd64 or arm64, and it is what decides whether\na binary built for the fleet will run here. Only the sources that report one\ncarry it (a linked run-target, a BYO worker).",
             "type": "string"
           },
           "cpus": {
+            "description": "CPUs is logical cores on the unit.",
             "type": "integer"
           },
           "gpuModel": {
+            "description": "GPUModel names the FIRST accelerator (\"NVIDIA GB10\") as the representative of\nthe set; GPUs carries how many. Empty for a cluster, whose cards are counted\nrather than modelled, and for a unit with none.",
             "type": "string"
           },
           "gpus": {
+            "description": "GPUs is how many accelerators the unit has. For a cluster it is the vendor\ntotals summed across every node, so it counts cards, not machines.",
             "type": "integer"
           },
           "memory": {
+            "description": "Memory is total system RAM in BYTES — not GB, and not what is free right now\n(fleetMetrics carries that). Absent when the source reports no RAM figure.",
             "type": "integer"
           },
           "os": {
+            "description": "OS is the operating system the unit runs: linux, darwin or windows. Empty\nwhen the source does not report one — a cluster row does not.",
             "type": "string"
           }
         },
@@ -1844,37 +1901,47 @@
       "fleetUnit": {
         "properties": {
           "host": {
+            "description": "Host is the unit's hostname. Empty for a unit that is not one host: a cluster\nrow has no hostname to report.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is what the unit IS: laptop, cloud, gpu, cluster, machine or worker.",
             "type": "string"
           },
           "label": {
+            "description": "Label is the name to show a human — a target's label, a worker's hostname, a\nmachine's display name. Empty when the source has none to give.",
             "type": "string"
           },
           "metrics": {
-            "$ref": "#/components/schemas/fleetMetrics"
+            "$ref": "#/components/schemas/fleetMetrics",
+            "description": "Metrics is the unit's latest utilization: its own live snapshot when it keeps\none (a run-target's heartbeat wins), else the newest sample from the series\nfor the SAME source. Absent means nothing is known about this unit's load —\nwhich is deliberately not the same as a reading of zero."
           },
           "queued": {
+            "description": "Queued is how many renders are waiting on THIS GPU's own lane in the org's\ngpu-jobs queue. BYO units only — an agent run-target dispatches, it does not\nqueue — and omitted when nothing is waiting.",
             "type": "integer"
           },
           "running": {
-            "description": "Running is what the unit is actively executing: agent sessions for a run-target,\nin-flight renders for a BYO GPU. Queued is the gpu-jobs backlog on this GPU's\nlane (BYO units only; an agent unit does not queue). Both come from the org's\ngpu-jobs queue for BYO units, overlaid in listFleet.",
+            "description": "Running is what the unit is executing right now: agent sessions in flight for\na run-target, claimed renders for a BYO GPU.",
             "type": "integer"
           },
           "sessions": {
+            "description": "Sessions is how many agent sessions are open on this unit. Always present,\nand 0 for a source that cannot host agent sessions at all — a fact about that\nplane, not a gap in the reading.",
             "type": "integer"
           },
           "source": {
+            "description": "Source is the plane this row came from: \"agent\" (a linked run-target), \"byo\"\n(a worker or cluster the org dialed in) or \"visor\" (a machine Hanzo\nprovisioned). It is half the row's identity, and it says which face owns the\nunit — /v1/agents/targets, /v1/visor/fleet/workers, /v1/visor/machines.",
             "type": "string"
           },
           "spec": {
-            "$ref": "#/components/schemas/fleetSpec"
+            "$ref": "#/components/schemas/fleetSpec",
+            "description": "Spec is the unit's static capability. Absent when the source reported none —\nunknown capability, never a zeroed one."
           },
           "status": {
+            "description": "Status is liveness in the SOURCE's own vocabulary, because each plane decides\nit differently: a run-target's is derived from its heartbeat, a BYO worker's\nis online/offline on the 90s window, a BYO cluster's is \"attached\", and a\nVisor machine's is the provider's word for its lifecycle state.",
             "type": "string"
           },
           "unit": {
+            "description": "Unit is the SOURCE's own id for this unit — a run-target id, a BYO worker id,\na Visor machine name — so a row links straight back to the face that owns it.\nIt is unique within a source, not across them: two planes may mint the same\nid, which is why (source, unit) together is the identity.",
             "type": "string"
           }
         },
@@ -1895,43 +1962,55 @@
       "gpuJob": {
         "properties": {
           "attempt": {
+            "description": "Attempt is which try this is, counting from 1. Above 1 means the job was\nretried after a failed or abandoned run.",
             "type": "integer"
           },
           "closeTime": {
+            "description": "CloseTime is when the job reached a terminal state, RFC 3339. Empty means it\nis still live — queued, running or stalled.",
             "type": "string"
           },
           "failureCause": {
+            "description": "FailureCause is the engine's reason the job failed. Empty unless it did.",
             "type": "string"
           },
           "gpu": {
+            "description": "GPU is the node this job is aimed AT — the lane \"gpu:\u003cnode\u003e\" it was submitted\non. Empty means the shared any-GPU lane: it was not aimed anywhere and the\nfirst free worker takes it.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the job's id, and the id the cancel route takes. The dispatcher sets it\nequal to the render's prompt id, so it is the same value the studio knows the\njob by.",
             "type": "string"
           },
           "label": {
+            "description": "Label is the cheap human name for the render — the output filename prefix\nlifted out of the submitted graph. Empty when the graph carried none. The\ngraph itself is never in this list; the tasks describe endpoint serves it.",
             "type": "string"
           },
           "lastHeartbeat": {
+            "description": "LastHeartbeat is the claiming worker's most recent beat on this job, RFC 3339\n— the evidence a long render is still alive rather than wedged.",
             "type": "string"
           },
           "leaseExpiry": {
+            "description": "LeaseExpiry is when the worker's claim lapses, RFC 3339. Past it with the job\nstill STARTED, the claimant is presumed dead and Status reads \"stalled\".",
             "type": "string"
           },
           "runId": {
+            "description": "RunID identifies this execution of the job. It equals ID for a job the\ndispatcher submitted, which is why a cancel that omits it still works.",
             "type": "string"
           },
           "startTime": {
+            "description": "StartTime is when a worker began executing the job, RFC 3339. Empty while it\nis still queued.",
             "type": "string"
           },
           "status": {
-            "description": "queued|running|completed|failed|canceled",
+            "description": "Status is the job's lifecycle state: queued, running, completed, failed or\ncanceled — plus \"stalled\", which is this surface's own reading of a job that\nis STARTED whose worker died: its lease has elapsed and no reaper has taken\nit back yet. Without it such a job reads \"running\" forever. An engine state\nthis surface does not recognize passes through lower-cased rather than being\ncoerced into one of these.",
             "type": "string"
           },
           "type": {
+            "description": "Type is the work being done (\"studio.render\") — what the claiming worker has\nto be able to execute.",
             "type": "string"
           },
           "worker": {
+            "description": "Worker is the node that actually CLAIMED the job, which is not always the one\nit was aimed at: a shared-lane job has no GPU but does have a Worker once\npicked up. Empty while the job is still waiting.",
             "type": "string"
           }
         },
@@ -1952,31 +2031,39 @@
       "gpuView": {
         "properties": {
           "id": {
+            "description": "ID is the card's address: its host machine's id, \"#\", and the card's ordinal\nwithin that machine (\"gpu-1#0\"). Stable for as long as the machine is, and\nthe only id a single accelerator has — providers do not name cards.",
             "type": "string"
           },
           "location": {
+            "description": "Location is where the card physically sits, which for every source today is\nthe same value Region carries — the console renders it in its own column.",
             "type": "string"
           },
           "machine": {
+            "description": "Machine is the id of the machine holding this card, addressable as-is on\n/v1/visor/machines/:id.",
             "type": "string"
           },
           "memory": {
+            "description": "Memory is the card's VRAM as its own tooling reported it (\"122880 MiB\") — a\ndisplay string in the reporter's units, not a byte count. BYO cards carry it\n(nvidia-smi); Visor's machine object states no VRAM, so a rented card leaves\nit empty and the console renders \"—\" rather than a fabricated 0.",
             "type": "string"
           },
           "model": {
+            "description": "Model is the accelerator: the model token read out of the size slug for a\nVisor GPU droplet (\"H100\", \"MI300X\"), or the name nvidia-smi reported for a\nBYO card (\"NVIDIA GB10\").",
             "type": "string"
           },
           "name": {
+            "description": "Name is the HOST MACHINE's display name, not the card's — every card in a\ngpu-h100x8 node repeats it. Model is what says which accelerator this is.",
             "type": "string"
           },
           "provider": {
-            "description": "Provider distinguishes a BYO accelerator (\"byo\") from a Visor-provisioned\none (the machine's real provider). Memory is VRAM when known (BYO reports it\nfrom nvidia-smi; Visor's machine object carries none, so it stays empty and\nthe UI renders \"—\"). Both are additive + omitempty: existing rows are\nunaffected and the console normalizer ignores fields it does not read.",
+            "description": "Provider distinguishes a BYO accelerator (\"byo\") from a Visor-provisioned one\n(the host machine's real provider). It is what tells a card the org owns from\na card the org rents.",
             "type": "string"
           },
           "region": {
+            "description": "Region is the host machine's provider region slug; \"on-prem\" for a BYO card.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the HOST MACHINE's lifecycle state, because nothing upstream\nreports a card's own health. A card reads running because its machine does.",
             "type": "string"
           }
         },
@@ -2039,45 +2126,59 @@
       "machineView": {
         "properties": {
           "createdTime": {
+            "description": "CreatedTime is when the machine came into being: the provider's own creation\ntimestamp for a Visor machine, passed through in whatever form it states it,\nand for a BYO machine the RFC 3339 moment it first dialed in.",
             "type": "string"
           },
           "gpu": {
+            "description": "GPU names the accelerators this machine holds (\"H100\", or \"2× NVIDIA GB10\"\nfor a BYO machine reporting a matched pair). Empty means the machine is not\na GPU machine — the size slug does not parse as one, or nvidia-smi found\nnothing.",
             "type": "string"
           },
           "id": {
+            "description": "ID addresses this machine on the /v1/visor/machines/:id routes: the\norg-scoped NAME Visor keys a machine by, falling back to the provider id for\na machine that has no name. A BYO machine's is the id it dialed in under.",
             "type": "string"
           },
           "image": {
+            "description": "Image is the OS image the machine booted from, as the provider names it.",
             "type": "string"
           },
           "mem": {
+            "description": "Mem is system RAM rendered for a human (\"8 GB\"), not a number to compute\nwith. Empty when the provider's figure is ambiguous, or when the only figure\navailable is a GPU slug's gb — that is VRAM, and reporting it as system RAM\nwould be a fabrication. A BYO machine's RAM is on /v1/visor/fleet/workers.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the label to show a human — Visor's displayName, or the machine name\nwhen it carries none. A BYO machine's is its hostname. It is not an address:\nID is what the routes take.",
             "type": "string"
           },
           "os": {
+            "description": "Os is the operating system on the machine — Visor's record for a provisioned\none, the host's own report (linux, darwin, windows) for a BYO one.",
             "type": "string"
           },
           "privateIp": {
+            "description": "PrivateIp is the address on the provider's own network, reachable from the\norg's other machines in the same region. Empty on the same terms as PublicIp.",
             "type": "string"
           },
           "provider": {
+            "description": "Provider is the cloud that runs the machine (\"digitalocean\"), or \"byo\" for\none the operator dialed in with `hanzo link`.",
             "type": "string"
           },
           "publicIp": {
+            "description": "PublicIp is the internet-facing address the provider assigned. Empty while a\nmachine is still provisioning, and empty for a BYO machine — it dials out\nfrom behind NAT, so no address is ever learned for it.",
             "type": "string"
           },
           "region": {
+            "description": "Region is the provider region slug (\"sfo3\"), or the zone when the provider\nreports only that. \"on-prem\" for a BYO machine, which has no cloud region.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the lifecycle state in the PROVIDER's own words (\"active\",\n\"running\", \"off\"), passed through rather than mapped onto a vocabulary of\nours. A BYO machine's is \"online\" or \"offline\", decided by whether its last\nheartbeat is within 90s.",
             "type": "string"
           },
           "type": {
+            "description": "Type is the provider SIZE SLUG the machine runs at (\"s-2vcpu-4gb\",\n\"gpu-h100x8-640gb\") — the value a launch asks for, and what Vcpu/Mem/GPU are\nread out of when the provider states them no other way. \"byo-gpu\" for a\ndialed-in machine, which was never bought from a size catalog.",
             "type": "string"
           },
           "vcpu": {
+            "description": "Vcpu is logical cores — the provider's own cpuSize when that is a clean\ninteger, else the count read out of the size slug (4 from \"s-4vcpu-8gb\").\nABSENT, never 0, when neither says. A BYO machine leaves it absent here; its\nreal core count is on GET /v1/visor/fleet/workers.",
             "type": "integer"
           }
         },
@@ -2098,24 +2199,31 @@
       "nodePoolView": {
         "properties": {
           "autoScale": {
+            "description": "AutoScale reports whether the provider's cluster autoscaler owns this pool's\nsize, moving Count between MinNodes and MaxNodes as workloads demand. False\nmeans Count changes only when someone scales the pool.",
             "type": "boolean"
           },
           "count": {
+            "description": "Count is how many nodes the pool has right now. Always present, so 0 means a\npool that is genuinely empty rather than a figure the provider withheld.",
             "type": "integer"
           },
           "maxNodes": {
+            "description": "MaxNodes is the ceiling the autoscaler will not grow the pool past, and so\nthe bound on what this pool can cost. Read it only with AutoScale set.",
             "type": "integer"
           },
           "minNodes": {
+            "description": "MinNodes is the floor the autoscaler will not shrink the pool below. Read it\nonly with AutoScale set — the provider ignores it otherwise.",
             "type": "integer"
           },
           "name": {
+            "description": "Name is the pool's name as the provider knows it.",
             "type": "string"
           },
           "poolId": {
+            "description": "PoolID is the provider's id for the pool — the value the scale and delete\nroutes address it by. It falls back to the pool's name when the provider\nanswered without one, so it is always something the routes accept.",
             "type": "string"
           },
           "size": {
+            "description": "Size is the provider size slug every node in the pool runs at\n(\"s-4vcpu-8gb\", \"gpu-h100x8-640gb\"). One pool is one size — a mixed cluster\nis several pools.",
             "type": "string"
           }
         },
@@ -2136,10 +2244,11 @@
             "type": "integer"
           },
           "maxNodes": {
+            "description": "MaxNodes is the ceiling the autoscaler may not grow the pool past, and so the\nbound on what this pool can spend. Ignored unless AutoScale is set.",
             "type": "integer"
           },
           "minNodes": {
-            "description": "MinNodes and MaxNodes bound the autoscaler; they are ignored unless\nAutoScale is set.",
+            "description": "MinNodes is the floor the autoscaler may not shrink the pool below. Ignored\nunless AutoScale is set.",
             "type": "integer"
           },
           "name": {
@@ -2160,7 +2269,7 @@
       "poolScale": {
         "properties": {
           "clusterId": {
-            "description": "ClusterID and PoolID address the pool, from the URL path.",
+            "description": "ClusterID is the cluster holding the pool, from the URL path.",
             "type": "string"
           },
           "count": {
@@ -2168,6 +2277,7 @@
             "type": "integer"
           },
           "poolId": {
+            "description": "PoolID is the pool to resize, from the URL path — the `poolId` a cluster read\nreports for it. Required.",
             "type": "string"
           },
           "provider": {
@@ -2189,6 +2299,7 @@
       "sampleIngest": {
         "properties": {
           "gpuModel": {
+            "description": "GPUModel names the representative accelerator (\"GB10\"); GPUs carries how\nmany. A heterogeneous host names its first card rather than inventing a\nsummary.",
             "type": "string"
           },
           "gpuUtil": {
@@ -2196,7 +2307,7 @@
             "type": "number"
           },
           "gpus": {
-            "description": "GPUs is how many accelerators the reading covers, GPUModel the representative\nmodel name.",
+            "description": "GPUs is how many accelerators this reading covers.",
             "type": "integer"
           },
           "host": {
@@ -2204,10 +2315,11 @@
             "type": "string"
           },
           "memFree": {
+            "description": "MemFree is host memory still available, in BYTES.",
             "type": "integer"
           },
           "memUsed": {
-            "description": "MemUsed and MemFree are host memory in bytes.",
+            "description": "MemUsed is host memory in use, in BYTES.",
             "type": "integer"
           },
           "unit": {
@@ -2232,51 +2344,67 @@
       "sampleView": {
         "properties": {
           "at": {
+            "description": "At is when the reading was MEASURED, RFC 3339 in UTC — the x-axis a chart\nplots against. The series is returned oldest first, so it only increases.",
             "type": "string"
           },
           "costCents": {
+            "description": "CostCents is what this unit resold for over the hour the reading falls in, in\nwhole US cents. 0 means UNPRICED, not free: the operator's own machines — a\nlinked run-target, a dialed-in BYO worker — are metered for utilization and\nnever resold, so only a priced source ever fills it.",
             "type": "integer"
           },
           "cpus": {
+            "description": "CPUs is logical cores. The static capability rides every row on purpose: a\nchart can size load against cores without joining a registry whose row may\nsince have been rewritten or the unit deregistered.",
             "type": "integer"
           },
           "gpuModel": {
+            "description": "GPUModel names the representative accelerator (\"GB10\"); GPUs carries how many.",
             "type": "string"
           },
           "gpuUtil": {
+            "description": "GPUUtil is aggregate accelerator utilization as a FRACTION of 1 — 0.42 is\n42% busy. Anything a reporter sends outside 0..1 is clamped into it on write.",
             "type": "number"
           },
           "gpus": {
+            "description": "GPUs is how many accelerators the reading covers.",
             "type": "integer"
           },
           "host": {
+            "description": "Host is the hostname the unit reported at the time of the reading.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is what the measured unit is: laptop, cloud, gpu, cluster, machine or\nworker.",
             "type": "string"
           },
           "load1": {
+            "description": "Load1 is the 1-minute load average — runnable processes, not a percentage.",
             "type": "number"
           },
           "load15": {
+            "description": "Load15 is the 15-minute load average, the same units as Load1.",
             "type": "number"
           },
           "load5": {
+            "description": "Load5 is the 5-minute load average, the same units as Load1.",
             "type": "number"
           },
           "memFree": {
+            "description": "MemFree is host memory available, in BYTES, as reported rather than derived.",
             "type": "integer"
           },
           "memUsed": {
+            "description": "MemUsed is host memory in use, in BYTES.",
             "type": "integer"
           },
           "memory": {
+            "description": "Memory is total system RAM in BYTES at the time of the reading.",
             "type": "integer"
           },
           "source": {
+            "description": "Source is the plane that reported the reading: \"agent\", \"byo\" or \"visor\" —\nthe same vocabulary the board's rows carry, and what ?source= narrows on.",
             "type": "string"
           },
           "unit": {
+            "description": "Unit is the source's own id for the measured unit. With Source it is the key\nthe chart groups by, and the key the board joins a unit's latest reading on.",
             "type": "string"
           }
         },

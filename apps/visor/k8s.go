@@ -73,6 +73,9 @@ type visorKubernetesClusterDetail struct {
 // plus the worker nodes as the SAME machineView the machines surface emits.
 type clusterDetailView struct {
 	clusterView
+	// Nodes is every worker node in the cluster, each in the same shape the
+	// machines surface uses — a node IS a machine, addressable by its own id. This
+	// is the individual hardware behind the pool counts above.
 	Nodes []machineView `json:"nodes"`
 }
 
@@ -181,7 +184,10 @@ type createClusterReq struct {
 	// Region is the provider region slug (e.g. "nyc3"). Required.
 	Region string `json:"region"`
 	// Version is the Kubernetes version slug; empty takes the provider default.
-	Version  string `json:"version,omitempty"`
+	Version string `json:"version,omitempty"`
+	// NodePool is the ONE pool the cluster is born with — a cluster with no nodes
+	// runs nothing, so it is not optional. More pools are added afterwards through
+	// POST /v1/visor/clusters/:clusterId/pools.
 	NodePool struct {
 		// Name is the seed pool's name; empty takes the provider default.
 		Name string `json:"name,omitempty"`
