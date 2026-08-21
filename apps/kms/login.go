@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 )
 
 const (
@@ -85,52 +84,31 @@ var loginHTTPClient = &http.Client{
 	},
 }
 
-// loginRequest is the operator's universalAuth credential (kmsapi.Client.Login
-// posts exactly this shape).
-type loginRequest struct {
-	ClientID     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"`
+// kmsLogin is the operator's universalAuth credential (kmsapi.Client.Login posts
+// exactly this shape). Both fields carry url:"-" because they have always been
+// body-only, and a query string that could supply a client secret would put
+// credential material somewhere URLs are logged and bodies are not.
+//
+// It is named for the product rather than for the act: a typed op's Go type name
+// IS its schema name across the WHOLE fleet, and `loginRequest` is a name four
+// other subsystems could reasonably want.
+type kmsLogin struct {
+	// ClientID is the machine identity's id, as IAM issued it.
+	ClientID string `json:"clientId" url:"-"`
+	// ClientSecret is that identity's secret. It is never logged, never echoed,
+	// and never carried in an error.
+	ClientSecret string `json:"clientSecret" url:"-"`
 }
 
-// loginResponse mirrors kmsapi.LoginResponse — the shape the operator decodes.
-type loginResponse struct {
+// kmsToken mirrors kmsapi.LoginResponse — the shape the operator decodes.
+type kmsToken struct {
+	// AccessToken is IAM's own JWT, verbatim. Its `owner` claim scopes it to
+	// exactly one org, which is what every secret operation then reads.
 	AccessToken string `json:"accessToken"`
-	ExpiresIn   int64  `json:"expiresIn"`
-	TokenType   string `json:"tokenType"`
-}
-
-// login exchanges the caller's clientId/clientSecret for an owner-scoped IAM JWT.
-// Fail-closed: no IAM issuer configured → 503; malformed input → 400; a bad
-// credential → 401; an IAM outage → 502. It NEVER logs or echoes the secret, and
-// its error bodies carry no IAM internals (no credential-validity oracle beyond
-// what IAM's own endpoint already exposes).
-func login(s *cloud.Service[state], ctx *zip.Ctx) error {
-	if s.State.iamTokenURL == "" {
-		return zip.Errorf(http.StatusServiceUnavailable, "kms login unavailable: no IAM issuer configured")
-	}
-	body := ctx.Body()
-	if len(body) > maxLoginBodyBytes {
-		return zip.ErrBadRequest("login body too large")
-	}
-	var req loginRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		return zip.ErrBadRequest("invalid JSON body")
-	}
-	cid := strings.TrimSpace(req.ClientID)
-	csec := strings.TrimSpace(req.ClientSecret)
-	if cid == "" || csec == "" {
-		return zip.ErrBadRequest("clientId and clientSecret are required")
-	}
-	if len(cid) > maxCredLen || len(csec) > maxCredLen || hasCtrlByte(cid) || hasCtrlByte(csec) {
-		return zip.ErrBadRequest("credentials malformed")
-	}
-
-	tok, expiresIn, status := brokerIAMToken(s, ctx.Context(), cid, csec)
-	if status != http.StatusOK {
-		// One clean status, no upstream detail. 401 = auth failed; 502 = IAM down.
-		return zip.Errorf(status, "kms login failed")
-	}
-	return ctx.JSON(http.StatusOK, loginResponse{AccessToken: tok, ExpiresIn: expiresIn, TokenType: "Bearer"})
+	// ExpiresIn is the token's lifetime in seconds, as IAM reported it.
+	ExpiresIn int64 `json:"expiresIn"`
+	// TokenType is `Bearer`.
+	TokenType string `json:"tokenType"`
 }
 
 // brokerIAMToken performs the client_credentials exchange at IAM and returns the
