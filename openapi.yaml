@@ -98929,8 +98929,8 @@ paths:
         one calls itself, the platform it runs on, its agent version, when its socket
         was established, and the capabilities and commands it reported.'
       tags:
-      - bots
-      x-app: bots
+      - nodes
+      x-app: nodes
       x-public: true
       x-tool: true
   /v1/nodes/{id}/invoke:
@@ -98955,8 +98955,8 @@ paths:
       summary: Ask one of your connected machines to run a command, and get its answer
         back.
       tags:
-      - bots
-      x-app: bots
+      - nodes
+      x-app: nodes
       x-public: true
   /v1/nodes/connect:
     get:
@@ -98971,8 +98971,8 @@ paths:
       operationId: get_nodes_connect
       summary: The socket a bot node dials and holds open to become invokable.
       tags:
-      - bots
-      x-app: bots
+      - nodes
+      x-app: nodes
       x-public: true
   /v1/nodes/peer/invoke:
     post:
@@ -98988,8 +98988,8 @@ paths:
       summary: Replica-to-replica forward of one invocation to the pod holding the
         node's socket.
       tags:
-      - bots
-      x-app: bots
+      - nodes
+      x-app: nodes
       x-public: true
   /v1/notify/health:
     get:
@@ -124312,8 +124312,8 @@ tags:
 - description: 'Package books is double-entry accounting: chart of accounts, ledger,
     bank reconciliation, and the reports that prove the books balance.'
   name: books
-- description: 'Package bot is a bot: your own machines connected and ready to take
-    a command, and a run doing your work on a surface while you watch.'
+- description: Package bots is a bot doing your work on a real desktop, live, while
+    you watch.
   name: bots
 - description: Package campaign is one go-to-market push across paid, organic and
     email at once.
@@ -124485,6 +124485,9 @@ tags:
     — served as clean, org-scoped REST off the unified cloud binary and fronting the
     Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
   name: networks
+- description: 'Package nodes is your machines: the ones you own, connected and ready
+    to take a command.'
+  name: nodes
 - description: Package notify is transactional email and SMS, sent through your org's
     own provider credential.
   name: notify
