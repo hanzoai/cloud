@@ -1182,6 +1182,77 @@
         "x-public": true
       }
     },
+    "/v1/commerce/rates/entries": {
+      "get": {
+        "operationId": "get_commerce_rates_entries",
+        "summary": "List what one unit of each metered thing costs",
+        "description": "Returns the rate authority's rows — the prices every metered charge resolves against. Narrow with ?product= to show one surface at a time rather than every rate at once. SuperAdmin only: a rate is cross-tenant money, so the handler asks for the reserved admin org's owner claim itself rather than trusting the bundle's token gate.",
+        "tags": [
+          "commerce"
+        ],
+        "x-public": true
+      },
+      "post": {
+        "operationId": "post_commerce_rates_entries",
+        "summary": "Add a rate",
+        "description": "Creates one rate. Product AND meter are both required, because together they are the identity: a rate keyed on the metered thing alone would let one product's price overwrite another's under the same name. A slug that already exists is refused rather than silently replaced. SuperAdmin only.",
+        "tags": [
+          "commerce"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/commerce/rates/entries/{slug}": {
+      "delete": {
+        "operationId": "delete_commerce_rates_entries_by_slug",
+        "summary": "Remove a rate outright",
+        "description": "Deletes the row. ARCHIVING is usually what is wanted instead — a deleted rate cannot price a historical charge, so a past invoice that has to re-resolve its rate finds nothing to read. Reach for status=archived unless the rate never priced anything. SuperAdmin only.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      },
+      "put": {
+        "operationId": "put_commerce_rates_entries_by_slug",
+        "summary": "Edit a rate, and mark it as operator-set",
+        "description": "Edits one rate and MARKS it edited, which is the whole contract with the importer: an operator's price outranks the document it came from, so a later import leaves this row alone. Without that mark a price set here would apply, work, and silently revert on the next import. Only the editable fields move; identity and bookkeeping are not writable from the body. SuperAdmin only.",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/commerce/rates/import": {
+      "post": {
+        "operationId": "post_commerce_rates_import",
+        "summary": "Load the published price document, reconciling rather than replacing",
+        "description": "Takes an array of rates and seeds the authority from it. This is the seed, driven from admin rather than compiled in, because 506 published prices in an embed made a price change wait for a build. It RECONCILES: a row that matches is left alone, a row that has drifted is corrected, and a row an operator edited is skipped — so importing the same document twice is a no-op and importing a corrected one moves exactly the rows that changed. Answers what it received, created, corrected and left unchanged, so an import that changes nothing reads as nothing to do rather than as a failure. An empty array is refused 400. SuperAdmin only.",
+        "tags": [
+          "commerce"
+        ],
+        "x-public": true
+      }
+    },
     "/v1/commerce/return/": {
       "get": {
         "operationId": "get_commerce_return",
