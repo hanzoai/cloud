@@ -13,6 +13,14 @@
 // upstream request and sets only the headers it means to send, so no inbound header
 // (a stray cookie, a forged X-*, an injected Authorization copy) is blindly relayed.
 //
+// UNTYPED, AND THE COUNT IS FIVE. The whole surface is one All() registration on
+// a greedy wildcard, so it publishes five operations (one per method the document
+// generator knows) and not one of them can be a typed op — three wire facts, each
+// sufficient, each re-verified against the pinned zip and gated in
+// typed_wire_test.go rather than believed. Prose is therefore the only thing this
+// head can state about itself, and it states it per method. The module that would
+// end that is named at the registration in Mount.
+//
 // ISOLATION -- BEARER RELAY, NO STANDING CRED. The DNS plane is OIDC-gated and keys
 // every zone per-org: it re-validates the caller's OWN bearer and derives the org
 // from the `owner` claim. This head relays that identity UNCHANGED -- the caller's
@@ -87,10 +95,12 @@ func init() {
 		openapi.Describe(dnsRoute, d.method, d.summary, d.lead+dnsRelay)
 	}
 	// The methods left over. This address is bound with All(), so it publishes every
-	// method this generator knows and the ones above are only the ones that DO
-	// something. DescribeRest covers the remainder from the generator's own set, so a
-	// method added there is covered the day it appears rather than published bare —
-	// which is what a hand-copied list here had already produced for OPTIONS and TRACE.
+	// method the generator knows, and the five above are the ones that DO something.
+	// The generator's set is exactly those five today (openapi.Methods), so this
+	// currently covers nothing — and that is the point of asking rather than listing:
+	// a hand-copied list here had already published bare operations for OPTIONS and
+	// TRACE after the generator stopped emitting them, and would publish them bare
+	// again the day it starts.
 	openapi.DescribeRest(dnsRoute,
 		"Not served by the DNS surface",
 		"Published because this address accepts every method, but the DNS surface routes "+
@@ -148,8 +158,28 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//     Location on a 3xx. A typed op answers the status its op DECLARED and
 	//     serialises its Out as JSON, so every one of those three moves.
 	//
-	// Typing this means giving the DNS plane a typed control surface in the plane
-	// itself, not wrapping it here. See LLM.md, "the typed migration".
+	// zip v1.31.0 closed two of the three gaps this used to name — a SET of declared
+	// statuses (WithStatus + StatusCoder) and declared response headers
+	// (WithResponseHeader + HeaderCoder) — and neither reaches: a relay passes ANY
+	// upstream status rather than one of a declared set, and fiber stamps
+	// application/json over whatever a header coder set (res.go:501). The wildcard
+	// fact got STRONGER on re-reading: zip's Template leaves `*` verbatim while
+	// cloud's router reading names it {wildcard1}, so a typed op here does not
+	// mis-name a parameter, it makes the fold refuse to produce a document at all.
+	// typed_wire_test.go runs both.
+	//
+	// THE MODULE OWED. This head cannot be fixed from here, and neither can the
+	// smaller half — declaring the bodies — because it authors none: the request
+	// bytes are the caller's, relayed unread, and the response bytes are the
+	// plane's, relayed unparsed. What ends it is hanzoai/dns handing its host what
+	// hanzoai/ai hands one: a route table (`path -> methods` plus
+	// `"METHOD /path" -> sentence`) or a *zip.App. openapi.Table and openapi.Front
+	// already consume both, and a relay REPLACES the door with what the door
+	// reaches — so the day that table exists, /v1/dns publishes the plane's real
+	// addresses instead of five wildcard operations, with no edit to this file
+	// beyond the declaration. Until then five operations is the honest count and
+	// prose is the honest declaration. See LLM.md, "the typed migration", and
+	// openapi/relay.go.
 	app.Group("/v1/dns").All("/*", e.forward)
 	if luxlog.Default() != nil {
 		luxlog.Default().Info("dns forward head mounted", "upstream", e.base)
