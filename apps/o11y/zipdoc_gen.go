@@ -138,6 +138,17 @@ func init() {
 		},
 		Example: json.RawMessage(`{"product":"kms"}`),
 	})
+	zip.Describe("GET /v1/o11y/summary", zip.Doc{
+		Description: "Reports whether the platform is up. It returns the public status\ndocument: the incidents currently open against Hanzo's own services, derived\nfrom the fleet health probes, plus the address of the human status page. No\nauthentication is required and no tenant data is involved — the answer is the\nsame for every caller.\n\nA service that fails its health probe becomes one incident naming that service.\nWhen the availability source itself cannot be read the endpoint answers 503\nrather than an empty incident list, because \"we cannot tell\" and \"everything is\nfine\" are different answers and only one of them is true.",
+		Fields: map[string]string{
+			"StatusComponent.current_status":      "CurrentStatus is this component's own condition: \"full_outage\" for a\nservice that did not answer its health probe at all.",
+			"StatusIncident.current_worst_impact": "CurrentWorstImpact is the incident's impact on the PLATFORM, which is not\nthe same question as the component's own condition above.",
+			"StatusIncident.last_update_at":       "LastUpdateAt is when the failing measurement this incident reports was\nread, RFC3339 UTC.",
+			"StatusSummary.checked_at":            "CheckedAt is when the underlying availability read was taken, RFC3339 UTC.\nNot part of the status-page schema the panel parses (which ignores unknown\nfields); it is here because a status document with no timestamp cannot be\ntold apart from a stale one.",
+			"StatusSummary.page_url":              "PageURL is the HUMAN status page — an HTML page for people, distinct from\nthis JSON endpoint. Every link in this document points there.",
+		},
+		Example: json.RawMessage(`{}`),
+	})
 	zip.Describe("GET /v1/o11y/traces", zip.Doc{
 		Description: "Lists the caller org's recent traces — one row per trace with\nits span count and wall-clock duration, most recently active first. This is\nthe trace SEARCH: it is where a trace id comes from, and the spans behind any\nrow are then read from GET /v1/o11y/traces/{traceId}. Every row belongs to the\ncaller's own org — the tenant is the validated principal, never an input, and\nthere is no administrator widening, because a trace list is a tenant's records\nrather than a rollup over them. An unreachable telemetry store answers 503\nrather than an empty page, because \"no traces\" and \"cannot see the traces\" are\ndifferent facts and only one of them is about the caller's system.",
 		Fields: map[string]string{
@@ -155,17 +166,6 @@ func init() {
 			"tracesOut.traces":       "Traces are the caller org's traces, most recently active first.",
 		},
 		Example: json.RawMessage(`{"range":3600,"limit":50}`),
-	})
-	zip.Describe("GET /v1/summary", zip.Doc{
-		Description: "Reports whether the platform is up. It returns the public status\ndocument: the incidents currently open against Hanzo's own services, derived\nfrom the fleet health probes, plus the address of the human status page. No\nauthentication is required and no tenant data is involved — the answer is the\nsame for every caller.\n\nA service that fails its health probe becomes one incident naming that service.\nWhen the availability source itself cannot be read the endpoint answers 503\nrather than an empty incident list, because \"we cannot tell\" and \"everything is\nfine\" are different answers and only one of them is true.",
-		Fields: map[string]string{
-			"StatusComponent.current_status":      "CurrentStatus is this component's own condition: \"full_outage\" for a\nservice that did not answer its health probe at all.",
-			"StatusIncident.current_worst_impact": "CurrentWorstImpact is the incident's impact on the PLATFORM, which is not\nthe same question as the component's own condition above.",
-			"StatusIncident.last_update_at":       "LastUpdateAt is when the failing measurement this incident reports was\nread, RFC3339 UTC.",
-			"StatusSummary.checked_at":            "CheckedAt is when the underlying availability read was taken, RFC3339 UTC.\nNot part of the status-page schema the panel parses (which ignores unknown\nfields); it is here because a status document with no timestamp cannot be\ntold apart from a stale one.",
-			"StatusSummary.page_url":              "PageURL is the HUMAN status page — an HTML page for people, distinct from\nthis JSON endpoint. Every link in this document points there.",
-		},
-		Example: json.RawMessage(`{}`),
 	})
 	zip.Describe("PATCH /v1/o11y/reviews/:id", zip.Doc{
 		Description: "Changes a review queue's name, description or\nscore-config set. A field the request omits is left alone. A name another\nqueue in the same project already uses is a 409; a queue id belonging to\nanother org is a 404.",

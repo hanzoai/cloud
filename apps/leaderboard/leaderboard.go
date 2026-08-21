@@ -10,19 +10,23 @@
 //
 // Surface (all /v1, NO /api/ prefix; org-scoped, fail-closed):
 //
-//	GET  /v1/usage/leaderboard   ranked top users (personal|org) or orgs (global)
-//	GET  /v1/usage/activity      per-day series for a heatmap + timeline (authorized subject)
-//	GET  /v1/usage/leaderboard/optin       the caller's opt-in + their org's opt-in
-//	PUT  /v1/usage/leaderboard/optin        set the caller's OWN public-listing opt-in
-//	PUT  /v1/usage/leaderboard/optin/org    set the ORG's public-board opt-in (org admin)
-//	POST /v1/usage/rollup/backfill          seed the rollup from ledger history (SuperAdmin, once)
+//	GET  /v1/leaderboard              ranked top users (personal|org) or orgs (global)
+//	GET  /v1/leaderboard/activity     per-day series for a heatmap + timeline (authorized subject)
+//	GET  /v1/leaderboard/optin        the caller's opt-in + their org's opt-in
+//	PUT  /v1/leaderboard/optin        set the caller's OWN public-listing opt-in
+//	PUT  /v1/leaderboard/optin/org    set the ORG's public-board opt-in (org admin)
+//	POST /v1/admin/leaderboard/rollup seed the rollup from ledger history (SuperAdmin, once)
 //
-// It co-owns the /v1/usage/* prefix with apps/usage (the cost footprint at
-// /v1/usage/summary) — a DISTINCT concern (who leads + your activity graph) at its
-// own paths, registered as a separate subsystem so it stays isolated. Its auto
-// health route is /v1/leaderboard/health (the spec name). apps/usage's own doc
-// claims it "owns ALL usage"; two packages under one prefix is one prefix with no
-// owner, and the name here (leaderboard) does not match the prefix it serves.
+// It answers under its OWN name. It used to sit inside apps/usage's /v1/usage/*
+// prefix — a distinct concern (who leads + your activity graph) at paths another
+// subsystem's name was on, which apps/usage's own doc read as "owns ALL usage".
+// Two packages under one prefix is one prefix with no owner, and the two ARE two:
+// this one keeps a store (the opt-in preferences, store.go) and usage keeps none,
+// so the boundary was already there and only the address disagreed. Now the
+// address agrees, and usage keeps what it actually owns (/v1/usage/summary,
+// /v1/usage/analytics). Its auto health route is /v1/leaderboard/health, which
+// the name now matches. The SuperAdmin backfill is the operator's view of this
+// capability and lands where those live, /v1/admin/leaderboard/rollup.
 //
 // TENANT ISOLATION (the bar). The org is the VALIDATED IAM owner claim (principal.Org
 // — the trusted X-Org-Id the identity middleware minted from the verified bearer,
@@ -111,18 +115,21 @@ func Shutdown(_ context.Context) error {
 // claims off — cross on the context, parked there by cloud.Bridge. The composer
 // owns that install, once at its root.
 //
-// The group is a bare path prefix — no middleware, so it gates nothing on the
-// co-owned /v1/usage root — and exists only so each op's path is composed the one way
-// the router composes it.
+// The group is /v1 with a non-empty leaf on every op, not /v1/leaderboard: the
+// board IS the prefix, and zip.Get(g, "") composes to "/v1/leaderboard/", a
+// different route — and op.Path is the identity every projection keys on. One
+// group also spans both of this surface's roots, the public one and the
+// operator's, so this is one idiom rather than a group plus an exception. It is a
+// bare path prefix carrying no middleware, so it gates nothing.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/usage")
+	g := app.Group("/v1")
 	o := boardOps{s: s}
 	zip.Get(g, "/leaderboard", o.leaderboard)
-	zip.Get(g, "/activity", o.activity)
+	zip.Get(g, "/leaderboard/activity", o.activity)
 	zip.Get(g, "/leaderboard/optin", o.getOptin)
 	zip.Put(g, "/leaderboard/optin", o.putUserOptin)
 	zip.Put(g, "/leaderboard/optin/org", o.putOrgOptin)
-	zip.Post(g, "/rollup/backfill", o.backfill)
+	zip.Post(g, "/admin/leaderboard/rollup", o.backfill)
 }
 
 // boardOps binds the service to leaderboard's typed ops. A TypedHandler is

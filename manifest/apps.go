@@ -73,15 +73,15 @@ var Apps = []App{
 	// client's convention rather than by ours; Base moved it beneath the mount
 	// prefix, so it is /v1/base/rest/{collection} and this row covers it.
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/waitlist"}},
-	// /v1/summary is the PUBLIC platform status document (apps/o11y/summary.go),
-	// the outward projection of the fleet health probes o11y already runs. It has
-	// to be listed here or the host never routes it to this app and it falls to
-	// commerce's bare "/v1", which does not serve it.
-	// /ws/query_progress is the websocket form of the query-progress read. It sits
-	// outside /v1/o11y because the Upgrade handshake is a transport concern, so no
-	// other prefix here reaches it: unlisted, the fleet published the address and
-	// routed it nowhere.
-	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentinel", "/v1/summary", "/ws/query_progress"}, Eager: true},
+	// Two prefixes here are not /v1/o11y, and both are hanzoai/o11y's own routes:
+	// /v1/sentinel is the Sentry product face (twelve literal paths the module
+	// registers) and /ws/query_progress is the websocket form of the
+	// query-progress read. They are the app's addresses, so they belong under the
+	// app's name — a route move in that module and a pin bump, not an edit here;
+	// unlisted meanwhile, the fleet publishes them and routes them nowhere.
+	// (The public status document was the third: it is cloud's own route and
+	// answers at /v1/o11y/summary now — apps/o11y/summary.go.)
+	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentinel", "/ws/query_progress"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
 	// the fleet's route of last resort: every path no app named deeper — the whole
@@ -278,7 +278,11 @@ var Apps = []App{
 	// four /v1/risk apps are contiguous either way.
 	{Name: "dataset", Prefixes: []string{"/v1/risk/datasets"}, Stage: Beta},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
-	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
+	// It sat inside usage's prefix and answered under usage's name. The two are
+	// two capabilities — leaderboard keeps the opt-in store, usage keeps none —
+	// so it took its own name rather than folding into that one. The backfill is
+	// the SuperAdmin view of this capability and lives where those live.
+	{Name: "leaderboard", Prefixes: []string{"/v1/admin/leaderboard", "/v1/leaderboard"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}, Stage: Beta},
 	{Name: "marketing", Prefixes: []string{"/v1/marketing"}, Stage: Beta},
 	{Name: "ads", Prefixes: []string{"/v1/ads"}, Stage: Beta},
@@ -317,7 +321,7 @@ var Apps = []App{
 	// unregenerated: the path was in the router and not in the artifact this table
 	// is checked against, so the check had nothing to disagree with.
 	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/replay", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
-	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
+	{Name: "git", Prefixes: []string{"/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/visor"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}, Stage: Beta},
@@ -344,7 +348,7 @@ var Apps = []App{
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}, Stage: Beta},
 	{Name: "explorer", Prefixes: []string{"/v1/indexers", "/v1/oracles"}, Stage: Beta},
 	{Name: "security", Prefixes: []string{"/v1/security"}, Stage: Beta},
-	{Name: "integrations", Prefixes: []string{"/v1/connectors", "/v1/integrations"}},
+	{Name: "integrations", Prefixes: []string{"/v1/integrations"}},
 	// /v1/tags is owned by the projects app, which holds both the handler and the
 	// project store it reads (see the projects entry above and apps/projects/tagdoor.go).
 	// It must be claimed exactly once — two apps claiming it panics the host build.
@@ -379,7 +383,7 @@ var Apps = []App{
 	// are the session's, and the session is exec's.
 	{Name: "exec", Prefixes: []string{"/v1/exec"}},
 	{Name: "sandboxes", Prefixes: []string{"/v1/sandboxes"}},
-	{Name: "websearch", Prefixes: []string{"/v1/websearch", "/v1/scrape"}},
+	{Name: "websearch", Prefixes: []string{"/v1/websearch"}},
 	{Name: "crawl", Prefixes: []string{"/v1/crawl"}},
 	// Beside the two surfaces that read the web, because it measures the same web
 	// one layer up: websearch asks what a query returns, crawl reads one page, and
