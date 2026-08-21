@@ -481,3 +481,49 @@ func TestForgeRewrites_AShorterNameDoesNotSwallowALongerOne(t *testing.T) {
 		t.Errorf("pubsub-go was routed to the forge by the rewrite written for pubsub:\n%s", tr)
 	}
 }
+
+// THE BOOTSTRAP IS A LAST RESORT, NOT A PREFERENCE. The audience the forge requires is
+// stamped by a release that cannot be built until the modules resolve, and the modules
+// cannot resolve until it is stamped. One credential that already works breaks that
+// circle — but only after the IAM identity has been asked and the forge served nothing
+// by it, so the moment the release is live this stops being reached.
+func TestForgeRewrites_TheFallbackIsReachedOnlyAfterIAMServesNothing(t *testing.T) {
+	srv, _, form := iamStub(t, "iam-token-the-forge-refuses")
+
+	out, _, _ := runRewritesWithModule(t, map[string]string{
+		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
+		"GIT_TOKEN": "", "FALLBACK_TOKEN": "forge-token",
+	})
+	// IAM is still asked, and asked FOR the forge.
+	if got := (*form)["resource"]; len(got) != 1 || got[0] != "hanzo-git" {
+		t.Errorf("resource = %v, want [hanzo-git] — IAM must still be asked first", got)
+	}
+	if !strings.Contains(out, "asking as the IAM identity") {
+		t.Fatalf("the IAM identity was not tried first:\n%s", out)
+	}
+	// Only then does it reach for the credential that works today.
+	if !strings.Contains(out, "served nothing — asking again as the per-job token") {
+		t.Errorf("the fallback was never reached even though the forge served nothing:\n%s", out)
+	}
+}
+
+// An IAM identity the forge DOES spend must never reach the fallback — that is what makes
+// this removable rather than permanent.
+func TestForgeRewrites_AServedIAMIdentityNeverReachesTheFallback(t *testing.T) {
+	srv, _, _ := iamStub(t, "iam-token-that-works")
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200) // the forge spends the IAM token
+	}))
+	defer forge.Close()
+
+	out, _, _ := runRewritesWithModule(t, map[string]string{
+		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
+		"GIT_TOKEN": "", "FALLBACK_TOKEN": "forge-token", "FORGE_URL": forge.URL,
+	})
+	if !strings.Contains(out, "forge serves -> vfs") {
+		t.Fatalf("the IAM identity did not serve the module:\n%s", out)
+	}
+	if strings.Contains(out, "served nothing") {
+		t.Errorf("reached the fallback despite the IAM identity being spent:\n%s", out)
+	}
+}
