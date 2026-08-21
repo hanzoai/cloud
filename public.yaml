@@ -19305,6 +19305,41 @@ components:
             reports a card's own health. A card reads running because its machine does.
           type: string
       type: object
+    graphAssertIn:
+      properties:
+        assertions:
+          description: |-
+            Assertions is the batch. Each member is judged on its own: one refusal
+            does not discard the rest, because a caller redelivering five facts must
+            not lose four of them to one malformed fifth.
+          items:
+            $ref: '#/components/schemas/graphFact'
+          type: array
+      type: object
+    graphAssertOut:
+      properties:
+        duplicate:
+          description: |-
+            Duplicate is how many members this plane already held. A redelivery
+            collides on its content address and is counted here, not refused: it is
+            the success a retrying caller depends on.
+          type: integer
+        reasons:
+          description: Reasons names why each refused member was refused, in the order
+            sent.
+          items:
+            type: string
+          type: array
+        recorded:
+          description: Recorded is how many members became new rows.
+          type: integer
+        refused:
+          description: |-
+            Refused is how many members were turned away at the door, before the store
+            was touched — a missing entity, a timestamp that is not RFC 3339, a
+            confidence outside [0,1]. The rest of the batch was still recorded.
+          type: integer
+      type: object
     graphEdge:
       properties:
         from:
@@ -19323,6 +19358,114 @@ components:
             points at a synthetic "unresolved:<lowercased title>" node rather than
             dangling.
           type: string
+      type: object
+    graphFact:
+      properties:
+        at:
+          description: |-
+            At is when the thing was so, RFC 3339. Required, and refused when it sits
+            more than five minutes ahead of the server clock — an assertion dated
+            further out would never mature and would skew every read until it did.
+          type: string
+        confidence:
+          description: |-
+            Confidence in [0,1]. A tie-breaker within the order, never a substitute
+            for it. Absent is 0, the weakest an assertion can be.
+          type: number
+        entity:
+          description: |-
+            Entity is the thing being described, in the organization's own namespace.
+            It is not created: an entity exists because something was asserted about it.
+            Required, 512 bytes at most.
+          type: string
+        evidence:
+          description: |-
+            Evidence points at the record this claim came from, 512 bytes at most. An
+            assertion without one is admitted and carries no defence.
+          type: string
+        names:
+          description: |-
+            Names says the value is an entity. A walk reads only the edges, so this is
+            a declaration and never a guess about the value's shape.
+          type: boolean
+        relation:
+          description: |-
+            Relation is what is being asserted — `depends`, `owner`, `same`, `title`.
+            It is open: this plane holds no vocabulary of its own. Required, 128 bytes
+            at most.
+          type: string
+        seen:
+          description: |-
+            Seen is when this assertion became knowable, RFC 3339. Defaults to At and
+            may not precede it. It is provenance and it decides nothing: the instant
+            every read uses is derived as the later of Seen and the server's own clock.
+          type: string
+        source:
+          description: |-
+            Source names who asserted. Required, because an assertion nobody is named
+            for cannot be weighed against one that is. Open text: this plane ranks no
+            source above another.
+          type: string
+        value:
+          description: |-
+            Value is what the relation points at. When Names is true it is another
+            entity's key and the assertion is an EDGE; otherwise it is a scalar and
+            the assertion is a property. 2048 bytes at most, or 512 when it names an
+            entity.
+          type: string
+      type: object
+    graphNeighborsIn:
+      properties:
+        as_of:
+          description: |-
+            AsOf walks the graph as it stood at an instant, RFC 3339. Absent walks it
+            as it stands now.
+          type: string
+        depth:
+          description: Depth is how many hops. Absent is one.
+          type: integer
+        direction:
+          description: |-
+            Direction is out, in or both. Out follows an edge from its entity to its
+            value — what the node points at; in follows it the other way — what points
+            at the node; both is the union of the two, not a third rule. Absent is out.
+          type: string
+        relation:
+          description: |-
+            Relation narrows the walk to one edge relation. Absent follows all. Only
+            edges are ever followed: an assertion whose value is a scalar is a property
+            and is never a hop.
+          type: string
+        seeds:
+          description: Seeds is where the walk starts. At least one.
+          items:
+            type: string
+          type: array
+      type: object
+    graphNeighborsOut:
+      properties:
+        bound:
+          description: |-
+            Bound is the ceiling this walk was held to, the same for every caller, so
+            Truncated can be read against a number rather than guessed at.
+          type: integer
+        depth:
+          description: |-
+            Depth is the deepest hop count actually reached. It is at most the depth
+            asked for, and smaller when the walk ran out of edges first.
+          type: integer
+        entities:
+          description: |-
+            Entities is everything reached, the seeds included, ordered by the fewest
+            hops that reach each one and then by key.
+          items:
+            type: string
+          type: array
+        truncated:
+          description: |-
+            Truncated says the bound stopped the walk. The bound is part of the answer
+            rather than a silent short read.
+          type: boolean
       type: object
     graphNode:
       properties:
@@ -19364,6 +19507,99 @@ components:
             link targets.
           items:
             $ref: '#/components/schemas/graphNode'
+          type: array
+      type: object
+    graphReadOut:
+      properties:
+        assertions:
+          description: |-
+            Assertions are the matching rows in the order they were written, oldest
+            first. Every version is here: this read resolves nothing and withholds
+            nothing, so a superseded claim and the one that superseded it both appear.
+          items:
+            $ref: '#/components/schemas/wireFact'
+          type: array
+      type: object
+    graphResolveIn:
+      properties:
+        as_of:
+          description: AsOf is the instant to answer at, RFC 3339. Absent means now.
+          type: string
+        entity:
+          description: Entity is the thing to answer about. Required.
+          type: string
+        relation:
+          description: |-
+            Relation is the one relation to settle. Required: this answers a single
+            (entity, relation) pair, never a whole entity at once.
+          type: string
+      type: object
+    graphResolveOut:
+      properties:
+        as_of:
+          description: |-
+            AsOf is the instant this answer was taken at, RFC 3339: the one asked for,
+            or the server's clock when none was.
+          type: string
+        conflicts:
+          description: |-
+            Conflicts is every OTHER assertion knowable at AsOf, strongest first. They
+            are not all disagreements: one that repeats the winner's value ranks below
+            it and is listed here too.
+          items:
+            $ref: '#/components/schemas/wireFact'
+          type: array
+        contested:
+          description: |-
+            Contested is true when at least one conflict claims a value different from
+            the winner's. Any number of conflicts that all agree leaves it false.
+          type: boolean
+        entity:
+          description: |-
+            Entity is the entity the question named, echoed so a stored answer still
+            says what it is about.
+          type: string
+        known:
+          description: |-
+            Known is false when this plane held nothing knowable at AsOf. That is an
+            answer, not an error.
+          type: boolean
+        relation:
+          description: Relation is the relation the question named, echoed for the
+            same reason.
+          type: string
+        truncated:
+          description: |-
+            Truncated says this pair holds more assertions than one read returns, so
+            the winner was decided from the most recent ceiling-full of them. It is
+            reported because a provenance plane that trims silently is a plane that
+            answers confidently and wrongly; narrow the question with as_of to see
+            what it dropped.
+          type: boolean
+        winner:
+          $ref: '#/components/schemas/wireFact'
+          description: |-
+            Winner is the assertion in force — the strongest of those knowable at AsOf
+            under the order `rule` names. Absent exactly when Known is false.
+      type: object
+    graphVocabularyOut:
+      properties:
+        bound:
+          description: Bound is the ceiling on one walk.
+          type: integer
+        relations:
+          description: |-
+            Relations is what this organization has actually asserted, which is the
+            only vocabulary there is: this plane declares none of its own.
+          items:
+            type: string
+          type: array
+        rule:
+          description: |-
+            Rule names the terms of the precedence order, in the order they apply. A
+            reader who is told a winner without the rule cannot check it.
+          items:
+            type: string
           type: array
       type: object
     handleRequest:
@@ -47362,6 +47598,67 @@ components:
             $ref: '#/components/schemas/webResult'
           type: array
       type: object
+    wireFact:
+      properties:
+        at:
+          description: At is when the thing was so, RFC 3339, as the asserter gave
+            it.
+          type: string
+        by:
+          description: |-
+            By is the identity that filed it — `owner` or `owner/user` — stamped from
+            the validated principal at the write, never from the body.
+          type: string
+        confidence:
+          description: |-
+            Confidence in [0,1] as the asserter gave it; absent is 0. It breaks a tie
+            between two assertions equally knowable and decides nothing else.
+          type: number
+        entity:
+          description: Entity is the thing described, in the organization's own namespace.
+          type: string
+        evidence:
+          description: |-
+            Evidence points at the record the claim came from. Absent when the asserter
+            gave none.
+          type: string
+        id:
+          description: |-
+            ID is the assertion's content address, minted by the server from what was
+            asserted. Two callers who assert the identical thing land on one ID and one
+            row; changing any asserted field makes a different ID and a second row.
+          type: string
+        knowable:
+          description: |-
+            Knowable is the first instant this plane could have answered with the
+            assertion, RFC 3339: the later of Seen and the server's clock at the write.
+            Derived and never supplied, which is what stops history filed today from
+            being backdated into a past read.
+          type: string
+        names:
+          description: |-
+            Names true means the assertion is an edge and Value is an entity. A walk
+            reads only these.
+          type: boolean
+        relation:
+          description: Relation is what was asserted of it.
+          type: string
+        seen:
+          description: |-
+            Seen is when the asserter says it became knowable, RFC 3339. Provenance
+            only — Knowable is what an as-of read is bounded by.
+          type: string
+        source:
+          description: |-
+            Source names who asserted, as the caller gave it. This plane ranks no
+            source above another, so it never outweighs a later Knowable.
+          type: string
+        value:
+          description: |-
+            Value is what the relation points at: another entity's key when Names is
+            true, otherwise a scalar.
+          type: string
+      type: object
     workerList:
       properties:
         workers:
@@ -73863,6 +74160,142 @@ paths:
       - git
       x-app: git
       x-public: true
+  /v1/graph:
+    get:
+      operationId: graphRead
+      parameters:
+      - description: |-
+          Entity narrows to what was asserted ABOUT one entity. Absent matches every
+          entity.
+        in: query
+        name: entity
+        required: false
+        schema:
+          type: string
+      - description: Relation narrows to one relation. Absent matches every relation.
+        in: query
+        name: relation
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Value narrows to assertions pointing AT one value, which is how the edges
+          into an entity are read.
+        in: query
+        name: value
+        required: false
+        schema:
+          type: string
+      - description: |-
+          AsOf bounds the read to what was knowable at an instant, RFC 3339. Absent
+          reads everything this plane holds.
+        in: query
+        name: as_of
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps how many assertions come back. Absent, zero, or anything above
+          the walk ceiling is the ceiling.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphReadOut'
+          description: ok
+      summary: Read the assertions this organization has recorded
+      tags:
+      - graph
+      x-app: graph
+      x-public: true
+      x-tool: true
+    post:
+      operationId: graphAssert
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/graphAssertIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphAssertOut'
+          description: ok
+      summary: Assert what is true of an entity
+      tags:
+      - graph
+      x-app: graph
+      x-public: true
+      x-tool: true
+  /v1/graph/neighbors:
+    post:
+      operationId: graphNeighbors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/graphNeighborsIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphNeighborsOut'
+          description: ok
+      summary: Walk the edges from a seed set, bounded
+      tags:
+      - graph
+      x-app: graph
+      x-public: true
+      x-tool: true
+  /v1/graph/resolve:
+    post:
+      operationId: graphResolve
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/graphResolveIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphResolveOut'
+          description: ok
+      summary: What is in force about an entity as of an instant, and what disagreed
+      tags:
+      - graph
+      x-app: graph
+      x-public: true
+      x-tool: true
+  /v1/graph/vocabulary:
+    get:
+      operationId: graphVocabulary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphVocabularyOut'
+          description: ok
+      summary: The relations in use, and the rule that resolves a conflict
+      tags:
+      - graph
+      x-app: graph
+      x-public: true
+      x-tool: true
   /v1/guide:
     get:
       description: |-
@@ -111474,6 +111907,10 @@ tags:
 - description: 'Package git is Git hosting for your org: create repos, clone, push,
     and see what they cost.'
   name: git
+- description: 'Package graph is one organization''s entities and the relations between
+    them, held as assertions: somebody, at some moment, from some evidence, asserted
+    that this thing stands in that relation to that other thing.'
+  name: graph
 - description: Package guide is a step-by-step checklist that gets your business running
     on AI.
   name: guide
