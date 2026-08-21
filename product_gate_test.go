@@ -71,7 +71,16 @@ var unextracted = []string{
 	"kv",
 	"label",
 	"leaderboard", "legal", "links", "lsp", "marketplace", "meet", "membership",
-	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
+	"metering", "mq",
+	// nodes is the machine control plane, split out of bots (HIP-0139 §7.2). It
+	// carries the pin bots carried for it: no hanzoai/nodes exists, and what lives
+	// here — the presence registry over Hanzo KV, the socket, and the policy that
+	// decides what a command may be — is the whole of the functionality. The
+	// decision it owes is this bucket's first branch, because an agent runtime that
+	// connects your machines and runs commands on them is a product somebody would
+	// fork, not cloud's own machinery.
+	"nodes",
+	"payout", "plan", "plugin", "prefs", "principal",
 	"projects", "prompts", "provisioning", "reference",
 	"referrals", "registry", "risk", "rollingcap", "s3", "s3admin",
 	"samples", "sandbox", "sbom", "search", "security",

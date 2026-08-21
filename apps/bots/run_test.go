@@ -122,21 +122,25 @@ func runsOn(t *testing.T, app *zip.App, rt Runtime) {
 	}
 }
 
-// mountAll builds the whole capability on one router — node plane, run plane and
-// relay — which is what a projection gate has to read. Two apps measured two
-// halves and neither could see a route that landed in the gap between them.
+// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
+// (mountRuns says why): the program's composer installs it once at the root,
+// after the identity check that mints the validated org and before any subsystem
+// registers a route. In production that composer is serve.go. In a test the test
+// IS the composer, so it owes the same thing — and a test that skips it does not
+// test a stricter program, it tests one where every org-scoped op answers 403 for
+// a reason that would never exist in production.
+func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+
+// mountAll builds the WHOLE capability on one router — the run plane and the
+// relay — which is what a projection gate has to read. A gate that saw one of the
+// two could not see a route that landed in the gap between them.
+//
+// It is what Mount does, minus the deps a test cannot supply, which is why the
+// gate reads this and not a reconstruction: the routes are registered by the same
+// two functions the binary calls.
 func mountAll(t *testing.T) *zip.App {
 	t.Helper()
-	t.Setenv(gatewayURLEnv, "https://bot.example.test")
-	deps := cloud.Deps{Version: "test"}
-	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	compose(app)
-	mountNodes(app, &cloud.Service[state]{
-		Base:  cloud.NewBase(deps, "bot"),
-		State: state{reg: gated()},
-	}, deps)
-	runsOn(t, app, newFake())
-	return app
+	return mountWith(t, newFake())
 }
 
 // call sends a request with the gateway-minted identity headers. A non-empty org
