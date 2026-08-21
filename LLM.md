@@ -2974,9 +2974,9 @@ The typed packages are `apps/admin` and its eight sub-packages, plus `apps/accou
 `apps/git`, `apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`,
 `apps/ml`, `apps/o11y`, `apps/plugin`, `apps/provisioning`, `apps/search`, `apps/team`, `apps/visor`.
 
-`provisioning` is **21 of 28** — and the 28 were the WHOLE surface, every one of
-them publishing nothing: seven kinds × four verbs, registered from a loop over
-`kinds` with a computed path (`app.Post("/v1/"+k, create(s, k))`). That shape is
+`provisioning` is **30 of 30 — COMPLETE**, and the 28 were the WHOLE surface,
+every one of them publishing nothing: seven kinds × four verbs, registered from a
+loop over `kinds` with a computed path (`app.Post("/v1/"+k, create(s, k))`). That shape is
 untypable twice over and it is the general lesson, not a provisioning quirk: a
 computed path is not a constant, so `cmd/zipdoc` refuses it outright ("route path
 is not a constant string, so the operation has no identity to document",
@@ -2984,17 +2984,32 @@ extract.go:189), and a handler returned by a FACTORY is a call expression with n
 doc comment to lift. **A loop that registers N routes publishes prose for none of
 them, however well the handler is commented** — so the fix is one declaration per
 published operation (`apps/provisioning/typed.go`), which is what every projection
-keys on anyway. The 21 reads and deletes are typed ops; the 7 creates are refused
-for the `cloud.DenyResource` reason `apps/ml` and `apps/company` already carry (a
-402/503 whose body is the fleet's NESTED `{"error":{code,message}}`, which a typed
-op's error cannot be — `errorHandler` renders zip's flat `HTTPError`, and writing
-the nested body inside the op does not escape it because a nil Out makes zip stamp
-`cmp.Or(op.Status, 204)` over the 402). That refusal is GATED, not prose:
-`untypedByDesign` + `TestEveryRouteIsTypedOrNamed` + `TestEveryTypedOpIsDescribed`
-(apps/provisioning/typed_wire_test.go) read the router of the REAL `routes()` and
-require the two ledgers to SUM to the served surface. The seven still declare
-their bodies through `openapi.Register`, so `provisionRequest`/`provisionResult`
-reach the document and an SDK caller has somewhere to put the name.
+keys on anyway. The seven creates were the last holdouts and are typed now, closing the
+`cloud.DenyResource` refusal `apps/ml` and `apps/company` carried too — a refusal
+that had stopped being true: `cloud.Denied` carries the nested
+`{"error":{code,message}}` off a RETURNED error and `serve.go` installs
+`DenyEnvelope` app-wide. `untypedByDesign` is EMPTY and the gate still runs.
+
+**What made this one different from the other two is prose, not wire.** Seven
+addresses share ONE handler, so seven doc comments would be seven accounts of one
+create — which is exactly what the deleted `createContract` const existed to
+prevent. The split that resolves it: **an op's doc comment says what its KIND
+gives you; everything true of all seven is FIELD prose on the shared
+`provisionRequest`/`provisionResult`, stated once and published on all seven by
+the generator.** That is the same seam `TestEveryPublishedFieldIsDescribed`
+already gates, used for what it is good at.
+
+The `proseless` ledger is what measured the gain, and it went red in the RIGHT
+direction: it named twelve properties as "now described", because `openapi.Register`
+derives a schema by reflection and Go drops comments, so those twelve had been
+reaching openapi.yaml, every SDK and every MCP inputSchema bare. It is empty now —
+`password` finally says on the wire that it comes back exactly once and is stored
+nowhere. Measured on the regenerated subset: **+7 `x-tool`, +26 field descriptions**.
+
+The half of the old reason that was RIGHT is kept, in `createOf`: the gate runs
+LAST, after the decode and before the first write, so an unfunded org sending an
+invalid name is still told 400 rather than told it cannot afford a request that was
+never valid. That is why it does not lift into middleware.
 
 Two things this partition is worth reading for. **Tenancy could not go through
 `principal.OrgFrom`**, and the reason is a wire fact rather than a preference:
