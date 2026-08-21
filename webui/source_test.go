@@ -20,7 +20,7 @@ import (
 // so every client-side route would 404 and the product would look broken while
 // the process looked healthy. Refuse it where the source is named.
 func TestBundleWithoutShellIsRefused(t *testing.T) {
-	_, err := Handler(fstest.MapFS{"_next/static/chunk.js": {Data: []byte("//")}}, testDoor())
+	_, err := Handler(fstest.MapFS{"_next/static/chunk.js": {Data: []byte("//")}}, testDoor(), nil)
 	if err == nil {
 		t.Fatal("Handler accepted a bundle with no index.html — every deep link would 404")
 	}
@@ -34,7 +34,7 @@ func TestBundleWithoutShellIsRefused(t *testing.T) {
 // terminal handler. It must keep the API namespaces honest and must NOT invent a
 // page: an empty 200 of HTML is the one answer a front door may never give.
 func TestNoBundleIsA503_NotAShell(t *testing.T) {
-	h, err := Handler(nil, testDoor())
+	h, err := Handler(nil, testDoor(), nil)
 	if err != nil {
 		t.Fatalf("Handler(nil): %v — no bundle is a stated case, not an error", err)
 	}
@@ -80,7 +80,7 @@ func TestReleaseSwapIsServedImmediately(t *testing.T) {
 		"_next/static/chunks/aaaa1111.js": {Data: []byte("//a")},
 	})
 
-	h, err := Handler(src, testDoor())
+	h, err := Handler(src, testDoor(), nil)
 	if err != nil {
 		t.Fatalf("Handler: %v", err)
 	}
