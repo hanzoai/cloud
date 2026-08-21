@@ -314,7 +314,7 @@ var Apps = []App{
 	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/replay", "/v1/event", "/v1/event.js", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
-	{Name: "visor", Prefixes: []string{"/v1/clusters", "/v1/compute/bots", "/v1/compute/regions", "/v1/compute/sizes", "/v1/fleet", "/v1/gpus", "/v1/k8s/clusters", "/v1/k8s/nodes", "/v1/machines"}},
+	{Name: "visor", Prefixes: []string{"/v1/visor"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}, Stage: Beta},
 	{Name: "code", Prefixes: []string{"/v1/code"}},
 	// lsp lives UNDER code, at /v1/code/lsp, because they are two reads of one

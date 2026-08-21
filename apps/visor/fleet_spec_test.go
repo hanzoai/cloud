@@ -1,7 +1,7 @@
 package visor
 
 // fleet_spec_test.go — a linked node's CPU arch + core count + total RAM must
-// survive the CLI→server decode (fleetRegistration) and land on the /v1/fleet board
+// survive the CLI→server decode (fleetRegistration) and land on the /v1/visor/fleet board
 // (byoUnit → fleetSpec), the SAME fields a code-linked run-target carries. This is
 // what makes evo-2 (x86_64 / Strix Halo) and spark (aarch64 / GB10) show real arch +
 // 128 GB on the world Fleet panel, not just their GPU. Arch is the fleet's `uname -m`
