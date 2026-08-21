@@ -1,7 +1,7 @@
 ---
 name: iam_webauthn-credentials
 version: "8.0.0"
-description: "Read iam webauthn credentials: Returns the passkeys and security keys registered to one person, newest first — which device each lives on and when it was registered.."
+description: "Read iam webauthn credentials: Returns the passkeys and security keys registered to one person, newest first — which device each lives on and when it was registered., Returns one passkey or security key: whose it is, what device it lives on, and when it was registered.."
 ---
 
 # Hanzo · IAM · webauthn credentials
@@ -15,16 +15,20 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.hanzo.ai/v1/iam/webauthn-credentials` — Returns the passkeys and security keys registered to one person, newest first — which device each lives on and when it was registered.
+- `GET https://api.hanzo.ai/v1/iam/webauthn-credentials/{owner}/{name}` — Returns one passkey or security key: whose it is, what device it lives on, and when it was registered.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `user` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/webauthn-credentials` → `iam.listWebauthnCredentialsOut` object with fields: `webauthnCredentials`.
+- `/v1/iam/webauthn-credentials/{owner}/{name}` → `iam.webauthnCredentialResult` object with fields: `webauthnCredential`.
 
 ## Example
 
