@@ -13,6 +13,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
+	github.com/graph-gophers/graphql-go v1.9.0
 	github.com/hanzoai/account v0.3.3
 	github.com/hanzoai/amqp v0.4.2
 	github.com/hanzoai/cek v0.2.7
@@ -80,7 +81,6 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
-	github.com/graph-gophers/graphql-go v1.9.0 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.17 // indirect
