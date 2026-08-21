@@ -94,7 +94,7 @@ const (
 // firstParty are our own registries: anything here is ours by construction.
 var firstParty = []string{
 	"ghcr.io/hanzoai/", "ghcr.io/luxfi/", "ghcr.io/zooai/",
-	"registry.hanzo.ai/", "registry.lux.network/", "registry.zoo.network/",
+	"oci.hanzo.ai/",
 	"registry.digitalocean.com/hanzo/",
 }
 

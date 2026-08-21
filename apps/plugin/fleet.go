@@ -18,7 +18,7 @@ import (
 )
 
 // OriginEnv names the base URL plugin artifacts are published under —
-// registry.hanzo.ai's S3 store, or a releases URL. A version resolves to
+// hanzoai/s3, or a releases URL. A version resolves to
 // <origin>/<version>/binaries.json, which is the index CI already writes, so
 // the mapping from a version to a digest has ONE author.
 const OriginEnv = "CLOUD_PLUGIN_ORIGIN"
