@@ -18,11 +18,11 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// sentryPrefix is the SECOND path family this package owns — the Hanzo Sentry
-// product face, delegating to the same gated runtime handler as the /v1/o11y
-// wildcard (mountSentinel, o11y.go). The gate below has to read both, or half the
-// surface it claims to cover is outside it.
-const sentryPrefix = "/v1/sentinel"
+// There is ONE path family now. The Hanzo Sentry product face used to be a
+// second — /v1/sentinel, a wildcard this package registered — and the gate below
+// had to read both or leave half the surface it claims to cover outside it. The
+// face folded under /v1/o11y/sentinel in the module (v1.5.67), so one prefix is
+// the whole surface again and there is no second list to keep in step.
 
 // surfaceApp mounts the WHOLE observability surface through the REAL MountO11y,
 // so the assertions below read the router the document is generated from rather
@@ -85,14 +85,6 @@ var untypedByDesign = map[string]string{
 		"body — it is a delivery receipt, so a body that will not parse still proves delivery and a 400 " +
 		"would make Alertmanager retry forever. zip decodes a typed In before the handler runs, so " +
 		"typing it would turn that 200 into a 400.",
-	// The /v1/sentinel catch-all this package registers (mountSentinel). A wildcard has
-	// no operation to type.
-	"GET /v1/sentinel/{wildcard1}":    sentryReason,
-	"POST /v1/sentinel/{wildcard1}":   sentryReason,
-	"PUT /v1/sentinel/{wildcard1}":    sentryReason,
-	"PATCH /v1/sentinel/{wildcard1}":  sentryReason,
-	"DELETE /v1/sentinel/{wildcard1}": sentryReason,
-
 	// The upstream module's own hatches. hanzoai/o11y no longer registers a
 	// /v1/o11y/* catch-all — every route it serves is named — so the routes a
 	// wildcard used to hide are visible here, each with the wire fact that keeps
@@ -118,8 +110,6 @@ var untypedByDesign = map[string]string{
 }
 
 const (
-	sentryReason = "the /v1/sentinel/* wildcard (mountSentinel) forwarding to the same gated runtime handler. " +
-		"A wildcard has no operation to type."
 	upstreamProbeReason = "registered by the upstream hanzoai/o11y module, not by this package — a " +
 		"liveness/readiness path the runtime serves without identity so k8s probes pass."
 	upstreamStreamReason = "an upstream hanzoai/o11y hatch that never produces one complete JSON value; " +
@@ -151,9 +141,7 @@ func o11yOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
 	}
-	ours := func(p string) bool {
-		return strings.HasPrefix(p, o11yPrefix) || strings.HasPrefix(p, sentryPrefix)
-	}
+	ours := func(p string) bool { return strings.HasPrefix(p, o11yPrefix) }
 	served, typed = map[string]bool{}, map[string]string{}
 	for path, item := range doc.Paths {
 		if !ours(path) {
