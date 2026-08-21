@@ -217,6 +217,21 @@ for try_model in $MODEL $FALLBACKS; do
     echo "review: $LABEL — $MODEL could not be paid for; asking $try_model instead"
     python3 -c 'import json,sys; b=json.load(open(sys.argv[1])); b["model"]=sys.argv[2]; json.dump(b, open(sys.argv[1],"w"))' "$req" "$try_model"
   fi
+  # HOW MUCH PATIENCE A TRANSIENT IS OWED IS A MEASUREMENT, and three tries over
+  # fifteen seconds of pause was under it. The 502 here is not a gateway being
+  # rolled: the model plane's child process dies and is restarted, so EVERY
+  # request in flight at that instant is cut mid-body, and the ones queued behind
+  # it are cut by the next one. Measured on this deployment — three consecutive
+  # 502s spanning 90 seconds on one slice, `mount /v1: http: read response: EOF`,
+  # while a fourth ask seconds later answered normally. So the burst outlives the
+  # budget, and a release is refused for a change nobody read.
+  #
+  # Six tries with a widening pause spans about four minutes, which covers the
+  # bursts observed while still ending. FAIL-CLOSED IS UNTOUCHED, and that is the
+  # only property that matters here: exhausting the tries falls through to the
+  # same `die`, so this buys the reviewer a chance to answer and can never turn
+  # the absence of an answer into a pass.
+  tries=6
   attempt=1
   while :; do
     code=$(curl -sS -m 180 -o "$resp" -w '%{http_code}' "$API/v1/chat/completions" \
@@ -226,9 +241,9 @@ for try_model in $MODEL $FALLBACKS; do
       000|429|502|503|504) : ;;
       *) break ;;
     esac
-    if [ "$attempt" -ge 3 ]; then break; fi
-    echo "review: $LABEL — reviewer answered $code, which is no answer; asking again ($attempt of 3)"
-    sleep $(( attempt * 5 ))
+    if [ "$attempt" -ge "$tries" ]; then break; fi
+    echo "review: $LABEL — reviewer answered $code, which is no answer; asking again ($attempt of $tries)"
+    sleep $(( attempt * 10 ))
     attempt=$(( attempt + 1 ))
   done
   # 402 is the ONLY status that moves to the next rung. A 401 is a bad bearer and
