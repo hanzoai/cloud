@@ -44958,6 +44958,13 @@ components:
             Space is the project's Base data space, which is where a deployed site's form,
             forum and data submissions land. Absent means the site stores nothing.
           type: string
+        starred:
+          description: |-
+            Starred is THIS CALLER's star, not a property of the project — two people
+            in the same org see different values for the same row, which is the whole
+            point of it. Always present so a client can tell "not starred" from "this
+            API is too old to say", the same reason visibility and hidden are.
+          type: boolean
         status:
           description: |-
             Status is where the project stands — whether a build has ever succeeded and
