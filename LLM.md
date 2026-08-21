@@ -180,8 +180,10 @@ its `-mod=readonly` download step.
 Test modes: `make test` is pure-Go (`CGO_ENABLED=0`). Encrypted-at-rest OrgDB
 tests REQUIRE `CGO_ENABLED=1` + libsqlcipher; those run only in the
 Dockerfile's dedicated `-tags libsqlite3` CGO stage, and fail under `make test`
-by design (kms, flags, x402, plugin/kmsreseal, finance). Bundle-embed
-tests (apps/tasks/ui) need `make deploy-ui` first (real bundle is gitignored).
+by design (kms, flags, x402, plugin/kmsreseal, finance). There are no
+bundle-embed tests any more: the three fronts that had them — todo, meet and
+now tasks — are their own images at the root of their own hosts, so no SPA is
+compiled into this binary and `spa.Handler` has no caller left here.
 (`apps/git` was in that list and no longer belongs: measured green under exactly
 that posture — `TEST_ENV` dev key, `-tags sqlite_fts5`, `CGO_ENABLED=0` — in 18s.)
 
@@ -1047,7 +1049,7 @@ document pipeline" below.)
   surface — and the moment they do, it lands here with no change to cloud.
 - **Opaque does not always mean UNKNOWABLE, and `tasks` is the case that shows
   the difference.** Its whole product is `/v1/tasks` (a 307 to `/v1/tasks/`) plus
-  one `/v1/tasks/*` relay, so it publishes 28 operations and describes none —
+  one `/v1/tasks/*` relay, so it publishes 10 operations and describes none —
   but the remainder behind that relay is not off in another service. It is 64
   operations in THIS process, dispatched by path SEGMENT inside
   hanzoai/tasks' own `net/http` mux, over inputs that are anonymous structs

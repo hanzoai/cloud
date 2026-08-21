@@ -1,6 +1,0 @@
-# Provenance of this embedded Tasks SPA build. See ../README.md to regenerate.
-app=@hanzo/tasks (admin-tasks)
-base=/tasks/
-api_prefix=/v1/tasks
-source=hanzoai/admin:apps/admin-tasks@448b189ca3a2f86ed48199fa27eef54eebd925cc (feat/tasks-base-path)
-built=vite build (tsc gate skipped: pre-existing es2021 lib-target drift in typecheck)

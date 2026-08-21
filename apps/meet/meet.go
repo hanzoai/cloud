@@ -61,7 +61,6 @@ import (
 	// an import that shadows a package-level identifier is a compile error in the
 	// test build only — green `go build`, red `go test`.
 	accountapp "github.com/hanzoai/cloud/apps/account"
-	meetui "github.com/hanzoai/cloud/apps/meet/ui"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/openapi"
@@ -297,11 +296,6 @@ func init() {
 	// /v1/meet/health declares no prose here: it is a TYPED op now (see Mount), and
 	// zipdoc lifts its summary and description from the op itself. Describing it in
 	// both places is the drift this file already paid for once.
-
-	// The call client's two addresses. Bound with All(), so they publish every
-	// method the generator knows and none of them can lift prose from a handler —
-	// a static bundle has no typed op. The ONE helper every embedded SPA uses.
-	openapi.DescribeSPA("/meet", "call client")
 }
 
 // Mount wires /v1/meet/* onto app. The route is registered even when unconfigured so
@@ -361,23 +355,21 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	zip.Get(g, "/health", ops{s}.health,
 		zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
-	// The native client, embedded in THIS binary and served from the SAME origin as
-	// the routes above. One origin is not a convenience here: the lobby's read is a
-	// credentialled same-origin GET, so there is no CORS grant to make, no second
-	// host to hold a session on, and no bundle carrying an API address it could be
-	// pointed away from. This is what replaces the office plugin in the published
-	// Team front — the media plane and the token were already ours; the client was
-	// the last piece that was not.
+	// THE CLIENT IS NOT HERE. It is its own image (ghcr.io/hanzoai/meet, built from
+	// hanzoai/admin apps/meet at base '/') on its own host, meet.hanzo.ai — three
+	// planes with three lifecycles: the bundle is static bytes, this binary mints
+	// the join token, and the media is a direct browser↔LiveKit connection that
+	// touches neither.
 	//
-	// Mounted OUTSIDE the ready() gate below, on purpose: an unconfigured deployment
-	// still serves the UI, which then renders the honest refusal from /v1/meet/session
-	// instead of a blank 404 that says nothing about what is wrong.
-	// On the ROOT router, not the group: /meet is the bundle and /v1/meet is the
-	// API, and a GET of an HTML shell has nothing to forge. todo registers its
-	// SPA the same way, outside its own gate.
-	ui := zip.AdaptNetHTTP(http.StripPrefix("/meet", meetui.Handler()))
-	app.All("/meet", ui)
-	app.All("/meet/*", ui)
+	// It used to be //go:embed'd here and served at /meet/*, which put every UI
+	// change behind a full Go release and put a client bundle on the API origin.
+	// Nothing about the request path required it: the client reads /v1/meet/session
+	// and posts /v1/meet/getToken, and it carries a bearer for both, so those two
+	// are answered the same whether the bundle shares this origin or not.
+	//
+	// The bearer is the whole reason meet could move and tasks could not. A client
+	// that holds one can name its API; a client that relies on a host-only cookie
+	// cannot, which is why tasks.hanzo.ai is split at the edge instead.
 
 	if !s.State.ready() {
 		// ERROR, not warn, and it names the file/Secret to fix. A subsystem that can

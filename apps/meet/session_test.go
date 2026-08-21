@@ -218,10 +218,14 @@ func TestSpacesIsRefusedForAMachine(t *testing.T) {
 	}
 }
 
-// TestLobbyIsServedFromTheSameOrigin proves the wiring, not the bundle: Mount puts
-// the client on /meet and /meet/<deep link>, beside the API it reads. The ui
-// package's own test covers what those bytes are.
-func TestLobbyIsServedFromTheSameOrigin(t *testing.T) {
+// TestTheClientIsNotOnThisOrigin. The call client is its own image on its own
+// host (ghcr.io/hanzoai/meet at meet.hanzo.ai), so this binary serves the mint
+// and nothing else — /meet and every deep link under it reach no route here.
+//
+// It replaces the pair that measured the opposite (the bundle answered 200 on
+// /meet, /meet/ and /meet/<workspace>/<room>), because a deletion that nothing
+// measures is a deletion that comes back.
+func TestTheClientIsNotOnThisOrigin(t *testing.T) {
 	app := mount(t, apiKey, apiSecret)
 	for _, path := range []string{"/meet", "/meet/", "/meet/" + workspaceA + "/standup"} {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
@@ -230,27 +234,13 @@ func TestLobbyIsServedFromTheSameOrigin(t *testing.T) {
 		}
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s = %d, want 200", path, resp.StatusCode)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("GET %s = %d, want 404 — the API origin does not serve the client:\n%s",
+				path, resp.StatusCode, truncate(string(body)))
 		}
-		if !strings.Contains(string(body), `<div id="root">`) {
-			t.Errorf("GET %s did not serve the SPA shell:\n%s", path, truncate(string(body)))
+		if strings.Contains(string(body), `<div id="root">`) {
+			t.Errorf("GET %s served an SPA shell; the bundle left this binary", path)
 		}
-	}
-}
-
-// TestTheClientIsServedEvenUnconfigured. An unconfigured deployment still serves
-// the client, which then renders the refusal /v1/meet/session gives it. A 404 here
-// would say nothing at all about what is wrong.
-func TestTheClientIsServedEvenUnconfigured(t *testing.T) {
-	app := mount(t, "", "")
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/meet", nil))
-	if err != nil {
-		t.Fatalf("GET /meet: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /meet on an unconfigured deploy = %d, want 200", resp.StatusCode)
 	}
 }
 

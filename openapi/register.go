@@ -60,17 +60,6 @@ type registration struct {
 	description string
 	described   bool // the prose half is present (Describe ran)
 
-	// id overrides the operation id derived from method+path. Empty for almost
-	// every route, because a derived id is the right one: it is the address, and
-	// two routes cannot share an address.
-	//
-	// The exception is an address served TWICE — a UI at /tasks and its API at
-	// /v1/tasks. zip.ID drops a leading version as saying nothing every address
-	// carries, which is true right up until something else claims the unversioned
-	// path: then both derive "get_tasks" and the document cannot be generated at
-	// all. So the UI names itself, in the one place that knows a prefix is a UI
-	// (DescribeSPA), and the API keeps the plain name a caller expects.
-	id string
 }
 
 // opKey addresses a registration the same way the router addresses a route:
@@ -211,28 +200,6 @@ func Describe(path, method, summary, description string) {
 	registry[key] = reg
 }
 
-// identify states an operation's id instead of letting it be derived.
-//
-// Every other id comes from [zip.ID] on method+path, and that single rule is what
-// lets an agent call the name it just read in the document. The rule drops the
-// default version segment, because a segment every address carries tells no two
-// operations apart — which leaves ONE shape ambiguous: two addresses that differ
-// only by that segment. An embedded SPA is exactly it, mounting at /tasks while
-// its API answers at /v1/tasks.
-//
-// The page yields, not the API: the thing people call keeps the clean name, and
-// the shell says it is the shell. Unexported because [DescribeSPA] is the one
-// declaration that needs it — a second caller would mean a second ambiguity, and
-// that is worth reading this comment first.
-func identify(path, method, id string) {
-	key := opKey{method: strings.ToUpper(method), path: path}
-	regMu.Lock()
-	defer regMu.Unlock()
-	reg := registry[key]
-	reg.id = id
-	registry[key] = reg
-}
-
 // DescribeRest declares prose for every method at path that nothing has described
 // yet, and is how an address bound with All() is covered WITHOUT a hand-copied list
 // of methods.
@@ -311,9 +278,6 @@ func newComponents() *components {
 func (r *registration) apply(op *Operation, c *components) error {
 	if r.described {
 		op.Summary, op.Description = r.summary, r.description
-	}
-	if r.id != "" {
-		op.OperationID = r.id
 	}
 	switch {
 	case r.req == binaryReq:
