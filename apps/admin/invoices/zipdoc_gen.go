@@ -10,9 +10,22 @@ func init() {
 	zip.Describe("GET /v1/admin/invoices", zip.Doc{
 		Description: "Answers GET /v1/admin/invoices.\n\n\tGET /v1/admin/invoices?org=&status=&limit=",
 		Fields: map[string]string{
-			"InvoicesIn.limit":  "Limit caps the rows returned. total still reports the full match count.",
-			"InvoicesIn.org":    "Org filters to one tenant, matched exactly.",
-			"InvoicesIn.status": "Status filters on the invoice's LATEST lifecycle status (paid, open, void, …),\nmatched case-insensitively.",
+			"InvoiceRow.amountCents": "AmountCents is the invoice total in minor units of Currency, as of its latest\nevent. It is the amount BILLED — a partially paid invoice does not report a\nremainder here.",
+			"InvoiceRow.currency":    "Currency is the invoice's ISO code. AmountCents is minor units of THIS, so a list\nspanning currencies must not be summed without reading it.",
+			"InvoiceRow.display":     "Display is the same slug as Org. The warehouse holds no friendly name and this\nread does no per-org IAM fan-out, so it repeats the slug rather than inventing one.",
+			"InvoiceRow.due":         "Due is when payment is due, RFC3339. Empty when the invoice carries no due date.",
+			"InvoiceRow.id":          "ID is commerce's invoice id — the row's identity, and what a detail view fetches\n/v1/billing/invoices/:id with.",
+			"InvoiceRow.issued":      "Issued is when the invoice was issued, RFC3339 as commerce emitted it. The list is\nsorted by it, newest first.",
+			"InvoiceRow.number":      "Number is the human invoice number the customer sees on the document. Distinct from\nID, which is the machine handle.",
+			"InvoiceRow.org":         "Org is the tenant the invoice was issued to, and what ?org= matches exactly.",
+			"InvoiceRow.status":      "Status is the EFFECTIVE lifecycle state, folded from the invoice's latest event:\n`paid` and `void` are terminal and come from the event itself; anything else is the\nlast status the events carried, defaulting to `open` for a finalized invoice.",
+			"InvoicesIn.limit":       "Limit caps the rows returned. total still reports the full match count.",
+			"InvoicesIn.org":         "Org filters to one tenant, matched exactly.",
+			"InvoicesIn.status":      "Status filters on the invoice's LATEST lifecycle status (paid, open, void, …),\nmatched case-insensitively.",
+			"InvoicesOut.data":       "Data is the matching invoices, newest issued first, capped by limit.",
+			"InvoicesOut.msg":        "Msg is the query failure, and is empty on success.",
+			"InvoicesOut.status":     "Status is \"ok\" or \"error\". A warehouse that is not connected answers ok with an\nempty list and total 0 — the honest not-yet-wired state, not a claim that the fleet\nhas never invoiced anyone.",
+			"InvoicesOut.total":      "Total is how many matched BEFORE limit truncated, so a console can say \"showing 50\nof 812\". Omitted on an error.",
 		},
 	})
 }

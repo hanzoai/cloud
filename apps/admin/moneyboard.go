@@ -69,75 +69,170 @@ var (
 
 // moneyBoard is the whole GET /v1/admin/money payload.
 type moneyBoard struct {
-	Revenue     moneyRevenue        `json:"revenue"`
-	Credits     moneyCredits        `json:"credits"`
-	Infra       moneyInfra          `json:"infrastructure"`
-	Margin      moneyMargin         `json:"margin"`
-	ByOrg       []moneyOrgRow       `json:"byOrg"`
-	GeneratedAt string              `json:"generatedAt"`
-	Sources     []core.SourceStatus `json:"sources"`
+	// Revenue is what customers actually pay: realized consumption, recurring
+	// contract value, and the counts behind them.
+	Revenue moneyRevenue `json:"revenue"`
+	// Credits is the granted-against-consumed ledger, including the balance
+	// customers still hold.
+	Credits moneyCredits `json:"credits"`
+	// Infra is what the platform costs to run: vendor COGS, the DigitalOcean
+	// burn-down, and the reserve backing the payout programs.
+	Infra moneyInfra `json:"infrastructure"`
+	// Margin is revenue against cost, carried through from the finance board
+	// unchanged so the two can never report different margins.
+	Margin moneyMargin `json:"margin"`
+	// ByOrg is one line per customer, biggest spender first. The row SET comes
+	// from revenue, so an org that was granted credit but no longer exists in IAM
+	// is inside the fleet totals above and has no line of its own.
+	ByOrg []moneyOrgRow `json:"byOrg"`
+	// GeneratedAt is when the board was assembled, RFC 3339 UTC. Nothing here is
+	// cached.
+	GeneratedAt string `json:"generatedAt"`
+	// Sources is one row per upstream, each name prefixed by the domain that read
+	// it (revenue:, finance:, grants:audit, treasury) — a bare "commerce" appears
+	// under two domains and would otherwise collide. A not-ok row means the total
+	// it feeds is an UNDERCOUNT, not a smaller number.
+	Sources []core.SourceStatus `json:"sources"`
 }
 
 // moneyRevenue is what customers actually pay us.
 type moneyRevenue struct {
-	RealizedCents money.Cents `json:"realizedCents"` // consumed spend, fleet-wide
-	MRRCents      money.Cents `json:"mrrCents"`
-	ARRCents      money.Cents `json:"arrCents"`
-	ARPUCents     money.Cents `json:"arpuCents"`
-	Customers     int         `json:"customers"`
-	Paying        int         `json:"paying"`
+	// RealizedCents is credit customers have actually CONSUMED, fleet-wide, in US
+	// cents. This is the revenue figure — MRR beside it is contract value and the
+	// two are never added.
+	RealizedCents money.Cents `json:"realizedCents"`
+	// MRRCents is fleet monthly recurring revenue, in US cents — contract value
+	// from subscriptions. Orthogonal to RealizedCents and never added to it.
+	MRRCents money.Cents `json:"mrrCents"`
+	// ARRCents is MRRCents times twelve, in US cents. A projection of today's
+	// contracts, not a measurement of a year.
+	ARRCents money.Cents `json:"arrCents"`
+	// ARPUCents is realized spend divided by PAYING customers, in US cents — per
+	// paying customer, not per signup, so free signups cannot deflate it.
+	ARPUCents money.Cents `json:"arpuCents"`
+	// Customers is every org IAM lists, paying or not.
+	Customers int `json:"customers"`
+	// Paying is how many of them have spend or MRR above zero. It is the ARPU
+	// denominator.
+	Paying int `json:"paying"`
 }
 
 // moneyCredits is the granted-vs-consumed ledger. Outstanding is the liability side:
 // prepaid + promo balance customers still hold and have not yet burned.
 type moneyCredits struct {
-	GrantedCents        money.Cents `json:"grantedCents"`
-	GrantedTrialCents   money.Cents `json:"grantedTrialCents"`   // non-cash comps/promos
-	GrantedPrepaidCents money.Cents `json:"grantedPrepaidCents"` // real money added
-	ConsumedCents       money.Cents `json:"consumedCents"`
-	OutstandingCents    money.Cents `json:"outstandingCents"`
-	Grants              int         `json:"grants"`
+	// GrantedCents is every credit successfully issued, in US cents, over the
+	// whole grant history rather than a window. Refused grants are excluded — they
+	// moved nothing.
+	GrantedCents money.Cents `json:"grantedCents"`
+	// GrantedTrialCents is the non-cash half — comps and promos we gave away — in
+	// US cents. A grant whose source the ledger did not record counts here, since a
+	// grant nobody paid for is the safer assumption.
+	GrantedTrialCents money.Cents `json:"grantedTrialCents"`
+	// GrantedPrepaidCents is the half backed by real money the customer paid in, in
+	// US cents. With GrantedTrialCents it sums to GrantedCents.
+	GrantedPrepaidCents money.Cents `json:"grantedPrepaidCents"`
+	// ConsumedCents is realized spend, in US cents. A credit is consumed exactly
+	// when it is spent, so this is the same number revenue reports, stated once
+	// from one source.
+	ConsumedCents money.Cents `json:"consumedCents"`
+	// OutstandingCents is the LIABILITY: prepaid and promo balance customers still
+	// hold and have not burned. It is not revenue, and it is not GrantedCents
+	// minus ConsumedCents — customers also add their own money.
+	OutstandingCents money.Cents `json:"outstandingCents"`
+	// Grants is how many successful grants make up GrantedCents. If it reaches the
+	// scan bound the grants source is marked partial rather than the sum being
+	// presented as complete.
+	Grants int `json:"grants"`
 }
 
 // moneyInfra is what the platform costs to run: vendor COGS plus the DigitalOcean
 // burn-down, plus the platform reserve fund backing the payout programs.
 type moneyInfra struct {
-	Period                 string            `json:"period"`
-	VendorCogsCents        money.Cents       `json:"vendorCogsCents"`
-	DOMonthToDateCents     money.Cents       `json:"doMonthToDateCents"`
-	DOCreditRemainingCents money.Cents       `json:"doCreditRemainingCents"`
-	DOAvgDailyBurnCents    money.Cents       `json:"doAvgDailyBurnCents"`
-	TreasuryReserveCents   money.Cents       `json:"treasuryReserveCents"`
-	Vendors                []commerce.Vendor `json:"vendors"`
+	// Period is the billing month the vendor COGS covers, "2006-01", as commerce
+	// reports it. It bounds VendorCogsCents only — the DigitalOcean figures below
+	// are month-to-date and the reserve is point-in-time.
+	Period string `json:"period"`
+	// VendorCogsCents is what the platform owes its vendors for Period, in US
+	// cents, POSITIVE — money out is not negated. This is the COGS the margin
+	// subtracts.
+	VendorCogsCents money.Cents `json:"vendorCogsCents"`
+	// DOMonthToDateCents is DigitalOcean spend so far this month, in US cents.
+	DOMonthToDateCents money.Cents `json:"doMonthToDateCents"`
+	// DOCreditRemainingCents is the promo credit left on the DigitalOcean account,
+	// in US cents — what is left to spend, not what was granted.
+	DOCreditRemainingCents money.Cents `json:"doCreditRemainingCents"`
+	// DOAvgDailyBurnCents is the average DigitalOcean spend per day, in US cents.
+	// Dividing the credit above by it is the runway.
+	DOAvgDailyBurnCents money.Cents `json:"doAvgDailyBurnCents"`
+	// TreasuryReserveCents is the platform reserve backing the payout programs, in
+	// US cents, read live from the treasury app. Zero here can mean an empty
+	// reserve OR an unreachable treasury — the treasury row in sources is what
+	// tells them apart.
+	TreasuryReserveCents money.Cents `json:"treasuryReserveCents"`
+	// Vendors is the COGS broken out per vendor and service line for Period, each
+	// amount positive.
+	Vendors []commerce.Vendor `json:"vendors"`
 }
 
 // moneyMargin is revenue against cost, carried through from finance so the two boards
 // cannot report different margins.
 type moneyMargin struct {
+	// GrossCents is realized revenue minus vendor COGS, in US cents. Negative
+	// means the fleet spent more on vendors than its customers consumed. GROSS
+	// only: salaries, tooling and everything outside vendor COGS are not in it.
 	GrossCents money.Cents `json:"grossCents"`
-	GrossPct   float64     `json:"grossPct"`
-	Profitable bool        `json:"profitable"`
-	RunwayDays *float64    `json:"runwayDays"`
+	// GrossPct is that margin as a percentage of revenue — 42.5 means 42.5%, not
+	// 0.425. Zero when revenue is zero, which is arithmetic rather than a claim of
+	// break-even.
+	GrossPct float64 `json:"grossPct"`
+	// Profitable is revenue strictly greater than COGS — the sign of GrossCents
+	// stated outright, so no consumer has to decide what zero means.
+	Profitable bool `json:"profitable"`
+	// RunwayDays is DigitalOcean promo credit divided by average daily burn: how
+	// long the credit lasts at today's rate, and nothing to do with the margin
+	// above. NULL — never a large number — when DigitalOcean is unconfigured or
+	// burn is zero, because no honest projection exists and an infinity would read
+	// as safety.
+	RunwayDays *float64 `json:"runwayDays"`
 }
 
 // moneyOrgRow is one customer's whole money position on a single line — what they were
 // given, what they spent, and what they still hold.
 type moneyOrgRow struct {
-	Org          string      `json:"org"`
-	Display      string      `json:"display"`
-	Plan         string      `json:"plan"`
-	SpendCents   money.Cents `json:"spendCents"`
+	// Org is the tenant slug — the row's identity.
+	Org string `json:"org"`
+	// Display is the org's display name, falling back to the slug.
+	Display string `json:"display"`
+	// Plan is the live subscription tier's name, or "pay-as-you-go" — which is
+	// also what an org reads as when the subscriptions read failed, so it is not
+	// proof of no plan.
+	Plan string `json:"plan"`
+	// SpendCents is realized consumption over the trailing 30 days, in US cents.
+	// The board sorts on it, largest first.
+	SpendCents money.Cents `json:"spendCents"`
+	// BalanceCents is the prepaid wallet the tenant still holds, in US cents —
+	// money not yet earned.
 	BalanceCents money.Cents `json:"balanceCents"`
-	MRRCents     money.Cents `json:"mrrCents"`
+	// MRRCents is the tenant's monthly recurring revenue, in US cents. Contract
+	// value, not cash collected.
+	MRRCents money.Cents `json:"mrrCents"`
+	// GrantedCents is credit successfully granted TO this tenant, in US cents,
+	// across all history. Zero for a tenant that was never granted any.
 	GrantedCents money.Cents `json:"grantedCents"`
-	Grants       int         `json:"grants"`
+	// Grants is how many grants that was.
+	Grants int `json:"grants"`
 }
 
 // MoneyOut is the GET /v1/admin/money envelope.
 type MoneyOut struct {
-	Status string      `json:"status"`
-	Msg    string      `json:"msg"`
-	Data   *moneyBoard `json:"data,omitempty"`
+	// Status is "ok" or "error", at HTTP 200 either way. A degraded upstream still
+	// answers "ok" — it is reported in data.sources, because a consolidated board
+	// that fails whole because one source is down is useless.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error", empty otherwise.
+	Msg string `json:"msg"`
+	// Data is the consolidated board. Omitted when the caller was refused.
+	Data *moneyBoard `json:"data,omitempty"`
 }
 
 // moneyBoardHandler answers GET /v1/admin/money.

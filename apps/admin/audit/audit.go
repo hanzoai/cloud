@@ -84,10 +84,25 @@ type RecordsIn struct {
 // `data` is opaque because it is one of two shapes: this store's own records
 // (audit.Wire), or IAM's get-records payload forwarded verbatim by the fallback.
 type RecordsOut struct {
-	Status    string                `json:"status"`
-	Msg       string                `json:"msg"`
-	Data      any                   `json:"data"`
-	Total     *int                  `json:"total,omitempty"`
+	// Status is "ok" or "error". A chain whose live verification failed still answers ok
+	// — the verdict travels in `integrity`, and a verify problem must not hide the
+	// records an auditor came for.
+	Status string `json:"status"`
+	// Msg is the failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the page of records, newest first, and it is one of TWO shapes: this
+	// store's own rows, or IAM's get-records payload forwarded verbatim by the fallback.
+	// `integrity` being null is what tells you which — the fallback is a different trail.
+	// Never null; an absent page is an empty list.
+	Data any `json:"data"`
+	// Total is how many records match the filter across all pages, so a console can page
+	// without walking. Omitted on an error.
+	Total *int `json:"total,omitempty"`
+	// Integrity is the live hash-chain verdict for THE ONE CHAIN these records came from,
+	// carrying that chain's name so it cannot be read as the whole trail's. The trail is
+	// a family of chains, one per process; GET /v1/admin/audit/verify answers for all of
+	// them. NULL means no verdict, not a failed one: either the check could not run, or
+	// these rows came from the IAM fallback, which has no chain of ours to verify.
 	Integrity *auditstore.Integrity `json:"integrity"`
 }
 
@@ -146,9 +161,17 @@ func (o ops) Records(ctx context.Context, in *RecordsIn) (*RecordsOut, error) {
 
 // VerifyOut is the GET /v1/admin/audit/verify envelope.
 type VerifyOut struct {
-	Status string            `json:"status"`
-	Msg    string            `json:"msg"`
-	Data   *auditstore.Trail `json:"data"`
+	// Status is "ok" or "error". A deployment with no audit store is an ERROR here, not
+	// an empty pass: "there is nothing to check" and "everything checks out" must never
+	// render the same on a compliance surface.
+	Status string `json:"status"`
+	// Msg is why the walk could not run, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the verdict for every chain the deployment keeps — a set, because the trail
+	// is a family of chains, one per process, and no single boolean is true of all of
+	// them. Null exactly when Status is "error". A BROKEN or UNREAD chain is still an ok
+	// answer: read the counts inside before concluding the trail is sound.
+	Data *auditstore.Trail `json:"data"`
 }
 
 // Verify walks EVERY hash chain this deployment keeps and reports each one: which

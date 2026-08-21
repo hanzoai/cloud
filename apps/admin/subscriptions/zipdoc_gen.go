@@ -10,9 +10,22 @@ func init() {
 	zip.Describe("GET /v1/admin/subscriptions", zip.Doc{
 		Description: "Answers GET /v1/admin/subscriptions.\n\n\tGET /v1/admin/subscriptions?org=&status=&limit=",
 		Fields: map[string]string{
-			"SubscriptionsIn.limit":  "Limit caps the rows returned. total still reports the full match count.",
-			"SubscriptionsIn.org":    "Org filters to one tenant, matched exactly.",
-			"SubscriptionsIn.status": "Status filters on the subscription's LATEST lifecycle status (active, trialing,\ncanceled, …), matched case-insensitively.",
+			"SubscriptionRow.display":  "Display is the same slug as Org. The warehouse holds no friendly name and this read\ndoes no per-org IAM fan-out, so it repeats the slug rather than inventing one.",
+			"SubscriptionRow.id":       "ID is commerce's subscription id — the row's identity and the warehouse GROUP BY\nkey. One row per subscription, so an org on several plans has several rows.",
+			"SubscriptionRow.mrrCents": "MRRCents is the subscription's monthly recurring revenue in USD cents — already\ninterval-normalized and multiplied by seats by the emitter, so an annual plan\nreports a twelfth here and not its yearly price. Reported for EVERY row, including\ntrialing and canceled ones, which are not revenue: filter on Status before summing.",
+			"SubscriptionRow.org":      "Org is the tenant that holds the subscription, and what ?org= matches exactly.",
+			"SubscriptionRow.plan":     "Plan is the plan's human label as of the subscription's latest event. A plan\nrenamed mid-life reports the name it carries now.",
+			"SubscriptionRow.renews":   "Renews is the current period's end, RFC3339 — when it next bills. On a canceled\nsubscription it is the last period's end, so it is a date in the past, not a\npromise of a charge.",
+			"SubscriptionRow.started":  "Started is the earliest event on this subscription, RFC3339 — when it first\nappeared in the warehouse. The tiebreaker in the ranking, newest first.",
+			"SubscriptionRow.status":   "Status is the EFFECTIVE lifecycle state: `canceled` when the latest event is a\ncancel, whatever the last status snapshot said, otherwise that snapshot, defaulting\nto `active`. Common values are `active`, `trialing`, `past_due`, `canceled`.",
+			"SubscriptionRow.user":     "User is the individual the subscription was created by, from the event's\ndistinct_id. Empty for one created by a machine rather than a person.",
+			"SubscriptionsIn.limit":    "Limit caps the rows returned. total still reports the full match count.",
+			"SubscriptionsIn.org":      "Org filters to one tenant, matched exactly.",
+			"SubscriptionsIn.status":   "Status filters on the subscription's LATEST lifecycle status (active, trialing,\ncanceled, …), matched case-insensitively.",
+			"SubscriptionsOut.data":    "Data is the matching subscriptions, highest MRR first, then newest, capped by\nlimit. Canceled subscriptions are included unless ?status= excludes them.",
+			"SubscriptionsOut.msg":     "Msg is the query failure, and is empty on success.",
+			"SubscriptionsOut.status":  "Status is \"ok\" or \"error\". A warehouse that is not connected answers ok with an\nempty list and total 0 — the honest not-yet-wired state, not a fleet with no\nsubscribers.",
+			"SubscriptionsOut.total":   "Total is how many matched BEFORE limit truncated. Omitted on an error.",
 		},
 	})
 }

@@ -156,9 +156,17 @@ type GrantResult struct {
 // GrantOut is the envelope of every credit-grant op. There is one shape because there is
 // ONE credit-write path.
 type GrantOut struct {
-	Status string       `json:"status"`
-	Msg    string       `json:"msg"`
-	Data   *GrantResult `json:"data"`
+	// Status is "ok" or "error". Error means NO money moved: every refusal — a
+	// non-positive amount, one over the per-grant cap, an unknown org, a deployment with
+	// no durable audit store — is decided before the ledger is written.
+	Status string `json:"status"`
+	// Msg is why the grant was refused, and is empty on success. Two refusals also carry
+	// a non-200 HTTP status alongside this envelope: 404 for an unknown org, 503 when
+	// there is nowhere durable to record the grant.
+	Msg string `json:"msg"`
+	// Data is the receipt: the account credited, the amount, and the balance after.
+	// Null exactly when Status is "error".
+	Data *GrantResult `json:"data"`
 }
 
 // ApplyGrant validates the amount + target org, deposits into the org's commerce ledger

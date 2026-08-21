@@ -29,15 +29,33 @@ const defaultLimit = 500
 // InvoiceRow is one row of GET /v1/admin/invoices — an issued invoice at a glance,
 // tagged with its owning org. Money is USD cents; timestamps are RFC3339 strings.
 type InvoiceRow struct {
-	ID          string `json:"id"`
-	Number      string `json:"number"`
-	Org         string `json:"org"`
-	Display     string `json:"display"`
-	Status      string `json:"status"`
-	AmountCents int64  `json:"amountCents"`
-	Currency    string `json:"currency"`
-	Issued      string `json:"issued"`
-	Due         string `json:"due"`
+	// ID is commerce's invoice id — the row's identity, and what a detail view fetches
+	// /v1/billing/invoices/:id with.
+	ID string `json:"id"`
+	// Number is the human invoice number the customer sees on the document. Distinct from
+	// ID, which is the machine handle.
+	Number string `json:"number"`
+	// Org is the tenant the invoice was issued to, and what ?org= matches exactly.
+	Org string `json:"org"`
+	// Display is the same slug as Org. The warehouse holds no friendly name and this
+	// read does no per-org IAM fan-out, so it repeats the slug rather than inventing one.
+	Display string `json:"display"`
+	// Status is the EFFECTIVE lifecycle state, folded from the invoice's latest event:
+	// `paid` and `void` are terminal and come from the event itself; anything else is the
+	// last status the events carried, defaulting to `open` for a finalized invoice.
+	Status string `json:"status"`
+	// AmountCents is the invoice total in minor units of Currency, as of its latest
+	// event. It is the amount BILLED — a partially paid invoice does not report a
+	// remainder here.
+	AmountCents int64 `json:"amountCents"`
+	// Currency is the invoice's ISO code. AmountCents is minor units of THIS, so a list
+	// spanning currencies must not be summed without reading it.
+	Currency string `json:"currency"`
+	// Issued is when the invoice was issued, RFC3339 as commerce emitted it. The list is
+	// sorted by it, newest first.
+	Issued string `json:"issued"`
+	// Due is when payment is due, RFC3339. Empty when the invoice carries no due date.
+	Due string `json:"due"`
 }
 
 // Invoices answers GET /v1/admin/invoices.
@@ -96,10 +114,17 @@ type InvoicesIn struct {
 // InvoicesOut is the GET /v1/admin/invoices envelope. total is the count BEFORE limit
 // truncates, so the console can say "showing 50 of 812".
 type InvoicesOut struct {
-	Status string       `json:"status"`
-	Msg    string       `json:"msg"`
-	Data   []InvoiceRow `json:"data"`
-	Total  *int         `json:"total,omitempty"`
+	// Status is "ok" or "error". A warehouse that is not connected answers ok with an
+	// empty list and total 0 — the honest not-yet-wired state, not a claim that the fleet
+	// has never invoiced anyone.
+	Status string `json:"status"`
+	// Msg is the query failure, and is empty on success.
+	Msg string `json:"msg"`
+	// Data is the matching invoices, newest issued first, capped by limit.
+	Data []InvoiceRow `json:"data"`
+	// Total is how many matched BEFORE limit truncated, so a console can say "showing 50
+	// of 812". Omitted on an error.
+	Total *int `json:"total,omitempty"`
 }
 
 // invoicesSQL resolves each invoice's LATEST lifecycle state from commerce.events
