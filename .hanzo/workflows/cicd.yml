@@ -96,7 +96,35 @@ concurrency:
   # setting here can protect it, because the flag that reads as if it would only
   # ever governed the cars that are already running. So the pin is a step of the
   # job that proves the image rather than a car of its own — see `image`.
-  group: cicd-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'release' }}
+  # ── ONE GROUP PER COMMIT, so every change runs to completion ─────────────────
+  #
+  # Pushes used to share the single group `release`. That coalesced them, which
+  # reads as thrift and was not: the sweep above takes {waiting, blocked} whatever
+  # the flag says, so the ONE queued run was forfeit to the next push. Main takes a
+  # push every minute or two against a ~35-minute gate, so runs 1725→1766 went
+  # cancel, cancel, cancel and NOTHING was proven about any commit for 262 of them.
+  # A gate that never finishes is not a slower gate, it is an absent one.
+  #
+  # Per-sha, no run is ever another run's rival: nothing sweeps, every commit is
+  # judged, and a green tree can actually mint its receipt.
+  #
+  # OVERLAPPING RELEASES ARE ALREADY THE DESIGN, which is what makes this safe
+  # rather than merely faster. The version claim is a compare-and-swap (409 → the
+  # next candidate), and the pin step says it outright: "the claim hands out
+  # version numbers in order, but nothing makes the builds finish in that order",
+  # so pin.sh answers 3 when production is already past this run and that is the
+  # step's SUCCESS. Neither the register nor the pin can be raced backward.
+  #
+  # THE COST, STATED: an image per commit rather than per burst. That is the trade
+  # the old comment was avoiding, and it buys the property asked for — every change
+  # deterministically run to completion — which coalescing cannot give at any
+  # setting. If runner pressure ever makes that the wrong trade, narrow the TRIGGER
+  # (paths-ignore, or a merge queue), never the group: a narrower group brings the
+  # cancellation back.
+  group: cicd-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  # Still true for a pull request, where a newer push to the same branch genuinely
+  # supersedes the older one. For a push the group is now unique, so nothing this
+  # can cancel exists.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
