@@ -413,26 +413,64 @@ func String(key string) string {
 // SwitchView is one platform switch as the admin cockpit renders it: the live value +
 // where it came from (flags | env | default).
 type SwitchView struct {
-	Key         string `json:"key"`
-	Category    string `json:"category"`
-	Label       string `json:"label"`
+	// Key is the registry key, which is also the flag key the engine evaluates and
+	// the path segment a write addresses: snake_case for the seeded platform set
+	// (waitlist_open, public_signup), waitlist.<service> for a launch gate.
+	Key string `json:"key"`
+	// Category is the board's grouping: Launch, Signup, Subsystems, Gateway or
+	// Network. Any subsystem may register a switch with a category of its own, so
+	// treat it as a label to group by, not a fixed set.
+	Category string `json:"category"`
+	// Label is the switch's title on the board.
+	Label string `json:"label"`
+	// Description is what flipping this switch does, written by whoever registered
+	// it — including the preconditions for flipping it, where there are any.
 	Description string `json:"description"`
-	Type        string `json:"type"`
-	Value       string `json:"value"`
-	Source      string `json:"source"`
-	Env         string `json:"env,omitempty"`
-	ReadOnly    bool   `json:"readOnly"`
+	// Type is how Value is to be read back: bool, int or string.
+	Type string `json:"type"`
+	// Value is the value IN FORCE right now, always as a string whatever Type says
+	// — "true"/"false" for a bool, decimal digits for an int. It is what the
+	// running deployment is using, not what is stored: an unstored switch reports
+	// its env or literal fallback here.
+	Value string `json:"value"`
+	// Source is where Value came from, in the order they are tried: "flags" (a
+	// stored definition — the only one a cockpit write produces), "env" (the Env
+	// var below), or "default" (the registered literal). Anything but "flags"
+	// means nothing has ever been written for this key.
+	Source string `json:"source"`
+	// Env is the environment variable that supplies the fallback. Present only on
+	// the boot-time switches, where env IS the mechanism; a runtime switch carries
+	// none on purpose, so that this surface is the one place its value comes from.
+	Env string `json:"env,omitempty"`
+	// ReadOnly marks a switch the process reads once at BOOT (subsystem activation,
+	// the network ids). Writing it is not refused and the stored value is real, but
+	// the running process keeps its boot value until it is restarted — so a flip
+	// here is a request for a redeploy rather than a hot change.
+	ReadOnly bool `json:"readOnly"`
 }
 
 // BoardView is the full control-plane read board: the engine status plus every
 // switch's live value. Definitions are edited in place over /v1/flags (the cockpit
 // writes through SetPlatformSwitch); the activity log is the native change audit.
 type BoardView struct {
-	Engine     string       `json:"engine"`
-	Configured bool         `json:"configured"`
-	ManageURL  string       `json:"manageUrl"`
-	AuditURL   string       `json:"auditUrl"`
-	Switches   []SwitchView `json:"switches"`
+	// Engine names the evaluator serving these values: "hanzo-flags", running
+	// in-process in this pod.
+	Engine string `json:"engine"`
+	// Configured is whether the definition stores opened. When false every switch
+	// below is resolving from env or its registered default — the values are still
+	// the ones in force, but nothing stored can be reaching them and a write will
+	// fail. That is the fail-safe posture, not an outage.
+	Configured bool `json:"configured"`
+	// ManageURL is where the definitions behind these switches are read and
+	// written: /v1/flags/defs.
+	ManageURL string `json:"manageUrl"`
+	// AuditURL is where the change log for those writes lives: /v1/flags/activity.
+	AuditURL string `json:"auditUrl"`
+	// Switches is every registered switch with the value in force, in registration
+	// order — the seeded platform set first, then whatever each subsystem added at
+	// init. The registry is open, so this is the deployment's switchboard rather
+	// than a fixed list.
+	Switches []SwitchView `json:"switches"`
 }
 
 // Board evaluates every registered switch live and returns the cockpit read board.
