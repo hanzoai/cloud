@@ -199,11 +199,34 @@ jobs:
           # secret store this job reads the reviewer's identity out of. The
           # credential is piped in rather than passed, so it is never a value
           # this shell holds.
+          # THE CODE IS READ, SO THE FAILURE CAN BE NAMED. The body used to go
+          # straight into jq, so every failure arrived as one empty string: a
+          # REFUSAL (the store answering 401 for a credential that was revoked)
+          # and an ABSENCE (the CDN in front of it answering a bad minute) wore
+          # the same face here, and whoever met the second was sent to rotate a
+          # credential that was never wrong.
+          #
+          # The CDN's bad minute is literally `error code: 502`, a plain-text
+          # body, and jq met it with `parse error: Invalid numeric literal at
+          # line 1, column 6` — three lines about JSON in a job whose real news
+          # was that kms.hanzo.ai never answered. The body goes to a file now and
+          # jq reads it quietly; the failure below prints the code and the first
+          # 200 bytes, which say which of the two happened. Both still fail
+          # closed: this reads the answer, it does not soften it.
+          #
+          # mktemp, not a fixed path: on a success this file holds a bearer token
+          # for the store, the runner is shared, and 0600 plus a delete is the
+          # difference between a token that lived in one process and one that sat
+          # in /tmp for the next job to read. Same reason the secret below never
+          # reaches argv.
+          KMS_BODY=$(mktemp); KMS_CODE=$(mktemp)
           login() {
             jq -Rsj --arg id "$1" '{clientId: $id, clientSecret: rtrimstr("\n")}' \
-              | curl -sS --max-time 30 "${KMS_ENDPOINT}/v1/kms/auth/login" \
+              | curl -sS --max-time 30 -o "$KMS_BODY" -w '%{http_code}' \
+                  "${KMS_ENDPOINT}/v1/kms/auth/login" \
                   -H 'content-type: application/json' --data-binary @- \
-              | jq -r '.accessToken // empty'
+                  > "$KMS_CODE" || true
+            jq -r '.accessToken // empty' < "$KMS_BODY" 2>/dev/null || true
           }
 
           # ASKED AGAIN BEFORE IT IS BELIEVED. This login leaves the cluster and
@@ -211,20 +234,33 @@ jobs:
           # single packet, and an empty answer there is the absence of a reply
           # rather than a refusal. Retrying re-runs the whole pipeline instead of
           # re-reading a buffered copy, so nothing has to be held to try twice.
+          #
+          # SIX, BECAUSE THREE DID NOT OUTLAST THE BURST. The CDN does not drop a
+          # single packet and recover; it refuses for a stretch, and three tries
+          # nine seconds apart fitted inside one. Measured on 2026-08-21: reviews
+          # passed until 19:38 and failed from 19:56 on that same credential,
+          # while the deploy leg of those same runs — asking the same store a
+          # minute later — succeeded throughout. The window is what differed, so
+          # the window is what moves: 5s, 10s, 15s, 20s, 25s.
           again() {
             local attempt=1 out=
             while :; do
               out=$("$@" || true)
               [ -n "$out" ] && { printf %s "$out"; return 0; }
-              [ "$attempt" -ge 3 ] && return 1
-              sleep $(( attempt * 3 ))
+              [ "$attempt" -ge 6 ] && return 1
+              sleep $(( attempt * 5 ))
               attempt=$(( attempt + 1 ))
             done
           }
 
           kms_login() { printf %s "$KMS_CLIENT_SECRET" | login "$KMS_CLIENT_ID"; }
           KMS_TOKEN=$(again kms_login || true)
-          [ -n "$KMS_TOKEN" ] || { echo "::error::review: KMS login failed at ${KMS_ENDPOINT} — the reviewer's identity cannot be read, so the change does not pass"; exit 1; }
+          if [ -z "$KMS_TOKEN" ]; then
+            echo "::error::review: KMS login at ${KMS_ENDPOINT} answered $(cat "$KMS_CODE" 2>/dev/null || echo 000) — $(head -c 200 "$KMS_BODY" 2>/dev/null). The reviewer's identity cannot be read, so the change does not pass. A 4xx is the store refusing this credential — rotate review/IAM_CLIENT_* or KMS_CLIENT_*; anything else is the door not answering, and this asked six times over seventy-five seconds."
+            rm -f "$KMS_BODY" "$KMS_CODE"
+            exit 1
+          fi
+          rm -f "$KMS_BODY" "$KMS_CODE"
 
           # THE PATH IS WHERE THE STORE HOLDS IT. The reviewer's client id and
           # its secret are two secrets under review/, which is where they were
