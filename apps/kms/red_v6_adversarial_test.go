@@ -40,6 +40,7 @@ import (
 
 	gojose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/hanzoai/authz"
 	model "github.com/hanzoai/iam/pkg/model"
 	"github.com/zap-proto/zip"
 )
@@ -52,6 +53,14 @@ type redClaims struct {
 	Owner   string         `json:"owner"`
 	IsAdmin bool           `json:"isAdmin"`
 	Orgs    []model.OrgRef `json:"orgs"` // membership SET, home org first — what IAM mints for a USER.
+	// Type is the KIND, and it is what decides machine-ness now: IAM signs
+	// `type: application` for a client_credentials token and authz.Claims.Machine
+	// reads it. Without this field a mint here could not express a machine at all
+	// — it carried an owner, a membership set and a machine-shaped audience, which
+	// is a HUMAN by every term the predicate has — so the probes that assert a
+	// machine is denied admin were handing the gate a human and reading the human
+	// answer back.
+	Type string `json:"type,omitempty"`
 }
 
 // mintRed signs a token with an arbitrary aud SET and an explicit isAdmin, against
@@ -75,6 +84,16 @@ func mintRed(t *testing.T, key *rsa.PrivateKey, owner string, aud []string, isAd
 		},
 		Owner:   owner,
 		IsAdmin: isAdmin,
+		// THE KIND IS SIGNED, and this suite already declares it: `<owner>-platform-kms`
+		// is how every probe here says "this org's OWN machine". Translating that into
+		// the claim IAM actually mints is what makes a machine probe a machine — the
+		// audience itself decides nothing any more.
+		//
+		// Owner-bound deliberately. A token carrying ANOTHER org's machine audience
+		// (acme presenting maxpower-platform-kms) is not acme's machine, and several
+		// probes exist precisely to show that borrowing an audience confers nothing.
+		// Those stay human, which is what makes their answer meaningful.
+		Type: machineKind(owner, aud),
 		// SuperAdmin is HOME-ORG MEMBERSHIP (middleware_identity.go SanitizeIdentity):
 		// homeOrg == adminOrg and human. `owner` names the APP's org, not the user's,
 		// and isAdmin is deliberately not a term. A human token therefore has to carry
@@ -305,4 +324,21 @@ func TestRed_TrimCollapseOwner_FailsClosed(t *testing.T) {
 	if got := decode(t, getWithBearer(t, app, path, mintRed(t, key, paasOrgA, []string{"hanzo-console"}, false, future)).Body)["value"]; got != paasValueA {
 		t.Fatalf("maxpower read %v, want %q", got, paasValueA)
 	}
+}
+
+// machineKind returns the kind IAM signs for a client_credentials token when this
+// suite's own convention says the subject IS that org's machine, and "" otherwise.
+//
+// The convention is the owner-bound audience `<owner>-platform-kms`, which the
+// probes already use to mean exactly that. It is read HERE, in the minter, and
+// nowhere in the code under test: the audience stopped conferring authority when
+// the kind became a signed claim, and the point of these probes is that borrowing
+// one confers nothing.
+func machineKind(owner string, aud []string) string {
+	for _, a := range aud {
+		if a == owner+"-platform-kms" {
+			return authz.Program
+		}
+	}
+	return ""
 }

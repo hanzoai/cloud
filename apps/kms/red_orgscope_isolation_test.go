@@ -36,6 +36,7 @@ import (
 
 	gojose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/hanzoai/authz"
 	model "github.com/hanzoai/iam/pkg/model"
 	"github.com/zap-proto/zip"
 )
@@ -361,9 +362,16 @@ func TestRedIso_C_AdminCrossOrg(t *testing.T) {
 	//   token with no membership set never has an org read out of `owner`.
 	//
 	// This case used to assert the KMS answer for BOTH, because the fixture marked the
-	// generic machine with `type: "application"` — a claim IAM stamps nowhere, so in
-	// production that principal was taking the SuperAdmin arm instead, which is the
-	// leak probe (c) above now catches.
+	// generic machine with `type: "application"` while IAM stamped that claim nowhere,
+	// so in production that principal was taking the SuperAdmin arm instead, which is
+	// the leak probe (c) above now catches.
+	//
+	// IAM STAMPS IT NOW. authz v1.10.34 moved the discriminator onto the signed kind
+	// — Claims.Machine reads Type == "application" — so the claim that was once a
+	// fiction is the fact, and a fixture that omits it is a HUMAN however
+	// machine-shaped its audience looks. The KMS-sync probes below carry it for that
+	// reason: without it they were minting an admin-org human, watching it wield the
+	// org-switch exactly as a human admin should, and calling that a machine leak.
 	isoGet(t, app, "(c) generic admin-org MACHINE + X-Org-Id:maxpower", path,
 		isoTok{owner: "admin", isAdmin: true, machine: true}.mint(t, key),
 		map[string]string{"X-Org-Id": paasOrgA}).
@@ -371,9 +379,9 @@ func TestRedIso_C_AdminCrossOrg(t *testing.T) {
 		noLeak(t, "s3kr3t-of-admin-ISO")
 
 	for _, tk := range []isoTok{
-		{owner: "admin", isAdmin: true, aud: []string{"admin-platform-kms"}},
-		{owner: "admin", isAdmin: true, aud: []string{"hanzo-console", "admin-platform-kms"}},
-		{owner: "admin", isAdmin: true, aud: []string{"admin-platform-kms", "hanzo-console"}},
+		{owner: "admin", isAdmin: true, typ: authz.Program, aud: []string{"admin-platform-kms"}},
+		{owner: "admin", isAdmin: true, typ: authz.Program, aud: []string{"hanzo-console", "admin-platform-kms"}},
+		{owner: "admin", isAdmin: true, typ: authz.Program, aud: []string{"admin-platform-kms", "hanzo-console"}},
 	} {
 		isoGet(t, app, "(c) KMS-sync MACHINE + X-Org-Id:maxpower", path, tk.mint(t, key),
 			map[string]string{"X-Org-Id": paasOrgA}).
