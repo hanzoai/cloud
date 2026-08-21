@@ -753,9 +753,11 @@ type poolCreate struct {
 	Size string `json:"size"`
 	// Count is how many nodes the pool starts with.
 	Count int `json:"count"`
-	// MinNodes and MaxNodes bound the autoscaler; they are ignored unless
-	// AutoScale is set.
+	// MinNodes is the floor the autoscaler may not shrink the pool below. Ignored
+	// unless AutoScale is set.
 	MinNodes int `json:"minNodes"`
+	// MaxNodes is the ceiling the autoscaler may not grow the pool past, and so the
+	// bound on what this pool can spend. Ignored unless AutoScale is set.
 	MaxNodes int `json:"maxNodes"`
 	// AutoScale turns the provider's cluster autoscaler on for this pool.
 	AutoScale bool `json:"autoScale"`
@@ -795,9 +797,11 @@ func (o ops) createPool(ctx context.Context, in *poolCreate) (*nodePoolView, err
 
 // poolScale is the resize request: which pool, and how many nodes it should have.
 type poolScale struct {
-	// ClusterID and PoolID address the pool, from the URL path.
+	// ClusterID is the cluster holding the pool, from the URL path.
 	ClusterID string `json:"clusterId"`
-	PoolID    string `json:"poolId"`
+	// PoolID is the pool to resize, from the URL path — the `poolId` a cluster read
+	// reports for it. Required.
+	PoolID string `json:"poolId"`
 	// Provider is the cloud the cluster lives on. Required; body or ?provider=.
 	Provider string `json:"provider"`
 	// Count is the node count to scale TO — an absolute target, not a delta, and
