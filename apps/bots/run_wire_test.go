@@ -1,4 +1,4 @@
-package bot
+package bots
 
 import (
 	"io"
@@ -36,14 +36,14 @@ const reasonProxy = "proxy. One All() registration for every method, over a gree
 
 // TestRunToleratesAMalformedBody is the MEASUREMENT behind the one refusal above,
 // so the day zip can declare a body-tolerant op the conversion is a test away rather
-// than a re-derivation. POST /v1/bot/runs never reads its body, so bytes that are
+// than a re-derivation. POST /v1/bots/runs never reads its body, so bytes that are
 // not JSON at all still answer 501 — which op.invoke's unconditional 400 cannot.
 func TestRunToleratesAMalformedBody(t *testing.T) {
 	app := mountWith(t, newFake())
 	for _, body := range []string{"", "{", "not json at all", `{"task":"x"}`} {
-		code, _ := post(t, app, "/v1/bot/runs", body, "acme")
+		code, _ := post(t, app, "/v1/bots/runs", body, "acme")
 		if code != 501 {
-			t.Fatalf("POST /v1/bot/runs with body %q: got %d, want 501 — the route is body-tolerant, "+
+			t.Fatalf("POST /v1/bots/runs with body %q: got %d, want 501 — the route is body-tolerant, "+
 				"which is half of why it is not a typed op", body, code)
 		}
 	}
@@ -82,7 +82,7 @@ func TestStopIsAddressedByTheURLAlone(t *testing.T) {
 	rt.seed("acme", Run{ID: "wanted"})
 	rt.seed("acme", Run{ID: "other"})
 	app := mountWith(t, rt)
-	code, body := post(t, app, "/v1/bot/runs/wanted/stop", `{"runId":"other"}`, "acme")
+	code, body := post(t, app, "/v1/bots/runs/wanted/stop", `{"runId":"other"}`, "acme")
 	if code != 200 {
 		t.Fatalf("stop: got %d (%s), want 200", code, body)
 	}

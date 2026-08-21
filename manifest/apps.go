@@ -414,7 +414,7 @@ var Apps = []App{
 	// It was app.All("/v1/bot/*") in the other app, one specificity rule away from
 	// swallowing every sibling above; in one router that would have been a live
 	// hazard rather than a latent one.
-	{Name: "bot", Prefixes: []string{"/v1/bot", "/v1/node"}},
+	{Name: "bots", Prefixes: []string{"/v1/bots", "/v1/nodes"}},
 	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}},

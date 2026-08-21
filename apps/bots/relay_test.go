@@ -1,4 +1,4 @@
-package bot
+package bots
 
 import (
 	"net/http"
@@ -11,14 +11,14 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// TestRed_BotProxyForwardsForgedOrgNoPrincipal proves the /v1/bot/runtime/* proxy is NOT
+// TestRed_BotProxyForwardsForgedOrgNoPrincipal proves the /v1/bots/runtime/* proxy is NOT
 // gated on a validated principal. It replays the exact state SanitizeIdentity
 // leaves on the off-gateway forge path: X-Org-Id RESTORED to the client's forged
 // value, X-User-Id EMPTY (no validated principal). A gated data-plane resolver
 // (crm/kms/ml/...) answers 403 in this state. The bot proxy instead forwards the
 // forged tenant to bot-gateway — which the package doc says trusts these headers
 // as "the gateway-minted tenant context" — reopening the cross-tenant hole for
-// every /v1/bot/runtime/* surface (billable chat, per-tenant channels/skills/agents).
+// every /v1/bots/runtime/* surface (billable chat, per-tenant channels/skills/agents).
 //
 // SECURE behavior (asserted here, FAILS today): a no-principal request must not
 // hand bot-gateway a victim tenant — the proxy should 403, or at minimum strip
@@ -40,7 +40,7 @@ func TestRed_BotProxyForwardsForgedOrgNoPrincipal(t *testing.T) {
 	}
 
 	// The off-gateway forge, post-SanitizeIdentity: forged org, NO validated user.
-	req := httptest.NewRequest(http.MethodGet, "/v1/bot/runtime/v1/models", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/bots/runtime/v1/models", nil)
 	req.Header.Set("X-Org-Id", "victim") // forged; no X-User-Id → no validated principal
 	resp, err := app.Test(req)
 	if err != nil {
@@ -49,9 +49,9 @@ func TestRed_BotProxyForwardsForgedOrgNoPrincipal(t *testing.T) {
 	_ = resp.Body.Close()
 
 	if resp.StatusCode != http.StatusForbidden {
-		t.Errorf("no-principal forged /v1/bot/runtime/* = HTTP %d, want 403 (proxy must gate like every data-plane resolver)", resp.StatusCode)
+		t.Errorf("no-principal forged /v1/bots/runtime/* = HTTP %d, want 403 (proxy must gate like every data-plane resolver)", resp.StatusCode)
 	}
 	if org := gotOrg.Load().(string); org != "" {
-		t.Errorf("bot-gateway received X-Org-Id=%q from a NO-PRINCIPAL forge — cross-tenant hole forwarded through cloud's /v1/bot/runtime proxy", org)
+		t.Errorf("bot-gateway received X-Org-Id=%q from a NO-PRINCIPAL forge — cross-tenant hole forwarded through cloud's /v1/bots/runtime proxy", org)
 	}
 }
