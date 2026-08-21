@@ -1,7 +1,7 @@
 ---
 name: tasks_tasks
 version: "8.0.0"
-description: "Read tasks tasks: Redirect to the tasks API root, Read workflow state from the durable engine."
+description: "Read tasks tasks: The tasks console, The tasks console's assets and client-side routes, Redirect to the tasks API root."
 ---
 
 # Hanzo · TASKS · tasks
@@ -14,6 +14,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
+- `GET https://api.hanzo.ai/tasks` — The tasks console
+- `GET https://api.hanzo.ai/tasks/{wildcard1}` — The tasks console's assets and client-side routes
 - `GET https://api.hanzo.ai/v1/tasks` — Redirect to the tasks API root
 - `GET https://api.hanzo.ai/v1/tasks/{wildcard1}` — Read workflow state from the durable engine
 
@@ -25,13 +27,15 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
+- `/tasks` → JSON body.
+- `/tasks/{wildcard1}` → JSON body.
 - `/v1/tasks` → JSON body.
 - `/v1/tasks/{wildcard1}` → JSON body.
 
 ## Example
 
 ```bash
-curl -sS "https://api.hanzo.ai/v1/tasks" \
+curl -sS "https://api.hanzo.ai/tasks" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

@@ -61,6 +61,7 @@
             "description": "bad request"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }

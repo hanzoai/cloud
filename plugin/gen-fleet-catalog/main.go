@@ -23,10 +23,13 @@ import (
 	"sort"
 )
 
-// op is one operation as its own subsystem published it.
+// op is one operation as its own subsystem published it. Read says the
+// operation's method is GET — the one fact the door needs to mark a tool
+// read-only, and the only one it cannot derive from an id a child declared.
 type op struct {
-	ID  string `json:"id"`
-	Doc string `json:"doc"`
+	ID   string `json:"id"`
+	Doc  string `json:"doc"`
+	Read bool   `json:"read,omitempty"`
 }
 
 func main() {
@@ -56,6 +59,9 @@ func main() {
 				// x-tool, written by openapi.Fold for the ops the app's own typed
 				// registry holds — the same registry zip builds its MCP tools from.
 				Tool bool `json:"x-tool"`
+				// x-public, the audience openapi.stamp derived: the customer
+				// contract. The door offers that contract and nothing beside it.
+				Public bool `json:"x-public"`
 			} `json:"paths"`
 		}
 		if err := json.Unmarshal(raw, &doc); err != nil {
@@ -81,10 +87,17 @@ func main() {
 				if !o.Tool {
 					continue
 				}
+				// THE DOOR IS THE PUBLIC CONTRACT. An operation the public document
+				// leaves out — the operator's /v1/admin family, a relay door, a
+				// legacy spelling — is not offered to a model either; the tool
+				// surface and the SDK surface are two projections of one audience.
+				if !o.Public {
+					continue
+				}
 				seen[o.OperationID] = true
 				// The description, falling back to the summary — the same
 				// preference a child's own descriptor carries.
-				ops = append(ops, op{ID: o.OperationID, Doc: pick(o.Description, o.Summary)})
+				ops = append(ops, op{ID: o.OperationID, Doc: pick(o.Description, o.Summary), Read: method == "get"})
 			}
 		}
 		// AN APP WITH NO OPERATIONS STILL GETS AN ENTRY, and the difference matters

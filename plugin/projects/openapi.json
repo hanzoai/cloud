@@ -63,6 +63,7 @@
             "description": "service unavailable"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -89,6 +90,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -120,6 +122,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -147,6 +150,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -179,6 +183,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -221,6 +226,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -263,7 +269,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/platform/sites/{slug}/deployments": {
@@ -300,6 +307,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -342,6 +350,7 @@
             "description": "accepted"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -385,6 +394,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -438,6 +448,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -472,6 +483,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -514,6 +526,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -550,6 +563,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -593,6 +607,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -637,6 +652,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -671,6 +687,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -708,6 +725,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -750,6 +768,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -793,6 +812,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -819,6 +839,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -850,6 +871,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -883,6 +905,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -910,6 +933,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -942,6 +966,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -984,6 +1009,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1026,7 +1052,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/projects/{slug}/deployments": {
@@ -1063,6 +1090,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1105,6 +1133,7 @@
             "description": "accepted"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1148,6 +1177,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1201,6 +1231,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1235,6 +1266,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1277,6 +1309,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1313,6 +1346,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1356,6 +1390,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1390,6 +1425,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1416,6 +1452,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1447,6 +1484,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1480,6 +1518,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1513,6 +1552,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1540,6 +1580,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -1572,6 +1613,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -1614,6 +1656,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1656,7 +1699,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     },
     "/v1/sites/{slug}/deployments": {
@@ -1693,6 +1737,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1735,6 +1780,7 @@
             "description": "accepted"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1778,6 +1824,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1831,6 +1878,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1865,6 +1913,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -1907,6 +1956,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1943,6 +1993,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1986,6 +2037,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2030,6 +2082,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2064,6 +2117,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2101,6 +2155,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -2143,6 +2198,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2186,6 +2242,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -2208,7 +2265,8 @@
               }
             }
           }
-        }
+        },
+        "x-public": true
       }
     }
   },
@@ -2301,10 +2359,11 @@
             "type": "array"
           },
           "org": {
-            "description": "Org and Slug identify the site the hosts were bound to.",
+            "description": "Org is the organisation that owns the site.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the site the hosts were bound to.",
             "type": "string"
           }
         },
@@ -2313,15 +2372,19 @@
       "projectsBuildSite": {
         "properties": {
           "brief": {
+            "description": "Brief is what the site should be, in plain language. It is the whole input the\nmodel gets and it is size-bounded.",
             "type": "string"
           },
           "model": {
+            "description": "Model names which model writes the site. Absent takes the deployment's\ndefault — this route spends inference on the caller's org either way.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the site's display name. Taken from what the model writes when omitted.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the handle and public host label to publish under. Derived from the\nname, or from the brief, when omitted.",
             "type": "string"
           }
         },
@@ -2330,12 +2393,15 @@
       "projectsComplete": {
         "properties": {
           "bytes": {
+            "description": "Bytes is their total size in bytes.",
             "type": "integer"
           },
           "commit": {
+            "description": "Commit is the revision that was built, recorded on the deployment.",
             "type": "string"
           },
           "files": {
+            "description": "Files is how many objects CI published.",
             "type": "integer"
           },
           "id": {
@@ -2350,9 +2416,11 @@
             "type": "array"
           },
           "liveUrl": {
+            "description": "LiveURL is a HINT at the address the site should serve at. The public host is\nclaimed by cloud first, so this can refine the URL a deployment reports but\ncan never assert a subdomain another tenant holds.",
             "type": "string"
           },
           "message": {
+            "description": "Message is what happened, in words — on an error completion, why it failed.",
             "type": "string"
           },
           "slug": {
@@ -2360,7 +2428,7 @@
             "type": "string"
           },
           "status": {
-            "description": "live | error",
+            "description": "Status is how the build ended: `live` if it succeeded, `error` if it did not.\nNothing else is accepted.",
             "type": "string"
           }
         },
@@ -2373,18 +2441,23 @@
             "type": "boolean"
           },
           "description": {
+            "description": "Description is the one-line summary, copied onto anything forked from this\nproject.",
             "type": "string"
           },
           "framework": {
+            "description": "Framework is a BUILD HINT from a closed set, defaulting to static. It tells CI\nhow to build a linked repo and never gates a deploy.",
             "type": "string"
           },
           "license": {
+            "description": "License is the terms that upstream work carries.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the project's display name and the only REQUIRED field. When slug is\nomitted it is also what the slug is derived from.",
             "type": "string"
           },
           "repo": {
+            "description": "Repo links a git source, so pushes to it rebuild this project. Omit it for a\nproject deployed by uploading an artifact.",
             "properties": {
               "branch": {
                 "type": "string"
@@ -2396,10 +2469,11 @@
             "type": "object"
           },
           "slug": {
+            "description": "Slug is the handle everything else addresses this project by: the public host\n`\u003cslug\u003e.hanzo.app`, the object-store key segment, and the path parameter of\nevery later call. Derived from the name when omitted. It is a hostname label,\nso it is constrained and reserved labels such as `api` or `admin` are refused.",
             "type": "string"
           },
           "upstream": {
-            "description": "Upstream/License credit the third-party work this project was published\nfrom. Taken from any caller: disclaiming authorship can only cost the\npublisher credit, so it needs no gate (see Project.Upstream).",
+            "description": "Upstream credits the third-party work this project was published from. It is\naccepted from any caller: giving away credit can only cost the publisher, so\nit needs no gate.",
             "type": "string"
           },
           "visibility": {
@@ -2412,15 +2486,18 @@
       "projectsDeploySite": {
         "properties": {
           "files": {
+            "description": "Files is the whole site, inline — every file it consists of. It REPLACES what\nis there rather than merging, so an omitted file is a deleted one.",
             "items": {
               "$ref": "#/components/schemas/projectsFile"
             },
             "type": "array"
           },
           "name": {
+            "description": "Name is the site's display name.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the handle and public host label to publish under.",
             "type": "string"
           }
         },
@@ -2442,42 +2519,55 @@
       "projectsDeployment": {
         "properties": {
           "bucket": {
+            "description": "Bucket is the object-store bucket its files were written to.",
             "type": "string"
           },
           "bytes": {
+            "description": "Bytes is their total size in bytes.",
             "type": "integer"
           },
           "commit": {
+            "description": "Commit is the revision that was built, for a deployment that came from a\nrepository. Absent for an uploaded artifact, which has no revision.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the deployment was queued, as Unix seconds.",
             "type": "integer"
           },
           "files": {
+            "description": "Files is how many objects the deployment published.",
             "type": "integer"
           },
           "id": {
+            "description": "ID identifies this one deployment attempt, and is what CI quotes back to\ncomplete it.",
             "type": "string"
           },
           "liveUrl": {
+            "description": "LiveURL is where this deployment serves, once it is live.",
             "type": "string"
           },
           "message": {
+            "description": "Message is what happened, in words — the build's own note, or on a failure\nwhy it failed.",
             "type": "string"
           },
           "prefix": {
+            "description": "Prefix is the key prefix within that bucket holding EXACTLY this deployment's\nobjects — the unit an upload grant is scoped to, so a grant for one deployment\ncannot write over another.",
             "type": "string"
           },
           "projectId": {
+            "description": "ProjectID is the project this deployment belongs to.",
             "type": "string"
           },
           "source": {
+            "description": "Source is what caused the deployment — a git push, an uploaded artifact, a\ngenerated site.",
             "type": "string"
           },
           "status": {
+            "description": "Status is where the attempt got to — queued, live, or failed. A deployment\nthat is live is not necessarily the one SERVING: the project's own\ncurrentDeploymentId says which is.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is when it last changed state, as Unix seconds — so the gap between\nthe two is how long the build took.",
             "type": "integer"
           },
           "upload": {
@@ -2485,6 +2575,7 @@
             "description": "Upload is the prefix-scoped, short-lived S3 write grant handed to CI with a\nqueued git deployment, so it needs no bucket credential (grant.go). Present\nONLY on the 202 that creates the deployment — it is never stored and never\nreplayed on a later read, so a grant cannot outlive the build it was minted\nfor by being fetched again."
           },
           "version": {
+            "description": "Version counts deployments of this project from 1, so the history reads as an\nordered sequence rather than by timestamp. It is per project, not global.",
             "type": "integer"
           }
         },
@@ -2493,27 +2584,34 @@
       "projectsDomain": {
         "properties": {
           "createdAt": {
+            "description": "CreatedAt is when the host was claimed, as Unix seconds — not when it went live.",
             "type": "integer"
           },
           "detail": {
+            "description": "Detail is what is holding the claim up, in words a person can act on.",
             "type": "string"
           },
           "host": {
+            "description": "Host is the custom hostname claimed for this site.",
             "type": "string"
           },
           "records": {
+            "description": "Records are EXACTLY the DNS records to publish to prove ownership and route\nthe host. Present only while pending, because a live host has already proved\nit; absent is therefore \"nothing left to do\", not \"we cannot say what to do\".",
             "items": {
               "$ref": "#/components/schemas/Record"
             },
             "type": "array"
           },
           "status": {
+            "description": "Status is `live` when the edge answers for this host now, `pending` while the\nclaim is waiting on DNS proof of ownership. A pending host is claimed but\nserves nothing.",
             "type": "string"
           },
           "url": {
+            "description": "URL is where the host will serve once it is live — present on a pending claim\ntoo, so a console can show the destination before it works.",
             "type": "string"
           },
           "verified": {
+            "description": "Verified is the same fact as a boolean, for a caller that only needs the yes\nor no. It cannot disagree with status.",
             "type": "boolean"
           }
         },
@@ -2536,10 +2634,11 @@
             "type": "array"
           },
           "org": {
-            "description": "Org and Slug identify the site the panel belongs to.",
+            "description": "Org is the organisation that owns the site.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the site the panel belongs to.",
             "type": "string"
           }
         },
@@ -2564,9 +2663,11 @@
       "projectsFile": {
         "properties": {
           "content": {
+            "description": "Content is the file's whole text, inline. There is no upload step and no\nreference to fetch: a site is sent as its bytes, and each file and the site as\na whole are size-bounded.",
             "type": "string"
           },
           "path": {
+            "description": "Path is where the file lands in the site, RELATIVE to its root — so\n\"index.html\" is the page served at /. Leading slashes and any attempt to\nescape the root are refused.",
             "type": "string"
           }
         },
@@ -2596,23 +2697,27 @@
       "projectsProject": {
         "properties": {
           "analytics": {
-            "description": "Analytics is the wired-by-default web-analytics flag (default true). It is the\nvalue the app's static-builder reads as deployment.analytics to inject the\nbeacon. Space is the project's Base data space (\"\u003corg\u003e/\u003cslug\u003e\") a deployed\nsite posts form/forum/data submissions to under /v1/base.",
+            "description": "Analytics is whether the web-analytics beacon is injected into this site's\npages. It is ON by default — a project has to opt out — and it is what the\nstatic builder reads to decide whether to inject at all.",
             "type": "boolean"
           },
           "bucket": {
+            "description": "Bucket is the object-store bucket the site's files are served out of.",
             "type": "string"
           },
           "cacheControl": {
-            "description": "Cache is the site's edge-cache state: the HTML/document Cache-Control policy\nin effect (TTL) and the last edge-purge time, so a console can show freshness.",
+            "description": "CacheControl is the Cache-Control policy the edge serves this site's HTML\nunder — how long a reader may hold a stale page before asking again. Assets\nare content-addressed and are not governed by it.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the project was created, as Unix seconds.",
             "type": "integer"
           },
           "currentDeploymentId": {
+            "description": "CurrentDeploymentID names the deployment currently serving, so a caller can\nask what is live without scanning the history.",
             "type": "string"
           },
           "description": {
+            "description": "Description is the one-line summary, which is copied onto forks of this\nproject and shown on a gallery card.",
             "type": "string"
           },
           "forkedFrom": {
@@ -2620,15 +2725,19 @@
             "type": "string"
           },
           "framework": {
+            "description": "Framework is a BUILD HINT from a closed set, defaulting to static. It tells CI\nhow to build a linked repo and never gates a deploy, so a wrong value costs a\nbuild rather than access.",
             "type": "string"
           },
           "hidden": {
+            "description": "Hidden is PLATFORM MODERATION, and it is a different axis from visibility: it\npulls a public project out of the catalogue without editing the publisher's\nown choice, so un-hiding restores exactly what they asked for. A project is\nlisted only when it is public AND not hidden. Always present, never omitted,\nfor the same reason as visibility.",
             "type": "boolean"
           },
           "hiddenReason": {
+            "description": "HiddenReason is why moderation hid it. Absent when it is not hidden.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the project's internal identifier. It is stable across a rename, but it\nis not what the API addresses this project by — `slug` is.",
             "type": "string"
           },
           "key": {
@@ -2636,30 +2745,39 @@
             "type": "string"
           },
           "lastPurgeAt": {
+            "description": "LastPurgeAt is when the edge cache was last cleared, as Unix seconds, so a\nconsole can say how fresh what readers see actually is. Absent means never.",
             "type": "integer"
           },
           "license": {
+            "description": "License is the terms that upstream work carries. Absent has the same reading:\nundeclared, not unencumbered.",
             "type": "string"
           },
           "liveUrl": {
+            "description": "LiveURL is where the site answers today. Absent until something has been\ndeployed.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the project's display name, free text a person chose.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the organisation that owns the project, and therefore who pays for it\nand who may change it. It is also the AUTHORSHIP line a gallery credits;\nthere is no separate author field.",
             "type": "string"
           },
           "repo": {
-            "$ref": "#/components/schemas/projectsRepo"
+            "$ref": "#/components/schemas/projectsRepo",
+            "description": "Repo is the git source this project builds from, empty when it is deployed by\nuploading an artifact instead."
           },
           "slug": {
+            "description": "Slug is the identifier that MATTERS: the handle every later call addresses,\nthe S3 key segment the site's objects live under, and the label of the public\nhost `\u003cslug\u003e.hanzo.app`. Because it is a hostname it is constrained and\nreserved labels such as `api` are refused.",
             "type": "string"
           },
           "space": {
+            "description": "Space is the project's Base data space, which is where a deployed site's form,\nforum and data submissions land. Absent means the site stores nothing.",
             "type": "string"
           },
           "status": {
+            "description": "Status is where the project stands — whether a build has ever succeeded and\nwhether anything is serving right now.",
             "type": "string"
           },
           "tags": {
@@ -2670,10 +2788,11 @@
             "type": "object"
           },
           "updatedAt": {
+            "description": "UpdatedAt is when the project's own record last changed, as Unix seconds. A\ndeploy is not an edit of the project, so this does not move on every publish.",
             "type": "integer"
           },
           "upstream": {
-            "description": "Upstream/License credit the third-party work this project was published\nfrom, and the terms it carries. Omitted when nothing is declared: an absent\ncredit means \"nobody has said\", not \"there is nothing to say\".",
+            "description": "Upstream credits the third-party work this project was published from — a\nfree-text line, because the honest answer is a name and a title that no enum\ncould hold. Absent means NOBODY HAS SAID, not that there is nothing to say.",
             "type": "string"
           },
           "visibility": {
@@ -2699,27 +2818,35 @@
       "projectsRelease": {
         "properties": {
           "active": {
+            "description": "Active is whether this is the release the site is SERVING right now. Exactly\none release of a site is active; the others are kept so they can be activated\nagain, until retention reclaims them.",
             "type": "boolean"
           },
           "bytes": {
+            "description": "Bytes is their total size in bytes.",
             "type": "integer"
           },
           "createdAt": {
+            "description": "CreatedAt is when the release was cut, as Unix seconds — not when it was last\nactivated.",
             "type": "integer"
           },
           "objects": {
+            "description": "Objects is how many files the release holds.",
             "type": "integer"
           },
           "releaseId": {
+            "description": "ReleaseID is derived from a DIGEST of the release's own manifest, so identical\ncontent is the same release and a release can never be confused with another\none. Activating an older id IS the rollback.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the site this release belongs to.",
             "type": "string"
           },
           "source": {
+            "description": "Source is what the release was cut from — the build output or upload it was\npromoted out of.",
             "type": "string"
           },
           "url": {
+            "description": "URL is where the site serves. Present only on the ACTIVE release, since an\ninactive one is not answering anywhere.",
             "type": "string"
           }
         },
@@ -2728,12 +2855,15 @@
       "projectsRepo": {
         "properties": {
           "branch": {
+            "description": "Branch is the ref a push has to touch for this project to rebuild. Pushes to\nany other branch are ignored.",
             "type": "string"
           },
           "provider": {
+            "description": "Provider is the forge the URL was recognised as — it decides which webhook\nand which credential reach the repository, and is DERIVED from the URL rather\nthan chosen by the caller.",
             "type": "string"
           },
           "url": {
+            "description": "URL is the clone address of the repository this project builds from.",
             "type": "string"
           }
         },
@@ -2742,18 +2872,23 @@
       "projectsSite": {
         "properties": {
           "name": {
+            "description": "Name is the site's display name.",
             "type": "string"
           },
           "slug": {
+            "description": "Slug is the site's handle — also the label of the host it serves at.",
             "type": "string"
           },
           "status": {
+            "description": "Status is the project's state behind the site — whether it is serving, still\nbuilding, or failed its last build. A site that is listed is not necessarily\none that answers.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is when the project last changed, as Unix seconds.",
             "type": "integer"
           },
           "url": {
+            "description": "URL is the pretty address readers use, not the object-store path behind it.",
             "type": "string"
           }
         },
@@ -2794,12 +2929,15 @@
       "projectsUpdate": {
         "properties": {
           "cacheControl": {
+            "description": "CacheControl replaces the Cache-Control policy the edge serves this site's\nHTML under. Absent leaves it.",
             "type": "string"
           },
           "description": {
+            "description": "Description replaces the one-line summary. Absent leaves it.",
             "type": "string"
           },
           "framework": {
+            "description": "Framework replaces the build hint. It affects the NEXT build only — nothing\nalready deployed is rebuilt.",
             "type": "string"
           },
           "hidden": {
@@ -2807,15 +2945,19 @@
             "type": "boolean"
           },
           "hiddenReason": {
+            "description": "HiddenReason records WHY moderation hid it, so the action can be explained\nand reviewed later. Admin-gated like hidden itself.",
             "type": "string"
           },
           "license": {
+            "description": "License is the terms that upstream work carries, with the same clear-versus-\nleave rule.",
             "type": "string"
           },
           "name": {
+            "description": "Name replaces the display name. Absent leaves it; the slug never moves with it.",
             "type": "string"
           },
           "repo": {
+            "description": "Repo relinks the git source. Absent leaves the existing link.",
             "properties": {
               "branch": {
                 "type": "string"
@@ -2838,7 +2980,7 @@
             "type": "object"
           },
           "upstream": {
-            "description": "Upstream/License credit the third-party work this app was published from —\nsettable after the fact, because the demos that need crediting most are the\nones already live. Pointers so \"\" clears a credit and absent leaves it.",
+            "description": "Upstream credits the third-party work this project was published from, and is\nsettable after the fact because the live demos are the ones that most need\ncrediting. An explicit empty string CLEARS the credit; absent leaves it.",
             "type": "string"
           },
           "visibility": {
@@ -2851,21 +2993,26 @@
       "projectsUploadGrant": {
         "properties": {
           "expiresAt": {
+            "description": "ExpiresAt is when the grant stops being accepted, as Unix seconds. It is\nshort-lived by design and is handed out ONCE, on the response that queues the\ndeployment — a later read of that deployment does not carry it, so a grant\ncannot be fetched again after the build it was minted for.",
             "type": "integer"
           },
           "fields": {
             "additionalProperties": {
               "type": "string"
             },
+            "description": "Fields are form values every POST must carry VERBATIM, alongside `key` and\n`file`. The signature covers them, so altering any one of them — including\nwidening the key to reach outside the prefix — invalidates the grant rather\nthan extending it.",
             "type": "object"
           },
           "maxBytes": {
+            "description": "MaxBytes bounds ONE object, not the upload as a whole.",
             "type": "integer"
           },
           "prefix": {
+            "description": "Prefix is the only place this grant can write: the deployment's own key\nprefix. It authorizes WRITES ONLY, which is why completing a deployment\nreconciles the prefix against a manifest instead of letting CI delete.",
             "type": "string"
           },
           "url": {
+            "description": "URL is the address to POST each object to. It is signed for the PUBLIC\nendpoint, because the signature covers the host and CI posts from outside the\ncluster.",
             "type": "string"
           }
         },

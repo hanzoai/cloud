@@ -28,7 +28,8 @@
         "description": "Lists the caller org's documents with their status, recipients and timestamps, newest first, capped at 200 — there is no paging, so treat it as the recent window rather than a complete export. Requires a validated principal (403 without one) and reads the caller's own tenant store, so no other org's documents can appear in it.",
         "tags": [
           "esign"
-        ]
+        ],
+        "x-public": true
       },
       "post": {
         "operationId": "post_esign_documents",
@@ -36,7 +37,8 @@
         "description": "Creates a document from a base64 PDF and answers 201 with it in `DRAFT` — the state where recipients and fields may still be added, and the only state they may. `title` and `pdfBase64` are required; `signingOrder` chooses `PARALLEL` (the default, everyone may sign at once) or `SEQUENTIAL`, and that choice is fixed for the document's life.\n\nThe bytes go to object storage, not into the tenant database, and the ORIGINAL is kept under its own key so it survives sealing untouched — a completed document can always be compared against what was uploaded. Creation is recorded on the audit trail.\n\nThis is the sender's door: a validated principal is required (403 without one) and the document lands in that principal's OWN org. Isolation is physical rather than a filter — each tenant has its own store — so another org's document id is simply not there. Bodies over 32 MiB are refused with 413.",
         "tags": [
           "esign"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/documents/{id}": {
@@ -56,7 +58,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/documents/{id}/audit": {
@@ -76,7 +79,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/documents/{id}/download": {
@@ -96,7 +100,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/documents/{id}/fields": {
@@ -116,7 +121,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/documents/{id}/recipients": {
@@ -136,7 +142,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/documents/{id}/send": {
@@ -156,7 +163,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/health": {
@@ -166,7 +174,8 @@
         "description": "Answers ok whenever the subsystem is mounted. It is unauthenticated and takes no tenant, and it is deliberately shallow: it is registered before the document host is built, so it still answers on a deployment that came up WITHOUT object storage and therefore serves nothing else. Read it as reachability, never as a promise that documents can be stored.",
         "tags": [
           "esign"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/o/{org}/sign/{token}": {
@@ -194,7 +203,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/o/{org}/sign/{token}/complete": {
@@ -222,7 +232,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/o/{org}/sign/{token}/fields/{fieldId}": {
@@ -258,7 +269,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/esign/o/{org}/sign/{token}/reject": {
@@ -286,7 +298,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     }
   },
