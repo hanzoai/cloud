@@ -34,7 +34,7 @@ func TestCollabRPCRoundTrip(t *testing.T) {
 	docID := collabDocID(ws.UUID, "tracker:class:Issue", "issue-1", "description")
 	markup := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"hello"}]}]}`
 
-	code, body := call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth, map[string]any{
+	code, body := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, auth, map[string]any{
 		"method": "createContent", "payload": map[string]any{"content": map[string]string{"description": markup}},
 	})
 	if code != http.StatusOK {
@@ -52,7 +52,7 @@ func TestCollabRPCRoundTrip(t *testing.T) {
 		t.Fatalf("no blob ref in %s", body)
 	}
 
-	code, body = call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth, map[string]any{
+	code, body = call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, auth, map[string]any{
 		"method": "getContent", "payload": map[string]any{"source": ref},
 	})
 	if code != http.StatusOK {
@@ -69,7 +69,7 @@ func TestCollabRPCRoundTrip(t *testing.T) {
 	}
 
 	// updateContent answers the empty object the client expects.
-	code, body = call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth, map[string]any{
+	code, body = call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, auth, map[string]any{
 		"method": "updateContent", "payload": map[string]any{"content": map[string]string{"description": markup}},
 	})
 	if code != http.StatusOK || string(body) != "{}" {
@@ -97,7 +97,7 @@ func TestCollabCreateContentSeedsYLog(t *testing.T) {
 	update := []byte{0x01, 0x02, 0x03, 0x04} // opaque Y.js update — the lane never parses it
 	logKey := blobKey(org, ws.UUID, yLogBlobID(collabDoc{objectID: "issue-seed", objectAttr: "description"}))
 
-	code, body := call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth, map[string]any{
+	code, body := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, auth, map[string]any{
 		"method": "createContent",
 		"payload": map[string]any{
 			"content": map[string]string{"description": markup},
@@ -116,7 +116,7 @@ func TestCollabCreateContentSeedsYLog(t *testing.T) {
 	}
 
 	// updateContent must not clobber the log the live editors own.
-	code, body = call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth, map[string]any{
+	code, body = call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, auth, map[string]any{
 		"method": "updateContent",
 		"payload": map[string]any{
 			"content": map[string]string{"description": markup},
@@ -144,11 +144,11 @@ func TestCollabRPCTenancy(t *testing.T) {
 	docA := collabDocID(wsA.UUID, "tracker:class:Issue", "issue-1", "description")
 	payload := map[string]any{"method": "createContent", "payload": map[string]any{"content": map[string]string{"description": "{}"}}}
 
-	if code, _ := call(t, app, http.MethodPost, "/collaborator/rpc/"+docA, nil, payload); code != http.StatusUnauthorized {
+	if code, _ := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docA, nil, payload); code != http.StatusUnauthorized {
 		t.Fatalf("unauth = %d, want 401", code)
 	}
 	// org-b caller naming org-a's workspace → 404.
-	if code, _ := call(t, app, http.MethodPost, "/collaborator/rpc/"+docA, bearerFor(t, acctB, "org-b"), payload); code != http.StatusNotFound {
+	if code, _ := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docA, bearerFor(t, acctB, "org-b"), payload); code != http.StatusNotFound {
 		t.Fatalf("cross-org = %d, want 404", code)
 	}
 	// A WORKSPACE token names its workspace; a documentId for a different one is
@@ -161,7 +161,7 @@ func TestCollabRPCTenancy(t *testing.T) {
 		t.Fatal(err)
 	}
 	otherDoc := collabDocID("00000000-0000-4000-8000-00000000dead", "tracker:class:Issue", "i", "description")
-	code, _ := call(t, app, http.MethodPost, "/collaborator/rpc/"+otherDoc,
+	code, _ := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+otherDoc,
 		map[string]string{"Authorization": "Bearer " + wsTok}, payload)
 	if code != http.StatusNotFound {
 		t.Fatalf("workspace-token mismatch = %d, want 404", code)

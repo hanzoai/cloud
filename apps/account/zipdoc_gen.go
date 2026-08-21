@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/keys", zip.Doc{
+	zip.Describe("DELETE /v1/account/keys", zip.Doc{
 		Description: "Revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
 		Fields: map[string]string{
 			"keyTypeIn.limit": "Limit narrows what the minted key may reach, as `kind:name` entries:\n`model:zen5`, `project:acme`, `product:commerce`, or `model:*` for a whole\nkind. It only ever NARROWS — a key can never reach further than the person\nwho minted it — so an unrecognised kind costs availability, never privilege.\n\nOmitted mints an unrestricted key, because that is what every key in the\nestate is today and a default that restricted would revoke all of them.\n\nExample: {\"type\": \"secret\", \"limit\": [\"model:zen5\", \"project:acme\"]}",
@@ -22,7 +22,7 @@ func init() {
 	zip.Describe("GET /avatar/:org/:user/:digest", zip.Doc{
 		Description: "Streams a stored photo. No credentials — see the file header.",
 	})
-	zip.Describe("GET /v1/appearance", zip.Doc{
+	zip.Describe("GET /v1/account/appearance", zip.Doc{
 		Description: "Returns the signed-in caller's own appearance preference — text\nsize, density and accent — read from their IAM account so it is the same on\nevery device and every Hanzo surface. An unset preference is an empty object.\n\nA transient IAM read failure reports the empty preference rather than a 5xx, so\na surface applies its published default and never error-toasts on load — the\nsame fail-soft the key read uses.",
 		Fields: map[string]string{
 			"appearance.accent":  "Accent is the one hue — a CSS colour token (a hex, or a bounded functional\ncolour like rgb()/oklch()). Anything else is dropped rather than stored.",
@@ -30,14 +30,14 @@ func init() {
 			"appearance.type":    "Type is the text-size multiplier, clamped to the ramp window [0.85, 1.4].\nAbsent (0) leaves the published default.",
 		},
 	})
-	zip.Describe("GET /v1/csrf", zip.Doc{
+	zip.Describe("GET /v1/account/csrf", zip.Doc{
 		Description: "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on\nevery money write (mint/revoke a key, top up, onboard, and the billing/commerce\nwrite verbs). The token is bound to the caller's validated identity and expires,\nso one minted for one identity cannot authorize a write as another.\n\nIt is answered no-store, so it is never cached by a shared proxy. This is the\nsame-origin endpoint the embedded console reads — the Same-Origin Policy is what\nstops a cross-site page from reading the response and forging a write.",
 		Fields: map[string]string{
 			"csrfResp.csrfToken": "Token is the value to send back in the X-CSRF-Token header. It is bound to the\ncaller's identity, so it authorizes writes as them and as nobody else.",
 			"csrfResp.expiresIn": "ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;\na write with an expired token is refused.",
 		},
 	})
-	zip.Describe("GET /v1/embed", zip.Doc{
+	zip.Describe("GET /v1/account/embed", zip.Doc{
 		Description: "Reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself. ENTITLEMENT is\nserver-authoritative: each app is a single shared per-BRAND instance, so only a\nmember of the owning brand org — or a SuperAdmin — is given the embed URL; every\nother caller gets phase \"not-entitled\" and no URL. REACHABILITY is a probe of\nthat origin, which a cross-origin page cannot read for itself.\n\nThe probed host is always <app>.<this deployment's own brand domain>: no part of\nit comes from the request, so this can never be steered into probing an\narbitrary origin.",
 		Fields: map[string]string{
 			"embedStatusReq.app":        "App is the embedded app to report on: cms (Content Studio), erp or help.",
@@ -50,7 +50,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"app":"cms"}`),
 	})
-	zip.Describe("GET /v1/keys", zip.Doc{
+	zip.Describe("GET /v1/account/keys", zip.Doc{
 		Description: "Returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
 		Fields: map[string]string{
 			"apiKey.createdAt": "CreatedAt is when the key last changed, as IAM records it.",
@@ -64,7 +64,7 @@ func init() {
 	zip.Describe("POST /avatar", zip.Doc{
 		Description: "Stores the upload and records its URL on the caller's IAM user row.",
 	})
-	zip.Describe("POST /v1/appearance", zip.Doc{
+	zip.Describe("POST /v1/account/appearance", zip.Doc{
 		Description: "Stores the caller's appearance preference on their IAM account,\npreserving every other field of the row. The accent is validated as a real\ncolour token before it is stored; an unset or invalid axis is dropped rather\nthan stored.",
 		Fields: map[string]string{
 			"appearance.accent":  "Accent is the one hue — a CSS colour token (a hex, or a bounded functional\ncolour like rgb()/oklch()). Anything else is dropped rather than stored.",
@@ -73,7 +73,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"type":1.15,"density":"compact","accent":"#8b5cf6"}`),
 	})
-	zip.Describe("POST /v1/keys", zip.Doc{
+	zip.Describe("POST /v1/account/keys", zip.Doc{
 		Description: "Creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
 		Fields: map[string]string{
 			"keyTypeIn.limit":     "Limit narrows what the minted key may reach, as `kind:name` entries:\n`model:zen5`, `project:acme`, `product:commerce`, or `model:*` for a whole\nkind. It only ever NARROWS — a key can never reach further than the person\nwho minted it — so an unrecognised kind costs availability, never privilege.\n\nOmitted mints an unrestricted key, because that is what every key in the\nestate is today and a default that restricted would revoke all of them.\n\nExample: {\"type\": \"secret\", \"limit\": [\"model:zen5\", \"project:acme\"]}",
@@ -85,7 +85,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"type":"publishable"}`),
 	})
-	zip.Describe("POST /v1/orgs", zip.Doc{
+	zip.Describe("POST /v1/account/orgs", zip.Doc{
 		Description: "Onboard creates the caller's organization. Two flows, keyed on whether the caller\nalready has a home org (mirrors app/onboard/route.ts):\n\n  - FIRST-RUN (no home org): create + MOVE the user in as admin, so their next\n    JWT carries the new owner and the cloud scopes everything to it. This is the\n    path a fresh OAuth sign-up takes, from the sign-up application's org.\n  - ADDITIONAL (owner set): create the org but do NOT move the user — a move\n    changes their IAM owner (stripping a SuperAdmin's status + orphaning their\n    current org). They reach the new org via the OrgSwitcher, which re-scopes\n    X-Org-Id without touching IAM membership. A personal-org request from someone\n    who already has an org is meaningless → 409.",
 		Fields: map[string]string{
 			"onboardReq.name":          "Name is the organization's display name. Ignored when personal is true, which\nderives the name from the caller's own username instead.",

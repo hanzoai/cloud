@@ -296,12 +296,12 @@ var unsafe = map[string]bool{
 // wildcard covers hosts that serve arbitrary user content — so a page there can
 // read and write another org's boards with the visitor's own session. The
 // positive control is a token the caller can only obtain by READING a same-origin
-// response (GET /v1/csrf; the Same-Origin Policy stops a cross-site page reading
+// response (GET /v1/account/csrf; the Same-Origin Policy stops a cross-site page reading
 // it) and must echo in a CUSTOM header (which a simple form POST cannot set
 // without a preflight we do not grant).
 //
 // The gate itself is apps/account's — the estate has ONE anti-CSRF token, minted
-// by GET /v1/csrf and bound to the caller's validated identity, and it verifies
+// by GET /v1/account/csrf and bound to the caller's validated identity, and it verifies
 // here byte-identically because both processes key it from the same KMS-sourced
 // CONSOLE_CSRF_KEY. This does not re-implement any of that; it only decides WHEN
 // to apply it.
