@@ -282,6 +282,7 @@ var meteredApps = []string{
 	"agents",       // per-run agent fee.
 	"ai",           // LLM token costs (ai self-meters).
 	"ask",          // the answer engine's per-question fee.
+	"auto",         // durable flow runs on the tasks plane.
 	"automations",  // per-run automation fee.
 	"cloudflare",   // Workers AI + provisioning.
 	"company",      // the $999 formation, gated and debited in providers.go; the genesis anchor rides inside it.
