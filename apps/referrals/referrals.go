@@ -32,12 +32,11 @@
 //	GET  /v1/admin/referrals/bonuses   (SuperAdmin) every referral edge + a summary
 //	POST /v1/admin/referrals/sweep     (SuperAdmin) qualify-check every pending referral
 //
-// TWO PACKAGES SHARE ONE ADMIN PREFIX. The cross-tenant referral ANALYTICS board
-// (top referrers, conversion) is GET /v1/admin/referrals, owned by apps/affiliates
-// over the shared attribution spine; this package owns the edge directory one
-// segment deeper at /v1/admin/referrals/bonuses. They do not collide, but
-// /v1/admin/referrals/* has no single owner — the merge that gives it one is the
-// standing decision, and it lands in commerce.
+// ONE OWNER FOR THE ADMIN PREFIX. The cross-tenant referral ANALYTICS board (top
+// referrers, conversion) reads apps/affiliates' OWN tables, so it answers at
+// GET /v1/admin/affiliates/referrals — the second segment names the capability
+// that serves it (HIP-0139 §3.2). What is left under /v1/admin/referrals is this
+// package's alone: the edge directory and the qualify sweep.
 //
 // serve.go auto-registers GET /v1/referrals/health.
 package referrals
@@ -109,8 +108,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // routes registers the referrals surface.
 //
 // Each middleware install is bounded by the EXACT path it gates, never by a
-// subtree: /v1/admin/referrals is clients/affiliates' cross-tenant analytics
-// board, so a group at that prefix would gate a neighbour's route. The two admin
+// subtree, so a group can never reach a neighbour's route. The two admin
 // leaves get their own groups; the customer surface gets one at /v1/referrals,
 // whose only sibling is the auto-registered GET /v1/referrals/health (a GET, which
 // requireOrgOnWrite lets through so probes keep working).
@@ -136,8 +134,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(zapp, "/v1/referrals", o.mine)
 	zip.Post(zapp, "/v1/referrals/claim", o.claim)
 
-	// The one-time-bonus ledger board. The cross-tenant analytics board at
-	// GET /v1/admin/referrals is owned by clients/affiliates (shared spine).
+	// The one-time-bonus ledger board. The cross-tenant analytics board is
+	// affiliates' own, at GET /v1/admin/affiliates/referrals (shared spine).
 	app.Use(zip.H(under("/v1/admin/referrals/bonuses", requireAdmin())))
 	zip.Get(zapp, "/v1/admin/referrals/bonuses", o.adminList)
 
@@ -413,8 +411,8 @@ type adminBonusesEnvelope struct {
 // SuperAdmin only, fail-closed. This is the ATTRIBUTION directory — who referred
 // whom and whether that referee became a customer. It carries no amounts because
 // this package issues none. The cross-tenant referral ANALYTICS board (top
-// referrers, conversion) is a different surface, GET /v1/admin/referrals, owned by
-// the affiliates subsystem over the shared attribution spine.
+// referrers, conversion) is a different surface, GET /v1/admin/affiliates/referrals,
+// owned by the affiliates subsystem over the shared attribution spine.
 func (o referralOps) adminList(ctx context.Context, in *adminListIn) (*adminBonusesEnvelope, error) {
 	s := o.s
 	rows, err := s.State.store.ListAll(ctx, adminLimitOf(in.Limit))
