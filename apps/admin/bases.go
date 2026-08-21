@@ -43,12 +43,24 @@ var baseHTTP = &http.Client{Timeout: 15 * time.Second}
 // tenant slug the scope filter keys on — it MUST be present for a row to be visible to a
 // scoped (non-super) caller.
 type baseInstance struct {
-	Name    string `json:"name"`
-	Org     string `json:"org"`
-	URL     string `json:"url"`
-	Status  string `json:"status"`
-	Plan    string `json:"plan"`
-	Region  string `json:"region"`
+	// Name is the instance's name at the Base engine.
+	Name string `json:"name"`
+	// Org is the tenant that owns the instance, and the key the scope filter runs
+	// on. A row whose org is empty or outside the caller's subtree is DROPPED for
+	// a non-SuperAdmin, so an instance the engine reports without an org is
+	// visible only to a super.
+	Org string `json:"org"`
+	// URL is where the instance is reached.
+	URL string `json:"url"`
+	// Status is the engine's own lifecycle word for the instance — running and its
+	// siblings. The vocabulary belongs to the Base engine, which is why this layer
+	// forwards it rather than mapping it.
+	Status string `json:"status"`
+	// Plan is the plan the instance runs on, as the engine names it.
+	Plan string `json:"plan"`
+	// Region is where it is hosted, as the engine names it.
+	Region string `json:"region"`
+	// Created is when the instance was created, as the engine reports it.
 	Created string `json:"created"`
 }
 
@@ -140,10 +152,20 @@ func (o ops) bases(ctx context.Context, _ *core.None) (*basesOut, error) {
 // basesOut is the GET /v1/admin/bases envelope. total == len(data): the list is the
 // caller's whole window after scope filtering, unpaginated.
 type basesOut struct {
-	Status string         `json:"status"`
-	Msg    string         `json:"msg"`
-	Data   []baseInstance `json:"data"`
-	Total  *int           `json:"total,omitempty"`
+	// Status is "ok" or "error", at HTTP 200 either way. An unconfigured Base
+	// engine answers "ok", not "error" — see Msg.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error" (the engine was unreachable
+	// or answered non-2xx). On a SUCCESS it may still carry an advisory: "the Base
+	// engine is not yet embedded on this deployment" beside an empty list, which
+	// is the honest not-yet state rather than a fleet with no instances.
+	Msg string `json:"msg"`
+	// Data is the instances in the caller's window, after the scope re-check. Null
+	// when Status is "error".
+	Data []baseInstance `json:"data"`
+	// Total is len(data): the caller's whole window after scope filtering,
+	// unpaginated. Absent when the read failed.
+	Total *int `json:"total,omitempty"`
 }
 
 // decodeInstances tolerates BOTH a bare JSON array and a { data: [...] } envelope (the two

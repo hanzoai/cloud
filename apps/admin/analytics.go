@@ -31,65 +31,136 @@ import (
 // the % of it still ACTIVE at each subsequent period (values[0] = the signup period
 // itself). Percentages are 0..100.
 type retentionCohort struct {
-	Cohort string    `json:"cohort"`
-	Size   int       `json:"size"`
+	// Cohort is the signup month, YYYY-MM. Every customer who signed up in it is
+	// in this row.
+	Cohort string `json:"cohort"`
+	// Size is how many customers signed up in that month — the denominator behind
+	// every percentage in Values.
+	Size int `json:"size"`
+	// Values is the percentage of the cohort ACTIVE in each month after signup,
+	// 0..100, with values[0] the signup month itself. Its length varies by row: an
+	// older cohort has more months behind it, which is what makes the grid a
+	// triangle.
 	Values []float64 `json:"values"`
 }
 
 // retentionGrid is the classic cohort-retention heatmap (cohorts × periods).
 type retentionGrid struct {
-	Interval string            `json:"interval"` // "month"
-	Periods  int               `json:"periods"`
-	Cohorts  []retentionCohort `json:"cohorts"`
+	// Interval is the cohort width, always "month": the triangle is built from
+	// signup months and active months, and no other bucketing is offered.
+	Interval string `json:"interval"`
+	// Periods is the longest Values length across the cohorts — the width of the
+	// triangle, so a renderer can size the grid before walking it.
+	Periods int `json:"periods"`
+	// Cohorts is one row per signup month, oldest first, capped at the last
+	// twelve. A month in which nobody signed up is omitted rather than shown
+	// empty.
+	Cohorts []retentionCohort `json:"cohorts"`
 }
 
 // analyticsData is the whole GET /v1/admin/analytics payload.
 type analyticsData struct {
-	Range       string `json:"range"`
-	Interval    string `json:"interval"`
+	// Range is the requested window: 7d, 30d, 90d, or all (the last two years).
+	// NORMALIZED — anything else reads as 30d and says so here.
+	Range string `json:"range"`
+	// Interval is the bucket width every series below uses: day, week or month,
+	// derived from Range (7d and 30d give day, 90d gives week, all gives month).
+	Interval string `json:"interval"`
+	// GeneratedAt is when this board was computed, RFC 3339 UTC. Nothing is
+	// cached, so it is the moment of this request.
 	GeneratedAt string `json:"generatedAt"`
 
-	// Growth — from IAM createdTime (always real).
-	Signups             []core.SeriesPoint `json:"signups"`
+	// Signups is new orgs created per bucket, from IAM's own createdTime. It is
+	// the one series here that is always real: a signup timestamp exists whether
+	// or not that tenant ever used anything.
+	Signups []core.SeriesPoint `json:"signups"`
+	// CumulativeCustomers is the all-time customer count as of each bucket's END —
+	// a running total, so it only rises and its last point is TotalCustomers.
 	CumulativeCustomers []core.SeriesPoint `json:"cumulativeCustomers"`
-	TotalCustomers      int                `json:"totalCustomers"`
-	NewCustomers        int                `json:"newCustomers"`
-	GrowthRatePct       float64            `json:"growthRatePct"`
+	// TotalCustomers is how many customers in the caller's window carry a signup
+	// date at all, over ALL time rather than within Range.
+	TotalCustomers int `json:"totalCustomers"`
+	// NewCustomers is how many of them signed up inside the window.
+	NewCustomers int `json:"newCustomers"`
+	// GrowthRatePct is the percentage change in signups against the immediately
+	// preceding window of the same length; negative when signups fell. It is 0
+	// when the prior window had none, which is not the same as flat.
+	GrowthRatePct float64 `json:"growthRatePct"`
 
-	// Active customers — from the usage ledger.
+	// ActiveCustomers is how many DISTINCT customers had at least one usage event
+	// in each bucket. Empty when the ledger returned no usage at all.
 	ActiveCustomers []core.SeriesPoint `json:"activeCustomers"`
-	DAU             int                `json:"dau"`
-	WAU             int                `json:"wau"`
-	MAU             int                `json:"mau"`
+	// DAU is how many distinct customers had a usage event in the last 24 hours. A
+	// FIXED lookback — it ignores Range, so it does not change when the window
+	// does.
+	DAU int `json:"dau"`
+	// WAU is the same over the last 7 days.
+	WAU int `json:"wau"`
+	// MAU is the same over the last 30 days, and it is the denominator ARPUCents
+	// uses.
+	MAU int `json:"mau"`
 
-	// Retention triangle — signup cohort × active period.
+	// Retention is the cohort triangle: signup month against months elapsed since,
+	// as percentages of each cohort.
 	Retention retentionGrid `json:"retention"`
 
-	// Churn — logo churn (count) + rate.
-	Churn        []core.SeriesPoint `json:"churn"`
-	ChurnRatePct float64            `json:"churnRatePct"`
+	// Churn is LOGO churn per month — customers active in the previous month and
+	// not in this one. It counts customers, not revenue. The first point is always
+	// zero because there is no month before it to compare against.
+	Churn []core.SeriesPoint `json:"churn"`
+	// ChurnRatePct is churned customers as a percentage of the at-risk base,
+	// pooled over the last SIX months rather than over Range.
+	ChurnRatePct float64 `json:"churnRatePct"`
 
-	// Revenue analytics.
-	MRRCents  int64              `json:"mrrCents"`
-	Revenue   []core.SeriesPoint `json:"revenue"`
-	ARPUCents int64              `json:"arpuCents"`
-	LTVCents  *int64             `json:"ltvCents"` // null until churn is observed
-	NRRPct    *float64           `json:"nrrPct"`   // null — needs MRR history
+	// MRRCents is monthly recurring revenue as of NOW, in US cents, summed from
+	// active subscriptions across the caller's window. Point-in-time: it is the
+	// one revenue figure here that is not a fold of the usage window.
+	MRRCents int64 `json:"mrrCents"`
+	// Revenue is realized revenue per bucket, in US cents. For a pay-as-you-go
+	// fleet it carries the same numbers as Usage; it is a separate field so a
+	// console can theme the two differently.
+	Revenue []core.SeriesPoint `json:"revenue"`
+	// ARPUCents is average revenue per active customer over the window, in US
+	// cents: window spend divided by MAU, falling back to TotalCustomers when
+	// nothing was active. Integer division, so it truncates.
+	ARPUCents int64 `json:"arpuCents"`
+	// LTVCents is estimated lifetime value per customer, in US cents: ARPU divided
+	// by the monthly churn rate. NULL until real churn is observed — with no churn
+	// the formula divides by zero, and a huge number would read as good news.
+	LTVCents *int64 `json:"ltvCents"`
+	// NRRPct is net revenue retention. Always NULL: it needs a history of MRR over
+	// time and commerce keeps only the current value, so there is nothing honest to
+	// compute.
+	NRRPct *float64 `json:"nrrPct"`
 
-	// Usage analytics.
-	Usage        []core.SeriesPoint `json:"usage"`
-	TopCustomers []analyticsSlice   `json:"topCustomers"`
+	// Usage is usage spend per bucket, in US cents, oldest first.
+	Usage []core.SeriesPoint `json:"usage"`
+	// TopCustomers is the ten biggest spenders in the window, largest first. A
+	// customer with no spend is left out rather than listed at zero.
+	TopCustomers []analyticsSlice `json:"topCustomers"`
 
-	// Transparency: which metrics are backed by real data vs honest-empty.
-	Computed map[string]bool     `json:"computed"`
-	Sources  []core.SourceStatus `json:"sources"`
+	// Computed says which metrics on this board are backed by real data, keyed
+	// growth, retention, active, churn, usage, revenue, mrr, arpu, ltv, nrr. False
+	// means the number beside it is an honest zero because the ledger held nothing
+	// to fold — NOT that it measured zero. Read it before reading any of them.
+	Computed map[string]bool `json:"computed"`
+	// Sources is one row per upstream this board read — iam and commerce-ledger —
+	// with whether it answered and how many rows it gave. A ledger that answered
+	// for only some orgs is marked degraded here, which is the only thing
+	// distinguishing an undercount from a quiet month.
+	Sources []core.SourceStatus `json:"sources"`
 }
 
 // analyticsSlice is a labelled magnitude (top customers by usage cents).
 type analyticsSlice struct {
+	// Label is the customer's display name — what to render.
 	Label string `json:"label"`
-	Value int64  `json:"value"`
-	Hint  string `json:"hint,omitempty"`
+	// Value is that customer's spend over the window, in US cents.
+	Value int64 `json:"value"`
+	// Hint is the org slug behind Label, so two customers sharing a display name
+	// stay distinguishable and a row can be clicked through to its tenant. Absent
+	// when unknown.
+	Hint string `json:"hint,omitempty"`
 }
 
 // ── handler ──────────────────────────────────────────────────────────────────
@@ -160,9 +231,14 @@ func (o ops) analytics(ctx context.Context, in *rangeIn) (*analyticsOut, error) 
 
 // analyticsOut is the GET /v1/admin/analytics envelope.
 type analyticsOut struct {
-	Status string         `json:"status"`
-	Msg    string         `json:"msg"`
-	Data   *analyticsData `json:"data"`
+	// Status is "ok" or "error", at HTTP 200 either way.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error" — here, that the tenant
+	// window itself could not be resolved. A degraded upstream is not this: it is
+	// reported in data.sources with Status still "ok".
+	Msg string `json:"msg"`
+	// Data is the board. Null when Status is "error".
+	Data *analyticsData `json:"data"`
 }
 
 // analyticsInput is everything computeAnalytics needs — no I/O, so the whole SaaS
