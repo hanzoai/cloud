@@ -831,6 +831,19 @@ func serveCommerce(t *testing.T, by func(org string) (int64, int64, error)) {
 			}, nil
 		}, zip.WithOperationID(plane.FinanceSpend))
 
+	// Subscriptions, on the same stand-in: the plan read left HTTP for the plane,
+	// and two apps answering "commerce" would shadow each other. One active $50/mo
+	// sub per org — the figure the HTTP fixture served.
+	zip.Post[plane.SubsIn, plane.Subs](cloud.Plane(), "/finance/subs",
+		func(ctx context.Context, _ *plane.SubsIn) (*plane.Subs, error) {
+			if cloud.Who(ctx).Org == "" {
+				return nil, zip.ErrForbidden("subs: no org on the call")
+			}
+			return &plane.Subs{Rows: []plane.Sub{
+				{Status: "active", MRRCents: 5000, PlanName: "Pro"},
+			}}, nil
+		}, zip.WithOperationID(plane.FinanceSubs))
+
 	// Bind the canonical socket for the name, so a read that asks for "commerce"
 	// reaches this process's plane. Without it the router answers ErrNoPeer, which
 	// the boards read — correctly — as "this deployment runs no commerce".

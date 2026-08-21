@@ -760,6 +760,19 @@ type Sub struct {
 	PlanSlug  string `json:"planSlug,omitempty"`
 	Status    string `json:"status"`
 	StartedAt int64  `json:"startedAt,omitempty"`
+
+	// PlanName is what a person calls this plan, for a surface that shows it.
+	PlanName string `json:"planName,omitempty"`
+
+	// MRRCents is what this subscription contributes per month — commerce's own
+	// figure, interval-normalized and multiplied by its seats.
+	//
+	// It travels rather than being derived by the reader, because a reader that
+	// derived it needed its own copy of commerce's interval normalization AND the
+	// seat count, and the admin surface that did exactly that read a ten-seat plan
+	// as one seat. Commerce bills price x quantity; it is the authority on what a
+	// subscription is worth, and everyone else is a display.
+	MRRCents int64 `json:"mrrCents,omitempty"`
 }
 
 // SubsIn filters the org's subscriptions. Both fields are optional and an empty
