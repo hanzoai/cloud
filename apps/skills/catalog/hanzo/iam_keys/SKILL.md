@@ -29,7 +29,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/iam/keys` → `iam.ListResponse` object with fields: `keys`.
-- `/v1/iam/keys/get` → `iam.Key` object with fields: `accessKey`, `accessSecret`, `accessSecretDigest`, `application`, `createdAt`, `createdTime`, `deleted`, `displayName`, `expireTime`, `id`, `name`, `organization`.
+- `/v1/iam/keys/get` → `iam.Key` object with fields: `accessKey`, `accessSecret`, `accessSecretDigest`, `act`, `application`, `createdAt`, `createdTime`, `deleted`, `displayName`, `expireTime`, `id`, `name`.
 - `/v1/iam/keys/org` → JSON object.
 - `/v1/iam/keys/principal` → JSON object.
 
