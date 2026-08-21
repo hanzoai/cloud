@@ -38,13 +38,7 @@
   }
  ],
  "admin": [],
- "admission": [
-  {
-   "id": "get_admission_waitlist",
-   "doc": "Reports whether ONE host is currently gated by the launch waitlist.\nIt resolves the host to the service that governs it and reads that service's\nwaitlist switch, so a guard sitting in front of a hosted surface can decide in one\ncall whether to show the waitlist or the product. It answers for the ONE host\nasked about and never enumerates the registry, which is why it needs no\ncredential. It FAILS OPEN: an unregistered host, an unmounted registry and a store\nfault all answer known=false with mode=false, so a request is never gated pre-boot\nor on a registry fault.",
-   "read": true
-  }
- ],
+ "admission": [],
  "ads": [
   {
    "id": "delete_ads_campaigns_by_id",
@@ -656,13 +650,13 @@
  ],
  "bot": [
   {
-   "id": "get_bot_nodes",
-   "doc": "Returns the caller org's currently connected bot nodes: what each one\ncalls itself, the platform it runs on, its agent version, when its socket was\nestablished, and the capabilities and commands it reported.\n\nOnly this org's nodes are listed — the org is half of every key in the table it\nreads — and only nodes attached to THIS replica, because the list is of live\nsockets rather than of registrations. The capability and command lists are the\nnode's own self-report: useful to show, never load-bearing, because what a node\nmay actually be asked to do is decided at the socket against the deployment's\nallowlist.",
+   "id": "get_bot_runs",
+   "doc": "List returns the caller org's live bot runs, read from the bot runtime and projected\ninto the console contract with each run's live session URL derived here.\n\nThe org is ALWAYS the validated principal's org, NEVER a request field, and it is\nwhat scopes the runtime's answer — so one tenant can never enumerate another's\nruns. A runtime that cannot answer is an error, not an empty list: [] would tell\nthe caller \"your org has no runs\", which is a different claim from \"we could not\nask\", and the difference is the whole reason this endpoint exists.",
    "read": true
   },
   {
-   "id": "get_bot_runs",
-   "doc": "List returns the caller org's live bot runs, read from the bot runtime and projected\ninto the console contract with each run's live session URL derived here.\n\nThe org is ALWAYS the validated principal's org, NEVER a request field, and it is\nwhat scopes the runtime's answer — so one tenant can never enumerate another's\nruns. A runtime that cannot answer is an error, not an empty list: [] would tell\nthe caller \"your org has no runs\", which is a different claim from \"we could not\nask\", and the difference is the whole reason this endpoint exists.",
+   "id": "get_node",
+   "doc": "Returns the caller org's currently connected bot nodes: what each one\ncalls itself, the platform it runs on, its agent version, when its socket was\nestablished, and the capabilities and commands it reported.\n\nOnly this org's nodes are listed — the org is half of every key in the table it\nreads — and only nodes attached to THIS replica, because the list is of live\nsockets rather than of registrations. The capability and command lists are the\nnode's own self-report: useful to show, never load-bearing, because what a node\nmay actually be asked to do is decided at the socket against the deployment's\nallowlist.",
    "read": true
   },
   {
@@ -2399,7 +2393,7 @@
   },
   {
    "id": "listOrganizations",
-   "doc": "Returns the organizations you can see, newest first. Narrow it to one\nparent account, and set a limit and offset to page through the rest.",
+   "doc": "Returns the organizations you can see, newest first. Narrow it to one\nparent account, and set a limit and offset to page through the rest.\n\nREADING THE REGISTRY IS AN OPERATOR ACT, and the handler now says so itself.\n\nIt never did: the scope lived only in the Guard, which refuses a non-operator\nGET with 403 before the handler runs. That was true and sufficient for as long\nas HTTP was the only way in. It stopped being sufficient when the same typed op\nbecame reachable over the agent door, where a request arrives at the handler\nwith no middleware in front of it — and this handler, reading no principal and\ntreating an absent Owner selector as no filter, answered with the whole table.\nMeasured on production: 670 organizations, 898KB, to a caller holding no\ncredential at all.\n\nSo the fact moves to where every door reaches it. The Guard keeps its own\nrefusal — two checks of one rule is not two rules, and the outer one still\nspends nothing to refuse — but the rule no longer depends on which door was\nused. A caller who wants the organizations they can ACT in asks Search, which\nanswers everyone from their own memberships.",
    "read": true
   },
   {
@@ -2616,7 +2610,7 @@
   },
   {
    "id": "upsertUser",
-   "doc": "Creates a person or updates them in place, so a deployment can\ndeclare the accounts it needs and re-run that declaration safely.\n\nPasswords are hashed before they are stored. Leave the password out and their\ncurrent one is kept, so a redeploy never locks somebody out."
+   "doc": "Creates a person or updates them in place, so a deployment can\ndeclare the accounts it needs and re-run that declaration safely.\n\nIt DESCRIBES an account it meets and GRANTS only to one it creates: org-admin is\nnever raised on a row that already exists, and a machine identity is answered by\nname rather than adopted. Both are properties of the update itself, so a\nsteady-state reconcile — which changes neither — is unaffected.\n\nPasswords are hashed before they are stored. Leave the password out and their\ncurrent one is kept, so a redeploy never locks somebody out; send the same one\nagain and it is kept too, so a steady-state re-run is not a rotation."
   }
  ],
  "index": [
@@ -5147,11 +5141,6 @@
    "read": true
   },
   {
-   "id": "get_plan_cloud",
-   "doc": "Returns the cloud plan catalog. It is the same section\nListCloudPlans answers and a separate operation because it is a separate\naddress, and an address is what every projection keys on.",
-   "read": true
-  },
-  {
    "id": "get_plan_dns",
    "doc": "ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records\nper zone and queries per day. It is the canonical catalog for every caller —\nthese plans carry no reseller overrides.",
    "read": true
@@ -5839,40 +5828,7 @@
    "doc": "Token mints a short-lived, pull-only registry token for exactly one of the\norg's images, through the same IAM realm the docker CLI authenticates\nagainst. The scope is pinned server-side to `\u003corg\u003e/\u003cimage\u003e` with the `pull`\naction — no field exists to name another org's image or ask for push. Use it\nas `Authorization: Bearer …` on the OCI wire; it expires in minutes."
   }
  ],
- "research": [
-  {
-   "id": "get_research_artifacts",
-   "doc": "Returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
-   "read": true
-  },
-  {
-   "id": "get_research_experiments",
-   "doc": "Returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
-   "read": true
-  },
-  {
-   "id": "get_research_projects",
-   "doc": "Returns every research project in the caller's org with its\nreal totals — canonical and retained side by side — which is the ops board's\n\"every project + real totals\" view.",
-   "read": true
-  },
-  {
-   "id": "get_research_totals",
-   "doc": "Returns the caller org's headline aggregate plus a per-kind\nbreakdown — the observatory's poll target. Canonical and retained counts travel\ntogether, so a deduped view never reads as loss. ?project= narrows to one project.",
-   "read": true
-  },
-  {
-   "id": "post_research_artifacts",
-   "doc": "Records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false."
-  },
-  {
-   "id": "post_research_experiments",
-   "doc": "Appends one batch of experiment and attempt versions to the\ncaller org's evidence store, idempotently by content, then rolls it up to the\nanalytics plane best-effort. The project is the SERVER's value and visibility is\nforced private — an upload grants no training or publication right, which is a\nseparate call. A run carrying a BYO endpoint is SSRF-checked before the store is\ntouched. The answer carries BOTH the canonical (deduped) and retained (full\nhistory) counts, so a caller sees the versioned truth rather than a dedup that\nreads as loss."
-  },
-  {
-   "id": "post_research_grants",
-   "doc": "Records the SEPARATE authorization an upload never\nimplies: a record's visibility (private, org or public) and, for a run, its\ntraining and commons-publication consent. Address a run by its stable id or an\nartifact by its sha256; an artifact grant sets visibility only. The ORG is the\ntenant boundary and comes from the validated principal, so a caller can only ever\ngrant within its own org; `project` locates WHICH record inside it and defaults to\nthe caller's project scope."
-  }
- ],
+ "research": [],
  "risk": [
   {
    "id": "riskAdoptModel",
