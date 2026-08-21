@@ -392,19 +392,22 @@ var Apps = []App{
 	// /v1/<name> default would cover nothing it registers — the apps/plan defect.
 	// The three prefixes are its whole surface (chains, rpc, tokens).
 	{Name: "web3", Prefixes: []string{"/v1/web3"}, Stage: Beta},
-	{Name: "bot", Prefixes: []string{"/v1/bot/connect", "/v1/bot/nodes", "/v1/bot/peer/invoke"}, Stage: Beta},
-	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}, Stage: Beta},
-	// bots is the headless bot: the run control plane at /v1/bots AND the door to
-	// @hanzo/bot, the service that executes a run, whose own ops paths it relays at
-	// /v1/bot. Those were two apps (bots, runtime) until the split was measured for
-	// what it was — a LANGUAGE boundary (Go surface, TS executor), not a product
-	// boundary. One product answers for one thing, so it holds both prefixes.
+	// ONE ROW, because bot and bots were one capability wearing two names.
+	// HIP-0139 §2.4 refuses a pair differing only in number and keeps the singular,
+	// and §1 puts one capability in bijection with one package and one plugin — so
+	// two rows both serving /v1/bot were a collision, not a convention. The two
+	// halves are three route families under one prefix now:
 	//
-	// /v1/bot here is the BARE prefix: bot's three deeper prefixes above still win
-	// on it by specificity, which is the only reason two apps could ever share it.
-	// That sharing is the remaining defect, and it is bot's to fix by vacating —
-	// its product is connected machines, not a bot.
-	{Name: "bots", Prefixes: []string{"/v1/bot", "/v1/bots"}, Stage: Beta},
+	//	/v1/bot/{connect,nodes,peer/invoke}  the node control plane
+	//	/v1/bot/runs[/{runId}/stop]          the run control plane (was /v1/bots)
+	//	/v1/bot/runtime/*                    @hanzo/bot's own ops paths, relayed
+	//
+	// The relay's greedy wildcard moved under its own segment in the same change.
+	// It was app.All("/v1/bot/*") in the other app, one specificity rule away from
+	// swallowing every sibling above; in one router that would have been a live
+	// hazard rather than a latent one.
+	{Name: "bot", Prefixes: []string{"/v1/bot"}, Stage: Beta},
+	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}, Stage: Beta},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}, Stage: Beta},
 	{Name: "esign", Prefixes: []string{"/v1/esign"}, Stage: Beta},
