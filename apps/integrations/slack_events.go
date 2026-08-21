@@ -35,11 +35,12 @@ import (
 //
 // THERE IS NO SLACK-SPECIFIC BRANCH LEFT. A `code:` prefix used to route past the
 // brain into the coding engine, and it was deleted rather than kept beside the
-// tool path: a coding run is a TOOL the brain calls (create_coding, the fleet's
-// own door), so a prefix a person had to type made the model's choice irrelevant
-// here and left every surface that did not know the word — hanzo.app, hanzo.chat,
-// MCP — unable to run code at all. Keeping it as a shortcut would have kept the
-// model path unexercised, which is the same thing as not having one.
+// tool path: a coding run is a TOOL the brain calls (create_agent_coding, the
+// fleet's own door), so a prefix a person had to type made the model's choice
+// irrelevant here and left every surface that did not know the word —
+// hanzo.app, hanzo.chat, MCP — unable to run code at all. Keeping it as a
+// shortcut would have kept the model path unexercised, which is the same thing
+// as not having one.
 //
 // ISOLATION BAR: a workspace's events reach ONLY the org that connected that Slack
 // team. The org comes ONLY from OrgForExternalID("slack", team_id) — never a payload

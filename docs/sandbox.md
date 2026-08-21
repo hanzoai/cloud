@@ -310,10 +310,15 @@ rule `apps/coding/task.go` already states and `coding-task.ts` already enforces.
 POST /v1/exec                {lang, code, files?, args?}
                              -> {session_id, stdout, stderr, files:[{name}]}
 POST /v1/exec/programmatic
-POST /v1/upload              multipart
-GET  /v1/download/{id}       bytes
-GET  /v1/files/{sid}         listing
+POST /v1/exec/upload         multipart
+GET  /v1/exec/download/{id}  bytes
+GET  /v1/exec/files/{sid}    listing
 ```
+
+The three file addresses answered at the bare roots `/v1/upload`, `/v1/download`
+and `/v1/files` until they folded under `/v1/exec`. The client composes all three
+off a configured base, so what the fold costs a caller is the base — point
+`LIBRECHAT_CODE_BASEURL` at `.../v1/exec` and every path below it is unchanged.
 
 **Served under `/v1/`, and this uncovers a live defect that must be fixed with
 the same commit.** The two existing consumers currently disagree about the path:
