@@ -206,9 +206,9 @@ var Apps = []App{
 
 	{Name: "knowledge", Prefixes: []string{"/v1/knowledge"}},
 	// graph is the assertion plane: entities, the relations between them, and
-	// who asserted each one when. It owns /v1/graph outright. alpha until it
-	// carries retention (HIP-1198).
-	{Name: "graph", Prefixes: []string{"/v1/graph"}, Stage: Alpha},
+	// who asserted each one when. It owns /v1/graph outright. GA: it carries
+	// retention (HIP-1198), which was the one thing holding it back.
+	{Name: "graph", Prefixes: []string{"/v1/graph"}},
 	{Name: "help", Prefixes: []string{"/v1/help"}},
 	{Name: "content", Prefixes: []string{"/v1/content"}},
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},

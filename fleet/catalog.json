@@ -649,61 +649,61 @@
    "doc": "Creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category. A category given as a slug (\"software\") is normalized to\nits real COA expense account, and anything unrecognized becomes 5900 Uncategorized\nrather than a guessed real account. It answers the row exactly as stored, so the caller\nsees the normalization. Recording a vendor is what makes future bills from it\nself-classify instead of asking again."
   }
  ],
- "bot": [
+ "bots": [
   {
-   "id": "get_bot_runs",
+   "id": "get_bots_runs",
    "doc": "List returns the caller org's live bot runs, read from the bot runtime and projected\ninto the console contract with each run's live session URL derived here.\n\nThe org is ALWAYS the validated principal's org, NEVER a request field, and it is\nwhat scopes the runtime's answer — so one tenant can never enumerate another's\nruns. A runtime that cannot answer is an error, not an empty list: [] would tell\nthe caller \"your org has no runs\", which is a different claim from \"we could not\nask\", and the difference is the whole reason this endpoint exists.",
    "read": true
   },
   {
-   "id": "get_node",
+   "id": "get_nodes",
    "doc": "Returns the caller org's currently connected bot nodes: what each one\ncalls itself, the platform it runs on, its agent version, when its socket was\nestablished, and the capabilities and commands it reported.\n\nOnly this org's nodes are listed — the org is half of every key in the table it\nreads — and only nodes attached to THIS replica, because the list is of live\nsockets rather than of registrations. The capability and command lists are the\nnode's own self-report: useful to show, never load-bearing, because what a node\nmay actually be asked to do is decided at the socket against the deployment's\nallowlist.",
    "read": true
   },
   {
-   "id": "post_bot_runs_by_runid_stop",
+   "id": "post_bots_runs_by_runid_stop",
    "doc": "Stop terminates one of the caller org's own bot runs and reports its terminal state.\n\nThe own-key guard is the org: it is the caller's validated org, never theirs to\nchoose, and the runtime resolves the run id UNDER it. A run belonging to another\ntenant is not among this org's runs, so it answers absent — the same 404 a\nnonexistent id gets, which is what keeps this from being an oracle.\n\nAbsence is honoured ONLY when the runtime answers it. A runtime that does not\nserve stop reports nothing about the run, and reporting \"stopped\" on that basis\nwould be a stop that cannot fail — so it is a 502."
   }
  ],
- "campaign": [
+ "campaigns": [
   {
-   "id": "delete_campaign_by_id",
+   "id": "delete_campaigns_by_id",
    "doc": "Removes one campaign of the caller's org and answers 204 with no\nbody. 404 when the org has no campaign with that id.\n\nIt deletes the RECORD, not the executions: a campaign whose channels are live\non a provider should be paused first, or those executions keep running with\nnothing here to report them."
   },
   {
-   "id": "delete_campaign_by_id_channels_by_kind",
+   "id": "delete_campaigns_by_id_channels_by_kind",
    "doc": "Drops one channel from a campaign and returns the updated\ncampaign. 404 when the campaign carries no channel of that kind.\n\nIt removes the channel from the PLAN. A channel that is live at its provider\nshould be paused first — dropping the row here leaves nothing to pause it with\nafterwards."
   },
   {
-   "id": "get_campaign",
+   "id": "get_campaigns",
    "doc": "Returns the org's campaigns, newest first, optionally narrowed to\none status.\n\nA campaign is the top-level go-to-market object: a value that SPANS channels\n(paid, organic, email) and fans out to the executor for each. The listing is\norg-scoped server-side, so one org can never see another's campaigns.",
    "read": true
   },
   {
-   "id": "get_campaign_by_id",
+   "id": "get_campaigns_by_id",
    "doc": "Returns one campaign of the caller's org — its name, audience,\ncreatives, channels with their per-channel launch state, schedule, budget and\nstatus. 404 when the org has no campaign with that id.",
    "read": true
   },
   {
-   "id": "get_campaign_by_id_metrics",
+   "id": "get_campaigns_by_id_metrics",
    "doc": "Returns a campaign's results over a window: the analytics\nfunnel (impressions, clicks, conversions, revenue, visitors), the spend each\nchannel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and\nROAS.\n\nThere is exactly ONE metrics plane and nothing is stored here: the funnel is an\nanalytics query over the campaign's utm_campaign-tagged events, and the spend is\neach provider's own number read through the org's connector. A warehouse that is\nnot emitting yet degrades to available:false with zeroes — honest-empty, never a\n500 and never a fabricated number. When the campaign runs more than one creative\nand an experiment is wired, abTest carries the A/B analysis.",
    "read": true
   },
   {
-   "id": "get_campaign_summary",
+   "id": "get_campaigns_summary",
    "doc": "Returns the org's go-to-market roll-up: how many campaigns\nexist, how many are live, their total budget in cents, and which channel\nexecutors this deployment can actually reach.\n\nThe channel list is the deployment's honest capability, not a wish: a kind\nmissing from it is one a launch will record as \"unavailable\" rather than fail\non.",
    "read": true
   },
   {
-   "id": "post_campaign",
+   "id": "post_campaigns",
    "doc": "Creates a campaign as a DRAFT and returns it.\n\nA draft is inert: nothing is sent, no connector is touched and no budget is\ncommitted until the campaign is launched. The channels named here are validated\nand de-duplicated by kind (one executor per kind), and every channel starts\n\"pending\" whatever the caller claims — a client can never assert a launched\nstate."
   },
   {
-   "id": "post_campaign_by_id_channels",
+   "id": "post_campaigns_by_id_channels",
    "doc": "Adds a channel to a campaign, or REPLACES the one it already\nhas of that kind, and returns the updated campaign.\n\nA campaign carries at most one channel per kind, because the kind IS the\nexecutor: adding a second \"paid\" channel would mean two ad accounts running one\ncampaign with no way to tell their results apart. The new channel starts\n\"pending\" — adding it does not launch it."
   },
   {
-   "id": "put_campaign_by_id",
+   "id": "put_campaigns_by_id",
    "doc": "Rewrites a campaign's core fields — name, audience, creatives,\nschedule and budget — and returns the updated campaign.\n\nChannels are replaced ONLY while the campaign is still a draft. Once it is\nlaunched its channels carry provider state (an external id, a live status), so\nthey are added and removed explicitly through the channels sub-resource\ninstead; a whole-object write would silently orphan a running execution."
   }
  ],
@@ -1360,7 +1360,7 @@
    "doc": "Grants access: it mints a public share link over one data\nroom (`dataroomId`) or one document (`documentId`) — one of the two is\nrequired — and answers with the link, whose `id` is the token a visitor opens\nit with.\n\nThis is how a party is let in. The controls are declared HERE and enforced on\nthe viewer surface: `password` is hashed with bcrypt before storage and is\nnever readable back, `emailProtected` (on by default) makes a visitor state an\naddress, `allowList`/`denyList` narrow which addresses pass, `allowDownload`\n(off by default) governs downloads, and `expiresAt` closes the link. The target\nroom or document must exist in the caller's own store or it is not found.\n\nCreating a link also writes dataroom's ONE cross-tenant row: the link id to\nowning org mapping an anonymous visitor is routed through. That write is part\nof the operation — if it fails the call is 500 — so a link that no visitor\ncould open is never handed back as usable.\n\nThe address a visitor later states is recorded UNVERIFIED, so a link gated only\nby email is openable by anyone the link reaches. Use a password for a link that\nmust not travel."
   }
  ],
- "dataset": [
+ "datasets": [
   {
    "id": "riskCreateDataset",
    "doc": "Declares the next version of a dataset from a bound query over\nthis org's own feature surface.\n\nIt mints a VERSION and writes no rows: a version is declared, then materialised\nonce, then never rewritten. Version numbers are monotone and never reused, so\n\"version 3 of signups\" means one thing forever — which is the whole reason a\nmodel can cite one.\n\nThe window is bounded by the source's retention, the horizon by a year, the\nrows by the plane's cap, and the number of datasets and versions per org by\ntheir own limits. Every refusal names which bound it hit."
@@ -2120,7 +2120,30 @@
    "doc": "Binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is."
   }
  ],
- "graph": [],
+ "graph": [
+  {
+   "id": "graphAssert",
+   "doc": "Assert what is true of an entity"
+  },
+  {
+   "id": "graphNeighbors",
+   "doc": "Walk the edges from a seed set, bounded"
+  },
+  {
+   "id": "graphRead",
+   "doc": "Read the assertions this organization has recorded",
+   "read": true
+  },
+  {
+   "id": "graphResolve",
+   "doc": "What is in force about an entity as of an instant, and what disagreed"
+  },
+  {
+   "id": "graphVocabulary",
+   "doc": "The relations in use, and the rule that resolves a conflict",
+   "read": true
+  }
+ ],
  "guide": [
   {
    "id": "delete_guide_curriculum",
@@ -3105,56 +3128,56 @@
    "doc": "Verify checks a license token online: signature, schema, expiry, app_id and\nthe revocation list.\n\nIt is UNAUTHENTICATED and always answers 200 — a bad token is `valid:false`\nwith a reason rather than an error status, because \"is this token good\" is a\nquestion anyone may ask about a credential they already hold and the answer is\nthe same either way. It is also OPTIONAL: the engine verifies OFFLINE against\nthe published public key (GET /v1/licensing/pubkey) and needs this endpoint\nonly to learn about revocation, so an outage here never stops a paid customer\nworking."
   }
  ],
- "link": [
+ "links": [
   {
-   "id": "delete_link_by_id",
+   "id": "delete_links_by_id",
    "doc": "Logs out one account and stops the sessions it was running.\n\nIt revokes a single linked account and stops the agent sessions that ran under\nit, answering with the revoked row and how many sessions stopped. The link is\nRETAINED with a revoked status rather than deleted, so its usage history and\nthe audit trail survive the log-out — which also means a revoked account still\nappears in the list, and is excluded from the route plan rather than absent\nfrom it. The session stop is narrowed to the revoking user's own sessions on\nthat device, provider and account, and a stop that fails does not fail the\nrevoke: the revoked row is the durable truth. An id that does not exist, or\nbelongs to another user or org, is the same 404."
   },
   {
-   "id": "get_link",
+   "id": "get_links",
    "doc": "Lists your linked accounts and the devices they sit on.\n\nIt answers the caller's own links plus a devices projection of the same rows\nfolded per machine — the cross-machine \"AI Providers / Accounts\" view. A\ndevice is a projection, not a stored entity: its labels come from its\nmost-recently-seen account, so there is no device to create and none to\ngarbage-collect. Revoked links are INCLUDED rather than dropped, because a\nlogged-out account keeps its usage history and audit trail. Scoped to the\ncaller: a validated principal and a non-empty org, else 403.",
    "read": true
   },
   {
-   "id": "get_link_by_id",
+   "id": "get_links_by_id",
    "doc": "Reads one linked account.\n\nIt answers a single link — its device, provider, account, plan, how it bills,\nits status and its latest usage snapshot. An id that does not exist, or\nbelongs to another user or org, is the same 404: the scope is a bound\npredicate on the read, so a wrong id and a foreign id are indistinguishable\nand neither confirms the other's existence. The static paths on this\ncollection — route, usage, devices — register before this one and win\nfirst-match, so a link whose id collided with one of those words could not be\naddressed here.",
    "read": true
   },
   {
-   "id": "get_link_devices_by_machine",
+   "id": "get_links_devices_by_machine",
    "doc": "Shows one machine: its accounts, usage and live sessions.\n\nIt answers one device — its host and OS labels, every account the caller has\nsigned in on that machine with its latest usage, and how many agent sessions\nthe caller currently has running on it. The device labels come from the\nmost-recently-seen account, since a device is a projection of its links rather\nthan a row of its own. A machine with none of the caller's accounts is 404,\nwhich is also the answer when the machine belongs to someone else — the scope\nmakes the two indistinguishable, deliberately. The session count reports 0\nwhere the agent plane is not mounted rather than failing the read.",
    "read": true
   },
   {
-   "id": "get_link_route",
+   "id": "get_links_route",
    "doc": "Gets the failover order across your linked accounts.\n\nIt answers an ordered redundancy plan over the caller's LINKED (not revoked)\naccounts: each candidate with its remaining rate-limit headroom, whether it is\nroutable right now, how it BILLS (plan or commerce), and a reason when it is\nnot — plus the primary to try first. It is what lets a router fail over from\none subscription to another and fall back to the metered API as the\nalways-available backstop, knowing the cost consequence before it dials.\n\nIt is POLICY, not execution: the plan is computed purely from the usage\nsnapshots already in the registry, never by probing a provider, so it is a\ntotal function of the links and costs nothing to ask for. Actually dialing,\ndetecting a live 429 and advancing to the next candidate belongs to the\ncaller. A link with no snapshot counts as full headroom.",
    "read": true
   },
   {
-   "id": "get_link_usage",
+   "id": "get_links_usage",
    "doc": "Shows one provider account's own usage dashboard.\n\nIt answers the time series for a SINGLE provider account — the windows in\nrange plus the currently-open ones — as that provider's own meter reported it:\n\"my plan is 47% through its 6h window, resets at 14:20\". current is the newest\ninstance of each lane (the headline); windows is the history behind it, both\ncomputed from ONE deduped read. provider is required; an unknown window class\nor range is 400, never a quiet fallback to a different one. When no series is\navailable the response is a 200 with available:false and empty lists — an\nhonest \"we have no data\", which is a different claim from zero usage.",
    "read": true
   },
   {
-   "id": "get_link_usage_accounts",
+   "id": "get_links_usage_accounts",
    "doc": "Breaks down what the gateway routed through each of your accounts.\n\nIt answers one row per linked account the GATEWAY actually routed through,\nplus their total — requests, prompt and completion tokens, and cost. This is\nthe routed ledger, the read twin of the counter the router writes, and it is\ndistinct from both of its neighbours: not the device collector's plan\nsnapshots, and not the org money ledger. The source and scope fields on the\nresponse say so on every payload. The same shape answers in the billing\nnamespace, from one shaping function, so the two mounts cannot drift.",
    "read": true
   },
   {
-   "id": "get_link_usage_summary",
+   "id": "get_links_usage_summary",
    "doc": "Shows plan consumption and Hanzo spend side by side.\n\nIt answers the global usage board over one window: the caller's own linked\naccounts, metered from each provider's own login, alongside their org's\nHanzo-routed inference. These come from different ledgers and mean different\nthings, so every row is LABELLED by source, by scope and by availability, and\nTHE TWO ARE NEVER SUMMED — a plan's percentage is not money, and a provider's\nown spend is not a Hanzo charge. The rows sit side by side and say what they\nare.\n\nOne resolver fixes the window for both halves, so the two sets always cover\nthe same period. range is one of 1h, 24h, 7d or 30d and defaults to 24h;\nanything else is 400 rather than a silent substitution. A ledger that cannot\nanswer reports available:false instead of a zero that would read as \"no usage\".",
    "read": true
   },
   {
-   "id": "post_link",
+   "id": "post_links",
    "doc": "Registers a signed-in AI provider account on a machine.\n\nIt records that a developer has signed into one provider account on one\nmachine — a Claude Max or ChatGPT Plus subscription, a Hanzo key, a raw\nprovider key — and answers 201 with the stored link. Re-reporting the same\n(machine, provider, account) UPDATES that link rather than creating a second,\nso a collector may call this on every heartbeat. machine and provider are\nrequired (400 otherwise), as is a valid kind, and every field is\nlength-bounded. Scoped to the caller: a validated principal and a non-empty\norg, else 403, so a caller writes only their OWN accounts within their own org."
   },
   {
-   "id": "post_link_devices_by_machine_revoke",
+   "id": "post_links_devices_by_machine_revoke",
    "doc": "Logs out every account on one machine and stops its sessions.\n\nIt revokes every one of the caller's accounts on one machine and stops the\nagent sessions they were running, answering with how many of each. This is the\n\"I lost that laptop\" button. Revoked links are RETAINED, not deleted, so usage\nhistory and the audit trail survive a log-out — the rows come back in the\nresponse with their new status. The session stop reaches only the REVOKING\nuser's own sessions, so a shared machine name can never be used to stop a\nco-tenant's work, and a stop that fails does not fail the revoke: the revoked\nrow is the durable truth and the count then honestly reports fewer. A machine\nwith nothing left to revoke is 404."
   },
   {
-   "id": "post_link_usage",
+   "id": "post_links_usage",
    "doc": "Reports usage samples from the device collector.\n\nIt ingests a batch of usage samples and answers with how many were accepted,\nwhether history was durably stored, and the links they refreshed. A report\nalso REFRESHES one link per distinct (machine, provider, account) it names, so\na running collector keeps the accounts overview current without a separate\nregistration call.\n\nA caller can only ever report for THEMSELVES: org and subject come from the\nvalidated bearer, never from the body, so no sample can be attributed to\nanother user or tenant. History is FAIL-SOFT and stored says which happened —\na warehouse outage still accepts the report and refreshes the links rather\nthan failing the device, and answers 202 either way. Send either one sample\ninline or up to 256 in samples; an empty batch or an over-long one is 400, as\nis a provider, window class or kind outside the closed vocabulary — an\nunrecognized window is refused rather than rewritten, because a silently\nreclassified sample would fill a dashboard with a class nobody reported."
   }
  ],
@@ -3460,24 +3483,24 @@
    "doc": "Reconfigures an existing stream; the path names the stream, and the\nimmutable fields (storage, retention) must restate what they are."
   }
  ],
- "network": [
+ "networks": [
   {
-   "id": "get_network",
+   "id": "get_networks",
    "doc": "Returns the caller's org overlay network on the Zero Trust fabric.\n\nThe org has at most ONE overlay, projected from the edge-routers tagged with its\n\"org-\u003corg\u003e\" role attribute: nodes is the real router count and status is\n\"connected\" once at least one router has dialed home, \"provisioning\" while none\nhas. An org with no routers gets an empty list, never a fabricated network.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list so the\nconsole's Networks page renders a clean empty state instead of an error.",
    "read": true
   },
   {
-   "id": "get_network_by_id",
+   "id": "get_networks_by_id",
    "doc": "Returns one overlay network by id, scoped to the caller's org.\n\nThe org has exactly one overlay network and its id is derived from the org, so\nany other id — another tenant's, or one that does not exist — is 404 rather than\na peek across the tenant boundary. An org whose network exists but has no\nedge-routers is 404 too, for the same reason the list is empty: there is no\noverlay until something is on it.",
    "read": true
   },
   {
-   "id": "get_network_routers",
+   "id": "get_networks_routers",
    "doc": "Returns the Zero Trust routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-\u003corg\u003e\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-\u003cslug\u003e\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
    "read": true
   },
   {
-   "id": "get_network_services",
+   "id": "get_networks_services",
    "doc": "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-\u003corg\u003e\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and router reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
    "read": true
   }
