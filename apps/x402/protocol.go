@@ -215,18 +215,57 @@ type Extensions map[string]json.RawMessage
 // carries the spec's SettlementResponse, which has no room for the payer org or the
 // resource, and those are exactly what a tenant reading its own settlements needs.
 type Receipt struct {
-	ID         string `json:"id"`
-	Resource   string `json:"resource"`
-	Payer      string `json:"payer"` // payer ORG (the debited ledger)
-	From       string `json:"from"`  // payer address
-	Payee      string `json:"payee"` // recipient address
-	PayeeOrg   string `json:"payeeOrg"`
-	Amount     string `json:"amount"` // exact 18-dp USD (money.Amount string)
-	Nonce      string `json:"nonce"`
-	Network    string `json:"network"`
-	SettledVia string `json:"settledVia"` // "ledger" (live) | "chain" (seam)
-	TxHash     string `json:"txHash,omitempty"`
-	SettledAt  int64  `json:"settledAt"`
+	// ID is the settle-once key: "x402_" + keccak(from|nonce) in hex. It is
+	// DERIVED, not minted, so a client that re-submits the same authorization
+	// addresses the same settlement and is served again for free rather than
+	// charged twice. It is also the id GET /v1/x402/settlements/:id takes.
+	ID string `json:"id"`
+	// Resource is what was paid for, in the same spelling the price table and the
+	// challenge used: the request path for a priced route, "tool:<id>" for a
+	// priced tool.
+	Resource string `json:"resource"`
+	// Payer is the payer ORG — the tenant whose ledger was debited — and not an
+	// address. It is the org the request was authenticated as, so it answers who
+	// is billed, which the payer address alone cannot.
+	Payer string `json:"payer"`
+	// From is the payer's EVM address: the account that signed the EIP-3009
+	// authorization, recovered from the signature rather than taken on trust.
+	From string `json:"from"`
+	// Payee is the recipient's EVM address — the `payTo` the challenge advertised
+	// and the authorization named. A payment to any other address never settles.
+	Payee string `json:"payee"`
+	// PayeeOrg is the tenant that owns the recipient wallet, resolved at
+	// settlement. It is who got PAID, as Payer is who paid.
+	PayeeOrg string `json:"payeeOrg"`
+	// Amount is what actually moved, as an exact 18-decimal-place USD string. It
+	// is NOT the atomic-unit figure the client signed: the challenge quotes the
+	// asset's own units (USDC's 6 dp) and truncates to fit them, while the ledger
+	// moves this exact value.
+	Amount string `json:"amount"`
+	// Nonce is the client-chosen nonce from the authorization, hex — up to 32
+	// bytes, left-padded to the contract's bytes32. It is the replay anchor: the
+	// token contract refuses a second on-chain transfer for one (from, nonce), and
+	// this rail refuses a second settlement for the same pair, so a ledger
+	// settlement inherits the identical guarantee.
+	Nonce string `json:"nonce"`
+	// Network is the CAIP-2 identifier the payment was settled under, e.g.
+	// "eip155:36963". Its eip155 reference is the chain id in the EIP-712 domain
+	// the payer signed, so it is not a label — changing it invalidates the
+	// signature.
+	Network string `json:"network"`
+	// SettledVia is which rail moved the money: "ledger", the live default, or
+	// "chain" when the authorization is broadcast. Those two values and no others.
+	SettledVia string `json:"settledVia"`
+	// TxHash is the chain transaction hash, present only for a "chain"
+	// settlement. Empty on a ledger settlement — that is the normal case today,
+	// and it means the money moved without a chain, not that it failed. The
+	// wire's PAYMENT-RESPONSE `transaction` falls back to ID when this is empty.
+	TxHash string `json:"txHash,omitempty"`
+	// SettledAt is when this settlement was CLAIMED, in unix seconds — the moment
+	// the authorization was accepted, which is also the moment the time window it
+	// carried stopped applying. A settlement finished later by reconciliation
+	// keeps this instant.
+	SettledAt int64 `json:"settledAt"`
 }
 
 // epoch is a unix-seconds timestamp. The specification prints it as a JSON STRING

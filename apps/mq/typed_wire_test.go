@@ -208,3 +208,96 @@ func TestRefusedStaysRefused(t *testing.T) {
 			len(served)+len(refused), want)
 	}
 }
+
+// proseless is the CLOSED list of published properties that carry NO description
+// because the SEAM they arrived through cannot carry one — not because nobody
+// wrote it.
+//
+// EMBEDDED STRUCT. makeIn (consumers.go) is the create body: the path's stream,
+// plus an embedded Durable, which is the consumer config the read half also
+// answers. zipdoc files a field's prose under the type that DECLARES it, so the
+// eleven lifted keys are Durable.ack_policy, Durable.ack_wait and so on — while
+// the schema generator INLINES the promotion and publishes makeIn.ack_policy,
+// which no key matches. Every one of the eleven IS described, on Durable, and
+// reaches the document as the Durable component and as Consumer.config's $ref to
+// it. The gap is one shape short of a create body.
+//
+// Not worked around. Unrolling the embedding into eleven copies on makeIn
+// replaces one true statement with two that can drift — and the copies would be
+// the ones a caller reads while the original is the one the code uses.
+//
+// Exact in BOTH directions: a bare property anywhere else goes red, and an entry
+// here that starts publishing prose goes red too, which is the day zipdoc learns
+// to follow an embedding and this ledger must shrink rather than outlive the gap.
+var proseless = map[string]bool{
+	"makeIn.ack_policy":      true,
+	"makeIn.ack_wait":        true,
+	"makeIn.deliver_policy":  true,
+	"makeIn.description":     true,
+	"makeIn.durable_name":    true,
+	"makeIn.filter_subject":  true,
+	"makeIn.max_ack_pending": true,
+	"makeIn.max_deliver":     true,
+	"makeIn.opt_start_seq":   true,
+	"makeIn.opt_start_time":  true,
+	"makeIn.replay_policy":   true,
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the gates
+// above cannot see. Typing a route documents its ADDRESS and its SHAPE; the
+// shape's FIELDS come from a different place — a doc comment on each one, which
+// zipdoc lifts one at a time.
+//
+// It matters here because a consumer's knobs are a broker's vocabulary and not
+// English. ack_policy, deliver_policy and replay_policy each draw from a FIXED
+// set of words (explicit|all|none, all|last|new|by_start_sequence|by_start_time|
+// last_per_subject, instant|original) that nothing in the shape itself lists;
+// ack_wait is a DURATION STRING with a unit ("30s"), not a count; max_deliver
+// counts attempts and takes -1 for unlimited, while max_ack_pending counts
+// messages in flight — two integers a name alone would not tell apart. And
+// filter_subject is org-RELATIVE: the value a caller writes is not the subject
+// the broker sees.
+//
+// Presence is all a gate can check, and it is checked against the ledger above.
+// A description restating the field's name is worse than none, and only a reader
+// catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(wireApp(t), openapi.Info{Title: "mq", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("mq publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
+		}
+	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/mq describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
+	}
+}
