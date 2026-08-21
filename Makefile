@@ -49,7 +49,6 @@ REVISION        ?= $(shell git describe --always --abbrev=40 --match='' --dirty 
 # host and the plugins, because three copies of a stamp is three chances to
 # stamp one binary and forget the one that answers /v1/health.
 STAMP            = -X github.com/hanzoai/cloud.Version=$(VERSION) -X github.com/hanzoai/cloud.revision=$(REVISION)
-# Path to a hanzoai/openapi checkout — the SOT the agent-skills catalog is generated from.
 
 # The shipped binary is NOT pure Go. Dockerfile builds /cloud with
 #   CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5"
