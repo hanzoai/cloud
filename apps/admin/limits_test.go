@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/hanzoai/cloud/plane"
 )
 
 // recCommerce records the X-Org-Id + method + path of the last forwarded request so a
@@ -96,15 +98,20 @@ func TestLimits_SpendCaps_OrgScoped(t *testing.T) {
 	defer iam.server.Close()
 	com := newRecCommerce()
 	defer com.server.Close()
+	// The caps are reached BY NAME now — /v1/billing is billing's address and the
+	// rows are commerce's — so the peer records which org each call was answered
+	// FOR. That is the same question the forwarded header used to answer, asked
+	// where the answer now lives.
+	caps := newCapsPeer(t)
 	do := mount(t, iam.server.URL, com.server.URL, "")
 
-	// SuperAdmin with ?org=maxpower → forwards X-Org-Id=maxpower.
+	// SuperAdmin with ?org=maxpower → the call is answered for maxpower.
 	resp, body := do("GET", "/v1/admin/caps?org=maxpower", superHdr)
 	if resp.StatusCode != http.StatusOK || envStatus(t, body) != "ok" {
 		t.Fatalf("super caps = %d %s", resp.StatusCode, body)
 	}
-	if _, p, org := com.seen(); org != "maxpower" || !strings.HasSuffix(p, "/alerts") {
-		t.Fatalf("forwarded org=%q path=%q, want maxpower .../alerts", org, p)
+	if org, op := caps.seen(); org != "maxpower" || op != plane.BillingAlerts {
+		t.Fatalf("answered for org=%q op=%q, want maxpower %s", org, op, plane.BillingAlerts)
 	}
 
 	// SuperAdmin WITHOUT ?org → org required (honest error, no guessed tenant).
@@ -114,7 +121,7 @@ func TestLimits_SpendCaps_OrgScoped(t *testing.T) {
 
 	// A scoped org admin naming a FOREIGN ?org=hanzo is hard-pinned to their OWN org.
 	do("GET", "/v1/admin/caps?org=hanzo", orgAdminHdr)
-	if _, _, org := com.seen(); org != "maxpower" {
-		t.Fatalf("scoped admin forwarded org=%q, want maxpower (client ?org= must be ignored)", org)
+	if org, _ := caps.seen(); org != "maxpower" {
+		t.Fatalf("scoped admin answered for org=%q, want maxpower (client ?org= must be ignored)", org)
 	}
 }

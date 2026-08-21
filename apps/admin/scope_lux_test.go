@@ -19,9 +19,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"sync"
 	"testing"
+
+	"github.com/hanzoai/cloud/plane"
 )
 
 // luxAdminHdr is a validated Lux-tenant org admin: a pinned own-org (lux) + the
@@ -99,21 +99,22 @@ func TestScope_LuxAdminCannotReachDO(t *testing.T) {
 // STATE-CHANGING write. A Lux admin who tries to set a spend cap on Zoo (POST
 // /v1/admin/caps?org=zoo) must have the write hard-pinned to owner=lux downstream:
 // the ?org= is ignored for a non-super caller (targetOrg → sc.Orgs[0]). We record the
-// X-Org-Id commerce actually receives and assert it is lux, never zoo. The read-path pins
-// are covered above; this closes the write path.
+// org the cap write is actually ANSWERED FOR and assert it is lux, never zoo. The
+// read-path pins are covered above; this closes the write path.
+//
+// The recording moved with the address. The write used to be a forward carrying
+// X-Org-Id to commerce's own HTTP door; it is a call BY NAME now, and the org
+// rides the CALLER — plane.AlertSpec cannot name one — so the peer records the
+// tenant the call was answered for, which is the same question asked where the
+// answer now lives. The fixture refuses an org-less call exactly as commerce
+// does, so this cannot pass through a door production closes.
 func TestScope_LuxAdminSpendCapWriteHardPinned(t *testing.T) {
-	var mu sync.Mutex
-	var wroteOrg string
 	commerce := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/v1/billing/alerts") && r.Method == http.MethodPost {
-			mu.Lock()
-			wroteOrg = r.Header.Get("X-Org-Id") // commerce.Forward pins the target org here
-			mu.Unlock()
-		}
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"status":"ok"}`)
 	}))
 	defer commerce.Close()
+	caps := newCapsPeer(t)
 
 	do, s, _ := mountService(t, "http://127.0.0.1:0", commerce.URL, "")
 	s.State.WLTenants = map[string]bool{"lux": true}
@@ -122,9 +123,10 @@ func TestScope_LuxAdminSpendCapWriteHardPinned(t *testing.T) {
 	if resp.StatusCode == http.StatusForbidden {
 		t.Fatalf("admitted Lux WL admin must reach the scoped caps WRITE, got 403 (%s)", body)
 	}
-	mu.Lock()
-	org := wroteOrg
-	mu.Unlock()
+	org, op := caps.seen()
+	if op != plane.BillingAlertRaise {
+		t.Fatalf("the cap WRITE reached %q, want %s — a write that never arrived proves nothing about which tenant it targeted", op, plane.BillingAlertRaise)
+	}
 	if org != "lux" {
 		t.Fatalf("Lux admin spend-cap WRITE targeted org=%q, want lux — cross-brand WRITE into Zoo (?org=zoo honored)!", org)
 	}
