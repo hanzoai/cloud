@@ -88,15 +88,35 @@ type TxnRow struct {
 	CreatedAt int64
 }
 
-// ListEntries returns org's ledger entries, most-recent-first, up to limit
-// (limit <= 0 lists all). Same read as ListUsage and the same tenant boundary — the
-// org's own file — but unfiltered: the caller decides which kinds its page shows.
-func (f *ledgerFinance) ListEntries(ctx context.Context, org string, test bool, limit int) ([]TxnRow, error) {
+// ListEntries returns subject's ledger entries within org, most-recent-first, up to
+// limit (limit <= 0 lists all). Every kind, unfiltered by kind: the caller decides
+// which kinds its page shows.
+//
+// THE ENTRIES ARE THE ONES [ledgerFinance.Balance] COUNTS. A balance is the settled
+// sum of one WALLET — walletAcct(subject) — and these are the movements of that same
+// wallet, resolved through that same one function, so the running total and the list
+// it is made of can never name two accounts. An org whose members all pool resolves
+// to the pool wallet either way; where the subject is a person (the shared signup
+// org, where account.Payer resolves everyone to <org>/<name>) it is their own.
+//
+// The wallet is on the ENTRY, not beside it, so there is nothing to backfill: a
+// posting is addressed to an account by construction — a deposit credits
+// walletAcct(subject) and a usage debit drains it — so every entry this ledger has
+// ever written already names the wallet it moved.
+//
+// The org's file is still the tenant boundary — nothing here can reach another org's
+// books — and an empty subject reads every wallet in it, which is the org-wide read
+// the revenue ingest takes.
+func (f *ledgerFinance) ListEntries(ctx context.Context, org, subject string, test bool, limit int) ([]TxnRow, error) {
 	store, err := f.storeFor(org, test)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := store.Entries(ctx, limit)
+	acct := ""
+	if subject != "" {
+		acct = walletAcct(subject)
+	}
+	entries, err := store.EntriesOn(ctx, acct, limit)
 	if err != nil {
 		return nil, err
 	}
