@@ -120,3 +120,94 @@ func keysOfBody(t *testing.T, resp *http.Response) []string {
 	sort.Strings(out)
 	return out
 }
+
+// proseless is the CLOSED list of published properties carrying NO description
+// because the SEAM they arrive through cannot carry one — not because nobody wrote
+// it. Every field named here HAS its doc comment in the source; the generator
+// cannot reach it from where the schema is built.
+//
+// It is exact in BOTH directions. A bare property anywhere else goes red, and an
+// entry here that starts publishing prose goes red too — that is the day the
+// generator learns, and the ledger must shrink then rather than outlive the gap.
+var proseless = map[string]bool{
+	// REFLECTION SEAM. POST /v1/ask cannot be a typed op — TestAskRefusalIsTheWire
+	// measures the three wire facts that keep it untyped — so its body reaches the
+	// document through openapi.Register (ask.go's init) instead. Register derives a
+	// schema by REFLECTION, and Go drops comments at compile time, so zipdoc, which
+	// walks zip's TYPED registrations, can never reach a type that arrives this way.
+	// These eleven carry their doc comments on askRequest; reflection cannot see one.
+	// The op's own prose is declared beside the wire fact (openapi.Describe), which
+	// is the seam for exactly the operations the wire refuses to type; there is no
+	// matching seam for a field.
+	"askRequest.question":   true,
+	"askRequest.q":          true,
+	"askRequest.mode":       true,
+	"askRequest.sources":    true,
+	"askRequest.model":      true,
+	"askRequest.stream":     true,
+	"askRequest.language":   true,
+	"askRequest.maxSources": true,
+	"askRequest.maxQueries": true,
+	"askRequest.followUps":  true,
+	"askRequest.system":     true,
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the gates
+// above cannot see. They prove this route's ADDRESS and the SHAPE it declares
+// reach the document; neither says anything about whether that shape's FIELDS mean
+// anything to a reader, and those come from a different place — a doc comment on
+// each field, which zipdoc lifts one at a time.
+//
+// It matters here because these fields bound what an answer COSTS and how long it
+// takes, and every one of them is asymmetric in a way the name hides. `maxSources`
+// and `maxQueries` can only LOWER the mode's budget — a caller can buy a cheaper
+// answer, never a bigger one — and 0 means the mode's own rather than none.
+// `mode` is the fork between the web engine and the org-figure advisor, and an
+// unrecognised value is not an error: it silently takes the advisor. `model`
+// REPLACES the fallback chain rather than heading it, so naming one that is down
+// fails the answer instead of degrading to the next. On the way back, a source's
+// `snippet` is what a client renders while the model reads the whole fetched page,
+// which never rides the wire at all.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(askApp(t), openapi.Info{Title: "ask", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("ask publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
+		}
+	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/ask describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
+	}
+}
