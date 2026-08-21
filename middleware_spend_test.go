@@ -433,7 +433,7 @@ func TestStandNeverInventsAnUnpaid(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			publishLedger(t, tc.ledger)
-			if got := Stand(context.Background(), tc.lic, w); got != tc.want {
+			if got := Stand(context.Background(), tc.lic, AllowanceUnknown, w); got != tc.want {
 				t.Fatalf("Stand = %v, want %v", got, tc.want)
 			}
 			if tc.want == Unknown && Unknown.Admits() {
@@ -448,7 +448,7 @@ func TestStandNeverInventsAnUnpaid(t *testing.T) {
 func TestStandSubscribedNeverReadsTheLedger(t *testing.T) {
 	led := &spendLedger{credit: atto(0)}
 	publishLedger(t, led)
-	if got := Stand(context.Background(), LicenceActive, principal.Wallet{Ledger: "acme", Account: "acme/bob"}); got != Subscribed {
+	if got := Stand(context.Background(), LicenceActive, AllowanceUnknown, principal.Wallet{Ledger: "acme", Account: "acme/bob"}); got != Subscribed {
 		t.Fatalf("Stand = %v, want Subscribed", got)
 	}
 	if led.reads != 0 {
@@ -497,26 +497,9 @@ func TestAllowanceOnlyEverRemovesAnAdmission(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			publishLedger(t, tc.ledger)
-			if got := StandWithin(context.Background(), tc.lic, tc.allow, w); got != tc.want {
-				t.Fatalf("StandWithin(%v, %v) = %v, want %v", tc.lic, tc.allow, got, tc.want)
+			if got := Stand(context.Background(), tc.lic, tc.allow, w); got != tc.want {
+				t.Fatalf("Stand(%v, %v) = %v, want %v", tc.lic, tc.allow, got, tc.want)
 			}
 		})
-	}
-}
-
-// Stand is StandWithin with the leg unknown, so every caller that predates the
-// allowance leg behaves EXACTLY as it did. Without this the change would be a
-// silent behavioural edit to every existing seam rather than an added capability.
-func TestStandIsStandWithinAnUnknownAllowance(t *testing.T) {
-	w := principal.Wallet{Ledger: "hanzo", Account: "hanzo/stranger"}
-	for _, lic := range []Licence{LicenceUnknown, LicenceNone, LicenceActive} {
-		for _, l := range []*spendLedger{nil, {credit: atto(0)}, {credit: atto(1)}, {err: errors.New("down")}} {
-			publishLedger(t, l)
-			old := Stand(context.Background(), lic, w)
-			neu := StandWithin(context.Background(), lic, AllowanceUnknown, w)
-			if old != neu {
-				t.Fatalf("Stand=%v but StandWithin(unknown)=%v for licence %v", old, neu, lic)
-			}
-		}
 	}
 }

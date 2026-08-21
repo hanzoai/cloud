@@ -119,21 +119,21 @@ func (s Standing) String() string {
 	}
 }
 
-// Stand composes the two independent legs into the one answer.
+// Stand composes the three independent legs into the one answer.
 //
-//	lic — the subscription authority's already-resolved answer.
-//	w   — the money address the credit leg reads (principal.WalletOf).
+//	lic   — the subscription authority's already-resolved answer.
+//	allow — what that subscription's own usage windows say (AllowanceIn).
+//	w     — the money address the credit leg reads (principal.WalletOf).
 //
-// The legs are evaluated cheapest-decisive-first: a licensed caller never touches
-// the ledger. A caller with no subscription always does — that is the pay-as-you-go
-// path, and it is the common case for a prepaid customer.
-func Stand(ctx context.Context, lic Licence, w principal.Wallet) Standing {
-	return StandWithin(ctx, lic, AllowanceUnknown, w)
-}
-
-// StandWithin is Stand with the ALLOWANCE leg supplied — what the subscription's
-// own usage windows say. Stand is this with the leg unknown, which admits every
-// subscriber exactly as it always did.
+// The legs are evaluated cheapest-decisive-first: a licensed caller inside its
+// windows never touches the ledger. A caller with no subscription always does —
+// that is the pay-as-you-go path, and the common case for a prepaid customer.
+//
+// The allowance leg is a PARAMETER rather than something resolved in here, and
+// it has no wrapper that defaults it. A convenience Stand(lic, w) existed and
+// passed AllowanceUnknown for every caller, which meant any new seam could skip
+// the leg by picking the shorter name and nothing would say so. One name, leg
+// always stated.
 //
 // A plan INCLUDES usage, bounded by nested windows, and prepaid credit is money
 // bought separately. So a subscriber who has spent their included usage does not
@@ -148,7 +148,7 @@ func Stand(ctx context.Context, lic Licence, w principal.Wallet) Standing {
 // counter was unreadable is a worse failure than serving one request past a
 // bound, and this codebase already takes that side everywhere else — "a balance
 // that cannot be read is unknown, never zero".
-func StandWithin(ctx context.Context, lic Licence, allow Allowance, w principal.Wallet) Standing {
+func Stand(ctx context.Context, lic Licence, allow Allowance, w principal.Wallet) Standing {
 	if lic == LicenceActive && allow != AllowanceSpent {
 		return Subscribed
 	}
@@ -526,9 +526,13 @@ type AllowanceChecker interface {
 	WithinAllowance(ctx context.Context, org, account string) (spent bool, ok bool)
 }
 
-// allowanceIn resolves the allowance leg. Every failure is AllowanceUnknown —
-// absent reader, empty address, a reader that could not answer.
-func allowanceIn(ctx context.Context, a AllowanceChecker, w principal.Wallet) Allowance {
+// AllowanceIn resolves the allowance leg — the twin of the spend gate's own
+// licence(), exported because apps/entitlement runs the same ladder and a second
+// copy of this is how the two come to disagree about what a spent plan means.
+//
+// Every failure is AllowanceUnknown — absent reader, empty address, a reader that
+// could not answer — because this leg may only ever REMOVE an admission.
+func AllowanceIn(ctx context.Context, a AllowanceChecker, w principal.Wallet) Allowance {
 	if a == nil || w.Ledger == "" {
 		return AllowanceUnknown
 	}
