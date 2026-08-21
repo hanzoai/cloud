@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/dataroom"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the dataroom app.
@@ -22,6 +23,12 @@ func main() {
 		Mount:      dataroom.Mount,
 		Shutdown:   dataroom.Shutdown,
 		OwnsHealth: true,
+		// The trust centre's platform roster answers at /v1/admin/dataroom, which
+		// MountPrefixes' /v1/<name> default does not cover — so without this the
+		// scoped router owns one of the two subtrees the app serves, its middleware
+		// lands outside the other, and cloud.Declare attributes that traffic to
+		// nobody. The manifest is the one place those prefixes are written down.
+		Prefixes: manifest.PrefixesFor("dataroom"),
 	}}, []string{"dataroom"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

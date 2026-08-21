@@ -218,6 +218,38 @@ func (h *BaseHost) Dispatch(ctx context.Context, tenant string, req BaseRequest)
 	return resp, nil
 }
 
+// Tx runs fn against the tenant's OWN store under the same discipline Dispatch
+// uses — the pooled handle, one transaction, commit on success and roll back on
+// error — for the part of a subsystem the bundle does not own.
+//
+// It exists because the Go host already owns the per-tenant DDL (BaseConfig.Schema)
+// while the bundle owns the routes over it, so a subsystem that grows a table with
+// no counterpart in the bundle's upstream has nowhere to put the reads and writes.
+// The alternative is a second opener on the same file, which is a second pool and a
+// second writer against SQLite's one — so this hands back the handle the pool
+// already holds rather than letting a caller open beside it.
+//
+// tenant MUST be a validated principal's org, exactly as for Dispatch.
+func (h *BaseHost) Tx(ctx context.Context, tenant string, fn func(*sql.Tx) error) error {
+	db, release, err := h.stores.acquire(ctx, tenant)
+	if err != nil {
+		return err
+	}
+	defer release()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("gojabase[%s]: begin: %w", h.name, err)
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("gojabase[%s]: commit: %w", h.name, err)
+	}
+	return nil
+}
+
 // Close closes every open tenant DB and drops the goja engine. Idempotent.
 func (h *BaseHost) Close() error {
 	err := h.stores.closeAll()

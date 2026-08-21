@@ -541,6 +541,20 @@ var allowedRequestUses = map[string]string{
 		"bodyless rate post would set a rate of zero. The TENANT is resolved with principal.OrgFrom " +
 		"(tenant, in this same file), never through the request. All fail closed off the HTTP path: no " +
 		"request, no attested admin, no actor, and nothing to require a body of.",
+	"apps/dataroom/trust_typed.go": "sudo / orgAdmin / actor — the trust centre's ONE resolver of the " +
+		"request. The plane has TWO admin scopes and conflating them is the privilege escalation it is " +
+		"built to prevent: the cross-tenant roster gates on platform sudo (principal.IsSuperAdmin, the " +
+		"reserved admin org's membership as SanitizeIdentity minted it), while changing what an org " +
+		"releases gates on being an admin OF THAT ORG (X-User-IsOrgAdmin) — two headers, neither of " +
+		"which principal.OrgFrom carries and neither of which has a ctx-side twin to read instead. " +
+		"Reading the org-scoped one as platform authority would hand every customer admin the roster; " +
+		"reading the platform one as org authority would refuse every legitimate customer. Neither can " +
+		"be an In field, for the usual reason — a caller that could name itself an admin would be one. " +
+		"actor records WHO granted access, on the validated user id (X-User-Id): an attribution on the " +
+		"access record, never an authority. The TENANT is resolved with principal.Acting throughout, " +
+		"never through the request. All three fail closed off the HTTP path, which is what closes the " +
+		"MCP door and the internal plane — both invoke a typed op DIRECTLY, with no route for the " +
+		"group's own sudoGate to sit on.",
 	"apps/link/http.go": "scope — the linked-account surface is scoped to (org, SUBJECT): every op keys " +
 		"the caller's own provider accounts and usage on the validated user id (c.User()) as well as the " +
 		"tenant, and principal.OrgFrom carries only the tenant. ONE function, which every op in the " +
