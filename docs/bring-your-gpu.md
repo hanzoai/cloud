@@ -12,7 +12,7 @@ One fleet. Two ways to add a GPU. Two things a GPU does.
   console →      │                                       └──────────┬───────────────┘  │
   Deploy GPU ───▶│                                                  │ advertised        │
                  └──────────────────────────────────────────────────┼───────────────────┘
-                                                                     │  GET /v1/fleet/workers
+                                                                     │  GET /v1/visor/fleet/workers
                           Studio renders ◀── studio.render           │  POST /v1/add-provider
                           api.hanzo.ai model calls ◀── engine.serve ─┘  (Type=Local → engine)
 ```
@@ -52,7 +52,7 @@ The machine registers a heartbeating presence record and shows up on
 ### Deploy (cloud)
 
 On the console **GPUs** page, click **Deploy GPU** — the existing Visor/DOKS provision
-flow (`POST /v1/machines/launch`). Cloud GPUs are prepay-only (card required, 24-hour
+flow (`POST /v1/visor/machines`). Cloud GPUs are prepay-only (card required, 24-hour
 minimum). They show up with a **Cloud** badge.
 
 Both actions live together on the GPUs page: bring your own **or** spin up cloud.
@@ -120,7 +120,7 @@ advertises its endpoint + model list in the fleet presence record. Confirm it:
 
 ```sh
 hanzo gpu status                 # shows "↳ engine <url> — ready · N models"
-curl -sS https://api.hanzo.ai/v1/fleet/workers \
+curl -sS https://api.hanzo.ai/v1/visor/fleet/workers \
   -H "Authorization: Bearer $HANZO_TOKEN"       # workers[].engine.{url,apis,models,status}
 ```
 

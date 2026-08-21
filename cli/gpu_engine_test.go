@@ -124,7 +124,7 @@ func TestBuildRegistrationCarriesEngine(t *testing.T) {
 		t.Fatalf("registration engine = %+v, want the advertised endpoint", reg.Engine)
 	}
 
-	// The presence record's Input must carry the endpoint so GET /v1/fleet/workers
+	// The presence record's Input must carry the endpoint so GET /v1/visor/fleet/workers
 	// (which decodes this exact JSON) can advertise it.
 	raw, err := json.Marshal(reg)
 	if err != nil {
@@ -167,9 +167,9 @@ func TestProviderBodyIsOpenAICompatible(t *testing.T) {
 
 // TestConnectServeEngineRoundTrip closes the loop end-to-end on this box, no model
 // and no production: a stub hanzo-engine (GET /v1/models) + a stub cloud that stores
-// the presence Input and serves it back on GET /v1/fleet/workers. It exercises the
+// the presence Input and serves it back on GET /v1/visor/fleet/workers. It exercises the
 // real chain — probe → build registration → POST the fleet activity → GET
-// /v1/fleet/workers → the engine endpoint is advertised.
+// /v1/visor/fleet/workers → the engine endpoint is advertised.
 func TestConnectServeEngineRoundTrip(t *testing.T) {
 	engine := stubEngine(t, "default", "zen-omni-30b")
 	defer engine.Close()
@@ -184,7 +184,7 @@ func TestConnectServeEngineRoundTrip(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			storedInput = body.Input
 			w.WriteHeader(http.StatusOK)
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/fleet/workers":
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/visor/fleet/workers":
 			// Fold the stored registration into the fleet worker shape, exactly as
 			// apps/visor/fleet.go byoWorkers does.
 			_ = json.NewEncoder(w).Encode(map[string]any{"workers": []fleetWorker{{
@@ -221,8 +221,8 @@ func TestConnectServeEngineRoundTrip(t *testing.T) {
 	var resp struct {
 		Workers []fleetWorker `json:"workers"`
 	}
-	if _, err := w.call(ctx, http.MethodGet, "/v1/fleet/workers", nil, &resp); err != nil {
-		t.Fatalf("GET /v1/fleet/workers: %v", err)
+	if _, err := w.call(ctx, http.MethodGet, "/v1/visor/fleet/workers", nil, &resp); err != nil {
+		t.Fatalf("GET /v1/visor/fleet/workers: %v", err)
 	}
 	if len(resp.Workers) != 1 {
 		t.Fatalf("workers = %d, want 1", len(resp.Workers))

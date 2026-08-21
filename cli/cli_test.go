@@ -270,7 +270,7 @@ var servedVerbs = []string{
 // "code" for "hanzo"` instead of reaching the fabric CLI that implements it.
 //
 // `status` is here because it was implemented TWICE and the two disagreed. This
-// binary's version called ONE endpoint, GET /v1/fleet/workers, which serves only
+// binary's version called ONE endpoint, GET /v1/visor/fleet/workers, which serves only
 // BYO machines that dialled in — so it showed two laptops and none of the org's
 // clusters or deployed applications. The fabric CLI's composes clusters +
 // applications + workers and leads with whatever is unhealthy: a strict superset.

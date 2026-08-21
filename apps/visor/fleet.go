@@ -6,7 +6,7 @@
 // engine. This file reads that registry and folds it into the SAME machineView /
 // gpuView the console already renders, tagged provider="byo", so the existing
 // Machines and GPUs pages light up for free — no parallel UI. It also serves the
-// raw list at GET /v1/fleet/workers.
+// raw list at GET /v1/visor/fleet/workers.
 //
 // Registration is written by the CLI over the public tasks surface
 // (POST /v1/tasks/namespaces/fleet/activities + heartbeat) — this subsystem only
@@ -58,7 +58,7 @@ type byoGPU struct {
 // engineAdvertisement is a hanzo-engine model server a BYO worker runs on its node
 // (advertised by `hanzo link --serve-engine`). hanzo-engine serves the OpenAI
 // AND Anthropic HTTP APIs from one port, so the gateway can route model calls to this
-// GPU on the standard chat-completions provider. Surfaced verbatim on GET /v1/fleet/workers.
+// GPU on the standard chat-completions provider. Surfaced verbatim on GET /v1/visor/fleet/workers.
 type engineAdvertisement struct {
 	URL    string   `json:"url"`
 	APIs   []string `json:"apis,omitempty"`   // ["openai","anthropic"]
@@ -67,7 +67,7 @@ type engineAdvertisement struct {
 }
 
 // byoWorker is a connected BYO machine, normalized from its `fleet` presence
-// activity. It is the raw shape GET /v1/fleet/workers returns and the source the
+// activity. It is the raw shape GET /v1/visor/fleet/workers returns and the source the
 // machine/gpu unions map from.
 type byoWorker struct {
 	ID            string   `json:"id"`
@@ -85,7 +85,7 @@ type byoWorker struct {
 	Os            string   `json:"os,omitempty"`
 	// Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the
 	// registration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in
-	// BYTES — the same fields a code-linked run-target carries, so the /v1/fleet
+	// BYTES — the same fields a code-linked run-target carries, so the /v1/visor/fleet
 	// board renders a linked node's arch + cores + RAM like any other unit.
 	Arch     string `json:"arch,omitempty"`
 	CPUs     int    `json:"cpus,omitempty"`
@@ -279,7 +279,7 @@ func byoGPUSummary(gpus []byoGPU) string {
 // taskQueue VALUE: "gpu:<node>" is claimed only by that node (cli/gpu.go claims its
 // own lane first), the shared value "gpu-jobs" is the any-GPU broadcast. This reads
 // that queue org-scoped (the SAME ActivitiesForOrg primitive byoWorkers uses) and
-// serves it on GET /v1/fleet/jobs, with POST /v1/fleet/jobs/:id/cancel to manage it.
+// serves it on GET /v1/visor/fleet/jobs, with POST /v1/visor/fleet/jobs/:id/cancel to manage it.
 
 // jobsNamespace is the tasks namespace the render queue lives in. gpuQueuePrefix
 // mirrors the CLI/dispatcher convention — ONE way to name a per-GPU lane.
@@ -390,7 +390,7 @@ const (
 // a BYO worker registers its presence in `fleet` and claims out of `gpu-jobs` — so the
 // rows have never been in visor's engine. Reading the local one returned an empty page
 // with no error, and an online GPU that was heartbeating every 30s appeared on
-// /v1/machines, /v1/gpus, /v1/fleet/workers, the board and studio's node badges as no
+// /v1/visor/machines, /v1/visor/gpus, /v1/visor/fleet/workers, the board and studio's node badges as no
 // fleet at all. The org travels as the CALLER, never as an argument, so this cannot
 // page another tenant.
 func allActivitiesForOrg(ctx context.Context, org, ns string) []tasks.StandaloneActivity {
@@ -671,7 +671,7 @@ func cancelErrStatus(err error) int {
 
 const sampleIngestTimeout = 10 * time.Second
 
-// sampleIngest is a BYO worker's self-reported utilization (POST /v1/fleet/samples).
+// sampleIngest is a BYO worker's self-reported utilization (POST /v1/visor/fleet/samples).
 // Only the metrics a worker can measure locally; Org/Source/Kind are
 // server-authoritative — a worker cannot claim to be another tenant or source.
 type sampleIngest struct {

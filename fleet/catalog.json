@@ -4756,7 +4756,7 @@
  "visor": [
   {
    "id": "attachCluster",
-   "doc": "Attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane."
+   "doc": "Attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/visor/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane."
   },
   {
    "id": "bindMachineAgent",
