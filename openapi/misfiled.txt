@@ -9,4 +9,5 @@
 # Anthropic-compatible wire served by ai, and /v1/admin/<app> served by <app>.
 /_ commerce
 /v1/billing commerce
+/v1/embed ai
 /v1/kv pubsub
