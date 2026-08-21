@@ -17,49 +17,10 @@
   ],
   "tags": [
     {
-      "name": "logs"
-    },
-    {
       "name": "metrics"
-    },
-    {
-      "name": "traces"
     }
   ],
   "paths": {
-    "/v1/logs/health": {
-      "get": {
-        "operationId": "get_logs_health",
-        "summary": "How many log records this deployment holds for your org",
-        "description": "Reports the native log store's live state for the calling tenant: the subsystem version and `records`, the count actually held right now rather than a constant. Not a dependency probe — the store is in-process, so this answers 200 whenever the process is up.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.",
-        "tags": [
-          "logs"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/logs/query": {
-      "get": {
-        "operationId": "get_logs_query",
-        "summary": "Search your org's logs by label, time and substring",
-        "description": "Answers `{count, records}`, newest first. `match` is the same `k=v,k2=v2` superset label matcher the metrics query uses; `contains` is a case-insensitive substring test against the record body; `start` and `end` are nanosecond bounds.\n\nA bound that is absent, empty or unparseable becomes 0, which means UNBOUNDED — a malformed `start` widens the search rather than failing it. `limit` caps the page and defaults to 100 when absent or non-positive, so an unfiltered read is never the whole ring.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, so a search can only reach the org the edge asserted.",
-        "tags": [
-          "logs"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/logs/write": {
-      "post": {
-        "operationId": "post_logs_write",
-        "summary": "Append structured log records for your org",
-        "description": "Takes `{records:[{t, level, body, labels}]}`, appends each one, and answers `{written}`. Bodies are stored verbatim; `labels` are the indexed dimensions a query filters on, so what you do not label you can only find by substring.\n\n`t` is NANOSECONDS since the Unix epoch. A record sent without one is stored at 0 and then falls outside any query carrying a lower bound — the usual reason a successful write does not read back. Retention is a bounded ring, 1048576 records per org, oldest evicted first. No record is validated or rejected, so `written` is the number of records SENT; only a body that does not decode at all is 400.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`; each org's records live in its own WAL-durable store.",
-        "tags": [
-          "logs"
-        ],
-        "x-public": true
-      }
-    },
     "/v1/metrics/batch": {
       "post": {
         "operationId": "post_metrics_batch",
@@ -82,11 +43,88 @@
         "x-public": true
       }
     },
+    "/v1/metrics/logs/health": {
+      "get": {
+        "operationId": "get_metrics_logs_health",
+        "summary": "How many log records this deployment holds for your org",
+        "description": "Reports the native log store's live state for the calling tenant: the subsystem version and `records`, the count actually held right now rather than a constant. Not a dependency probe — the store is in-process, so this answers 200 whenever the process is up.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.",
+        "tags": [
+          "metrics"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/metrics/logs/query": {
+      "get": {
+        "operationId": "get_metrics_logs_query",
+        "summary": "Search your org's logs by label, time and substring",
+        "description": "Answers `{count, records}`, newest first. `match` is the same `k=v,k2=v2` superset label matcher the metrics query uses; `contains` is a case-insensitive substring test against the record body; `start` and `end` are nanosecond bounds.\n\nA bound that is absent, empty or unparseable becomes 0, which means UNBOUNDED — a malformed `start` widens the search rather than failing it. `limit` caps the page and defaults to 100 when absent or non-positive, so an unfiltered read is never the whole ring.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, so a search can only reach the org the edge asserted.",
+        "tags": [
+          "metrics"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/metrics/logs/write": {
+      "post": {
+        "operationId": "post_metrics_logs_write",
+        "summary": "Append structured log records for your org",
+        "description": "Takes `{records:[{t, level, body, labels}]}`, appends each one, and answers `{written}`. Bodies are stored verbatim; `labels` are the indexed dimensions a query filters on, so what you do not label you can only find by substring.\n\n`t` is NANOSECONDS since the Unix epoch. A record sent without one is stored at 0 and then falls outside any query carrying a lower bound — the usual reason a successful write does not read back. Retention is a bounded ring, 1048576 records per org, oldest evicted first. No record is validated or rejected, so `written` is the number of records SENT; only a body that does not decode at all is 400.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`; each org's records live in its own WAL-durable store.",
+        "tags": [
+          "metrics"
+        ],
+        "x-public": true
+      }
+    },
     "/v1/metrics/query": {
       "get": {
         "operationId": "get_metrics_query",
         "summary": "Read your org's series back over a time range",
         "description": "Answers `{count, series}`, where `count` is the number of matching SERIES and each series carries the samples that fall inside the window. `name` selects one series name, and an absent or empty `name` returns every series the org holds. `match` is a `k=v,k2=v2` label matcher applied as a SUPERSET test: a series matches when it carries all the named labels with those values, extra labels and all.\n\n`start` and `end` are nanoseconds since the Unix epoch, and here is the rule worth knowing: a bound that is absent, empty or unparseable becomes 0, which this store reads as UNBOUNDED. A malformed `start` therefore silently widens the query instead of failing it. There is no limit parameter — the window and the matcher are the whole of what bounds the answer.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, so a query can only ever read the org the edge asserted.",
+        "tags": [
+          "metrics"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/metrics/traces/health": {
+      "get": {
+        "operationId": "get_metrics_traces_health",
+        "summary": "How many spans this deployment holds for your org",
+        "description": "Reports the native trace store's live state for the calling tenant: the subsystem version and `spans`, the count actually held right now. Not a dependency probe — the store is in-process, so this answers 200 whenever the process is up.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.",
+        "tags": [
+          "metrics"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/metrics/traces/query": {
+      "get": {
+        "operationId": "get_metrics_traces_query",
+        "summary": "Recent spans for your org over a time range",
+        "description": "Answers `{count, spans}`, newest first, filtered on each span's START time. `start` and `end` are nanosecond bounds where 0 — which is what an absent, empty or unparseable value becomes — means UNBOUNDED, so a malformed bound widens the listing instead of failing it. `limit` defaults to 100 when absent or non-positive.\n\nIt lists SPANS, not traces: several spans of one trace each count separately and each take a slot against `limit`. Assembling one trace is /v1/metrics/traces/trace. The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.",
+        "tags": [
+          "metrics"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/metrics/traces/trace": {
+      "get": {
+        "operationId": "get_metrics_traces_trace",
+        "summary": "Every span of one trace — the waterfall",
+        "description": "Answers `{spans}`: every span the org holds for the trace id in `id`, in the order they were appended, which is what a waterfall view renders. Unlike the other reads there is no count, no time range and no limit — a trace is addressed by id or not at all.\n\nAn id with no spans answers an EMPTY list, never a 404: the store cannot tell a trace that never existed from one whose spans retention has already dropped, so it does not pretend to. The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, and a trace id belonging to another org is simply not in this org's store.",
+        "tags": [
+          "metrics"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/metrics/traces/write": {
+      "post": {
+        "operationId": "post_metrics_traces_write",
+        "summary": "Append spans for your org",
+        "description": "Takes `{spans:[{traceId, spanId, parentId, name, startNs, endNs, attrs}]}`, appends each, and answers `{written}` — the number of spans sent. Every span is indexed by its trace id as it lands, which is what makes the waterfall read possible without a second store.\n\nTimes are NANOSECONDS since the Unix epoch. Retention is a bounded ring of 1048576 spans per org: past that the OLDEST are evicted to keep the newest 1048576, and the trace index is rebuilt — so a long-lived trace can lose its early spans while its later ones survive, and a waterfall read is best-effort against retention, not a guarantee.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`. A body that does not decode is 400.",
         "tags": [
           "metrics"
         ],
@@ -100,50 +138,6 @@
         "description": "Takes `{series:[{name, labels, samples:[{t, v}]}]}`, appends every sample, creating each series on first write, and answers `{written}` — again counting SAMPLES, so three series of ten samples is 30.\n\nA series is identified by its name PLUS its whole label set, so adding one label makes a different series rather than annotating an existing one. Timestamps `t` are NANOSECONDS since the Unix epoch; a sample sent without one is stored at 0 and is then excluded by any query that sets a lower bound, which is the usual reason a write that reported success does not read back. Retention is per series and bounded — past 65536 samples the oldest are evicted.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`. A body that does not decode is 400; nothing else is validated or rejected.",
         "tags": [
           "metrics"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/traces/health": {
-      "get": {
-        "operationId": "get_traces_health",
-        "summary": "How many spans this deployment holds for your org",
-        "description": "Reports the native trace store's live state for the calling tenant: the subsystem version and `spans`, the count actually held right now. Not a dependency probe — the store is in-process, so this answers 200 whenever the process is up.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.",
-        "tags": [
-          "traces"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/traces/query": {
-      "get": {
-        "operationId": "get_traces_query",
-        "summary": "Recent spans for your org over a time range",
-        "description": "Answers `{count, spans}`, newest first, filtered on each span's START time. `start` and `end` are nanosecond bounds where 0 — which is what an absent, empty or unparseable value becomes — means UNBOUNDED, so a malformed bound widens the listing instead of failing it. `limit` defaults to 100 when absent or non-positive.\n\nIt lists SPANS, not traces: several spans of one trace each count separately and each take a slot against `limit`. Assembling one trace is /v1/traces/trace. The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`.",
-        "tags": [
-          "traces"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/traces/trace": {
-      "get": {
-        "operationId": "get_traces_trace",
-        "summary": "Every span of one trace — the waterfall",
-        "description": "Answers `{spans}`: every span the org holds for the trace id in `id`, in the order they were appended, which is what a waterfall view renders. Unlike the other reads there is no count, no time range and no limit — a trace is addressed by id or not at all.\n\nAn id with no spans answers an EMPTY list, never a 404: the store cannot tell a trace that never existed from one whose spans retention has already dropped, so it does not pretend to. The tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`, and a trace id belonging to another org is simply not in this org's store.",
-        "tags": [
-          "traces"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/traces/write": {
-      "post": {
-        "operationId": "post_traces_write",
-        "summary": "Append spans for your org",
-        "description": "Takes `{spans:[{traceId, spanId, parentId, name, startNs, endNs, attrs}]}`, appends each, and answers `{written}` — the number of spans sent. Every span is indexed by its trace id as it lands, which is what makes the waterfall read possible without a second store.\n\nTimes are NANOSECONDS since the Unix epoch. Retention is a bounded ring of 1048576 spans per org: past that the OLDEST are evicted to keep the newest 1048576, and the trace index is rebuilt — so a long-lived trace can lose its early spans while its later ones survive, and a waterfall read is best-effort against retention, not a guarantee.\n\nThe tenant is the gateway-minted `X-Org-Id` header, falling back to the deployment brand and then `default`. A body that does not decode is 400.",
-        "tags": [
-          "traces"
         ],
         "x-public": true
       }
