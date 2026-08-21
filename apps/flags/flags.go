@@ -73,19 +73,6 @@ const (
 	TypeString Type = "string"
 )
 
-// The reserved store the platform switches evaluate from.
-//
-// This is a REAL org namespace named "platform", not namespace.System().
-// The system namespace is the right name for it and would make it unsquattable
-// by a tenant who registers that org, but it renders to a different file, and
-// moving a live store is a migration rather than a rename. Left as it is,
-// deliberately, so the change is a decision somebody makes and not a side
-// effect of this one.
-const (
-	platformOrg     = "platform"
-	platformProject = "platform"
-)
-
 // Def is ONE platform switch: a flag key qualified by the metadata the cockpit shows
 // and the env var that provides the fallback default. This table is the ONE place the
 // platform switches are named; the embedded engine evaluates them.
@@ -266,7 +253,7 @@ func (c *Client) ensureFresh() {
 		return
 	}
 	ctx, _ := json.Marshal(map[string]string{"distinct_id": c.distinctID})
-	res, err := c.evaluateProject(platformOrg, platformProject, ctx)
+	res, err := c.evaluateProject(cloud.Reserved, cloud.Reserved, ctx)
 	if err != nil {
 		c.snap.at = time.Now() // keep last values; bound retry to one per TTL
 		return
@@ -299,7 +286,7 @@ func (c *Client) invalidate() {
 // SetPlatformSwitch stores/overwrites a platform switch's definition (the admin
 // cockpit's ONE write path) and applies it immediately in this pod.
 func SetPlatformSwitch(key string, definition json.RawMessage, actor string) error {
-	st, err := mounted.storeFor(platformOrg, platformProject)
+	st, err := mounted.storeFor(cloud.Reserved, cloud.Reserved)
 	if err != nil {
 		return err
 	}

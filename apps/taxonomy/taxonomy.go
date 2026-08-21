@@ -71,20 +71,26 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// platformOrg owns the PLATFORM catalogue — Hanzo's own products, the rows every
-// tenant sees. It is the hanzo org and not a reserved marker, because these are
+// hanzo owns the PLATFORM catalogue — our own products, the rows every tenant
+// sees. It is an ordinary IAM org id and not a reserved marker, because these are
 // genuinely one org's products rather than a special kind of thing; a customer's
 // rows sit in the same table under their own org.
 //
+// It is named for the value it is, which is the point: the deployment's own
+// reserved store partition is spelled "platform" (cloud.Reserved) and our
+// registry namespace is spelled "hanzoai" (apps/sandbox). Three different
+// strings, three different systems — a name like "the platform org" would read
+// as any of them, and whichever one a reader guessed they would be wrong twice.
+//
 // It is NOT the SuperAdmin org. Platform sudo is membership of the reserved
 // `admin` org, which is an identity fact; this is whose products these are. The
-// two are deliberately different values: an admin OF the hanzo org administers
-// hanzo, and only a SuperAdmin edits what every tenant sees.
+// two are deliberately different values: an admin OF this org administers it, and
+// only a SuperAdmin edits what every tenant sees.
 //
 // Brand does not enter into it. A lux or zoo deployment serves this same platform
 // catalogue narrowed by the per-row Brands scope — one catalogue, projected — so
 // there is no per-brand owner to resolve.
-const platformOrg = "hanzo"
+const hanzo = "hanzo"
 
 type service struct {
 	store *Store
