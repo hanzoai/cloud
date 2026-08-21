@@ -9,7 +9,6 @@
 # Anthropic-compatible wire served by ai, and /v1/admin/<app> served by <app>.
 / git
 /_ commerce
-/collaborator team
 /explore git
 /git git
 /meet meet
@@ -17,9 +16,7 @@
 /v1/admin affiliates
 /v1/admin pricing
 /v1/agent agents
-/v1/appearance account
 /v1/auto automations
-/v1/avatar account
 /v1/billing commerce
 /v1/bot bots
 /v1/builds platform
@@ -28,9 +25,7 @@
 /v1/chains web3
 /v1/commands openapi
 /v1/connectors integrations
-/v1/csrf account
 /v1/edge projects
-/v1/embed account
 /v1/enablement pricing
 /v1/environments platform
 /v1/errors analytics
@@ -44,14 +39,11 @@
 /v1/insights analytics
 /v1/instances provisioning
 /v1/kb knowledge
-/v1/keys account
 /v1/links link
 /v1/logs metrics
 /v1/mesh zt
 /v1/networks zt
 /v1/oracles explorer
-/v1/orgs account
-/v1/orgs entitlements
 /v1/payments commerce
 /v1/pipelines platform
 /v1/plans commerce

@@ -346,7 +346,7 @@ func TestKeys_RequireValidatedPrincipal(t *testing.T) {
 	// No X-User-Id → no validated principal → 403, and IAM is never touched, even if
 	// a forged X-Org-Id is present (the bearer-less data path must not mint a key).
 	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
-		for _, path := range []string{"/v1/keys"} {
+		for _, path := range []string{"/v1/account/keys"} {
 			code, _ := call(t, app, m, path, "", "victim", "")
 			if code != http.StatusForbidden {
 				t.Fatalf("%s %s with forged org but no principal: want 403, got %d", m, path, code)
@@ -363,7 +363,7 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
 	// GET before mint → an empty set (authoritative IAM read, not the claim).
-	code, body := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	code, body := call(t, app, http.MethodGet, "/v1/account/keys", "alice", "acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("get pre-mint: want 200, got %d (%s)", code, body)
 	}
@@ -375,7 +375,7 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 
 	// POST → mint; the key is returned ONCE, and IAM was targeted with the DERIVED
 	// `<owner>/<name>` id — never a request value.
-	code, body = call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", "")
+	code, body = call(t, app, http.MethodPost, "/v1/account/keys", "alice", "acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("mint: want 200, got %d (%s)", code, body)
 	}
@@ -405,7 +405,7 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 	// GET after mint → the key is LISTED, by prefix only, with no secret material.
 	// This is the round trip that was broken: the mint writes a key ROW and the read
 	// looked at the USER row, so a freshly minted key never appeared.
-	code, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	code, body = call(t, app, http.MethodGet, "/v1/account/keys", "alice", "acme", "")
 	mustJSON(t, body, &st)
 	if code != http.StatusOK || len(st.Keys) != 1 {
 		t.Fatalf("get post-mint: want the minted key listed, got %d %s", code, body)
@@ -417,15 +417,15 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 		t.Fatalf("get post-mint: want a secret key with no prefix and no value, got %+v", st.Keys[0])
 	}
 	if strings.Contains(string(body), "SECRET") {
-		t.Fatalf("GET /v1/keys leaked the secret: %s", body)
+		t.Fatalf("GET /v1/account/keys leaked the secret: %s", body)
 	}
 
 	// DELETE → revoke, targeting the same derived id, and the key stops being listed.
-	code, _ = call(t, app, http.MethodDelete, "/v1/keys", "alice", "acme", "")
+	code, _ = call(t, app, http.MethodDelete, "/v1/account/keys", "alice", "acme", "")
 	if code != http.StatusOK || len(f.revokedFor) != 1 || f.revokedFor[0] != "acme/alice" {
 		t.Fatalf("revoke: want 200 targeting acme/alice, got %d %v", code, f.revokedFor)
 	}
-	_, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	_, body = call(t, app, http.MethodGet, "/v1/account/keys", "alice", "acme", "")
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 0 {
 		t.Fatalf("a revoked key is still listed: %s", body)
@@ -440,7 +440,7 @@ func TestKeys_PublishableTypeIsAFieldNotAnEndpoint(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	code, body := call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
+	code, body := call(t, app, http.MethodPost, "/v1/account/keys", "alice", "acme", `{"type":"publishable"}`)
 	if code != http.StatusOK {
 		t.Fatalf("publishable mint: want 200, got %d (%s)", code, body)
 	}
@@ -457,13 +457,13 @@ func TestKeys_PublishableTypeIsAFieldNotAnEndpoint(t *testing.T) {
 	}
 
 	// The type also rides as a query field — one contract, either spelling.
-	if code, _ = call(t, app, http.MethodPost, "/v1/keys?type=publishable", "bob", "acme", ""); code != http.StatusOK {
+	if code, _ = call(t, app, http.MethodPost, "/v1/account/keys?type=publishable", "bob", "acme", ""); code != http.StatusOK {
 		t.Fatalf("?type=publishable: want 200, got %d", code)
 	}
 
 	// A publishable key is LISTED WITH ITS FULL VALUE — it is public by construction
 	// and useless to its holder if it cannot be read back.
-	_, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	_, body = call(t, app, http.MethodGet, "/v1/account/keys", "alice", "acme", "")
 	var st apiKeyList
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 1 || st.Keys[0].Type != "publishable" {
@@ -481,24 +481,24 @@ func TestKeys_TypesAreIndependent(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"secret"}`)
-	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
+	call(t, app, http.MethodPost, "/v1/account/keys", "alice", "acme", `{"type":"secret"}`)
+	call(t, app, http.MethodPost, "/v1/account/keys", "alice", "acme", `{"type":"publishable"}`)
 
 	var st apiKeyList
-	_, body := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	_, body := call(t, app, http.MethodGet, "/v1/account/keys", "alice", "acme", "")
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 2 {
 		t.Fatalf("a user holds one key per type; want 2 listed, got %s", body)
 	}
 
 	// Revoke ONLY the publishable one.
-	if code, _ := call(t, app, http.MethodDelete, "/v1/keys?type=publishable", "alice", "acme", ""); code != http.StatusOK {
+	if code, _ := call(t, app, http.MethodDelete, "/v1/account/keys?type=publishable", "alice", "acme", ""); code != http.StatusOK {
 		t.Fatalf("scoped revoke: want 200, got %d", code)
 	}
 	if len(f.revokedType) != 1 || f.revokedType[0] != "publishable" {
 		t.Fatalf("the revoke type must reach IAM, got %v", f.revokedType)
 	}
-	_, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	_, body = call(t, app, http.MethodGet, "/v1/account/keys", "alice", "acme", "")
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 1 || st.Keys[0].Type != "secret" {
 		t.Fatalf("revoking the publishable key must leave the secret key working, got %s", body)
@@ -516,11 +516,11 @@ func TestKeys_RevokeReadsTheClassFromTheBodyWhenTheQueryOmitsIt(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"secret"}`)
-	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
+	call(t, app, http.MethodPost, "/v1/account/keys", "alice", "acme", `{"type":"secret"}`)
+	call(t, app, http.MethodPost, "/v1/account/keys", "alice", "acme", `{"type":"publishable"}`)
 
 	// No `?type=` at all — the class rides in the body, as the older callers send it.
-	code, body := call(t, app, http.MethodDelete, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
+	code, body := call(t, app, http.MethodDelete, "/v1/account/keys", "alice", "acme", `{"type":"publishable"}`)
 	if code != http.StatusOK {
 		t.Fatalf("body-selected revoke: want 200, got %d (%s)", code, body)
 	}
@@ -536,7 +536,7 @@ func TestKeys_RevokeReadsTheClassFromTheBodyWhenTheQueryOmitsIt(t *testing.T) {
 	}
 	// And the secret key is untouched — the whole reason the fallback survives.
 	var st apiKeyList
-	_, list := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	_, list := call(t, app, http.MethodGet, "/v1/account/keys", "alice", "acme", "")
 	mustJSON(t, list, &st)
 	if len(st.Keys) != 1 || st.Keys[0].Type != keyTypeSecret {
 		t.Fatalf("a body-selected revoke must leave the secret key working, got %s", list)
@@ -544,7 +544,7 @@ func TestKeys_RevokeReadsTheClassFromTheBodyWhenTheQueryOmitsIt(t *testing.T) {
 
 	// When both are sent the URL WINS: it is the half the method carries, the half
 	// the document declares, and the half a generated client fills in.
-	if code, _ = call(t, app, http.MethodDelete, "/v1/keys?type=secret", "alice", "acme", `{"type":"publishable"}`); code != http.StatusOK {
+	if code, _ = call(t, app, http.MethodDelete, "/v1/account/keys?type=secret", "alice", "acme", `{"type":"publishable"}`); code != http.StatusOK {
 		t.Fatalf("query-selected revoke: want 200, got %d", code)
 	}
 	if len(f.revokedType) != 2 || f.revokedType[1] != keyTypeSecret {
@@ -560,11 +560,11 @@ func TestKeys_UnknownTypeRefused(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
 	for _, typ := range []string{"public", "publishible", "sk", "SECRET"} {
-		code, _ := call(t, app, http.MethodPost, "/v1/keys?type="+typ, "alice", "acme", "")
+		code, _ := call(t, app, http.MethodPost, "/v1/account/keys?type="+typ, "alice", "acme", "")
 		if code != http.StatusBadRequest {
 			t.Fatalf("POST type=%q: want 400, got %d", typ, code)
 		}
-		code, _ = call(t, app, http.MethodDelete, "/v1/keys?type="+typ, "alice", "acme", "")
+		code, _ = call(t, app, http.MethodDelete, "/v1/account/keys?type="+typ, "alice", "acme", "")
 		if code != http.StatusBadRequest {
 			t.Fatalf("DELETE type=%q: want 400, got %d", typ, code)
 		}
@@ -579,7 +579,7 @@ func TestKeys_DirectBearerPath_MintsByUsernameNotUUID(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
 	const uuid = "2d4d67ab-30f1-474e-b81f-f60461852259"
-	req := httptest.NewRequest(http.MethodPost, "/v1/keys", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/account/keys", nil)
 	req.Header.Set("X-User-Id", uuid)  // direct-path stamp: the subject UUID
 	req.Header.Set("X-User-Name", "z") // direct-path stamp: the IAM username
 	req.Header.Set("X-Org-Id", "hanzo")
@@ -607,7 +607,7 @@ func TestKeys_DirectBearerPath_MintsByUsernameNotUUID(t *testing.T) {
 func TestKeys_NotConfigured_501(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "", "") // confidential client unwired
-	code, body := call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", "")
+	code, body := call(t, app, http.MethodPost, "/v1/account/keys", "alice", "acme", "")
 	if code != http.StatusNotImplemented {
 		t.Fatalf("unconfigured mint: want 501, got %d (%s)", code, body)
 	}
@@ -617,7 +617,7 @@ func TestKeys_MintUpstreamFailure_502(t *testing.T) {
 	f := newFakeIAM()
 	f.failMintKey = true
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
-	code, body := call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", "")
+	code, body := call(t, app, http.MethodPost, "/v1/account/keys", "alice", "acme", "")
 	if code != http.StatusBadGateway {
 		t.Fatalf("mint upstream failure: want 502, got %d (%s)", code, body)
 	}
@@ -634,7 +634,7 @@ func TestOnboard_FirstRun_CreatesAndMoves(t *testing.T) {
 
 	// First-run: the caller has NO org (empty X-Org-Id) but IS validated. onboard
 	// must allow it (requireOwner=false), create the org, and MOVE the user in.
-	code, body := call(t, app, http.MethodPost, "/v1/orgs", "dave", "", `{"name":"Acme Rockets"}`)
+	code, body := call(t, app, http.MethodPost, "/v1/account/orgs", "dave", "", `{"name":"Acme Rockets"}`)
 	if code != http.StatusOK {
 		t.Fatalf("first-run onboard: want 200, got %d (%s)", code, body)
 	}
@@ -660,7 +660,7 @@ func TestOnboard_Additional_CreatesWithoutMoving(t *testing.T) {
 
 	// The caller ALREADY has an org. onboard must create the new org but NOT move
 	// them (a move would strip their owner + orphan their current org).
-	code, body := call(t, app, http.MethodPost, "/v1/orgs", "alice", "acme", `{"name":"Side Project"}`)
+	code, body := call(t, app, http.MethodPost, "/v1/account/orgs", "alice", "acme", `{"name":"Side Project"}`)
 	if code != http.StatusOK {
 		t.Fatalf("additional onboard: want 200, got %d (%s)", code, body)
 	}
@@ -680,12 +680,12 @@ func TestOnboard_ReservedAndTaken(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
 	// A reserved brand/system name is a 400 (policy), before any IAM create.
-	code, _ := call(t, app, http.MethodPost, "/v1/orgs", "alice", "acme", `{"name":"Hanzo"}`)
+	code, _ := call(t, app, http.MethodPost, "/v1/account/orgs", "alice", "acme", `{"name":"Hanzo"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("reserved name: want 400, got %d", code)
 	}
 	// An explicit name that's taken is an honest 409.
-	code, _ = call(t, app, http.MethodPost, "/v1/orgs", "alice", "acme", `{"name":"Taken"}`)
+	code, _ = call(t, app, http.MethodPost, "/v1/account/orgs", "alice", "acme", `{"name":"Taken"}`)
 	if code != http.StatusConflict {
 		t.Fatalf("taken name: want 409, got %d", code)
 	}
@@ -702,7 +702,7 @@ func TestOnboard_Personal_AutoSuffixesOnCollision(t *testing.T) {
 
 	// personal:true (zero-org user) with the base slug taken → auto-suffix to dave-2,
 	// first-run move.
-	code, body := call(t, app, http.MethodPost, "/v1/orgs", "dave", "", `{"personal":true}`)
+	code, body := call(t, app, http.MethodPost, "/v1/account/orgs", "dave", "", `{"personal":true}`)
 	if code != http.StatusOK {
 		t.Fatalf("personal onboard: want 200, got %d (%s)", code, body)
 	}
@@ -717,7 +717,7 @@ func TestOnboard_PersonalWhenAlreadyOrged_409(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 	// A user WITH an org asking for a personal org is meaningless → 409.
-	code, _ := call(t, app, http.MethodPost, "/v1/orgs", "alice", "acme", `{"personal":true}`)
+	code, _ := call(t, app, http.MethodPost, "/v1/account/orgs", "alice", "acme", `{"personal":true}`)
 	if code != http.StatusConflict {
 		t.Fatalf("personal-while-orged: want 409, got %d", code)
 	}
@@ -726,7 +726,7 @@ func TestOnboard_PersonalWhenAlreadyOrged_409(t *testing.T) {
 func TestOnboard_Unauthenticated_403(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
-	code, _ := call(t, app, http.MethodPost, "/v1/orgs", "", "", `{"name":"x"}`)
+	code, _ := call(t, app, http.MethodPost, "/v1/account/orgs", "", "", `{"name":"x"}`)
 	if code != http.StatusForbidden {
 		t.Fatalf("unauth onboard: want 403, got %d", code)
 	}
@@ -747,11 +747,11 @@ func TestOnboard_Unauthenticated_403(t *testing.T) {
 //
 // iam is GRAFTED now, so both would be EXACT routes at one address and the winner
 // would be registration order rather than specificity — silent, and zip.Graft
-// refuses it at compose time instead. The keys aliases are deleted (the canonical
-// /v1/keys is unchanged) and onboard moved to /v1/orgs, named for the resource,
-// which is the same rule that moved the key surface off /v1/iam/keys in the first
-// place. This test is the ratchet on that: nothing account registers may sit under
-// a prefix another app owns.
+// refuses it at compose time instead. The keys aliases are deleted and onboard is
+// POST /v1/account/orgs, both named for the resource under the capability that
+// serves them — the same rule that moved the key surface off /v1/iam/keys in the
+// first place. This test is the ratchet on that: nothing account registers may sit
+// under a prefix another app owns.
 func TestAccountClaimsNothingUnderIAM(t *testing.T) {
 	f := newFakeIAM()
 	t.Setenv("IAM_URL", f.server(t).URL)
@@ -772,11 +772,11 @@ func TestAccountClaimsNothingUnderIAM(t *testing.T) {
 	}
 
 	// The two operations that moved are alive at their own addresses.
-	if code, body := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", ""); code != http.StatusOK {
-		t.Fatalf("GET /v1/keys: want 200, got %d (%s)", code, body)
+	if code, body := call(t, app, http.MethodGet, "/v1/account/keys", "alice", "acme", ""); code != http.StatusOK {
+		t.Fatalf("GET /v1/account/keys: want 200, got %d (%s)", code, body)
 	}
-	if code, _ := call(t, app, http.MethodPost, "/v1/orgs", "dave", "", `{"name":"Acme Rockets"}`); code != http.StatusOK {
-		t.Fatalf("POST /v1/orgs: want 200, got %d", code)
+	if code, _ := call(t, app, http.MethodPost, "/v1/account/orgs", "dave", "", `{"name":"Acme Rockets"}`); code != http.StatusOK {
+		t.Fatalf("POST /v1/account/orgs: want 200, got %d", code)
 	}
 }
 
@@ -799,7 +799,7 @@ func TestKeys_RefusesAKeyWhosePrefixContradictsItsType(t *testing.T) {
 	f.ignoreKeyType = true // an IAM that has never heard of ?type=
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	code, body := call(t, app, http.MethodPost, "/v1/keys?type=publishable", "alice", "acme", "")
+	code, body := call(t, app, http.MethodPost, "/v1/account/keys?type=publishable", "alice", "acme", "")
 	if code != http.StatusBadGateway {
 		t.Fatalf("want 502 when IAM answers with the wrong key class, got %d (%s)", code, body)
 	}
@@ -809,7 +809,7 @@ func TestKeys_RefusesAKeyWhosePrefixContradictsItsType(t *testing.T) {
 
 	// A SECRET mint against that same IAM is unaffected — it is what the old IAM
 	// already does correctly, so nothing regresses for the existing caller.
-	if code, body = call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", ""); code != http.StatusOK {
+	if code, body = call(t, app, http.MethodPost, "/v1/account/keys", "alice", "acme", ""); code != http.StatusOK {
 		t.Fatalf("secret mint against a pre-type IAM must still work, got %d (%s)", code, body)
 	}
 }

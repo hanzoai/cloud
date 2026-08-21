@@ -273,7 +273,7 @@ func TestPrivileged(t *testing.T) {
 		{"GET", "/v1/kms/orgs/acme/secrets/db", true, "reading a secret with a stolen key IS the attack"},
 		{"DELETE", "/v1/admin/orgs/acme", true, "an admin mutation changes who can do what"},
 		{"GET", "/v1/admin/orgs", false, "an admin read is audited and access-controlled, not a grant"},
-		{"POST", "/v1/orgs/acme/members", true, "adding a member grants standing authority"},
+		{"POST", "/v1/account/orgs", true, "minting your own tenant is a grant"},
 		{"GET", "/v1/models", false, "an ordinary read is not a grant"},
 		{"POST", "/v1/ai/chat/completions", false, "inference is not a grant"},
 		{"GET", "/v1/iam/whoami", false, "reading your own identity grants nothing"},
@@ -288,13 +288,13 @@ func TestPrivileged(t *testing.T) {
 		{"GET", "/v1/kms/", true, "the subtree root is in the subtree"},
 		{"GET", "/v1/kms", true, "and so is the root without its slash — one route, per StrictRouting"},
 		{"DELETE", "/V1/Admin/orgs/acme", true, "an admin mutation, whatever its case"},
-		{"POST", "/v1/orgs/", true, "the org subtree root"},
+		{"POST", "/v1/account/orgs/", true, "and the org create with a trailing slash"},
 
 		// And normalization must not WIDEN the list either: a neighbouring name that
 		// merely shares a prefix is a different route and must stay ordinary.
 		{"GET", "/v1/kmsx/keys", false, "a prefix of a name is not the subtree"},
 		{"GET", "/v1/iam/signup-preflight", false, "a longer name is a different route"},
-		{"POST", "/v1/organizations/x", false, "/v1/orgs is not /v1/organizations"},
+		{"POST", "/v1/account/organizations", false, "orgs is not organizations"},
 	}
 	for _, tc := range cases {
 		if got := Privileged(tc.method, tc.path); got != tc.want {
