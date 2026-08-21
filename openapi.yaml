@@ -94565,8 +94565,8 @@ paths:
       summary: Removes one bucket of the caller's org — every key and every revision
         with it — and answers 204 with no body.
       tags:
-      - pubsub
-      x-app: pubsub
+      - kv
+      x-app: kv
       x-public: true
       x-tool: true
     post:
@@ -94603,8 +94603,8 @@ paths:
           description: created
       summary: Creates a KV bucket and returns it.
       tags:
-      - pubsub
-      x-app: pubsub
+      - kv
+      x-app: kv
       x-public: true
       x-tool: true
   /v1/kv/{bucket}/{key}:
@@ -94633,8 +94633,8 @@ paths:
       summary: Delete removes one key — a delete marker in the key's history, so watchers
         see it and Get answers 404 — and answers 204 with no body.
       tags:
-      - pubsub
-      x-app: pubsub
+      - kv
+      x-app: kv
       x-public: true
       x-tool: true
     get:
@@ -94664,8 +94664,8 @@ paths:
           description: ok
       summary: Get returns one key's current value and revision.
       tags:
-      - pubsub
-      x-app: pubsub
+      - kv
+      x-app: kv
       x-public: true
       x-tool: true
     put:
@@ -94704,8 +94704,8 @@ paths:
           description: ok
       summary: Put sets one key to one value and returns the revision the write created.
       tags:
-      - pubsub
-      x-app: pubsub
+      - kv
+      x-app: kv
       x-public: true
       x-tool: true
   /v1/kv/{bucket}/{key}/history:
@@ -94738,8 +94738,8 @@ paths:
       summary: History returns one key's retained revisions, oldest first — every
         put and every delete marker up to the bucket's History depth.
       tags:
-      - pubsub
-      x-app: pubsub
+      - kv
+      x-app: kv
       x-public: true
       x-tool: true
   /v1/label:
@@ -124440,6 +124440,9 @@ tags:
 - description: Package knowledge is your team's wiki and your agents' memory, searchable
     by meaning.
   name: knowledge
+- description: 'Package kv is your key-value store: buckets of versioned values your
+    apps read and write by key.'
+  name: kv
 - description: 'Package label is the ground-truth plane: what actually turned out
     to be fraud, who said so, and when they could first have said it.'
   name: label

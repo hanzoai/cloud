@@ -48,7 +48,15 @@
 package manifest
 
 var Apps = []App{
-	{Name: "pubsub", Prefixes: []string{"/v1/kv", "/v1/pubsub"}, Eager: true},
+	{Name: "pubsub", Prefixes: []string{"/v1/pubsub"}, Eager: true},
+	// The second door on pubsub's plane, and its own capability. A bucket holds
+	// values and answers reads; nothing about it publishes or subscribes, so
+	// key-value is not messaging and does not answer under messaging's name. It
+	// rides the ONE embedded bus through the calls apps/pubsub exports (Bus, Org,
+	// Qualify, Err) rather than running a second server — one process apart, zero
+	// servers apart. NOT Eager: the door is request-driven, it owns no listener
+	// and no loop, and the plane it dials is another row's to start.
+	{Name: "kv", Prefixes: []string{"/v1/kv"}},
 	{Name: "kafka", Prefixes: []string{"/v1/kafka"}, Eager: true},
 	// Eager for kafka's reason: it owns a listener. A wire adaptor that binds
 	// its port only once a request arrives at /v1/amqp would never bind, since
