@@ -117,23 +117,23 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	g := app.Group("/v1/mq")
 
 	s := streams{b}
-	zip.Get(g, "/streams", s.list)
-	zip.Post(g, "/streams", s.create, zip.WithStatus(http.StatusCreated))
-	zip.Get(g, "/streams/:name", s.get)
-	zip.Put(g, "/streams/:name", s.update)
-	zip.Delete(g, "/streams/:name", s.delete)
-	zip.Post(g, "/streams/:name/purge", s.purge)
+	zip.Get(g, "/stream", s.list)
+	zip.Post(g, "/stream", s.create, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/stream/:name", s.get)
+	zip.Put(g, "/stream/:name", s.update)
+	zip.Delete(g, "/stream/:name", s.delete)
+	zip.Post(g, "/stream/:name/purge", s.purge)
 
 	m := messages{b}
-	zip.Get(g, "/streams/:name/messages", m.list)
-	zip.Delete(g, "/streams/:name/messages/:seq", m.delete)
+	zip.Get(g, "/stream/:name/message", m.list)
+	zip.Delete(g, "/stream/:name/message/:seq", m.delete)
 
 	c := consumers{b}
-	zip.Get(g, "/streams/:stream/consumers", c.list)
-	zip.Post(g, "/streams/:stream/consumers", c.create, zip.WithStatus(http.StatusCreated))
-	zip.Get(g, "/streams/:stream/consumers/:name", c.get)
-	zip.Delete(g, "/streams/:stream/consumers/:name", c.delete)
-	zip.Post(g, "/streams/:stream/consumers/:name/next", c.next)
+	zip.Get(g, "/stream/:stream/consumer", c.list)
+	zip.Post(g, "/stream/:stream/consumer", c.create, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/stream/:stream/consumer/:name", c.get)
+	zip.Delete(g, "/stream/:stream/consumer/:name", c.delete)
+	zip.Post(g, "/stream/:stream/consumer/:name/next", c.next)
 
 	st := status{b}
 	zip.Get(g, "/health", st.health)

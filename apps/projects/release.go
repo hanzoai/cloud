@@ -473,14 +473,29 @@ func activate(s *cloud.Service[state], ctx context.Context, org string, p Projec
 // projectsRelease is the published shape of a release, used by every release route
 // so create, activate, and list describe the resource identically.
 type projectsRelease struct {
+	// ReleaseID is derived from a DIGEST of the release's own manifest, so identical
+	// content is the same release and a release can never be confused with another
+	// one. Activating an older id IS the rollback.
 	ReleaseID string `json:"releaseId"`
-	Slug      string `json:"slug"`
-	Objects   int    `json:"objects"`
-	Bytes     int64  `json:"bytes"`
-	Source    string `json:"source,omitempty"`
-	Active    bool   `json:"active"`
-	URL       string `json:"url,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
+	// Slug is the site this release belongs to.
+	Slug string `json:"slug"`
+	// Objects is how many files the release holds.
+	Objects int `json:"objects"`
+	// Bytes is their total size in bytes.
+	Bytes int64 `json:"bytes"`
+	// Source is what the release was cut from — the build output or upload it was
+	// promoted out of.
+	Source string `json:"source,omitempty"`
+	// Active is whether this is the release the site is SERVING right now. Exactly
+	// one release of a site is active; the others are kept so they can be activated
+	// again, until retention reclaims them.
+	Active bool `json:"active"`
+	// URL is where the site serves. Present only on the ACTIVE release, since an
+	// inactive one is not answering anywhere.
+	URL string `json:"url,omitempty"`
+	// CreatedAt is when the release was cut, as Unix seconds — not when it was last
+	// activated.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 func toRelease(s *cloud.Service[state], r Release, active bool) projectsRelease {

@@ -69,9 +69,9 @@
         "x-tool": true
       }
     },
-    "/v1/mq/streams": {
+    "/v1/mq/stream": {
       "get": {
-        "operationId": "get_mq_streams",
+        "operationId": "get_mq_stream",
         "summary": "Returns the org's streams, name-ordered, with their live state.",
         "description": "Returns the org's streams, name-ordered, with their live state.",
         "tags": [
@@ -113,7 +113,7 @@
         "x-tool": true
       },
       "post": {
-        "operationId": "post_mq_streams",
+        "operationId": "post_mq_stream",
         "summary": "Creates a durable stream in the org's namespace and returns it.",
         "description": "Creates a durable stream in the org's namespace and returns it.",
         "tags": [
@@ -145,9 +145,9 @@
         "x-tool": true
       }
     },
-    "/v1/mq/streams/{name}": {
+    "/v1/mq/stream/{name}": {
       "delete": {
-        "operationId": "delete_mq_streams_by_name",
+        "operationId": "delete_mq_stream_by_name",
         "summary": "Removes a stream with all its messages and consumers.",
         "description": "Removes a stream with all its messages and consumers. Irreversible.",
         "tags": [
@@ -173,7 +173,7 @@
         "x-tool": true
       },
       "get": {
-        "operationId": "get_mq_streams_by_name",
+        "operationId": "get_mq_stream_by_name",
         "summary": "Returns one stream's configuration and live state.",
         "description": "Returns one stream's configuration and live state.",
         "tags": [
@@ -206,7 +206,7 @@
         "x-tool": true
       },
       "put": {
-        "operationId": "put_mq_streams_by_name",
+        "operationId": "put_mq_stream_by_name",
         "summary": "Reconfigures an existing stream; the path names the stream, and the immutable fields (storage, retention) must restate what they are.",
         "description": "Reconfigures an existing stream; the path names the stream, and the\nimmutable fields (storage, retention) must restate what they are.",
         "tags": [
@@ -249,9 +249,9 @@
         "x-tool": true
       }
     },
-    "/v1/mq/streams/{name}/messages": {
+    "/v1/mq/stream/{name}/message": {
       "get": {
-        "operationId": "get_mq_streams_by_name_messages",
+        "operationId": "get_mq_stream_by_name_message",
         "summary": "Reads stored messages without a consumer: by sequence, by newest on a subject, or walking a subject forward from a sequence.",
         "description": "Reads stored messages without a consumer: by sequence, by newest on a\nsubject, or walking a subject forward from a sequence.",
         "tags": [
@@ -320,9 +320,9 @@
         "x-tool": true
       }
     },
-    "/v1/mq/streams/{name}/messages/{seq}": {
+    "/v1/mq/stream/{name}/message/{seq}": {
       "delete": {
-        "operationId": "delete_mq_streams_by_name_messages_by_seq",
+        "operationId": "delete_mq_stream_by_name_message_by_seq",
         "summary": "Erases one message by sequence; the sequence gap remains.",
         "description": "Erases one message by sequence; the sequence gap remains.",
         "tags": [
@@ -357,9 +357,9 @@
         "x-tool": true
       }
     },
-    "/v1/mq/streams/{name}/purge": {
+    "/v1/mq/stream/{name}/purge": {
       "post": {
-        "operationId": "post_mq_streams_by_name_purge",
+        "operationId": "post_mq_stream_by_name_purge",
         "summary": "Removes messages from a stream, leaving its consumers in place.",
         "description": "Removes messages from a stream, leaving its consumers in place.",
         "tags": [
@@ -402,9 +402,9 @@
         "x-tool": true
       }
     },
-    "/v1/mq/streams/{stream}/consumers": {
+    "/v1/mq/stream/{stream}/consumer": {
       "get": {
-        "operationId": "get_mq_streams_by_stream_consumers",
+        "operationId": "get_mq_stream_by_stream_consumer",
         "summary": "Returns a stream's consumers, name-ordered, with delivery state.",
         "description": "Returns a stream's consumers, name-ordered, with delivery state.",
         "tags": [
@@ -455,7 +455,7 @@
         "x-tool": true
       },
       "post": {
-        "operationId": "post_mq_streams_by_stream_consumers",
+        "operationId": "post_mq_stream_by_stream_consumer",
         "summary": "Creates a durable pull consumer on a stream and returns it.",
         "description": "Creates a durable pull consumer on a stream and returns it.",
         "tags": [
@@ -498,9 +498,9 @@
         "x-tool": true
       }
     },
-    "/v1/mq/streams/{stream}/consumers/{name}": {
+    "/v1/mq/stream/{stream}/consumer/{name}": {
       "delete": {
-        "operationId": "delete_mq_streams_by_stream_consumers_by_name",
+        "operationId": "delete_mq_stream_by_stream_consumer_by_name",
         "summary": "Removes a consumer and its delivery state; unacknowledged messages stay in the stream.",
         "description": "Removes a consumer and its delivery state; unacknowledged messages\nstay in the stream.",
         "tags": [
@@ -535,7 +535,7 @@
         "x-tool": true
       },
       "get": {
-        "operationId": "get_mq_streams_by_stream_consumers_by_name",
+        "operationId": "get_mq_stream_by_stream_consumer_by_name",
         "summary": "Returns one consumer's configuration and delivery state.",
         "description": "Returns one consumer's configuration and delivery state.",
         "tags": [
@@ -577,9 +577,9 @@
         "x-tool": true
       }
     },
-    "/v1/mq/streams/{stream}/consumers/{name}/next": {
+    "/v1/mq/stream/{stream}/consumer/{name}/next": {
       "post": {
-        "operationId": "post_mq_streams_by_stream_consumers_by_name_next",
+        "operationId": "post_mq_stream_by_stream_consumer_by_name_next",
         "summary": "Pulls the consumer's next batch.",
         "description": "Pulls the consumer's next batch. Delivered messages are acknowledged on\ndelivery — the broker will not redeliver what this call returns; an empty\nwait answers 408.",
         "tags": [

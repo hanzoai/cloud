@@ -3,12 +3,26 @@ components:
     Account:
       properties:
         name:
+          description: Name is the account's human name, for a statement's line label.
           type: string
         number:
+          description: |-
+            Number is the posting key every voucher leg, rule and report references —
+            stable, and the reason the chart is a fixed value rather than a table anybody
+            can edit. It looks numeric and is a string: "1000" sorts and compares as text.
           type: string
         party:
+          description: |-
+            Party marks the account as carrying a SUBLEDGER — receivable is money owed to
+            us, payable money we owe — so a leg posted here also writes a payment-ledger
+            row against a counterparty. Absent means no subledger: a bank, wallet, revenue
+            or cost account tracks no counterparty at all.
           type: string
         type:
+          description: |-
+            Type is the account's fundamental class, which is also its NORMAL balance
+            side: asset and expense are debit-normal, liability, income and equity
+            credit-normal.
           type: string
       type: object
     Accounts:
@@ -70,20 +84,41 @@ components:
     ActionRecord:
       properties:
         args:
+          description: |-
+            Args is the JSON the tool was called with, recorded as TEXT exactly as sent —
+            including whatever the AI drafted into it — so a run can be read back and
+            reproduced. It is a string, not an object.
           type: string
         createdAt:
+          description: |-
+            CreatedAt is when the run was recorded, as Unix seconds. The ledger is read
+            newest-first on this column.
           type: integer
         err:
+          description: Err is why the run failed, when it did. Empty on a successful
+            run.
           type: string
         id:
+          description: |-
+            ID identifies this one execution. The ledger is append-only, so an id is
+            never reused and never updated.
           type: string
         ok:
+          description: |-
+            OK is whether the tool ran to completion. It is the ledger's own verdict, not
+            the tool's opinion of the outcome — a tool that succeeded at reporting bad
+            news is ok.
           type: boolean
         result:
+          description: |-
+            Result is the tool's own answer, likewise recorded as JSON text. Present on a
+            failed run too, where the tool answered but the answer was a refusal.
           type: string
         stepId:
+          description: StepID is the checklist step the Business AI was acting on.
           type: string
         tool:
+          description: Tool is the MCP tool that was dispatched, by name.
           type: string
       type: object
     ActivityPoint:
@@ -576,52 +611,98 @@ components:
     BalanceLine:
       properties:
         account:
+          description: |-
+            Account is the chart-of-accounts number this line reports on. ABSENT marks a
+            DERIVED line that no account holds — retained earnings is the one such line,
+            computed from cumulative income minus expense.
           type: string
         amount:
-          description: cents, display sign
+          description: |-
+            Amount is the balance as of the statement date, in whole cents, in its NATURAL
+            sign: positive when the account behaved normally, on all three sides. Assets
+            are debit-normal and shown as stored; liabilities and equity are credit-normal
+            and flipped once here for display. A negative asset is a real overdraft, not a
+            sign convention.
           type: integer
         name:
+          description: Name is the account's human name, or the derived line's own
+            name.
           type: string
         type:
+          description: |-
+            Type is the account's fundamental class. Absent on a derived line, which
+            belongs to no account and therefore has none.
           type: string
       type: object
     BalanceSheet:
       properties:
         asOf:
+          description: |-
+            AsOf is the posting time the statement is taken at, inclusive. A balance sheet
+            is a snapshot, not a window, so there is no From. Absent means as of now.
           type: string
         assets:
+          description: |-
+            Assets are what the org OWNS at that instant, one line per account that has a
+            balance. Cash, receivables, funds captured but not yet settled.
           items:
             $ref: '#/components/schemas/BalanceLine'
           type: array
         balanced:
-          description: TotalAssets == TotalLiabilities + TotalEquity
+          description: |-
+            Balanced is whether assets equal liabilities plus equity — the accounting
+            equation, computed from the totals above rather than assumed. False means the
+            ledger is broken, not that the statement is.
           type: boolean
         equity:
+          description: |-
+            Equity is what is left over for the owners. It carries a DERIVED retained
+            earnings line holding cumulative income minus expense, because this ledger has
+            no period close that sweeps the P&L into equity — without that line the
+            equation would not close.
           items:
             $ref: '#/components/schemas/BalanceLine'
           type: array
         liabilities:
+          description: |-
+            Liabilities are what the org OWES — including customers' unspent prepaid
+            credit, which is their money until it is consumed and so is carried here
+            rather than counted as revenue.
           items:
             $ref: '#/components/schemas/BalanceLine'
           type: array
         totalAssets:
+          description: TotalAssets is the sum of the asset lines, in cents.
           type: integer
         totalEquity:
+          description: TotalEquity is the sum of the equity lines including retained
+            earnings, in cents.
           type: integer
         totalLiabilities:
+          description: TotalLiabilities is the sum of the liability lines, in cents.
           type: integer
       type: object
     BankQuestion:
       properties:
         connector:
+          description: |-
+            Connector names the feed the unplaceable line arrived on. With externalId it
+            identifies both the question and the bank line it is about, so re-syncing the
+            same deposit never asks twice.
           type: string
         createdAt:
+          description: CreatedAt is when the question was raised.
           type: string
         externalId:
+          description: ExternalID is the bank's own id for the line in question.
           type: string
         prompt:
+          description: |-
+            Prompt is the question put to the founder in plain language — what this money
+            was, since the books cannot place it on their own.
           type: string
         status:
+          description: Status is whether the question is still open or has been answered.
           type: string
       type: object
     BankTally:
@@ -648,24 +729,54 @@ components:
     BankTxnRow:
       properties:
         amountCents:
+          description: |-
+            AmountCents is the size of the movement in whole cents, always POSITIVE —
+            direction carries the sign, so a caller must read both to know which way money
+            went.
           type: integer
         connector:
+          description: |-
+            Connector names the feed this row arrived on — which bank or processor
+            connection it was synced from. With externalId it is the row's identity, so
+            re-syncing the same statement never books a second copy.
           type: string
         currency:
+          description: Currency is the ISO code the bank reported the line in.
           type: string
         description:
+          description: Description is the statement memo as the bank wrote it.
           type: string
         direction:
+          description: |-
+            Direction is which way the money moved: an inflow into the account or an
+            outflow from it, from the org's point of view.
           type: string
         externalId:
+          description: |-
+            ExternalID is the bank's OWN id for the line, carried verbatim. It is unique
+            only within its connector.
           type: string
         matchedVoucher:
+          description: |-
+            MatchedVoucher names the ledger voucher this line was reconciled against —
+            the bill it paid, or the settlement it cleared. Absent when nothing matched,
+            which for an inflow is what raises a question.
           type: string
         merchant:
+          description: Merchant is the counterparty the feed identified, where it
+            did.
           type: string
         postedAt:
+          description: PostedAt is the bank's posting date for the line, not when
+            we synced it.
           type: string
         status:
+          description: |-
+            Status is where the line got to: posted (an outflow booked straight to an
+            expense), settled (an outflow that paid down a scanned bill), reconciled (an
+            inflow that cleared a pending settlement), transfer (a move between the org's
+            own accounts, recorded but with no effect on the books), or unmatched (an
+            inflow nobody could place, which is waiting on a human answer).
           type: string
       type: object
     Benchmark:
@@ -706,46 +817,78 @@ components:
     Blog:
       properties:
         caseStudy:
+          description: CaseStudy is one worked instance — somebody who ran it, and
+            what happened.
           type: string
         how:
+          description: 'How is the run book: the steps to execute the tactic.'
           type: string
         slug:
+          description: Slug is the post's address — the last path segment it is published
+            at.
           type: string
         title:
+          description: Title is the post's headline.
           type: string
         why:
+          description: |-
+            Why is the mechanism: the reason the tactic works, stated as a principle
+            rather than as instructions.
           type: string
       type: object
     Blueprint:
       properties:
         brand:
+          description: |-
+            Brand is the white-label key this playbook serves. Empty is the shared
+            default every unbranded deployment falls back to.
           type: string
         enabled:
+          description: |-
+            Enabled is the whole-playbook lever. Absent reads as ON; an explicit false
+            makes resolution skip this playbook entirely and fall through to the next
+            tier, rather than serving an empty journey.
           type: boolean
         principles:
-          description: the 64-principle spine (Zen of Hanzo archetypes)
+          description: |-
+            Principles are the fixed 64-archetype spine a tactic files under. It is
+            authored data an operator organises the corpus by; nothing in the checklist
+            engine reads it.
           items:
             $ref: '#/components/schemas/Principle'
           type: array
         sections:
+          description: Sections are the journey's ordered phases.
           items:
             $ref: '#/components/schemas/Section'
           type: array
         steps:
+          description: |-
+            Steps are every checklist item, disabled ones included — this is the authored
+            document, not the projection an org runs.
           items:
             $ref: '#/components/schemas/JourneyStep'
           type: array
         strategies:
+          description: Strategies are the tactics corpus the recommendation reads
+            narrow.
           items:
             $ref: '#/components/schemas/Strategy'
           type: array
         templates:
+          description: Templates are the reusable prompts and snippets steps reference
+            by id.
           items:
             $ref: '#/components/schemas/Page'
           type: array
         title:
+          description: Title is the playbook's name as a person reads it.
           type: string
         version:
+          description: |-
+            Version is the playbook's own name for this edition of its content, chosen by
+            whoever authored it. It travels onto every journey projected from it. The
+            store's numeric revision is a separate value and lives beside it.
           type: string
       type: object
     Board:
@@ -2154,12 +2297,20 @@ components:
     Curriculum:
       properties:
         steps:
+          description: |-
+            Steps are the enabled steps in authoring order. Order is the tiebreak the
+            next-step logic walks, so it is part of the contract rather than cosmetic.
           items:
             $ref: '#/components/schemas/JourneyStep'
           type: array
         title:
+          description: Title is the playbook's name as it heads the checklist.
           type: string
         version:
+          description: |-
+            Version identifies the authored playbook this journey was projected from, so
+            two orgs on different playbooks can be told apart. It is the blueprint's own
+            `version` string, not the store's numeric revision.
           type: string
       type: object
     D1Query:
@@ -2732,24 +2883,42 @@ components:
     Extracted:
       properties:
         category:
-          description: proposed slug (software|cloud|office|…)
+          description: |-
+            Category is the expense bucket the SCANNER guessed, as a slug — a hint only.
+            Vendor rules override it whenever they know better, so this is the model's
+            reading and not the account the entry will land on.
           type: string
         currency:
+          description: Currency is the ISO code the document is denominated in.
           type: string
         issuedAt:
-          description: YYYY-MM-DD
+          description: |-
+            IssuedAt is the document's OWN date as YYYY-MM-DD — when the bill was issued,
+            which is not when it was uploaded or when it will post.
           type: string
         lineItems:
+          description: |-
+            LineItems are the individual lines read off the document, where it had any.
+            They need not sum to totalCents: a document may carry lines the scanner could
+            not read, and the total is taken from the total.
           items:
             $ref: '#/components/schemas/LineItem'
           type: array
         merchant:
+          description: Merchant is the supplier as printed on the document.
           type: string
         note:
+          description: |-
+            Note is anything else worth carrying from the document that has no field of
+            its own.
           type: string
         taxCents:
+          description: |-
+            TaxCents is how much of that total is tax, in cents. It is part of totalCents,
+            not additional to it.
           type: integer
         totalCents:
+          description: TotalCents is the document total in whole cents, tax INCLUDED.
           type: integer
       type: object
     Field:
@@ -2830,22 +2999,38 @@ components:
       properties:
         balanceSheet:
           $ref: '#/components/schemas/BalanceSheet'
+          description: BalanceSheet is struck as of the period END, not the start.
         from:
+          description: From opens the reporting period. Absent means from the beginning
+            of the ledger.
           type: string
         generatedAt:
+          description: |-
+            GeneratedAt is when the bundle was assembled — the moment the statements were
+            struck, which is what makes two exports of the same period comparable.
           type: string
         gl:
+          description: |-
+            GL is the newest slice of ledger detail, as the audit trail behind the
+            statements. It is CAPPED, so on a busy ledger it is a sample rather than the
+            full support for the figures above.
           items:
             $ref: '#/components/schemas/GLRow'
           type: array
         org:
+          description: |-
+            Org is the organisation whose books these are — the validated caller's own,
+            stamped so a downloaded bundle still says whose it is.
           type: string
         pnl:
           $ref: '#/components/schemas/PnL'
+          description: PnL is the income statement for the period, on an accrual basis.
         to:
+          description: To closes it. Absent means up to now.
           type: string
         trialBalance:
           $ref: '#/components/schemas/TrialBalance'
+          description: TrialBalance is the proof the ledger balances over the period.
       type: object
     Flow:
       properties:
@@ -3078,39 +3263,85 @@ components:
     Funnel:
       properties:
         available:
+          description: |-
+            Available separates "this org has no traffic" from "we could not ask". False
+            means the warehouse was unreachable or the org has emitted nothing at all, and
+            every count below is then a placeholder zero rather than a measurement — a
+            caller must read this before reading any of them.
           type: boolean
         orders:
+          description: Orders counts completed orders in the window — purchases, not
+            carts started.
           type: integer
         pageviews:
+          description: |-
+            Pageviews counts page events in the window, one per view rather than per
+            person, so a single visitor reading ten pages counts ten.
           type: integer
         revenue:
+          description: |-
+            Revenue is the sum of the amounts those orders reported, in whatever currency
+            the beacon stamped on them (major units, e.g. 49.5 for $49.50) — NOT cents,
+            and not converted to a single currency. Contrast revenueCents on the profile,
+            which is the money of record.
           type: number
         signups:
+          description: |-
+            Signups counts completed signups in the window, the step where an anonymous
+            visitor becomes somebody with an account.
           type: integer
         visitors:
+          description: |-
+            Visitors is the number of DISTINCT people seen in the window, counted by the
+            beacon's distinct id — so it is unique visitors, not sessions and not views.
           type: integer
         windowDays:
+          description: |-
+            WindowDays is the length of the trailing window every count covers, so a
+            reader knows whether 40 signups is a month or a day.
           type: integer
       type: object
     GLRow:
       properties:
         account:
+          description: Account is the chart-of-accounts number this leg posts to.
           type: string
         against:
+          description: |-
+            Against names the OTHER accounts in the same voucher — the contra side of this
+            leg — so a single row reads as an entry rather than as half of one.
           type: string
         credit:
+          description: Credit is the amount credited to that account, in whole cents.
           type: integer
         debit:
+          description: |-
+            Debit is the amount debited to that account, in whole cents. Exactly one of
+            debit and credit is non-zero on a leg; a negative amount is never used to mean
+            the other side.
           type: integer
         id:
+          description: |-
+            ID is the entry's position in the ledger. The ledger is append-only, so ids
+            ascend with posting order and a higher id is a later entry.
           type: integer
         postingAt:
+          description: |-
+            PostingAt is the accounting date this entry belongs to — what the reports
+            window on, which need not be when the row was written.
           type: string
         remarks:
+          description: Remarks is the memo carried onto the entry, for a human reading
+            the ledger.
           type: string
         sourceId:
+          description: SourceID identifies that originating record within its kind.
           type: string
         sourceKind:
+          description: |-
+            SourceKind is what caused the posting: a bank line, a scanned document, a
+            commerce sale. With sourceId it traces the entry back to the thing that
+            produced it.
           type: string
       type: object
     GPU:
@@ -3368,21 +3599,43 @@ components:
     InboxItem:
       properties:
         category:
+          description: |-
+            Category is the expense account the scanner proposed, as a chart number — a
+            PROPOSAL, not a posting: nothing is booked until it is accepted.
           type: string
         confidence:
+          description: |-
+            Confidence is how sure the scanner is of that reading, and is the signal for
+            whether a person needs to check it before it is booked.
           type: string
         createdAt:
+          description: CreatedAt is when the document was uploaded.
           type: string
         extracted:
           $ref: '#/components/schemas/Extracted'
+          description: |-
+            Extracted is what the scanner read off the document. Absent until it has been
+            scanned, so its absence is "not read yet", never "nothing on it".
         filename:
+          description: |-
+            Filename is the name the document was uploaded under, for a person to
+            recognise it by. It is not part of the item's identity.
           type: string
         id:
-          description: the file hash (== a scan's ScanID)
+          description: |-
+            ID is the CONTENT HASH of the uploaded bytes, which is what makes the queue
+            idempotent: re-uploading the same document returns this item rather than
+            adding a second one. It is also the id the scan of this document carries.
           type: string
         status:
+          description: |-
+            Status is where the document is in the queue — unsorted until the scanner has
+            read it, and thereafter whether it is waiting on a person or has been booked.
           type: string
         vendor:
+          description: |-
+            Vendor is the supplier the scanner identified, surfaced beside the item so a
+            queue renders without opening each document.
           type: string
       type: object
     IngestRequest:
@@ -3479,6 +3732,9 @@ components:
         args:
           additionalProperties:
             type: object
+          description: |-
+            Args are the tool's default arguments, merged under whatever the caller
+            passes at run time, so a step ships with the arguments that make it work.
           type: object
         deps:
           description: |-
@@ -3489,11 +3745,18 @@ components:
             type: string
           type: array
         detail:
-          description: the prose/juncture — what the Guide asks/explains here
+          description: Detail is the juncture — what the Guide explains, or asks for,
+            at this step.
           type: string
         draft:
+          description: |-
+            Draft, when set, is the prompt the embedded AI answers first; its output is
+            folded into one of Args before the tool runs, so the model writes the
+            content and the tool only delivers it.
           type: string
         draftInto:
+          description: DraftInto names the argument the drafted text lands in. Empty
+            means "brief".
           type: string
         enabled:
           description: |-
@@ -3503,9 +3766,15 @@ components:
             on() in blueprint.go and the Blueprint.Curriculum() projection.
           type: boolean
         id:
+          description: |-
+            ID is the stable slug the whole plane addresses this step by — the value in
+            `deps`, in `next`, in the progress rows, and in the URL of every step route.
+            Renaming it orphans an org's recorded progress for this step.
           type: string
         section:
-          description: the phase (section id) this step groups under
+          description: |-
+            Section is the id of the phase this step groups under. A disabled section
+            takes its steps out of the journey with it.
           type: string
         signal:
           description: |-
@@ -3513,12 +3782,13 @@ components:
             reports the org's real state present, the step auto-marks done.
           type: string
         title:
+          description: Title is the one-line quest as a person reads it in the checklist.
           type: string
         tool:
           description: |-
-            Tool, when set, is the MCP tool the Business AI runs for "do it for me". Args
-            are its default arguments; Draft is an optional AI prompt whose output fills the
-            DraftInto arg (default "brief").
+            Tool, when set, names the MCP tool the Business AI runs for "do it for me".
+            A step with no tool can only be completed by a person; it is the field the
+            `automatable` flag on every projection of this step is derived from.
           type: string
       type: object
     KindTotal:
@@ -3878,8 +4148,13 @@ components:
     LineItem:
       properties:
         amountCents:
+          description: |-
+            AmountCents is that line's amount in whole cents. The scanner is instructed to
+            return integer cents rather than a decimal, so no float rounding can enter the
+            ledger through here.
           type: integer
         description:
+          description: Description is the line as it appears on the document.
           type: string
       type: object
     Listing:
@@ -4574,12 +4849,21 @@ components:
     Page:
       properties:
         body:
+          description: |-
+            Body is the reusable prompt or snippet itself. It may carry {placeholder}
+            tokens for the client-specific bits — {client_name}, {domain}, {product} —
+            which are substituted where the template is used, not here.
           type: string
         enabled:
+          description: |-
+            Enabled is the admin lever. Absent reads as ON; an explicit false withdraws
+            the template from org-facing reads.
           type: boolean
         id:
+          description: ID is the slug a step references to pull this template in.
           type: string
         title:
+          description: Title names the template in the authoring plane and in a picker.
           type: string
       type: object
     PagesBuildConfig:
@@ -4765,35 +5049,63 @@ components:
     PnL:
       properties:
         expense:
+          description: Expense is the cost lines that moved in the period, one per
+            account.
           items:
             $ref: '#/components/schemas/PnLLine'
           type: array
         from:
+          description: |-
+            From opens the period and is EXCLUSIVE — movement strictly after it, matching
+            the trial balance's opening boundary so the two reports agree on what belongs
+            to a period. Absent means from the beginning of the ledger.
           type: string
         income:
+          description: |-
+            Income is the revenue lines that moved in the period, one per account.
+            Accounts that did not move are omitted rather than listed at zero.
           items:
             $ref: '#/components/schemas/PnLLine'
           type: array
         netIncome:
-          description: TotalIncome − TotalExpense
+          description: NetIncome is totalIncome minus totalExpense, in cents. Negative
+            is a loss.
           type: integer
         to:
+          description: To closes the period and is inclusive. Absent means up to now.
           type: string
         totalExpense:
+          description: |-
+            TotalExpense is cost MATCHED to that revenue, in cents, including accrued
+            infrastructure that has not been billed yet.
           type: integer
         totalIncome:
+          description: |-
+            TotalIncome is revenue RECOGNIZED in the period, in cents — accrual, not cash,
+            so a prepaid top-up is not in it until the credit is consumed.
           type: integer
       type: object
     PnLLine:
       properties:
         account:
+          description: Account is the chart-of-accounts number this line reports on.
           type: string
         amount:
-          description: cents, display sign (income & expense both positive when normal)
+          description: |-
+            Amount is the account's movement over the period in whole cents, in its
+            NATURAL sign: positive when the account behaved normally, for income and
+            expense alike. Income is credit-normal so its stored net is flipped once here
+            for display; the ledger underneath is never sign-flipped. A negative amount
+            therefore means the account ran backwards — a refunded sale, a reversed cost.
           type: integer
         name:
+          description: Name is that account's human name from the fixed chart.
           type: string
         type:
+          description: |-
+            Type is the account's fundamental class, which on this statement is always
+            income or expense — it tells a reader which half of the statement the line
+            came from without re-deriving it from the array it arrived in.
           type: string
       type: object
     Policy:
@@ -5258,25 +5570,43 @@ components:
     Question:
       properties:
         account:
+          description: Account is the chart number the questioned entry posted to,
+            where one applies.
           type: string
         amount:
-          description: formatted figure ($…)
+          description: |-
+            Amount is the figure that makes the question concrete, already FORMATTED for
+            display with its currency symbol — a string, not cents, and not for arithmetic.
           type: string
         id:
-          description: the source transaction id it concerns
+          description: |-
+            ID is the source transaction the question is about, so answering it leads
+            straight back to the entry that raised it.
           type: string
         kind:
-          description: outlier|reversal|roundoff|uncosted|overdrawn
+          description: |-
+            Kind is what looked wrong: outlier (a charge far above the usual), reversal (a
+            posting undone), roundoff (a balancing plug big enough to be worth explaining),
+            uncosted (revenue booked with no cost matched to it), or overdrawn (a wallet
+            spent past its balance).
           type: string
         postedAt:
+          description: PostedAt anchors the question in time — when the entry it concerns
+            posted.
           type: string
         text:
-          description: the specific question to ask the founder
+          description: Text is the question itself, written for a founder to answer
+            directly.
           type: string
       type: object
     QuestionsResponse:
       properties:
         questions:
+          description: |-
+            Questions are what the books want explained, SHARPEST FIRST — largest amounts
+            ahead of smaller ones, and capped, so this is the top of the list rather than
+            everything. Empty means the ledger looks clean; the detector is deterministic
+            over what was posted and invents nothing.
           items:
             $ref: '#/components/schemas/Question'
           type: array
@@ -6571,14 +6901,25 @@ components:
     Section:
       properties:
         detail:
+          description: Detail is what this phase of the journey is for, in prose.
           type: string
         enabled:
+          description: |-
+            Enabled is the admin lever. Absent reads as ON, so only an explicit false
+            turns a phase off — and it takes every step filed under it out of the
+            journey, not just the heading.
           type: boolean
         id:
+          description: ID is the slug a step's `section` names to file itself under
+            this phase.
           type: string
         order:
+          description: |-
+            Order places the phase in the journey, ascending. Ties fall back to
+            authoring order, and an omitted order sorts as 0 — ahead of everything.
           type: integer
         title:
+          description: Title is the phase heading a person reads above its steps.
           type: string
       type: object
     SelfRank:
@@ -7116,30 +7457,51 @@ components:
     Strategy:
       properties:
         action:
+          description: 'Action is the tactic itself: the thing to go and do, stated
+            imperatively.'
           type: string
         blog:
           $ref: '#/components/schemas/Blog'
-          description: long-form explainer (nil for un-blogged tactics)
+          description: Blog is the tactic's long-form explainer; absent for tactics
+            that have none.
         category:
+          description: |-
+            Category is the growth discipline the tactic belongs to — the axis
+            `?category=` narrows the corpus on, and one of the facets a caller browses by.
           type: string
         enabled:
+          description: |-
+            Enabled is the admin lever. Absent reads as ON; an explicit false drops the
+            tactic from every org-facing corpus read while leaving it in the document.
           type: boolean
         era:
-          description: modern | heritage
+          description: Era separates an AI-era tactic (`modern`) from a classical
+            one (`heritage`).
           type: string
         id:
+          description: ID is the tactic's stable slug, unique across the corpus.
           type: string
         principle:
-          description: the spine slug this tactic files under
+          description: Principle is the spine slug this tactic files under (a Principle.Slug).
           type: string
         source:
-          description: provenance / attribution
+          description: Source is where the tactic came from — the attribution a reader
+            is owed.
           type: string
         tags:
+          description: |-
+            Tags are PRECONDITIONS, not labels — every one must be satisfied by the org's
+            observed profile before the tactic surfaces, so an untagged tactic is
+            universally applicable. Two vocabularies: `stage:<research|formed|launched|
+            activated|scaling>` reads the org's growth stage, `has:<capability>` reads an
+            observed signal.
           items:
             type: string
           type: array
         workload:
+          description: |-
+            Workload is how much effort running the tactic costs, so a corpus can be
+            narrowed to what an org has the hands for right now.
           type: string
       type: object
     Stream:
@@ -7715,62 +8077,128 @@ components:
     TrialBalance:
       properties:
         balanced:
+          description: |-
+            Balanced is the proof this report exists to give: whether total debits equal
+            total credits. It is computed from the rows above, never assumed, and false
+            means the ledger itself is broken rather than that the report is wrong.
           type: boolean
         from:
+          description: |-
+            From is the posting time the window opens at, as it was asked for. Absent
+            means the report runs from the beginning of the ledger.
           type: string
         rows:
+          description: |-
+            Rows are the accounts that MOVED in one of the windows. An account that never
+            moved is omitted rather than listed at zero, so this is shorter than the chart.
           items:
             $ref: '#/components/schemas/TrialBalanceRow'
           type: array
         to:
+          description: |-
+            To is the posting time the window closes at, inclusive. Absent means "up to
+            now" — every posting the ledger holds.
           type: string
         totalCredit:
+          description: TotalCredit is the sum of every row's closing credit column,
+            in cents.
           type: integer
         totalDebit:
+          description: TotalDebit is the sum of every row's CLOSING debit column,
+            in cents.
           type: integer
       type: object
     TrialBalanceRow:
       properties:
         account:
+          description: |-
+            Account is the chart-of-accounts NUMBER this line reports on ("1000", "4000")
+            — the stable posting key, not a display label.
           type: string
         closingCredit:
+          description: ClosingCredit is that closing balance in cents when it is a
+            credit balance.
           type: integer
         closingDebit:
+          description: |-
+            ClosingDebit is the balance at the end of the window, in cents, when it is a
+            debit balance. This is the column the report's totals are summed from.
           type: integer
         credit:
-          description: period movement
+          description: Credit is the same window movement in cents when it was net
+            credit.
           type: integer
         debit:
-          description: period movement
+          description: |-
+            Debit is the account's MOVEMENT within the window — closing minus opening, not
+            the closing balance — in cents, when that movement was net debit. Zero when the
+            account moved net credit.
           type: integer
         name:
+          description: Name is that account's human name from the fixed chart.
           type: string
         openingCredit:
+          description: |-
+            OpeningCredit is the same opening balance in cents when it fell on the credit
+            side. Zero when the balance was a debit one.
           type: integer
         openingDebit:
+          description: |-
+            OpeningDebit is the account's balance before the window began, in whole cents,
+            when that balance was on the debit side. Zero when the balance was a credit
+            one — the pair is exclusive, never two halves of one number.
           type: integer
         type:
+          description: |-
+            Type is the account's fundamental class — asset, liability, income, expense or
+            equity — which is also its normal balance side. It is carried for presentation
+            and does NOT decide which column an amount lands in: placement follows the
+            sign of the real net, so a contra balance shows up as one.
           type: string
       type: object
     Txn:
       properties:
         amountCents:
+          description: |-
+            AmountCents is the voucher's total, in whole cents — its total debit, which
+            equals its total credit because every voucher balances. It is the size of the
+            entry and carries no direction; the category says which way it went.
           type: integer
         category:
-          description: COA account number of the P&L line
+          description: |-
+            Category is the chart-of-accounts NUMBER of the income or expense account this
+            voucher touched — where it lands on the P&L, not a free-text label.
           type: string
         categoryName:
+          description: |-
+            CategoryName is that account's human name, so a caller need not carry the
+            chart to render the row.
           type: string
         date:
+          description: |-
+            Date is when the voucher POSTED — the accounting date the reports window on,
+            which for an imported bank row is the bank's date and not the day it landed
+            here.
           type: string
         description:
+          description: 'Description is the line a person reads: the memo carried in
+            from the source.'
           type: string
         source:
-          description: 'source_kind: bank_txn | scan | commerce_txn'
+          description: |-
+            Source is where the entry came from: bank_txn for an imported statement line,
+            scan for a receipt or bill read by the scanner, commerce_txn for a sale
+            booked by the store.
           type: string
         vendor:
+          description: |-
+            Vendor is the counterparty, resolved from whatever the source knew — a bank
+            row's merchant, a scanned bill's supplier. Absent when the source named none.
           type: string
         voucherId:
+          description: |-
+            VoucherID identifies the underlying double-entry voucher, so a caller can open
+            the full set of legs behind this single register line.
           type: integer
       type: object
     UTM:
@@ -7879,10 +8307,21 @@ components:
     VersionMeta:
       properties:
         brand:
+          description: |-
+            Brand is the white-label key this revision was authored under; empty is the
+            shared base playbook. Revisions of two brands never share a number line.
           type: string
         updatedAt:
+          description: |-
+            UpdatedAt is when this revision was written, as Unix seconds — the "who
+            changed the playbook, and when" half of the audit trail.
           type: integer
         version:
+          description: |-
+            Version is the store's own revision counter for that brand, starting at 1 for
+            the seeded playbook and incrementing on every edit. Nothing is overwritten, so
+            the highest number is the live one and every lower number is still readable.
+            It is not the playbook's authored `version` string.
           type: integer
       type: object
     Voucher:
@@ -9735,14 +10174,25 @@ components:
     blueprintCounts:
       properties:
         principles:
+          description: |-
+            Principles is how many spine archetypes the playbook carries (64 in the
+            shipped corpus).
           type: integer
         sections:
+          description: Sections is how many phases the journey has.
           type: integer
         steps:
+          description: |-
+            Steps is how many checklist items the playbook holds, DISABLED ONES INCLUDED
+            — this counts the authored document, not the journey an org runs, so it is
+            normally larger than the `total` on a progress view.
           type: integer
         strategies:
+          description: Strategies is how many tactics the corpus holds, again counting
+            disabled ones.
           type: integer
         templates:
+          description: Templates is how many reusable prompts the playbook carries.
           type: integer
       type: object
     blueprintHealth:
@@ -33289,18 +33739,32 @@ components:
     overviewView:
       properties:
         custom:
+          description: |-
+            Custom is true when the org replaced the shared playbook with one of its own
+            — the difference between "everyone's checklist" and "the one you authored".
           type: boolean
         funnel:
           $ref: '#/components/schemas/Funnel'
+          description: |-
+            Funnel is the org's analytics lens, present only where the read asked for it
+            — absent means it was not requested, never that the org has no traffic.
         progress:
           $ref: '#/components/schemas/progressView'
+          description: Progress is how far through the journey the org is.
         steps:
+          description: |-
+            Steps are every enabled step with the org's own state folded in, in
+            authoring order.
           items:
             $ref: '#/components/schemas/stepView'
           type: array
         title:
+          description: Title is the playbook's name as it heads the checklist.
           type: string
         version:
+          description: |-
+            Version identifies the playbook this journey came from, so a caller can tell
+            that the checklist itself changed under them.
           type: string
       type: object
     pairing:
@@ -34192,33 +34656,82 @@ components:
       properties:
         funnel:
           $ref: '#/components/schemas/Funnel'
+          description: |-
+            Funnel is what the org's analytics observed over the trailing window. Read
+            its `available` first: an org with no analytics reports zeros here, and zero
+            traffic and no measurement are different facts.
         launchProgress:
           $ref: '#/components/schemas/progressView'
+          description: |-
+            LaunchProgress is the org's own position in the launch checklist, folded in
+            so a profile carries both what the org has BUILT and what it has DONE.
         records:
+          description: |-
+            Records is how many business records the org holds — the volume that tells a
+            real book of customers from an empty account. It feeds the `customers`
+            signal, which crosses at a threshold rather than at one row.
           type: integer
         revenueCents:
+          description: |-
+            RevenueCents is the org's money OF RECORD — what its books say, in whole
+            cents, never a float and never a display string. This is the number the
+            scaling stage is decided on; funnel.revenue is the beacon's separate,
+            unreconciled view of the same business. Zero when the org has none, and also
+            zero when the books could not be read, which is why the `revenue` signal
+            beside it is the thing to trust.
           type: integer
       type: object
     profileResponse:
       properties:
         keyMetrics:
           $ref: '#/components/schemas/profileMetrics'
+          description: |-
+            KeyMetrics are the org's OWN numbers behind those signals — never another
+            org's, and never a platform aggregate.
         signals:
           additionalProperties:
             type: boolean
+          description: |-
+            Signals is what was observed of the org right now, one boolean per probe.
+            A probe that could not be run reports FALSE, not absent — the shape is stable
+            so a caller never has to tell a missing key from a negative answer, and the
+            cost is that "not observed" and "not there" look alike here. Keys are the
+            probe names, including the `module:<name>` and `connected:<provider>`
+            families.
           type: object
         stage:
+          description: |-
+            Stage is how far the business itself has got — formed, launched, activated or
+            scaling — decided purely from the signals below, and by what the org has
+            ACHIEVED rather than what it has configured. It reads the STRONGEST evidence
+            present, so money of record makes an org scaling even if an earlier rung's
+            signal was never observed. It is unrelated to checklist progress.
           type: string
       type: object
     progressView:
       properties:
         done:
+          description: |-
+            Done counts steps that are FINISHED — done and skipped alike, since a step
+            the org deliberately passed over is not still owed. It therefore rises when
+            somebody skips, which is the intended reading of a checklist.
           type: integer
         next:
+          description: |-
+            Next is the id of the step to do next: the first available, unfinished step
+            in authoring order. Empty when the journey is complete, and also empty when
+            every remaining step is blocked by a dependency.
           type: string
         percent:
+          description: |-
+            Percent is done/total as a whole number 0-100, rounded, so a caller renders
+            a bar without recomputing it. Total zero reads as 0.
           type: integer
         total:
+          description: |-
+            Total is how many steps this org's journey holds — the ENABLED steps of the
+            playbook, so it shrinks when an operator disables one and does not match the
+            authored step count.
           type: integer
       type: object
     projectView:
@@ -34271,29 +34784,44 @@ components:
             type: string
           type: array
         org:
-          description: Org and Slug identify the site the hosts were bound to.
+          description: Org is the organisation that owns the site.
           type: string
         slug:
+          description: Slug is the site the hosts were bound to.
           type: string
       type: object
     projectsBuildSite:
       properties:
         brief:
+          description: |-
+            Brief is what the site should be, in plain language. It is the whole input the
+            model gets and it is size-bounded.
           type: string
         model:
+          description: |-
+            Model names which model writes the site. Absent takes the deployment's
+            default — this route spends inference on the caller's org either way.
           type: string
         name:
+          description: Name is the site's display name. Taken from what the model
+            writes when omitted.
           type: string
         slug:
+          description: |-
+            Slug is the handle and public host label to publish under. Derived from the
+            name, or from the brief, when omitted.
           type: string
       type: object
     projectsComplete:
       properties:
         bytes:
+          description: Bytes is their total size in bytes.
           type: integer
         commit:
+          description: Commit is the revision that was built, recorded on the deployment.
           type: string
         files:
+          description: Files is how many objects CI published.
           type: integer
         id:
           description: ID is the queued deployment to complete, from the path.
@@ -34309,14 +34837,22 @@ components:
             type: string
           type: array
         liveUrl:
+          description: |-
+            LiveURL is a HINT at the address the site should serve at. The public host is
+            claimed by cloud first, so this can refine the URL a deployment reports but
+            can never assert a subdomain another tenant holds.
           type: string
         message:
+          description: Message is what happened, in words — on an error completion,
+            why it failed.
           type: string
         slug:
           description: Slug is the project the deployment belongs to, from the path.
           type: string
         status:
-          description: live | error
+          description: |-
+            Status is how the build ended: `live` if it succeeded, `error` if it did not.
+            Nothing else is accepted.
           type: string
       type: object
     projectsCreate:
@@ -34328,14 +34864,27 @@ components:
             distinguishable from "false" — the only way to turn the default off.
           type: boolean
         description:
+          description: |-
+            Description is the one-line summary, copied onto anything forked from this
+            project.
           type: string
         framework:
+          description: |-
+            Framework is a BUILD HINT from a closed set, defaulting to static. It tells CI
+            how to build a linked repo and never gates a deploy.
           type: string
         license:
+          description: License is the terms that upstream work carries.
           type: string
         name:
+          description: |-
+            Name is the project's display name and the only REQUIRED field. When slug is
+            omitted it is also what the slug is derived from.
           type: string
         repo:
+          description: |-
+            Repo links a git source, so pushes to it rebuild this project. Omit it for a
+            project deployed by uploading an artifact.
           properties:
             branch:
               type: string
@@ -34343,12 +34892,17 @@ components:
               type: string
           type: object
         slug:
+          description: |-
+            Slug is the handle everything else addresses this project by: the public host
+            `<slug>.hanzo.app`, the object-store key segment, and the path parameter of
+            every later call. Derived from the name when omitted. It is a hostname label,
+            so it is constrained and reserved labels such as `api` or `admin` are refused.
           type: string
         upstream:
           description: |-
-            Upstream/License credit the third-party work this project was published
-            from. Taken from any caller: disclaiming authorship can only cost the
-            publisher credit, so it needs no gate (see Project.Upstream).
+            Upstream credits the third-party work this project was published from. It is
+            accepted from any caller: giving away credit can only cost the publisher, so
+            it needs no gate.
           type: string
         visibility:
           description: |-
@@ -34361,12 +34915,17 @@ components:
     projectsDeploySite:
       properties:
         files:
+          description: |-
+            Files is the whole site, inline — every file it consists of. It REPLACES what
+            is there rather than merging, so an omitted file is a deleted one.
           items:
             $ref: '#/components/schemas/projectsFile'
           type: array
         name:
+          description: Name is the site's display name.
           type: string
         slug:
+          description: Slug is the handle and public host label to publish under.
           type: string
       type: object
     projectsDeployStart:
@@ -34394,30 +34953,59 @@ components:
     projectsDeployment:
       properties:
         bucket:
+          description: Bucket is the object-store bucket its files were written to.
           type: string
         bytes:
+          description: Bytes is their total size in bytes.
           type: integer
         commit:
+          description: |-
+            Commit is the revision that was built, for a deployment that came from a
+            repository. Absent for an uploaded artifact, which has no revision.
           type: string
         createdAt:
+          description: CreatedAt is when the deployment was queued, as Unix seconds.
           type: integer
         files:
+          description: Files is how many objects the deployment published.
           type: integer
         id:
+          description: |-
+            ID identifies this one deployment attempt, and is what CI quotes back to
+            complete it.
           type: string
         liveUrl:
+          description: LiveURL is where this deployment serves, once it is live.
           type: string
         message:
+          description: |-
+            Message is what happened, in words — the build's own note, or on a failure
+            why it failed.
           type: string
         prefix:
+          description: |-
+            Prefix is the key prefix within that bucket holding EXACTLY this deployment's
+            objects — the unit an upload grant is scoped to, so a grant for one deployment
+            cannot write over another.
           type: string
         projectId:
+          description: ProjectID is the project this deployment belongs to.
           type: string
         source:
+          description: |-
+            Source is what caused the deployment — a git push, an uploaded artifact, a
+            generated site.
           type: string
         status:
+          description: |-
+            Status is where the attempt got to — queued, live, or failed. A deployment
+            that is live is not necessarily the one SERVING: the project's own
+            currentDeploymentId says which is.
           type: string
         updatedAt:
+          description: |-
+            UpdatedAt is when it last changed state, as Unix seconds — so the gap between
+            the two is how long the build took.
           type: integer
         upload:
           $ref: '#/components/schemas/projectsUploadGrant'
@@ -34428,25 +35016,47 @@ components:
             replayed on a later read, so a grant cannot outlive the build it was minted
             for by being fetched again.
         version:
+          description: |-
+            Version counts deployments of this project from 1, so the history reads as an
+            ordered sequence rather than by timestamp. It is per project, not global.
           type: integer
       type: object
     projectsDomain:
       properties:
         createdAt:
+          description: CreatedAt is when the host was claimed, as Unix seconds — not
+            when it went live.
           type: integer
         detail:
+          description: Detail is what is holding the claim up, in words a person can
+            act on.
           type: string
         host:
+          description: Host is the custom hostname claimed for this site.
           type: string
         records:
+          description: |-
+            Records are EXACTLY the DNS records to publish to prove ownership and route
+            the host. Present only while pending, because a live host has already proved
+            it; absent is therefore "nothing left to do", not "we cannot say what to do".
           items:
             $ref: '#/components/schemas/Record'
           type: array
         status:
+          description: |-
+            Status is `live` when the edge answers for this host now, `pending` while the
+            claim is waiting on DNS proof of ownership. A pending host is claimed but
+            serves nothing.
           type: string
         url:
+          description: |-
+            URL is where the host will serve once it is live — present on a pending claim
+            too, so a console can show the destination before it works.
           type: string
         verified:
+          description: |-
+            Verified is the same fact as a boolean, for a caller that only needs the yes
+            or no. It cannot disagree with status.
           type: boolean
       type: object
     projectsDomains:
@@ -34465,9 +35075,10 @@ components:
             type: string
           type: array
         org:
-          description: Org and Slug identify the site the panel belongs to.
+          description: Org is the organisation that owns the site.
           type: string
         slug:
+          description: Slug is the site the panel belongs to.
           type: string
       type: object
     projectsDomainsBind:
@@ -34486,8 +35097,16 @@ components:
     projectsFile:
       properties:
         content:
+          description: |-
+            Content is the file's whole text, inline. There is no upload step and no
+            reference to fetch: a site is sent as its bytes, and each file and the site as
+            a whole are size-bounded.
           type: string
         path:
+          description: |-
+            Path is where the file lands in the site, RELATIVE to its root — so
+            "index.html" is the page served at /. Leading slashes and any attempt to
+            escape the root are refused.
           type: string
       type: object
     projectsFork:
@@ -34526,23 +35145,32 @@ components:
       properties:
         analytics:
           description: |-
-            Analytics is the wired-by-default web-analytics flag (default true). It is the
-            value the app's static-builder reads as deployment.analytics to inject the
-            beacon. Space is the project's Base data space ("<org>/<slug>") a deployed
-            site posts form/forum/data submissions to under /v1/base.
+            Analytics is whether the web-analytics beacon is injected into this site's
+            pages. It is ON by default — a project has to opt out — and it is what the
+            static builder reads to decide whether to inject at all.
           type: boolean
         bucket:
+          description: Bucket is the object-store bucket the site's files are served
+            out of.
           type: string
         cacheControl:
           description: |-
-            Cache is the site's edge-cache state: the HTML/document Cache-Control policy
-            in effect (TTL) and the last edge-purge time, so a console can show freshness.
+            CacheControl is the Cache-Control policy the edge serves this site's HTML
+            under — how long a reader may hold a stale page before asking again. Assets
+            are content-addressed and are not governed by it.
           type: string
         createdAt:
+          description: CreatedAt is when the project was created, as Unix seconds.
           type: integer
         currentDeploymentId:
+          description: |-
+            CurrentDeploymentID names the deployment currently serving, so a caller can
+            ask what is live without scanning the history.
           type: string
         description:
+          description: |-
+            Description is the one-line summary, which is copied onto forks of this
+            project and shown on a gallery card.
           type: string
         forkedFrom:
           description: |-
@@ -34551,12 +35179,27 @@ components:
             gallery credits.
           type: string
         framework:
+          description: |-
+            Framework is a BUILD HINT from a closed set, defaulting to static. It tells CI
+            how to build a linked repo and never gates a deploy, so a wrong value costs a
+            build rather than access.
           type: string
         hidden:
+          description: |-
+            Hidden is PLATFORM MODERATION, and it is a different axis from visibility: it
+            pulls a public project out of the catalogue without editing the publisher's
+            own choice, so un-hiding restores exactly what they asked for. A project is
+            listed only when it is public AND not hidden. Always present, never omitted,
+            for the same reason as visibility.
           type: boolean
         hiddenReason:
+          description: HiddenReason is why moderation hid it. Absent when it is not
+            hidden.
           type: string
         id:
+          description: |-
+            ID is the project's internal identifier. It is stable across a rename, but it
+            is not what the API addresses this project by — `slug` is.
           type: string
         key:
           description: |-
@@ -34570,22 +35213,50 @@ components:
             page already ships.
           type: string
         lastPurgeAt:
+          description: |-
+            LastPurgeAt is when the edge cache was last cleared, as Unix seconds, so a
+            console can say how fresh what readers see actually is. Absent means never.
           type: integer
         license:
+          description: |-
+            License is the terms that upstream work carries. Absent has the same reading:
+            undeclared, not unencumbered.
           type: string
         liveUrl:
+          description: |-
+            LiveURL is where the site answers today. Absent until something has been
+            deployed.
           type: string
         name:
+          description: Name is the project's display name, free text a person chose.
           type: string
         org:
+          description: |-
+            Org is the organisation that owns the project, and therefore who pays for it
+            and who may change it. It is also the AUTHORSHIP line a gallery credits;
+            there is no separate author field.
           type: string
         repo:
           $ref: '#/components/schemas/projectsRepo'
+          description: |-
+            Repo is the git source this project builds from, empty when it is deployed by
+            uploading an artifact instead.
         slug:
+          description: |-
+            Slug is the identifier that MATTERS: the handle every later call addresses,
+            the S3 key segment the site's objects live under, and the label of the public
+            host `<slug>.hanzo.app`. Because it is a hostname it is constrained and
+            reserved labels such as `api` are refused.
           type: string
         space:
+          description: |-
+            Space is the project's Base data space, which is where a deployed site's form,
+            forum and data submissions land. Absent means the site stores nothing.
           type: string
         status:
+          description: |-
+            Status is where the project stands — whether a build has ever succeeded and
+            whether anything is serving right now.
           type: string
         tags:
           additionalProperties:
@@ -34596,12 +35267,15 @@ components:
             per site. Omitted when none are set. The API SECRET is never here (KMS).
           type: object
         updatedAt:
+          description: |-
+            UpdatedAt is when the project's own record last changed, as Unix seconds. A
+            deploy is not an edit of the project, so this does not move on every publish.
           type: integer
         upstream:
           description: |-
-            Upstream/License credit the third-party work this project was published
-            from, and the terms it carries. Omitted when nothing is declared: an absent
-            credit means "nobody has said", not "there is nothing to say".
+            Upstream credits the third-party work this project was published from — a
+            free-text line, because the honest answer is a name and a title that no enum
+            could hold. Absent means NOBODY HAS SAID, not that there is nothing to say.
           type: string
         visibility:
           description: |-
@@ -34629,42 +35303,81 @@ components:
     projectsRelease:
       properties:
         active:
+          description: |-
+            Active is whether this is the release the site is SERVING right now. Exactly
+            one release of a site is active; the others are kept so they can be activated
+            again, until retention reclaims them.
           type: boolean
         bytes:
+          description: Bytes is their total size in bytes.
           type: integer
         createdAt:
+          description: |-
+            CreatedAt is when the release was cut, as Unix seconds — not when it was last
+            activated.
           type: integer
         objects:
+          description: Objects is how many files the release holds.
           type: integer
         releaseId:
+          description: |-
+            ReleaseID is derived from a DIGEST of the release's own manifest, so identical
+            content is the same release and a release can never be confused with another
+            one. Activating an older id IS the rollback.
           type: string
         slug:
+          description: Slug is the site this release belongs to.
           type: string
         source:
+          description: |-
+            Source is what the release was cut from — the build output or upload it was
+            promoted out of.
           type: string
         url:
+          description: |-
+            URL is where the site serves. Present only on the ACTIVE release, since an
+            inactive one is not answering anywhere.
           type: string
       type: object
     projectsRepo:
       properties:
         branch:
+          description: |-
+            Branch is the ref a push has to touch for this project to rebuild. Pushes to
+            any other branch are ignored.
           type: string
         provider:
+          description: |-
+            Provider is the forge the URL was recognised as — it decides which webhook
+            and which credential reach the repository, and is DERIVED from the URL rather
+            than chosen by the caller.
           type: string
         url:
+          description: URL is the clone address of the repository this project builds
+            from.
           type: string
       type: object
     projectsSite:
       properties:
         name:
+          description: Name is the site's display name.
           type: string
         slug:
+          description: Slug is the site's handle — also the label of the host it serves
+            at.
           type: string
         status:
+          description: |-
+            Status is the project's state behind the site — whether it is serving, still
+            building, or failed its last build. A site that is listed is not necessarily
+            one that answers.
           type: string
         updatedAt:
+          description: UpdatedAt is when the project last changed, as Unix seconds.
           type: integer
         url:
+          description: URL is the pretty address readers use, not the object-store
+            path behind it.
           type: string
       type: object
     projectsSiteDeploy:
@@ -34698,10 +35411,17 @@ components:
     projectsUpdate:
       properties:
         cacheControl:
+          description: |-
+            CacheControl replaces the Cache-Control policy the edge serves this site's
+            HTML under. Absent leaves it.
           type: string
         description:
+          description: Description replaces the one-line summary. Absent leaves it.
           type: string
         framework:
+          description: |-
+            Framework replaces the build hint. It affects the NEXT build only — nothing
+            already deployed is rebuilt.
           type: string
         hidden:
           description: |-
@@ -34711,12 +35431,21 @@ components:
             they asked for. A tenant sending it is ignored.
           type: boolean
         hiddenReason:
+          description: |-
+            HiddenReason records WHY moderation hid it, so the action can be explained
+            and reviewed later. Admin-gated like hidden itself.
           type: string
         license:
+          description: |-
+            License is the terms that upstream work carries, with the same clear-versus-
+            leave rule.
           type: string
         name:
+          description: Name replaces the display name. Absent leaves it; the slug
+            never moves with it.
           type: string
         repo:
+          description: Repo relinks the git source. Absent leaves the existing link.
           properties:
             branch:
               type: string
@@ -34740,9 +35469,9 @@ components:
           type: object
         upstream:
           description: |-
-            Upstream/License credit the third-party work this app was published from —
-            settable after the fact, because the demos that need crediting most are the
-            ones already live. Pointers so "" clears a credit and absent leaves it.
+            Upstream credits the third-party work this project was published from, and is
+            settable after the fact because the live demos are the ones that most need
+            crediting. An explicit empty string CLEARS the credit; absent leaves it.
           type: string
         visibility:
           description: |-
@@ -34753,16 +35482,35 @@ components:
     projectsUploadGrant:
       properties:
         expiresAt:
+          description: |-
+            ExpiresAt is when the grant stops being accepted, as Unix seconds. It is
+            short-lived by design and is handed out ONCE, on the response that queues the
+            deployment — a later read of that deployment does not carry it, so a grant
+            cannot be fetched again after the build it was minted for.
           type: integer
         fields:
           additionalProperties:
             type: string
+          description: |-
+            Fields are form values every POST must carry VERBATIM, alongside `key` and
+            `file`. The signature covers them, so altering any one of them — including
+            widening the key to reach outside the prefix — invalidates the grant rather
+            than extending it.
           type: object
         maxBytes:
+          description: MaxBytes bounds ONE object, not the upload as a whole.
           type: integer
         prefix:
+          description: |-
+            Prefix is the only place this grant can write: the deployment's own key
+            prefix. It authorizes WRITES ONLY, which is why completing a deployment
+            reconciles the prefix against a manifest instead of letting CI delete.
           type: string
         url:
+          description: |-
+            URL is the address to POST each object to. It is signed for the PUBLIC
+            endpoint, because the signature covers the host and CI posts from outside the
+            cluster.
           type: string
       type: object
     promoteReq:
@@ -40072,6 +40820,9 @@ components:
         args:
           additionalProperties:
             type: object
+          description: |-
+            Args are the tool's default arguments, merged under whatever the caller
+            passes at run time.
           type: object
         automatable:
           description: Automatable is true when the Business AI can run this step
@@ -40098,8 +40849,13 @@ components:
             here.
           type: string
         draft:
+          description: |-
+            Draft, when set, is the prompt the embedded AI answers first; its output is
+            folded into one of Args before the tool runs.
           type: string
         draftInto:
+          description: DraftInto names the argument the drafted text lands in. Empty
+            means "brief".
           type: string
         enabled:
           description: Enabled is the admin on/off lever; absent reads as enabled.
@@ -40122,27 +40878,40 @@ components:
           description: 'State is the step''s per-org lifecycle state: todo|in_progress|done|skipped.'
           type: string
         title:
+          description: Title is the one-line quest as a person reads it in the checklist.
           type: string
         tool:
           description: |-
-            Tool is the MCP tool the Business AI runs for "do it for me"; Args are its
-            default arguments, Draft an optional AI prompt whose output fills the
-            DraftInto arg (default "brief").
+            Tool is the MCP tool the Business AI runs for "do it for me". A step naming
+            none can only be completed by a person.
           type: string
       type: object
     strategyView:
       properties:
         action:
+          description: 'Action is the tactic itself: the thing to go and do.'
           type: string
         category:
+          description: |-
+            Category is the growth discipline the tactic belongs to — the axis
+            `?category=` narrows on.
           type: string
         id:
+          description: ID is the tactic's stable slug in the corpus.
           type: string
         tags:
+          description: |-
+            Tags are the PRECONDITIONS this tactic already satisfied to appear in the
+            answer — `stage:<name>` and `has:<capability>` predicates over the org's
+            observed profile. They are carried back so a caller can show why a tactic
+            surfaced, not so it can filter again.
           items:
             type: string
           type: array
         workload:
+          description: |-
+            Workload is how much effort running the tactic costs, so a corpus can be cut
+            to what the org has the hands for.
           type: string
       type: object
     structureIn:
@@ -40307,14 +41076,25 @@ components:
     suggestion:
       properties:
         automatable:
+          description: |-
+            Automatable is true when the step names a tool, so the Business AI can do it
+            rather than only describe it.
           type: boolean
         detail:
+          description: Detail is the step's own prose — what it asks for.
           type: string
         rationale:
+          description: |-
+            Rationale is why this step is being suggested NOW, written for the person
+            reading it. It explains the ranking, not the step.
           type: string
         stepId:
+          description: |-
+            StepID is the checklist step being recommended — the id every step route
+            takes, so a caller can act on the suggestion directly.
           type: string
         title:
+          description: Title is the step's own one-line quest.
           type: string
         unlocks:
           description: |-
@@ -78255,10 +79035,10 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/mq/streams:
+  /v1/mq/stream:
     get:
       description: Returns the org's streams, name-ordered, with their live state.
-      operationId: get_mq_streams
+      operationId: get_mq_stream
       parameters:
       - description: Limit caps the streams returned (1–1000, default 100).
         in: query
@@ -78287,7 +79067,7 @@ paths:
       x-tool: true
     post:
       description: Creates a durable stream in the org's namespace and returns it.
-      operationId: post_mq_streams
+      operationId: post_mq_stream
       requestBody:
         content:
           application/json:
@@ -78307,10 +79087,10 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/mq/streams/{name}:
+  /v1/mq/stream/{name}:
     delete:
       description: Removes a stream with all its messages and consumers. Irreversible.
-      operationId: delete_mq_streams_by_name
+      operationId: delete_mq_stream_by_name
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -78329,7 +79109,7 @@ paths:
       x-tool: true
     get:
       description: Returns one stream's configuration and live state.
-      operationId: get_mq_streams_by_name
+      operationId: get_mq_stream_by_name
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -78354,7 +79134,7 @@ paths:
       description: |-
         Reconfigures an existing stream; the path names the stream, and the
         immutable fields (storage, retention) must restate what they are.
-      operationId: put_mq_streams_by_name
+      operationId: put_mq_stream_by_name
       parameters:
       - description: Name is the stream name, unique within the org (alphanumeric,
           hyphens, underscores).
@@ -78383,12 +79163,12 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/mq/streams/{name}/messages:
+  /v1/mq/stream/{name}/message:
     get:
       description: |-
         Reads stored messages without a consumer: by sequence, by newest on a
         subject, or walking a subject forward from a sequence.
-      operationId: get_mq_streams_by_name_messages
+      operationId: get_mq_stream_by_name_message
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -78436,10 +79216,10 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/mq/streams/{name}/messages/{seq}:
+  /v1/mq/stream/{name}/message/{seq}:
     delete:
       description: Erases one message by sequence; the sequence gap remains.
-      operationId: delete_mq_streams_by_name_messages_by_seq
+      operationId: delete_mq_stream_by_name_message_by_seq
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -78462,10 +79242,10 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/mq/streams/{name}/purge:
+  /v1/mq/stream/{name}/purge:
     post:
       description: Removes messages from a stream, leaving its consumers in place.
-      operationId: post_mq_streams_by_name_purge
+      operationId: post_mq_stream_by_name_purge
       parameters:
       - description: Name is the stream name, from the path.
         in: path
@@ -78492,10 +79272,10 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/mq/streams/{stream}/consumers:
+  /v1/mq/stream/{stream}/consumer:
     get:
       description: Returns a stream's consumers, name-ordered, with delivery state.
-      operationId: get_mq_streams_by_stream_consumers
+      operationId: get_mq_stream_by_stream_consumer
       parameters:
       - description: Stream is the stream name, from the path.
         in: path
@@ -78530,7 +79310,7 @@ paths:
       x-tool: true
     post:
       description: Creates a durable pull consumer on a stream and returns it.
-      operationId: post_mq_streams_by_stream_consumers
+      operationId: post_mq_stream_by_stream_consumer
       parameters:
       - description: Stream is the stream name, from the path.
         in: path
@@ -78557,12 +79337,12 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/mq/streams/{stream}/consumers/{name}:
+  /v1/mq/stream/{stream}/consumer/{name}:
     delete:
       description: |-
         Removes a consumer and its delivery state; unacknowledged messages
         stay in the stream.
-      operationId: delete_mq_streams_by_stream_consumers_by_name
+      operationId: delete_mq_stream_by_stream_consumer_by_name
       parameters:
       - description: Stream is the stream name, from the path.
         in: path
@@ -78588,7 +79368,7 @@ paths:
       x-tool: true
     get:
       description: Returns one consumer's configuration and delivery state.
-      operationId: get_mq_streams_by_stream_consumers_by_name
+      operationId: get_mq_stream_by_stream_consumer_by_name
       parameters:
       - description: Stream is the stream name, from the path.
         in: path
@@ -78615,13 +79395,13 @@ paths:
       x-app: mq
       x-public: true
       x-tool: true
-  /v1/mq/streams/{stream}/consumers/{name}/next:
+  /v1/mq/stream/{stream}/consumer/{name}/next:
     post:
       description: |-
         Pulls the consumer's next batch. Delivered messages are acknowledged on
         delivery — the broker will not redeliver what this call returns; an empty
         wait answers 408.
-      operationId: post_mq_streams_by_stream_consumers_by_name_next
+      operationId: post_mq_stream_by_stream_consumer_by_name_next
       parameters:
       - description: Stream is the stream name, from the path.
         in: path

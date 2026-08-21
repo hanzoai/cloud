@@ -1038,15 +1038,19 @@
       "Account": {
         "properties": {
           "name": {
+            "description": "Name is the account's human name, for a statement's line label.",
             "type": "string"
           },
           "number": {
+            "description": "Number is the posting key every voucher leg, rule and report references —\nstable, and the reason the chart is a fixed value rather than a table anybody\ncan edit. It looks numeric and is a string: \"1000\" sorts and compares as text.",
             "type": "string"
           },
           "party": {
+            "description": "Party marks the account as carrying a SUBLEDGER — receivable is money owed to\nus, payable money we owe — so a leg posted here also writes a payment-ledger\nrow against a counterparty. Absent means no subledger: a bank, wallet, revenue\nor cost account tracks no counterparty at all.",
             "type": "string"
           },
           "type": {
+            "description": "Type is the account's fundamental class, which is also its NORMAL balance\nside: asset and expense are debit-normal, liability, income and equity\ncredit-normal.",
             "type": "string"
           }
         },
@@ -1102,16 +1106,19 @@
       "BalanceLine": {
         "properties": {
           "account": {
+            "description": "Account is the chart-of-accounts number this line reports on. ABSENT marks a\nDERIVED line that no account holds — retained earnings is the one such line,\ncomputed from cumulative income minus expense.",
             "type": "string"
           },
           "amount": {
-            "description": "cents, display sign",
+            "description": "Amount is the balance as of the statement date, in whole cents, in its NATURAL\nsign: positive when the account behaved normally, on all three sides. Assets\nare debit-normal and shown as stored; liabilities and equity are credit-normal\nand flipped once here for display. A negative asset is a real overdraft, not a\nsign convention.",
             "type": "integer"
           },
           "name": {
+            "description": "Name is the account's human name, or the derived line's own name.",
             "type": "string"
           },
           "type": {
+            "description": "Type is the account's fundamental class. Absent on a derived line, which\nbelongs to no account and therefore has none.",
             "type": "string"
           }
         },
@@ -1120,37 +1127,44 @@
       "BalanceSheet": {
         "properties": {
           "asOf": {
+            "description": "AsOf is the posting time the statement is taken at, inclusive. A balance sheet\nis a snapshot, not a window, so there is no From. Absent means as of now.",
             "type": "string"
           },
           "assets": {
+            "description": "Assets are what the org OWNS at that instant, one line per account that has a\nbalance. Cash, receivables, funds captured but not yet settled.",
             "items": {
               "$ref": "#/components/schemas/BalanceLine"
             },
             "type": "array"
           },
           "balanced": {
-            "description": "TotalAssets == TotalLiabilities + TotalEquity",
+            "description": "Balanced is whether assets equal liabilities plus equity — the accounting\nequation, computed from the totals above rather than assumed. False means the\nledger is broken, not that the statement is.",
             "type": "boolean"
           },
           "equity": {
+            "description": "Equity is what is left over for the owners. It carries a DERIVED retained\nearnings line holding cumulative income minus expense, because this ledger has\nno period close that sweeps the P\u0026L into equity — without that line the\nequation would not close.",
             "items": {
               "$ref": "#/components/schemas/BalanceLine"
             },
             "type": "array"
           },
           "liabilities": {
+            "description": "Liabilities are what the org OWES — including customers' unspent prepaid\ncredit, which is their money until it is consumed and so is carried here\nrather than counted as revenue.",
             "items": {
               "$ref": "#/components/schemas/BalanceLine"
             },
             "type": "array"
           },
           "totalAssets": {
+            "description": "TotalAssets is the sum of the asset lines, in cents.",
             "type": "integer"
           },
           "totalEquity": {
+            "description": "TotalEquity is the sum of the equity lines including retained earnings, in cents.",
             "type": "integer"
           },
           "totalLiabilities": {
+            "description": "TotalLiabilities is the sum of the liability lines, in cents.",
             "type": "integer"
           }
         },
@@ -1159,18 +1173,23 @@
       "BankQuestion": {
         "properties": {
           "connector": {
+            "description": "Connector names the feed the unplaceable line arrived on. With externalId it\nidentifies both the question and the bank line it is about, so re-syncing the\nsame deposit never asks twice.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the question was raised.",
             "type": "string"
           },
           "externalId": {
+            "description": "ExternalID is the bank's own id for the line in question.",
             "type": "string"
           },
           "prompt": {
+            "description": "Prompt is the question put to the founder in plain language — what this money\nwas, since the books cannot place it on their own.",
             "type": "string"
           },
           "status": {
+            "description": "Status is whether the question is still open or has been answered.",
             "type": "string"
           }
         },
@@ -1208,33 +1227,43 @@
       "BankTxnRow": {
         "properties": {
           "amountCents": {
+            "description": "AmountCents is the size of the movement in whole cents, always POSITIVE —\ndirection carries the sign, so a caller must read both to know which way money\nwent.",
             "type": "integer"
           },
           "connector": {
+            "description": "Connector names the feed this row arrived on — which bank or processor\nconnection it was synced from. With externalId it is the row's identity, so\nre-syncing the same statement never books a second copy.",
             "type": "string"
           },
           "currency": {
+            "description": "Currency is the ISO code the bank reported the line in.",
             "type": "string"
           },
           "description": {
+            "description": "Description is the statement memo as the bank wrote it.",
             "type": "string"
           },
           "direction": {
+            "description": "Direction is which way the money moved: an inflow into the account or an\noutflow from it, from the org's point of view.",
             "type": "string"
           },
           "externalId": {
+            "description": "ExternalID is the bank's OWN id for the line, carried verbatim. It is unique\nonly within its connector.",
             "type": "string"
           },
           "matchedVoucher": {
+            "description": "MatchedVoucher names the ledger voucher this line was reconciled against —\nthe bill it paid, or the settlement it cleared. Absent when nothing matched,\nwhich for an inflow is what raises a question.",
             "type": "string"
           },
           "merchant": {
+            "description": "Merchant is the counterparty the feed identified, where it did.",
             "type": "string"
           },
           "postedAt": {
+            "description": "PostedAt is the bank's posting date for the line, not when we synced it.",
             "type": "string"
           },
           "status": {
+            "description": "Status is where the line got to: posted (an outflow booked straight to an\nexpense), settled (an outflow that paid down a scanned bill), reconciled (an\ninflow that cleared a pending settlement), transfer (a move between the org's\nown accounts, recorded but with no effect on the books), or unmatched (an\ninflow nobody could place, which is waiting on a human answer).",
             "type": "string"
           }
         },
@@ -1273,32 +1302,38 @@
       "Extracted": {
         "properties": {
           "category": {
-            "description": "proposed slug (software|cloud|office|…)",
+            "description": "Category is the expense bucket the SCANNER guessed, as a slug — a hint only.\nVendor rules override it whenever they know better, so this is the model's\nreading and not the account the entry will land on.",
             "type": "string"
           },
           "currency": {
+            "description": "Currency is the ISO code the document is denominated in.",
             "type": "string"
           },
           "issuedAt": {
-            "description": "YYYY-MM-DD",
+            "description": "IssuedAt is the document's OWN date as YYYY-MM-DD — when the bill was issued,\nwhich is not when it was uploaded or when it will post.",
             "type": "string"
           },
           "lineItems": {
+            "description": "LineItems are the individual lines read off the document, where it had any.\nThey need not sum to totalCents: a document may carry lines the scanner could\nnot read, and the total is taken from the total.",
             "items": {
               "$ref": "#/components/schemas/LineItem"
             },
             "type": "array"
           },
           "merchant": {
+            "description": "Merchant is the supplier as printed on the document.",
             "type": "string"
           },
           "note": {
+            "description": "Note is anything else worth carrying from the document that has no field of\nits own.",
             "type": "string"
           },
           "taxCents": {
+            "description": "TaxCents is how much of that total is tax, in cents. It is part of totalCents,\nnot additional to it.",
             "type": "integer"
           },
           "totalCents": {
+            "description": "TotalCents is the document total in whole cents, tax INCLUDED.",
             "type": "integer"
           }
         },
@@ -1324,31 +1359,39 @@
       "FinancialPackage": {
         "properties": {
           "balanceSheet": {
-            "$ref": "#/components/schemas/BalanceSheet"
+            "$ref": "#/components/schemas/BalanceSheet",
+            "description": "BalanceSheet is struck as of the period END, not the start."
           },
           "from": {
+            "description": "From opens the reporting period. Absent means from the beginning of the ledger.",
             "type": "string"
           },
           "generatedAt": {
+            "description": "GeneratedAt is when the bundle was assembled — the moment the statements were\nstruck, which is what makes two exports of the same period comparable.",
             "type": "string"
           },
           "gl": {
+            "description": "GL is the newest slice of ledger detail, as the audit trail behind the\nstatements. It is CAPPED, so on a busy ledger it is a sample rather than the\nfull support for the figures above.",
             "items": {
               "$ref": "#/components/schemas/GLRow"
             },
             "type": "array"
           },
           "org": {
+            "description": "Org is the organisation whose books these are — the validated caller's own,\nstamped so a downloaded bundle still says whose it is.",
             "type": "string"
           },
           "pnl": {
-            "$ref": "#/components/schemas/PnL"
+            "$ref": "#/components/schemas/PnL",
+            "description": "PnL is the income statement for the period, on an accrual basis."
           },
           "to": {
+            "description": "To closes it. Absent means up to now.",
             "type": "string"
           },
           "trialBalance": {
-            "$ref": "#/components/schemas/TrialBalance"
+            "$ref": "#/components/schemas/TrialBalance",
+            "description": "TrialBalance is the proof the ledger balances over the period."
           }
         },
         "type": "object"
@@ -1356,30 +1399,39 @@
       "GLRow": {
         "properties": {
           "account": {
+            "description": "Account is the chart-of-accounts number this leg posts to.",
             "type": "string"
           },
           "against": {
+            "description": "Against names the OTHER accounts in the same voucher — the contra side of this\nleg — so a single row reads as an entry rather than as half of one.",
             "type": "string"
           },
           "credit": {
+            "description": "Credit is the amount credited to that account, in whole cents.",
             "type": "integer"
           },
           "debit": {
+            "description": "Debit is the amount debited to that account, in whole cents. Exactly one of\ndebit and credit is non-zero on a leg; a negative amount is never used to mean\nthe other side.",
             "type": "integer"
           },
           "id": {
+            "description": "ID is the entry's position in the ledger. The ledger is append-only, so ids\nascend with posting order and a higher id is a later entry.",
             "type": "integer"
           },
           "postingAt": {
+            "description": "PostingAt is the accounting date this entry belongs to — what the reports\nwindow on, which need not be when the row was written.",
             "type": "string"
           },
           "remarks": {
+            "description": "Remarks is the memo carried onto the entry, for a human reading the ledger.",
             "type": "string"
           },
           "sourceId": {
+            "description": "SourceID identifies that originating record within its kind.",
             "type": "string"
           },
           "sourceKind": {
+            "description": "SourceKind is what caused the posting: a bank line, a scanned document, a\ncommerce sale. With sourceId it traces the entry back to the thing that\nproduced it.",
             "type": "string"
           }
         },
@@ -1388,28 +1440,35 @@
       "InboxItem": {
         "properties": {
           "category": {
+            "description": "Category is the expense account the scanner proposed, as a chart number — a\nPROPOSAL, not a posting: nothing is booked until it is accepted.",
             "type": "string"
           },
           "confidence": {
+            "description": "Confidence is how sure the scanner is of that reading, and is the signal for\nwhether a person needs to check it before it is booked.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the document was uploaded.",
             "type": "string"
           },
           "extracted": {
-            "$ref": "#/components/schemas/Extracted"
+            "$ref": "#/components/schemas/Extracted",
+            "description": "Extracted is what the scanner read off the document. Absent until it has been\nscanned, so its absence is \"not read yet\", never \"nothing on it\"."
           },
           "filename": {
+            "description": "Filename is the name the document was uploaded under, for a person to\nrecognise it by. It is not part of the item's identity.",
             "type": "string"
           },
           "id": {
-            "description": "the file hash (== a scan's ScanID)",
+            "description": "ID is the CONTENT HASH of the uploaded bytes, which is what makes the queue\nidempotent: re-uploading the same document returns this item rather than\nadding a second one. It is also the id the scan of this document carries.",
             "type": "string"
           },
           "status": {
+            "description": "Status is where the document is in the queue — unsorted until the scanner has\nread it, and thereafter whether it is waiting on a person or has been booked.",
             "type": "string"
           },
           "vendor": {
+            "description": "Vendor is the supplier the scanner identified, surfaced beside the item so a\nqueue renders without opening each document.",
             "type": "string"
           }
         },
@@ -1435,9 +1494,11 @@
       "LineItem": {
         "properties": {
           "amountCents": {
+            "description": "AmountCents is that line's amount in whole cents. The scanner is instructed to\nreturn integer cents rather than a decimal, so no float rounding can enter the\nledger through here.",
             "type": "integer"
           },
           "description": {
+            "description": "Description is the line as it appears on the document.",
             "type": "string"
           }
         },
@@ -1522,31 +1583,37 @@
       "PnL": {
         "properties": {
           "expense": {
+            "description": "Expense is the cost lines that moved in the period, one per account.",
             "items": {
               "$ref": "#/components/schemas/PnLLine"
             },
             "type": "array"
           },
           "from": {
+            "description": "From opens the period and is EXCLUSIVE — movement strictly after it, matching\nthe trial balance's opening boundary so the two reports agree on what belongs\nto a period. Absent means from the beginning of the ledger.",
             "type": "string"
           },
           "income": {
+            "description": "Income is the revenue lines that moved in the period, one per account.\nAccounts that did not move are omitted rather than listed at zero.",
             "items": {
               "$ref": "#/components/schemas/PnLLine"
             },
             "type": "array"
           },
           "netIncome": {
-            "description": "TotalIncome − TotalExpense",
+            "description": "NetIncome is totalIncome minus totalExpense, in cents. Negative is a loss.",
             "type": "integer"
           },
           "to": {
+            "description": "To closes the period and is inclusive. Absent means up to now.",
             "type": "string"
           },
           "totalExpense": {
+            "description": "TotalExpense is cost MATCHED to that revenue, in cents, including accrued\ninfrastructure that has not been billed yet.",
             "type": "integer"
           },
           "totalIncome": {
+            "description": "TotalIncome is revenue RECOGNIZED in the period, in cents — accrual, not cash,\nso a prepaid top-up is not in it until the credit is consumed.",
             "type": "integer"
           }
         },
@@ -1555,16 +1622,19 @@
       "PnLLine": {
         "properties": {
           "account": {
+            "description": "Account is the chart-of-accounts number this line reports on.",
             "type": "string"
           },
           "amount": {
-            "description": "cents, display sign (income \u0026 expense both positive when normal)",
+            "description": "Amount is the account's movement over the period in whole cents, in its\nNATURAL sign: positive when the account behaved normally, for income and\nexpense alike. Income is credit-normal so its stored net is flipped once here\nfor display; the ledger underneath is never sign-flipped. A negative amount\ntherefore means the account ran backwards — a refunded sale, a reversed cost.",
             "type": "integer"
           },
           "name": {
+            "description": "Name is that account's human name from the fixed chart.",
             "type": "string"
           },
           "type": {
+            "description": "Type is the account's fundamental class, which on this statement is always\nincome or expense — it tells a reader which half of the statement the line\ncame from without re-deriving it from the array it arrived in.",
             "type": "string"
           }
         },
@@ -1573,25 +1643,27 @@
       "Question": {
         "properties": {
           "account": {
+            "description": "Account is the chart number the questioned entry posted to, where one applies.",
             "type": "string"
           },
           "amount": {
-            "description": "formatted figure ($…)",
+            "description": "Amount is the figure that makes the question concrete, already FORMATTED for\ndisplay with its currency symbol — a string, not cents, and not for arithmetic.",
             "type": "string"
           },
           "id": {
-            "description": "the source transaction id it concerns",
+            "description": "ID is the source transaction the question is about, so answering it leads\nstraight back to the entry that raised it.",
             "type": "string"
           },
           "kind": {
-            "description": "outlier|reversal|roundoff|uncosted|overdrawn",
+            "description": "Kind is what looked wrong: outlier (a charge far above the usual), reversal (a\nposting undone), roundoff (a balancing plug big enough to be worth explaining),\nuncosted (revenue booked with no cost matched to it), or overdrawn (a wallet\nspent past its balance).",
             "type": "string"
           },
           "postedAt": {
+            "description": "PostedAt anchors the question in time — when the entry it concerns posted.",
             "type": "string"
           },
           "text": {
-            "description": "the specific question to ask the founder",
+            "description": "Text is the question itself, written for a founder to answer directly.",
             "type": "string"
           }
         },
@@ -1600,6 +1672,7 @@
       "QuestionsResponse": {
         "properties": {
           "questions": {
+            "description": "Questions are what the books want explained, SHARPEST FIRST — largest amounts\nahead of smaller ones, and capped, so this is the top of the list rather than\neverything. Empty means the ledger looks clean; the detector is deterministic\nover what was posted and invents nothing.",
             "items": {
               "$ref": "#/components/schemas/Question"
             },
@@ -1660,24 +1733,30 @@
       "TrialBalance": {
         "properties": {
           "balanced": {
+            "description": "Balanced is the proof this report exists to give: whether total debits equal\ntotal credits. It is computed from the rows above, never assumed, and false\nmeans the ledger itself is broken rather than that the report is wrong.",
             "type": "boolean"
           },
           "from": {
+            "description": "From is the posting time the window opens at, as it was asked for. Absent\nmeans the report runs from the beginning of the ledger.",
             "type": "string"
           },
           "rows": {
+            "description": "Rows are the accounts that MOVED in one of the windows. An account that never\nmoved is omitted rather than listed at zero, so this is shorter than the chart.",
             "items": {
               "$ref": "#/components/schemas/TrialBalanceRow"
             },
             "type": "array"
           },
           "to": {
+            "description": "To is the posting time the window closes at, inclusive. Absent means \"up to\nnow\" — every posting the ledger holds.",
             "type": "string"
           },
           "totalCredit": {
+            "description": "TotalCredit is the sum of every row's closing credit column, in cents.",
             "type": "integer"
           },
           "totalDebit": {
+            "description": "TotalDebit is the sum of every row's CLOSING debit column, in cents.",
             "type": "integer"
           }
         },
@@ -1686,32 +1765,39 @@
       "TrialBalanceRow": {
         "properties": {
           "account": {
+            "description": "Account is the chart-of-accounts NUMBER this line reports on (\"1000\", \"4000\")\n— the stable posting key, not a display label.",
             "type": "string"
           },
           "closingCredit": {
+            "description": "ClosingCredit is that closing balance in cents when it is a credit balance.",
             "type": "integer"
           },
           "closingDebit": {
+            "description": "ClosingDebit is the balance at the end of the window, in cents, when it is a\ndebit balance. This is the column the report's totals are summed from.",
             "type": "integer"
           },
           "credit": {
-            "description": "period movement",
+            "description": "Credit is the same window movement in cents when it was net credit.",
             "type": "integer"
           },
           "debit": {
-            "description": "period movement",
+            "description": "Debit is the account's MOVEMENT within the window — closing minus opening, not\nthe closing balance — in cents, when that movement was net debit. Zero when the\naccount moved net credit.",
             "type": "integer"
           },
           "name": {
+            "description": "Name is that account's human name from the fixed chart.",
             "type": "string"
           },
           "openingCredit": {
+            "description": "OpeningCredit is the same opening balance in cents when it fell on the credit\nside. Zero when the balance was a debit one.",
             "type": "integer"
           },
           "openingDebit": {
+            "description": "OpeningDebit is the account's balance before the window began, in whole cents,\nwhen that balance was on the debit side. Zero when the balance was a credit\none — the pair is exclusive, never two halves of one number.",
             "type": "integer"
           },
           "type": {
+            "description": "Type is the account's fundamental class — asset, liability, income, expense or\nequity — which is also its normal balance side. It is carried for presentation\nand does NOT decide which column an amount lands in: placement follows the\nsign of the real net, so a contra balance shows up as one.",
             "type": "string"
           }
         },
@@ -1720,29 +1806,35 @@
       "Txn": {
         "properties": {
           "amountCents": {
+            "description": "AmountCents is the voucher's total, in whole cents — its total debit, which\nequals its total credit because every voucher balances. It is the size of the\nentry and carries no direction; the category says which way it went.",
             "type": "integer"
           },
           "category": {
-            "description": "COA account number of the P\u0026L line",
+            "description": "Category is the chart-of-accounts NUMBER of the income or expense account this\nvoucher touched — where it lands on the P\u0026L, not a free-text label.",
             "type": "string"
           },
           "categoryName": {
+            "description": "CategoryName is that account's human name, so a caller need not carry the\nchart to render the row.",
             "type": "string"
           },
           "date": {
+            "description": "Date is when the voucher POSTED — the accounting date the reports window on,\nwhich for an imported bank row is the bank's date and not the day it landed\nhere.",
             "type": "string"
           },
           "description": {
+            "description": "Description is the line a person reads: the memo carried in from the source.",
             "type": "string"
           },
           "source": {
-            "description": "source_kind: bank_txn | scan | commerce_txn",
+            "description": "Source is where the entry came from: bank_txn for an imported statement line,\nscan for a receipt or bill read by the scanner, commerce_txn for a sale\nbooked by the store.",
             "type": "string"
           },
           "vendor": {
+            "description": "Vendor is the counterparty, resolved from whatever the source knew — a bank\nrow's merchant, a scanned bill's supplier. Absent when the source named none.",
             "type": "string"
           },
           "voucherId": {
+            "description": "VoucherID identifies the underlying double-entry voucher, so a caller can open\nthe full set of legs behind this single register line.",
             "type": "integer"
           }
         },
