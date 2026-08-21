@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 
 // errorsink.go is the Sentry projection of the canonical event plane: it consumes the
-// analytics error fan-out (analytics.AddErrorSink) and lands each error-signal fact on
+// analytics error fan-out (event.AddErrorSink) and lands each error-signal fact on
 // the o11y Sentry plane, so /v1/event errors surface on sentry.hanzo.ai alongside the
 // errors a Sentry SDK posts to /v1/sentinel directly.
 //
@@ -13,7 +13,7 @@
 // the columnar events plane (o11y_sentry_events) AND the grouped-issue lifecycle
 // (o11y_issues) from ONE normalize+fingerprint translate. apps/analytics stays
 // orthogonal: it knows only "there is an error sink", handing over an o11y-free
-// analytics.ErrorEvent. One coupling boundary, on the side that already couples to o11y.
+// event.ErrorEvent. One coupling boundary, on the side that already couples to o11y.
 //
 // TENANCY (fail-closed, no state): the org is the analytics tenant slug (the validated
 // principal-resolved owner, never client input). It is mapped to the o11y org UUID
@@ -41,7 +41,7 @@ import (
 	"github.com/google/uuid"
 	luxlog "github.com/luxfi/log"
 
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/o11y/pkg/modules/errortracking/implerrortracking"
 	"github.com/hanzoai/o11y/pkg/modules/sentry"
@@ -96,7 +96,7 @@ func sentryLensEnabled() bool {
 // installErrorSink wires the analytics error fan-out to the embedded Sentry module. It
 // is a no-op (and installs NO sink) unless the in-process runtime is up — the fallback
 // reverse-proxy has no in-process module to call, so errors then simply stay in
-// event.fact + the /v1/errors lens (honest degradation, never a failure). Called from
+// event.fact + the /v1/event/errors lens (honest degradation, never a failure). Called from
 // mountRuntime AFTER embeddedRuntime is set.
 func installErrorSink(log luxlog.Logger) {
 	if !sentryLensEnabled() {
@@ -107,7 +107,7 @@ func installErrorSink(log luxlog.Logger) {
 		log.Info("sentry error lens inactive (no in-process runtime; errors stay on the event plane)")
 		return
 	}
-	removeErrorSink = analytics.AddErrorSink(func(org string, errs []analytics.ErrorEvent) { consumeErrors(log, org, errs) })
+	removeErrorSink = event.AddErrorSink(func(org string, errs []event.ErrorEvent) { consumeErrors(log, org, errs) })
 	log.Info("sentry error lens installed (in-process runtime)")
 }
 
@@ -125,7 +125,7 @@ func clearErrorSink() {
 // consumeErrors is the installed error-sink handler. It runs on the goroutine
 // analytics detached, so it may do bounded synchronous work here. Every path is
 // fail-soft: it NEVER returns to a caller and NEVER propagates an error to the ingest.
-func consumeErrors(log luxlog.Logger, org string, errs []analytics.ErrorEvent) {
+func consumeErrors(log luxlog.Logger, org string, errs []event.ErrorEvent) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Warn("sentry error-sink panic", "org", org, "err", r)
@@ -162,7 +162,7 @@ func consumeErrors(log luxlog.Logger, org string, errs []analytics.ErrorEvent) {
 		return
 	}
 
-	// ONE translate: analytics.ErrorEvent → the Sentry wire → o11y's normalize+fingerprint.
+	// ONE translate: event.ErrorEvent → the Sentry wire → o11y's normalize+fingerprint.
 	occs := make([]*errortrackingtypes.Occurrence, 0, len(errs))
 	for _, e := range errs {
 		occ := implerrortracking.NormalizeEvent(buildSentryEvent(e), false)
@@ -240,12 +240,12 @@ func findCanonicalProject(ctx context.Context, module sentry.Module, orgID value
 	return valuer.UUID{}, false
 }
 
-// buildSentryEvent maps an analytics.ErrorEvent onto the Sentry wire event the o11y
+// buildSentryEvent maps an event.ErrorEvent onto the Sentry wire event the o11y
 // normalizer consumes. The folded /v1/event wire carries a raw stack STRING (not the
 // structured frames a native Sentry envelope has), so grouping is by exception
 // type+message (the normalizer's documented fallback) and the raw stack is preserved as
 // a bounded tag rather than dropped. Pure — no I/O — so the mapping is unit-tested.
-func buildSentryEvent(e analytics.ErrorEvent) *errortrackingtypes.SentryEvent {
+func buildSentryEvent(e event.ErrorEvent) *errortrackingtypes.SentryEvent {
 	se := &errortrackingtypes.SentryEvent{
 		EventID:     e.MessageID,
 		Timestamp:   json.RawMessage(strconv.FormatInt(e.Time.UTC().Unix(), 10)),
@@ -282,7 +282,7 @@ func buildSentryEvent(e analytics.ErrorEvent) *errortrackingtypes.SentryEvent {
 // bounded raw stack. A tag never affects grouping (the fingerprint ignores tags), so
 // preserving the stack here keeps it for debugging without collapsing distinct
 // errors. nil when empty.
-func buildTags(e analytics.ErrorEvent) json.RawMessage {
+func buildTags(e event.ErrorEvent) json.RawMessage {
 	t := map[string]string{}
 	if svc := cmp.Or(e.Service, e.Product); svc != "" {
 		t["service_name"] = svc

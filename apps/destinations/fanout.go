@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/integrations"
 )
 
@@ -22,9 +22,9 @@ import (
 //   - ONE TRANSLATION. The batch is translated once (translate.go) and every
 //     destination renders from the same normalized Conversions.
 
-// consume is the analytics.SetSink handler. It runs on the goroutine analytics
+// consume is the event.SetSink handler. It runs on the goroutine analytics
 // detached, so it may do bounded synchronous work here.
-func consume(s *cloud.Service[state], org string, evs []analytics.SinkEvent) {
+func consume(s *cloud.Service[state], org string, evs []event.SinkEvent) {
 	defer func() {
 		if r := recover(); r != nil {
 			s.Log.Warn("destinations fan-out panic", "org", org, "err", r)

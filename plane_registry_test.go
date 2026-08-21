@@ -21,12 +21,12 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/allowance"
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/commerce"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/risk"
 	allowancepeer "github.com/hanzoai/cloud/plane/allowance"
-	analyticspeer "github.com/hanzoai/cloud/plane/analytics"
+	eventpeer "github.com/hanzoai/cloud/plane/event"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	flagspeer "github.com/hanzoai/cloud/plane/flags"
 	riskpeer "github.com/hanzoai/cloud/plane/risk"
@@ -97,9 +97,9 @@ func TestGeneratedRiskSurfaceIsTheLiveSurface(t *testing.T) {
 // they describe kept answering exactly as before. So the registration itself is
 // asserted, from the running registry.
 func TestGeneratedAnalyticsSurfaceIsTheLiveSurface(t *testing.T) {
-	live := liveOps(t, analyticspeer.App, analytics.Mount, false)
-	t.Cleanup(func() { _ = analytics.Shutdown(t.Context()) })
-	sameSurface(t, "analytics", analyticspeer.Ops, live,
+	live := liveOps(t, eventpeer.App, event.Mount, false)
+	t.Cleanup(func() { _ = event.Shutdown(t.Context()) })
+	sameSurface(t, "event", eventpeer.Ops, live,
 		"analytics registered no plane ops at all — every peer that states a fact about "+
 			"its own work writes nothing, and nothing says so. build must call exposeCapture.")
 }

@@ -8,7 +8,7 @@ package commerce
 //
 // A card cleared, [screen.settle] funded the wallet and [screen.learn] taught the
 // risk model, and that was the end of it. The organisation's own lenses
-// (/v1/insights, the commerce overview that counts `order_completed` and sums its
+// (/v1/event/insights, the commerce overview that counts `order_completed` and sums its
 // revenue) saw nothing, and neither did apps/destinations — the fan-out that
 // forwards a conversion to whichever ad platforms the org has connected. So the
 // ONLY Purchase those platforms ever received was the browser pixel's: fired from
@@ -21,7 +21,7 @@ package commerce
 //
 // # It is the event plane's door, not a second one
 //
-// The call is [analyticspeer.EventCapture] over the peer socket, which is the
+// The call is [eventpeer.EventCapture] over the peer socket, which is the
 // SAME write core POST /v1/event reaches (apps/analytics/event_rpc.go). One
 // admission, one normalizer, one storage projection, one fan-out — so a purchase
 // this process states and a purchase a browser posts are the same kind of thing,
@@ -48,12 +48,12 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
-	analyticspeer "github.com/hanzoai/cloud/plane/analytics"
+	eventpeer "github.com/hanzoai/cloud/plane/event"
 )
 
 // orderCompleted is the name the sale is filed under, and it is a CONSTANT because
 // `name` is the column every lens groups by. It is the canonical events vocabulary's
-// own word for a completed sale — what /v1/insights counts as an order and what
+// own word for a completed sale — what /v1/event/insights counts as an order and what
 // apps/destinations translates into each platform's Purchase.
 const orderCompleted = "order_completed"
 
@@ -77,7 +77,7 @@ var emitting = make(chan struct{}, maxEmits)
 // here: a test can observe exactly what LEAVES this process without standing up an
 // analytics child to receive it. It is never reassigned in production — the only
 // writer is a test, and the compiler holds the signature to the generated client's.
-var send = analyticspeer.EventCapture
+var send = eventpeer.EventCapture
 
 // emit states a settled payment as a completed order on the calling organisation's
 // own event plane.

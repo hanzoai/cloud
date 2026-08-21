@@ -4,12 +4,12 @@ import (
 	"cmp"
 	"strings"
 
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 )
 
 // translate.go maps the canonical EVENTS vocabulary (@hanzo/event: signup_completed,
 // checkout_started, order_completed, …) onto the normalized StandardEvent taxonomy,
-// ONCE, and builds a Conversion from an analytics.SinkEvent. Each adapter renders
+// ONCE, and builds a Conversion from an event.SinkEvent. Each adapter renders
 // StandardEvent → its own platform name; this file is the ONE canonical→normalized
 // map, so a new platform never re-derives it.
 
@@ -44,7 +44,7 @@ var standardOf = map[string]StandardEvent{
 // Translate maps one canonical event onto the normalized Conversion every adapter
 // renders. It is pure — no I/O — so the mapping is driven directly by tests. The raw
 // (pre-warehouse-scrub) properties carry the match keys the User set is lifted from.
-func Translate(ev analytics.SinkEvent) Conversion {
+func Translate(ev event.SinkEvent) Conversion {
 	return Conversion{
 		Standard: standardOf[ev.Name], // "" ⇒ custom, forwarded as ev.Name
 		Name:     ev.Name,
@@ -68,7 +68,7 @@ func Translate(ev analytics.SinkEvent) Conversion {
 // array in the properties (each row a product map), else a single item synthesized
 // from the first-class product id + quantity. nil when the event carries no commerce
 // items — a non-commerce event yields none and every adapter omits the field.
-func liftItems(ev analytics.SinkEvent) []Item {
+func liftItems(ev event.SinkEvent) []Item {
 	for _, key := range []string{"items", "products"} {
 		raw, ok := ev.Properties[key].([]any)
 		if !ok || len(raw) == 0 {
@@ -119,7 +119,7 @@ func firstFloat(p map[string]any, keys ...string) float64 {
 // conversionValue is the monetary value of a conversion in MAJOR units: the event's
 // first-class Revenue, else a value/revenue/amount property. 0 when none is present
 // (a non-purchase event carries no value, and adapters omit the value field then).
-func conversionValue(ev analytics.SinkEvent) float64 {
+func conversionValue(ev event.SinkEvent) float64 {
 	if ev.Revenue != 0 {
 		return ev.Revenue
 	}
@@ -133,7 +133,7 @@ func conversionValue(ev analytics.SinkEvent) float64 {
 
 // conversionCurrency resolves the ISO-4217 currency (upper-cased): the event's
 // first-class Currency, else a currency property, else USD.
-func conversionCurrency(ev analytics.SinkEvent) string {
+func conversionCurrency(ev event.SinkEvent) string {
 	if c := strings.TrimSpace(ev.Currency); c != "" {
 		return strings.ToUpper(c)
 	}
@@ -147,7 +147,7 @@ func conversionCurrency(ev analytics.SinkEvent) string {
 // distinct/person id the caller owns; email/phone/ip/user-agent/fbp and the known
 // click ids are read from the raw properties. Adapters hash the PII fields before
 // send; nothing here is stored.
-func liftUser(ev analytics.SinkEvent) UserData {
+func liftUser(ev event.SinkEvent) UserData {
 	p := ev.Properties
 	u := UserData{
 		ExternalID: cmp.Or(strings.TrimSpace(ev.DistinctID), strings.TrimSpace(ev.AnonymousID)),

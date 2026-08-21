@@ -425,7 +425,7 @@ const (
 	//
 	// It is the WRITE side of the door ObsErrorPost claims a slice of, and it is
 	// here for the same reason: analytics owns POST /v1/event, event.fact and the
-	// /v1/insights reads over them, and the pod forks one process per app — so a
+	// /v1/event/insights reads over them, and the pod forks one process per app — so a
 	// peer that wanted its own facts queryable beside the product's had no way to
 	// state one. In-process there is a write core (ingestEvents) and it is
 	// unreachable from another pid; over HTTP there is the public edge, which is a
@@ -1720,7 +1720,7 @@ type RiskObserved struct {
 // ---- event.capture — one occurrence, onto the shared event plane ------------
 
 // EventIn is ONE occurrence a peer states onto the shared event plane — the same
-// plane POST /v1/event fills, /v1/insights reads and every product lens groups
+// plane POST /v1/event fills, /v1/event/insights reads and every product lens groups
 // over. It is what makes a peer's own facts answerable in the SAME query as the
 // product's, rather than in a private table beside it.
 //

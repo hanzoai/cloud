@@ -22888,7 +22888,7 @@ components:
             it reports.
           type: boolean
         surface:
-          description: 'Surface is the path prefix this status covers: /v1/insights.'
+          description: 'Surface is the path prefix this status covers: /v1/event/insights.'
           type: string
       type: object
     installReq:
@@ -38290,7 +38290,7 @@ components:
           description: |-
             Type is the row's kind — the plane's discriminator: page, track, identify or
             group. (Errors are not here at all: they land on event.error and are read at
-            /v1/errors.)
+            /v1/event/errors.)
           type: string
         url:
           description: URL is the full page address the event fired on. Omitted when
@@ -57697,231 +57697,6 @@ paths:
       x-app: allowance
       x-public: true
       x-tool: true
-  /v1/analytics/health:
-    get:
-      description: |-
-        Health reports whether the event plane can take a write and the warehouse can
-        answer a read.
-
-        It reports the analytics subsystem's own liveness in BOTH directions: plane is
-        the event plane it WRITES (the bus and the JetStream stream every accepted
-        event is published to, both named in the report), and datastore is the
-        warehouse it READS, with each read lens's table reported as it is provisioned
-        (the LLM usage ledger and the product-event table).
-
-        EITHER ONE DOWN IS A 503, and the report says WHICH — they are probed
-        independently and never collapse into a single bit. This endpoint used to
-        report the read half only, and answered 200/ok while every POST /v1/event
-        failed on a stream that could not bind: a total ingest outage behind a green
-        probe. A readiness gate here now gates on the write path too.
-
-        plane.ready IS A REAL PROBE and walks the ingest path itself — the same
-        connection and the same stream a publish uses — so it cannot answer ready while
-        a publish would 503. plane.reason carries the plane's own error text when it is
-        false.
-
-        datastore IS NOT PROBED WITH A QUERY. It is the state of the process's own
-        shared client — established, and not since closed — so a warehouse accepting
-        connections and failing reads still reports true. Degraded CARRIES the report
-        (status, the failing half, reason) as its body rather than an error envelope,
-        so a gate reads the cause off the same object it got at 200.
-
-        A MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens
-        reported available:false answers honest-empty rather than erroring, so a fresh
-        deployment whose collector has not emitted yet is legitimately 200 with the
-        product-event lens unavailable. The lens block is reported whenever the
-        warehouse is REACHABLE — including on a report degraded by the plane, where the
-        tables genuinely were probed — and is absent only when the warehouse is not,
-        having nothing to say about tables it could not reach.
-
-        Unauthenticated on purpose — liveness has to be probe-able — and it reads NO
-        tenant data: table existence and stream presence only, never a row and never an
-        event.
-      operationId: get_analytics_health
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/healthReport'
-          description: ok
-        "503":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/healthReport'
-          description: service unavailable
-      summary: Health reports whether the event plane can take a write and the warehouse
-        can answer a read.
-      tags:
-      - analytics
-      x-app: analytics
-      x-public: true
-      x-tool: true
-  /v1/analytics/overview:
-    get:
-      description: |-
-        Overview returns the caller org's analytics KPIs for one time window. Three lenses
-        over one warehouse: llm is the live per-org LLM usage ledger (requests, tokens,
-        spend, models, providers, errors) and is always real; web (pageviews, visitors,
-        sessions) and commerce (orders, revenue, AOV) read the product-event table and
-        report available=false rather than fabricating zeros when it holds nothing yet.
-
-        The org is the validated principal's — never a parameter — so a caller can only
-        ever read its own tenant. 403 without a validated bearer, 400 on an unknown range,
-        503 when the warehouse is unreachable.
-      operationId: get_analytics_overview
-      parameters:
-      - description: |-
-          Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
-          <N>d — or day, week, month, all. Default 24h. Ignored when both start and
-          end are given. An unknown value, or one past the 730-day horizon, is a 400.
-        example: 7d
-        in: query
-        name: range
-        required: false
-        schema:
-          type: string
-      - description: Start is the inclusive lower bound of a custom window, RFC3339.
-          Requires end.
-        in: query
-        name: start
-        required: false
-        schema:
-          type: string
-      - description: End is the exclusive upper bound of a custom window, RFC3339.
-          Requires start.
-        in: query
-        name: end
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Overview'
-          description: ok
-      summary: Overview returns the caller org's analytics KPIs for one time window.
-      tags:
-      - analytics
-      x-app: analytics
-      x-public: true
-      x-tool: true
-  /v1/analytics/timeseries:
-    get:
-      description: |-
-        Timeseries returns the caller org's LLM usage over time as an evenly-spaced series.
-        One point per hour or per day — the bucket the window implies, 24h giving hours and
-        7d/30d giving days — carrying requests, total tokens and spend in cents. Empty
-        buckets are filled with zeros so a client charts a continuous line.
-
-        The org is the validated principal's — never a parameter. 403 without a validated
-        bearer, 400 on an unknown range, 503 when the warehouse is unreachable.
-      operationId: get_analytics_timeseries
-      parameters:
-      - description: |-
-          Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
-          <N>d — or day, week, month, all. Default 24h. Ignored when both start and
-          end are given. An unknown value, or one past the 730-day horizon, is a 400.
-        example: 30d
-        in: query
-        name: range
-        required: false
-        schema:
-          type: string
-      - description: Start is the inclusive lower bound of a custom window, RFC3339.
-          Requires end.
-        in: query
-        name: start
-        required: false
-        schema:
-          type: string
-      - description: End is the exclusive upper bound of a custom window, RFC3339.
-          Requires start.
-        in: query
-        name: end
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Timeseries'
-          description: ok
-      summary: Timeseries returns the caller org's LLM usage over time as an evenly-spaced
-        series.
-      tags:
-      - analytics
-      x-app: analytics
-      x-public: true
-      x-tool: true
-  /v1/analytics/top:
-    get:
-      description: |-
-        Top returns the caller org's ranked lenses for one window, five of them at once.
-        models ranks LLM models by spend and is always real; products ranks commerce orders
-        by revenue; topPages ranks requested paths, topReferrers the external referrer
-        domains ("(direct)" for a missing or same-origin one) and topSources the utm_source
-        campaigns ("(none)" when absent), each by pageviews. Every lens carries each row's
-        share of the in-window total, so a top-N honestly shows the long tail.
-
-        The four event lenses report available=false rather than fabricating zeros when the
-        product-event table holds nothing yet. The org is the validated principal's — never
-        a parameter. 403 without a validated bearer, 400 on an unknown range, 503 when the
-        warehouse is unreachable.
-      operationId: get_analytics_top
-      parameters:
-      - description: |-
-          Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
-          <N>d — or day, week, month, all. Default 24h. Ignored when both start and
-          end are given. An unknown value, or one past the 730-day horizon, is a 400.
-        example: 7d
-        in: query
-        name: range
-        required: false
-        schema:
-          type: string
-      - description: Start is the inclusive lower bound of a custom window, RFC3339.
-          Requires end.
-        in: query
-        name: start
-        required: false
-        schema:
-          type: string
-      - description: End is the exclusive upper bound of a custom window, RFC3339.
-          Requires start.
-        in: query
-        name: end
-        required: false
-        schema:
-          type: string
-      - description: |-
-          Limit bounds every ranked lens in the response. Default 10, maximum 100; a
-          value at or below zero, or one that is not a number, takes the default.
-        example: 25
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Top'
-          description: ok
-      summary: Top returns the caller org's ranked lenses for one window, five of
-        them at once.
-      tags:
-      - analytics
-      x-app: analytics
-      x-public: true
-      x-tool: true
   /v1/ask:
     post:
       description: |-
@@ -72632,42 +72407,6 @@ paths:
       x-app: entitlements
       x-public: true
       x-tool: true
-  /v1/errors:
-    get:
-      description: |-
-        Errors returns the caller org's most recently captured errors, newest first. The
-        error-tracking read view over event.error — the plane table the write core's error
-        facts land in (errors are DELIBERATELY not on event.event) — each with its captured
-        exception surfaced from the attributes map as a first-class field.
-
-        The org is the validated principal's — never a parameter — and this read requires a
-        real bearer, NEVER the write-only publishable key: pk- can attribute a write and can
-        read nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.
-      operationId: get_errors
-      parameters:
-      - description: |-
-          Limit is how many rows to return, newest first. Default 50, maximum 200; a
-          value at or below zero, or one that is not a number, takes the default.
-        example: 100
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/errorList'
-          description: ok
-      summary: Errors returns the caller org's most recently captured errors, newest
-        first.
-      tags:
-      - analytics
-      x-app: analytics
-      x-public: true
-      x-tool: true
   /v1/esign/documents:
     get:
       description: Lists the caller org's documents with their status, recipients
@@ -73548,7 +73287,7 @@ paths:
 
         WHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the door itself grants nothing. A validated bearer or an org API key writes the full event at full fidelity. A PUBLISHABLE key (pk-, on Authorization: Bearer, x-hanzo-ingest-key, or ?ingest_key= for navigator.sendBeacon, which cannot set headers) does the same, and is the credential a browser bundle ships: it is deliberately NOT a secret, it resolves WHICH tenant a beacon belongs to and nothing more. A pk- never authenticates and can READ NOTHING — not this org's errors, not a lens, not any other route on this API — so a leaked one lets a stranger write into your stream, and never lets one read out of it. Reading these rows back always takes a real bearer. A Hanzo Team workspace token resolves its org at REDUCED capability: the signed account names the person, so a `distinctId` in the body cannot pin events on a colleague.
 
-        NO CREDENTIAL IS REFUSED: a write the server cannot attribute to a project is 401 `ingest_key_required`, and a credential that IS presented but resolves to no project is 403 `ingest_key_unknown`. Nothing is filed under a shared tenant — events nobody can read are worse than events nobody sent, because the caller is told it succeeded. A browser bundle therefore always ships a pk-, which is what /v1/event.js takes.
+        NO CREDENTIAL IS REFUSED: a write the server cannot attribute to a project is 401 `ingest_key_required`, and a credential that IS presented but resolves to no project is 403 `ingest_key_unknown`. Nothing is filed under a shared tenant — events nobody can read are worse than events nobody sent, because the caller is told it succeeded. A browser bundle therefore always ships a pk-, which is what /v1/event/tag.js takes.
 
         A REDUCED principal — a Hanzo Team workspace token — writes through the PROJECTION into its own org: narrowed to what the SERVER can name (pageviews and errors, plus the closed autocapture vocabulary $click, $input, $change, $submit, $view), where every one of those names is resolved through a server-owned table and stored as that table's value, so the name on the wire is never the name in the row. Stripped, too, to the fields the projection names, so revenue, personId, groupId and every property but the element annotation cannot reach a row — and an exception is carried only on an error, never on an interaction, so a click cannot ship a stack trace into a row's attributes. It does NOT name the person: the signed account is the identity, so a `distinctId` in the body cannot pin events on a colleague. Everything refused is counted in `dropped`.
 
@@ -73574,34 +73313,8 @@ paths:
           description: Success
       summary: Capture product events into your org's warehouse
       tags:
-      - analytics
-      x-app: analytics
-      x-public: true
-  /v1/event.js:
-    get:
-      description: |-
-        Serves the browser tag that autocaptures pageviews (initial and SPA) and uncaught errors onto the canonical wire at POST /v1/event.
-
-        Install is one line, and it is the same line for a Hanzo property and for a customer's own page:
-
-            <script defer src="https://api.hanzo.ai/v1/event.js" data-key="pk-…"></script>
-
-        `data-key` is the publishable key the project mints; `data-product` optionally names the emitting surface. The key may also ride the src as `?key=` for a host that strips data attributes.
-
-        WITHOUT A KEY THE TAG SENDS NOTHING. A keyless beacon is accepted 200 into $public, a reserved tenant the owning org cannot read — so silence is the honest failure, and the tag picks it rather than reporting success into a tenant nobody reads.
-      operationId: get_event.js
-      responses:
-        2XX:
-          content:
-            application/javascript:
-              schema:
-                format: binary
-                type: string
-          description: Success
-      summary: The Hanzo event tag — the one-line install for a surface with no bundler
-      tags:
-      - analytics
-      x-app: analytics
+      - event
+      x-app: event
       x-public: true
   /v1/event/{project}/envelope:
     post:
@@ -73629,8 +73342,8 @@ paths:
       summary: Sentry SDK envelope ingest — errors and traces from an unmodified Sentry
         client
       tags:
-      - analytics
-      x-app: analytics
+      - event
+      x-app: event
       x-public: true
   /v1/event/{project}/store:
     post:
@@ -73657,9 +73370,382 @@ paths:
               type: string
       summary: Sentry SDK store ingest — the legacy single-event wire
       tags:
-      - analytics
-      x-app: analytics
+      - event
+      x-app: event
       x-public: true
+  /v1/event/errors:
+    get:
+      description: |-
+        Errors returns the caller org's most recently captured errors, newest first. The
+        error-tracking read view over event.error — the plane table the write core's error
+        facts land in (errors are DELIBERATELY not on event.event) — each with its captured
+        exception surfaced from the attributes map as a first-class field.
+
+        The org is the validated principal's — never a parameter — and this read requires a
+        real bearer, NEVER the write-only publishable key: pk- can attribute a write and can
+        read nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.
+      operationId: get_event_errors
+      parameters:
+      - description: |-
+          Limit is how many rows to return, newest first. Default 50, maximum 200; a
+          value at or below zero, or one that is not a number, takes the default.
+        example: 100
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/errorList'
+          description: ok
+      summary: Errors returns the caller org's most recently captured errors, newest
+        first.
+      tags:
+      - event
+      x-app: event
+      x-public: true
+      x-tool: true
+  /v1/event/health:
+    get:
+      description: |-
+        Health reports whether the event plane can take a write and the warehouse can
+        answer a read.
+
+        It reports the analytics subsystem's own liveness in BOTH directions: plane is
+        the event plane it WRITES (the bus and the JetStream stream every accepted
+        event is published to, both named in the report), and datastore is the
+        warehouse it READS, with each read lens's table reported as it is provisioned
+        (the LLM usage ledger and the product-event table).
+
+        EITHER ONE DOWN IS A 503, and the report says WHICH — they are probed
+        independently and never collapse into a single bit. This endpoint used to
+        report the read half only, and answered 200/ok while every POST /v1/event
+        failed on a stream that could not bind: a total ingest outage behind a green
+        probe. A readiness gate here now gates on the write path too.
+
+        plane.ready IS A REAL PROBE and walks the ingest path itself — the same
+        connection and the same stream a publish uses — so it cannot answer ready while
+        a publish would 503. plane.reason carries the plane's own error text when it is
+        false.
+
+        datastore IS NOT PROBED WITH A QUERY. It is the state of the process's own
+        shared client — established, and not since closed — so a warehouse accepting
+        connections and failing reads still reports true. Degraded CARRIES the report
+        (status, the failing half, reason) as its body rather than an error envelope,
+        so a gate reads the cause off the same object it got at 200.
+
+        A MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens
+        reported available:false answers honest-empty rather than erroring, so a fresh
+        deployment whose collector has not emitted yet is legitimately 200 with the
+        product-event lens unavailable. The lens block is reported whenever the
+        warehouse is REACHABLE — including on a report degraded by the plane, where the
+        tables genuinely were probed — and is absent only when the warehouse is not,
+        having nothing to say about tables it could not reach.
+
+        Unauthenticated on purpose — liveness has to be probe-able — and it reads NO
+        tenant data: table existence and stream presence only, never a row and never an
+        event.
+      operationId: get_event_health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/healthReport'
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/healthReport'
+          description: service unavailable
+      summary: Health reports whether the event plane can take a write and the warehouse
+        can answer a read.
+      tags:
+      - event
+      x-app: event
+      x-public: true
+      x-tool: true
+  /v1/event/insights/events:
+    get:
+      description: |-
+        Returns the caller org's most recent product events, newest first.
+        The console's raw-event view over event.event — the same table the capture doors
+        fill — one row per stored event, with the row's attributes returned as the
+        properties object.
+
+        The org is the validated principal's — never a parameter — and a read requires a
+        real bearer, never the write-only publishable key. 403 without a validated bearer,
+        503 when the warehouse is unreachable.
+      operationId: get_event_insights_events
+      parameters:
+      - description: |-
+          Limit is how many rows to return, newest first. Default 50, maximum 200; a
+          value at or below zero, or one that is not a number, takes the default.
+        example: 100
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/eventList'
+          description: ok
+      summary: Returns the caller org's most recent product events, newest first.
+      tags:
+      - event
+      x-app: event
+      x-public: true
+      x-tool: true
+  /v1/event/insights/health:
+    get:
+      description: |-
+        Reports that the unified insights surface is serving. It reads no
+        tenant data and consults no dependency, so it answers 200 unconditionally and needs
+        no principal — liveness must be probe-able. The warehouse-connectivity probe is a
+        different question and lives at GET /v1/event/health.
+      operationId: get_event_insights_health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/insightsStatus'
+          description: ok
+      summary: Reports that the unified insights surface is serving.
+      tags:
+      - event
+      x-app: event
+      x-public: true
+      x-tool: true
+  /v1/event/overview:
+    get:
+      description: |-
+        Overview returns the caller org's analytics KPIs for one time window. Three lenses
+        over one warehouse: llm is the live per-org LLM usage ledger (requests, tokens,
+        spend, models, providers, errors) and is always real; web (pageviews, visitors,
+        sessions) and commerce (orders, revenue, AOV) read the product-event table and
+        report available=false rather than fabricating zeros when it holds nothing yet.
+
+        The org is the validated principal's — never a parameter — so a caller can only
+        ever read its own tenant. 403 without a validated bearer, 400 on an unknown range,
+        503 when the warehouse is unreachable.
+      operationId: get_event_overview
+      parameters:
+      - description: |-
+          Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+          <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+          end are given. An unknown value, or one past the 730-day horizon, is a 400.
+        example: 7d
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: Start is the inclusive lower bound of a custom window, RFC3339.
+          Requires end.
+        in: query
+        name: start
+        required: false
+        schema:
+          type: string
+      - description: End is the exclusive upper bound of a custom window, RFC3339.
+          Requires start.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Overview'
+          description: ok
+      summary: Overview returns the caller org's analytics KPIs for one time window.
+      tags:
+      - event
+      x-app: event
+      x-public: true
+      x-tool: true
+  /v1/event/replay:
+    post:
+      description: |-
+        Accepts a batch of rrweb events from a browser recorder and hands it to the session-replay pipeline, which stores the recording and derives the session summary a player reads back.
+
+        ONE REQUEST IS ONE BATCH, and it is all-or-nothing: the recording is made durable before this answers, so a 200 {"accepted":1} means stored and never "buffered somewhere". There is no partial count, because a half-written recording is not a recording.
+
+        `sessionId` is REQUIRED and bounded — at most 70 characters of ASCII letters, digits or '-'. It is the key every batch of one visit is grouped and ordered by, so an id outside that grammar is refused 400 here rather than accepted and dropped further down. `windowId` separates two tabs of one session and `distinctId` attributes the recording to a person; both are optional. `events` is the rrweb batch, each element a raw eventWithTime object, carried VERBATIM — the summary (click, keypress and mouse-activity counts, size) is derived downstream from exactly these bytes, so nothing is re-encoded or dropped.
+
+        THE CALLER'S CREDENTIAL DECIDES THE TENANT, and the body never does: the recording lands in the org the presented credential resolves to. It takes the SAME credentials as /v1/event — a validated bearer, an org API key, or a publishable pk- key on Authorization: Bearer, x-hanzo-ingest-key or ?ingest_key= — so a browser bundle already holding a pk- for events needs nothing new to record. A caller that presents nothing is 401 `ingest_key_required`; one whose key resolves to no project is 403 `ingest_key_unknown`; a reduced principal (a Hanzo Team workspace token) is 403 `insufficient_capability`, because a full-fidelity screen recording has no projected form that is safe for a guest to write into a host org.
+
+        BOUNDS: 413 over 512 KiB of body, and that is the only bound on one batch — a recorder is expected to chunk a long session rather than send it whole, and the cap is the size one message can carry rather than an arbitrary number. 503 when the pipeline cannot take the batch: honest unavailability the caller can retry, never a 200 over a discarded recording.
+      operationId: post_event_replay
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/replayBody'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureResult'
+          description: Success
+      summary: Record a session-replay snapshot batch
+      tags:
+      - event
+      x-app: event
+      x-public: true
+  /v1/event/tag.js:
+    get:
+      description: |-
+        Serves the browser tag that autocaptures pageviews (initial and SPA) and uncaught errors onto the canonical wire at POST /v1/event.
+
+        Install is one line, and it is the same line for a Hanzo property and for a customer's own page:
+
+            <script defer src="https://api.hanzo.ai/v1/event/tag.js" data-key="pk-…"></script>
+
+        `data-key` is the publishable key the project mints; `data-product` optionally names the emitting surface. The key may also ride the src as `?key=` for a host that strips data attributes.
+
+        WITHOUT A KEY THE TAG SENDS NOTHING. A keyless beacon is accepted 200 into $public, a reserved tenant the owning org cannot read — so silence is the honest failure, and the tag picks it rather than reporting success into a tenant nobody reads.
+      operationId: get_event_tag.js
+      responses:
+        2XX:
+          content:
+            application/javascript:
+              schema:
+                format: binary
+                type: string
+          description: Success
+      summary: The Hanzo event tag — the one-line install for a surface with no bundler
+      tags:
+      - event
+      x-app: event
+      x-public: true
+  /v1/event/timeseries:
+    get:
+      description: |-
+        Timeseries returns the caller org's LLM usage over time as an evenly-spaced series.
+        One point per hour or per day — the bucket the window implies, 24h giving hours and
+        7d/30d giving days — carrying requests, total tokens and spend in cents. Empty
+        buckets are filled with zeros so a client charts a continuous line.
+
+        The org is the validated principal's — never a parameter. 403 without a validated
+        bearer, 400 on an unknown range, 503 when the warehouse is unreachable.
+      operationId: get_event_timeseries
+      parameters:
+      - description: |-
+          Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+          <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+          end are given. An unknown value, or one past the 730-day horizon, is a 400.
+        example: 30d
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: Start is the inclusive lower bound of a custom window, RFC3339.
+          Requires end.
+        in: query
+        name: start
+        required: false
+        schema:
+          type: string
+      - description: End is the exclusive upper bound of a custom window, RFC3339.
+          Requires start.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Timeseries'
+          description: ok
+      summary: Timeseries returns the caller org's LLM usage over time as an evenly-spaced
+        series.
+      tags:
+      - event
+      x-app: event
+      x-public: true
+      x-tool: true
+  /v1/event/top:
+    get:
+      description: |-
+        Top returns the caller org's ranked lenses for one window, five of them at once.
+        models ranks LLM models by spend and is always real; products ranks commerce orders
+        by revenue; topPages ranks requested paths, topReferrers the external referrer
+        domains ("(direct)" for a missing or same-origin one) and topSources the utm_source
+        campaigns ("(none)" when absent), each by pageviews. Every lens carries each row's
+        share of the in-window total, so a top-N honestly shows the long tail.
+
+        The four event lenses report available=false rather than fabricating zeros when the
+        product-event table holds nothing yet. The org is the validated principal's — never
+        a parameter. 403 without a validated bearer, 400 on an unknown range, 503 when the
+        warehouse is unreachable.
+      operationId: get_event_top
+      parameters:
+      - description: |-
+          Range is a relative window: a count and a unit — 24h, 7d, 90d, any <N>h or
+          <N>d — or day, week, month, all. Default 24h. Ignored when both start and
+          end are given. An unknown value, or one past the 730-day horizon, is a 400.
+        example: 7d
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: Start is the inclusive lower bound of a custom window, RFC3339.
+          Requires end.
+        in: query
+        name: start
+        required: false
+        schema:
+          type: string
+      - description: End is the exclusive upper bound of a custom window, RFC3339.
+          Requires start.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit bounds every ranked lens in the response. Default 10, maximum 100; a
+          value at or below zero, or one that is not a number, takes the default.
+        example: 25
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Top'
+          description: ok
+      summary: Top returns the caller org's ranked lenses for one window, five of
+        them at once.
+      tags:
+      - event
+      x-app: event
+      x-public: true
+      x-tool: true
   /v1/exec:
     post:
       description: |-
@@ -83973,62 +84059,6 @@ paths:
       tags:
       - ingress
       x-app: ingress
-      x-public: true
-      x-tool: true
-  /v1/insights/events:
-    get:
-      description: |-
-        Returns the caller org's most recent product events, newest first.
-        The console's raw-event view over event.event — the same table the capture doors
-        fill — one row per stored event, with the row's attributes returned as the
-        properties object.
-
-        The org is the validated principal's — never a parameter — and a read requires a
-        real bearer, never the write-only publishable key. 403 without a validated bearer,
-        503 when the warehouse is unreachable.
-      operationId: get_insights_events
-      parameters:
-      - description: |-
-          Limit is how many rows to return, newest first. Default 50, maximum 200; a
-          value at or below zero, or one that is not a number, takes the default.
-        example: 100
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/eventList'
-          description: ok
-      summary: Returns the caller org's most recent product events, newest first.
-      tags:
-      - analytics
-      x-app: analytics
-      x-public: true
-      x-tool: true
-  /v1/insights/health:
-    get:
-      description: |-
-        Reports that the unified insights surface is serving. It reads no
-        tenant data and consults no dependency, so it answers 200 unconditionally and needs
-        no principal — liveness must be probe-able. The warehouse-connectivity probe is a
-        different question and lives at GET /v1/analytics/health.
-      operationId: get_insights_health
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/insightsStatus'
-          description: ok
-      summary: Reports that the unified insights surface is serving.
-      tags:
-      - analytics
-      x-app: analytics
       x-public: true
       x-tool: true
   /v1/integrations:
@@ -107016,36 +107046,6 @@ paths:
       x-app: registry
       x-public: true
       x-tool: true
-  /v1/replay:
-    post:
-      description: |-
-        Accepts a batch of rrweb events from a browser recorder and hands it to the session-replay pipeline, which stores the recording and derives the session summary a player reads back.
-
-        ONE REQUEST IS ONE BATCH, and it is all-or-nothing: the recording is made durable before this answers, so a 200 {"accepted":1} means stored and never "buffered somewhere". There is no partial count, because a half-written recording is not a recording.
-
-        `sessionId` is REQUIRED and bounded — at most 70 characters of ASCII letters, digits or '-'. It is the key every batch of one visit is grouped and ordered by, so an id outside that grammar is refused 400 here rather than accepted and dropped further down. `windowId` separates two tabs of one session and `distinctId` attributes the recording to a person; both are optional. `events` is the rrweb batch, each element a raw eventWithTime object, carried VERBATIM — the summary (click, keypress and mouse-activity counts, size) is derived downstream from exactly these bytes, so nothing is re-encoded or dropped.
-
-        THE CALLER'S CREDENTIAL DECIDES THE TENANT, and the body never does: the recording lands in the org the presented credential resolves to. It takes the SAME credentials as /v1/event — a validated bearer, an org API key, or a publishable pk- key on Authorization: Bearer, x-hanzo-ingest-key or ?ingest_key= — so a browser bundle already holding a pk- for events needs nothing new to record. A caller that presents nothing is 401 `ingest_key_required`; one whose key resolves to no project is 403 `ingest_key_unknown`; a reduced principal (a Hanzo Team workspace token) is 403 `insufficient_capability`, because a full-fidelity screen recording has no projected form that is safe for a guest to write into a host org.
-
-        BOUNDS: 413 over 512 KiB of body, and that is the only bound on one batch — a recorder is expected to chunk a long session rather than send it whole, and the cap is the size one message can carry rather than an arbitrary number. 503 when the pipeline cannot take the batch: honest unavailability the caller can retry, never a 200 over a discarded recording.
-      operationId: post_replay
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/replayBody'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CaptureResult'
-          description: Success
-      summary: Record a session-replay snapshot batch
-      tags:
-      - analytics
-      x-app: analytics
-      x-public: true
   /v1/rerank:
     post:
       description: "Implements POST /v1/rerank (Cohere/Jina-compatible).\n\nBody:
@@ -115413,9 +115413,6 @@ tags:
 - description: Package allowance is how much a plan lets you do without paying, and
     how much of it you have left today.
   name: allowance
-- description: 'Package analytics is product analytics: send an event, read back who
-    did what.'
-  name: analytics
 - description: Package ask is a plain-language question about your business, answered
     with real numbers.
   name: ask
@@ -115516,6 +115513,9 @@ tags:
 - description: Package eval is scoring a model on your own data, with a judge you
     choose.
   name: evals
+- description: 'Package analytics is product analytics: send an event, read back who
+    did what.'
+  name: event
 - description: 'Package exec is the code interpreter: run a snippet in a sandbox,
     and move files in and out of the session that sandbox IS.'
   name: exec
