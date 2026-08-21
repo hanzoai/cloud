@@ -158,10 +158,35 @@ jobs:
         run: |
           set -euo pipefail
 
-          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
-            | jq -r '.accessToken // empty' || true)
+          # ASKED PROPERLY BEFORE IT IS REFUSED. This login leaves the cluster and
+          # returns through a CDN, so one attempt makes a release depend on a
+          # single packet — and a 502 from that path is not a refusal, it is the
+          # absence of an answer. A transient status is asked again; a 4xx is the
+          # endpoint answering and stands on the first reply. Exhausting the
+          # tries still fails, which is the direction this has to fail in.
+          #
+          # The body is READ rather than piped straight into jq: a reply that is
+          # not JSON reported a jq parse error, which tells a reader that the
+          # JSON was not JSON and nothing whatever about what came back.
+          kms_body=$(mktemp)
+          kms_attempt=1
+          while :; do
+            kms_code=$(curl -sS -m 30 -o "$kms_body" -w '%{http_code}' "${KMS_ENDPOINT}/v1/kms/auth/login" \
+              -H 'Content-Type: application/json' \
+              -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" || true)
+            kms_code=${kms_code:-000}
+            case "$kms_code" in
+              000|429|502|503|504) : ;;
+              *) break ;;
+            esac
+            if [ "$kms_attempt" -ge 3 ]; then break; fi
+            echo "kms: ${KMS_ENDPOINT} answered ${kms_code}, which is no answer; asking again (${kms_attempt} of 3)"
+            sleep $(( kms_attempt * 3 ))
+            kms_attempt=$(( kms_attempt + 1 ))
+          done
+          KMS_TOKEN=$(jq -r '.accessToken // empty' < "$kms_body" 2>/dev/null || true)
+          [ -n "$KMS_TOKEN" ] || echo "kms: ${KMS_ENDPOINT} answered ${kms_code} — $(head -c 200 "$kms_body")"
+          rm -f "$kms_body"
           [ -n "$KMS_TOKEN" ] || { echo "::error::review: KMS login failed at ${KMS_ENDPOINT} — the reviewer cannot be given a credential, so the change cannot pass"; exit 1; }
 
           kms_secret() {
@@ -1182,10 +1207,35 @@ jobs:
           VERSION="${{ steps.ver.outputs.version }}"
 
           # Secrets come from KMS, never from a file or a repo variable.
-          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
-            | jq -r '.accessToken // empty' || true)
+          # ASKED PROPERLY BEFORE IT IS REFUSED. This login leaves the cluster and
+          # returns through a CDN, so one attempt makes a release depend on a
+          # single packet — and a 502 from that path is not a refusal, it is the
+          # absence of an answer. A transient status is asked again; a 4xx is the
+          # endpoint answering and stands on the first reply. Exhausting the
+          # tries still fails, which is the direction this has to fail in.
+          #
+          # The body is READ rather than piped straight into jq: a reply that is
+          # not JSON reported a jq parse error, which tells a reader that the
+          # JSON was not JSON and nothing whatever about what came back.
+          kms_body=$(mktemp)
+          kms_attempt=1
+          while :; do
+            kms_code=$(curl -sS -m 30 -o "$kms_body" -w '%{http_code}' "${KMS_ENDPOINT}/v1/kms/auth/login" \
+              -H 'Content-Type: application/json' \
+              -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" || true)
+            kms_code=${kms_code:-000}
+            case "$kms_code" in
+              000|429|502|503|504) : ;;
+              *) break ;;
+            esac
+            if [ "$kms_attempt" -ge 3 ]; then break; fi
+            echo "kms: ${KMS_ENDPOINT} answered ${kms_code}, which is no answer; asking again (${kms_attempt} of 3)"
+            sleep $(( kms_attempt * 3 ))
+            kms_attempt=$(( kms_attempt + 1 ))
+          done
+          KMS_TOKEN=$(jq -r '.accessToken // empty' < "$kms_body" 2>/dev/null || true)
+          [ -n "$KMS_TOKEN" ] || echo "kms: ${KMS_ENDPOINT} answered ${kms_code} — $(head -c 200 "$kms_body")"
+          rm -f "$kms_body"
           [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
 
           # THERE IS NO ORG IN A KMS PATH. The store root comes from the validated
@@ -1305,10 +1355,35 @@ jobs:
 
           # Same KMS path convention as the pin token: there is no org in a KMS
           # path, the store root comes from the validated claim.
-          KMS_TOKEN=$(curl -sS "${KMS_ENDPOINT}/v1/kms/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" \
-            | jq -r '.accessToken // empty' || true)
+          # ASKED PROPERLY BEFORE IT IS REFUSED. This login leaves the cluster and
+          # returns through a CDN, so one attempt makes a release depend on a
+          # single packet — and a 502 from that path is not a refusal, it is the
+          # absence of an answer. A transient status is asked again; a 4xx is the
+          # endpoint answering and stands on the first reply. Exhausting the
+          # tries still fails, which is the direction this has to fail in.
+          #
+          # The body is READ rather than piped straight into jq: a reply that is
+          # not JSON reported a jq parse error, which tells a reader that the
+          # JSON was not JSON and nothing whatever about what came back.
+          kms_body=$(mktemp)
+          kms_attempt=1
+          while :; do
+            kms_code=$(curl -sS -m 30 -o "$kms_body" -w '%{http_code}' "${KMS_ENDPOINT}/v1/kms/auth/login" \
+              -H 'Content-Type: application/json' \
+              -d "{\"clientId\":\"${KMS_CLIENT_ID}\",\"clientSecret\":\"${KMS_CLIENT_SECRET}\"}" || true)
+            kms_code=${kms_code:-000}
+            case "$kms_code" in
+              000|429|502|503|504) : ;;
+              *) break ;;
+            esac
+            if [ "$kms_attempt" -ge 3 ]; then break; fi
+            echo "kms: ${KMS_ENDPOINT} answered ${kms_code}, which is no answer; asking again (${kms_attempt} of 3)"
+            sleep $(( kms_attempt * 3 ))
+            kms_attempt=$(( kms_attempt + 1 ))
+          done
+          KMS_TOKEN=$(jq -r '.accessToken // empty' < "$kms_body" 2>/dev/null || true)
+          [ -n "$KMS_TOKEN" ] || echo "kms: ${KMS_ENDPOINT} answered ${kms_code} — $(head -c 200 "$kms_body")"
+          rm -f "$kms_body"
           [ -n "$KMS_TOKEN" ] || { echo "::error::KMS login failed at ${KMS_ENDPOINT}"; exit 1; }
 
           # The path is the app that READS the secret (HIP-0136), and this bearer is

@@ -146,13 +146,36 @@ json.dump({"model": model, "max_tokens": 1500, "temperature": 0,
            "messages": [{"role":"system","content":system},{"role":"user","content":user}]}, sys.stdout)
 PY
 
+# ASKED PROPERLY BEFORE IT IS REFUSED. This gate fails closed, so every dropped
+# packet is a refused release — and a 502 from a gateway being rolled, or a
+# connection cut mid-body, is not a verdict but the ABSENCE of one. Refusing on
+# it reports "this change is hostile" about a change nobody read. So a transient
+# answer is asked again, with a pause between tries, and refused only once the
+# reviewer has genuinely been given the chance to answer. The fail-closed
+# property is untouched: exhausting the tries falls through to the same `die`.
+#
+# A 4xx is NOT retried. That is the gateway ANSWERING — a refused bearer, an
+# unknown model, a body it will not take — and asking twice more returns the
+# same answer twice more, turning an instant legible refusal into a slow one.
+#
 # `-w` prints 000 itself when the transfer never completed, so a `|| echo 000`
 # fallback APPENDS to that rather than standing in for it, and the refusal read
 # `answered 000000` — a status nothing can look up. Take curl's own word, and
 # default only the case where it printed nothing at all.
-code=$(curl -sS -m 180 -o "$resp" -w '%{http_code}' "$API/v1/chat/completions" \
-  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @"$req" || true)
-code=${code:-000}
+attempt=1
+while :; do
+  code=$(curl -sS -m 180 -o "$resp" -w '%{http_code}' "$API/v1/chat/completions" \
+    -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' --data-binary @"$req" || true)
+  code=${code:-000}
+  case "$code" in
+    000|429|502|503|504) : ;;
+    *) break ;;
+  esac
+  if [ "$attempt" -ge 3 ]; then break; fi
+  echo "review: $LABEL — reviewer answered $code, which is no answer; asking again ($attempt of 3)"
+  sleep $(( attempt * 5 ))
+  attempt=$(( attempt + 1 ))
+done
 # A REFUSED BEARER NAMES ITSELF. The gateway answers `jwt: audience not allowed`
 # without saying which audience it saw or which it wanted, and the two live in
 # different repositories — the aud is whatever IAM application minted this token
