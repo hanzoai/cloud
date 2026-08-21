@@ -150,11 +150,23 @@ type routedRunOut struct {
 	// turns into it.
 	SessionID string `json:"sessionId"`
 	// Repo is the repository to work in and CloneURL is how to fetch it.
-	Repo     string `json:"repo"`
-	Project  string `json:"project"`
-	Base     string `json:"base"`
-	Branch   string `json:"branch"`
-	Prompt   string `json:"prompt"`
+	Repo string `json:"repo"`
+	// Project is the product slug the run is filed under, so the machine can tag
+	// what it produces. Empty when the dispatch named none.
+	Project string `json:"project"`
+	// Base is the branch to start FROM. Empty means the repository's default —
+	// resolve it on the machine, since the machine is the one holding the clone.
+	Base string `json:"base"`
+	// Branch is the ref the run must push its work to, and the ONLY one it is
+	// permitted to write: the forge's ref policy refuses anything else from this
+	// run's credential. It is decided at dispatch and exists before the work does.
+	Branch string `json:"branch"`
+	// Prompt is the task, in full, as the person wrote it. There is no second field
+	// for context.
+	Prompt string `json:"prompt"`
+	// CloneURL is how to fetch the repository. It carries NO credential — the
+	// machine authenticates with the git identity it already holds — which is why
+	// this whole shape is safe to hand to a claimed runner.
 	CloneURL string `json:"cloneUrl"`
 	// TimeoutSeconds bounds the run on the machine; 0 means the machine's own default.
 	TimeoutSeconds int `json:"timeoutSeconds"`
@@ -214,14 +226,24 @@ type reportRunIn struct {
 	// RunID is the routed run being completed, from the path.
 	RunID string `json:"runId"`
 	// OK is whether the run succeeded; Changed whether it produced any commit.
-	OK      bool `json:"ok"`
+	OK bool `json:"ok"`
+	// Changed says whether the run produced any commit. It is INDEPENDENT of OK: a
+	// run can succeed and change nothing (there was nothing to do), and a run can
+	// fail after committing some of its work. Two questions, two booleans.
 	Changed bool `json:"changed"`
 	// Branch, CommitSha and Diffstat describe what the run produced; Error is the
 	// failure when OK is false. Each is clamped, never rejected.
-	Branch    string `json:"branch"`
+	Branch string `json:"branch"`
+	// CommitSha is the tip the run pushed, clamped to 128 characters. Empty when it
+	// pushed nothing, which is the same case Changed reports false for.
 	CommitSha string `json:"commitSha"`
-	Diffstat  string `json:"diffstat"`
-	Error     string `json:"error"`
+	// Diffstat is the run's own summary of what it changed, as text, clamped to
+	// 64 KiB. Free-form: it is shown, never parsed.
+	Diffstat string `json:"diffstat"`
+	// Error is why the run failed, clamped to 64 KiB. It is CLAMPED rather than
+	// refused — a truncated reason is worth more than a rejected report, because a
+	// rejected report leaves the durable workflow waiting forever.
+	Error string `json:"error"`
 }
 
 // reportOut acknowledges a reported result.
