@@ -179,6 +179,7 @@ func Enforced() bool { return flags.Bool(enforceKey) }
 // Apply it ONLY to route groups whose routes are ALL authenticated: step (3) refuses
 // an unvalidated caller, so a genuinely public route must never be wrapped.
 func RequireProduct(commerce cloud.CommerceClient, product string) zip.Handler {
+	allow, _ := commerce.(cloud.AllowanceChecker)
 	return func(c *zip.Ctx) error {
 		if !flags.Bool(enforceKey) {
 			return c.Next() // dark — byte-identical to no middleware at all.
@@ -201,7 +202,7 @@ func RequireProduct(commerce cloud.CommerceClient, product string) zip.Handler {
 		// org against the platform's own balance. A caller with no resolvable wallet
 		// simply has no credit leg; the subscription leg still answers.
 		w, _ := principal.WalletOf(c)
-		switch s := cloud.Stand(c.Context(), licensedBy(c.Context(), commerce, org, product), w); {
+		switch s := cloud.Stand(c.Context(), licensedBy(c.Context(), commerce, org, product), cloud.AllowanceIn(c.Context(), allow, w), w); {
 		case s.Admits():
 			return c.Next()
 		case s == cloud.Unknown:

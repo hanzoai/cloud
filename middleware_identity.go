@@ -130,64 +130,24 @@ const HeaderUserBrand = "X-User-Brand"
 // validated claims alone, so it is never a value a caller chose.
 const HeaderUserIsApp = "X-User-IsApp"
 
-// authorityHeaders are the identity/authority headers the gateway writes and the
-// ONLY ones a downstream may trust. The sanitizer deletes every one on ingress
-// so nothing a client sent survives as identity, then re-injects from a
-// validated principal.
+// Two categories of name reach this boundary and they are RESTORED differently,
+// which is the distinction to keep in mind reading the passes below.
 //
-// Deliberately NOT in this list: org SUB-SCOPES (X-Project-Id, X-App-Id,
-// X-Environment). A sub-scope NARROWS within an org; it is not identity authority,
-// so it is handled in a separate pass (sanitizeSubScopes, keyed on
-// subScopeHeaders): every raw client copy is deleted on ingress, then X-Project-Id
-// is RE-WRITTEN from the validated `project` claim (claims.renderProject) exactly
-// like X-Org-Id from `owner`, still checked non-foreign to the effective org
-// (projectIsForeign — org_scope.go refuses a project REGISTERED to a DIFFERENT org,
-// which also drops an admin's own-org project when a SuperAdmin views another
-// org), and dropped on the anonymous path. The raw client X-Project-Id is NEVER a
-// source. So after this pass X-Project-Id is a TRUSTWORTHY server-written scope,
-// which is exactly why principal.ValidatedProject reports it claim-backed and per-
-// project spend caps HARD-enforce. The native evals subsystem, which scopes
-// exclusively by c.Org() and ignores X-Project-Id, is unaffected.
-var authorityHeaders = []string{
-	authz.HeaderUser,
-	authz.HeaderOrg,
-	authz.HeaderUserPermissions,
-	authz.HeaderUserEmail,
-	authz.HeaderUserAdmin,
-	authz.HeaderUserOrgAdmin,
-	// X-User-Owner is the HOME org (the validated `owner` claim) — the identity +
-	// BILLING anchor, written below DISTINCT from X-Org-Id (the effective/acted-on
-	// org). Stripped on ingress like every authority header so a client can never
-	// forge who pays, then re-injected only from validated claims.
-	"X-User-Owner",
-	// X-User-Brand is WHICH BRAND'S IAM vouched for this principal, resolved from
-	// the token's VERIFIED `iss` (HeaderUserBrand below). Stripped on ingress like
-	// every authority header and re-injected only from validated claims: a caller
-	// that could choose it would choose which brand's tenant space its org lands
-	// in, which is exactly the collision brand-qualification exists to prevent.
-	HeaderUserBrand,
-	// Legacy identity aliases an attacker might try; none are org sub-scopes.
-	authz.HeaderUserName,
-}
-
-// subScopeHeaders are org SUB-SCOPES — narrowings WITHIN an org, NOT identity
-// authority. All are deleted on ingress like the authority headers so no raw client
-// copy survives, then re-injected by sanitizeSubScopes only for a validated
-// principal:
-//   - X-Project-Id is WRITTEN from the validated `project` claim (claims.renderProject),
-//     exactly like X-Org-Id from `owner`, then still checked non-foreign to the
-//     effective org (defense in depth; it also drops an admin's own-org project when
-//     a SuperAdmin views another org). The raw client copy is never a source.
-//   - X-App-Id is a caller attribution hint (no isolation boundary): forwarded
-//     as-is on the validated path, dropped when anonymous.
-//   - X-Billing-Account-Id is NOT a hint and is never forwarded from the client.
-//     It names WHO PAYS, so it is MINTED from the validated `billing_account`
-//     claim, the same way X-Org-Id is minted from `owner`. It WAS an attribution
-//     hint once, and this list went on saying so long after sanitizeSubScopes
-//     stopped restoring the client copy — a stale sentence on a money boundary,
-//     which is how someone "restores" a debited header believing it decides
-//     nothing. sanitizeSubScopes states the rule it enforces; this now agrees.
-var subScopeHeaders = []string{authz.HeaderProject, authz.HeaderApp, authz.HeaderBillingAccount}
+// AUTHORITY is who the caller is — user, org, owner, brand, admin bits. A
+// downstream may trust it precisely because a client copy never survives ingress;
+// it is re-injected from a validated principal and from nothing else.
+//
+// An org SUB-SCOPE (X-Project-Id, X-App-Id, X-Billing-Account-Id) NARROWS within
+// an org and is not authority, so sanitizeSubScopes restores it in a separate pass
+// and per header: X-Project-Id is written from the validated `project` claim and
+// then checked non-foreign to the effective org, X-App-Id is a caller attribution
+// hint forwarded as-is, and X-Billing-Account-Id names WHO PAYS so it is minted
+// from the validated `billing_account` claim. The raw client copy is never a
+// source for any of them.
+//
+// Both categories are REMOVED the same way, by the one list below. They used to be
+// two lists that also spelled what to remove, which is two places for one fact to
+// go stale in.
 
 // stripped is every identity name ingress DELETES, taken from the estate's own list
 // rather than restated here.
@@ -220,7 +180,7 @@ var stripped = func() []string {
 // SanitizeIdentity returns the identity-trust-boundary middleware.
 //
 // Per request:
-//   - ALWAYS delete every header in authorityHeaders (a client copy never
+//   - ALWAYS delete every header in stripped (a client copy never
 //     survives — this alone kills X-User-IsAdmin forgery).
 //   - Validate a Bearer / Basic / session-cookie JWT, if present:
 //     SuperAdmin (authz.Claims.Sudo — a human MEMBER of the reserved admin
