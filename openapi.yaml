@@ -73422,6 +73422,84 @@ paths:
       - commerce
       x-app: commerce
       x-public: true
+  /v1/commerce/rates/entries:
+    get:
+      description: 'Returns the rate authority''s rows — the prices every metered
+        charge resolves against. Narrow with ?product= to show one surface at a time
+        rather than every rate at once. SuperAdmin only: a rate is cross-tenant money,
+        so the handler asks for the reserved admin org''s owner claim itself rather
+        than trusting the bundle''s token gate.'
+      operationId: get_commerce_rates_entries
+      summary: List what one unit of each metered thing costs
+      tags:
+      - commerce
+      x-app: commerce
+      x-public: true
+    post:
+      description: 'Creates one rate. Product AND meter are both required, because
+        together they are the identity: a rate keyed on the metered thing alone would
+        let one product''s price overwrite another''s under the same name. A slug
+        that already exists is refused rather than silently replaced. SuperAdmin only.'
+      operationId: post_commerce_rates_entries
+      summary: Add a rate
+      tags:
+      - commerce
+      x-app: commerce
+      x-public: true
+  /v1/commerce/rates/entries/{slug}:
+    delete:
+      description: Deletes the row. ARCHIVING is usually what is wanted instead —
+        a deleted rate cannot price a historical charge, so a past invoice that has
+        to re-resolve its rate finds nothing to read. Reach for status=archived unless
+        the rate never priced anything. SuperAdmin only.
+      operationId: delete_commerce_rates_entries_by_slug
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      summary: Remove a rate outright
+      tags:
+      - commerce
+      x-app: commerce
+      x-public: true
+    put:
+      description: 'Edits one rate and MARKS it edited, which is the whole contract
+        with the importer: an operator''s price outranks the document it came from,
+        so a later import leaves this row alone. Without that mark a price set here
+        would apply, work, and silently revert on the next import. Only the editable
+        fields move; identity and bookkeeping are not writable from the body. SuperAdmin
+        only.'
+      operationId: put_commerce_rates_entries_by_slug
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      summary: Edit a rate, and mark it as operator-set
+      tags:
+      - commerce
+      x-app: commerce
+      x-public: true
+  /v1/commerce/rates/import:
+    post:
+      description: 'Takes an array of rates and seeds the authority from it. This
+        is the seed, driven from admin rather than compiled in, because 506 published
+        prices in an embed made a price change wait for a build. It RECONCILES: a
+        row that matches is left alone, a row that has drifted is corrected, and a
+        row an operator edited is skipped — so importing the same document twice is
+        a no-op and importing a corrected one moves exactly the rows that changed.
+        Answers what it received, created, corrected and left unchanged, so an import
+        that changes nothing reads as nothing to do rather than as a failure. An empty
+        array is refused 400. SuperAdmin only.'
+      operationId: post_commerce_rates_import
+      summary: Load the published price document, reconciling rather than replacing
+      tags:
+      - commerce
+      x-app: commerce
+      x-public: true
   /v1/commerce/return/:
     get:
       description: 'A return is an RMA — the store, user and order it belongs to,
@@ -80143,19 +80221,6 @@ paths:
       x-app: domain
       x-public: true
       x-tool: true
-  /v1/embed:
-    post:
-      description: |-
-        Handles POST /v1/embed — the multipart upload hanzo.chat's
-        uploadVectors() sends. It saves the upload to a temp file, then reuses
-        object.RagEmbedFile (same parse+chunk+index as the native surface).
-      operationId: post_embed
-      summary: Handles POST /v1/embed — the multipart upload hanzo.chat's uploadVectors()
-        sends.
-      tags:
-      - ai
-      x-app: ai
-      x-public: true
   /v1/embeddings:
     post:
       description: |-
