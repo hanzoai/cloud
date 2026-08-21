@@ -63,12 +63,10 @@
 /v1/links link
 /v1/logs metrics
 /v1/machines visor
-/v1/mcp openapi
 /v1/mcp tools
 /v1/memory ai
 /v1/mesh zt
 /v1/networks zt
-/v1/openapi.json openapi
 /v1/oracles explorer
 /v1/org ai
 /v1/orgs account
