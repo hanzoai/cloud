@@ -21,7 +21,6 @@
 /v1/mesh zt
 /v1/networks zt
 /v1/replay analytics
-/v1/s3 storage
 /v1/sentinel o11y
 /v1/traces metrics
 /ws o11y

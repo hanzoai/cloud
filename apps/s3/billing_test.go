@@ -1,4 +1,4 @@
-package storage
+package s3
 
 // Integration tests proving the per-org credit-drawdown gate is wired into the
 // s3 data-plane guard via the ONE shared cloud.ResourceMeter: an unfunded org is
@@ -69,8 +69,8 @@ func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
 	}
 	deps := cloud.Deps{Metering: m, Env: "mainnet"}
 	return &cloud.Service[state]{
-		Base:  cloud.NewBase(deps, "storage"),
-		State: state{admin: s3admin.New(), bill: cloud.NewResourceMeter(deps, "s3")},
+		Base:  cloud.NewBase(deps, "s3"),
+		State: state{admin: s3admin.New()},
 	}
 }
 

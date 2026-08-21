@@ -42,7 +42,7 @@ type declaredIn struct {
 // openapi.Describe is NOT: prose is judged for orphans across the whole package
 // (openapi.Complete), so declaring it here fails two unrelated tests. The prose
 // half of this case is therefore asserted by the packages that actually carry it
-// (apps/storage describes untyped routes) rather than manufactured globally here.
+// (apps/s3 describes untyped routes) rather than manufactured globally here.
 func init() {
 	openapi.Register("/v1/probe/declared", http.MethodPost, declaredIn{}, toolOut{})
 }

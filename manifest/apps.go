@@ -125,12 +125,17 @@ var Apps = []App{
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}, Stage: Beta},
 	{Name: "plan", Prefixes: []string{"/v1/plan"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/pricing", "/v1/pricing"}},
-	// storage is the S3 DATA plane (buckets, objects, health). It shared this root
+	// s3 is the S3 DATA plane (buckets, objects, health). It shared this root
 	// with provisioning, which PROVISIONS an s3 resource: both rows once read
 	// "/v1/s3" — one prefix, two owners — so whichever mounted first took the
 	// other's routes with it. Allocation has since folded under its own name, so
-	// the two no longer meet and only storage answers here.
-	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
+	// the two no longer meet and only this row answers here.
+	//
+	// The app answered to "storage" until the address took the name back. Every
+	// route it has ever served is under /v1/s3, s3 is a word HIP-0139 §2.5 admits
+	// and the one every client already speaks, and a package called one thing
+	// while its whole surface says another is the pair §7.3 closes by rename.
+	{Name: "s3", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
 	// provisioning allocates a store of one of seven kinds and hands back its
 	// connection: one act, one store, one address (HIP-1164 §2). The row carried
 	// three further roots — /v1/s3, /v1/search/query and /v1/vector — that no route

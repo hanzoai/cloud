@@ -64,7 +64,7 @@ var unextracted = []string{
 	"leaderboard", "legal", "link", "lsp", "marketplace", "meet", "membership",
 	"metering", "mq", "payout", "plan", "plugin", "prefs", "principal",
 	"projects", "prompts", "provisioning", "reference",
-	"referrals", "registry", "risk", "rollingcap", "s3admin",
+	"referrals", "registry", "risk", "rollingcap", "s3", "s3admin",
 	"samples", "sandbox", "sbom", "search", "security",
 	// seo is the search-visibility surface: a typed proxy onto a measurement
 	// vendor, metered at that vendor's own published prices. It imports only
@@ -75,7 +75,7 @@ var unextracted = []string{
 	"seo",
 	"settings", "share",
 	"sites",
-	"storage", "sync",
+	"sync",
 	// taxonomy is the product catalogue's own shape — the categories, tags and
 	// display order the console used to hold as a TypeScript array. It imports only
 	// hanzoai/cloud, and no hanzoai/taxonomy exists to mount, so the functionality
