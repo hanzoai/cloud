@@ -189,21 +189,26 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("/v1/iam/organizations/get", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
-		id := r.URL.Query().Get("id") // admin/<slug>
-		slug := id
-		if _, bare, qualified := strings.Cut(id, "/"); qualified {
-			slug = bare
+		// SEPARATE owner and name. The composite `?id=admin/<slug>` binds NOTHING —
+		// measured against the running service, where it answers 400 for a missing
+		// owner, which the client then reads as "no such org" and reports every slug
+		// as available. The fake insists on the shape IAM accepts so a client that
+		// regresses to `id` fails here instead of onboarding into a duplicate.
+		q := r.URL.Query()
+		if q.Get("owner") == "" || q.Get("name") == "" {
+			bad(w, "owner and name are required")
+			return
 		}
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		if row, present := f.orgs[slug]; present && row != nil {
+		if row, present := f.orgs[q.Get("name")]; present && row != nil {
 			ok(w, row)
 			return
 		}
-		bad(w, "organization does not exist") // not-ok ⇒ getOrganization returns (nil,nil)
+		bad(w, "organization does not exist") // a refusal ⇒ getOrganization returns (nil,nil)
 	})
 
-	mux.HandleFunc("/v1/iam/add-organization", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/iam/organizations", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
 		body, _ := io.ReadAll(r.Body)
 		var row map[string]any
@@ -211,7 +216,7 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		if f.failAddOrg {
-			bad(w, "add-organization denied")
+			bad(w, "create organization denied")
 			return
 		}
 		f.createdOrgs = append(f.createdOrgs, row)
@@ -221,23 +226,62 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		ok(w, map[string]any{})
 	})
 
-	mux.HandleFunc("/v1/iam/update-user", func(w http.ResponseWriter, r *http.Request) {
+	// The ONE atomic first-run op: the org and its founder's place in it are created
+	// together. There is no create-then-move pair to model, because the user update
+	// resolves the row it writes from that row's OWN owner and cannot move anybody.
+	mux.HandleFunc("/v1/iam/admin/provision", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
-		id := r.URL.Query().Get("id")
 		body, _ := io.ReadAll(r.Body)
-		var row map[string]any
-		_ = json.Unmarshal(body, &row)
+		var in struct {
+			Owner, Name, OrgSlug string
+			Personal             bool
+		}
+		_ = json.Unmarshal(body, &in)
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		if f.failAddOrg {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "create organization denied"})
+			return
+		}
+		row := map[string]any{"owner": adminOrg, "name": in.OrgSlug, "isPersonal": in.Personal}
+		f.createdOrgs = append(f.createdOrgs, row)
+		f.orgs[in.OrgSlug] = row
+		// Keyed the way the caller spells its own id: `<owner>/<name>`, or the bare
+		// name for a user who has no org yet — which is every first run.
+		moved := in.Name
+		if in.Owner != "" {
+			moved = in.Owner + "/" + in.Name
+		}
+		f.movedTo[moved] = in.OrgSlug
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"org": in.OrgSlug, "accessKey": "pk-" + in.OrgSlug, "accessSecret": "sk-" + in.OrgSlug,
+		})
+	})
+
+	mux.HandleFunc("/v1/iam/users/update", func(w http.ResponseWriter, r *http.Request) {
+		f.capture(r)
+		// The row travels NESTED under `user` and names its own target — there is no
+		// id parameter, so a client that still sends the bare row is refused here.
+		body, _ := io.ReadAll(r.Body)
+		var in struct {
+			User map[string]any `json:"user"`
+		}
+		_ = json.Unmarshal(body, &in)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if in.User == nil {
+			bad(w, "owner and name are required")
+			return
+		}
 		if f.failUpdateUser {
 			bad(w, "update refused")
 			return
 		}
-		f.rows = append(f.rows, row)
-		if owner, _ := row["owner"].(string); owner != "" {
-			f.movedTo[id] = owner
-		}
-		ok(w, map[string]any{})
+		f.rows = append(f.rows, in.User)
+		ok(w, in.User)
 	})
 
 	srv := httptest.NewServer(mux)
@@ -258,6 +302,9 @@ func mountApp(t *testing.T, base, clientID, clientSecret string) *zip.App {
 	t.Setenv("IAM_URL", base)
 	t.Setenv("IAM_MINT_CLIENT_ID", clientID)
 	t.Setenv("IAM_MINT_CLIENT_SECRET", clientSecret)
+	// First-run onboarding is the atomic provision and nothing else, so the token
+	// that reaches it is part of a wired deployment rather than an extra.
+	t.Setenv("IAM_SERVICE_TOKEN", "svc")
 	return mount(t, "hanzo")
 }
 
@@ -757,6 +804,7 @@ func TestAccountClaimsNothingUnderIAM(t *testing.T) {
 	t.Setenv("IAM_URL", f.server(t).URL)
 	t.Setenv("IAM_MINT_CLIENT_ID", "hanzo-console")
 	t.Setenv("IAM_MINT_CLIENT_SECRET", "s3cr3t")
+	t.Setenv("IAM_SERVICE_TOKEN", "svc")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)

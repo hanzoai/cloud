@@ -104,12 +104,12 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 		w.Header().Set("Content-Type", "application/json")
 		q := r.URL.Query()
 		switch {
-		case r.URL.Path == "/v1/iam/get-organizations":
-			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[
+		case r.URL.Path == "/v1/iam/organizations":
+			fmt.Fprintf(w, `{"organizations":[
 				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":%q},
 				{"owner":"admin","name":"globex","displayName":"Globex","createdTime":%q}
-			],"total":2}`, acmeCreated, globexCreated)
-		case r.URL.Path == "/v1/iam/get-users":
+			],"count":2}`, acmeCreated, globexCreated)
+		case r.URL.Path == "/v1/iam/users":
 			owner := q.Get("owner")
 			rows := []string{}
 			for _, us := range users[owner] {
@@ -123,41 +123,47 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 				rows = append(rows, fmt.Sprintf(`{"owner":%q,"name":%q,"email":%q,"isAdmin":%v,"isForbidden":%v,"accessKey":%q,"createdTime":%q,"lastSigninTime":%q}`,
 					us.owner, us.name, us.email, us.admin, forb, us.key, created, now.AddDate(0, 0, -2).Format(time.RFC3339)))
 			}
-			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[%s],"total":%d}`, strings.Join(rows, ","), len(rows))
-		case r.URL.Path == "/v1/iam/get-user":
-			id := q.Get("id")
-			parts := strings.SplitN(id, "/", 2)
-			owner := ""
-			if len(parts) == 2 {
-				owner = parts[0]
-			}
+			fmt.Fprintf(w, `{"users":[%s],"total":%d}`, strings.Join(rows, ","), len(rows))
+		case r.URL.Path == "/v1/iam/users/get":
+			// SEPARATE owner and name, and the row itself is the answer.
+			owner, name := q.Get("owner"), q.Get("name")
 			for _, us := range users[owner] {
-				if us.owner+"/"+us.name == id {
+				if us.name == name {
 					f.mu.Lock()
-					forb := f.forbidden[id]
+					forb := f.forbidden[owner+"/"+name]
 					f.mu.Unlock()
-					// Full object incl. fields update-user must preserve.
-					fmt.Fprintf(w, `{"status":"ok","msg":"","data":{"owner":%q,"name":%q,"email":%q,"isAdmin":%v,"isForbidden":%v,"accessKey":%q,"displayName":"X","phone":"","type":"normal-user"}}`,
+					// Full object incl. fields the update must preserve.
+					fmt.Fprintf(w, `{"owner":%q,"name":%q,"email":%q,"isAdmin":%v,"isForbidden":%v,"accessKey":%q,"displayName":"X","phone":"","type":"normal-user"}`,
 						us.owner, us.name, us.email, us.admin, forb, us.key)
 					return
 				}
 			}
 			w.WriteHeader(404)
-			io.WriteString(w, `{"status":"error","msg":"not found"}`)
-		case r.URL.Path == "/v1/iam/update-user":
-			id := q.Get("id")
+			io.WriteString(w, `{"status":404,"error":"not found"}`)
+		case r.URL.Path == "/v1/iam/users/update":
+			// The row travels NESTED under `user` and names its own target — there is
+			// no id parameter, so this reads who to write out of the row itself.
 			body, _ := io.ReadAll(r.Body)
-			var obj map[string]any
-			_ = json.Unmarshal(body, &obj)
-			forb, _ := obj["isForbidden"].(bool)
+			var in struct {
+				User map[string]any `json:"user"`
+			}
+			_ = json.Unmarshal(body, &in)
+			if in.User == nil {
+				w.WriteHeader(400)
+				io.WriteString(w, `{"status":400,"error":"owner and name are required"}`)
+				return
+			}
+			owner, _ := in.User["owner"].(string)
+			name, _ := in.User["name"].(string)
+			forb, _ := in.User["isForbidden"].(bool)
 			f.mu.Lock()
-			f.forbidden[id] = forb
-			f.updateCalls = append(f.updateCalls, id)
+			f.forbidden[owner+"/"+name] = forb
+			f.updateCalls = append(f.updateCalls, owner+"/"+name)
 			f.mu.Unlock()
-			io.WriteString(w, `{"status":"ok","msg":"","data":"Affected"}`)
+			fmt.Fprintf(w, `{"owner":%q,"name":%q}`, owner, name)
 		default:
 			w.WriteHeader(404)
-			io.WriteString(w, `{"status":"error","msg":"not found"}`)
+			io.WriteString(w, `{"status":404,"error":"not found"}`)
 		}
 	}))
 

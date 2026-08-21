@@ -225,39 +225,40 @@ func TestGate_AllowsSuperAdmin(t *testing.T) {
 	}
 }
 
-// TestUsers_DefaultsPagination locks the "0 of 222" fix: IAM's user list returns
-// ZERO rows AND total 0 when p/pageSize are unset, so the /v1/admin/users handler
-// MUST supply a default first page + page size when the client (the operator
-// directory) omits them. Proves the handler forwards p=1 & pageSize=200 and that
-// the real total reaches the client.
+// TestUsers_DefaultsPagination locks the "0 of 222" fix in the terms the user list
+// takes: a row LIMIT and an OFFSET, defaulted when the operator directory omits
+// them, with IAM's real unpaged total reaching the client rather than the page
+// length. It also pins the TRANSLATION — a page number is the console's spelling
+// and never travels — so a client asking for page 1 does not send an offset and a
+// client asking for page 3 sends the offset that page starts at.
 func TestUsers_DefaultsPagination(t *testing.T) {
-	var gotP, gotPageSize string
+	var gotLimit, gotOffset string
 	iamSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/iam/get-users" {
-			gotP = r.URL.Query().Get("p")
-			gotPageSize = r.URL.Query().Get("pageSize")
+		if r.URL.Path == "/v1/iam/users" {
+			gotLimit = r.URL.Query().Get("limit")
+			gotOffset = r.URL.Query().Get("offset")
 			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"status":"ok","msg":"","data":[
+			io.WriteString(w, `{"users":[
 				{"owner":"hanzo","name":"alice","email":"alice@hanzo.ai","displayName":"Alice"}
-			],"data2":222}`)
+			],"total":222}`)
 			return
 		}
 		w.WriteHeader(404)
-		io.WriteString(w, `{"status":"error","msg":"not found"}`)
+		io.WriteString(w, `{"status":404,"error":"not found"}`)
 	}))
 	defer iamSrv.Close()
 
 	do := mount(t, iamSrv.URL, "http://127.0.0.1:0", "http://127.0.0.1:0")
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin", "X-User-Id": "admin/z", "X-User-Email": "z@hanzo.ai"}
-	resp, body := do("GET", "/v1/admin/users", admin) // NOTE: no ?pageSize — the bug path.
+	resp, body := do("GET", "/v1/admin/users?org=hanzo", admin) // NOTE: no ?pageSize — the bug path.
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /v1/admin/users: got %d (body=%s)", resp.StatusCode, body)
 	}
-	if gotPageSize != "200" {
-		t.Fatalf("users list must default pageSize=200 when the client omits it, got %q", gotPageSize)
+	if gotLimit != "200" {
+		t.Fatalf("users list must default limit=200 when the client omits it, got %q", gotLimit)
 	}
-	if gotP != "1" {
-		t.Fatalf("users list must default p=1 when the client omits it, got %q", gotP)
+	if gotOffset != "" {
+		t.Fatalf("the first page starts at the beginning, so no offset travels; got %q", gotOffset)
 	}
 	var env struct {
 		Data  []operatorUser `json:"data"`
@@ -268,6 +269,13 @@ func TestUsers_DefaultsPagination(t *testing.T) {
 	}
 	if env.Total != 222 || len(env.Data) == 0 {
 		t.Fatalf("users must surface the REAL directory (got %d rows, total %d), not 0-of-222", len(env.Data), env.Total)
+	}
+
+	if resp, body := do("GET", "/v1/admin/users?org=hanzo&p=3&pageSize=50", admin); resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/admin/users paged: got %d (body=%s)", resp.StatusCode, body)
+	}
+	if gotLimit != "50" || gotOffset != "100" {
+		t.Fatalf("page 3 at 50 rows = limit 50 offset 100, got limit=%q offset=%q", gotLimit, gotOffset)
 	}
 }
 
@@ -286,34 +294,44 @@ func newFakeIAM() *fakeIAM {
 		f.gotCook = r.Header.Get("Cookie")
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.URL.Path == "/v1/iam/get-organizations":
-			io.WriteString(w, `{"status":"ok","msg":"","data":[
+		case r.URL.Path == "/v1/iam/organizations":
+			io.WriteString(w, `{"organizations":[
 				{"owner":"admin","name":"hanzo","displayName":"Hanzo","createdTime":"2020-01-01T00:00:00Z"},
 				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":"2021-02-02T00:00:00Z"}
-			],"data2":2}`)
-		case r.URL.Path == "/v1/iam/get-users":
-			// The directory folds members from ONE list, so this answers with the rows a
-			// real list returns — each carrying its owner — rather than a total detached
-			// from them. Three belong to hanzo and four to acme, which is the only shape
-			// that can tell a real per-org count from a fleet total handed to every row.
-			io.WriteString(w, `{"status":"ok","msg":"","data":[
-				{"owner":"hanzo","name":"alice","email":"alice@hanzo.ai","displayName":"Alice","tag":"staff","createdTime":"2020-03-01T00:00:00Z","lastSigninTime":"2026-06-01T00:00:00Z","isAdmin":true,"isForbidden":false},
-				{"owner":"hanzo","name":"bob","email":"bob@hanzo.ai","displayName":"Bob"},
-				{"owner":"hanzo","name":"cara","email":"cara@hanzo.ai","displayName":"Cara"},
-				{"owner":"acme","name":"dan","email":"dan@acme.com","displayName":"Dan"},
-				{"owner":"acme","name":"eve","email":"eve@acme.com","displayName":"Eve"},
-				{"owner":"acme","name":"finn","email":"finn@acme.com","displayName":"Finn"},
-				{"owner":"acme","name":"gus","email":"gus@acme.com","displayName":"Gus"}
-			],"data2":7}`)
-		case r.URL.Path == "/v1/iam/get-roles":
-			io.WriteString(w, `{"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"data2":1}`)
-		case r.URL.Path == "/v1/iam/get-applications":
-			io.WriteString(w, `{"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"data2":1}`)
-		case r.URL.Path == "/v1/iam/get-records":
-			io.WriteString(w, `{"status":"ok","msg":"","data":[{"createdTime":"2026-06-29T00:00:00Z","organization":"hanzo","user":"alice","clientIp":"1.2.3.4","method":"POST","action":"login","requestUri":"/v1/iam/login"}],"data2":1}`)
+			],"count":2}`)
+		case r.URL.Path == "/v1/iam/users":
+			// The roster is OWNER-SCOPED — that is the tenancy boundary IAM enforces —
+			// so the directory asks each org and this answers each with its own rows and
+			// its own total. Three belong to hanzo and four to acme, which is the only
+			// shape that can tell a real per-org count from a fleet total handed to
+			// every row. An unscoped read is refused here exactly as IAM refuses it.
+			switch r.URL.Query().Get("owner") {
+			case "hanzo":
+				io.WriteString(w, `{"users":[
+					{"owner":"hanzo","name":"alice","email":"alice@hanzo.ai","displayName":"Alice","tag":"staff","createdTime":"2020-03-01T00:00:00Z","lastSigninTime":"2026-06-01T00:00:00Z","isAdmin":true,"isForbidden":false},
+					{"owner":"hanzo","name":"bob","email":"bob@hanzo.ai","displayName":"Bob"},
+					{"owner":"hanzo","name":"cara","email":"cara@hanzo.ai","displayName":"Cara"}
+				],"total":3}`)
+			case "acme":
+				io.WriteString(w, `{"users":[
+					{"owner":"acme","name":"dan","email":"dan@acme.com","displayName":"Dan"},
+					{"owner":"acme","name":"eve","email":"eve@acme.com","displayName":"Eve"},
+					{"owner":"acme","name":"finn","email":"finn@acme.com","displayName":"Finn"},
+					{"owner":"acme","name":"gus","email":"gus@acme.com","displayName":"Gus"}
+				],"total":4}`)
+			default:
+				w.WriteHeader(400)
+				io.WriteString(w, `{"status":400,"error":"owner is required"}`)
+			}
+		case r.URL.Path == "/v1/iam/roles":
+			io.WriteString(w, `{"roles":[{"owner":"admin","name":"ops","displayName":"Ops"}],"total":1}`)
+		case r.URL.Path == "/v1/iam/applications":
+			io.WriteString(w, `{"applications":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}]}`)
+		case r.URL.Path == "/v1/iam/audit-logs":
+			io.WriteString(w, `{"auditLogs":[{"createdTime":"2026-06-29T00:00:00Z","organization":"hanzo","user":"alice","clientIp":"1.2.3.4","method":"POST","action":"login","requestUri":"/v1/iam/login"}],"total":1}`)
 		default:
 			w.WriteHeader(404)
-			io.WriteString(w, `{"status":"error","msg":"not found"}`)
+			io.WriteString(w, `{"status":404,"error":"not found"}`)
 		}
 	}))
 	return f
@@ -515,8 +533,11 @@ func TestUsers_MapsIAMToOperatorUser(t *testing.T) {
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if env.Total != 7 || len(env.Data) != 7 {
-		t.Fatalf("users total=%d rows=%d, want 7/7", env.Total, len(env.Data))
+	// The read named hanzo, so it is hanzo's THREE — not the seven the fleet holds.
+	// A directory that answered 7 to a request naming one org would be showing the
+	// operator another tenant's people under that tenant's heading.
+	if env.Total != 3 || len(env.Data) != 3 {
+		t.Fatalf("users total=%d rows=%d, want 3/3 for org=hanzo", env.Total, len(env.Data))
 	}
 	u := env.Data[0]
 	if u.Name != "alice" || u.Email != "alice@hanzo.ai" || !u.IsAdmin || u.LastSignin == "" {
