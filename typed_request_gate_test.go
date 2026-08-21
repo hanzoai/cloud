@@ -30,6 +30,15 @@ import (
 // One is a URL-borne value on a BODY-carrying route, which zip cannot name on an
 // In without also accepting it in the body — a wire that route has never had.
 var allowedRequestUses = map[string]string{
+	"apps/provisioning/inventory.go": "operatorOf — an identity gate reading strictly more than the " +
+		"org. These two reads span the WHOLE vector backend across every tenant, so the fact they turn " +
+		"on is platform sudo (principal.IsSuperAdmin, which is the reserved admin org's membership as " +
+		"SanitizeIdentity minted it) and not which org is asking — an org-scoped answer would be the " +
+		"wrong answer here, not a narrower one. There is no ctx-side twin of that predicate to read " +
+		"instead: it is a header the route middleware parks, and the other From accessors exist " +
+		"because their facts have a ctx slot. It cannot be an In field for the obvious reason — a " +
+		"caller that could name itself the operator would be one. ONE function, which both ops ask, " +
+		"and it fails closed off the HTTP path, where there is no principal to be sudo.",
 	"apps/flow/billing.go": "gate + meter — a workflow run executes a component graph that bills a " +
 		"model provider, so it is gated before it runs and debited after, and the money gate needs " +
 		"strictly more of the validated principal than the org: the PAYER (principal.Payer, which is " +

@@ -792,6 +792,59 @@ embedded underneath.
   point: on a defer-encryption-to-checkpoint backend it MUST route through the
   driver's re-encrypting Checkpoint so ship-before-ack reads FRESH ciphertext (P5).
 
+## A capability answers at its own name (HIP-0139 §3), and ten came home
+
+Ten apps served under a noun that was not their own. Each fold moves the ADDRESS
+and nothing else — the name, the package, the plugin and the store key all stand.
+
+    plan          /v1/plans        → /v1/plan
+    provisioning  /v1/instances/*  → /v1/provisioning/*
+    link          /v1/links        → /v1/link
+    knowledge     /v1/kb/*         → /v1/knowledge/*
+    explorer      /v1/{indexers,oracles}    → /v1/explorer/{indexers,oracles}
+    web3          /v1/{chains,rpc,tokens}   → /v1/web3/{chains,rpc,tokens}
+    dataset       /v1/risk/datasets  → /v1/dataset
+    label         /v1/risk/labels    → /v1/label
+    reference     /v1/risk/reference → /v1/reference
+    product       DISSOLVED
+
+`product` opened no store, so it was not a capability but a proxy sitting on two
+others' roots. §7.2 permits a split only along a store boundary and there was
+none, so its four reads went to the apps that own the roots: the Meilisearch pair
+to `search` at the SAME addresses (`apps/search/inventory.go`), and the Qdrant
+pair to `provisioning`, which allocates into that backend, at the operator's
+depth `/v1/admin/provisioning/vector/*` (`apps/provisioning/inventory.go`). The
+operator depth is also the only collision-free home: `/v1/provisioning/vector/
+collections` would shadow the tenant read of an instance named "collections".
+
+Four things this move taught, all of them the kind that only shows up when you
+pull the address out of the app:
+
+- **A store key is not an address.** `cek.Open(namespace.System(), "provisioning")`
+  and `sqlpool.Open("link")` name FILES; renaming one with the address opens an
+  empty store. Same for the warehouse tables (`hanzo.risk_dataset`,
+  `hanzo.risk_label`) and knowledge's framework `Module = "kb"` and `kb-` DocType
+  slugs. None of them moved.
+- **A prefix built from two constants does not answer a grep.** `apps/reference`
+  composed its address as `parentPrefix + leaf`, so the literal `/v1/risk/reference`
+  appeared nowhere in the file. Its routes stayed put while its manifest row
+  moved, and `describe` projected ZERO paths. The floor ratchet caught it —
+  `reference 6 → 0` — which is the whole reason the floor is per product.
+- **A routing claim with nothing behind it is still load-bearing.** provisioning's
+  row claimed `/v1/s3`, `/v1/search/query` and `/v1/vector` with no route
+  registered behind any of them. Deleting them was supposed to be bookkeeping;
+  it narrowed `meteredTrees`, because `spend.go` resolves the metered trees
+  through the manifest. `POST /v1/s3/bucket` had been billable only through
+  provisioning's dead claim over storage's root.
+- **The fold retired the defect `plugin/plan/main.go` was written to describe.**
+  `MountPrefixes` defaults to `/v1/<name>`, so an app serving elsewhere had to
+  declare `manifest.PrefixesFor(name)` or install its middleware on a subtree it
+  did not own. With the address equal to the name the declaration is the default;
+  five mains dropped it. web3, link and reference had never declared it at all.
+
+`openapi/misfiled.txt`: 100 pairs → 86. `/v1/plans commerce` stays — commerce's
+`/v1/plans/{entries,seed}` belong to the money wave, not this one.
+
 ## The route table has three projections, and the router is the source
 
 `serve.go` composes ONE route table and projects it three ways, all after

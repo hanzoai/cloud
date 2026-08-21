@@ -7,6 +7,29 @@ import (
 )
 
 func init() {
+	zip.Describe("GET /v1/search/indexes", zip.Doc{
+		Description: "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
+		Fields: map[string]string{
+			"keyedIn.authorization":     "Authorization carries the surface's bearer key (`Bearer <key>`); the bare\nkey is accepted too. It is not `validate:\"required\"` on purpose: requireKey\nanswers absence itself, so an unconfigured surface 503s and a missing bearer\n401s — a validation refusal would rewrite both statuses.",
+			"searchIndex.createdAt":     "CreatedAt is the index's creation time (RFC 3339); it falls back to now when\nthe index list could not be read.",
+			"searchIndex.docCount":      "DocCount is how many documents the index currently holds.",
+			"searchIndex.lastIndexedAt": "LastIndexedAt is the index's last update time (RFC 3339), null when the\nindex list could not be read.",
+			"searchIndex.name":          "Name is the index uid.",
+			"searchIndexList.indexes":   "Indexes is one row per Meilisearch index, sorted by name. Empty — never\nabsent — when the search service cannot be reached.",
+		},
+	})
+	zip.Describe("GET /v1/search/stats", zip.Doc{
+		Description: "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
+		Fields: map[string]string{
+			"dayCount.count":             "Count is that day's total.",
+			"dayCount.date":              "Date is the day, YYYY-MM-DD.",
+			"keyedIn.authorization":      "Authorization carries the surface's bearer key (`Bearer <key>`); the bare\nkey is accepted too. It is not `validate:\"required\"` on purpose: requireKey\nanswers absence itself, so an unconfigured surface 503s and a missing bearer\n401s — a validation refusal would rewrite both statuses.",
+			"searchStats.searchesPerDay": "SearchesPerDay is always empty, for the same reason as totalSearches.",
+			"searchStats.totalDocuments": "TotalDocuments is the sum of every index's document count.",
+			"searchStats.totalSearches":  "TotalSearches is always 0: Meilisearch keeps no query-history counter, so\nthis surface reports the honest zero rather than an estimate.",
+			"searchStats.totalSessions":  "TotalSessions is always 0, for the same reason as totalSearches.",
+		},
+	})
 	zip.Describe("POST /v1/search", zip.Doc{
 		Description: "Is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg.",
 		Fields: map[string]string{

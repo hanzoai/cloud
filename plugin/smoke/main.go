@@ -80,7 +80,7 @@ var probes = []probe{
 	{"templates", http.MethodGet, "/v1/templates", classPublic},
 	{"prompts-catalog", http.MethodGet, "/v1/prompts/catalog", classPublic},
 	{"health", http.MethodGet, "/v1/health", classHealth},
-	{"plans", http.MethodGet, "/v1/plans", classPublic}, // the paywall's own cure URL
+	{"plans", http.MethodGet, "/v1/plan", classPublic}, // the paywall's own cure URL
 	{"kms-health", http.MethodGet, "/v1/kms/health", classPublic},
 	{"deploy-health", http.MethodGet, "/v1/deploy/health", classPublic},
 	{"s3-health", http.MethodGet, "/v1/s3/health", classPublic},
@@ -101,7 +101,7 @@ var probes = []probe{
 	{"team", http.MethodGet, "/v1/team/bots", classAuthed},
 	{"storage-buckets", http.MethodGet, "/v1/s3/buckets", classAuthed},
 	{"analytics", http.MethodGet, "/v1/analytics/overview", classAuthed},
-	{"knowledge", http.MethodGet, "/v1/kb/connectors/catalog", classAuthed},
+	{"knowledge", http.MethodGet, "/v1/knowledge/connectors/catalog", classAuthed},
 	{"automations", http.MethodGet, "/v1/automations/connectors", classAuthed},
 
 	// ── tolerant (preview / SuperAdmin / cross-org / staged-optional) ──

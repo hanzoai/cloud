@@ -67,7 +67,7 @@ const denyReason = "the pre-provision balance gate answers 402/503 through cloud
 
 func init() {
 	for _, kind := range kinds {
-		untypedByDesign["POST /v1/instances/"+kind] = denyReason
+		untypedByDesign["POST /v1/provisioning/"+kind] = denyReason
 	}
 }
 
@@ -155,8 +155,10 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // here as a nameless tool.
 func TestEveryTypedOpIsDescribed(t *testing.T) {
 	_, typed := provisioningOps(t)
-	if len(typed) != 21 {
-		t.Errorf("typed ops = %d, want 21 (7 kinds × list/get/delete)", len(typed))
+	// 7 kinds × list/get/delete, plus the operator's two whole-backend reads of
+	// the vector store this app allocates into (inventory.go).
+	if len(typed) != 23 {
+		t.Errorf("typed ops = %d, want 23 (7 kinds × list/get/delete, + 2 operator reads)", len(typed))
 	}
 	for key, desc := range typed {
 		if strings.TrimSpace(desc) == "" {
@@ -254,20 +256,20 @@ func TestTheCreatesStillDeclareTheirBodies(t *testing.T) {
 		t.Fatalf("spec: %v", err)
 	}
 	for _, kind := range kinds {
-		op := doc.Paths["/v1/instances/"+kind]["post"]
+		op := doc.Paths["/v1/provisioning/"+kind]["post"]
 		if op == nil {
-			t.Fatalf("POST /v1/instances/%s is not in the document at all", kind)
+			t.Fatalf("POST /v1/provisioning/%s is not in the document at all", kind)
 		}
 		// RequestBody is `any` on the shared Operation — the untyped seam and the
 		// typed fold produce different (JSON-identical) shapes — so assert on the
 		// one Register builds.
 		rb, ok := op.RequestBody.(*openapi.RequestBody)
 		if !ok {
-			t.Errorf("POST /v1/instances/%s publishes no request body (%T) — an SDK caller has nowhere to put the name", kind, op.RequestBody)
+			t.Errorf("POST /v1/provisioning/%s publishes no request body (%T) — an SDK caller has nowhere to put the name", kind, op.RequestBody)
 			continue
 		}
 		if _, ok := rb.Content["application/json"]; !ok {
-			t.Errorf("POST /v1/instances/%s request body is not application/json", kind)
+			t.Errorf("POST /v1/provisioning/%s request body is not application/json", kind)
 		}
 	}
 	for _, name := range []string{"provisionRequest", "provisionResult"} {

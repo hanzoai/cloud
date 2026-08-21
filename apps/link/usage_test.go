@@ -121,9 +121,9 @@ func TestFailClosedNoPrincipalOnUsage(t *testing.T) {
 		method, path string
 		body         any
 	}{
-		{http.MethodGet, "/v1/links/usage?provider=claude", nil},
-		{http.MethodGet, "/v1/links/usage/summary", nil},
-		{http.MethodPost, "/v1/links/usage", map[string]any{
+		{http.MethodGet, "/v1/link/usage?provider=claude", nil},
+		{http.MethodGet, "/v1/link/usage/summary", nil},
+		{http.MethodPost, "/v1/link/usage", map[string]any{
 			"provider": "claude", "machine": "m1", "window": "6h", "usedPct": 42}},
 	} {
 		if code, _ := req(t, app, tc.method, tc.path, "acme", "", tc.body); code != http.StatusForbidden {
@@ -146,7 +146,7 @@ func TestReportIsolatesTenants(t *testing.T) {
 	for _, who := range []struct{ org, user string }{
 		{"acme", "alice"}, {"acme", "bob"}, {"evil", "mallory"},
 	} {
-		if code, b := req(t, app, http.MethodPost, "/v1/links/usage", who.org, who.user, body); code != http.StatusAccepted {
+		if code, b := req(t, app, http.MethodPost, "/v1/link/usage", who.org, who.user, body); code != http.StatusAccepted {
 			t.Fatalf("%s/%s report want 202, got %d (%s)", who.org, who.user, code, b)
 		}
 	}
@@ -154,7 +154,7 @@ func TestReportIsolatesTenants(t *testing.T) {
 	for _, who := range []struct{ org, user string }{
 		{"acme", "alice"}, {"acme", "bob"}, {"evil", "mallory"},
 	} {
-		code, b := req(t, app, http.MethodGet, "/v1/links", who.org, who.user, nil)
+		code, b := req(t, app, http.MethodGet, "/v1/link", who.org, who.user, nil)
 		if code != http.StatusOK {
 			t.Fatalf("list %s/%s want 200, got %d", who.org, who.user, code)
 		}
@@ -314,7 +314,7 @@ func TestInsertBindsEveryColumn(t *testing.T) {
 // a poll of history may never fail a report or block a device.
 func TestReportSucceedsWithoutTheWarehouse(t *testing.T) {
 	app := mountLink(t)
-	code, b := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice", map[string]any{
+	code, b := req(t, app, http.MethodPost, "/v1/link/usage", "acme", "alice", map[string]any{
 		"provider": "claude", "account": "alice@x", "machine": "m1", "plan": "Claude Max",
 		"kind": "subscription", "window": "6h", "lane": "five_hour", "windowMinutes": 300,
 		"usedPct": 47.5, "confidence": "percentOnly",
@@ -336,7 +336,7 @@ func TestReportSucceedsWithoutTheWarehouse(t *testing.T) {
 	}
 
 	// The durable truth is live and current, with the snapshot the dash renders.
-	code, b = req(t, app, http.MethodGet, "/v1/links", "acme", "alice", nil)
+	code, b = req(t, app, http.MethodGet, "/v1/link", "acme", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d", code)
 	}
@@ -371,7 +371,7 @@ func TestReportSucceedsWithoutTheWarehouse(t *testing.T) {
 // used nothing".
 func TestDashIsUnavailableNotEmpty(t *testing.T) {
 	app := mountLink(t)
-	code, b := req(t, app, http.MethodGet, "/v1/links/usage?provider=claude", "acme", "alice", nil)
+	code, b := req(t, app, http.MethodGet, "/v1/link/usage?provider=claude", "acme", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("dash want 200, got %d (%s)", code, b)
 	}
@@ -396,7 +396,7 @@ func TestDashIsUnavailableNotEmpty(t *testing.T) {
 // half a warehouse never turns the other half into zeros.
 func TestSummaryLabelsItsSources(t *testing.T) {
 	app := mountLink(t)
-	code, b := req(t, app, http.MethodGet, "/v1/links/usage/summary?range=7d", "acme", "alice", nil)
+	code, b := req(t, app, http.MethodGet, "/v1/link/usage/summary?range=7d", "acme", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("summary want 200, got %d (%s)", code, b)
 	}
@@ -477,7 +477,7 @@ func TestUnknownRangeIsRefused(t *testing.T) {
 		}
 	}
 	app := mountLink(t)
-	if code, _ := req(t, app, http.MethodGet, "/v1/links/usage/summary?range=90d", "acme", "alice", nil); code != http.StatusBadRequest {
+	if code, _ := req(t, app, http.MethodGet, "/v1/link/usage/summary?range=90d", "acme", "alice", nil); code != http.StatusBadRequest {
 		t.Fatalf("an unknown range want 400, got %d", code)
 	}
 }
@@ -503,14 +503,14 @@ func TestReportRejectsUnknownVocabulary(t *testing.T) {
 		{"bad windowStart", map[string]any{"provider": "claude", "machine": "m1", "window": "6h", "windowStart": "yesterday"}},
 		{"bad resetsAt", map[string]any{"provider": "claude", "machine": "m1", "window": "6h", "resetsAt": "soon"}},
 	} {
-		if code, b := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice", tc.body); code != http.StatusBadRequest {
+		if code, b := req(t, app, http.MethodPost, "/v1/link/usage", "acme", "alice", tc.body); code != http.StatusBadRequest {
 			t.Fatalf("%s: want 400, got %d (%s)", tc.name, code, b)
 		}
 	}
-	if code, _ := req(t, app, http.MethodGet, "/v1/links/usage?provider=claude&window=weekly", "acme", "alice", nil); code != http.StatusBadRequest {
+	if code, _ := req(t, app, http.MethodGet, "/v1/link/usage?provider=claude&window=weekly", "acme", "alice", nil); code != http.StatusBadRequest {
 		t.Fatalf("dash with a non-canonical window want 400, got %d", code)
 	}
-	if code, _ := req(t, app, http.MethodGet, "/v1/links/usage", "acme", "alice", nil); code != http.StatusBadRequest {
+	if code, _ := req(t, app, http.MethodGet, "/v1/link/usage", "acme", "alice", nil); code != http.StatusBadRequest {
 		t.Fatalf("dash with no provider want 400, got %d", code)
 	}
 }
@@ -526,11 +526,11 @@ func TestBatchIsBounded(t *testing.T) {
 			"lane": fmt.Sprintf("lane-%d", i), "usedPct": 1,
 		})
 	}
-	if code, _ := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice",
+	if code, _ := req(t, app, http.MethodPost, "/v1/link/usage", "acme", "alice",
 		map[string]any{"samples": batch}); code != http.StatusBadRequest {
 		t.Fatalf("an over-cap batch want 400, got %d", code)
 	}
-	if code, _ := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice",
+	if code, _ := req(t, app, http.MethodPost, "/v1/link/usage", "acme", "alice",
 		map[string]any{"samples": []map[string]any{}}); code != http.StatusBadRequest {
 		t.Fatalf("an empty batch want 400, got %d", code)
 	}
@@ -542,7 +542,7 @@ func TestReportAcceptsOneOrMany(t *testing.T) {
 	app := mountLink(t)
 	// Claude's real shape: four lanes, three of them the SAME 10080 minutes — they
 	// must survive as three distinct meters.
-	code, b := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice", map[string]any{
+	code, b := req(t, app, http.MethodPost, "/v1/link/usage", "acme", "alice", map[string]any{
 		"samples": []map[string]any{
 			{"provider": "claude", "account": "a@x", "machine": "m1", "window": "6h",
 				"lane": "five_hour", "windowMinutes": 300, "usedPct": 47, "confidence": "percentOnly"},

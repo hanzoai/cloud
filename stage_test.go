@@ -62,10 +62,10 @@ func staged(names ...string) *zip.App {
 	app.Get("/v1/ads/campaigns", served)
 	app.Get("/v1/iam/keys", served)
 	app.Get("/v1/health", served)
-	// label's surface, which sits INSIDE risk's prefix — see
+	// bot's surface, which sits INSIDE bots's prefix — see
 	// TestTheRefusalYieldsToTheDeeperOwner.
-	app.Get("/v1/risk/scores", served)
-	app.Get("/v1/risk/labels/x", served)
+	app.Get("/v1/bot/status", served)
+	app.Get("/v1/bot/connect", served)
 	return app
 }
 
@@ -190,23 +190,30 @@ func TestTheRefusalStaysOnItsOwnPrefixes(t *testing.T) {
 	}
 }
 
-// PREFIXES NEST, and the deeper claim is a different capability. /v1/risk is
-// risk's and /v1/risk/labels is label's, and the host routes by specificity — so
-// risk's refusal must not answer for label's surface.
+// PREFIXES NEST, and the deeper claim is a different capability. /v1/bot is
+// beta bots's and /v1/bot/connect is bot's, and the host routes by specificity —
+// so bots's refusal must not answer for bot's surface.
 //
-// Today both are beta, so the visible symptom is narrow: an org holding `label`
-// and not `risk` is refused its own capability. Promote one and the symptom is a
-// ga product answering 404 to everybody. A byte-prefix compare gets this wrong in
-// both directions, which is why the decision is manifest.OwnerOf — the router's
-// own rule, asked rather than restated.
+// The symptom scales with the stage. Where the deeper neighbour is beta too it is
+// narrow: an org holding it and not the shallower one is refused its own product.
+// Where the deeper one is ga — as bot is here — it is a shipped product answering
+// 404 to everybody. A byte-prefix compare gets this wrong in both directions,
+// which is why the decision is manifest.OwnerOf: the router's own rule, asked
+// rather than restated.
+//
+// The pair used to be risk and label, which is where the case was found. Label,
+// reference and dataset have since come home to their own names (HIP-0139 §7.1),
+// so /v1/risk has one owner again and this asks the same question of a pair that
+// still nests — and bots/bot is the sharper one anyway, because the shallower
+// capability is the beta and the deeper is live.
 func TestTheRefusalYieldsToTheDeeperOwner(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // flags unreachable: risk refuses everything it owns
-	app := staged("risk")
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // flags unreachable: bots refuses everything it owns
+	app := staged("bots")
 
-	if code, body := fetch(t, app, "/v1/risk/labels/x", member); code != http.StatusOK {
-		t.Errorf("GET /v1/risk/labels/x = %d %s, want 200 — risk answered for label's capability", code, body)
+	if code, body := fetch(t, app, "/v1/bot/connect", member); code != http.StatusOK {
+		t.Errorf("GET /v1/bot/connect = %d %s, want 200 — bots answered for bot's capability", code, body)
 	}
-	if code, _ := fetch(t, app, "/v1/risk/scores", member); code != http.StatusNotFound {
-		t.Errorf("GET /v1/risk/scores = %d, want 404 — risk did not answer for its own surface", code)
+	if code, _ := fetch(t, app, "/v1/bot/status", member); code != http.StatusNotFound {
+		t.Errorf("GET /v1/bot/status = %d, want 404 — bots did not answer for its own surface", code)
 	}
 }

@@ -1761,40 +1761,40 @@
  "kms": [],
  "knowledge": [
   {
-   "id": "delete_kb_connectors_by_provider",
+   "id": "delete_knowledge_connectors_by_provider",
    "doc": "Revokes a connection: it tombstones the stored credential\nso a later sync cannot reuse it, purges this provider's points from the org's\nvector namespace, and marks the connector disconnected. The documents already\ningested stay in the org's store — they are the org's own data — but stop being\nretrievable by search; a caller deletes them through the document surface."
   },
   {
-   "id": "get_kb_connectors",
+   "id": "get_knowledge_connectors",
    "doc": "Returns every supported knowledge connector with THIS org's\nconnection state and the REAL number of documents each has ingested into the\norg's store. A provider that is configured for the deployment but not yet\nconnected appears as disconnected, so the console can offer a Connect button.\nNo secret is ever returned.",
    "read": true
   },
   {
-   "id": "get_kb_connectors_by_provider_callback",
+   "id": "get_knowledge_connectors_by_provider_callback",
    "doc": "CompleteConnectorOAuth finishes an OAuth connection: it exchanges the\nprovider's code for a token, seals that token in KMS, and records the\nconnection. THE ORG COMES FROM THE SIGNED STATE, not from a header and not from\nthe provider, so an attacker cannot bind their own account to someone else's\norg — a tampered, expired or foreign-provider state is refused outright. The\ntoken itself is never returned, never written into the document, and never\nlogged; the document holds only its KMS path.",
    "read": true
   },
   {
-   "id": "get_kb_connectors_by_provider_connect",
+   "id": "get_knowledge_connectors_by_provider_connect",
    "doc": "StartConnectorOAuth returns the provider authorize URL the console opens to\nconnect this org's account. There is no server-side redirect — the console\nstays in control of the navigation. The URL carries a state this server SIGNED\nover the caller's validated org, so the connection the callback completes can\nonly ever land in that org.",
    "read": true
   },
   {
-   "id": "get_kb_connectors_catalog",
+   "id": "get_knowledge_connectors_catalog",
    "doc": "Returns the ONE catalog of everything a caller can\nconnect: every first-party connector and every long-tail one, in a single list\nsorted by provider. `configured` reports whether this deployment holds OAuth\ncredentials for a source, so the console can show Connect rather than a dead\nbutton, and `kind` is a badge only — the connect and sync lifecycle is\nidentical for both. The catalog itself is org-independent; a validated\nprincipal is still required. It is metadata only: no secret is ever returned.",
    "read": true
   },
   {
-   "id": "get_kb_graph",
+   "id": "get_knowledge_graph",
    "doc": "Returns the caller org's knowledge as a node/edge graph\nshaped for a force-directed renderer: pages, memories and synced sources as\nnodes; the page parent tree, the wikilinks between pages, and each source's\nconnector provenance as edges. Wikilink targets are resolved HERE by title or\nslug, so a rename never needs an edge rewrite and a link that matches no page\nrenders as its own \"unresolved\" node instead of vanishing. ?project= narrows\nit. A store outage degrades to an honest empty graph, never a 5xx.",
    "read": true
   },
   {
-   "id": "post_kb_connectors_by_provider_sync",
+   "id": "post_knowledge_connectors_by_provider_sync",
    "doc": "Pulls the provider's documents for the caller's org and files\nthem as knowledge sources, which the store's own hook then indexes — so a\nsynced document is retrievable exactly like a hand-written page. The org is the\nvalidated tenant and the credential is read from KMS, so an org can only ever\nsync its own connection. A provider failure is reported honestly (502) and\nrecorded on the connector rather than silently swallowed."
   },
   {
-   "id": "post_kb_search",
+   "id": "post_knowledge_search",
    "doc": "Runs a semantic search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced —\nand returns the matching passages. This is the RAG entry point: an agent asks\n\"what does this org know about X\" and the org's OWN vector namespace answers.\nThe org comes from the validated principal, and both the collection and the\npayload filter are pinned to it, so cross-tenant retrieval is impossible. An\nunreachable index returns an honest empty result set with degraded=true, never\na 5xx."
   }
  ],
@@ -3573,77 +3573,77 @@
  ],
  "plan": [
   {
-   "id": "get_plans",
+   "id": "get_plan",
    "doc": "Returns the Hanzo cloud plan catalog: every cloud tier with its\nprice, included capacity, limits and feature list, scoped to the caller's\ncatalog. A reseller org sees its own overrides in place of the canonical\nrecords it has replaced, and the canonical record for every tier it has not.",
    "read": true
   },
   {
-   "id": "get_plans_blockchain",
+   "id": "get_plan_blockchain",
    "doc": "Returns the blockchain RPC plan catalog: the tiers metered\nin monthly compute units, with their prices, limits and overage terms. It is\nthe canonical catalog for every caller — these plans carry no reseller\noverrides.",
    "read": true
   },
   {
-   "id": "get_plans_cloud",
+   "id": "get_plan_cloud",
    "doc": "Returns the cloud plan catalog. It is the same section\nListCloudPlans answers and a separate operation because it is a separate\naddress, and an address is what every projection keys on.",
    "read": true
   },
   {
-   "id": "get_plans_dns",
+   "id": "get_plan_dns",
    "doc": "ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records\nper zone and queries per day. It is the canonical catalog for every caller —\nthese plans carry no reseller overrides.",
    "read": true
   },
   {
-   "id": "get_plans_entitlements_by_id",
+   "id": "get_plan_entitlements_by_id",
    "doc": "Returns what one plan GRANTS and not what it costs: the\ncanonical namespaced entitlement block and the flat license-feature list\nderived from it. It is the entitlement half of ResolvePlan, over the same\ncatalog and the same 404 for an id no catalog holds — the read a licensing or\nquota gate makes.",
    "read": true
   },
   {
-   "id": "get_plans_gpu",
+   "id": "get_plan_gpu",
    "doc": "ListGPUTiers returns the rentable GPU configurations, each with its accelerator\ncount and model, VRAM, vCPUs, host memory and hourly price.",
    "read": true
   },
   {
-   "id": "get_plans_health",
+   "id": "get_plan_health",
    "doc": "Health reports that the plans subsystem is mounted and serving. It answers from\nthe process itself and consults neither the catalog bundle nor the goja host,\nso it stays \"ok\" while either is degraded.",
    "read": true
   },
   {
-   "id": "get_plans_policy",
+   "id": "get_plan_policy",
    "doc": "Returns the published pricing policy: whether pricing is\ntransparent, the revenue-sharing terms (idle compute resale and the open-source\nshare) and the principles the catalog is priced by.",
    "read": true
   },
   {
-   "id": "get_plans_regions",
+   "id": "get_plan_regions",
    "doc": "Returns the regions cloud capacity is offered in, each with its\ndisplay name and physical location.",
    "read": true
   },
   {
-   "id": "get_plans_resolve_by_id",
+   "id": "get_plan_resolve_by_id",
    "doc": "Resolves one plan to everything a consumer of the catalog needs at\nonce: its canonical entitlement block, the flat license-feature list a signed\nlicense carries, its billing reference, and the catalog it came from. The id\nmay be the plan's id or its slug, and it is resolved against the caller's\ncatalog, so a reseller's override wins over the canonical record. An id no\ncatalog holds answers 404.",
    "read": true
   },
   {
-   "id": "get_plans_schema",
+   "id": "get_plan_schema",
    "doc": "Returns the two JSON Schema documents this surface speaks:\nentitlements.schema.json, which declares every entitlement key with its type,\nunit and enum, and plan.schema.json, which a catalog plan record conforms to.",
    "read": true
   },
   {
-   "id": "get_plans_storage",
+   "id": "get_plan_storage",
    "doc": "Returns the block-storage price block: the price per GB per\nmonth and the volume size bounds a cloud plan may attach.",
    "read": true
   },
   {
-   "id": "get_plans_subscriptions",
+   "id": "get_plan_subscriptions",
    "doc": "Returns the subscription ladder — the personal and team\ntiers a customer buys to use the cloud, each with its monthly and annual price,\nseat rules, limits and billing reference. Scoped to the caller's catalog.",
    "read": true
   },
   {
-   "id": "get_plans_tools",
+   "id": "get_plan_tools",
    "doc": "Returns the per-use price of every metered tool — web search,\ncode interpreter, image generation, speech — each with the unit it is billed\nin.",
    "read": true
   },
   {
-   "id": "get_plans_vocab",
+   "id": "get_plan_vocab",
    "doc": "Returns the entitlement key vocabulary: every key with\nits namespace, JSON type, nullability, unit, enum and title, the list of\nnamespaces, and the engine features a license can grant. It is derived from\nentitlements.schema.json on every call, so it cannot fall behind the schema.",
    "read": true
   }
@@ -3932,28 +3932,6 @@
    "doc": "Refreshes the third-party section of the catalog from its upstream\nlistings and returns the time the refreshed catalog was stamped with. The\nfetch runs in Go and the markup transform in the pricing bundle. SuperAdmin\nonly; every other caller is refused."
   }
  ],
- "product": [
-  {
-   "id": "get_search_indexes",
-   "doc": "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
-   "read": true
-  },
-  {
-   "id": "get_search_stats",
-   "doc": "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
-   "read": true
-  },
-  {
-   "id": "get_vector_collections",
-   "doc": "Lists the vector collections with their size and geometry.\n\nIt reads the in-cluster Qdrant service: the collection list, then each\ncollection's detail for its point count, vector dimension and distance metric.\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.",
-   "read": true
-  },
-  {
-   "id": "get_vector_stats",
-   "doc": "Totals the collections, vectors and storage across the vector store.\n\nEvery figure is summed from the same per-collection detail\nGET /v1/vector/collections returns, so the two panels can never disagree. An\nunreachable Qdrant answers 200 with all zeros rather than an error.",
-   "read": true
-  }
- ],
  "projects": [
   {
    "id": "delete_projects_by_slug",
@@ -4093,100 +4071,100 @@
  ],
  "provisioning": [
   {
-   "id": "delete_instances_datastore_by_name",
+   "id": "delete_provisioning_datastore_by_name",
    "doc": "Deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404."
   },
   {
-   "id": "delete_instances_docdb_by_name",
+   "id": "delete_provisioning_docdb_by_name",
    "doc": "DropDocDB deprovisions one Hanzo DocDB database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated FerretDB\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404."
   },
   {
-   "id": "delete_instances_kv_by_name",
+   "id": "delete_provisioning_kv_by_name",
    "doc": "DropKV deprovisions one Hanzo KV store. It reverts any app instance bound to\nit back to Base BEFORE tearing down the org's dedicated Valkey instance, then\ndeletes the sealed credential and removes the metadata row. Answers 204 with\nno body; a second call is a 404."
   },
   {
-   "id": "delete_instances_s3_by_name",
+   "id": "delete_provisioning_s3_by_name",
    "doc": "Deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404."
   },
   {
-   "id": "delete_instances_search_by_name",
+   "id": "delete_provisioning_search_by_name",
    "doc": "Deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404."
   },
   {
-   "id": "delete_instances_sql_by_name",
+   "id": "delete_provisioning_sql_by_name",
    "doc": "DropSQL deprovisions one Hanzo SQL database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated Postgres\ninstance — never a live app pointed at a deleted backend — then deletes the\nsealed credential and removes the metadata row. Answers 204 with no body; a\nsecond call is a 404, not a second delete."
   },
   {
-   "id": "delete_instances_vector_by_name",
+   "id": "delete_provisioning_vector_by_name",
    "doc": "Deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404."
   },
   {
-   "id": "get_instances_datastore",
+   "id": "get_provisioning_datastore",
    "doc": "Lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123.",
    "read": true
   },
   {
-   "id": "get_instances_datastore_by_name",
+   "id": "get_provisioning_datastore_by_name",
    "doc": "Returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
    "read": true
   },
   {
-   "id": "get_instances_docdb",
+   "id": "get_provisioning_docdb",
    "doc": "ListDocDB lists the caller org's Hanzo DocDB document databases. Each one is\na DEDICATED FerretDB instance the org alone runs, speaking the MongoDB wire\nprotocol, so the host is that instance's own in-cluster Service and the port\nis 27017.",
    "read": true
   },
   {
-   "id": "get_instances_docdb_by_name",
+   "id": "get_provisioning_docdb_by_name",
    "doc": "GetDocDB returns one Hanzo DocDB database's metadata. It carries the\ndatabase's status, its instance address and the SCRAM user the instance was\nset up with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view.",
    "read": true
   },
   {
-   "id": "get_instances_kv",
+   "id": "get_provisioning_kv",
    "doc": "ListKV lists the caller org's Hanzo KV stores. Each one is a DEDICATED Valkey\ninstance the org alone runs, so the host is that instance's own in-cluster\nService and the port is 6379.",
    "read": true
   },
   {
-   "id": "get_instances_kv_by_name",
+   "id": "get_provisioning_kv_by_name",
    "doc": "GetKV returns one Hanzo KV store's metadata. It carries the store's status,\nits instance address and the Valkey user it authenticates as (\"default\", the\nonly user a requirepass instance has) — never the password. A still-booting\ninstance reads \"provisioning\", reconciled from the operator's live view.",
    "read": true
   },
   {
-   "id": "get_instances_s3",
+   "id": "get_provisioning_s3",
    "doc": "Lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct.",
    "read": true
   },
   {
-   "id": "get_instances_s3_by_name",
+   "id": "get_provisioning_s3_by_name",
    "doc": "Returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
    "read": true
   },
   {
-   "id": "get_instances_search",
+   "id": "get_provisioning_search",
    "doc": "Lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own.",
    "read": true
   },
   {
-   "id": "get_instances_search_by_name",
+   "id": "get_provisioning_search_by_name",
    "doc": "Returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
    "read": true
   },
   {
-   "id": "get_instances_sql",
+   "id": "get_provisioning_sql",
    "doc": "ListSQL lists the caller org's Hanzo SQL databases. Each one is a DEDICATED\nPostgreSQL instance the org alone runs, so the host is that instance's own\nin-cluster Service and the port is 5432.",
    "read": true
   },
   {
-   "id": "get_instances_sql_by_name",
+   "id": "get_provisioning_sql_by_name",
    "doc": "GetSQL returns one Hanzo SQL database's metadata. It carries the database's\nstatus, its instance address and the admin user Postgres booted with — never\nthe password, which is returned once at create and otherwise lives only in\nHanzo KMS. A still-booting instance reads \"provisioning\", reconciled from the\noperator's live view rather than from the row.",
    "read": true
   },
   {
-   "id": "get_instances_vector",
+   "id": "get_provisioning_vector",
    "doc": "Lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own.",
    "read": true
   },
   {
-   "id": "get_instances_vector_by_name",
+   "id": "get_provisioning_vector_by_name",
    "doc": "Returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
    "read": true
   }
@@ -4291,6 +4269,16 @@
  ],
  "sbom": [],
  "search": [
+  {
+   "id": "get_search_indexes",
+   "doc": "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
+   "read": true
+  },
+  {
+   "id": "get_search_stats",
+   "doc": "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
+   "read": true
+  },
   {
    "id": "search",
    "doc": "Is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg."
@@ -4620,7 +4608,7 @@
   },
   {
    "id": "post_usage",
-   "doc": "Ingests a batch of account-usage samples — what a developer's OWN AI\naccounts have consumed of their OWN plans, metered from each provider's own\nlogin — and appends them to the warehouse series. Answers 202.\n\nSend either a `samples` array or one sample's fields at the top level. Every\nsample needs a provider, a machine and a known window class; an unknown window or\nkind is refused rather than silently rewritten, because a dash filled with a class\nnobody reported is worse than an error. There is no timestamp field: the server\nowns the observation clock, and a sample says which window it measured with\nwindowStart or resetsAt.\n\nIt is FAIL-SOFT on storage: a warehouse outage costs a poll of history\n(stored:false), never a failed request. It records usage ONLY — the link registry\nis refreshed separately via POST /v1/links, so there is one and only one way to\nupdate an account row."
+   "doc": "Ingests a batch of account-usage samples — what a developer's OWN AI\naccounts have consumed of their OWN plans, metered from each provider's own\nlogin — and appends them to the warehouse series. Answers 202.\n\nSend either a `samples` array or one sample's fields at the top level. Every\nsample needs a provider, a machine and a known window class; an unknown window or\nkind is refused rather than silently rewritten, because a dash filled with a class\nnobody reported is worse than an error. There is no timestamp field: the server\nowns the observation clock, and a sample says which window it measured with\nwindowStart or resetsAt.\n\nIt is FAIL-SOFT on storage: a warehouse outage costs a poll of history\n(stored:false), never a failed request. It records usage ONLY — the link registry\nis refreshed separately via POST /v1/link, so there is one and only one way to\nupdate an account row."
   }
  ],
  "validators": [],

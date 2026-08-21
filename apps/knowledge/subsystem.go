@@ -1,17 +1,17 @@
-// subsystem.go mounts the KB retrieval + ingestion control-plane at /v1/kb/*. It is
+// subsystem.go mounts the KB retrieval + ingestion control-plane at /v1/knowledge/*. It is
 // the thin surface on top of the framework DocType store (CRUD lives at
-// /v1/kb) and the vector index (index.go):
+// /v1/knowledge) and the vector index (index.go):
 //
-//   - POST /v1/kb/search — the RAG entry point. An agent/chat resolves the org from
+//   - POST /v1/knowledge/search — the RAG entry point. An agent/chat resolves the org from
 //     its validated principal and asks "what does this org know about X"; the org's
 //     OWN vector namespace answers. This is how human wiki + AI memory become
 //     retrievable org knowledge for an agent.
 //
-//   - GET /v1/kb/graph (graph.go) — the org's knowledge as a node/edge graph for a
+//   - GET /v1/knowledge/graph (graph.go) — the org's knowledge as a node/edge graph for a
 //     force-directed renderer: pages/memories/sources as nodes; the parent tree,
 //     wikilinks, and connector provenance as edges.
 //
-//   - POST /v1/kb/import (import.go) — an Obsidian-importer-equivalent that ingests
+//   - POST /v1/knowledge/import (import.go) — an Obsidian-importer-equivalent that ingests
 //     an Obsidian/Notion/Roam/Evernote export as a kb-page tree with links intact.
 //
 //   - Connectors (connectors.go): per-org OAuth connections to Slack/GitHub/Google
@@ -66,7 +66,7 @@ func build(b cloud.Base) (state, error) {
 // context and its decoded In and nothing else, so the state rides on the receiver.
 type ops struct{ s *cloud.Service[state] }
 
-// routes registers the retrieval + connector surface at /v1/kb. One prefix: the
+// routes registers the retrieval + connector surface at /v1/knowledge. One prefix: the
 // same handler reachable at two paths is two answers to "where is this".
 //
 // Every route but the import is a TYPED op: ONE registry entry that is at once
@@ -79,7 +79,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// fused host once at its root (serve.go), and a plugin program's constructor
 	// likewise. An install here would hang middleware on declared prefixes with no
 	// routes beneath them, a program zip refuses to compose.
-	g := app.Group("/v1/kb")
+	g := app.Group("/v1/knowledge")
 	o := ops{s: s}
 	zip.Post(g, "/search", o.search)                            // RAG entry point
 	zip.Get(g, "/graph", o.graph)                               // force-directed knowledge graph
@@ -102,7 +102,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // takes nothing off the wire. ONE of these for the whole package.
 type noInput struct{}
 
-// searchIn is the POST /v1/kb/search request. There is NO org field — the org is
+// searchIn is the POST /v1/knowledge/search request. There is NO org field — the org is
 // the validated tenant, so a client can never search another org's knowledge by
 // asking.
 type searchIn struct {

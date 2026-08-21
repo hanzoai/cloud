@@ -142,18 +142,18 @@ func TestOverridesNeverLeaveTheirOrg(t *testing.T) {
 	app := mount(t)
 	seed(t, "domain", []Entry{{Key: "tempbox.example", Value: map[string]string{"class": "disposable"}}})
 
-	if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "tempbox.example", "verdict": Allow, "note": "acme trusts it"}}}); code != 200 {
 		t.Fatalf("acme write: %d", code)
 	}
-	if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "globex",
+	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "globex",
 		map[string]any{"entries": []any{map[string]any{"key": "partner.globex", "verdict": Deny, "note": "globex denies it"}}}); code != 200 {
 		t.Fatalf("globex write: %d", code)
 	}
 
 	// Each org's listing contains only its own entry.
 	for org, want := range map[string]string{"acme": "tempbox.example", "globex": "partner.globex"} {
-		code, body := call(t, app, http.MethodGet, "/v1/risk/reference/domain", org, nil)
+		code, body := call(t, app, http.MethodGet, "/v1/reference/domain", org, nil)
 		if code != 200 {
 			t.Fatalf("%s read: %d", org, code)
 		}
@@ -172,13 +172,13 @@ func TestOverridesNeverLeaveTheirOrg(t *testing.T) {
 
 	// And the resolve answers differ by caller, on the same key, at the same
 	// instant, against the same baseline.
-	_, acme := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	_, acme := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain"}, "keys": []string{"user@tempbox.example"}})
 	a := answersFor(t, acme, "user@tempbox.example")
 	if a["from"] != "override" || a["verdict"] != Allow {
 		t.Errorf("acme's own allow must win: %v", a)
 	}
-	_, globex := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "globex",
+	_, globex := call(t, app, http.MethodPost, "/v1/reference/resolve", "globex",
 		map[string]any{"sets": []string{"domain"}, "keys": []string{"user@tempbox.example"}})
 	g := answersFor(t, globex, "user@tempbox.example")
 	if g["from"] != "baseline" {
@@ -190,7 +190,7 @@ func TestOverridesNeverLeaveTheirOrg(t *testing.T) {
 
 	// A third organisation, which never wrote anything, sees an empty list and
 	// the baseline's own answer.
-	code, body := call(t, app, http.MethodGet, "/v1/risk/reference/domain", "initech", nil)
+	code, body := call(t, app, http.MethodGet, "/v1/reference/domain", "initech", nil)
 	if code != 200 {
 		t.Fatalf("initech read: %d", code)
 	}
@@ -223,15 +223,15 @@ func TestNoRequestShapeNamesAnotherOrg(t *testing.T) {
 		{"org": "globex", "entries": []any{map[string]any{"key": "a.example", "verdict": Deny}}},
 		{"scope": "globex", "owner": "globex", "tenant": "globex", "entries": []any{map[string]any{"key": "b.example", "verdict": Deny}}},
 	} {
-		if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain?org=globex&scope=globex", "acme", body); code != 200 {
+		if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain?org=globex&scope=globex", "acme", body); code != 200 {
 			t.Fatalf("write: %d", code)
 		}
 	}
 	// globex holds nothing; acme holds both.
-	if _, g := call(t, app, http.MethodGet, "/v1/risk/reference/domain", "globex", nil); len(g["overrides"].([]any)) != 0 {
+	if _, g := call(t, app, http.MethodGet, "/v1/reference/domain", "globex", nil); len(g["overrides"].([]any)) != 0 {
 		t.Fatalf("a smuggled org landed in globex: %v", g["overrides"])
 	}
-	_, a := call(t, app, http.MethodGet, "/v1/risk/reference/domain", "acme", nil)
+	_, a := call(t, app, http.MethodGet, "/v1/reference/domain", "acme", nil)
 	if len(a["overrides"].([]any)) != 2 {
 		t.Fatalf("the writes did not land under the caller: %v", a["overrides"])
 	}
@@ -262,11 +262,11 @@ func TestUnvalidatedCallerIsRefused(t *testing.T) {
 		method, path string
 		body         any
 	}{
-		{http.MethodGet, "/v1/risk/reference", nil},
-		{http.MethodGet, "/v1/risk/reference/domain", nil},
-		{http.MethodPut, "/v1/risk/reference/domain", map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": Deny}}}},
-		{http.MethodDelete, "/v1/risk/reference/domain?key=a.example", nil},
-		{http.MethodPost, "/v1/risk/reference/resolve", map[string]any{"keys": []string{"a.example"}}},
+		{http.MethodGet, "/v1/reference", nil},
+		{http.MethodGet, "/v1/reference/domain", nil},
+		{http.MethodPut, "/v1/reference/domain", map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": Deny}}}},
+		{http.MethodDelete, "/v1/reference/domain?key=a.example", nil},
+		{http.MethodPost, "/v1/reference/resolve", map[string]any{"keys": []string{"a.example"}}},
 	} {
 		if code, _ := call(t, app, c.method, c.path, "", c.body); code != http.StatusForbidden {
 			t.Errorf("%s %s with no principal answered %d, want 403", c.method, c.path, code)
@@ -279,7 +279,7 @@ func TestUnvalidatedCallerIsRefused(t *testing.T) {
 // world.
 func TestRefreshIsPlatformWork(t *testing.T) {
 	app := mount(t)
-	if code, _ := call(t, app, http.MethodPost, "/v1/risk/reference/refresh", "acme", map[string]any{"set": "domain"}); code != http.StatusForbidden {
+	if code, _ := call(t, app, http.MethodPost, "/v1/reference/refresh", "acme", map[string]any{"set": "domain"}); code != http.StatusForbidden {
 		t.Errorf("a tenant refreshing the shared baseline answered %d, want 403", code)
 	}
 
@@ -290,7 +290,7 @@ func TestRefreshIsPlatformWork(t *testing.T) {
 	// reference data: the conflation IS the privilege escalation.
 	refresh := func(hdr map[string]string) int {
 		t.Helper()
-		rq := httptest.NewRequest(http.MethodPost, "/v1/risk/reference/refresh",
+		rq := httptest.NewRequest(http.MethodPost, "/v1/reference/refresh",
 			strings.NewReader(`{"set":"domain"}`))
 		rq.Header.Set("Content-Type", "application/json")
 		rq.Header.Set("X-Org-Id", "acme")
@@ -325,16 +325,16 @@ func TestOverrideBeatsBaselineAndClearingRestoresIt(t *testing.T) {
 	seed(t, "domain", []Entry{{Key: "tempbox.example", Value: map[string]string{"class": "disposable"}}})
 
 	// Before: the baseline answers.
-	_, before := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	_, before := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain"}, "keys": []string{"user@tempbox.example"}})
 	if a := answersFor(t, before, "user@tempbox.example"); a["from"] != "baseline" || a["hit"] != true {
 		t.Fatalf("baseline should answer first: %v", a)
 	}
 
 	// An allow over it wins.
-	call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "tempbox.example", "verdict": Allow}}})
-	_, during := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	_, during := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain"}, "keys": []string{"user@tempbox.example"}})
 	a := answersFor(t, during, "user@tempbox.example")
 	if a["from"] != "override" || a["verdict"] != Allow {
@@ -342,11 +342,11 @@ func TestOverrideBeatsBaselineAndClearingRestoresIt(t *testing.T) {
 	}
 
 	// Clearing it restores the baseline, which was never touched.
-	code, cleared := call(t, app, http.MethodDelete, "/v1/risk/reference/domain?key=tempbox.example", "acme", nil)
+	code, cleared := call(t, app, http.MethodDelete, "/v1/reference/domain?key=tempbox.example", "acme", nil)
 	if code != 200 || cleared["cleared"] != true {
 		t.Fatalf("clear answered %d %v", code, cleared)
 	}
-	_, after := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	_, after := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain"}, "keys": []string{"user@tempbox.example"}})
 	if a := answersFor(t, after, "user@tempbox.example"); a["from"] != "baseline" || a["hit"] != true {
 		t.Fatalf("the baseline must be intact after a removal: %v", a)
@@ -361,17 +361,17 @@ func TestOverrideIsMatchedTheSameWayTheBaselineIs(t *testing.T) {
 	seed(t, "domain", []Entry{{Key: "other.example"}})
 	seed(t, "net", []Entry{{Key: "10.0.0.0/8", Value: map[string]string{"class": "hosting"}}})
 
-	call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "partner.example", "verdict": Allow}}})
-	call(t, app, http.MethodPut, "/v1/risk/reference/net", "acme",
+	call(t, app, http.MethodPut, "/v1/reference/net", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "203.0.113.0/24", "verdict": Deny}}})
 
-	_, body := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	_, body := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain"}, "keys": []string{"bob@mail.partner.example"}})
 	if a := answersFor(t, body, "bob@mail.partner.example"); a["from"] != "override" || a["matched"] != "partner.example" {
 		t.Errorf("an override on the apex must cover a subdomain: %v", a)
 	}
-	_, body = call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	_, body = call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"net"}, "keys": []string{"203.0.113.9"}})
 	if a := answersFor(t, body, "203.0.113.9"); a["from"] != "override" || a["matched"] != "203.0.113.0/24" {
 		t.Errorf("an override on a block must cover an address in it: %v", a)
@@ -383,10 +383,10 @@ func TestOverrideIsMatchedTheSameWayTheBaselineIs(t *testing.T) {
 // consulted even when the set refuses.
 func TestOverrideSurvivesAnUnloadedBaseline(t *testing.T) {
 	app := mount(t)
-	call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "bad.example", "verdict": Deny}}})
 
-	_, body := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	_, body := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain"}, "keys": []string{"x@bad.example", "x@unknown.example"}})
 	if a := answersFor(t, body, "x@bad.example"); a["from"] != "override" || a["verdict"] != Deny || a["refusal"] != nil {
 		t.Errorf("an override answers even with no baseline loaded: %v", a)
@@ -412,7 +412,7 @@ func TestResolveNamesEveryVersionConsulted(t *testing.T) {
 	seed(t, "domain", []Entry{{Key: "tempbox.example"}})
 	seed(t, "net", []Entry{{Key: "10.0.0.0/8"}})
 
-	_, body := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	_, body := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain", "net", "pep"}, "keys": []string{"user@tempbox.example"}})
 	consulted, _ := body["consulted"].([]any)
 	if len(consulted) != 3 {
@@ -441,11 +441,11 @@ func TestResolveNamesEveryVersionConsulted(t *testing.T) {
 // was never consulted.
 func TestMisspeltSetIsRefusedRatherThanSkipped(t *testing.T) {
 	app := mount(t)
-	if code, _ := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	if code, _ := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domians"}, "keys": []string{"a.example"}}); code != http.StatusNotFound {
 		t.Errorf("a misspelt set answered %d, want 404", code)
 	}
-	if code, _ := call(t, app, http.MethodGet, "/v1/risk/reference/nosuchset", "acme", nil); code != http.StatusNotFound {
+	if code, _ := call(t, app, http.MethodGet, "/v1/reference/nosuchset", "acme", nil); code != http.StatusNotFound {
 		t.Errorf("an unknown set answered %d, want 404", code)
 	}
 }
@@ -461,15 +461,15 @@ func TestBoundsAreRefusals(t *testing.T) {
 	for i := range tooMany {
 		tooMany[i] = "a.example"
 	}
-	if code, _ := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	if code, _ := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"keys": tooMany}); code != http.StatusBadRequest {
 		t.Errorf("an oversized resolve answered %d, want 400", code)
 	}
-	if code, _ := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	if code, _ := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"keys": []string{}}); code != http.StatusBadRequest {
 		t.Errorf("an empty resolve answered %d, want 400", code)
 	}
-	if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": "maybe"}}}); code != http.StatusBadRequest {
 		t.Errorf("a verdict outside the vocabulary answered %d, want 400", code)
 	}
@@ -500,7 +500,7 @@ func TestOneRequestCannotSpendTheProcess(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
-	code, _ := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	code, _ := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain"}, "keys": keys})
 	runtime.ReadMemStats(&after)
 	if code != http.StatusBadRequest {
@@ -511,7 +511,7 @@ func TestOneRequestCannotSpendTheProcess(t *testing.T) {
 	}
 
 	// The same key, written as an override, is the other half of the same door.
-	if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": long, "verdict": Deny}}}); code != http.StatusBadRequest {
 		t.Errorf("an over-long override key answered %d, want 400", code)
 	}
@@ -520,12 +520,12 @@ func TestOneRequestCannotSpendTheProcess(t *testing.T) {
 	// so the case that matters is the one that gets through: past maxKey, inside
 	// the buffer.
 	overLong := strings.Repeat("d.", (maxKey+8)/2) + "example"
-	if code, _ := call(t, app, http.MethodDelete, "/v1/risk/reference/domain?key="+overLong, "acme", nil); code != http.StatusBadRequest {
+	if code, _ := call(t, app, http.MethodDelete, "/v1/reference/domain?key="+overLong, "acme", nil); code != http.StatusBadRequest {
 		t.Errorf("an over-long clear key of %d bytes answered %d, want 400", len(overLong), code)
 	}
 	// The page cursor is the last KEY of the previous page, so it crosses the same
 	// door: every door is the same door.
-	if code, _ := call(t, app, http.MethodGet, "/v1/risk/reference/domain?after="+overLong, "acme", nil); code != http.StatusBadRequest {
+	if code, _ := call(t, app, http.MethodGet, "/v1/reference/domain?after="+overLong, "acme", nil); code != http.StatusBadRequest {
 		t.Errorf("an over-long page cursor of %d bytes answered %d, want 400", len(overLong), code)
 	}
 
@@ -535,7 +535,7 @@ func TestOneRequestCannotSpendTheProcess(t *testing.T) {
 	if len(legit) > maxKey {
 		t.Fatalf("the sample address is %d bytes, past the bound itself", len(legit))
 	}
-	if code, _ := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	if code, _ := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain"}, "keys": []string{legit}}); code != 200 {
 		t.Errorf("a %d-byte address answered %d; the bound must refuse nothing real", len(legit), code)
 	}
@@ -546,11 +546,11 @@ func TestOneRequestCannotSpendTheProcess(t *testing.T) {
 	for i := range dup {
 		dup[i] = "domain"
 	}
-	if code, _ := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	if code, _ := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": dup, "keys": []string{"x@tempbox.example"}}); code != http.StatusBadRequest {
 		t.Errorf("naming %d sets when the plane publishes %d answered %d, want 400", len(dup), len(Catalog()), code)
 	}
-	code, body := call(t, app, http.MethodPost, "/v1/risk/reference/resolve", "acme",
+	code, body := call(t, app, http.MethodPost, "/v1/reference/resolve", "acme",
 		map[string]any{"sets": []string{"domain", "domain", "domain"}, "keys": []string{"x@tempbox.example"}})
 	if code != 200 {
 		t.Fatalf("a repeated set answered %d", code)
@@ -574,31 +574,31 @@ func TestAnOverrideCannotFillTheVolumeEveryOrgSharesOn(t *testing.T) {
 	app := mount(t)
 
 	big := strings.Repeat("x", 1<<20)
-	code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": big, "verdict": Deny}}})
 	if code != http.StatusBadRequest {
 		t.Fatalf("a 1 MiB override key answered %d, want 400", code)
 	}
 	// Nothing landed: a refused write writes nothing.
-	_, read := call(t, app, http.MethodGet, "/v1/risk/reference/domain", "acme", nil)
+	_, read := call(t, app, http.MethodGet, "/v1/reference/domain", "acme", nil)
 	if list, _ := read["overrides"].([]any); len(list) != 0 {
 		t.Fatalf("a refused write left %d entries behind", len(list))
 	}
 
 	// A note past its bound is refused rather than silently cut: an operator's
 	// stated reason for an adverse action is not a field to trim.
-	if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": Deny, "note": strings.Repeat("n", maxNote+1)}}}); code != http.StatusBadRequest {
 		t.Errorf("an over-long note answered %d, want 400", code)
 	}
 
 	// And a key at the bound is accepted and stored whole.
 	ok := strings.Repeat("k", maxKey-len(".example")) + ".example"
-	if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": ok, "verdict": Deny}}}); code != 200 {
 		t.Fatalf("a %d-byte key answered %d, want 200", len(ok), code)
 	}
-	_, read = call(t, app, http.MethodGet, "/v1/risk/reference/domain", "acme", nil)
+	_, read = call(t, app, http.MethodGet, "/v1/reference/domain", "acme", nil)
 	list, _ := read["overrides"].([]any)
 	if len(list) != 1 {
 		t.Fatalf("want the one accepted entry, got %v", list)
@@ -713,7 +713,7 @@ func TestTheWriterOnARowIsBoundedLikeEveryOtherTerm(t *testing.T) {
 	body := map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": Deny}}}
 
 	// One byte past the bound is refused, and the refusal says what was wrong.
-	code, out := callAs(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	code, out := callAs(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		strings.Repeat("u", maxActor+1), body)
 	if code != http.StatusBadRequest {
 		t.Fatalf("a %d-byte writer answered %d, want 400 — an unbounded writer means ownVolume() (%d MiB) states a figure nothing holds to",
@@ -724,7 +724,7 @@ func TestTheWriterOnARowIsBoundedLikeEveryOtherTerm(t *testing.T) {
 	}
 
 	// And nothing landed: a refused write writes nothing.
-	if _, read := callAs(t, app, http.MethodGet, "/v1/risk/reference/domain", "acme", "u_acme", nil); true {
+	if _, read := callAs(t, app, http.MethodGet, "/v1/reference/domain", "acme", "u_acme", nil); true {
 		if list, _ := read["overrides"].([]any); len(list) != 0 {
 			t.Fatalf("a refused write left %d entries behind", len(list))
 		}
@@ -732,7 +732,7 @@ func TestTheWriterOnARowIsBoundedLikeEveryOtherTerm(t *testing.T) {
 
 	// The bound itself is reachable: refusing AT it would make the stated maximum
 	// a number no principal can ever use.
-	if code, _ := callAs(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	if code, _ := callAs(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		strings.Repeat("u", maxActor), body); code != 200 {
 		t.Fatalf("a writer AT the %d-byte bound answered %d, want 200", maxActor, code)
 	}
@@ -756,14 +756,14 @@ func TestAnAcknowledgedOverrideIsDurable(t *testing.T) {
 
 	// This replica does not hold the organisation's write lease.
 	mounted.State.sync = func(namespace.Namespace) (bool, error) { return false, nil }
-	if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "a.example", "verdict": Deny}}}); code != http.StatusServiceUnavailable {
 		t.Errorf("a write that could not be made durable answered %d, want 503", code)
 	}
 
 	// The ship errors outright.
 	mounted.State.sync = func(namespace.Namespace) (bool, error) { return false, errors.New("object store unreachable") }
-	if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "b.example", "verdict": Deny}}}); code != http.StatusServiceUnavailable {
 		t.Errorf("a write whose ship failed answered %d, want 503", code)
 	}
@@ -771,11 +771,11 @@ func TestAnAcknowledgedOverrideIsDurable(t *testing.T) {
 	// Acknowledged: the write lands, and so does the removal that follows it.
 	shipped := 0
 	mounted.State.sync = func(namespace.Namespace) (bool, error) { shipped++; return true, nil }
-	if code, _ := call(t, app, http.MethodPut, "/v1/risk/reference/domain", "acme",
+	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": "c.example", "verdict": Deny}}}); code != 200 {
 		t.Fatalf("an acknowledged write answered %d", code)
 	}
-	if code, cleared := call(t, app, http.MethodDelete, "/v1/risk/reference/domain?key=c.example", "acme", nil); code != 200 || cleared["cleared"] != true {
+	if code, cleared := call(t, app, http.MethodDelete, "/v1/reference/domain?key=c.example", "acme", nil); code != 200 || cleared["cleared"] != true {
 		t.Fatalf("clear answered %d %v", code, cleared)
 	}
 	if shipped != 2 {
@@ -785,7 +785,7 @@ func TestAnAcknowledgedOverrideIsDurable(t *testing.T) {
 
 // TestThisAppOwnsOnlyItsOwnLeaf: /v1/risk is a SHARED parent — the decision plane
 // answers on /v1/risk, ground truth on /v1/risk/labels, datasets on
-// /v1/risk/datasets and this app on /v1/risk/reference, all in the same process —
+// /v1/risk/datasets and this app on /v1/reference, all in the same process —
 // so a middleware installed at that parent by this app would run inside three other
 // planes' request paths, decided by nothing but mount order. The neighbour probed
 // below is /v1/ml/models, a different product entirely: the assertion is that this
@@ -810,7 +810,7 @@ func TestThisAppOwnsOnlyItsOwnLeaf(t *testing.T) {
 	}
 	// And it still runs for every route this app DOES own — which the whole
 	// tenancy suite above depends on, and this states outright.
-	if code, _ := call(t, app, http.MethodGet, "/v1/risk/reference", "acme", nil); code != 200 {
+	if code, _ := call(t, app, http.MethodGet, "/v1/reference", "acme", nil); code != 200 {
 		t.Errorf("this app's own collection route answered %d", code)
 	}
 }
@@ -821,7 +821,7 @@ func TestTheSetListReportsStaleAndRefused(t *testing.T) {
 	app := mount(t)
 	seed(t, "domain", []Entry{{Key: "tempbox.example"}})
 
-	code, body := call(t, app, http.MethodGet, "/v1/risk/reference", "acme", nil)
+	code, body := call(t, app, http.MethodGet, "/v1/reference", "acme", nil)
 	if code != 200 {
 		t.Fatalf("list: %d", code)
 	}
