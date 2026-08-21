@@ -6,7 +6,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/bot"
-	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the bot app.
@@ -16,27 +15,26 @@ import (
 // and not the ~3040-package union the fused binary was. The light host loads it
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `bot openapi`. Hand-owned — edit the spec below directly.
+//
+// IT DECLARES NO Prefixes any more. The app used to serve three leaves —
+// /v1/bot/{connect,nodes,peer/invoke} — while a SECOND app answered the parent,
+// so the /v1/<name> default would have guarded a path this binary did not own and
+// the routing table had to be restated here. One app owns /v1/bot now, so the
+// convention names exactly what it serves.
+//
+// NO OwnsHealth. It said true while Mount registered no health route at all, so
+// the field's only effect — suppressing serve.go's generic GET /v1/bot/health —
+// left this binary answering 404 there, which from outside is indistinguishable
+// from a subsystem that was never enabled. The generic route is this binary's own
+// STANDALONE liveness answer, and that is the contract HIP-0106 states; the
+// runtime's own probe is a relay at /v1/bot/runtime/health. Claim the field again
+// only alongside a real probe.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name: "bot",
-		// Declared: undeclared falls back to /v1/bot, which this app does not
-		// serve — the scope then guards a path with no routes and zip refuses to
-		// compose (see plugin/account/main.go).
-		Prefixes: manifest.PrefixesFor("bot"),
+		Name:     "bot",
 		Price:    cloud.Free,
 		Mount:    bot.Mount,
 		Shutdown: bot.Shutdown,
-		// NO OwnsHealth. It said true and bot.Mount registers no health route at
-		// all, so the field's only effect — suppressing serve.go's generic
-		// GET /v1/bot/health — left this binary answering 404 there, which from
-		// outside is indistinguishable from a subsystem that was never enabled.
-		//
-		// Nothing changes in the FLEET either way: the host routes /v1/bot/health
-		// to `runtime` (whose row is the parent /v1/bot, and which forwards it to
-		// the runtime's own /health), while this app's row is the three leaves
-		// below it. The generic route is this binary's own STANDALONE liveness
-		// answer, and that is the contract HIP-0106 states. Claim the field again
-		// only alongside a real probe.
 	}}, []string{"bot"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
