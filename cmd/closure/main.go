@@ -543,7 +543,7 @@ func compare(w io.Writer, want, have witness) error {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  fix:")
 	fmt.Fprintf(w, "    %s\n", repair(stale, len(have.Apps)))
-	fmt.Fprintln(w, "    # then commit plugin/*/openapi.json, openapi.yaml, public.yaml and openapi/closure.json")
+	fmt.Fprintln(w, "    # then commit plugin/*/openapi.json, openapi.yaml, private.yaml and openapi/closure.json")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  This is the cheap warning, not the verdict: regenerating may produce no change,")
 	fmt.Fprintln(w, "  in which case only openapi/closure.json moves and that is the whole fix.")

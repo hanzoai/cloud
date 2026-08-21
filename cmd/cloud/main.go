@@ -785,15 +785,20 @@ func unfit(absent map[string]string) map[string]string {
 // fleet serves 1039. Every SDK generator, every spec-derived CLI and every third
 // party reading the published spec read that instead. 200 OK the whole time.
 //
+// What it answers with is the CUSTOMER contract (openapi.MountFleet): the door
+// takes no credential, and the same readers that meet it here are the ones the
+// audience rule is written for.
+//
 // Two properties make the fix the honest one rather than merely a fix:
 //
 //   - It costs no subsystem. The document is woven from the subsets the plugins
 //     projected when they were BUILT (plugin.Spec — bytes in this binary), so
 //     answering it starts nothing. A host that had to mount 113 subsystems to
 //     describe them would have given back exactly what laziness buys.
-//   - It is not a second source of truth. openapi.Fleet is the same composition
-//     that WRITES openapi.yaml, over the same committed files, so the served
-//     bytes and the committed artifact are one document by construction — and
+//   - It is not a second source of truth. openapi.Fleet and openapi.Publish are
+//     the same composition and projection that WRITE openapi.yaml, over the same
+//     committed files, so the served bytes and the committed artifact are one
+//     document by construction — and
 //     mk/fleet.mk check regenerates those files from source and fails on
 //     any diff, so a drifted spec goes red in CI instead of shipping.
 //

@@ -47,6 +47,13 @@ import (
 // TestCatalogAddressesAreServed is the law: EVERY PRODUCT THIS FLEET SELLS AS
 // CALLABLE IS CALLABLE, AND EVERY PRODUCT THAT IS NOT SAYS SO.
 //
+// Against the INTERNAL document, because "is it callable" is a routing question
+// and routing has no audience: the catalogue sells operator products and
+// capabilities still reached by flag, and the fleet serves both. Read against the
+// customer contract instead, an operator product would read as a dead link for
+// being an operator product — which is a fact about who may call it, not about
+// whether anything answers.
+//
 // Both halves are refused here, because both hand a reader the same broken
 // promise. A service whose apiPath resolves nowhere is a dead link sold as
 // working; a service that names no path at all is the same silence with better
@@ -116,7 +123,7 @@ func TestCatalogAddressesAreServed(t *testing.T) {
 			len(silent), strings.Join(silent, "\n  "), catalogentry.KindPending, catalogentry.KindClient)
 	}
 	t.Logf("%d of %d catalogue products are callable, and every one resolves in %s",
-		callable, len(rows), golden)
+		callable, len(rows), served)
 }
 
 // resolves reports whether the fleet publishes anything at or beneath addr.
@@ -147,18 +154,18 @@ func resolves(published map[string]json.RawMessage, addr string) bool {
 // projection — so reading the file here is reading what a customer reads.
 func publishedPaths(t *testing.T) map[string]json.RawMessage {
 	t.Helper()
-	doc, err := os.ReadFile(golden)
+	doc, err := os.ReadFile(served)
 	if err != nil {
-		t.Fatalf("read %s: %v — run `make describe`", golden, err)
+		t.Fatalf("read %s: %v — run `make describe`", served, err)
 	}
 	var d struct {
 		Paths map[string]json.RawMessage `json:"paths"`
 	}
 	if err := yaml.Unmarshal(doc, &d); err != nil {
-		t.Fatalf("%s is not an OpenAPI document: %v", golden, err)
+		t.Fatalf("%s is not an OpenAPI document: %v", served, err)
 	}
 	if len(d.Paths) == 0 {
-		t.Fatalf("%s publishes no paths — every catalogue address would fail against an empty document", golden)
+		t.Fatalf("%s publishes no paths — every catalogue address would fail against an empty document", served)
 	}
 	return d.Paths
 }

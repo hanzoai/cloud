@@ -8,7 +8,7 @@ import "testing"
 // A misspelling is what this catches, and it is silent in every direction that
 // matters. StageOf answers whatever the row says; cloud.Stage refuses on any
 // non-empty value, so the capability still goes behind a flag; and the weave
-// stamps the misspelling onto every operation and out through public.yaml into
+// stamps the misspelling onto every operation and out through openapi.yaml into
 // the SDKs, where "x-stage: bet" is a word no consumer has a rule for. Nothing
 // else goes red.
 func TestStageVocabulary(t *testing.T) {
