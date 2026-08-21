@@ -140,11 +140,12 @@ func GrantFor(name string) []string {
 // An unrouted path returns "" — the caller decides what that means.
 //
 // The match is SEGMENT-WISE, because one address has three spellings: the
-// manifest writes a parameter as `:org`, a document writes it `{org}`, and a
+// manifest writes a parameter as `:skill`, a document writes it `{skill}`, and a
 // real request carries the value itself. A byte-prefix compare answers only the
-// literal spelling, which is how a declared owner of /v1/orgs/:org/entitlements
-// read as unowned and its live operations were pruned as a sibling's. A `:name`
-// prefix segment matches any single path segment; a literal one matches itself.
+// literal spelling, which is how a declared owner of a parameterised prefix —
+// skills at /.well-known/agent-skills/:skill/SKILL.md — reads as unowned and its
+// live operations get pruned as a sibling's. A `:name` prefix segment matches any
+// single path segment; a literal one matches itself.
 func OwnerOf(path string) string {
 	ps := segments(path)
 	best, bestDepth := "", -1

@@ -47616,80 +47616,6 @@ paths:
       tags:
       - git
       x-app: git
-  /collaborator:
-    get:
-      description: |-
-        Upgrades to the hocuspocus WebSocket the Team editor syncs its Y.js documents over: binary frames of document name, message type and payload, with ONE socket multiplexing every document a tab has open. The server is a relay and an ordered update log, not a CRDT engine — it replays the log to each joining peer and broadcasts every update to the rest, which converges because Y.js updates are commutative and idempotent. There is no body; the response is a protocol upgrade.
-
-        IT SITS OUTSIDE /v1 ON PURPOSE. The client derives both collaborator lanes from one configured URL — this socket at its root, the markup-snapshot RPC one segment in — so the path is fixed by the editor library's contract rather than chosen by this service.
-
-        AUTH IS IN-BAND, PER DOCUMENT, NOT ON THE UPGRADE. The handshake gates only on browser Origin (403 outside the team surfaces; no Origin at all is admitted, which is what a non-browser sends), and then the first frame for a document must be an Auth message carrying the same session or workspace token every other team route verifies — a browser WebSocket cannot set an Authorization header, which is why the token rides inside the protocol. Anything else on an unauthenticated document is answered with one permission denial and nothing further.
-
-        Every document is authorized on its own: the document's workspace must be the token's workspace when the token pins one, and the caller must be a member of it. A mismatch, an unknown workspace and a non-member deny alike with "document not found". Rooms are keyed by org and workspace and the persisted log's key embeds both, so a foreign document id can neither join a room nor read a blob.
-
-        The server pings every twenty seconds and drops a socket silent for sixty, so a backgrounded tab — whose JS timers are throttled but whose network stack still auto-pongs — stays connected instead of dying into a reconnect loop.
-      operationId: get_collaborator
-      summary: Open the live collaborative-editing socket
-      tags:
-      - team
-      x-app: team
-  /collaborator/rpc/{documentId}:
-    post:
-      description: |-
-        CollabRPC is the collaborative-markup snapshot plane the Team front's editor
-        speaks: createContent stores a document field's markup at a fresh, immutable
-        blob ref and returns it, updateContent stores a new snapshot and answers
-        nothing, and getContent reads back the exact snapshot a ref names.
-
-        createContent ALSO seeds the live-editing update log from the front-supplied
-        Y.js update, so a dialog-authored description is visible in the collaborative
-        editor — which replays that log — and not only in snapshot reads.
-        updateContent never touches that log: peers may be live-editing the document,
-        and their edits are not this call's to overwrite.
-
-        Every call is scoped to the caller's VERIFIED session or workspace token: the
-        documentId's workspace must be the token's workspace when the token names one,
-        and the caller must be a member of it. An unknown workspace, another tenant's
-        workspace and a workspace the caller is not in all answer the same 404, so a
-        probe learns nothing about what exists.
-      operationId: post_collaborator_rpc_by_documentid
-      parameters:
-      - description: |-
-          DocumentID addresses the document field, as
-          "<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>" — the
-          collaborator-client encodeDocumentId shape, from the path.
-        example: 6579…|tracker:class:Issue|issue-1|description
-        in: path
-        name: documentId
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              documentId: 6579…|tracker:class:Issue|issue-1|description
-              method: getContent
-              payload:
-                source: issue-1-description-1730000000000
-            schema:
-              $ref: '#/components/schemas/collabRequest'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/collabResult'
-          description: ok
-      summary: 'CollabRPC is the collaborative-markup snapshot plane the Team front''s
-        editor speaks: createContent stores a document field''s markup at a fresh,
-        immutable blob ref and returns it, updateContent stores a new snapshot and
-        answers nothing, and getContent reads back the exact snapshot a ref names.'
-      tags:
-      - team
-      x-app: team
-      x-tool: true
   /explore:
     get:
       description: 'The open, unauthenticated face of the git host: every PUBLIC repository
@@ -48124,6 +48050,306 @@ paths:
       tags:
       - tasks
       x-app: tasks
+  /v1/account/appearance:
+    get:
+      description: |-
+        Returns the signed-in caller's own appearance preference — text
+        size, density and accent — read from their IAM account so it is the same on
+        every device and every Hanzo surface. An unset preference is an empty object.
+
+        A transient IAM read failure reports the empty preference rather than a 5xx, so
+        a surface applies its published default and never error-toasts on load — the
+        same fail-soft the key read uses.
+      operationId: get_account_appearance
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/appearance'
+          description: ok
+      summary: Returns the signed-in caller's own appearance preference — text size,
+        density and accent — read from their IAM account so it is the same on every
+        device and every Hanzo surface.
+      tags:
+      - account
+      x-app: account
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Stores the caller's appearance preference on their IAM account,
+        preserving every other field of the row. The accent is validated as a real
+        colour token before it is stored; an unset or invalid axis is dropped rather
+        than stored.
+      operationId: post_account_appearance
+      requestBody:
+        content:
+          application/json:
+            example:
+              accent: '#8b5cf6'
+              density: compact
+              type: 1.15
+            schema:
+              $ref: '#/components/schemas/appearance'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/appearance'
+          description: ok
+      summary: Stores the caller's appearance preference on their IAM account, preserving
+        every other field of the row.
+      tags:
+      - account
+      x-app: account
+      x-public: true
+      x-tool: true
+  /v1/account/avatar:
+    post:
+      description: |-
+        Stores one image as the signed-in user's profile photo and answers the URL it is served from, which is also written to the user's IAM record — so every surface that already renders `avatar` picks it up with no further call.
+
+        The body is a multipart form with a `file` part. The format is decided by the BYTES, never the filename or the part's Content-Type: png, jpeg, gif and webp are accepted and everything else is refused with 415, so an SVG cannot be stored as a picture and later served as a program. Over 8 MiB is 413; empty is 400.
+
+        The photo is addressed by the sha256 of its bytes, so setting a new one yields a new URL rather than a stale cache of the old face. The caller is taken from the validated identity ONLY — there is no way to name a different subject — so this always sets your own photo, and a caller with no organization yet is refused.
+      operationId: post_account_avatar
+      summary: Set your profile photo
+      tags:
+      - account
+      x-app: account
+      x-public: true
+  /v1/account/avatar/{org}/{user}/{digest}:
+    get:
+      description: |-
+        Streams a profile photo's raw BYTES. This is the address stored on the user's IAM record and rendered directly by an `<img>`, so it takes no credentials — the 64-hex content digest in the path is the capability, and it can only be produced by someone who already has the image.
+
+        The Content-Type is derived from the stored bytes and the response carries nosniff, so only a real raster image is ever served and only under its true type. Anything else — a miss, a malformed path, an object that is not an image — is one 404, and a hit caches for a year because the address is the content.
+      operationId: get_account_avatar_by_org_by_user_by_digest
+      parameters:
+      - in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: user
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: digest
+        required: true
+        schema:
+          type: string
+      summary: Fetch a profile photo
+      tags:
+      - account
+      x-app: account
+      x-public: true
+  /v1/account/csrf:
+    get:
+      description: |-
+        IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on
+        every money write (mint/revoke a key, top up, onboard, and the billing/commerce
+        write verbs). The token is bound to the caller's validated identity and expires,
+        so one minted for one identity cannot authorize a write as another.
+
+        It is answered no-store, so it is never cached by a shared proxy. This is the
+        same-origin endpoint the embedded console reads — the Same-Origin Policy is what
+        stops a cross-site page from reading the response and forging a write.
+      operationId: get_account_csrf
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/csrfResp'
+          description: ok
+      summary: IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token
+        on every money write (mint/revoke a key, top up, onboard, and the billing/commerce
+        write verbs).
+      tags:
+      - account
+      x-app: account
+      x-public: true
+      x-tool: true
+  /v1/account/embed:
+    get:
+      description: |-
+        Reports whether one of this brand's shared embedded apps (cms, erp,
+        help) may be framed by the caller and is actually running, so a console module
+        can choose between the embed and the provision panel.
+
+        It answers two questions the browser cannot answer for itself. ENTITLEMENT is
+        server-authoritative: each app is a single shared per-BRAND instance, so only a
+        member of the owning brand org — or a SuperAdmin — is given the embed URL; every
+        other caller gets phase "not-entitled" and no URL. REACHABILITY is a probe of
+        that origin, which a cross-origin page cannot read for itself.
+
+        The probed host is always <app>.<this deployment's own brand domain>: no part of
+        it comes from the request, so this can never be steered into probing an
+        arbitrary origin.
+      operationId: get_account_embed
+      parameters:
+      - description: 'App is the embedded app to report on: cms (Content Studio),
+          erp or help.'
+        example: cms
+        in: query
+        name: app
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/embedStatusResp'
+          description: ok
+      summary: Reports whether one of this brand's shared embedded apps (cms, erp,
+        help) may be framed by the caller and is actually running, so a console module
+        can choose between the embed and the provision panel.
+      tags:
+      - account
+      x-app: account
+      x-public: true
+      x-tool: true
+  /v1/account/keys:
+    delete:
+      description: |-
+        Revokes the caller's own API key of the requested class. The class is
+        the same field mint takes — `?type=publishable`, defaulting to secret — so
+        revoking the key that ships in a browser bundle does not sign its holder out of
+        their own API: the other key keeps working.
+
+        Revoking is how a key is replaced when it does not need replacing; minting the
+        same class again rotates it in one step. IAM drops the credential immediately,
+        but the gateway caches keys for a few minutes, so a request that beat the cache
+        expiry may still be served.
+
+        For callers written against the older shape, the class is also accepted in a JSON
+        request body, read only when `?type=` is absent.
+      operationId: delete_account_keys
+      parameters:
+      - description: |-
+          Type is the key class to act on: "secret" (sk-, session-equivalent, belongs
+          on a server) or "publishable" (pk-, org-identifying, safe in a browser
+          bundle). Omitted means secret, which is what every existing caller means.
+        example: publishable
+        in: query
+        name: type
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/revokedKey'
+          description: ok
+      summary: Revokes the caller's own API key of the requested class.
+      tags:
+      - account
+      x-app: account
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns the caller's own API keys — every type they hold, read
+        AUTHORITATIVELY from IAM rather than from the session claim, which lags a key
+        minted moments ago. No secret material comes back: a secret key is represented
+        by its prefix, and only a publishable key (public by construction) carries its
+        full value.
+
+        A transient IAM read failure reports an empty set rather than a 5xx, so the
+        page shows the honest empty state and never a fabricated key.
+      operationId: get_account_keys
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/apiKeyList'
+          description: ok
+      summary: Returns the caller's own API keys — every type they hold, read AUTHORITATIVELY
+        from IAM rather than from the session claim, which lags a key minted moments
+        ago.
+      tags:
+      - account
+      x-app: account
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Creates — or rotates — the caller's API key of the requested type and
+        returns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.
+
+        Rotating is what creating means here: a user holds one key per type, so the
+        endpoint is idempotent by (caller, type) and the superseded credential stops
+        working. Two live secrets for one user would make "revoke my key" a lie.
+      operationId: post_account_keys
+      requestBody:
+        content:
+          application/json:
+            example:
+              type: publishable
+            schema:
+              $ref: '#/components/schemas/keyTypeIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mintedKey'
+          description: ok
+      summary: Creates — or rotates — the caller's API key of the requested type and
+        returns it ONCE.
+      tags:
+      - account
+      x-app: account
+      x-public: true
+      x-tool: true
+  /v1/account/orgs:
+    post:
+      description: |-
+        Onboard creates the caller's organization. Two flows, keyed on whether the caller
+        already has a home org (mirrors app/onboard/route.ts):
+
+          - FIRST-RUN (no home org): create + MOVE the user in as admin, so their next
+            JWT carries the new owner and the cloud scopes everything to it. This is the
+            path a fresh OAuth sign-up takes, from the sign-up application's org.
+          - ADDITIONAL (owner set): create the org but do NOT move the user — a move
+            changes their IAM owner (stripping a SuperAdmin's status + orphaning their
+            current org). They reach the new org via the OrgSwitcher, which re-scopes
+            X-Org-Id without touching IAM membership. A personal-org request from someone
+            who already has an org is meaningless → 409.
+      operationId: post_account_orgs
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: Acme
+            schema:
+              $ref: '#/components/schemas/onboardReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/onboardResp'
+          description: ok
+      summary: Onboard creates the caller's organization.
+      tags:
+      - account
+      x-app: account
+      x-public: true
+      x-tool: true
   /v1/admin/affiliates:
     get:
       description: |-
@@ -58220,63 +58446,6 @@ paths:
       x-app: analytics
       x-public: true
       x-tool: true
-  /v1/appearance:
-    get:
-      description: |-
-        Returns the signed-in caller's own appearance preference — text
-        size, density and accent — read from their IAM account so it is the same on
-        every device and every Hanzo surface. An unset preference is an empty object.
-
-        A transient IAM read failure reports the empty preference rather than a 5xx, so
-        a surface applies its published default and never error-toasts on load — the
-        same fail-soft the key read uses.
-      operationId: get_appearance
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/appearance'
-          description: ok
-      summary: Returns the signed-in caller's own appearance preference — text size,
-        density and accent — read from their IAM account so it is the same on every
-        device and every Hanzo surface.
-      tags:
-      - account
-      x-app: account
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Stores the caller's appearance preference on their IAM account,
-        preserving every other field of the row. The accent is validated as a real
-        colour token before it is stored; an unset or invalid axis is dropped rather
-        than stored.
-      operationId: post_appearance
-      requestBody:
-        content:
-          application/json:
-            example:
-              accent: '#8b5cf6'
-              density: compact
-              type: 1.15
-            schema:
-              $ref: '#/components/schemas/appearance'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/appearance'
-          description: ok
-      summary: Stores the caller's appearance preference on their IAM account, preserving
-        every other field of the row.
-      tags:
-      - account
-      x-app: account
-      x-public: true
-      x-tool: true
   /v1/ask:
     post:
       description: |-
@@ -59220,48 +59389,6 @@ paths:
       tags:
       - automations
       x-app: automations
-      x-public: true
-  /v1/avatar:
-    post:
-      description: |-
-        Stores one image as the signed-in user's profile photo and answers the URL it is served from, which is also written to the user's IAM record — so every surface that already renders `avatar` picks it up with no further call.
-
-        The body is a multipart form with a `file` part. The format is decided by the BYTES, never the filename or the part's Content-Type: png, jpeg, gif and webp are accepted and everything else is refused with 415, so an SVG cannot be stored as a picture and later served as a program. Over 8 MiB is 413; empty is 400.
-
-        The photo is addressed by the sha256 of its bytes, so setting a new one yields a new URL rather than a stale cache of the old face. The caller is taken from the validated identity ONLY — there is no way to name a different subject — so this always sets your own photo, and a caller with no organization yet is refused.
-      operationId: post_avatar
-      summary: Set your profile photo
-      tags:
-      - account
-      x-app: account
-      x-public: true
-  /v1/avatar/{org}/{user}/{digest}:
-    get:
-      description: |-
-        Streams a profile photo's raw BYTES. This is the address stored on the user's IAM record and rendered directly by an `<img>`, so it takes no credentials — the 64-hex content digest in the path is the capability, and it can only be produced by someone who already has the image.
-
-        The Content-Type is derived from the stored bytes and the response carries nosniff, so only a real raster image is ever served and only under its true type. Anything else — a miss, a malformed path, an object that is not an image — is one 404, and a hit caches for a year because the address is the content.
-      operationId: get_avatar_by_org_by_user_by_digest
-      parameters:
-      - in: path
-        name: org
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: user
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: digest
-        required: true
-        schema:
-          type: string
-      summary: Fetch a profile photo
-      tags:
-      - account
-      x-app: account
       x-public: true
   /v1/base/health:
     get:
@@ -70447,33 +70574,6 @@ paths:
       x-app: crm
       x-stage: beta
       x-tool: true
-  /v1/csrf:
-    get:
-      description: |-
-        IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on
-        every money write (mint/revoke a key, top up, onboard, and the billing/commerce
-        write verbs). The token is bound to the caller's validated identity and expires,
-        so one minted for one identity cannot authorize a write as another.
-
-        It is answered no-store, so it is never cached by a shared proxy. This is the
-        same-origin endpoint the embedded console reads — the Same-Origin Policy is what
-        stops a cross-site page from reading the response and forging a write.
-      operationId: get_csrf
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/csrfResp'
-          description: ok
-      summary: IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token
-        on every money write (mint/revoke a key, top up, onboard, and the billing/commerce
-        write verbs).
-      tags:
-      - account
-      x-app: account
-      x-public: true
-      x-tool: true
   /v1/dataroom/analytics/dataroom/{dataroomId}:
     get:
       description: |-
@@ -71992,47 +72092,6 @@ paths:
       x-app: projects
       x-public: true
       x-tool: true
-  /v1/embed:
-    get:
-      description: |-
-        Reports whether one of this brand's shared embedded apps (cms, erp,
-        help) may be framed by the caller and is actually running, so a console module
-        can choose between the embed and the provision panel.
-
-        It answers two questions the browser cannot answer for itself. ENTITLEMENT is
-        server-authoritative: each app is a single shared per-BRAND instance, so only a
-        member of the owning brand org — or a SuperAdmin — is given the embed URL; every
-        other caller gets phase "not-entitled" and no URL. REACHABILITY is a probe of
-        that origin, which a cross-origin page cannot read for itself.
-
-        The probed host is always <app>.<this deployment's own brand domain>: no part of
-        it comes from the request, so this can never be steered into probing an
-        arbitrary origin.
-      operationId: get_embed
-      parameters:
-      - description: 'App is the embedded app to report on: cms (Content Studio),
-          erp or help.'
-        example: cms
-        in: query
-        name: app
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/embedStatusResp'
-          description: ok
-      summary: Reports whether one of this brand's shared embedded apps (cms, erp,
-        help) may be framed by the caller and is actually running, so a console module
-        can choose between the embed and the provision panel.
-      tags:
-      - account
-      x-app: account
-      x-public: true
-      x-tool: true
   /v1/embeddings:
     post:
       description: |-
@@ -72226,7 +72285,7 @@ paths:
         Projection reports which console apps the CALLER's org may open, and the plan slug
         that decides it. It is the READ side of the unified paywall: the org's plan tier
         resolved from commerce, which is a different authority from the enablement store
-        behind GET /v1/orgs/{org}/entitlements (that one is the org's own on/off intent).
+        behind GET /v1/entitlements/orgs/{org} (that one is the org's own on/off intent).
 
         It fails SAFE-TO-LOCKED, never 500: an unvalidated principal is a 403, but a
         commerce outage reports every app locked at 200 rather than breaking the shell.
@@ -72242,6 +72301,77 @@ paths:
           description: ok
       summary: Projection reports which console apps the CALLER's org may open, and
         the plan slug that decides it.
+      tags:
+      - entitlements
+      x-app: entitlements
+      x-public: true
+      x-tool: true
+  /v1/entitlements/orgs/{org}:
+    get:
+      description: |-
+        Get lists the products an org has ENABLED — its own intent, which the console's
+        paid-product sidebar reads to decide what to show. It is distinct from what the
+        org's plan ENTITLES it to (that is GET /v1/entitlements, resolved from commerce).
+
+        A caller may only read its OWN org's row; a platform super admin may read any.
+      operationId: get_entitlements_orgs_by_org
+      parameters:
+      - in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/entitlementsView'
+          description: ok
+      summary: Get lists the products an org has ENABLED — its own intent, which the
+        console's paid-product sidebar reads to decide what to show.
+      tags:
+      - entitlements
+      x-app: entitlements
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Post turns products on or off for an org and returns the enabled set afterwards.
+
+        A product may only be ENABLED if the org's plan already ENTITLES it, so enabling
+        never spends new money — a product the plan does not grant answers 402 and the
+        console routes that to an upgrade prompt. DISABLING is never gated. A platform
+        super admin bypasses the plan check (operator comp/grant) and may target any org;
+        everyone else may only change their own. Commerce unreachable is a 503, never an
+        implicit yes.
+      operationId: post_entitlements_orgs_by_org
+      parameters:
+      - in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              add:
+              - chat
+              remove:
+              - engine
+            schema:
+              $ref: '#/components/schemas/mutateReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/entitlementsView'
+          description: ok
+      summary: Post turns products on or off for an org and returns the enabled set
+        afterwards.
       tags:
       - entitlements
       x-app: entitlements
@@ -86012,103 +86142,6 @@ paths:
       tags:
       - knowledge
       x-app: knowledge
-      x-public: true
-      x-tool: true
-  /v1/keys:
-    delete:
-      description: |-
-        Revokes the caller's own API key of the requested class. The class is
-        the same field mint takes — `?type=publishable`, defaulting to secret — so
-        revoking the key that ships in a browser bundle does not sign its holder out of
-        their own API: the other key keeps working.
-
-        Revoking is how a key is replaced when it does not need replacing; minting the
-        same class again rotates it in one step. IAM drops the credential immediately,
-        but the gateway caches keys for a few minutes, so a request that beat the cache
-        expiry may still be served.
-
-        For callers written against the older shape, the class is also accepted in a JSON
-        request body, read only when `?type=` is absent.
-      operationId: delete_keys
-      parameters:
-      - description: |-
-          Type is the key class to act on: "secret" (sk-, session-equivalent, belongs
-          on a server) or "publishable" (pk-, org-identifying, safe in a browser
-          bundle). Omitted means secret, which is what every existing caller means.
-        example: publishable
-        in: query
-        name: type
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/revokedKey'
-          description: ok
-      summary: Revokes the caller's own API key of the requested class.
-      tags:
-      - account
-      x-app: account
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns the caller's own API keys — every type they hold, read
-        AUTHORITATIVELY from IAM rather than from the session claim, which lags a key
-        minted moments ago. No secret material comes back: a secret key is represented
-        by its prefix, and only a publishable key (public by construction) carries its
-        full value.
-
-        A transient IAM read failure reports an empty set rather than a 5xx, so the
-        page shows the honest empty state and never a fabricated key.
-      operationId: get_keys
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/apiKeyList'
-          description: ok
-      summary: Returns the caller's own API keys — every type they hold, read AUTHORITATIVELY
-        from IAM rather than from the session claim, which lags a key minted moments
-        ago.
-      tags:
-      - account
-      x-app: account
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Creates — or rotates — the caller's API key of the requested type and
-        returns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.
-
-        Rotating is what creating means here: a user holds one key per type, so the
-        endpoint is idempotent by (caller, type) and the superseded credential stops
-        working. Two live secrets for one user would make "revoke my key" a lie.
-      operationId: post_keys
-      requestBody:
-        content:
-          application/json:
-            example:
-              type: publishable
-            schema:
-              $ref: '#/components/schemas/keyTypeIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/mintedKey'
-          description: ok
-      summary: Creates — or rotates — the caller's API key of the requested type and
-        returns it ONCE.
-      tags:
-      - account
-      x-app: account
       x-public: true
       x-tool: true
   /v1/kms/auth/login:
@@ -101710,113 +101743,6 @@ paths:
       x-app: explorer
       x-stage: beta
       x-tool: true
-  /v1/orgs:
-    post:
-      description: |-
-        Onboard creates the caller's organization. Two flows, keyed on whether the caller
-        already has a home org (mirrors app/onboard/route.ts):
-
-          - FIRST-RUN (no home org): create + MOVE the user in as admin, so their next
-            JWT carries the new owner and the cloud scopes everything to it. This is the
-            path a fresh OAuth sign-up takes, from the sign-up application's org.
-          - ADDITIONAL (owner set): create the org but do NOT move the user — a move
-            changes their IAM owner (stripping a SuperAdmin's status + orphaning their
-            current org). They reach the new org via the OrgSwitcher, which re-scopes
-            X-Org-Id without touching IAM membership. A personal-org request from someone
-            who already has an org is meaningless → 409.
-      operationId: post_orgs
-      requestBody:
-        content:
-          application/json:
-            example:
-              name: Acme
-            schema:
-              $ref: '#/components/schemas/onboardReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/onboardResp'
-          description: ok
-      summary: Onboard creates the caller's organization.
-      tags:
-      - account
-      x-app: account
-      x-public: true
-      x-tool: true
-  /v1/orgs/{org}/entitlements:
-    get:
-      description: |-
-        Get lists the products an org has ENABLED — its own intent, which the console's
-        paid-product sidebar reads to decide what to show. It is distinct from what the
-        org's plan ENTITLES it to (that is GET /v1/entitlements, resolved from commerce).
-
-        A caller may only read its OWN org's row; a platform super admin may read any.
-      operationId: get_orgs_by_org_entitlements
-      parameters:
-      - in: path
-        name: org
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/entitlementsView'
-          description: ok
-      summary: Get lists the products an org has ENABLED — its own intent, which the
-        console's paid-product sidebar reads to decide what to show.
-      tags:
-      - entitlements
-      x-app: entitlements
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Post turns products on or off for an org and returns the enabled set afterwards.
-
-        A product may only be ENABLED if the org's plan already ENTITLES it, so enabling
-        never spends new money — a product the plan does not grant answers 402 and the
-        console routes that to an upgrade prompt. DISABLING is never gated. A platform
-        super admin bypasses the plan check (operator comp/grant) and may target any org;
-        everyone else may only change their own. Commerce unreachable is a 503, never an
-        implicit yes.
-      operationId: post_orgs_by_org_entitlements
-      parameters:
-      - in: path
-        name: org
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              add:
-              - chat
-              remove:
-              - engine
-            schema:
-              $ref: '#/components/schemas/mutateReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/entitlementsView'
-          description: ok
-      summary: Post turns products on or off for an org and returns the enabled set
-        afterwards.
-      tags:
-      - entitlements
-      x-app: entitlements
-      x-public: true
-      x-tool: true
   /v1/payments:
     post:
       description: |-
@@ -112706,6 +112632,82 @@ paths:
           description: ok
       summary: SyncBots re-projects the caller org's agents as workspace members into
         EVERY workspace of the org, and removes the ones whose agent is gone.
+      tags:
+      - team
+      x-app: team
+      x-public: true
+      x-tool: true
+  /v1/team/collaborator:
+    get:
+      description: |-
+        Upgrades to the hocuspocus WebSocket the Team editor syncs its Y.js documents over: binary frames of document name, message type and payload, with ONE socket multiplexing every document a tab has open. The server is a relay and an ordered update log, not a CRDT engine — it replays the log to each joining peer and broadcasts every update to the rest, which converges because Y.js updates are commutative and idempotent. There is no body; the response is a protocol upgrade.
+
+        BOTH LANES SHARE ONE ROOT. The client derives them from one configured URL — this socket at its root, the markup-snapshot RPC one segment in — so pointing the editor at this service is one value, and the two lanes cannot drift apart.
+
+        AUTH IS IN-BAND, PER DOCUMENT, NOT ON THE UPGRADE. The handshake gates only on browser Origin (403 outside the team surfaces; no Origin at all is admitted, which is what a non-browser sends), and then the first frame for a document must be an Auth message carrying the same session or workspace token every other team route verifies — a browser WebSocket cannot set an Authorization header, which is why the token rides inside the protocol. Anything else on an unauthenticated document is answered with one permission denial and nothing further.
+
+        Every document is authorized on its own: the document's workspace must be the token's workspace when the token pins one, and the caller must be a member of it. A mismatch, an unknown workspace and a non-member deny alike with "document not found". Rooms are keyed by org and workspace and the persisted log's key embeds both, so a foreign document id can neither join a room nor read a blob.
+
+        The server pings every twenty seconds and drops a socket silent for sixty, so a backgrounded tab — whose JS timers are throttled but whose network stack still auto-pongs — stays connected instead of dying into a reconnect loop.
+      operationId: get_team_collaborator
+      summary: Open the live collaborative-editing socket
+      tags:
+      - team
+      x-app: team
+      x-public: true
+  /v1/team/collaborator/rpc/{documentId}:
+    post:
+      description: |-
+        CollabRPC is the collaborative-markup snapshot plane the Team front's editor
+        speaks: createContent stores a document field's markup at a fresh, immutable
+        blob ref and returns it, updateContent stores a new snapshot and answers
+        nothing, and getContent reads back the exact snapshot a ref names.
+
+        createContent ALSO seeds the live-editing update log from the front-supplied
+        Y.js update, so a dialog-authored description is visible in the collaborative
+        editor — which replays that log — and not only in snapshot reads.
+        updateContent never touches that log: peers may be live-editing the document,
+        and their edits are not this call's to overwrite.
+
+        Every call is scoped to the caller's VERIFIED session or workspace token: the
+        documentId's workspace must be the token's workspace when the token names one,
+        and the caller must be a member of it. An unknown workspace, another tenant's
+        workspace and a workspace the caller is not in all answer the same 404, so a
+        probe learns nothing about what exists.
+      operationId: post_team_collaborator_rpc_by_documentid
+      parameters:
+      - description: |-
+          DocumentID addresses the document field, as
+          "<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>" — the
+          collaborator-client encodeDocumentId shape, from the path.
+        example: 6579…|tracker:class:Issue|issue-1|description
+        in: path
+        name: documentId
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              documentId: 6579…|tracker:class:Issue|issue-1|description
+              method: getContent
+              payload:
+                source: issue-1-description-1730000000000
+            schema:
+              $ref: '#/components/schemas/collabRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/collabResult'
+          description: ok
+      summary: 'CollabRPC is the collaborative-markup snapshot plane the Team front''s
+        editor speaks: createContent stores a document field''s markup at a fresh,
+        immutable blob ref and returns it, updateContent stores a new snapshot and
+        answers nothing, and getContent reads back the exact snapshot a ref names.'
       tags:
       - team
       x-app: team
