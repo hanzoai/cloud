@@ -1764,6 +1764,17 @@ components:
         warnPct:
           type: integer
       type: object
+    Capability:
+      properties:
+        description:
+          type: string
+        href:
+          type: string
+        name:
+          type: string
+        stage:
+          type: string
+      type: object
     CaptureBatch:
       properties:
         batch:
@@ -5611,6 +5622,23 @@ components:
             queue renders without opening each document.
           type: string
       type: object
+    Index:
+      properties:
+        _links:
+          additionalProperties:
+            $ref: '#/components/schemas/Link'
+          type: object
+        description:
+          type: string
+        name:
+          type: string
+        operations:
+          items:
+            $ref: '#/components/schemas/Op'
+          type: array
+        stage:
+          type: string
+      type: object
     IngestRequest:
       properties:
         attempts:
@@ -6337,6 +6365,11 @@ components:
           type: integer
         description:
           description: Description is the line as it appears on the document.
+          type: string
+      type: object
+    Link:
+      properties:
+        href:
           type: string
       type: object
     ListOut:
@@ -7377,6 +7410,17 @@ components:
           type: integer
         tld:
           description: the top-level domain the name sits under
+          type: string
+      type: object
+    Op:
+      properties:
+        href:
+          type: string
+        method:
+          type: string
+        operationId:
+          type: string
+        summary:
           type: string
       type: object
     Opportunity:
@@ -9799,6 +9843,17 @@ components:
           type: integer
         holdsCents:
           type: integer
+      type: object
+    Root:
+      properties:
+        _links:
+          additionalProperties:
+            $ref: '#/components/schemas/Link'
+          type: object
+        capabilities:
+          items:
+            $ref: '#/components/schemas/Capability'
+          type: array
       type: object
     RoundInput:
       properties:
@@ -54863,6 +54918,57 @@ paths:
       tags:
       - iam
       x-app: iam
+  /v1:
+    get:
+      description: |-
+        The API root. One row per capability — its name, the address it answers under, whether it is generally available, and the sentence it says about itself — plus the links to the document at /v1/openapi.json and the agent door.
+
+        It is a projection of that same document and carries the same surface a customer calls: the operator's admin product, the relay doors, the legacy spellings and any capability that is not yet generally available are in neither.
+
+        Unauthenticated by design, exactly as the document it derives from: a client has to be able to read the contract before it holds a credential, and a list of capability names grants nothing.
+      operationId: get_capabilities
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Root'
+          description: Success
+      security: []
+      summary: Every capability this deployment answers, and where to follow each
+        one
+      tags:
+      - openapi
+      x-app: openapi
+      x-public: true
+  /v1/{name}:
+    get:
+      description: |-
+        What the capability named in the path answers: every published operation, its operationId, its method and its address, and the sentence lifted from the handler that serves it — plus the way back to /v1.
+
+        It answers where the capability serves nothing at its own root. Where it does, that operation is the answer and is described at its own address; a client following the root index reaches the capability either way.
+
+        Unauthenticated, and scoped to the same customer surface the root is. A name that is not a published capability is answered exactly as any other unrouted address, so this cannot be asked whether something exists that it would not have listed.
+      operationId: get_capability
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Index'
+          description: Success
+      security: []
+      summary: One capability's operations, with the address and method to call each
+      tags:
+      - openapi
+      x-app: openapi
+      x-public: true
   /v1/account/appearance:
     get:
       description: |-
@@ -55538,7 +55644,7 @@ paths:
     get:
       description: |-
         Lists IAM applications for one owner org, forwarded VERBATIM from IAM's
-        get-applications. These are the platform's OIDC clients — the console reads clientId
+        application list. These are the platform's OIDC clients — the console reads clientId
         off each row.
       operationId: adminApplications
       parameters:
@@ -55583,7 +55689,7 @@ paths:
                 $ref: '#/components/schemas/iamRowsOut'
           description: ok
       summary: Lists IAM applications for one owner org, forwarded VERBATIM from IAM's
-        get-applications.
+        application list.
       tags:
       - admin
       x-app: admin
@@ -57359,9 +57465,11 @@ paths:
         schema:
           type: string
       - description: |-
-          PageSize is rows per page. Defaults to "200", the shared admin page size.
-          It bounds the fan-out: the page decides how many per-org reads happen, so
-          the directory costs the same at eighty tenants and at eight thousand.
+          PageSize is rows per page: 20 by default, 100 at most. It is deliberately
+          below the 200 the rest of the admin surface uses, because a row here is not
+          a row of text — each one still costs its own wallet read. The page size IS
+          the fan-out width, so the directory costs the same at eighty tenants and at
+          eight thousand.
         in: query
         name: pageSize
         required: false
@@ -58105,7 +58213,7 @@ paths:
   /v1/admin/roles:
     get:
       description: Lists IAM roles for one owner org, forwarded VERBATIM from IAM's
-        get-roles.
+        role list.
       operationId: adminRoles
       parameters:
       - description: |-
@@ -58148,7 +58256,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/iamRowsOut'
           description: ok
-      summary: Lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.
+      summary: Lists IAM roles for one owner org, forwarded VERBATIM from IAM's role
+        list.
       tags:
       - admin
       x-app: admin
@@ -80034,6 +80143,19 @@ paths:
       x-app: domain
       x-public: true
       x-tool: true
+  /v1/embed:
+    post:
+      description: |-
+        Handles POST /v1/embed — the multipart upload hanzo.chat's
+        uploadVectors() sends. It saves the upload to a temp file, then reuses
+        object.RagEmbedFile (same parse+chunk+index as the native surface).
+      operationId: post_embed
+      summary: Handles POST /v1/embed — the multipart upload hanzo.chat's uploadVectors()
+        sends.
+      tags:
+      - ai
+      x-app: ai
+      x-public: true
   /v1/embeddings:
     post:
       description: |-
@@ -124231,8 +124353,9 @@ tags:
     them, chart them.'
   name: o11y
 - description: 'The served contract: the OpenAPI document every client, tool list
-    and command group is generated from, its command projection, and the agent door
-    that offers the same operations over MCP.'
+    and command group is generated from, its command projection, the agent door that
+    offers the same operations over MCP, and the index a client follows from the API
+    root to reach any of it.'
   name: openapi
 - description: 'Package plan is the plan catalog: every tier you can buy, what it
     costs, and what it grants.'
