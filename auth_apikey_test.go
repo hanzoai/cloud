@@ -100,7 +100,7 @@ func TestOrgForKey_PublishableResolvesThroughTheOrgOnlyDoor(t *testing.T) {
 		paths = append(paths, r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/v1/iam/resolve-key":
+		case "/v1/iam/keys/org":
 			// The real envelope: an org and a scope, and NO principal.
 			_, _ = w.Write([]byte(`{"status":"ok","data":{"org":"acme","scope":"publish"}}`))
 		default:
@@ -115,7 +115,7 @@ func TestOrgForKey_PublishableResolvesThroughTheOrgOnlyDoor(t *testing.T) {
 	if org := k.resolveOrg(context.Background(), "pk-live-abc"); org != "acme" {
 		t.Fatalf("resolveOrg = %q, want acme", org)
 	}
-	if len(paths) != 1 || paths[0] != "/v1/iam/resolve-key" {
+	if len(paths) != 1 || paths[0] != "/v1/iam/keys/org" {
 		t.Fatalf("a publishable key must be resolved at the org-only door, got %v", paths)
 	}
 	// A publishable key yields an ORG and never a principal: there is no idClaims on
@@ -134,7 +134,7 @@ func TestOrgForKey_EachPrefixUsesItsOwnDoor(t *testing.T) {
 		paths = append(paths, r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/v1/iam/resolve-key":
+		case "/v1/iam/keys/org":
 			_, _ = w.Write([]byte(`{"status":"ok","data":{"org":"pub-org","scope":"publish"}}`))
 		default:
 			_, _ = w.Write([]byte(`{"status":"ok","data":{"owner":"secret-org","name":"z"}}`))
@@ -160,7 +160,7 @@ func TestOrgForKey_EachPrefixUsesItsOwnDoor(t *testing.T) {
 	// publishable door, org-only. /v1/iam/users/get is neither — it is the typed
 	// (owner, name) read, which carries no accessKey and cannot answer this
 	// question at all.
-	want := []string{"/v1/iam/get-user", "/v1/iam/resolve-key"}
+	want := []string{"/v1/iam/keys/principal", "/v1/iam/keys/org"}
 	if len(paths) != 2 || paths[0] != want[0] || paths[1] != want[1] {
 		t.Fatalf("doors used = %v, want %v (one question each, never interchangeable)", paths, want)
 	}

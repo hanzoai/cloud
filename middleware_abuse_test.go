@@ -78,7 +78,7 @@ func abuseAppWith(t *testing.T, mode string, boundary bool) (*zip.App, *edge.Tra
 	h := func(c *zip.Ctx) error { return c.JSON(http.StatusOK, map[string]string{"ok": "1"}) }
 	app.Get("/v1/models", h)
 	app.Get("/v1/models/:name", h)
-	app.Post("/v1/iam/mint-user-keys", h)
+	app.Post("/v1/iam/keys/mint", h)
 	app.Get("/v1/kms/orgs/acme/secrets/db", h)
 	app.Get("/health", h)
 	app.Get("/v1/risk/decisions", h)
@@ -256,7 +256,7 @@ func TestAbuseGate_FailsOpenForOrdinaryTrafficAndClosedForAGrant(t *testing.T) {
 			if got := abuseHit(app, "GET", "/v1/models", "acme", "sk-live-1", "198.51.100.4").StatusCode; got != 200 {
 				t.Fatalf("ordinary traffic must FAIL OPEN when the scorer is down: got %d, want 200", got)
 			}
-			if got := abuseHit(app, "POST", "/v1/iam/mint-user-keys", "acme", "sk-live-2", "198.51.100.4").StatusCode; got != 403 {
+			if got := abuseHit(app, "POST", "/v1/iam/keys/mint", "acme", "sk-live-2", "198.51.100.4").StatusCode; got != 403 {
 				t.Fatalf("minting a credential must FAIL CLOSED when the scorer is down: got %d, want 403", got)
 			}
 			if got := abuseHit(app, "GET", "/v1/kms/orgs/acme/secrets/db", "acme", "sk-live-3", "198.51.100.4").StatusCode; got != 403 {
@@ -277,7 +277,7 @@ func TestAbuseGate_FailsOpenForOrdinaryTrafficAndClosedForAGrant(t *testing.T) {
 				t.Fatalf("%s → %d with no scorer installed; want 200", p, got)
 			}
 		}
-		if got := abuseHit(app, "POST", "/v1/iam/mint-user-keys", "acme", "sk-live-5", "198.51.100.4").StatusCode; got != 200 {
+		if got := abuseHit(app, "POST", "/v1/iam/keys/mint", "acme", "sk-live-5", "198.51.100.4").StatusCode; got != 200 {
 			t.Fatalf("credential minting → %d with no scorer installed; want 200", got)
 		}
 	})
@@ -291,7 +291,7 @@ func TestAbuseGate_ShadowDoesNotFailClosedOnAGrant(t *testing.T) {
 	resetScorer(t)
 	SetRiskScorer(nil)
 	app, _ := abuseApp(t, edge.ModeShadow)
-	if got := abuseHit(app, "POST", "/v1/iam/mint-user-keys", "acme", "sk-live-1", "198.51.100.4").StatusCode; got != 200 {
+	if got := abuseHit(app, "POST", "/v1/iam/keys/mint", "acme", "sk-live-1", "198.51.100.4").StatusCode; got != 200 {
 		t.Fatalf("an unarmed org must not be locked out of credential minting: got %d, want 200", got)
 	}
 }
