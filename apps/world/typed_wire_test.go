@@ -137,10 +137,63 @@ func TestStreamIsStillReachable(t *testing.T) {
 // SDK method all come from — so an operation missing from that registry is invisible to
 // all four. Addresses are written the way the DOCUMENT writes them.
 var untypedByDesign = map[string]string{
-	"GET /v1/world/stream": "Server-Sent Events. A typed op returns ONE value that zip marshals and " +
-		"writes as the whole response; this route holds the connection open writing frame after frame " +
-		"through c.SendStreamWriter (stream.go:151) until the client goes away, bounded only by a 25s " +
-		"heartbeat. There is no Out that can express a stream.",
+	"GET /v1/world/stream": "Server-Sent Events. zip's REST arm ends in c.JSON(out) (zip v1.31.0 " +
+		"typed.go:567): a typed op returns ONE value, which zip marshals and writes as the whole " +
+		"response. This route instead holds the connection open writing frame after frame through " +
+		"c.SendStreamWriter (stream.go:151), which lives on *zip.Ctx (zip ctx.go:178) — the one thing " +
+		"a typed op never receives. There is no Out that can express a stream. " +
+		"RE-READ at v1.31.0 rather than inherited: that release gained multi-status WithStatus, " +
+		"StatusCoder, WithResponseHeader and HeaderCoder, so an answer can now choose its status and " +
+		"its headers — but every one of them still decorates a single marshalled value, and none of " +
+		"them is a second write.",
+}
+
+// TestTheStreamDeclaresNoResponse pins a SILENCE, which is the only way a silence
+// survives a helpful reader.
+//
+// stream's prose says its `news` frames carry "the same {items:[…]} body GET
+// /v1/world/news answers", and that sentence is an invitation to declare
+// newsResponse as this operation's 200. It would be false: the response is
+// text/event-stream — a sequence of frames with a heartbeat between them — not one
+// JSON object, so a generated SDK would offer a call that decodes the first frame
+// and hangs on the rest. Publishing nothing is the honest answer, exactly as
+// apps/ask publishes no response for the branch it cannot name, and this is what
+// stops someone "fixing" it.
+func TestTheStreamDeclaresNoResponse(t *testing.T) {
+	app := mountWorldOnly(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "world", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal doc: %v", err)
+	}
+	var published struct {
+		Paths map[string]map[string]struct {
+			Responses   map[string]any `json:"responses"`
+			RequestBody any            `json:"requestBody"`
+			Summary     string         `json:"summary"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(raw, &published); err != nil {
+		t.Fatalf("unmarshal doc: %v", err)
+	}
+	op, ok := published.Paths["/v1/world/stream"]["get"]
+	if !ok {
+		t.Fatal("the stream is not in the document at all")
+	}
+	if strings.TrimSpace(op.Summary) == "" {
+		t.Error("the stream owes the document its prose — see openapi.Describe in stream.go")
+	}
+	if len(op.Responses) > 0 {
+		t.Errorf("the stream publishes a response (%v). Its wire is a frame sequence, not a value: "+
+			"naming one shape would tell every generated SDK to decode the first frame and stop. "+
+			"The silence is the honest declaration.", op.Responses)
+	}
+	if op.RequestBody != nil {
+		t.Error("the stream publishes a request body; it reads none")
+	}
 }
 
 // worldOps reads BOTH projections of the live router at their one shared address form:
