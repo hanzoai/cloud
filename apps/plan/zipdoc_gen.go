@@ -21,12 +21,6 @@ func init() {
 			"planList.plans": "Plans are the plans in this section, each an opaque object exactly as the\n@hanzo/plans catalog emits it — typically id, name, description,\npriceMonthly, category, a feature list, a limits block and a price_ref.",
 		},
 	})
-	zip.Describe("GET /v1/plan/cloud", zip.Doc{
-		Description: "Returns the cloud plan catalog. It is the same section\nListCloudPlans answers and a separate operation because it is a separate\naddress, and an address is what every projection keys on.",
-		Fields: map[string]string{
-			"planList.plans": "Plans are the plans in this section, each an opaque object exactly as the\n@hanzo/plans catalog emits it — typically id, name, description,\npriceMonthly, category, a feature list, a limits block and a price_ref.",
-		},
-	})
 	zip.Describe("GET /v1/plan/dns", zip.Doc{
 		Description: "ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records\nper zone and queries per day. It is the canonical catalog for every caller —\nthese plans carry no reseller overrides.",
 		Fields: map[string]string{
