@@ -75,6 +75,7 @@
     "metrics": 11,
     "ml": 7,
     "mq": 15,
+    "network": 4,
     "notify": 4,
     "o11y": 387,
     "openapi": 4,
@@ -120,7 +121,6 @@
     "webhooks": 8,
     "websearch": 7,
     "world": 6,
-    "x402": 1,
-    "zt": 4
+    "x402": 1
   }
 }
