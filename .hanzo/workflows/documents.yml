@@ -100,6 +100,12 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
           GIT_TOKEN: ${{ github.token }}
+          # The client credential this job already holds. forge-rewrites.sh spends
+          # it on ONE short-lived token scoped to this forge, which is the identity
+          # that can SEE the private repositories -- asked as the per-job token,
+          # twenty-six of them answer 404 and fall through to GitHub.
+          IAM_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          IAM_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           # RUNNER_TEMP is unset on Hanzo Git. Unguarded, "$RUNNER_TEMP/x" is
@@ -118,19 +124,20 @@ jobs:
           { echo "GIT_CONFIG_GLOBAL=$CFG"; echo "GIT_CONFIG_NOSYSTEM=1"; } >> "$GITHUB_ENV"
           export GIT_CONFIG_GLOBAL="$CFG" GIT_CONFIG_NOSYSTEM=1
 
-          # GIT.HANZO.AI FIRST, as cicd.yml does. It mirrors the same objects, so the
-          # fetched zip hashes to the h1: line already in go.sum and Hanzo Git
-          # serving different bytes fails the build rather than shipping them.
-          # It is also the substitution that survives a GitHub ACL drift, which
-          # has blocked releases here before. GH_PAT stays the fallback for a
-          # module Hanzo Git has not mirrored.
-          if [ -n "${GIT_TOKEN:-}" ]; then
-            git config --global \
-              url."https://x:${GIT_TOKEN}@git.hanzo.ai/hanzoai/".insteadOf "https://github.com/hanzoai/"
-          fi
-          [ -n "${GH_PAT:-}" ] || { echo "::warning::GH_PAT is not set — a private module Hanzo Git has not mirrored, and that is not already in the cache, cannot be fetched"; exit 0; }
-          git config --global \
-            url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          # PER REPO, THROUGH THE ONE PROBER, exactly as cicd.yml resolves the
+          # same modules. `insteadOf` is a rewrite and not a chain: git takes the
+          # LONGEST match, so a single prefix rewrite of github.com/hanzoai/ ->
+          # git.hanzo.ai/hanzoai/ means GitHub is never tried, and one repo the
+          # forge denies takes the whole sweep down. It did: every module the
+          # forge does not serve resolved to no source, and `describe` stopped at
+          # `could not import github.com/hanzoai/types (invalid package name)`
+          # across 296 packages -- so the lane that REPAIRS the drift gate could
+          # not run, while the gate went on refusing every release for the drift.
+          #
+          # The script asks the forge, repo by repo, what it will actually serve,
+          # rewrites only those, and authenticates github.com in the same
+          # job-local credential store for the rest. One file, both hosts.
+          bash .hanzo/ci/forge-rewrites.sh
 
       - name: Write the documents
         # ONE TARGET, CALLED. Everything about which apps describe themselves,
