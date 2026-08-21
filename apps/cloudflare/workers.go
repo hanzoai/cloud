@@ -26,11 +26,23 @@ import (
 // struct the handler binds AND what the document declares for the route
 // (openapi.Register, cloudflare.go), so the published contract follows the code.
 type WorkerScriptPut struct {
-	Script             string          `json:"script"`
-	MainModule         string          `json:"mainModule,omitempty"`
-	CompatibilityDate  string          `json:"compatibilityDate,omitempty"`
-	CompatibilityFlags []string        `json:"compatibilityFlags,omitempty"`
-	Bindings           json.RawMessage `json:"bindings,omitempty"`
+	// Script is the ES-module SOURCE — the code itself, not a name or a URL. It
+	// shares a name with the `:script` path segment, which names the Worker; those
+	// are two different things, and keeping them apart is why this route cannot be a
+	// typed op.
+	Script string `json:"script"`
+	// MainModule is the module file the runtime starts at. Empty means "worker.js".
+	MainModule string `json:"mainModule,omitempty"`
+	// CompatibilityDate pins which Workers runtime behaviour the script runs under,
+	// as a date ("2024-01-01").
+	CompatibilityDate string `json:"compatibilityDate,omitempty"`
+	// CompatibilityFlags turn individual runtime behaviours on or off around that
+	// date ("nodejs_compat").
+	CompatibilityFlags []string `json:"compatibilityFlags,omitempty"`
+	// Bindings are the resources the script can reach (KV, D1, R2, secrets, …), in
+	// Cloudflare's own binding vocabulary. Passed through as written: this plane
+	// deliberately does not model Cloudflare's shapes.
+	Bindings json.RawMessage `json:"bindings,omitempty"`
 }
 
 // ── scripts ─────────────────────────────────────────────────────────────────────
