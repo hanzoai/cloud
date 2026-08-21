@@ -194,3 +194,136 @@ func TestForgeRewrites_WithoutACredentialNothingChanges(t *testing.T) {
 		t.Errorf("mentioned IAM with no credential configured:\n%s", out)
 	}
 }
+
+// runRewritesWithModule runs the script against a tree whose go.mod names one hanzoai
+// module, so the probe-and-rewrite half executes, and returns the job-local git config it
+// wrote along with the output.
+func runRewritesWithModule(t *testing.T, env map[string]string) (out string, gitconfig string, credFiles []string) {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".hanzo", "ci"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.ReadFile(".hanzo/ci/forge-rewrites.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(root, ".hanzo", "ci", "forge-rewrites.sh")
+	if err := os.WriteFile(script, src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gomod := "module example.com/x\n\ngo 1.25\n\nrequire (\n\tgithub.com/hanzoai/vfs v0.6.6\n)\n"
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte(gomod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := filepath.Join(root, "gitconfig")
+	cmd := exec.Command("bash", script)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+cfg, "GIT_CONFIG_NOSYSTEM=1")
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	b, _ := cmd.CombinedOutput()
+	cfgBody, _ := os.ReadFile(cfg)
+	return string(b), string(cfgBody), nil
+}
+
+// THE REWRITE CARRIES NO SECRET. It used to be spliced into the rewritten URL, which put
+// the token in argv on every `git config` call and made the section name unique per token
+// — so runs accumulated entries and a later fetch could be served by an expired one.
+func TestForgeRewrites_TheRewriteHoldsNoToken(t *testing.T) {
+	const tok = "tok-must-not-appear-in-config"
+	srv, _, _ := iamStub(t, tok)
+
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200) // this forge serves the module, so a rewrite is written
+	}))
+	defer forge.Close()
+
+	out, cfg, _ := runRewritesWithModule(t, map[string]string{
+		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
+		"GIT_TOKEN": "", "FORGE_URL": forge.URL,
+	})
+	if !strings.Contains(out, "forge serves -> vfs") {
+		t.Fatalf("the probe did not reach the stand-in forge, so there is no rewrite to judge:\n%s", out)
+	}
+	if strings.Contains(cfg, tok) {
+		t.Errorf("the token was written into the git config:\n%s", cfg)
+	}
+	// Whatever it rewrote, it rewrote without a credential in the URL.
+	for _, line := range strings.Split(cfg, "\n") {
+		if strings.Contains(line, "insteadOf") && strings.Contains(line, "@git.hanzo.ai") {
+			t.Errorf("a rewrite still carries a credential in its URL: %q", line)
+		}
+	}
+}
+
+// NOTHING IS WRITTEN TO THE RUNNER'S OWN CONFIG. These runners are long-lived and shared,
+// so a credential left in ~/.gitconfig is readable by the next job from any repository.
+// With no GIT_CONFIG_GLOBAL supplied the script must make one rather than fall back to the
+// machine's.
+func TestForgeRewrites_WritesAJobLocalConfigNotTheRunners(t *testing.T) {
+	const tok = "tok-scoped-to-this-job"
+	srv, _, _ := iamStub(t, tok)
+
+	home := t.TempDir()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".hanzo", "ci"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src, _ := os.ReadFile(".hanzo/ci/forge-rewrites.sh")
+	script := filepath.Join(root, ".hanzo", "ci", "forge-rewrites.sh")
+	_ = os.WriteFile(script, src, 0o755)
+	_ = os.WriteFile(filepath.Join(root, "go.mod"),
+		[]byte("module example.com/x\n\ngo 1.25\n\nrequire (\n\tgithub.com/hanzoai/vfs v0.6.6\n)\n"), 0o644)
+
+	env := filepath.Join(root, "github_env")
+	_ = os.WriteFile(env, nil, 0o644)
+
+	cmd := exec.Command("bash", script)
+	cmd.Dir = root
+	// HOME points at an empty directory and GIT_CONFIG_GLOBAL is deliberately unset:
+	// this is the shape that used to write the runner's own config.
+	cmd.Env = append(os.Environ(),
+		"HOME="+home, "GITHUB_ENV="+env,
+		"IAM_ISSUER="+srv.URL, "IAM_CLIENT_ID=cid", "IAM_CLIENT_SECRET=csec", "GIT_TOKEN=")
+	for _, drop := range []string{"GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"} {
+		out := cmd.Env[:0]
+		for _, e := range cmd.Env {
+			if !strings.HasPrefix(e, drop+"=") {
+				out = append(out, e)
+			}
+		}
+		cmd.Env = out
+	}
+	_, _ = cmd.CombinedOutput()
+
+	if body, err := os.ReadFile(filepath.Join(home, ".gitconfig")); err == nil {
+		t.Errorf("the runner's own ~/.gitconfig was written:\n%s", body)
+	}
+	// And it must tell the steps that follow where the config went, or the build that
+	// spends these rewrites will not see them.
+	body, _ := os.ReadFile(env)
+	if !strings.Contains(string(body), "GIT_CONFIG_GLOBAL=") {
+		t.Errorf("GIT_CONFIG_GLOBAL was not published to later steps: %q", body)
+	}
+}
+
+// A mint that succeeds says IAM answered, not that the forge will spend what it answered
+// with. If the IAM identity serves nothing and a per-job token was displaced to try it,
+// the per-job token must be asked again rather than the lane reporting nothing to fetch.
+func TestForgeRewrites_AnIdentityThatServesNothingFallsBack(t *testing.T) {
+	srv, _, _ := iamStub(t, "iam-token-the-forge-will-refuse")
+
+	out, _, _ := runRewritesWithModule(t, map[string]string{
+		"IAM_ISSUER": srv.URL, "IAM_CLIENT_ID": "cid", "IAM_CLIENT_SECRET": "csec",
+		"GIT_TOKEN": "per-job-token",
+	})
+	if !strings.Contains(out, "asking as the IAM identity") {
+		t.Fatalf("expected it to try the IAM identity first:\n%s", out)
+	}
+	if !strings.Contains(out, "served nothing — asking again as the per-job token") {
+		t.Errorf("an identity that served nothing did not fall back:\n%s", out)
+	}
+}
