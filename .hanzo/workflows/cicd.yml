@@ -145,12 +145,13 @@ jobs:
       # used to carry died, and a client secret kept the same way dies the same
       # way.
       #
-      # So the credential is never a value this job holds. It is read from KMS
-      # and PIPED into the token request: it is never assigned to a variable,
-      # never exported, never on a command line — /proc/<pid>/cmdline is readable
-      # by every user on this shared runner — and never on disk. What survives
-      # the pipe is an access token that buys one thing, expires by itself, and
-      # is withdrawn at IAM rather than at a vendor.
+      # So the SECRET is never a value this job holds. It is read from KMS and
+      # PIPED into the token request: never assigned to a variable, never
+      # exported, never on a command line — /proc/<pid>/cmdline is readable by
+      # every user on this shared runner — and never on disk. The client id
+      # travels beside it and is not a credential. What survives the pipe is an
+      # access token that buys one thing, expires by itself, and is withdrawn at
+      # IAM rather than at a vendor.
       #
       # The gate still fails closed in every direction: no token, no answer, an
       # unparseable verdict and a diff too large to read all REFUSE, and there is
@@ -162,16 +163,14 @@ jobs:
           KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
           KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
           REVIEW_CLIENT: ${{ vars.REVIEW_CLIENT || 'hanzo-review' }}
+          IAM_ENDPOINT: ${{ vars.IAM_ENDPOINT || 'https://iam.hanzo.ai' }}
         run: |
           set -euo pipefail
 
-          # ONE HOST, the one this job already talks to. The token below is
-          # IAM's — /v1/kms/auth/login is a client_credentials grant proxied to
-          # the issuer, and KMS signs nothing and hands back what IAM minted, so
-          # the reviewer still presents an IAM-signed token for one audience.
-          # Going to the issuer directly would work and would also add a
-          # destination this job reaches while holding secret material, which is
-          # a wider job for no more authority.
+          # The store's own login: the client_credentials grant that opens the
+          # secret store this job reads the reviewer's identity out of. The
+          # credential is piped in rather than passed, so it is never a value
+          # this shell holds.
           login() {
             jq -Rsj --arg id "$1" '{clientId: $id, clientSecret: rtrimstr("\n")}' \
               | curl -sS --max-time 30 "${KMS_ENDPOINT}/v1/kms/auth/login" \
@@ -199,20 +198,42 @@ jobs:
           KMS_TOKEN=$(again kms_login || true)
           [ -n "$KMS_TOKEN" ] || { echo "::error::review: KMS login failed at ${KMS_ENDPOINT} — the reviewer's identity cannot be read, so the change does not pass"; exit 1; }
 
-          # No org in a KMS path: the store root comes from the validated claim,
-          # so this reads the KMS credential's OWN org and cannot name another's.
-          # The secret is never a value here — it is piped from the store into
-          # the grant that spends it.
-          mint_review() {
+          # THE PATH IS WHERE THE STORE HOLDS IT. The reviewer's client id and
+          # its secret are two secrets under review/, which is where they were
+          # provisioned and where a rotation writes them. A path the store does
+          # not hold reads exactly like a revoked credential — the gate fails
+          # closed on both, and only one of them is true — so this names the one
+          # that answers rather than the one that would be tidier.
+          #
+          # No org in the path: the store root comes from the validated claim, so
+          # this reads the KMS credential's OWN org and cannot name another's.
+          kms_secret() {
             curl -sS --max-time 30 \
-                "${KMS_ENDPOINT}/v1/kms/secrets/iam/clients/${REVIEW_CLIENT}?env=${KMS_SECRET_ENV}" \
+                "${KMS_ENDPOINT}/v1/kms/secrets/review/$1?env=${KMS_SECRET_ENV}" \
                 -H "Authorization: Bearer ${KMS_TOKEN}" \
-              | jq -r '.value // .secret.value // empty' \
-              | login "$REVIEW_CLIENT"
+              | jq -r '.value // .secret.value // empty'
+          }
+          REVIEW_CLIENT_ID=$(again kms_secret IAM_CLIENT_ID || true)
+          [ -n "$REVIEW_CLIENT_ID" ] || { echo "::error::review: no client id for ${REVIEW_CLIENT} in KMS at review/IAM_CLIENT_ID (env ${KMS_SECRET_ENV}, org from the KMS credential); the reviewer has no identity, so the change does not pass"; exit 1; }
+
+          # THE SECRET IS NEVER A VALUE AND NEVER IN ARGV. It is piped from the
+          # store into the grant that spends it, as a curl config read on stdin.
+          # `-u id:secret` would put it in /proc/<pid>/cmdline, which every user
+          # on this shared runner can read — the same reason the module
+          # credential travels in a file (see .hanzo/ci/forge-rewrites.sh).
+          # What survives the pipe is a token that buys one thing, expires by
+          # itself, and is withdrawn at IAM rather than at a vendor.
+          mint_review() {
+            kms_secret IAM_CLIENT_SECRET \
+              | jq -Rsj --arg id "$REVIEW_CLIENT_ID" '"user = \"\($id):\(rtrimstr("\n"))\"\n"' \
+              | curl -sS --max-time 30 --config - "${IAM_ENDPOINT}/v1/iam/oauth/token" \
+                  -d 'grant_type=client_credentials' \
+              | jq -r '.access_token // empty'
           }
           REVIEW_TOKEN=$(again mint_review || true)
           export REVIEW_TOKEN
-          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: no access token was issued to ${REVIEW_CLIENT} — store that client's secret in KMS at iam/clients/${REVIEW_CLIENT} (env ${KMS_SECRET_ENV}, org from the KMS credential); the reviewer cannot be reached, so the change does not pass"; exit 1; }
+          [ -n "$REVIEW_TOKEN" ] || { echo "::error::review: IAM issued no token to ${REVIEW_CLIENT} at ${IAM_ENDPOINT} — its secret is read from KMS at review/IAM_CLIENT_SECRET (env ${KMS_SECRET_ENV}, org from the KMS credential); the reviewer cannot be reached, so the change does not pass"; exit 1; }
+          echo "::add-mask::${REVIEW_TOKEN}"
           base="${{ github.event.before }}"
           # MEASURED, because this comment used to say the opposite and the
           # opposite is what a reader plans against. On run 90908 Hanzo Git DID
@@ -470,10 +491,12 @@ jobs:
           # takes the whole build down — which is what happened to hanzoai/zen on
           # the forge exactly as it had happened to it on GitHub. The script asks
           # this token, repo by repo, what the forge will actually serve and
-          # rewrites only those; everything else falls through to the GitHub
-          # rewrite below. See .hanzo/ci/forge-rewrites.sh.
+          # rewrites only those; everything else keeps the GitHub address it
+          # already has, and the script authenticates that host in the same
+          # job-local credential store — one file, both hosts, no second place
+          # for a credential to be written where git will not read it.
+          # See .hanzo/ci/forge-rewrites.sh.
           bash .hanzo/ci/forge-rewrites.sh
-          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
           {
             echo "GOPRIVATE=github.com/hanzoai/*"
             echo "GOPROXY=https://proxy.golang.org,direct"
@@ -1547,10 +1570,12 @@ jobs:
           # takes the whole build down — which is what happened to hanzoai/zen on
           # the forge exactly as it had happened to it on GitHub. The script asks
           # this token, repo by repo, what the forge will actually serve and
-          # rewrites only those; everything else falls through to the GitHub
-          # rewrite below. See .hanzo/ci/forge-rewrites.sh.
+          # rewrites only those; everything else keeps the GitHub address it
+          # already has, and the script authenticates that host in the same
+          # job-local credential store — one file, both hosts, no second place
+          # for a credential to be written where git will not read it.
+          # See .hanzo/ci/forge-rewrites.sh.
           bash .hanzo/ci/forge-rewrites.sh
-          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
           {
             echo "GOPRIVATE=github.com/hanzoai/*"
             echo "GOPROXY=https://proxy.golang.org,direct"
