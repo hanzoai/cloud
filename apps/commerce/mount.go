@@ -180,7 +180,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// address belongs to somebody else.
 	exposePosture()
 	exposePlan()
-	exposeSale()
 
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")
@@ -246,6 +245,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// rather than onto the router only REST is served through. exposePayments puts the
 	// screen on the WRITE only; the receipt read mints nothing.
 	exposePayments(zapp, screen)
+	// The three CARD doors the money surface relays to, screened through the same
+	// VALUE for the same reason: one screen, handed to every door, so there is no
+	// arrangement of these registrations in which two of them hold different ones.
+	exposeSale(screen)
 	// The typed cart surface (cart.go). It reads and writes the embedded module's
 	// own cart store, so unlike the payment ops it is only useful when the embed
 	// below succeeds — and it is registered HERE anyway, ahead of it, so a cart
