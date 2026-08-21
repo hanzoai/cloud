@@ -19,19 +19,6 @@ func init() {
 			"BotRuns.bots":      "Bots is the org's live runs. Always an array, never null.",
 		},
 	})
-	zip.Describe("GET /v1/nodes", zip.Doc{
-		Description: "Returns the caller org's currently connected bot nodes: what each one\ncalls itself, the platform it runs on, its agent version, when its socket was\nestablished, and the capabilities and commands it reported.\n\nOnly this org's nodes are listed — the org is half of every key in the table it\nreads — and only nodes attached to THIS replica, because the list is of live\nsockets rather than of registrations. The capability and command lists are the\nnode's own self-report: useful to show, never load-bearing, because what a node\nmay actually be asked to do is decided at the socket against the deployment's\nallowlist.",
-		Fields: map[string]string{
-			"nodeView.caps":        "Caps is the capability list the node reported. It is a self-report, useful\nto SHOW and never load-bearing: what a node may actually be asked to do is\ndecided at the socket by the deployment's allowlist.",
-			"nodeView.commands":    "Commands is the command list the node reported. Same standing as Caps: a\nself-report, checked again at the socket before anything runs.",
-			"nodeView.connectedAt": "ConnectedAt is when this node's socket was established, RFC3339 UTC.",
-			"nodeView.displayName": "DisplayName is the human name the node reported for itself.",
-			"nodeView.id":          "ID is the node's own identifier within the org — the value\nPOST /v1/nodes/{id}/invoke addresses it by.",
-			"nodeView.platform":    "Platform is the operating system and architecture the node reported.",
-			"nodeView.version":     "Version is the node agent's own version string.",
-			"nodesView.nodes":      "Nodes is every node of the caller's org with a live socket to THIS replica,\nordered by id. A node connected to a different replica is not in it.",
-		},
-	})
 	zip.Describe("POST /v1/bots/runs", zip.Doc{
 		Description: "Reports that launching is not implemented.\n\nThere is no launch operation on the bot runtime, so nothing in cloud can start a\nsandbox. This endpoint used to mint a run id, charge a flat per-run fee, and hand\nback a sessionUrl for a bot that never booted — an id the runtime had never heard\nof, pointing at a VNC node that did not exist, for money that was really taken.\n501 is the truth, and the truth is cheaper than a plausible lie.\n\nRestoring it needs a runtime-side launch operation first (TS, cross-repo); the\ngate and the meter belong in the same change that can prove a bot boots.\n\nUNTYPED BY DESIGN, for the reason apps/books gives for its two bank stubs: a typed\nop publishes a SUCCESS response, and this route has no success. Typing it would\ndeclare a 200 body it can never send, and mint an MCP tool and a CLI command for\nan operation that cannot succeed — a model reading the tool list would call it.\nIt is also BODY-TOLERANT today, which zip cannot express: the handler never reads\nthe body, so any bytes at all — malformed JSON included — answer 501, while\nop.invoke 400s on an unparseable non-empty body before the handler runs. It gets\ntyped in the same change that can prove a bot boots, and not before.",
 	})

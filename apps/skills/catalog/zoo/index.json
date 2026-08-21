@@ -1037,18 +1037,18 @@
       "sha256": "e324b524ab6ce975acf04e7ec38a050686fe2434d3859b6abb5c7a19401859f4"
     },
     {
-      "description": "Read bot runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
-      "name": "bot_runs",
-      "path": "bot_runs/SKILL.md",
-      "service": "bot",
-      "sha256": "8e0133bcda6a1af8f82689f4acf3222bd05ea176f40ee9340f38e98a03b58911"
+      "description": "Read bots runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
+      "name": "bots_runs",
+      "path": "bots_runs/SKILL.md",
+      "service": "bots",
+      "sha256": "c2ec889da2726ee19696189a28010d3e842caaa5cfc28c6a76e7c8757c3f62a6"
     },
     {
-      "description": "Read bot runtime: Relay one of the bot runtime's own operational paths.",
-      "name": "bot_runtime",
-      "path": "bot_runtime/SKILL.md",
-      "service": "bot",
-      "sha256": "b1d0447e106c883b70bd8461674a2ba0b5bed1dc3b5a135bc2c2d0e4379ba9b4"
+      "description": "Read bots runtime: Relay one of the bot runtime's own operational paths.",
+      "name": "bots_runtime",
+      "path": "bots_runtime/SKILL.md",
+      "service": "bots",
+      "sha256": "4c3ee6bed5f4d908a5fe26967cf392eacd74226f8dc3a911e28d345e049238af"
     },
     {
       "description": "Read campaign campaign: Returns the org's campaigns, newest first, optionally narrowed to one status., Returns one campaign of the caller's org — its name, audience, creatives, channels with their per-channel launch state, schedule, budget and status..",
@@ -3123,18 +3123,18 @@
       "sha256": "00a8cef35137a56a44ad785189b144d71bc0e92d3146624e3523fda8664fb909"
     },
     {
-      "description": "Read node connect: The socket a bot node dials and holds open to become invokable..",
-      "name": "node_connect",
-      "path": "node_connect/SKILL.md",
-      "service": "node",
-      "sha256": "5fa2277d3356c549c3c45dda6c478fca2c3f93368562aac38fc5ad2e92fd67b2"
+      "description": "Read nodes connect: The socket a bot node dials and holds open to become invokable..",
+      "name": "nodes_connect",
+      "path": "nodes_connect/SKILL.md",
+      "service": "nodes",
+      "sha256": "1b22f4076da5d760d1ddc9ad932348be4a860035c9f41e9ee9098fb5beed9a6e"
     },
     {
-      "description": "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
-      "name": "node_node",
-      "path": "node_node/SKILL.md",
-      "service": "node",
-      "sha256": "e6c68cea41ca0e06ab7621a06f05b2f22448a5dfadc81ef2a3581e67bbdc37a0"
+      "description": "Read nodes nodes: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
+      "name": "nodes_nodes",
+      "path": "nodes_nodes/SKILL.md",
+      "service": "nodes",
+      "sha256": "974e3f02bc7e9c28b70d1a7f50926b735dc936354acaf668db644efbf2807d83"
     },
     {
       "description": "Read notify health: Reports that the notify send surface is mounted..",
