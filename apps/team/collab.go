@@ -16,11 +16,11 @@ package team
 // front-supplied Y.js update, so a dialog-authored description is visible in the
 // collaborative editor — which replays that log — not only in snapshot reads.
 //
-// The LIVE editing lane (Y.js sync) is the /collaborator WebSocket served by
-// collabws.go in this same service; this RPC lane is markup-snapshot blob I/O,
-// and blobs are cloud's domain (deps.VFS — the SAME seam and tenant-scoped key
-// layout as files.go). The ingress routes both /collaborator/rpc and
-// /collaborator (WS) to cloud.
+// The LIVE editing lane (Y.js sync) is the WebSocket served by collabws.go in
+// this same service; this RPC lane is markup-snapshot blob I/O, and blobs are
+// cloud's domain (deps.VFS — the SAME seam and tenant-scoped key layout as
+// files.go). Both lanes hang under one prefix, so the /v1 catch-all at the edge
+// carries them and no route of their own is needed.
 //
 // Snapshot semantics mirror the reference server (server/collaborator rpc):
 // createContent/updateContent persist the markup JSON at a timestamped blob id
@@ -54,12 +54,15 @@ import (
 // blob backend. 10 MiB of ProseMirror JSON is far beyond any real document.
 const maxMarkupSize = 10 << 20
 
-// collabPrefix is THE path both collaborator planes hang under — app-level, NOT
-// under /v1/team, because the front derives both from COLLABORATOR_URL. One
-// constant, so the group the RPC is declared on cannot drift from the WebSocket
-// beside it, and because cmd/zipdoc resolves a typed op's prefix from the
-// CONSTANT VALUE of the Group argument.
-const collabPrefix = "/collaborator"
+// collabPrefix is THE path both collaborator planes hang under. It was app-level
+// at /collaborator — the front derives both lanes from COLLABORATOR_URL, so the
+// address looked like the front's to choose — but HIP-0139 §3 leaves nothing
+// outside /v1 and both lanes are served by THIS binary, so it folds under the
+// capability and the front's one config value names the new path. One constant,
+// so the group the RPC is declared on cannot drift from the WebSocket beside it,
+// and because cmd/zipdoc resolves a typed op's prefix from the CONSTANT VALUE of
+// the Group argument.
+const collabPrefix = teamPrefix + "/collaborator"
 
 // collabService serves the collaborator planes: the markup-snapshot RPC lane
 // (this file) and the live hocuspocus WS lane (collabws.go), sharing one
@@ -75,7 +78,7 @@ type collabService struct {
 }
 
 func (s *collabService) register(app cloud.Router, guard guardFn) {
-	// The live Y.js WebSocket (wss://<host>/collaborator). UNTYPED, and it cannot
+	// The live Y.js WebSocket (wss://<host>/v1/team/collaborator). UNTYPED, and it cannot
 	// be otherwise: the response is a protocol upgrade, not a value.
 	app.Get(collabPrefix, guard(s.ws))
 	g := app.Group(collabPrefix)

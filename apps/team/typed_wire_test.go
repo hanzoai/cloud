@@ -37,21 +37,21 @@ func TestCollabRPCShapesAreExact(t *testing.T) {
 
 	// getContent with NO source is a first-class case (source is optional in the
 	// client contract) and it answers an empty content OBJECT, not an absent one.
-	code, body := call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth,
+	code, body := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, auth,
 		map[string]any{"method": "getContent", "payload": map[string]any{}})
 	if code != http.StatusOK || string(body) != `{"content":{}}` {
 		t.Fatalf("getContent without source = %d %s, want 200 {\"content\":{}}", code, body)
 	}
 
 	// createContent with an empty content map answers the same empty object.
-	code, body = call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth,
+	code, body = call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, auth,
 		map[string]any{"method": "createContent", "payload": map[string]any{"content": map[string]string{}}})
 	if code != http.StatusOK || string(body) != `{"content":{}}` {
 		t.Fatalf("createContent with no fields = %d %s, want 200 {\"content\":{}}", code, body)
 	}
 
 	// updateContent answers the bare empty object — no content key at all.
-	code, body = call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth,
+	code, body = call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, auth,
 		map[string]any{"method": "updateContent", "payload": map[string]any{"content": map[string]string{}}})
 	if code != http.StatusOK || string(body) != `{}` {
 		t.Fatalf("updateContent = %d %s, want 200 {}", code, body)
@@ -59,7 +59,7 @@ func TestCollabRPCShapesAreExact(t *testing.T) {
 
 	// An unknown verb is a SEMANTIC refusal, which this RPC reports under 200
 	// because the client throws on result.error.
-	code, body = call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth,
+	code, body = call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, auth,
 		map[string]any{"method": "nope", "payload": map[string]any{}})
 	if code != http.StatusOK || string(body) != `{"error":"unknown method nope"}` {
 		t.Fatalf("unknown verb = %d %s, want 200 {\"error\":\"unknown method nope\"}", code, body)
@@ -67,11 +67,11 @@ func TestCollabRPCShapesAreExact(t *testing.T) {
 
 	// A malformed documentId is still a 400, and a request with no token at all
 	// is still a 401 — the gates the op kept.
-	if code, _ := call(t, app, http.MethodPost, "/collaborator/rpc/not-a-doc-id", auth,
+	if code, _ := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/not-a-doc-id", auth,
 		map[string]any{"method": "getContent", "payload": map[string]any{}}); code != http.StatusBadRequest {
 		t.Fatalf("malformed documentId = %d, want 400", code)
 	}
-	if code, _ := call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, nil,
+	if code, _ := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, nil,
 		map[string]any{"method": "getContent", "payload": map[string]any{}}); code != http.StatusUnauthorized {
 		t.Fatalf("no token = %d, want 401", code)
 	}
@@ -91,10 +91,10 @@ func TestCollabRPCBridgedUnderBareMount(t *testing.T) {
 		t.Fatal(err)
 	}
 	docID := collabDocID(ws.UUID, "tracker:class:Issue", "issue-bridge", "description")
-	code, body := call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, bearerFor(t, acct, org),
+	code, body := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, bearerFor(t, acct, org),
 		map[string]any{"method": "getContent", "payload": map[string]any{}})
 	if code != http.StatusOK {
-		t.Fatalf("bridged collab RPC = %d (%s), want 200 — the composer's root bridge does not reach the /collaborator plane", code, body)
+		t.Fatalf("bridged collab RPC = %d (%s), want 200 — the composer's root bridge does not reach the /v1/team/collaborator plane", code, body)
 	}
 }
 
@@ -150,7 +150,7 @@ func TestClearCookieDegraded(t *testing.T) {
 // the way the DOCUMENT writes them, which is the identity every projection keys
 // on.
 var untypedByDesign = map[string]string{
-	"GET /collaborator": "the response is a WebSocket upgrade (the live Y.js lane), not a value.",
+	"GET /v1/team/collaborator": "the response is a WebSocket upgrade (the live Y.js lane), not a value.",
 	"GET /v1/team/transactor/{token}": "the response is a WebSocket upgrade (the transactor data " +
 		"plane), not a value.",
 
@@ -178,9 +178,9 @@ var untypedByDesign = map[string]string{
 
 // teamOps reads BOTH projections of the live router at their one shared address
 // form: what the document says is served, and which of those carry a typed
-// registry entry. Both team prefixes count — the collaborator plane is
-// app-level, because the front derives it from COLLABORATOR_URL, and a route
-// being outside /v1/team does not make it less of a product surface.
+// registry entry. It filters on the prefix the capability answers under, which
+// since the collaborator fold is the single /v1/team — the live lane and the
+// snapshot RPC are branches of it, not a second address.
 func teamOps(t *testing.T) (served map[string]bool, typed map[string]string, schemas map[string]any) {
 	t.Helper()
 	app := mountTeam(t)
@@ -192,9 +192,7 @@ func teamOps(t *testing.T) (served map[string]bool, typed map[string]string, sch
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
 	}
-	ours := func(p string) bool {
-		return strings.HasPrefix(p, teamPrefix) || strings.HasPrefix(p, collabPrefix)
-	}
+	ours := func(p string) bool { return strings.HasPrefix(p, teamPrefix) }
 	served, typed = map[string]bool{}, map[string]string{}
 	for path, item := range doc.Paths {
 		if !ours(path) {

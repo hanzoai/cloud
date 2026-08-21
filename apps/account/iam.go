@@ -269,7 +269,7 @@ func keyBelongsTo(k userKey, owner, user string) bool {
 }
 
 // mintUserKey (re)generates the user's key of `typ` and returns it — shown ONCE to
-// the caller (POST /v1/keys), never echoed again. IAM binds the key to `id`, so a
+// the caller (POST /v1/account/keys), never echoed again. IAM binds the key to `id`, so a
 // caller can only ever mint their OWN.
 //
 // The type rides as a FIELD on the one mint. A secret key returns its confidential

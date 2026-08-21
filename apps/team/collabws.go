@@ -1,9 +1,9 @@
 package team
 
 // collabws.go — the LIVE collaborative-editing lane: a hocuspocus-protocol
-// (v2.15) WebSocket server at GET /collaborator, the counterpart of collab.go's
+// (v2.15) WebSocket server at GET /v1/team/collaborator, the counterpart of collab.go's
 // snapshot RPC lane. The Team front's @hocuspocus/provider connects to
-// COLLABORATOR_URL (wss://<host>/collaborator) and speaks the hocuspocus wire:
+// COLLABORATOR_URL (wss://<host>/v1/team/collaborator) and speaks the hocuspocus wire:
 // every binary frame is varString(documentName) + varUint(messageType) + payload,
 // with the documentName the SAME encodeDocumentId shape the RPC lane decodes
 // ("<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>") and the token the
@@ -676,10 +676,9 @@ func init() {
 			"update log, not a CRDT engine — it replays the log to each joining peer and "+
 			"broadcasts every update to the rest, which converges because Y.js updates are "+
 			"commutative and idempotent. There is no body; the response is a protocol upgrade.\n\n"+
-			"IT SITS OUTSIDE /v1 ON PURPOSE. The client derives both collaborator lanes from one "+
-			"configured URL — this socket at its root, the markup-snapshot RPC one segment in — "+
-			"so the path is fixed by the editor library's contract rather than chosen by this "+
-			"service.\n\n"+
+			"BOTH LANES SHARE ONE ROOT. The client derives them from one configured URL — this "+
+			"socket at its root, the markup-snapshot RPC one segment in — so pointing the editor "+
+			"at this service is one value, and the two lanes cannot drift apart.\n\n"+
 			"AUTH IS IN-BAND, PER DOCUMENT, NOT ON THE UPGRADE. The handshake gates only on "+
 			"browser Origin (403 outside the team surfaces; no Origin at all is admitted, which "+
 			"is what a non-browser sends), and then the first frame for a document must be an "+
@@ -697,7 +696,7 @@ func init() {
 			"auto-pongs — stays connected instead of dying into a reconnect loop.")
 }
 
-// ws upgrades GET /collaborator and runs the frame loop. Auth is IN-BAND (per
+// ws upgrades GET /v1/team/collaborator and runs the frame loop. Auth is IN-BAND (per
 // document, inside the hocuspocus Auth message) — the upgrade itself only
 // gates on browser Origin, exactly like the transactor.
 func (s *collabService) ws(c *zip.Ctx) error {

@@ -193,10 +193,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	billing := &billingService{accounts: accounts, commerce: deps.Commerce, planEnt: plan.Entitlements, ident: ident, degraded: degraded}
 	billing.register(app, guard)
 
-	// Collaborator planes, both app-level under /collaborator: the markup
-	// snapshot RPC (collab.go, POST /collaborator/rpc/:documentId) and the live
-	// hocuspocus Y.js WebSocket (collabws.go, GET /collaborator) — one service,
-	// one tenancy gate, one VFS seam.
+	// Collaborator planes, both under /v1/team/collaborator: the markup snapshot
+	// RPC (collab.go, POST .../rpc/:documentId) and the live hocuspocus Y.js
+	// WebSocket (collabws.go, GET on the prefix itself) — one service, one
+	// tenancy gate, one VFS seam.
 	collab := &collabService{vfs: deps.VFS, accounts: accounts, ident: ident, hub: newCollabHub(deps.VFS), degraded: degraded}
 	collab.register(app, guard)
 
