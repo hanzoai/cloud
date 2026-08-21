@@ -58,7 +58,7 @@
             "name": "platform",
             "in": "path",
             "required": true,
-            "description": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
+            "description": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | insights | analytics.",
             "schema": {
               "type": "string"
             },
@@ -92,7 +92,7 @@
             "name": "platform",
             "in": "path",
             "required": true,
-            "description": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
+            "description": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | insights | analytics.",
             "schema": {
               "type": "string"
             },
@@ -169,7 +169,7 @@
             "name": "platform",
             "in": "path",
             "required": true,
-            "description": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | posthog | umami.",
+            "description": "Platform is the destination to act on, from the path: ga4 | meta | tiktok |\nlinkedin | x | reddit | insights | analytics.",
             "schema": {
               "type": "string"
             },
@@ -249,12 +249,16 @@
             "type": "array"
           },
           "live": {
-            "description": "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Umami). False on a\nconnected destination whose secret has gone missing — Connected \u0026\u0026 !Live is\nexactly the \"reconnect me\" state.",
+            "description": "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Analytics). False on a\nconnected destination whose secret has gone missing — Connected \u0026\u0026 !Live is\nexactly the \"reconnect me\" state.",
             "type": "boolean"
           },
           "name": {
             "description": "the platform's display name (\"Google Analytics 4\")",
             "type": "string"
+          },
+          "pixel": {
+            "description": "Pixel is whether the hosted tag can inject a browser pixel for this platform,\nso a console offers a per-SITE pixel input for exactly these. False means the\nplatform receives conversions server-side only, and an input would promise an\ninjection that never happens. Derived from the tag's own map (event.BrowserTags),\nnever restated — a second list is how a console offers a pixel nothing fires.",
+            "type": "boolean"
           },
           "platform": {
             "description": "the platform slug, and the path segment every route addresses it by",

@@ -48,7 +48,7 @@
 package manifest
 
 var Apps = []App{
-	{Name: "pubsub", Prefixes: []string{"/v1/pubsub"}, Eager: true},
+	{Name: "pubsub", Prefixes: []string{"/v1/kv", "/v1/pubsub"}, Eager: true},
 	{Name: "kafka", Prefixes: []string{"/v1/kafka"}, Eager: true},
 	{Name: "mq", Prefixes: []string{"/v1/mq"}},
 	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},

@@ -17,17 +17,20 @@
   ],
   "tags": [
     {
+      "name": "kv"
+    },
+    {
       "name": "pubsub"
     }
   ],
   "paths": {
-    "/v1/pubsub/kv/{bucket}": {
+    "/v1/kv/{bucket}": {
       "delete": {
-        "operationId": "delete_pubsub_kv_by_bucket",
+        "operationId": "delete_kv_by_bucket",
         "summary": "Removes one bucket of the caller's org — every key and every revision with it — and answers 204 with no body.",
         "description": "Removes one bucket of the caller's org — every key and every\nrevision with it — and answers 204 with no body. 404 when the org has no\nbucket of that name.",
         "tags": [
-          "pubsub"
+          "kv"
         ],
         "parameters": [
           {
@@ -49,11 +52,11 @@
         "x-tool": true
       },
       "post": {
-        "operationId": "post_pubsub_kv_by_bucket",
+        "operationId": "post_kv_by_bucket",
         "summary": "Creates a KV bucket and returns it.",
         "description": "Creates a KV bucket and returns it. A bucket is keyed state on\nthe same durable plane as the streams: each key holds up to History\nrevisions, entries can expire by TTL, and watchers on the NATS port see every\nwrite. 409 when the org already has a bucket of that name.",
         "tags": [
-          "pubsub"
+          "kv"
         ],
         "parameters": [
           {
@@ -96,13 +99,13 @@
         "x-tool": true
       }
     },
-    "/v1/pubsub/kv/{bucket}/{key}": {
+    "/v1/kv/{bucket}/{key}": {
       "delete": {
-        "operationId": "delete_pubsub_kv_by_bucket_by_key",
+        "operationId": "delete_kv_by_bucket_by_key",
         "summary": "Delete removes one key — a delete marker in the key's history, so watchers see it and Get answers 404 — and answers 204 with no body.",
         "description": "Delete removes one key — a delete marker in the key's history, so watchers\nsee it and Get answers 404 — and answers 204 with no body. 404 when the\nbucket does not exist.",
         "tags": [
-          "pubsub"
+          "kv"
         ],
         "parameters": [
           {
@@ -133,11 +136,11 @@
         "x-tool": true
       },
       "get": {
-        "operationId": "get_pubsub_kv_by_bucket_by_key",
+        "operationId": "get_kv_by_bucket_by_key",
         "summary": "Get returns one key's current value and revision.",
         "description": "Get returns one key's current value and revision. 404 when the bucket does\nnot exist, the key was never written, or its latest revision is a delete.",
         "tags": [
-          "pubsub"
+          "kv"
         ],
         "parameters": [
           {
@@ -175,11 +178,11 @@
         "x-tool": true
       },
       "put": {
-        "operationId": "put_pubsub_kv_by_bucket_by_key",
+        "operationId": "put_kv_by_bucket_by_key",
         "summary": "Put sets one key to one value and returns the revision the write created.",
         "description": "Put sets one key to one value and returns the revision the write created.\nWrites are versioned: each put is a new revision and the bucket retains up to\nits History of them per key.",
         "tags": [
-          "pubsub"
+          "kv"
         ],
         "parameters": [
           {
@@ -230,13 +233,13 @@
         "x-tool": true
       }
     },
-    "/v1/pubsub/kv/{bucket}/{key}/history": {
+    "/v1/kv/{bucket}/{key}/history": {
       "get": {
-        "operationId": "get_pubsub_kv_by_bucket_by_key_history",
+        "operationId": "get_kv_by_bucket_by_key_history",
         "summary": "History returns one key's retained revisions, oldest first — every put and every delete marker up to the bucket's History depth.",
         "description": "History returns one key's retained revisions, oldest first — every put and\nevery delete marker up to the bucket's History depth. 404 when the bucket\ndoes not exist or the key was never written.",
         "tags": [
-          "pubsub"
+          "kv"
         ],
         "parameters": [
           {
