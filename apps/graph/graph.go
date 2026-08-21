@@ -24,7 +24,7 @@
 //
 // TENANCY is physical: one SQLite file per organization through cloud.OrgDB, so
 // another organization's assertions are not in the database being read and no
-// predicate can be forgotten. See HIP-1196.
+// predicate can be forgotten. See HIP-1198.
 package graph
 
 import (
@@ -96,9 +96,13 @@ func tenantOf(ctx context.Context, s *cloud.Service[*state]) (scope, *store, err
 	if !ok {
 		return scope{}, nil, zip.ErrForbidden("no validated principal")
 	}
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return scope{}, nil, zip.ErrForbidden("no validated principal")
+	// principal.Acting, not OrgFrom plus a sentence of our own: a caller who
+	// authenticated but carries no org scope is refused for THAT, and telling
+	// them their principal is invalid sends them to fix the one thing that is
+	// already right. The wording lives in one place so it cannot fork.
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return scope{}, nil, err
 	}
 	ns, err := cloud.OrgNamespace(org, "")
 	if err != nil {
