@@ -36,6 +36,7 @@ var Ops = []string{
 	plane.FinanceRecord,
 	plane.FinanceScopeRules,
 	plane.FinanceSpend,
+	plane.FinanceSubs,
 	plane.FinanceTxns,
 	plane.FinanceUsage,
 }
@@ -80,6 +81,13 @@ func FinanceScopeRules(ctx context.Context) (*plane.ScopeRules, error) {
 // Calls plane.FinanceSpend on commerce over the peer plane.
 func FinanceSpend(ctx context.Context, in *plane.SpendIn) (*plane.Spend, error) {
 	return plane.Ask[plane.SpendIn, plane.Spend](ctx, App, plane.FinanceSpend, in)
+}
+
+// FinanceSubs subscriptions for this org.
+//
+// Calls plane.FinanceSubs on commerce over the peer plane.
+func FinanceSubs(ctx context.Context, in *plane.SubsIn) (*plane.Subs, error) {
+	return plane.Ask[plane.SubsIn, plane.Subs](ctx, App, plane.FinanceSubs, in)
 }
 
 // FinanceTxns ledger entries for this org.
