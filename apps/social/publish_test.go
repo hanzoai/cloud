@@ -25,7 +25,7 @@ type fakePublisher struct {
 
 type fakeCall struct{ org, acctID, postID string }
 
-func (f *fakePublisher) Publish(_ context.Context, org string, acct Account, post Post) (string, error) {
+func (f *fakePublisher) Publish(_ context.Context, org string, acct socialAccount, post socialPost) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, fakeCall{org, acct.ID, post.ID})
@@ -50,12 +50,12 @@ func testService(t *testing.T, pub Publisher) *cloud.Service[state] {
 func seed(t *testing.T, s *cloud.Service[state], org, provider, postID, status string, scheduleAt int64) {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := s.State.store.CreateAccount(ctx, Account{
+	if _, err := s.State.store.CreateAccount(ctx, socialAccount{
 		ID: "acct_" + org, Org: org, Provider: provider, Handle: "@" + org, Status: "connected", Token: "tok", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatalf("seed account: %v", err)
 	}
-	if _, err := s.State.store.CreatePost(ctx, Post{
+	if _, err := s.State.store.CreatePost(ctx, socialPost{
 		ID: postID, Org: org, Content: "hello", Channel: provider, Status: status, ScheduleAt: scheduleAt, CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatalf("seed post: %v", err)
@@ -114,7 +114,7 @@ func TestPublish_NoConnectedAccount(t *testing.T) {
 	fake := &fakePublisher{extID: "ext"}
 	s := testService(t, fake)
 	// A post with no matching account (nothing seeded).
-	if _, err := s.State.store.CreatePost(ctx, Post{ID: "post_1", Org: "hanzo", Content: "hi", Channel: "x", Status: statusDraft, CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if _, err := s.State.store.CreatePost(ctx, socialPost{ID: "post_1", Org: "hanzo", Content: "hi", Channel: "x", Status: statusDraft, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	post, err := publishPost(ctx, s, "hanzo", "post_1")
@@ -186,11 +186,11 @@ func TestScheduler_Sweep(t *testing.T) {
 	now := time.Now().Unix()
 
 	// account for org hanzo (channel x)
-	if _, err := s.State.store.CreateAccount(ctx, Account{ID: "acct_hanzo", Org: "hanzo", Provider: "x", Handle: "@h", Status: "connected", Token: "t", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if _, err := s.State.store.CreateAccount(ctx, socialAccount{ID: "acct_hanzo", Org: "hanzo", Provider: "x", Handle: "@h", Status: "connected", Token: "t", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("account: %v", err)
 	}
 	mk := func(id, status string, at int64) {
-		if _, err := s.State.store.CreatePost(ctx, Post{ID: id, Org: "hanzo", Content: "c", Channel: "x", Status: status, ScheduleAt: at, CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		if _, err := s.State.store.CreatePost(ctx, socialPost{ID: id, Org: "hanzo", Content: "c", Channel: "x", Status: status, ScheduleAt: at, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 			t.Fatalf("post %s: %v", id, err)
 		}
 	}
@@ -217,7 +217,7 @@ func TestClaimAndRecover(t *testing.T) {
 	s := testStore(t)
 	now := time.Now().Unix()
 
-	if _, err := s.CreatePost(ctx, Post{ID: "p", Org: "o", Content: "c", Channel: "x", Status: statusScheduled, CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if _, err := s.CreatePost(ctx, socialPost{ID: "p", Org: "o", Content: "c", Channel: "x", Status: statusScheduled, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	// First claim wins; second (now 'publishing') loses.

@@ -27,11 +27,11 @@ func TestPerOrgIsolation(t *testing.T) {
 	s := testStore(t)
 
 	// Accounts.
-	mpAcct, err := s.CreateAccount(ctx, Account{ID: "acct_mp", Org: "maxpower", Provider: "x", Handle: "@maxpower", Status: "connected", CreatedAt: 1, UpdatedAt: 1})
+	mpAcct, err := s.CreateAccount(ctx, socialAccount{ID: "acct_mp", Org: "maxpower", Provider: "x", Handle: "@maxpower", Status: "connected", CreatedAt: 1, UpdatedAt: 1})
 	if err != nil {
 		t.Fatalf("create maxpower account: %v", err)
 	}
-	if _, err := s.CreateAccount(ctx, Account{ID: "acct_acme", Org: "acme", Provider: "instagram", Handle: "@acme", Status: "connected", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if _, err := s.CreateAccount(ctx, socialAccount{ID: "acct_acme", Org: "acme", Provider: "instagram", Handle: "@acme", Status: "connected", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("create acme account: %v", err)
 	}
 	if list, err := s.ListAccounts(ctx, "maxpower", "", 100); err != nil || len(list) != 1 || list[0].Handle != "@maxpower" {
@@ -40,7 +40,7 @@ func TestPerOrgIsolation(t *testing.T) {
 	if _, err := s.GetAccount(ctx, "acme", mpAcct.ID); !errors.Is(err, errNotFound) {
 		t.Fatalf("acme GET maxpower account want errNotFound, got %v", err)
 	}
-	if _, err := s.UpdateAccount(ctx, Account{ID: mpAcct.ID, Org: "acme", Provider: "x", Handle: "HIJACK", Status: "error", UpdatedAt: 2}); !errors.Is(err, errNotFound) {
+	if _, err := s.UpdateAccount(ctx, socialAccount{ID: mpAcct.ID, Org: "acme", Provider: "x", Handle: "HIJACK", Status: "error", UpdatedAt: 2}); !errors.Is(err, errNotFound) {
 		t.Fatalf("acme UPDATE maxpower account want errNotFound, got %v", err)
 	}
 	if deleted, _ := s.DeleteAccount(ctx, "acme", mpAcct.ID); deleted {
@@ -51,11 +51,11 @@ func TestPerOrgIsolation(t *testing.T) {
 	}
 
 	// Posts.
-	mpPost, err := s.CreatePost(ctx, Post{ID: "post_mp", Org: "maxpower", Content: "hello world", Channel: "x", Status: "scheduled", ScheduleAt: 1000, CreatedAt: 1, UpdatedAt: 1})
+	mpPost, err := s.CreatePost(ctx, socialPost{ID: "post_mp", Org: "maxpower", Content: "hello world", Channel: "x", Status: "scheduled", ScheduleAt: 1000, CreatedAt: 1, UpdatedAt: 1})
 	if err != nil {
 		t.Fatalf("create maxpower post: %v", err)
 	}
-	if _, err := s.CreatePost(ctx, Post{ID: "post_acme", Org: "acme", Content: "acme blast", Channel: "email", Status: "draft", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if _, err := s.CreatePost(ctx, socialPost{ID: "post_acme", Org: "acme", Content: "acme blast", Channel: "email", Status: "draft", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("create acme post: %v", err)
 	}
 	if list, err := s.ListPosts(ctx, "maxpower", "", 100); err != nil || len(list) != 1 || list[0].Content != "hello world" {
@@ -64,7 +64,7 @@ func TestPerOrgIsolation(t *testing.T) {
 	if _, err := s.GetPost(ctx, "acme", mpPost.ID); !errors.Is(err, errNotFound) {
 		t.Fatalf("acme GET maxpower post want errNotFound, got %v", err)
 	}
-	if _, err := s.UpdatePost(ctx, Post{ID: mpPost.ID, Org: "acme", Content: "HIJACK", Channel: "x", Status: "failed", UpdatedAt: 2}); !errors.Is(err, errNotFound) {
+	if _, err := s.UpdatePost(ctx, socialPost{ID: mpPost.ID, Org: "acme", Content: "HIJACK", Channel: "x", Status: "failed", UpdatedAt: 2}); !errors.Is(err, errNotFound) {
 		t.Fatalf("acme UPDATE maxpower post want errNotFound, got %v", err)
 	}
 	if deleted, _ := s.DeletePost(ctx, "acme", mpPost.ID); deleted {
@@ -80,7 +80,7 @@ func TestPostCRUD(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
 
-	created, err := s.CreatePost(ctx, Post{
+	created, err := s.CreatePost(ctx, socialPost{
 		ID: "post_1", Org: "hanzo", Content: "launch day", Channel: "linkedin", Status: "draft",
 		Media: []string{"https://s3.hanzo.ai/a.png", "https://s3.hanzo.ai/b.png"}, CreatedAt: 10, UpdatedAt: 10,
 	})
@@ -98,7 +98,7 @@ func TestPostCRUD(t *testing.T) {
 	}
 
 	// Update: schedule it.
-	if _, err := s.UpdatePost(ctx, Post{
+	if _, err := s.UpdatePost(ctx, socialPost{
 		ID: created.ID, Org: "hanzo", Content: "launch day", Channel: "linkedin", Status: "scheduled",
 		ScheduleAt: 2000, UpdatedAt: 20,
 	}); err != nil {
@@ -123,10 +123,10 @@ func TestPostCRUD(t *testing.T) {
 	}
 
 	// A connected account + a published post make the summary non-trivial.
-	if _, err := s.CreateAccount(ctx, Account{ID: "acct_1", Org: "hanzo", Provider: "linkedin", Handle: "@hanzo", Status: "connected", CreatedAt: 11, UpdatedAt: 11}); err != nil {
+	if _, err := s.CreateAccount(ctx, socialAccount{ID: "acct_1", Org: "hanzo", Provider: "linkedin", Handle: "@hanzo", Status: "connected", CreatedAt: 11, UpdatedAt: 11}); err != nil {
 		t.Fatalf("create account: %v", err)
 	}
-	if _, err := s.CreatePost(ctx, Post{ID: "post_2", Org: "hanzo", Content: "shipped", Channel: "x", Status: "published", CreatedAt: 12, UpdatedAt: 12}); err != nil {
+	if _, err := s.CreatePost(ctx, socialPost{ID: "post_2", Org: "hanzo", Content: "shipped", Channel: "x", Status: "published", CreatedAt: 12, UpdatedAt: 12}); err != nil {
 		t.Fatalf("create published post: %v", err)
 	}
 
@@ -153,7 +153,7 @@ func TestAccountCRUD(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
 
-	created, err := s.CreateAccount(ctx, Account{
+	created, err := s.CreateAccount(ctx, socialAccount{
 		ID: "acct_1", Org: "hanzo", Provider: "x", Handle: "@hanzo", Status: "connected", CreatedAt: 10, UpdatedAt: 10,
 	})
 	if err != nil {
@@ -161,7 +161,7 @@ func TestAccountCRUD(t *testing.T) {
 	}
 
 	// Update: flip to disconnected, change handle.
-	if _, err := s.UpdateAccount(ctx, Account{
+	if _, err := s.UpdateAccount(ctx, socialAccount{
 		ID: created.ID, Org: "hanzo", Provider: "x", Handle: "@hanzoai", Status: "disconnected", UpdatedAt: 20,
 	}); err != nil {
 		t.Fatalf("update: %v", err)
@@ -172,7 +172,7 @@ func TestAccountCRUD(t *testing.T) {
 	}
 
 	// Provider filter narrows the list.
-	if _, err := s.CreateAccount(ctx, Account{ID: "acct_2", Org: "hanzo", Provider: "tiktok", Handle: "@h", Status: "connected", CreatedAt: 11, UpdatedAt: 11}); err != nil {
+	if _, err := s.CreateAccount(ctx, socialAccount{ID: "acct_2", Org: "hanzo", Provider: "tiktok", Handle: "@h", Status: "connected", CreatedAt: 11, UpdatedAt: 11}); err != nil {
 		t.Fatalf("create second: %v", err)
 	}
 	if rows, _ := s.ListAccounts(ctx, "hanzo", "tiktok", 100); len(rows) != 1 {
