@@ -292,9 +292,18 @@ func newFakeIAM() *fakeIAM {
 				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":"2021-02-02T00:00:00Z"}
 			],"data2":2}`)
 		case r.URL.Path == "/v1/iam/get-users":
-			// A single-page count probe (pageSize=1) still reports the full total.
+			// The directory folds members from ONE list, so this answers with the rows a
+			// real list returns — each carrying its owner — rather than a total detached
+			// from them. Three belong to hanzo and four to acme, which is the only shape
+			// that can tell a real per-org count from a fleet total handed to every row.
 			io.WriteString(w, `{"status":"ok","msg":"","data":[
-				{"owner":"hanzo","name":"alice","email":"alice@hanzo.ai","displayName":"Alice","tag":"staff","createdTime":"2020-03-01T00:00:00Z","lastSigninTime":"2026-06-01T00:00:00Z","isAdmin":true,"isForbidden":false}
+				{"owner":"hanzo","name":"alice","email":"alice@hanzo.ai","displayName":"Alice","tag":"staff","createdTime":"2020-03-01T00:00:00Z","lastSigninTime":"2026-06-01T00:00:00Z","isAdmin":true,"isForbidden":false},
+				{"owner":"hanzo","name":"bob","email":"bob@hanzo.ai","displayName":"Bob"},
+				{"owner":"hanzo","name":"cara","email":"cara@hanzo.ai","displayName":"Cara"},
+				{"owner":"acme","name":"dan","email":"dan@acme.com","displayName":"Dan"},
+				{"owner":"acme","name":"eve","email":"eve@acme.com","displayName":"Eve"},
+				{"owner":"acme","name":"finn","email":"finn@acme.com","displayName":"Finn"},
+				{"owner":"acme","name":"gus","email":"gus@acme.com","displayName":"Gus"}
 			],"data2":7}`)
 		case r.URL.Path == "/v1/iam/get-roles":
 			io.WriteString(w, `{"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"data2":1}`)
@@ -466,8 +475,8 @@ func TestOrgs_RealAggregation(t *testing.T) {
 	if acme.Org != "acme" || acme.Display != "Acme Inc" {
 		t.Errorf("org row[0] = %+v, want acme/Acme Inc", acme)
 	}
-	if acme.Users != 7 {
-		t.Errorf("org acme users = %d, want 7 (IAM total)", acme.Users)
+	if acme.Users != 4 {
+		t.Errorf("org acme users = %d, want 4 (acme's OWN members, not the fleet total)", acme.Users)
 	}
 	// Credits are the wallet, read from the money plane. Spend and tokens are the AI
 	// LEDGER — a different plane with a different owner — so with no warehouse wired
@@ -506,8 +515,8 @@ func TestUsers_MapsIAMToOperatorUser(t *testing.T) {
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if env.Total != 7 || len(env.Data) != 1 {
-		t.Fatalf("users total=%d rows=%d, want 7/1", env.Total, len(env.Data))
+	if env.Total != 7 || len(env.Data) != 7 {
+		t.Fatalf("users total=%d rows=%d, want 7/7", env.Total, len(env.Data))
 	}
 	u := env.Data[0]
 	if u.Name != "alice" || u.Email != "alice@hanzo.ai" || !u.IsAdmin || u.LastSignin == "" {
@@ -601,9 +610,10 @@ func TestOverview_RealTilesAndSources(t *testing.T) {
 	if d.Orgs != 2 {
 		t.Errorf("overview orgs = %d, want 2", d.Orgs)
 	}
-	// 2 orgs × 7 users each (both count probes return total=7).
-	if d.Users != 14 {
-		t.Errorf("overview users = %d, want 14", d.Users)
+	// Seven members across the two orgs — three in hanzo, four in acme. Summing a real
+	// per-org count is the tile; it is not orgs x the fleet total.
+	if d.Users != 7 {
+		t.Errorf("overview users = %d, want 7 (3 hanzo + 4 acme)", d.Users)
 	}
 	if d.CreditsCents != 10000 {
 		t.Errorf("overview credits = %d, want 10000", d.CreditsCents)
