@@ -274,7 +274,7 @@ var freeOfVendor = map[string]string{
 	// is called from agents.Mount — which none of them run either.
 	"billing:CF_API_TOKEN": "links apps/projects for SetDeployObserver only; mounts no route that reaches newEdge",
 	"catalog:CF_API_TOKEN": "links apps/projects for Ready/LiveSites, which read the store; the edge client is nil here",
-	"links:CF_API_TOKEN":   "links apps/projects for SetDeployObserver only; mounts no route that reaches newEdge",
+	"link:CF_API_TOKEN":    "links apps/projects for SetDeployObserver only; mounts no route that reaches newEdge",
 	"team:CF_API_TOKEN":    "links apps/projects for SetDeployObserver only; mounts no route that reaches newEdge",
 
 	// THE SAME TWO LINKS, A SECOND VENDOR — and the claim is narrower than the
@@ -289,8 +289,8 @@ var freeOfVendor = map[string]string{
 	"billing:CRAWL_API_TOKEN": "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
 	"catalog:crawl.hanzo.svc": "reaches apps/projects for Ready/LiveSites; the renderer is unexported behind a route projects alone mounts",
 	"catalog:CRAWL_API_TOKEN": "reaches apps/projects for Ready/LiveSites; the renderer is unexported behind a route projects alone mounts",
-	"links:crawl.hanzo.svc":   "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
-	"links:CRAWL_API_TOKEN":   "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
+	"link:crawl.hanzo.svc":    "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
+	"link:CRAWL_API_TOKEN":    "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
 	"team:crawl.hanzo.svc":    "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
 	"team:CRAWL_API_TOKEN":    "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
 
