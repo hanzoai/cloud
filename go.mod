@@ -719,7 +719,9 @@ replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190
 // the "sqlite" driver under both build tags — cgo through hanzoai/csqlite against
 // libsqlcipher, cgo-free through its vendored pure-Go engine and the
 // hanzoai/sqlcipher codec VFS. Every store imports that facade, never an engine.
-// apps/sqlite_test.go fails the gate if a second engine or driver name appears.
+// manifest/sqlite_test.go is that gate: it reads the linked module graph of the
+// commands, because database/sql.Register panics on a duplicate driver name at
+// init, and a transitive dependency links as hard as a direct one.
 
 replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13.1
 
