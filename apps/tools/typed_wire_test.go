@@ -20,30 +20,25 @@ import (
 // ops, each with the wire fact that keeps it raw. The address is written the way
 // the DOCUMENT writes it, which is the identity every projection keys on.
 //
-// It holds ONE entry now. The other was the hand-rolled MCP JSON-RPC surface at
-// POST /v1/tools/mcp, and it is gone rather than typed: the fleet serves ONE MCP
-// door, on the host, and this plane reaches it as a typed op (POST /v1/tools/call)
-// like everything else. A JSON-RPC envelope is a transport, and there is now
-// exactly one place in the fleet that speaks it.
+// IT IS EMPTY, and both entries left for reasons worth keeping apart.
 //
-// The remaining entry is wire-bound and was re-read against the PINNED zip
-// (v1.18.14), not inherited as prose from an older pass.
-var untypedByDesign = map[string]string{
-	// The plugin builder. A FAILED build answers 422 carrying the build
-	// DIAGNOSTICS as a domain body — the bundler's error, the source that failed,
-	// and whether the model wrote it — which is the only thing that lets a caller
-	// fix the plugin. A typed op can refuse only by RETURNING an error, which zip
-	// renders as the flat HTTPError {status, code, error} (errorHandler is the only
-	// path a typed op's error can take), and there is nowhere in that shape for the
-	// source. Writing the body from inside the op does not escape it either: a nil
-	// Out makes zip stamp cmp.Or(op.Status, 204) over the 422 (typed.go:302-306).
-	// So this is a 201-or-422 pair of DIFFERENT shapes and zip has one Out and one
-	// declared status per op — the multi-status gap (#78), not an oversight.
-	// TestBuildFailureCarriesItsDiagnostics pins the 422 body.
-	"POST /v1/tools/plugins/build": "a failed build answers 422 carrying the build diagnostics (detail, source, " +
-		"generated) as a domain body; a typed op's only refusal is a returned error, which zip renders as the " +
-		"flat HTTPError with nowhere to put them — one Out and one declared status per op.",
-}
+// POST /v1/tools/mcp was a hand-rolled JSON-RPC surface and is GONE rather than
+// typed: the fleet serves ONE MCP door, on the host, and this plane reaches it as
+// a typed op (POST /v1/tools/call) like everything else.
+//
+// POST /v1/tools/plugins/build was refused for a capability zip did not have. A
+// failed build answers 422 carrying the build DIAGNOSTICS as a domain body — the
+// bundler's error, the source that failed, and whether the model wrote it — and a
+// typed op's only refusal is a RETURNED error, which zip rendered as the flat
+// {status, code, error} with nowhere to put them. zip v1.31.3 gives HTTPError
+// extension members (RFC 9457), merged under the envelope, so the refusal now
+// carries its own shape and the op is typed. TestBuildFailureCarriesItsDiagnostics
+// pins the 422 body across that move.
+//
+// An entry added here owes the SAME standard: the wire fact, re-read against the
+// PINNED zip rather than inherited as prose, and a test that pins the wire it
+// protects.
+var untypedByDesign = map[string]string{}
 
 // toolPlaneOps reads BOTH projections of the live router at their one shared
 // address form: what the document says is served, and which of those carry a
@@ -111,8 +106,8 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	}
 	// The MEASURED partition, so "all but one" in the docs cannot drift from the
 	// binary. Changing these numbers is a deliberate edit, which is the point.
-	if len(served) != 19 || len(typed) != 18 {
-		t.Errorf("served = %d (want 19), typed = %d (want 18)", len(served), len(typed))
+	if len(served) != 19 || len(typed) != 19 {
+		t.Errorf("served = %d (want 19), typed = %d (want 19)", len(served), len(typed))
 	}
 }
 
@@ -175,12 +170,17 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	}
 }
 
-// ── the wire the one refusal protects ───────────────────────────────────────────
+// ── the wire the closed refusal protected ───────────────────────────────────────
 
-// TestBuildFailureCarriesItsDiagnostics is the pin under the single entry. A build
-// that does not compile answers 422 with the bundler's detail, the source that
+// TestBuildFailureCarriesItsDiagnostics pins the 422 body across the typing. A
+// build that does not compile answers with the bundler's detail, the source that
 // failed and whether a model wrote it — the only thing that lets a caller fix the
-// plugin, and a shape zip's flat HTTPError has nowhere to put.
+// plugin — and those now ride the returned error as RFC 9457 extension members
+// rather than a body the handler wrote itself.
+//
+// The envelope is asserted too, and that is the half worth the test: the members
+// MERGE, and they are written BEFORE the envelope, so a domain key called `status`
+// could otherwise displace the refusal's own and make a 422 read as a success.
 func TestBuildFailureCarriesItsDiagnostics(t *testing.T) {
 	app := newApp(t, nil)
 	r := do(t, app, http.MethodPost, "/v1/tools/plugins/build", "acme", map[string]any{
@@ -198,16 +198,22 @@ func TestBuildFailureCarriesItsDiagnostics(t *testing.T) {
 			t.Errorf("the 422 build body must carry %q; got %s", k, r.Body)
 		}
 	}
+	if got, ok := body["status"].(float64); !ok || int(got) != 422 {
+		t.Errorf("the refusal envelope must survive the merge: status = %v, want 422 (%s)", body["status"], r.Body)
+	}
+	if got, _ := body["error"].(string); got != "build failed" {
+		t.Errorf("error = %q, want \"build failed\" (%s)", got, r.Body)
+	}
 }
 
-// TestTheUntypedRouteStillDeclaresItsBody is the OTHER half of a refusal.
-// Staying out of zip's registry costs prose, an MCP tool, a CLI command and a
-// typed SDK method — it must not also cost the SHAPE. This route rendered as an
-// operationId and a tag and nothing else, which is precisely what a route taking
-// no input and returning none publishes, so no consumer of the document could
-// tell "takes a plugin source" from "takes nothing". openapi.Register (tools.go's
-// init) states the half that IS statable; this is the gate that it stays stated.
-func TestTheUntypedRouteStillDeclaresItsBody(t *testing.T) {
+// TestTheBuilderPublishesItsBodies keeps the builder's SHAPE on the document. It
+// once rendered as an operationId and a tag and nothing else — precisely what a
+// route taking no input and returning none publishes — so no consumer could tell
+// "takes a plugin source" from "takes nothing", and every generated SDK offered a
+// build call with nowhere to put the source. Fold supplies both shapes from the
+// typed registry now; this is the gate that they stay supplied, and it pins the
+// two names in the fleet-wide flat schema namespace as well.
+func TestTheBuilderPublishesItsBodies(t *testing.T) {
 	app := newApp(t, nil)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "tools", Version: "v1"})
 	if err != nil {
@@ -240,19 +246,22 @@ func TestTheUntypedRouteStillDeclaresItsBody(t *testing.T) {
 			t.Fatalf("decode POST %s: %v (%s)", c.path, err, raw)
 		}
 		if op.RequestBody == nil {
-			t.Errorf("POST %s declares no request body — openapi.Register is what tells an SDK "+
-				"this route takes one; without it the document says it takes nothing", c.path)
+			t.Errorf("POST %s declares no request body — without one the document says it "+
+				"takes nothing, which is not what an SDK caller needs to hear", c.path)
 		} else if got := op.RequestBody.Content["application/json"].Schema.Ref; got != "#/components/schemas/"+c.req {
 			t.Errorf("POST %s request schema = %q, want the %s component", c.path, got, c.req)
 		}
-		if got := op.Responses["2XX"].Content["application/json"].Schema.Ref; got != "#/components/schemas/"+c.resp {
-			t.Errorf("POST %s success response schema = %q, want the %s component", c.path, got, c.resp)
+		// The success key is the DECLARED status, "201" — not the "2XX" range key
+		// openapi.Register wrote before this route was typed. A typed op states one
+		// status, so the document states it too, and an SDK generator binds the
+		// answer to the code it will actually see.
+		if got := op.Responses["201"].Content["application/json"].Schema.Ref; got != "#/components/schemas/"+c.resp {
+			t.Errorf("POST %s 201 response schema = %q, want the %s component", c.path, got, c.resp)
 		}
 	}
-	// AuthoredPlugin is claimed by BOTH seams — the untyped declaration above and
-	// the typed listAuthoredPlugins. Fold merges the typed schema over the other,
-	// so the shared row keeps the prose zipdoc lifted; a regression here would
-	// silently strip every description off it.
+	// AuthoredPlugin is shared by the builder's receipt and by listAuthoredPlugins,
+	// so one schema serves both and the prose zipdoc lifted reaches every consumer
+	// of either; a regression here would silently strip the descriptions off it.
 	//
 	// Read it the way every consumer does — through the marshalled document —
 	// rather than by type-asserting whichever seam happened to write the value.
