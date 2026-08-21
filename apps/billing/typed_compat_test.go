@@ -1,10 +1,9 @@
 package billing
 
-// typed_compat_test.go pins what the finance conversion to typed ops must not
-// move: the contract. Every /v1/finance read keeps its path, its status, its
-// top-level JSON kind (a bare array stays a bare array), its exact key set
-// where the shape is an object, and the no-store cache discipline per-tenant
-// money has always carried. The per-account breakdown keeps its 401/501 gates.
+// typed_compat_test.go pins what the typed money reads must not move: the
+// contract. The ledger read keeps its status, its top-level JSON kind (a bare
+// array stays a bare array) and the no-store cache discipline per-tenant money
+// has always carried. The per-account breakdown keeps its 401/501 gates.
 
 import (
 	"encoding/json"
@@ -38,59 +37,42 @@ func callRoute(t *testing.T, app *zip.App, method, path, user, org string) (int,
 	return resp.StatusCode, resp.Header, b
 }
 
-func TestFinanceTyped_ContractUnmoved(t *testing.T) {
+func TestLedgerTyped_ContractUnmoved(t *testing.T) {
 	ledgerPeer(t, "acme")
-	f := &financeFake{}
+	f := &noHopCommerce{}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
-	for _, tc := range []struct {
-		path  string
-		array bool // a bare array stays a bare array
-	}{
-		{"/v1/finance/balance", false},
-		{"/v1/finance/credits", true},
-		{"/v1/finance/usage?range=24h", false},
-		{"/v1/finance/invoices", true},
-		{"/v1/finance/payment-methods", true},
-		{"/v1/finance/ledger?range=90d", true},
-	} {
-		status, hdr, body := callRoute(t, app, http.MethodGet, tc.path, "acme/dave", "acme")
-		if status != http.StatusOK {
-			t.Fatalf("%s: want 200, got %d (%s)", tc.path, status, body)
+	status, hdr, body := callRoute(t, app, http.MethodGet, "/v1/billing/ledger?range=90d", "acme/dave", "acme")
+	if status != http.StatusOK {
+		t.Fatalf("ledger: want 200, got %d (%s)", status, body)
+	}
+	if got := hdr.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("per-tenant money must be no-store, got %q", got)
+	}
+	var first byte
+	for _, b := range body {
+		if b != ' ' && b != '\n' && b != '\t' {
+			first = b
+			break
 		}
-		if got := hdr.Get("Cache-Control"); got != "no-store" {
-			t.Fatalf("%s: per-tenant money must be no-store, got %q", tc.path, got)
-		}
-		var first byte
-		for _, b := range body {
-			if b != ' ' && b != '\n' && b != '\t' {
-				first = b
-				break
-			}
-		}
-		if tc.array && first != '[' {
-			t.Fatalf("%s: a bare array must stay a bare array, got %s", tc.path, body)
-		}
-		if !tc.array && first != '{' {
-			t.Fatalf("%s: want a JSON object, got %s", tc.path, body)
-		}
+	}
+	if first != '[' {
+		t.Fatalf("a bare array must stay a bare array, got %s", body)
 	}
 
-	// The balance object keeps its exact key set — nothing lost, nothing grown.
-	_, _, body := callRoute(t, app, http.MethodGet, "/v1/finance/balance", "acme/dave", "acme")
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(body, &m); err != nil {
-		t.Fatalf("decode balance: %v (%s)", err, body)
+	// A posting keeps its exact key set — nothing lost, nothing grown. The
+	// optional balanceCents is omitted, so it is absent here by contract.
+	var rows []map[string]json.RawMessage
+	if err := json.Unmarshal(body, &rows); err != nil {
+		t.Fatalf("decode ledger: %v (%s)", err, body)
 	}
-	got := slices.Sorted(maps.Keys(m))
-	want := []string{"asOf", "availableCents", "currency", "dueCents", "pendingCents"}
-	if len(got) != len(want) {
-		t.Fatalf("balance keys = %v, want %v", got, want)
+	if len(rows) == 0 {
+		t.Fatal("the fixture has postings; an empty page cannot pin a shape")
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("balance keys = %v, want %v", got, want)
-		}
+	got := slices.Sorted(maps.Keys(rows[0]))
+	want := []string{"account", "cents", "currency", "date", "description", "id"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("posting keys = %v, want %v", got, want)
 	}
 }
 

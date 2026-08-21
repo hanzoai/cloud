@@ -12,8 +12,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The ONE prepaid-balance read for the customer surface (/v1/billing/balance and the
-// /v1/finance/balance projection).
+// The ONE prepaid-balance read for the customer surface (/v1/billing/balance).
 //
 // WHY IT IS NOT A COMMERCE PROXY. Co-resident, commerce registers its routes on the
 // HOST's zip app (apps/commerce/mount.go Mount → commerce.Embed with EmbedConfig.App),
