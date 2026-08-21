@@ -31,6 +31,7 @@ func init() {
 	describeAdmin()
 	describeWebhooks()
 	describeCatalog()
+	describeRates()
 	describePublic()
 	describePlans()
 	describeStore()
@@ -142,6 +143,74 @@ func describeCatalog() {
 		"Upserts the shipped catalog seed and answers how many entries it created. It is "+
 			"idempotent and non-destructive — an entry an administrator has since edited is left "+
 			"alone — so it is safe to run against a live catalog to fill in what is missing. "+
+			"PLATFORM admin only; an org-level admin is refused 403.")
+}
+
+// ---- /v1/commerce/rates — what one unit of anything costs ----
+
+// The rate authority is edited at admin.hanzo.ai. It is cross-tenant money, so
+// every handler asks IsSuperAdmin itself rather than trusting the route's token
+// middleware, and each of these says so: the gate is the first thing a caller
+// meets and the most common reason one of these answers 403.
+//
+// The through-line worth reading once is AdminEdited. A rate an operator touched
+// outranks the document it was imported from, so create and update both stamp it
+// and import skips what carries it. Without that, a price set here would apply,
+// work, and silently revert on the next import — which is the failure these
+// descriptions exist to stop someone walking into.
+func describeRates() {
+	openapi.Describe("/v1/commerce/rates/entries", http.MethodGet,
+		"Every rate in the authority, or one product's",
+		"Returns the authority rows as stored. Pass `?product=` to narrow to a single "+
+			"surface, which is how an editor shows one product's prices rather than all of "+
+			"them at once; omit it and you get everything. PLATFORM admin only — this is "+
+			"cross-tenant pricing, and an org-level admin is refused 403 by the handler "+
+			"itself, not merely by the route's middleware.")
+
+	openapi.Describe("/v1/commerce/rates/entries", http.MethodPost,
+		"Add a rate",
+		"Creates a rate from the body and answers it at 201. Product and meter are BOTH "+
+			"required, and together they are the identity: a rate keyed on the metered thing "+
+			"alone would let one product's price overwrite another's for the same meter name. "+
+			"Missing either is 400, and a body whose derived slug is already taken is 409 "+
+			"rather than shadowing the row that holds it.\n\n"+
+			"A rate created here is marked as an operator's, so a later import will not "+
+			"replace it — what a person entered outranks the document. PLATFORM admin only; "+
+			"an org-level admin is refused 403.")
+
+	openapi.Describe("/v1/commerce/rates/entries/:slug", http.MethodPut,
+		"Edit a rate, and protect it from the next import",
+		"Applies the body over the addressed rate and answers the stored result. The slug "+
+			"comes from the path; an unknown one is 404.\n\n"+
+			"The edit also MARKS the row as an operator's, and that mark is the whole contract "+
+			"with the importer: this price now outranks the document it came from, so a later "+
+			"import leaves the row alone. Without it a price set here would apply, work, and "+
+			"silently revert the next time the document was loaded. Only the editable fields "+
+			"move — identity and bookkeeping are not writable from a request body. PLATFORM "+
+			"admin only; an org-level admin is refused 403.")
+
+	openapi.Describe("/v1/commerce/rates/entries/:slug", http.MethodDelete,
+		"Remove a rate outright",
+		"Deletes the addressed rate and answers what it deleted. An unknown slug is 404.\n\n"+
+			"ARCHIVING is usually what is wanted instead — set `status` to `archived` through "+
+			"PUT. A deleted row cannot price anything, including the past: an invoice that has "+
+			"to re-resolve its rate finds nothing to read, where an archived row is still there "+
+			"to answer for the charges it priced. PLATFORM admin only; an org-level admin is "+
+			"refused 403.")
+
+	openapi.Describe("/v1/commerce/rates/import", http.MethodPost,
+		"Load a whole rate document, reconciling rather than replacing",
+		"Takes an ARRAY of rates and loads them in one call — how hundreds of published "+
+			"prices reach the authority without any of them being compiled into a binary, which "+
+			"is what used to make a price change wait for a build. An empty array, or a body "+
+			"that is not an array, is 400.\n\n"+
+			"It reconciles: a row that already matches is left alone, a row that has drifted is "+
+			"corrected, and a row an operator has edited is SKIPPED. So importing the same "+
+			"document twice does nothing the second time, and importing a corrected one moves "+
+			"exactly the rows that changed. The answer counts all four outcomes — received, "+
+			"created, corrected and unchanged — so an import that changes nothing reads as "+
+			"'nothing to do' rather than as a failure.\n\n"+
+			"Because the reconcile is idempotent, an import that fails partway is safe to rerun. "+
 			"PLATFORM admin only; an org-level admin is refused 403.")
 }
 
