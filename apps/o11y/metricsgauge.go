@@ -18,7 +18,7 @@
 // VictoriaMetrics go. The measurements were never the problem — the fleet
 // prober has recorded hanzo_service_up for as long as it has existed. The
 // problem was that the only way to READ them was a PromQL instant query against
-// VM, so every reader (the public /v1/summary, the scoped /v1/o11y/status) held
+// VM, so every reader (the public /v1/o11y/summary, the scoped /v1/o11y/status) held
 // a VM client, and VM could not be removed without those endpoints going dark.
 //
 // Two questions are asked here and nowhere else, and they are the only two an

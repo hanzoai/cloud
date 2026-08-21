@@ -29,7 +29,7 @@ package integrations
 //     subsystem's routes — an order only the composer can hold (serve.go).
 //   - THE OTHER IDENTITY FACTS. Two more live only in headers: the caller's
 //     own-org admin bit (what the AdminOnly connectors gate on) and their user id
-//     (what the per-USER /v1/connectors plane keys every row by). channelFacts
+//     (what the per-USER /v1/integrations/connectors plane keys every row by). channelFacts
 //     parks them beside the org, and it IS this subsystem's own.
 //
 // So channelFacts is the one thing registered here, at the ROOT and gated by PATH
@@ -38,7 +38,7 @@ package integrations
 // group node would declare middleware over a subtree holding no routes, which zip
 // refuses to compose — the app exits instead of listening. The gate is the prefix
 // set manifest/apps.go declares for this subsystem, so channelFacts reaches
-// /v1/integrations, /v1/connectors and the connector webhook, and nothing that
+// /v1/integrations, /v1/integrations/connectors and the connector webhook, and nothing that
 // belongs to anyone else. Ahead of the ops, always: fiber runs middleware in
 // registration order, so one installed after its leaves never runs.
 //
@@ -153,7 +153,7 @@ type noArgs struct{}
 // providerRef addresses one connector by the :provider path segment.
 type providerRef struct {
 	// Provider is the registry id of the connector — "slack", "github",
-	// "cloudflare". Unknown ids are 404, as are the user-plane (/v1/connectors)
+	// "cloudflare". Unknown ids are 404, as are the user-plane (/v1/integrations/connectors)
 	// providers, which this surface never resolves.
 	Provider string `json:"provider"`
 }

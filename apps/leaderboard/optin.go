@@ -1,8 +1,8 @@
 // The opt-in surface — PUBLIC-LISTING IS OPT-IN, PRIVATE BY DEFAULT.
 //
-//	GET /v1/usage/leaderboard/optin        the caller's own opt-in + their org's opt-in
-//	PUT /v1/usage/leaderboard/optin         set the caller's OWN listing (self only)
-//	PUT /v1/usage/leaderboard/optin/org     set the ORG's public-board listing (org admin)
+//	GET /v1/leaderboard/optin        the caller's own opt-in + their org's opt-in
+//	PUT /v1/leaderboard/optin         set the caller's OWN listing (self only)
+//	PUT /v1/leaderboard/optin/org     set the ORG's public-board listing (org admin)
 //
 // A user writes ONLY their own preference (keyed by their validated ledger id); an
 // org preference is writable only by an admin OF that org. Nothing here is secret.

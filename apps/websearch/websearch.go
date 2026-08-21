@@ -18,7 +18,7 @@
 // own services — never a third-party search API:
 //   - GET  /v1/websearch/search        SearXNG-shaped. Served NATIVELY in-process
 //     by a keyless Go meta-search (search.go) — no SearXNG pod, no search SaaS.
-//   - POST /v1/scrape                  Firecrawl-shaped. Served NATIVELY in-process
+//   - POST /v1/websearch/scrape        Firecrawl-shaped. Served NATIVELY in-process
 //     by clients/crawl — fetch, extract, render —
 //     returning {success,data:{markdown,metadata}}.
 //
@@ -30,8 +30,14 @@
 // with no network hop and no second deployment to keep alive.
 //
 // The chat server calls these SERVER-SIDE in-cluster, so point
-// searxngInstanceUrl / firecrawlApiUrl at this surface (public api.hanzo.ai/v1
-// or the internal cloud-api svc DNS — same binary either way).
+// searxngInstanceUrl at this surface (public api.hanzo.ai/v1 or the internal
+// cloud-api svc DNS — same binary either way). The fetch is a HANZO address
+// now, not a firecrawl one: a firecrawl client composes
+// {apiUrl}/{version}/scrape, which cannot spell /v1/websearch/scrape from any
+// base URL it accepts, so the chat server's scraper is pointed at the Hanzo
+// address directly. The envelope is what stayed compatible; the door carries
+// the name of the capability behind it (HIP-0139 §3, whose §3.2 exemptions are
+// a closed list firecrawl is not on).
 //
 // AUTH: two callers, two ONE-WAY-equivalent gates, never an open proxy —
 //   - SEARCH (/v1/websearch/search) admits EITHER a validated principal
@@ -40,7 +46,7 @@
 //     shared service key WEBSEARCH_API_KEY as X-API-Key (the hanzo.chat server,
 //     which reaches cloud service-to-service with no user principal). A caller with
 //     neither is refused.
-//   - SCRAPE (/v1/scrape) requires the shared key as a Bearer (the chat
+//   - SCRAPE (/v1/websearch/scrape) requires the shared key as a Bearer (the chat
 //     server path only; the console surfaces scrape read-only, does not drive it).
 //
 // An unset key 503s and any missing/mismatched key 401s on the key path; a request
@@ -68,7 +74,7 @@
 //     description. The POST/PUT/PATCH arms also read their query string and IGNORE
 //     the body entirely, while a typed op 400s on any unparseable non-empty body
 //     (typed.go op.invoke) — so those arms cannot be typed even one at a time.
-//   - /v1/scrape deliberately answers 200 {"success":false,"error":"missing url"} to
+//   - /v1/websearch/scrape deliberately answers 200 {"success":false,"error":"missing url"} to
 //     a malformed or oversized body (scrapeScoped, below): firecrawl clients read
 //     data.success, not the status line, and it caps the read at 1 MiB with an
 //     io.LimitReader rather than refusing. A typed op cannot express either — the
@@ -373,16 +379,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			scrapeScoped(w, r.WithContext(c.Context()), s)
 		}))(c)
 	}
-	// Firecrawl builds {apiUrl}/{version}/scrape and there is no way to make it
-	// stop, so the path is chosen by where firecrawlApiUrl points. Point it at
-	// the API ROOT (https://api.hanzo.ai) rather than at this group, and the
-	// client lands on a clean top-level /v1/scrape instead of the doubled
-	// /v1/websearch/v1/scrape that pointing it at the group produced.
-	//
-	// /v1/scrape is free for this: ai's crawl-and-index route of that name was a
-	// second door onto object.ScrapeAndIndex and was deleted in favour of
-	// /v1/docs/ingest.
-	app.Post("/v1/scrape", scrape)
+	// On the group, so the fetch answers under the name of the capability that
+	// performs it. It sat at a top-level /v1/scrape to be reachable by a
+	// firecrawl client, which composes {apiUrl}/{version}/scrape and offers no
+	// way to say anything else — point that client at the API root and it lands
+	// on /v1/scrape, point it here and it lands on the doubled
+	// /v1/websearch/v1/scrape. So there is no base URL that reaches this
+	// address, and that is the whole cost of the move: the BODY and the ANSWER
+	// are still firecrawl's, and a caller is re-pointed at the Hanzo spelling
+	// rather than redirected from the old one.
+	g.Post("/scrape", scrape)
 
 	logger.Info("web search surface mounted (native searxng-compat meta-search + firecrawl-compat scrape, both in-process)")
 	return nil
@@ -392,6 +398,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // the handler on it and the prose below is keyed by it, so the described operation
 // is the served one by construction.
 const searchPath = "/v1/websearch/search"
+
+// scrapePath is the fetch's address, spelled once for searchPath's reason: the
+// group composes it from "/scrape" and the prose below is keyed by it.
+const scrapePath = "/v1/websearch/scrape"
 
 // The prose for both surfaces, declared beside the wire facts that keep them
 // untyped (see the package doc for why neither can be a typed op). zipdoc lifts an
@@ -443,7 +453,7 @@ func init() {
 				"sent on the write verbs is ignored rather than refused.")
 	}
 
-	openapi.Describe("/v1/scrape", http.MethodPost,
+	openapi.Describe(scrapePath, http.MethodPost,
 		"Fetch one page and get its extracted markdown, in the firecrawl envelope.",
 		"Takes {url} and answers {success, data:{markdown, metadata}} — the exact contract a "+
 			"firecrawl client decodes. The fetch, extraction and optional browser render run "+

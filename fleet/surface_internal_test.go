@@ -351,7 +351,7 @@ func TestRank_AFoldedAddressKeepsItsBucket(t *testing.T) {
 // asset's number, not a bearer secret. But the neighbour test read either side,
 // and in a REST path the id before a subresource names the PARENT:
 //
-//	GET /v1/connectors/{id}/token   →  get | connectors | by | id | token
+//	GET /v1/integrations/connectors/{id}/token   →  get | connectors | by | id | token
 //
 // The id there is the connector's. The token is exactly what it says, and the
 // door projected it to every model as `get_connector_token` — a live OAuth

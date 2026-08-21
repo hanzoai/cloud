@@ -3,7 +3,7 @@ package main
 // The o11y app is the ONE app binary that composes its own root instead of going
 // through cloud.Listen, and the host in front of it installs no middleware. That
 // combination is how its three prefixes — /v1/o11y, /v1/sentinel and, the one a
-// browser reads, /v1/summary — became the only public surface answering 200 with
+// browser reads, /v1/o11y/summary — became the only public surface answering 200 with
 // no Access-Control-Allow-Origin: the browser received the status document and
 // then threw it away. These pin the edge policy onto THIS app's chain, over the
 // same allowlist every other app answers with.
@@ -37,7 +37,7 @@ func probeApp(t *testing.T, origins []string) *zip.App {
 	// deployment has before it is pointed at an issuer, and the one that must not
 	// leave the chain trusting the wire.
 	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
-	app.Get("/v1/summary", func(c *zip.Ctx) error {
+	app.Get("/v1/o11y/summary", func(c *zip.Ctx) error {
 		return c.JSON(200, map[string]string{"page_title": "Hanzo status"})
 	})
 	return app
@@ -56,7 +56,7 @@ var prodOrigins = []string{
 func TestSummaryReflectsAllowlistedBrandOrigin(t *testing.T) {
 	app := probeApp(t, prodOrigins)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/summary", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/o11y/summary", nil)
 	req.Header.Set("Origin", "https://insights.hanzo.ai")
 	res, err := app.Test(req)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestSummaryReflectsAllowlistedBrandOrigin(t *testing.T) {
 func TestSummaryAnswersPreflight(t *testing.T) {
 	app := probeApp(t, prodOrigins)
 
-	req := httptest.NewRequest(http.MethodOptions, "/v1/summary", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/v1/o11y/summary", nil)
 	req.Header.Set("Origin", "https://insights.hanzo.ai")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	res, err := app.Test(req)
@@ -105,7 +105,7 @@ func TestSummaryAnswersPreflight(t *testing.T) {
 func TestSummaryGivesUnknownOriginNoCORS(t *testing.T) {
 	app := probeApp(t, prodOrigins)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/summary", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/o11y/summary", nil)
 	req.Header.Set("Origin", "https://evil.example")
 	res, err := app.Test(req)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestSummaryGivesUnknownOriginNoCORS(t *testing.T) {
 func TestSummaryEmitsNothingWhenAllowlistEmpty(t *testing.T) {
 	app := probeApp(t, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/summary", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/o11y/summary", nil)
 	req.Header.Set("Origin", "https://insights.hanzo.ai")
 	res, err := app.Test(req)
 	if err != nil {
@@ -144,12 +144,12 @@ func TestChainStripsClientSuppliedAuthority(t *testing.T) {
 	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
 
 	var seen struct{ org, user, admin string }
-	app.Get("/v1/summary", func(c *zip.Ctx) error {
+	app.Get("/v1/o11y/summary", func(c *zip.Ctx) error {
 		seen.org, seen.user, seen.admin = c.Org(), c.User(), c.Header("X-User-IsAdmin")
 		return c.JSON(200, map[string]string{"ok": "1"})
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/summary", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/o11y/summary", nil)
 	req.Header.Set("X-User-Id", "u-forged")
 	req.Header.Set("X-User-IsAdmin", "true")
 	if _, err := app.Test(req); err != nil {

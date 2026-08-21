@@ -76,7 +76,7 @@ type state struct {
 	storage *storage
 	dataDir string     // base data dir; {dataDir}/orgs/{slug} is enumerated for the public explore
 	sshHost string     // for sshUrl construction (e.g. "git.hanzo.ai")
-	gitHost string     // the HTTPS git host (e.g. "git.hanzo.ai"); root smart-HTTP is served only for this Host
+	gitHost string     // the HTTPS git host (e.g. "git.hanzo.ai") named by the clone URLs a page prints
 	ssh     *sshServer // Git SSH transport listener
 	keys    *keyStore  // SSH public-key registry (global fingerprint index)
 }
@@ -382,21 +382,19 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/:org/:project/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
 	g.Post("/:org/:project/:repo/git-receive-pack", cloud.Handle(s, receivePack))
 
-	// Root-level smart-HTTP on the git host so `git clone
-	// https://git.hanzo.ai/<org>/<repo>.git` works with the canonical git URL
-	// (no /v1/git prefix). Guarded to s.State.gitHost via onGitHost: on the
-	// api/console hosts these fall through (c.Next()), so a root :org/:repo can
-	// never shadow another surface. Same handlers, same params.
-	onGit := onGitHost(s.State.gitHost)
-	app.Get("/:org/:repo/info/refs", onGit(cloud.Handle(s, infoRefs)))
-	app.Post("/:org/:repo/git-upload-pack", onGit(cloud.Handle(s, uploadPack)))
-	app.Post("/:org/:repo/git-receive-pack", onGit(cloud.Handle(s, receivePack)))
-	app.Get("/:org/:project/:repo/info/refs", onGit(cloud.Handle(s, infoRefs)))
-	app.Post("/:org/:project/:repo/git-upload-pack", onGit(cloud.Handle(s, uploadPack)))
-	app.Post("/:org/:project/:repo/git-receive-pack", onGit(cloud.Handle(s, receivePack)))
+	// The clone address is /v1/git/<org>/<repo> and only that. There was a
+	// second, root-level spelling of the six routes above — `git clone
+	// https://git.hanzo.ai/<org>/<repo>.git` — matched only when the request Host
+	// was s.State.gitHost, falling through on every other host. That Host is the
+	// standalone forge's in production, so those routes answered nobody there;
+	// and a manifest prefix must begin with a literal segment, so /:org could not
+	// be declared and under the plugin host they were unreachable even in dev.
+	// What is gone with them is running cloud ITSELF as a bare-URL git host,
+	// which is the forge's job.
 
-	// Browser UI — Hanzo Git's web surface (repo list/browse/blob/commits) at
-	// /git/*, Hanzo Git's native web surface (ui.go).
+	// Browser UI — Hanzo Git's web surface (repo list/browse/blob/commits) under
+	// /v1/git, beside the JSON ops it renders (ui.go). Registered after them, so
+	// the literal leaves are matched ahead of :org/:repo.
 	uiRoutes(app, s)
 
 	// ZAP transport — the SAME control-plane core, reachable by browsers/services
@@ -443,23 +441,6 @@ func registerLifecycleReactors() {
 			}
 		})
 	})
-}
-
-// onGitHost gates a handler on the request Host matching the git host
-// (e.g. git.hanzo.ai). The root-level smart-HTTP routes (/:org/:repo/*) are
-// registered globally, so on the api/console hosts they must fall through
-// (c.Next()) rather than serve — otherwise a bare /:org/:repo could shadow
-// another surface. An empty git host disables the match entirely (always falls
-// through), leaving /v1/git the only reachable smart-HTTP path.
-func onGitHost(host string) func(zip.Handler) zip.Handler {
-	return func(h zip.Handler) zip.Handler {
-		return func(c *zip.Ctx) error {
-			if host == "" || !strings.EqualFold(c.Fiber().Hostname(), host) {
-				return c.Next()
-			}
-			return h(c)
-		}
-	}
 }
 
 // ---- control-plane handlers ----
