@@ -82,7 +82,7 @@ func TestAppPrincipalNarrowings(t *testing.T) {
 	t.Run("an application is a machine first", func(t *testing.T) {
 		c := machineClaims("hanzo-kms", "admin", exp)
 		c.Orgs = []authz.Membership{{Org: authz.AdminOrg, Role: authz.Admin}}
-		if !c.PlatformSudo() {
+		if !platformSudo(&c) {
 			t.Fatal("precondition: a membership set makes these claims a person, and this one an operator")
 		}
 		if appPrincipal(&c) {
