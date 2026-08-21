@@ -311,9 +311,19 @@ jobs:
     #
     # ci publishes the reusable at .hanzo/workflows/build.yml and NOWHERE ELSE.
     # .github/workflows/build.yml was deleted upstream — present at v1.0.39, gone
-    # by v1.0.44, and `v1` now names v1.0.46 — so a caller pinning that path fails
-    # at InsertRun before a run row is written: no run, no red, and nothing to look
-    # at. Read the tag, not a local checkout; a stale worktree still shows the file.
+    # by v1.0.44 — so a caller pinning THAT path fails at InsertRun before a run
+    # row is written: no run, no red, and nothing to look at.
+    #
+    # Which release `v1` names is deliberately not written down here. It is a
+    # MOVING alias and this line said "v1.0.46" long after it had stopped being
+    # true, which is worse than saying nothing: a stale answer to the one question
+    # this comment exists to settle sends the next reader hunting a path that
+    # resolves fine. Ask the tag instead — it takes one command and cannot go
+    # stale:
+    #
+    #   git ls-tree -r --name-only v1 | grep workflows/
+    #
+    # Read the TAG, not a local checkout; a stale worktree still shows the file.
     uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
       # Not on a tag: the tag is minted below only after this gate passed on main
