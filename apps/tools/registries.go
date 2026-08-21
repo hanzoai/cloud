@@ -10,22 +10,22 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The separately-listed registries: /v1/skills, /v1/mcp/servers, /v1/plugins.
+// The separately-listed registries: /v1/tools/skills, /v1/tools/mcp/servers, /v1/tools/plugins.
 //
-// /v1/skills is the SAME registry as /v1/tools viewed through one Source, so a
+// /v1/tools/skills is the SAME registry as /v1/tools viewed through one Source, so a
 // client asking "what skills does this org have" does not have to know to pass
 // ?source=skill. It is a view, not a store — a tool is still registered in
 // exactly one place (tools.Register) and activation lives in exactly one place
 // (ActivationStore), which is what keeps a source from drifting into its own
 // half-parallel plane.
 //
-// /v1/mcp/servers owns the EXTERNAL MCP SERVER registry (the connection records),
+// /v1/tools/mcp/servers owns the EXTERNAL MCP SERVER registry (the connection records),
 // because a server is a thing an org creates and deletes, not a tool the registry
 // enumerates. The tools those servers offer are reported by GET /v1/tools with
 // ?source=mcp — there is no second view of them, and /v1/mcp itself is the
 // FLEET's one agent door, served by the host.
 //
-// /v1/plugins is deliberately NOT a tool source. A plugin here is a mounted
+// /v1/tools/plugins is deliberately NOT a tool source. A plugin here is a mounted
 // subsystem (cloud.Plugin: Name, Mount, Price, Prefixes) — code that extends
 // the deployment's own surface — whereas a tool is something an agent calls
 // through that surface. Its inventory is cloud.Subsystems(), the boot snapshot
@@ -183,7 +183,7 @@ type authoredSkillList struct {
 }
 
 // ListAuthoredSkills lists the caller org's OWN skills with their SKILL.md
-// bodies. GET /v1/skills is the registry view — the brand's catalogue plus this
+// bodies. GET /v1/tools/skills is the registry view — the brand's catalogue plus this
 // org's, with activation flags and no bodies; this is the EDITABLE set, so it
 // carries the content that view omits and nothing the org did not write.
 func (o toolOps) listAuthoredSkills(ctx context.Context, _ *noInput) (*authoredSkillList, error) {

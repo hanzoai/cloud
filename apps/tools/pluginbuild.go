@@ -18,7 +18,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The plugin builder: POST /v1/plugins/build.
+// The plugin builder: POST /v1/tools/plugins/build.
 //
 // A plugin is TypeScript that declares actions against one HTTP API. The build
 // is the SAME pipeline the committed connectors go through — esbuild to one
@@ -261,7 +261,7 @@ type authoredPluginList struct {
 
 // ListAuthoredPlugins lists the plugins the caller's org BUILT, newest first,
 // each with the TypeScript as authored. That is a different set with a different
-// lifecycle from GET /v1/plugins, which reports the subsystems this deployment
+// lifecycle from GET /v1/tools/plugins, which reports the subsystems this deployment
 // mounted. The bundled CommonJS the runtime executes is never included, and
 // neither is any credential — a plugin names the connectors provider it needs and
 // reads the credential from ctx.auth at run time.

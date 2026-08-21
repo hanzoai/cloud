@@ -485,7 +485,7 @@ type mcpCatalog struct {
 // decided about each entry.
 //
 // This is the SHELF an org picks from. A listing with a streamable-http endpoint
-// can be enabled as-is — POST /v1/mcp/servers with its id — and its tools then
+// can be enabled as-is — POST /v1/tools/mcp/servers with its id — and its tools then
 // join the org's tool plane and the fleet's MCP door. A listing that only ships a
 // stdio package needs a process to run it, which is why the transports are on
 // every entry rather than implied.
