@@ -5631,25 +5631,25 @@
  ],
  "pubsub": [
   {
-   "id": "delete_pubsub_kv_by_bucket",
+   "id": "delete_kv_by_bucket",
    "doc": "Removes one bucket of the caller's org — every key and every\nrevision with it — and answers 204 with no body. 404 when the org has no\nbucket of that name."
   },
   {
-   "id": "delete_pubsub_kv_by_bucket_by_key",
+   "id": "delete_kv_by_bucket_by_key",
    "doc": "Delete removes one key — a delete marker in the key's history, so watchers\nsee it and Get answers 404 — and answers 204 with no body. 404 when the\nbucket does not exist."
   },
   {
-   "id": "get_pubsub_kv_by_bucket_by_key",
+   "id": "get_kv_by_bucket_by_key",
    "doc": "Get returns one key's current value and revision. 404 when the bucket does\nnot exist, the key was never written, or its latest revision is a delete.",
    "read": true
   },
   {
-   "id": "get_pubsub_kv_by_bucket_by_key_history",
+   "id": "get_kv_by_bucket_by_key_history",
    "doc": "History returns one key's retained revisions, oldest first — every put and\nevery delete marker up to the bucket's History depth. 404 when the bucket\ndoes not exist or the key was never written.",
    "read": true
   },
   {
-   "id": "post_pubsub_kv_by_bucket",
+   "id": "post_kv_by_bucket",
    "doc": "Creates a KV bucket and returns it. A bucket is keyed state on\nthe same durable plane as the streams: each key holds up to History\nrevisions, entries can expire by TTL, and watchers on the NATS port see every\nwrite. 409 when the org already has a bucket of that name."
   },
   {
@@ -5661,7 +5661,7 @@
    "doc": "Request sends one request on the org's bus and waits for one reply — the\nsynchronous half of pub/sub, for callers speaking to a responder subscribed\non the NATS port. 404 when nobody is listening on the subject; 408 when a\nresponder exists but no reply arrived within the timeout."
   },
   {
-   "id": "put_pubsub_kv_by_bucket_by_key",
+   "id": "put_kv_by_bucket_by_key",
    "doc": "Put sets one key to one value and returns the revision the write created.\nWrites are versioned: each put is a new revision and the bucket retains up to\nits History of them per key."
   }
  ],
