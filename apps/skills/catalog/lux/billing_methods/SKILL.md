@@ -1,7 +1,7 @@
 ---
 name: billing_methods
 version: "8.0.0"
-description: "Read billing methods: Your saved cards, masked — the customer read."
+description: "Read billing methods: Cards and accounts on file for the caller."
 ---
 
 # Lux · BILLING · methods
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/billing/methods` — Your saved cards, masked — the customer read
+- `GET https://api.lux.network/v1/billing/methods` — Cards and accounts on file for the caller
 
 ## Response
 

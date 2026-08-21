@@ -1,7 +1,7 @@
 ---
 name: billing_settings
 version: "8.0.0"
-description: "Read billing settings: The public payment-provider config your card form needs to initialize."
+description: "Read billing settings: Answers the PUBLIC half of this org's processor configuration — the ids a browser needs to tokenize a card, and the environment it must tokenize against.."
 ---
 
 # Hanzo · BILLING · settings
@@ -14,11 +14,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/billing/settings` — The public payment-provider config your card form needs to initialize
+- `GET https://api.hanzo.ai/v1/billing/settings` — Answers the PUBLIC half of this org's processor configuration — the ids a browser needs to tokenize a card, and the environment it must tokenize against.
 
 ## Response
 
-- `/v1/billing/settings` → JSON object.
+- `/v1/billing/settings` → `PaymentConfig` object with fields: `applicationId`, `environment`, `live`, `locationId`, `provider`.
 
 ## Example
 
