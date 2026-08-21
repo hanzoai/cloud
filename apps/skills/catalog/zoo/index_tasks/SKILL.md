@@ -1,7 +1,7 @@
 ---
 name: index_tasks
 version: "8.0.0"
-description: "Read index tasks: Check a write task, which has already finished."
+description: "Read index tasks: Checks a write task, which has already finished.."
 ---
 
 # Zoo · INDEX · tasks
@@ -14,17 +14,17 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/index/tasks/{uid}` — Check a write task, which has already finished
+- `GET https://api.zoo.ngo/v1/index/tasks/{uid}` — Checks a write task, which has already finished.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `uid` | path | yes | string |  |
+| `uid` | path | yes | integer |  |
 
 ## Response
 
-- `/v1/index/tasks/{uid}` → JSON object.
+- `/v1/index/tasks/{uid}` → `indexTask` object with fields: `enqueuedAt`, `finishedAt`, `startedAt`, `status`, `type`, `uid`.
 
 ## Example
 

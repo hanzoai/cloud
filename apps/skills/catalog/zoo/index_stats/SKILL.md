@@ -1,7 +1,7 @@
 ---
 name: index_stats
 version: "8.0.0"
-description: "Read index stats: Count the documents in each of your indexes."
+description: "Read index stats: Counts the documents in each of your indexes.."
 ---
 
 # Zoo · INDEX · stats
@@ -14,11 +14,11 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/index/stats` — Count the documents in each of your indexes
+- `GET https://api.zoo.ngo/v1/index/stats` — Counts the documents in each of your indexes.
 
 ## Response
 
-- `/v1/index/stats` → JSON object.
+- `/v1/index/stats` → `indexStats` object with fields: `databaseSize`, `indexes`.
 
 ## Example
 

@@ -1,7 +1,7 @@
 ---
 name: index_indexes
 version: "8.0.0"
-description: "Read index indexes: List the indexes your org holds, Read one index's definition, Page through the documents in an index."
+description: "Read index indexes: Lists the indexes your org holds., Reads one index's definition., Pages through the documents in an index.."
 ---
 
 # Hanzo · INDEX · indexes
@@ -14,11 +14,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/index/indexes` — List the indexes your org holds
-- `GET https://api.hanzo.ai/v1/index/indexes/{uid}` — Read one index's definition
-- `GET https://api.hanzo.ai/v1/index/indexes/{uid}/documents` — Page through the documents in an index
-- `GET https://api.hanzo.ai/v1/index/indexes/{uid}/documents/{id}` — Read one document by its primary key
-- `GET https://api.hanzo.ai/v1/index/indexes/{uid}/settings` — Read an index's filterable attributes
+- `GET https://api.hanzo.ai/v1/index/indexes` — Lists the indexes your org holds.
+- `GET https://api.hanzo.ai/v1/index/indexes/{uid}` — Reads one index's definition.
+- `GET https://api.hanzo.ai/v1/index/indexes/{uid}/documents` — Pages through the documents in an index.
+- `GET https://api.hanzo.ai/v1/index/indexes/{uid}/documents/{id}` — Reads one document by its primary key.
+- `GET https://api.hanzo.ai/v1/index/indexes/{uid}/settings` — Reads an index's filterable attributes.
 
 ## Parameters
 
@@ -26,14 +26,16 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 |---|---|---|---|---|
 | `id` | path | yes | string |  |
 | `uid` | path | yes | string |  |
+| `limit` | query | no | string |  |
+| `offset` | query | no | string |  |
 
 ## Response
 
-- `/v1/index/indexes` → JSON object.
-- `/v1/index/indexes/{uid}` → JSON object.
-- `/v1/index/indexes/{uid}/documents` → JSON object.
+- `/v1/index/indexes` → `indexList` object with fields: `limit`, `offset`, `results`, `total`.
+- `/v1/index/indexes/{uid}` → `indexView` object with fields: `createdAt`, `primaryKey`, `uid`, `updatedAt`.
+- `/v1/index/indexes/{uid}/documents` → `indexDocuments` object with fields: `limit`, `offset`, `results`, `total`.
 - `/v1/index/indexes/{uid}/documents/{id}` → JSON object.
-- `/v1/index/indexes/{uid}/settings` → JSON object.
+- `/v1/index/indexes/{uid}/settings` → `indexSettings` object with fields: `filterableAttributes`.
 
 ## Example
 

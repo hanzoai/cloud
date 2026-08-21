@@ -5,7 +5,7 @@
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 696,
+  "skill_count": 675,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -43,11 +43,11 @@
       "sha256": "8d9d69f59567fe4f93a954efdc239ea1578a66257a75ae6cccfc4b08cf504360"
     },
     {
-      "description": "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents..",
+      "description": "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents., Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (ref",
       "name": "admin_affiliates",
       "path": "admin_affiliates/SKILL.md",
       "service": "admin",
-      "sha256": "2b5bf3ed3ce89741b82673ed4bd6965220c5fd982f4659d8c4f3a0ea02c66bbf"
+      "sha256": "52503c64c77cfb74c7ff089a02aaa35fa3a2dda4d74d92eb072d3ba0034a418a"
     },
     {
       "description": "Read admin aimetrics: Is the fleet AI board: LLM generations over gen_ai spans (count, cost, avg/p95 latency, per-model), per-model usage from the live cloud_usage ledger, and the eval plane (traces, scores, score names, runs, and the average-score trend)..",
@@ -99,13 +99,6 @@
       "sha256": "a150248949ae0c9ae1ebeb9b478171d45ce1293e1b42253aed3373cca48e610a"
     },
     {
-      "description": "Read admin catalog: Returns the full model and provider catalog annotated with each entry's enablement state, for the operator console..",
-      "name": "admin_catalog",
-      "path": "admin_catalog/SKILL.md",
-      "service": "admin",
-      "sha256": "61fbb4ccc42f0616821a395beb6b725ed554f9a21b6a95884744f52ca8822d40"
-    },
-    {
       "description": "Read admin compute: Rolls the fleet's compute usage up to one row per (org, app, project, kind): how many distinct machines ran in the window, how many are still active, what they billed, and when each group last emitted an event..",
       "name": "admin_compute",
       "path": "admin_compute/SKILL.md",
@@ -118,13 +111,6 @@
       "path": "admin_customers/SKILL.md",
       "service": "admin",
       "sha256": "897fbaf8864cc4fd5851ee6f6aac6ccbb20abe45d7b1082dc29c2873e4095906"
-    },
-    {
-      "description": "Read admin enablement: Returns every item an operator has set an enablement state on — its global state (off, beta or ga) and the orgs granted its beta..",
-      "name": "admin_enablement",
-      "path": "admin_enablement/SKILL.md",
-      "service": "admin",
-      "sha256": "b848a420e811cb93242da437181a790bd83881bb1f562e788a275dd258836ad4"
     },
     {
       "description": "Read admin finance: Answers GET /v1/admin/finance..",
@@ -194,7 +180,7 @@
       "name": "admin_orgs",
       "path": "admin_orgs/SKILL.md",
       "service": "admin",
-      "sha256": "42b8c52c89edef9294b273a42acd8efa3a07141213dff5b91a86bbc0392fbcf9"
+      "sha256": "d3ff9c1a39dc88ce07bec467861f909a3223a45f394649dcde9eb624dca4795e"
     },
     {
       "description": "Read admin overview: Is the Platform Overview tiles: how many orgs and users are in the caller's tenant window, the fleet workload counts, and month-to-date spend and credits..",
@@ -209,6 +195,13 @@
       "path": "admin_plugins/SKILL.md",
       "service": "admin",
       "sha256": "8d1cb8a0dce20d7d5b4df868c2938e01169b7dfb626431c437407313a1e23721"
+    },
+    {
+      "description": "Read admin pricing: Returns the full model and provider catalog annotated with each entry's enablement state, for the operator console., Returns every item an operator has set an enablement state on — its global state (off, beta or ga) and the orgs granted its beta..",
+      "name": "admin_pricing",
+      "path": "admin_pricing/SKILL.md",
+      "service": "admin",
+      "sha256": "61364e2bf18dae60469773e451c2731254a79610b12499ee2946f593803fc568"
     },
     {
       "description": "Read admin products: Lists the fleet workload registry: every operator App CR across the platform namespaces with its declared vs running image tag, reconciled health/phase and drift verdict..",
@@ -239,11 +232,11 @@
       "sha256": "cf3d54d015c09bde6c440e69e1248e08d9018c057a7db83f20529720fc8c829b"
     },
     {
-      "description": "Read admin referrals: Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level., Returns",
+      "description": "Read admin referrals: Returns every referral edge in the directory with a fleet summary..",
       "name": "admin_referrals",
       "path": "admin_referrals/SKILL.md",
       "service": "admin",
-      "sha256": "68a845ff27f684d67e965e59915dad6b892d7507f7977132ea7c078b18f4b6a7"
+      "sha256": "a6b1c5034b3e1a43fa4454bff49ee21805e0bd3ee55dca5fa0ee929658301100"
     },
     {
       "description": "Read admin revenue: Is the fleet money board: total prepaid balances held, total realized spend, MRR, ARPU, a per-customer table sorted highest-revenue first, and a real 30-day spend trend from the usage ledger..",
@@ -316,6 +309,13 @@
       "sha256": "de5331ab8f03fe037d982b8b6fcf5c60ed71e94cb482c6c3b0c8bad67eabe9df"
     },
     {
+      "description": "Read admission waitlist: Reports whether ONE host is currently gated by the launch waitlist..",
+      "name": "admission_waitlist",
+      "path": "admission_waitlist/SKILL.md",
+      "service": "admission",
+      "sha256": "797c3e919dadbb89bc0b3e22958a2feff68ebe81627b59d8ab997341f4d438c0"
+    },
+    {
       "description": "Read ads campaigns: Returns the caller org's ad campaigns, most recently updated first, optionally narrowed to one lifecycle status., Returns one of the caller org's campaigns..",
       "name": "ads_campaigns",
       "path": "ads_campaigns/SKILL.md",
@@ -351,20 +351,6 @@
       "sha256": "855d71d5f720a8598f991fddedb58e2e1ae1fc6ba06f7b24d4276bedb24a95ac"
     },
     {
-      "description": "Read agent conversations: List the agent threads in your org, Read one agent thread in full.",
-      "name": "agent_conversations",
-      "path": "agent_conversations/SKILL.md",
-      "service": "agent",
-      "sha256": "329046460c55beabddbf6c07ee849860be96241502b0e639089a0627c5500cda"
-    },
-    {
-      "description": "Read agent presets: List the agent presets available to a caller.",
-      "name": "agent_presets",
-      "path": "agent_presets/SKILL.md",
-      "service": "agent",
-      "sha256": "e18fd3f3c726f8873678621af8ba30b346d99a58e1913055dd843a4c8221f5aa"
-    },
-    {
       "description": "Read agents activity: Serves the org-wide recent-activity feed..",
       "name": "agents_activity",
       "path": "agents_activity/SKILL.md",
@@ -384,6 +370,13 @@
       "path": "agents_builds/SKILL.md",
       "service": "agents",
       "sha256": "e5353ce9c48c4a8d8b89c953f58ce37047235d728fc5990de0910ea04c6ce664"
+    },
+    {
+      "description": "Read agents chat: List the agent threads in your org, Read one agent thread in full, List the agent presets available to a caller.",
+      "name": "agents_chat",
+      "path": "agents_chat/SKILL.md",
+      "service": "agents",
+      "sha256": "3c4db0fbe50b2728027f8f36501adf2fabaaef8b36404578fdb5ad23066201cc"
     },
     {
       "description": "Read agents metrics: Serves the invocations-over-time histogram for the org's Agents dashboard..",
@@ -701,34 +694,6 @@
       "sha256": "29079ed66b872c89b1b594b137713e2d31bcb3ea90efdc59a55581ddfd7c318c"
     },
     {
-      "description": "Read analytics health: Health reports whether the event plane can take a write and the warehouse can answer a read..",
-      "name": "analytics_health",
-      "path": "analytics_health/SKILL.md",
-      "service": "analytics",
-      "sha256": "5d03cac3f5f6b8d6ffb533eaf849365b9b0151769df77deb509e2b85cb16f1ac"
-    },
-    {
-      "description": "Read analytics overview: Overview returns the caller org's analytics KPIs for one time window..",
-      "name": "analytics_overview",
-      "path": "analytics_overview/SKILL.md",
-      "service": "analytics",
-      "sha256": "a751a61daaec0fcd0d2288a0cabe621be8a351ec309467df4ae7fd61225c9e92"
-    },
-    {
-      "description": "Read analytics timeseries: Timeseries returns the caller org's LLM usage over time as an evenly-spaced series..",
-      "name": "analytics_timeseries",
-      "path": "analytics_timeseries/SKILL.md",
-      "service": "analytics",
-      "sha256": "25c81bd54f0d25209d0db425a3f41307a3f10b5c41bc14fce547e9b861233516"
-    },
-    {
-      "description": "Read analytics top: Top returns the caller org's ranked lenses for one window, five of them at once..",
-      "name": "analytics_top",
-      "path": "analytics_top/SKILL.md",
-      "service": "analytics",
-      "sha256": "a756b18f4dd84e82e17d232ab79d7ec9b4c9c51957abef56796cf7a116fb7901"
-    },
-    {
       "description": "Read audit audit: List reads the caller's OWN org audit trail, newest first, with the total the filter matched so a console can page it..",
       "name": "audit_audit",
       "path": "audit_audit/SKILL.md",
@@ -888,6 +853,13 @@
       "path": "billing_invoices/SKILL.md",
       "service": "billing",
       "sha256": "89e6640fc473dad4dc77ddaf48bed1ddbc3080224612526640f135bd5530b470"
+    },
+    {
+      "description": "Read billing ledger: Answers the org's own postings inside `range=`, each as a signed entry: a DEPOSIT CREDITS the wallet (positive, account `credits:<org>`) and every other posting DEBITS it (negative, account `usage:<org>`), described by its notes or its tags..",
+      "name": "billing_ledger",
+      "path": "billing_ledger/SKILL.md",
+      "service": "billing",
+      "sha256": "303e15ae1b421a5553f20d2ff8d7277a88208baa57fdf49286ec57da597b95fc"
     },
     {
       "description": "Read billing methods: Your saved cards, masked — the customer read.",
@@ -1072,13 +1044,6 @@
       "sha256": "3e644781d46cc3340d8c9b044ffb04cec3650172e6ddec378a4ed5ab09234db4"
     },
     {
-      "description": "Read bot bot: Relay one of the bot runtime's own operational paths.",
-      "name": "bot_bot",
-      "path": "bot_bot/SKILL.md",
-      "service": "bot",
-      "sha256": "499894518fda05a3f216188d66a695e354e0b4463cfbc298d947f64a3732b3f4"
-    },
-    {
       "description": "Read bot connect: The socket a bot node dials and holds open to become invokable..",
       "name": "bot_connect",
       "path": "bot_connect/SKILL.md",
@@ -1093,11 +1058,18 @@
       "sha256": "c0d33f09fcba77b13f242e2e6664106d0c4997bdd3be6c122c2cf0b215e9860c"
     },
     {
-      "description": "Read bots bots: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
-      "name": "bots_bots",
-      "path": "bots_bots/SKILL.md",
-      "service": "bots",
-      "sha256": "d8482fd0138b717917fecc7c55e336320d5a1c3746db84b7eb5f7432e474f743"
+      "description": "Read bot runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
+      "name": "bot_runs",
+      "path": "bot_runs/SKILL.md",
+      "service": "bot",
+      "sha256": "1ef4abbbc9b2e2ae8b40845e968f3eb8783dc27732611b3fb73374fe02cac4c5"
+    },
+    {
+      "description": "Read bot runtime: Relay one of the bot runtime's own operational paths.",
+      "name": "bot_runtime",
+      "path": "bot_runtime/SKILL.md",
+      "service": "bot",
+      "sha256": "03553d83a1c7a408983c765783a4d3f8ce23a6fa50a7150dded7faf363e24a14"
     },
     {
       "description": "Read campaign campaign: Returns the org's campaigns, newest first, optionally narrowed to one status., Returns one campaign of the caller's org — its name, audience, creatives, channels with their per-channel launch state, schedule, budget and status..",
@@ -1198,25 +1170,11 @@
       "sha256": "ec691f4a11a5d2fa902fed7ea8a5a0ecd7f329b2791bec0e706ccef950809ae4"
     },
     {
-      "description": "Read cart cart: Read one cart with its lines and totals.",
-      "name": "cart_cart",
-      "path": "cart_cart/SKILL.md",
-      "service": "cart",
-      "sha256": "db439803ec59dff1e03922dfb4d0075a2bcbcc4fa4b80102a21f65be5c10210f"
-    },
-    {
       "description": "Read catalog catalog: Browse searches AND browses the cross-org catalog: every project, app and site the fleet has built, whichever org built it..",
       "name": "catalog_catalog",
       "path": "catalog_catalog/SKILL.md",
       "service": "catalog",
       "sha256": "1fcf88b810e4de84d10c19bdccc23a12d2fc17bc36dfa801d7104684f0ccfcae"
-    },
-    {
-      "description": "Read catalog entries: The raw catalog entries, including the unpublished ones.",
-      "name": "catalog_entries",
-      "path": "catalog_entries/SKILL.md",
-      "service": "catalog",
-      "sha256": "f083c3f1ac72b1d3a15fd911c64156681d0e81084f3e579937f024a719e4fd3f"
     },
     {
       "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",
@@ -1324,11 +1282,18 @@
       "sha256": "8a9eac383f3a7097de6fd6b5a06ee79ad33969dbd11bc424d89098ee1df8a3c6"
     },
     {
-      "description": "Read commerce catalog: The public product catalog projection for a brand.",
+      "description": "Read commerce cart: Read one cart with its lines and totals.",
+      "name": "commerce_cart",
+      "path": "commerce_cart/SKILL.md",
+      "service": "commerce",
+      "sha256": "928c4a4c33835b92d0b34b75ef44c2123096422153d15ff9bdebfb3913a90cbf"
+    },
+    {
+      "description": "Read commerce catalog: The public product catalog projection for a brand, The raw catalog entries, including the unpublished ones.",
       "name": "commerce_catalog",
       "path": "commerce_catalog/SKILL.md",
       "service": "commerce",
-      "sha256": "a512048afda0802eec9f4fd1c604ff7ea15aedda437c9e2d32dc98c051813b6d"
+      "sha256": "eb27a0e280308763e71c049cbe3f247e02fa99ecf37efd19ba9642328c011739"
     },
     {
       "description": "Read commerce collection: List your org's collections, as a page, Fetch one collection.",
@@ -1359,6 +1324,13 @@
       "sha256": "00fc2bf085b1f01385037c66f67795953eb5000ffda831e8d49f85a4b8798c6a"
     },
     {
+      "description": "Read commerce health: Answers ok whenever the commerce subsystem is mounted..",
+      "name": "commerce_health",
+      "path": "commerce_health/SKILL.md",
+      "service": "commerce",
+      "sha256": "f4f83da91e5a109e5edd4fb74c6e773138c02d10e9c42c2ce6817ab3566485b3"
+    },
+    {
       "description": "Read commerce movie: List your org's movies, as a page, Fetch one movie.",
       "name": "commerce_movie",
       "path": "commerce_movie/SKILL.md",
@@ -1378,6 +1350,20 @@
       "path": "commerce_org/SKILL.md",
       "service": "commerce",
       "sha256": "5353b4db3312ae82b9cf0cdbd5a9634c421691bbe4bb18a8e8151466ad304020"
+    },
+    {
+      "description": "Read commerce payments: Read one settled payment by its id.",
+      "name": "commerce_payments",
+      "path": "commerce_payments/SKILL.md",
+      "service": "commerce",
+      "sha256": "6afe787722a3b48c08a6a53c82ae017e5e3b52612cbaebaee9fec12d2775d2c8"
+    },
+    {
+      "description": "Read commerce plans: The raw plan authority rows.",
+      "name": "commerce_plans",
+      "path": "commerce_plans/SKILL.md",
+      "service": "commerce",
+      "sha256": "dbf5b47d679b699f763b33a25b5534564bdeff8786d438058c381052a146c180"
     },
     {
       "description": "Read commerce product: List your org's products, as a page, Fetch one product.",
@@ -1406,6 +1392,13 @@
       "path": "commerce_stocklocation/SKILL.md",
       "service": "commerce",
       "sha256": "4b3c7782ea5ade6b3df1b74540c25114c708dd905184d624c7cd5a18510fa1a3"
+    },
+    {
+      "description": "Read commerce store: List your org's storefronts as a page, Whether a store is entitled to trade, and why, Resolve your org's active storefront without naming an id.",
+      "name": "commerce_store",
+      "path": "commerce_store/SKILL.md",
+      "service": "commerce",
+      "sha256": "bd808181584a2ffad636e8e6821727c2db201bdd80012ebc296df43f7e0d8e1d"
     },
     {
       "description": "Read commerce submission: List your org's submissions, as a page, Fetch one submission.",
@@ -1741,7 +1734,7 @@
       "name": "destinations_destinations",
       "path": "destinations_destinations/SKILL.md",
       "service": "destinations",
-      "sha256": "215f462ec2629f11396edcaabe1aff851798a418fcb274894c9d228ec4ae58f2"
+      "sha256": "9734a8e62d821e1ad6e440e040c153543c43b1975acb8d5cc8f4c311b6dcd9cd"
     },
     {
       "description": "Read dns dns: Read your org's DNS zones and records.",
@@ -1777,13 +1770,6 @@
       "path": "domain_search/SKILL.md",
       "service": "domain",
       "sha256": "45d67f10c6d2f8206c9bc980b97b69d8cc1bc41a88b9bb232b9b3d99a69b015d"
-    },
-    {
-      "description": "Read enablement enablement: Returns what the caller's org can actually use: every managed item with its global state, whether it is effective here, whether this org is already opted into its beta, and whether it may still opt in..",
-      "name": "enablement_enablement",
-      "path": "enablement_enablement/SKILL.md",
-      "service": "enablement",
-      "sha256": "44c371278bedeca6f00ab54a3b756ac1392429b47a722a0ce797390bf407a886"
     },
     {
       "description": "Read engine model: Read one model's load state on the serving runtime.",
@@ -1828,32 +1814,25 @@
       "sha256": "4567187c4427cabf38afcdb8f4552f53b2144f20af3281c75907912b8598c2ac"
     },
     {
-      "description": "Read errors errors: Errors returns the caller org's most recently captured errors, newest first..",
-      "name": "errors_errors",
-      "path": "errors_errors/SKILL.md",
-      "service": "errors",
-      "sha256": "98e2659a48b63ba7800a70388f550d3cdf58f95bab6bc929d51ad7caebd65479"
-    },
-    {
-      "description": "Read esign documents: Your org's documents, newest first, One document with its recipients and field layout, The document's full audit trail, oldest first.",
+      "description": "Read esign documents: Returns your org's documents, newest first., Returns one document with its recipients and field layout., Returns the document's full audit trail, oldest first..",
       "name": "esign_documents",
       "path": "esign_documents/SKILL.md",
       "service": "esign",
-      "sha256": "ec59bae20a4866bbccc70810fd352536dd15c76339677a627ad68a08f7b672df"
+      "sha256": "2c4b1368c351edc23e5aa33e840fdada502ae32e8d5ca98f149b6918a2dc94b9"
     },
     {
-      "description": "Read esign health: Whether the e-signature surface is mounted.",
+      "description": "Read esign health: Reports whether the e-signature surface is mounted..",
       "name": "esign_health",
       "path": "esign_health/SKILL.md",
       "service": "esign",
-      "sha256": "8a1f2a8d71bb5bbc3ac1433103b793e6eb6243b59d68ee7c64cfa0aa0c3fbbfc"
+      "sha256": "36012b409f9d5f2ab0ebafa495aa6079af221dc41066df23955e1890036e19ca"
     },
     {
-      "description": "Read esign o: Open a document you were asked to sign, using your signing link.",
+      "description": "Read esign o: Opens a document you were asked to sign, using your signing link..",
       "name": "esign_o",
       "path": "esign_o/SKILL.md",
       "service": "esign",
-      "sha256": "64c577a4db798f4c7e0e75e4f95a9b6134a2fa4263b957f32cc52a60ea5e81ac"
+      "sha256": "1844aebd253b65bde688e0e851d128bae96f1697dc17498b3caa96115f60f1aa"
     },
     {
       "description": "Read evals datasets: Is the datasets your org has, each with its name, description, metadata and timestamps., Returns one dataset of the caller's org by name, together with its live item count — the one read that answers how big the set actually is., Is the examples in one of you",
@@ -1905,6 +1884,55 @@
       "sha256": "d38c17878a740b6f82b36a6c7dba1ff4232f3a96428cdfbfd455d68b37dcc6fa"
     },
     {
+      "description": "Read event errors: Errors returns the caller org's most recently captured errors, newest first..",
+      "name": "event_errors",
+      "path": "event_errors/SKILL.md",
+      "service": "event",
+      "sha256": "1fe177fdc3ebc00622a319d4e7cb87e9a61c01b2371115c67141b3b1bf79a1d8"
+    },
+    {
+      "description": "Read event health: Health reports whether the event plane can take a write and the warehouse can answer a read..",
+      "name": "event_health",
+      "path": "event_health/SKILL.md",
+      "service": "event",
+      "sha256": "111c166775aeb368160043e52c43e3a3a50932d75853b31b0b5321a978d55e89"
+    },
+    {
+      "description": "Read event insights: Returns the caller org's most recent product events, newest first., Reports that the unified insights surface is serving..",
+      "name": "event_insights",
+      "path": "event_insights/SKILL.md",
+      "service": "event",
+      "sha256": "5464804fc092323accbfcc565574086883b0ff43b15e1559a206c2e559ed1ffe"
+    },
+    {
+      "description": "Read event overview: Overview returns the caller org's analytics KPIs for one time window..",
+      "name": "event_overview",
+      "path": "event_overview/SKILL.md",
+      "service": "event",
+      "sha256": "f544a840660ae7d97731fbfd64722a8986f4d21b1b9790a43dc7ef742d223c78"
+    },
+    {
+      "description": "Read event tag js: The Hanzo event tag — the one-line install for a surface with no bundler.",
+      "name": "event_tag-js",
+      "path": "event_tag-js/SKILL.md",
+      "service": "event",
+      "sha256": "b9dd50a5e72869e4cb9ba995abb8384a39aaa3db6407afe3a13f1ded1d958693"
+    },
+    {
+      "description": "Read event timeseries: Timeseries returns the caller org's LLM usage over time as an evenly-spaced series..",
+      "name": "event_timeseries",
+      "path": "event_timeseries/SKILL.md",
+      "service": "event",
+      "sha256": "a735d26829444645a223e717f71daf6e5bb3751683e0baef67cef1820515c612"
+    },
+    {
+      "description": "Read event top: Top returns the caller org's ranked lenses for one window, five of them at once..",
+      "name": "event_top",
+      "path": "event_top/SKILL.md",
+      "service": "event",
+      "sha256": "1f1bd58da5131be573240dae0d947a54577fc488eab66e39908d5007370ec0d5"
+    },
+    {
       "description": "Read exec download: Download a file from a session.",
       "name": "exec_download",
       "path": "exec_download/SKILL.md",
@@ -1954,62 +1982,6 @@
       "sha256": "07536ae5394119df66bb3ef9e95f6d1fe65a62785692fab2a1d14d6abdf3bccf"
     },
     {
-      "description": "Read finance accounts: Returns the ledger accounts the caller may see, with their balances..",
-      "name": "finance_accounts",
-      "path": "finance_accounts/SKILL.md",
-      "service": "finance",
-      "sha256": "acb50ea9c5c2abf9467e0b9be4c3c2d7126bbb27b7e270db6b6b7ef144458151"
-    },
-    {
-      "description": "Read finance balance: Answers the org's spendable prepaid balance typed for the finance surfaces: `availableCents`, `pendingCents`, `dueCents` and the `asOf` instant it was read..",
-      "name": "finance_balance",
-      "path": "finance_balance/SKILL.md",
-      "service": "finance",
-      "sha256": "8dd0addd7eb947deb0851da3c912ead13e1f65ec70a112682413553c5b6366d5"
-    },
-    {
-      "description": "Read finance credits: Answers the money PUT IN to the org's wallet — each staff grant, promo and settled top-up as a positive row with its id, label, cents and grant time..",
-      "name": "finance_credits",
-      "path": "finance_credits/SKILL.md",
-      "service": "finance",
-      "sha256": "ab980bcdb8050911fcae37d06f1b853ba157b352652eb9f8fb9b87afefb43776"
-    },
-    {
-      "description": "Read finance invoices: Answers an empty typed array, always..",
-      "name": "finance_invoices",
-      "path": "finance_invoices/SKILL.md",
-      "service": "finance",
-      "sha256": "5af2fc97aa216eb6066b068b84ec580d572cf1403e51dc41f54845093b8730d7"
-    },
-    {
-      "description": "Read finance ledger: Answers the org's own postings inside `range=`, each as a signed entry: a DEPOSIT CREDITS the wallet (positive, account `credits:<org>`) and every other posting DEBITS it (negative, account `usage:<org>`), described by its notes or its tags..",
-      "name": "finance_ledger",
-      "path": "finance_ledger/SKILL.md",
-      "service": "finance",
-      "sha256": "0620bf22d014b9d3412add3b4adfd8055b338d83d11cdcc565e544ce89187f85"
-    },
-    {
-      "description": "Read finance payment methods: Answers the masked card descriptors for the caller's resolved WALLET — id, brand, last four, expiry, default flag — reshaped into the finance contract..",
-      "name": "finance_payment-methods",
-      "path": "finance_payment-methods/SKILL.md",
-      "service": "finance",
-      "sha256": "26f5ce9166b802c33c10160aca64acf2f8dfaf1101ae3f5d81275d1bfa0dc20f"
-    },
-    {
-      "description": "Read finance treasury: Returns the reserve fund's health and the current revenue-share policy for any validated caller..",
-      "name": "finance_treasury",
-      "path": "finance_treasury/SKILL.md",
-      "service": "finance",
-      "sha256": "3a112a8bbb49e654082729df19d30b528787238667b3a0e3ee4ae43447293a10"
-    },
-    {
-      "description": "Read finance usage: Answers metered spend inside `range=`: the window total, a time series to plot, and one line per usage TAG..",
-      "name": "finance_usage",
-      "path": "finance_usage/SKILL.md",
-      "service": "finance",
-      "sha256": "11ae42224e1e445f5b81c4acee5f914eabde18df61c2eda0463d43580a474f42"
-    },
-    {
       "description": "Read flags activity: Returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time..",
       "name": "flags_activity",
       "path": "flags_activity/SKILL.md",
@@ -2029,13 +2001,6 @@
       "path": "flags_health/SKILL.md",
       "service": "flags",
       "sha256": "6ad002ca1a83521c6db4071788e9ed2e9338d9cf6a026487892614e4ba10b5ae"
-    },
-    {
-      "description": "Read flags waitlist: Reports whether ONE host is currently gated by the launch waitlist..",
-      "name": "flags_waitlist",
-      "path": "flags_waitlist/SKILL.md",
-      "service": "flags",
-      "sha256": "fdfbee44df5de2a6dc2a60e2a3dff1498c642739838941e9b6fd10e90a5882e4"
     },
     {
       "description": "Read flow runs: Runs reads one workflow's recorded runs: every component build with its result, keyed by component..",
@@ -2224,7 +2189,7 @@
       "name": "graph_graph",
       "path": "graph_graph/SKILL.md",
       "service": "graph",
-      "sha256": "dccc48b4b26506c7aef0313786beb5dde4d02e287c0c980a3d16c241c4054953"
+      "sha256": "e4e60e180a286c2a06834093d734e9897429e594bdffb2764c34311152dd5e0c"
     },
     {
       "description": "Read graph vocabulary: The relations in use, and the rule that resolves a conflict.",
@@ -2661,39 +2626,39 @@
       "sha256": "fb572deb18cb77e6928ab2b1ab80434e9cf960798af472f6934ad28370916a45"
     },
     {
-      "description": "Read index health: Report whether the search plane can serve.",
+      "description": "Read index health: Reports whether the search plane can serve..",
       "name": "index_health",
       "path": "index_health/SKILL.md",
       "service": "index",
-      "sha256": "a0824f6e526295d0d17191cacd86b8a5121f10be4f14d5fcf69b2e241207b648"
+      "sha256": "d0f1a9ca85e23eeac1493d17ce299a023b4fdeaaf02e8f81a66d9a9693a8ff04"
     },
     {
-      "description": "Read index indexes: List the indexes your org holds, Read one index's definition, Page through the documents in an index.",
+      "description": "Read index indexes: Lists the indexes your org holds., Reads one index's definition., Pages through the documents in an index..",
       "name": "index_indexes",
       "path": "index_indexes/SKILL.md",
       "service": "index",
-      "sha256": "9b323b9b22a3d974abe1d399f8369f4b0ee7901b5da8ddef1d89f10c12c250e9"
+      "sha256": "e52325bbfa2f99ccacfd5ee00a57ea81e7e1fdfb69afde0c86f9ba2db5201fd5"
     },
     {
-      "description": "Read index stats: Count the documents in each of your indexes.",
+      "description": "Read index stats: Counts the documents in each of your indexes..",
       "name": "index_stats",
       "path": "index_stats/SKILL.md",
       "service": "index",
-      "sha256": "27fd73c51e8801cb895e50d885befb622cf83e6304e87b40100c95900229bda9"
+      "sha256": "2d2585cb82ee9d8968e0e82d3b5b671b09da532e890c7337358d18fcaa5b47a2"
     },
     {
-      "description": "Read index tasks: Check a write task, which has already finished.",
+      "description": "Read index tasks: Checks a write task, which has already finished..",
       "name": "index_tasks",
       "path": "index_tasks/SKILL.md",
       "service": "index",
-      "sha256": "58c0f1ba7ced73c92f727a1b7978f3ce2b1049438f21edd86a97276bd93a6e5a"
+      "sha256": "a619ed57df727d8beb17730b1b106bb93e1b402bc53dcff882a6696c0938b843"
     },
     {
-      "description": "Read index version: Identify the search implementation answering.",
+      "description": "Read index version: Identifies the search implementation answering..",
       "name": "index_version",
       "path": "index_version/SKILL.md",
       "service": "index",
-      "sha256": "f2c50d1bd1b40fcaffc5787a01afd3365175194970fbd2c56f7c1d54774594d5"
+      "sha256": "4d5268367d2ecd231805fbcfd3e7ff774b5d148b9ed340c562196fb5296f7443"
     },
     {
       "description": "Read ingress middlewares: Returns every edge transform the caller's org has configured, ordered by id., Returns one of the caller org's edge transforms by id..",
@@ -2729,20 +2694,6 @@
       "path": "ingress_tls/SKILL.md",
       "service": "ingress",
       "sha256": "f3e0c59199e25e2ae3f3b90ef1e89c79b96128483317cca5c088d7e63e670e27"
-    },
-    {
-      "description": "Read insights events: Returns the caller org's most recent product events, newest first..",
-      "name": "insights_events",
-      "path": "insights_events/SKILL.md",
-      "service": "insights",
-      "sha256": "ddd2d11f572e46da64e3c0bd3cdcb64fe094db511579fb027724718236eabeb9"
-    },
-    {
-      "description": "Read insights health: Reports that the unified insights surface is serving..",
-      "name": "insights_health",
-      "path": "insights_health/SKILL.md",
-      "service": "insights",
-      "sha256": "ac283e7c8edb54fb0a63b3bc4c54dfe55b045b9deeb70b5ad1e6c5d482cded55"
     },
     {
       "description": "Read integrations callback: OAuth return for any connector.",
@@ -2808,25 +2759,25 @@
       "sha256": "3ede1d062245284620e5119f209cf7a88a856435b445c02c52c7aa2472d9d316"
     },
     {
-      "description": "Read kms config: Runtime configuration for the KMS console.",
+      "description": "Read kms config: Returns the runtime configuration for the KMS console..",
       "name": "kms_config",
       "path": "kms_config/SKILL.md",
       "service": "kms",
-      "sha256": "5472c8b4f2f9db0007e76ed7e593080aa955a75e85e02549bb7b019c587122f3"
+      "sha256": "a5a2fb048045a8a1f5dcfd04edbfc1bbe82de0301d57ee680e918cd7c23f0297"
     },
     {
-      "description": "Read kms health: Whether this broker can actually serve secrets.",
+      "description": "Read kms health: Reports whether this broker can actually serve secrets..",
       "name": "kms_health",
       "path": "kms_health/SKILL.md",
       "service": "kms",
-      "sha256": "5ca7ff82c197679abaf94ff73ef0801ec33a6ed6cd8597948a1654a781535e5e"
+      "sha256": "732cd95308404bf2720a92f024f6714cf7f9d0cc5a4689bee0a46bc03c2be7ae"
     },
     {
-      "description": "Read kms secrets: List the secrets your org holds, without their values, Read one secret's value.",
+      "description": "Read kms secrets: Lists the secrets your org holds, without their values., Read one secret's value.",
       "name": "kms_secrets",
       "path": "kms_secrets/SKILL.md",
       "service": "kms",
-      "sha256": "9a6b8ae1ca18e7546268bb82a580b81fcce440e678e1eed4de72056cec0297be"
+      "sha256": "fd31cd71ceba1ac0d942d8a07ff59273d23c1049e3f54a6afccf01d35a7a7134"
     },
     {
       "description": "Read knowledge connectors: Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store., Returns the ONE catalog of everything a caller can connect: every first-party connector and every long",
@@ -2841,6 +2792,20 @@
       "path": "knowledge_graph/SKILL.md",
       "service": "knowledge",
       "sha256": "a5571dc9fbc6f961da112aa83bfbf443418b60e04bf3820b62303782f3e38ec6"
+    },
+    {
+      "description": "Read kv history: History returns one key's retained revisions, oldest first — every put and every delete marker up to the bucket's History depth..",
+      "name": "kv_history",
+      "path": "kv_history/SKILL.md",
+      "service": "kv",
+      "sha256": "c5c02e6bfcab1387009bec91af9b36da105e406ab0004e552b70ca9a36a2ec39"
+    },
+    {
+      "description": "Read kv kv: Get returns one key's current value and revision..",
+      "name": "kv_kv",
+      "path": "kv_kv/SKILL.md",
+      "service": "kv",
+      "sha256": "066d4b067c6d87c24d11020d28a3020e8f0958123cc3c567aafa93024cc956fa"
     },
     {
       "description": "Read label coverage: How much of the window has matured, and how much of that is judged.",
@@ -2976,20 +2941,6 @@
       "sha256": "0c818e6a68990e6d5cda7d0c738454fbade751dc401782c165b56a19d1df17b3"
     },
     {
-      "description": "Read logs health: How many log records this deployment holds for your org.",
-      "name": "logs_health",
-      "path": "logs_health/SKILL.md",
-      "service": "logs",
-      "sha256": "7bf0e055383a1945c459edb82a7e2a35c1c11573eec8d404edf88a44f49e1efd"
-    },
-    {
-      "description": "Read logs query: Search your org's logs by label, time and substring.",
-      "name": "logs_query",
-      "path": "logs_query/SKILL.md",
-      "service": "logs",
-      "sha256": "a66170bd253bda5eeea3c4c8501959140c22b6cb2df0ef0fd21dac85611a2254"
-    },
-    {
       "description": "Read marketing audiences: Returns the org's saved audiences, most recently updated first., Returns one of the caller org's saved audiences., Evaluates the cohort LIVE — the same resolution an enrollment would run — and reports how big it is and how many real mailboxes it reaches.",
       "name": "marketing_audiences",
       "path": "marketing_audiences/SKILL.md",
@@ -2997,11 +2948,11 @@
       "sha256": "62f2f00ed6cd9db7f90e06f68650b96fc7751351b409de49902f094a57865cdc"
     },
     {
-      "description": "Read marketing calendar: Returns the org's calendar, soonest scheduled first, optionally narrowed to one status., Returns one of the caller org's posts, including the exact error behind a failed publish..",
+      "description": "Read marketing calendar: Returns the org's calendar, latest scheduled first, optionally narrowed to one status., Returns one of the caller org's posts, including the exact error behind a failed publish..",
       "name": "marketing_calendar",
       "path": "marketing_calendar/SKILL.md",
       "service": "marketing",
-      "sha256": "91a356dffda1107e15bb0df081e0c14b47fb08d4f67ef6c3283e56a83d4b7a25"
+      "sha256": "13d8814909f0ea7152e24600b30eaeb00481f9bcea442bbe1d4a8fdfb91899a5"
     },
     {
       "description": "Read marketing campaigns: Returns the org's campaigns, most recently updated first, optionally narrowed to one lifecycle status., Returns one of the caller org's campaigns..",
@@ -3074,13 +3025,6 @@
       "sha256": "b808583afca808a76f88df2c159a3ec1b513cc5cca44f028edd64e75d8a826e7"
     },
     {
-      "description": "Read mesh services: Returns the Zero Trust edge services the caller's org owns..",
-      "name": "mesh_services",
-      "path": "mesh_services/SKILL.md",
-      "service": "mesh",
-      "sha256": "5d6210aeec63535fd649efa338a5f8250eedf9041490f814386d877b0446eeeb"
-    },
-    {
       "description": "Read metrics health: How many metric series this deployment holds for your org.",
       "name": "metrics_health",
       "path": "metrics_health/SKILL.md",
@@ -3088,11 +3032,25 @@
       "sha256": "654a6ec2cafd89368f8bd13d0918caf34748b87e22e18cfad8885c0478061971"
     },
     {
+      "description": "Read metrics logs: How many log records this deployment holds for your org, Search your org's logs by label, time and substring.",
+      "name": "metrics_logs",
+      "path": "metrics_logs/SKILL.md",
+      "service": "metrics",
+      "sha256": "563bb067fac7e615e827925fa94a5fc423f20247d188f2764298c2254407d9e6"
+    },
+    {
       "description": "Read metrics query: Read your org's series back over a time range.",
       "name": "metrics_query",
       "path": "metrics_query/SKILL.md",
       "service": "metrics",
       "sha256": "521e4536813dd439de69dc0e41c8e2896b440ca9dd4c417fc47cc032548bb351"
+    },
+    {
+      "description": "Read metrics traces: How many spans this deployment holds for your org, Recent spans for your org over a time range, Every span of one trace — the waterfall.",
+      "name": "metrics_traces",
+      "path": "metrics_traces/SKILL.md",
+      "service": "metrics",
+      "sha256": "4e2913b3ebf99a5a3a889174a724b4d6b9212617cc5854826f39fb4e4b22744a"
     },
     {
       "description": "Read ml health: Whether model serving can actually work right now.",
@@ -3151,18 +3109,25 @@
       "sha256": "e5880e2c2cca01383b16bfc2ee58ecf6f0393269b85468b99555312d80d5bb5d"
     },
     {
-      "description": "Read networks networks: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
-      "name": "networks_networks",
-      "path": "networks_networks/SKILL.md",
-      "service": "networks",
-      "sha256": "1ba89c874c31eac0a017e8c32be476e850d92d6538ee7741054ddb65bae51d95"
+      "description": "Read network network: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
+      "name": "network_network",
+      "path": "network_network/SKILL.md",
+      "service": "network",
+      "sha256": "8eb20a13cbdc07b9551a77555b6a431ba05e10a199d11bbb3ff3ac956f914180"
     },
     {
-      "description": "Read networks routers: Returns the Zero Trust routers the caller's org owns..",
-      "name": "networks_routers",
-      "path": "networks_routers/SKILL.md",
-      "service": "networks",
-      "sha256": "a5a1d06644163e56ec4de68e9070cfb92fde4c2fc2d52b734a3d69e4f688703a"
+      "description": "Read network routers: Returns the Zero Trust routers the caller's org owns..",
+      "name": "network_routers",
+      "path": "network_routers/SKILL.md",
+      "service": "network",
+      "sha256": "19110d7cdc48087c75e8fe8b3ce65205def72614dc9d43e1bfb7ceae17d07f41"
+    },
+    {
+      "description": "Read network services: Returns the Zero Trust edge services the caller's org owns..",
+      "name": "network_services",
+      "path": "network_services/SKILL.md",
+      "service": "network",
+      "sha256": "3743717a963a919712706d6452f86625d0c0f7db290c478c6d29c6d4427739e7"
     },
     {
       "description": "Read notify health: Reports that the notify send surface is mounted..",
@@ -3578,6 +3543,13 @@
       "sha256": "8861831f39b22634ea265afe726449731dc8ecc8c2fe8ebfd25946d17ae96efb"
     },
     {
+      "description": "Read o11y sentinel: Returns one captured error event of a project, by its id., Lists the caller's org's grouped error issues, optionally narrowed to one project and one time window, and filtered by status, level, environment, service, a free-text query and a sort., Returns one gr",
+      "name": "o11y_sentinel",
+      "path": "o11y_sentinel/SKILL.md",
+      "service": "o11y",
+      "sha256": "2b1cf6154d7b1149e4ab66436e4e60bbc284d93f9abf33c67e71ce52b8c2f925"
+    },
+    {
       "description": "Read o11y service accounts: Lists the caller's org's service accounts., Returns the calling service account itself, with the roles it holds — the self-inspection read for a key-authenticated caller., Returns one service account with the roles it holds..",
       "name": "o11y_service-accounts",
       "path": "o11y_service-accounts/SKILL.md",
@@ -3690,13 +3662,6 @@
       "sha256": "e8b35ac2ab7bdb1471cd73a3b4632c6042f18de3eb854414bd5f7af7d54ab25a"
     },
     {
-      "description": "Read payments payments: Read one settled payment by its id.",
-      "name": "payments_payments",
-      "path": "payments_payments/SKILL.md",
-      "service": "payments",
-      "sha256": "095c039aa25d02a6e0b098ececab64fcc276767c97ef119881e84a6a440ebdcd"
-    },
-    {
       "description": "Read plan blockchain: Returns the blockchain RPC plan catalog: the tiers metered in monthly compute units, with their prices, limits and overage terms..",
       "name": "plan_blockchain",
       "path": "plan_blockchain/SKILL.md",
@@ -3800,13 +3765,6 @@
       "path": "plan_vocab/SKILL.md",
       "service": "plan",
       "sha256": "2e1884cfe0474dc6c16393a9e6bf5a8254b5023227b1e93d147b8fbf90d12d86"
-    },
-    {
-      "description": "Read plans entries: The raw plan authority rows.",
-      "name": "plans_entries",
-      "path": "plans_entries/SKILL.md",
-      "service": "plans",
-      "sha256": "791dab25b36f3ef3926573087639412e0dc45eca927407f8b50fe4ad54d38f57"
     },
     {
       "description": "Read platform apps: What this organization has declared, and what CD did with it, One declaration, One app's reconciliation.",
@@ -3919,6 +3877,13 @@
       "path": "pricing_datastore/SKILL.md",
       "service": "pricing",
       "sha256": "9075867665adb63e7da4292e4e747cb4cf52a3e5ef6492234b8ad6e07f3bb0e3"
+    },
+    {
+      "description": "Read pricing enablement: Returns what the caller's org can actually use: every managed item with its global state, whether it is effective here, whether this org is already opted into its beta, and whether it may still opt in..",
+      "name": "pricing_enablement",
+      "path": "pricing_enablement/SKILL.md",
+      "service": "pricing",
+      "sha256": "17808b1ca84b8ca32cc129edd3bc14da959aec2920c4e55fed6ef9d903270b44"
     },
     {
       "description": "Read pricing featured: Returns the models the catalog highlights, filtered to what the caller's org may see..",
@@ -4145,13 +4110,6 @@
       "sha256": "d3be1dbe8b5f6d69e60af0d985e6cdc54a9a1ab4966f2d4bea70e39dea4488e7"
     },
     {
-      "description": "Read pubsub kv: Get returns one key's current value and revision., History returns one key's retained revisions, oldest first — every put and every delete marker up to the bucket's History depth..",
-      "name": "pubsub_kv",
-      "path": "pubsub_kv/SKILL.md",
-      "service": "pubsub",
-      "sha256": "3ea4fa4269d88f8f0279d265a2e421c4f1a94ff01fe82d6377f95e67ed61e3fa"
-    },
-    {
       "description": "Read reference reference: Lists every set this plane publishes, with its version and how fresh it is., Reference describes one set and lists your org's overrides in it..",
       "name": "reference_reference",
       "path": "reference_reference/SKILL.md",
@@ -4362,55 +4320,6 @@
       "sha256": "c99bdab448a972104d05c40500dd9f6b8fa846e8f36f0f4f0ba1de9d8bedd795"
     },
     {
-      "description": "Read sentinel events: Returns one captured error event of a project, by its id..",
-      "name": "sentinel_events",
-      "path": "sentinel_events/SKILL.md",
-      "service": "sentinel",
-      "sha256": "4b45b1d7b15051a9d8e3636e8f162015123ba7bed27f0c35aa3a80e0ca22a768"
-    },
-    {
-      "description": "Read sentinel issues: Lists the caller's org's grouped error issues, optionally narrowed to one project and one time window, and filtered by status, level, environment, service, a free-text query and a sort., Returns one grouped issue of the caller's org with its latest occurrenc",
-      "name": "sentinel_issues",
-      "path": "sentinel_issues/SKILL.md",
-      "service": "sentinel",
-      "sha256": "79e731127ed77e259d39cf1ba323c6f69f24832d97b6629af31de4c4653f1feb"
-    },
-    {
-      "description": "Read sentinel logs: Lists a project's captured error events, newest first, optionally narrowed to those whose message or exception text contains a search string..",
-      "name": "sentinel_logs",
-      "path": "sentinel_logs/SKILL.md",
-      "service": "sentinel",
-      "sha256": "1357bb737b4b61093b86aae0ce2b03e7a4d3ade8d869921eb3db56312b98a79e"
-    },
-    {
-      "description": "Read sentinel projects: Lists the caller's org's Sentry projects, each with its freshly-derived DSN., Returns one Sentry project of the caller's org, DSN included..",
-      "name": "sentinel_projects",
-      "path": "sentinel_projects/SKILL.md",
-      "service": "sentinel",
-      "sha256": "398cb8d1c8491a98d67c31e438dc66befe6213c3d6729822bb28942a23368ff2"
-    },
-    {
-      "description": "Read sentinel sentinel: Read the caller org's errors on the Sentry surface.",
-      "name": "sentinel_sentinel",
-      "path": "sentinel_sentinel/SKILL.md",
-      "service": "sentinel",
-      "sha256": "f6be35b9d4c9e6f715a919aa855d0c2babf9ac759bc629d5c6ee33d83022d010"
-    },
-    {
-      "description": "Read sentinel stats: Returns a project's event-rate timeseries: one bucket per interval over the requested period, counting the events in it..",
-      "name": "sentinel_stats",
-      "path": "sentinel_stats/SKILL.md",
-      "service": "sentinel",
-      "sha256": "98b4dbf7376fbb1b1e462e1770b3fa3ae7f110ca981e36b0bec251e7b2fe29d2"
-    },
-    {
-      "description": "Read sentinel traces: Lists the traces a project's captured errors reference, each with how many errors landed on it, when they started and stopped, and the latest message seen — the entry point for \"which requests are failing\"., Returns one trace's captured errors for a project ",
-      "name": "sentinel_traces",
-      "path": "sentinel_traces/SKILL.md",
-      "service": "sentinel",
-      "sha256": "42ae324a1f92e36d0473d8eba0501b05678628a0beefe421172998323daf1b6f"
-    },
-    {
       "description": "Read seo rates: What each call on this surface costs, from the vendor's own list.",
       "name": "seo_rates",
       "path": "seo_rates/SKILL.md",
@@ -4432,81 +4341,32 @@
       "sha256": "c8bacdcebc471091d4018901006789b4a2cd08cb3f5fb127fea25314c4d7b4ab"
     },
     {
-      "description": "Read social accounts: List the social accounts connected to your org, Read one connected account.",
+      "description": "Read social accounts: Returns the org's connected accounts — each one's id, network, handle, status and timestamps, most-recently-updated first., Returns one of the org's connected accounts by id — its network, handle, status and timestamps — or 404..",
       "name": "social_accounts",
       "path": "social_accounts/SKILL.md",
       "service": "social",
-      "sha256": "63a37e518c33d1315c532b9dc233144acae98fb5fdc1b1759ce80dafd0582e21"
+      "sha256": "4f5cdeab66e63b2487590d1e21f856ddad18d673fb2a4fb5b2145918311e4fd7"
     },
     {
-      "description": "Read social posts: List your org's posts, Read one post.",
+      "description": "Read social posts: Returns the org's posts — content, channel, status, scheduled time, media and timestamps — most-recently-updated first., Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external ",
       "name": "social_posts",
       "path": "social_posts/SKILL.md",
       "service": "social",
-      "sha256": "58b39321d05780518da974708c83e6de8b727a811b5c4944e7e222ca2df46656"
+      "sha256": "3c59d859e0e108380b5fd7736086ecbd03ba1c43c89b729f2546bfcfd054c53d"
     },
     {
-      "description": "Read social providers: Which networks this deployment can actually publish to.",
+      "description": "Read social providers: Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing..",
       "name": "social_providers",
       "path": "social_providers/SKILL.md",
       "service": "social",
-      "sha256": "e90fd9c4fce43b4366f050f6ab134c6be5c9832187ffd6ff1b45aac7b1a59191"
+      "sha256": "b7bfe31106206267cc3ac51fb7f84908f3c868fd0a32069334acbeb920484845"
     },
     {
-      "description": "Read social summary: Counts across your org's social presence.",
+      "description": "Read social summary: Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected..",
       "name": "social_summary",
       "path": "social_summary/SKILL.md",
       "service": "social",
-      "sha256": "f7c49da385c295ab54ec8ea23e1411ab61d5182b583175e1eb85b2a9c5aac040"
-    },
-    {
-      "description": "Read store access: Whether a store is entitled to trade, and why.",
-      "name": "store_access",
-      "path": "store_access/SKILL.md",
-      "service": "store",
-      "sha256": "5280087daade478f9ac603eadeae7a236056e31ee81feb61469f3bee85f94f0d"
-    },
-    {
-      "description": "Read store bundle: Fetch a bundle as this storefront sells it.",
-      "name": "store_bundle",
-      "path": "store_bundle/SKILL.md",
-      "service": "store",
-      "sha256": "911fd7ef6f97260f2f582b4eb9cd3797773ccb3f094f136e066f41718a41e1c8"
-    },
-    {
-      "description": "Read store current: Resolve your org's active storefront without naming an id.",
-      "name": "store_current",
-      "path": "store_current/SKILL.md",
-      "service": "store",
-      "sha256": "7e6752c04156c3a10900268e4a6ac641ee8201779eb79681bc8410d5a55d7eb6"
-    },
-    {
-      "description": "Read store listing: The storefront's whole listing override map, Fetch one listing override, by item id or by its slug or SKU.",
-      "name": "store_listing",
-      "path": "store_listing/SKILL.md",
-      "service": "store",
-      "sha256": "a61a76dcac8d28c1f5b74b19227de764c9d5acb9a6a1e18369d92e1bca022a76"
-    },
-    {
-      "description": "Read store product: Fetch a product as this storefront sells it.",
-      "name": "store_product",
-      "path": "store_product/SKILL.md",
-      "service": "store",
-      "sha256": "a6184a9752a2e483f4717f0a5a35c1b1624b4260f5d904ab8a7f65c5db72db2f"
-    },
-    {
-      "description": "Read store store: List your org's storefronts as a page, Fetch one storefront.",
-      "name": "store_store",
-      "path": "store_store/SKILL.md",
-      "service": "store",
-      "sha256": "e24dd47490dedf6096957357ac68620d2ff1ca699dad5e5c7e17a8723908c2dc"
-    },
-    {
-      "description": "Read store variant: Fetch a variant as this storefront sells it.",
-      "name": "store_variant",
-      "path": "store_variant/SKILL.md",
-      "service": "store",
-      "sha256": "ea649956b06976de3a4d4d8c88c8f4e4339c203c44844eea7d2784868c4f2e6e"
+      "sha256": "b5636d4b7eebf5648a7aaf181c9ce35fdf351bb3d4e01635531bcafd801a5d2e"
     },
     {
       "description": "Read sync sync: List returns every sync link the caller's org has, each with its two endpoints, its direction and trigger policy, and the time it last reconciled., Get returns one sync by id..",
@@ -4670,32 +4530,25 @@
       "sha256": "a00e34571b02567f5e16a303ce068aa58e29b7c993c11c3142cdffff44d223fa"
     },
     {
-      "description": "Read traces health: How many spans this deployment holds for your org.",
-      "name": "traces_health",
-      "path": "traces_health/SKILL.md",
-      "service": "traces",
-      "sha256": "512cb602cf1ae805dc1111cfd1fd45ed3512986fc573fef0e4f81ae8188499df"
-    },
-    {
-      "description": "Read traces query: Recent spans for your org over a time range.",
-      "name": "traces_query",
-      "path": "traces_query/SKILL.md",
-      "service": "traces",
-      "sha256": "734b9a7d4040555a5b2661c7726fdfa23737cd528f1a4175a3693a3e47b15c50"
-    },
-    {
-      "description": "Read traces trace: Every span of one trace — the waterfall.",
-      "name": "traces_trace",
-      "path": "traces_trace/SKILL.md",
-      "service": "traces",
-      "sha256": "d31a6c3e40a616aa273a864b2b8ece761b60ec23349fd786b0bb798f9944324e"
-    },
-    {
       "description": "Read translate memory: List returns the org's own translation-memory entries, newest first, optionally narrowed to one target language and/or one position on the review ladder..",
       "name": "translate_memory",
       "path": "translate_memory/SKILL.md",
       "service": "translate",
       "sha256": "fd954946ddf908d7ddd7a4507ffcb7684f86c9ad5ce07f8b49f046cb0889a554"
+    },
+    {
+      "description": "Read treasury accounts: Returns the ledger accounts the caller may see, with their balances..",
+      "name": "treasury_accounts",
+      "path": "treasury_accounts/SKILL.md",
+      "service": "treasury",
+      "sha256": "4a1a028b9170a5d9c9f2e46343f585ede6b3ebe98db02a3894d29a0a1e997d4d"
+    },
+    {
+      "description": "Read treasury treasury: Returns the reserve fund's health and the current revenue-share policy for any validated caller..",
+      "name": "treasury_treasury",
+      "path": "treasury_treasury/SKILL.md",
+      "service": "treasury",
+      "sha256": "378fff83a60509d9d2deecf14febfefce27f9ddd81260e9e1b07be2527bad97a"
     },
     {
       "description": "Read usage analytics: Is the entitlement-GATED per-provider breakdown of the caller org's LLM usage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads its totals from., Echoes a plan's resolved analytics entitlement so a dashboard can configure itself agai",
