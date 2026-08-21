@@ -393,7 +393,7 @@ var Apps = []App{
 	// its product is connected machines, not a bot.
 	{Name: "bots", Prefixes: []string{"/v1/bot", "/v1/bots"}, Stage: Beta},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
-	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/admin/referrals", "/v1/affiliates"}, Stage: Beta},
+	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}, Stage: Beta},
 	{Name: "esign", Prefixes: []string{"/v1/esign"}, Stage: Beta},
 	// search is the QUERY surface — hybrid keyword+semantic over the org's own
 	// corpora at POST /v1/search — and, since product dissolved into the two

@@ -10,7 +10,6 @@
 /_ commerce
 /meet meet
 /tasks tasks
-/v1/admin affiliates
 /v1/agent agents
 /v1/auto automations
 /v1/billing commerce
