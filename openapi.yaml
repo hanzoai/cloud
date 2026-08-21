@@ -2053,6 +2053,10 @@ components:
         amountCents:
           description: AmountCents is what this line costs.
           type: integer
+        asOf:
+          description: AsOf is when a pass-through amount was last checked against
+            its source.
+          type: string
         code:
           description: Code names the line so a caller can branch on it without reading
             prose.
@@ -2072,6 +2076,16 @@ components:
             year for as long as the entity stands, and a payer agreeing to a one-time
             total is not agreeing to that.
           type: string
+        source:
+          description: |-
+            Source names who publishes this amount, for a line we merely pass through.
+            Empty for a price of ours, which needs no external authority.
+          type: string
+        stale:
+          description: |-
+            Stale reports that AsOf is older than the review window — the figure may
+            have moved and nobody has looked. It does not block; it tells.
+          type: boolean
       type: object
     Citation:
       properties:
