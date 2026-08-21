@@ -53,9 +53,6 @@ func (p *planeDebits) count() int32 { return p.c.Count() }
 // last is the most recent debit, and whether there was one.
 func (p *planeDebits) last() (planeDebit, bool) { return p.c.Last() }
 
-// subject is the wallet the last debit named, or "" if none landed.
-func (p *planeDebits) subject() string { return p.c.Subject() }
-
 // microsOf reads a crossed amount as micro-USD (1e6 = $1) — the unit the reservation
 // tests keep their wallet in, and finer than a cent because per-token charges are.
 func microsOf(m plane.Money) int64 { return planetest.Micros(m) }
