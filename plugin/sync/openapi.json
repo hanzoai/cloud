@@ -254,12 +254,15 @@
       "endpointView": {
         "properties": {
           "connector": {
+            "description": "Connector names a connected account from the org's connector registry, when the\nendpoint reaches its provider through one. Absent means the locator stands on\nits own; the pair below is always sufficient either way.",
             "type": "string"
           },
           "locator": {
+            "description": "Locator addresses the thing INSIDE that provider, in the provider's own terms —\nan https clone URL for a hosted forge, a bare repository name for hanzo-git. It\nnever carries a credential.",
             "type": "string"
           },
           "provider": {
+            "description": "Provider is the concrete integration: \"github\", \"gitlab\" or \"hanzo-git\".",
             "type": "string"
           }
         },
@@ -359,31 +362,39 @@
       "syncView": {
         "properties": {
           "actor": {
+            "description": "Actor is the identity a reconcile writes AS. It is the loop guard: a change\nthis identity made is one we already have, so it is not synced back.",
             "type": "string"
           },
           "createdAt": {
+            "description": "CreatedAt is when the link was first declared, RFC3339 in UTC.",
             "type": "string"
           },
           "direction": {
+            "description": "Direction is which way work flows: \"both\", \"pull\" (target ← source), \"push\"\n(source → target), or \"off\" — which keeps the link declared and moves nothing.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the link's handle, derived from its source and target — which is what\nmakes re-declaring the same pair an update rather than a duplicate.",
             "type": "string"
           },
           "kind": {
+            "description": "Kind is what is being synced. \"git\" today; the field exists so a storage or\ndatabase link is a value here rather than a second route family.",
             "type": "string"
           },
           "source": {
-            "$ref": "#/components/schemas/endpointView"
+            "$ref": "#/components/schemas/endpointView",
+            "description": "Source is the side read FROM on a pull."
           },
           "target": {
-            "$ref": "#/components/schemas/endpointView"
+            "$ref": "#/components/schemas/endpointView",
+            "description": "Target is the side written TO on a push."
           },
           "trigger": {
+            "description": "Trigger is what starts a reconcile: \"webhook\" (the provider tells us),\n\"poll\" (we ask on a schedule), or \"manual\" (only an explicit call).",
             "type": "string"
           },
           "updatedAt": {
-            "description": "bumped on every reconcile — the last-synced time",
+            "description": "UpdatedAt is bumped by every reconcile, so it reads as the LAST-SYNCED time\nrather than the last edit. Absent until the first one runs.",
             "type": "string"
           }
         },
