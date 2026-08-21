@@ -205,6 +205,7 @@ func TestFinanceBalance_ClientCannotWidenScope(t *testing.T) {
 // ── credits: deposits only, positive cents, labels from the grant reason ──
 
 func TestFinanceCredits_DepositsOnlyPositiveCents(t *testing.T) {
+	ledgerPeer(t, "acme")
 	f := &financeFake{}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 	code, body := call(t, app, http.MethodGet, "/v1/finance/credits", "acme/dave", "acme")
@@ -234,6 +235,7 @@ func TestFinanceCredits_DepositsOnlyPositiveCents(t *testing.T) {
 // ── usage: range window, series, per-tag lines, total (== series sum) ──
 
 func TestFinanceUsage_RangeSeriesLinesTotal(t *testing.T) {
+	ledgerPeer(t, "acme")
 	f := &financeFake{}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
@@ -338,6 +340,7 @@ func TestFinancePaymentMethods_MaskedBrandLast4(t *testing.T) {
 // ── ledger: signed postings (deposit +, withdraw −) into per-org accounts ──
 
 func TestFinanceLedger_SignedPostings(t *testing.T) {
+	ledgerPeer(t, "acme")
 	f := &financeFake{}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 	code, body := call(t, app, http.MethodGet, "/v1/finance/ledger?range=90d", "acme/dave", "acme")
