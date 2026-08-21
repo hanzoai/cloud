@@ -48833,88 +48833,6 @@ paths:
       - admin
       x-app: admin
       x-tool: true
-  /v1/admin/catalog:
-    get:
-      description: |-
-        Returns the full model and provider catalog annotated with
-        each entry's enablement state, for the operator console. Nothing is hidden:
-        this is the admin's view of what exists and what is currently off, in beta or
-        generally available. SuperAdmin only; every other caller is refused.
-      operationId: get_admin_catalog
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/adminCatalogOut'
-          description: ok
-      summary: Returns the full model and provider catalog annotated with each entry's
-        enablement state, for the operator console.
-      tags:
-      - pricing
-      x-app: pricing
-      x-tool: true
-  /v1/admin/catalog/models/{wildcard1}:
-    patch:
-      description: |-
-        Sets one model's availability overlay — and the price overrides applied on top of the catalog — then answers the new effective overlay, so a console needs no second read. The model id is the whole remaining path, so a slashed id like `acme/some-model-1` addresses intact.
-
-        SuperAdmin only; every other caller is 403, decided before the body is read. The overlay is PLATFORM-WIDE — this is the catalog every org prices against, not a per-org setting — and `betaOrgs` is what narrows a beta to named orgs.
-
-        Only the fields the patch names change; an entry with no overlay yet starts from the catalog default, which is enabled. `state` is the coherent tri-state setter (`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied AFTER it, so they win where both are sent; anything else in `state` is 400. A field sent as an explicit `null` arrives indistinguishable from an absent one, so null does not clear anything.
-
-        The rule worth reading twice: a disabled entry that still carries beta orgs IS a beta — `{"enabled":false,"betaOrgs":["acme"]}` leaves acme seeing the model. Only an explicit `off` (or `beta:false`) with an empty list is the absolute kill switch that a user's own beta opt-in can never re-open.
-
-        `overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it must be a JSON object or null — an array or a scalar is refused — and is bounded in size and nesting depth. An uninitialised overlay store answers 503.
-      operationId: patch_admin_catalog_models_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Turn one model off, into beta for named orgs, or generally available
-      tags:
-      - pricing
-      x-app: pricing
-  /v1/admin/catalog/providers/{name}:
-    patch:
-      description: |-
-        Sets one provider's availability overlay.
-
-        The overlay decides whether a provider is off, in beta for named orgs, or
-        generally available, and carries the price overrides applied on top of the
-        catalog. Only the fields the patch names change; every other field keeps the
-        value it had, and an absent overlay starts from the catalog default (enabled).
-        Answers the new effective overlay, so a console needs no second read.
-
-        SuperAdmin only.
-      operationId: patch_admin_catalog_providers_by_name
-      parameters:
-      - description: Name is the provider the overlay belongs to, from the URL.
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/providerPatchIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Overlay'
-          description: ok
-      summary: Sets one provider's availability overlay.
-      tags:
-      - pricing
-      x-app: pricing
-      x-tool: true
   /v1/admin/compute:
     get:
       description: |-
@@ -49181,61 +49099,6 @@ paths:
       tags:
       - admin
       x-app: admin
-      x-tool: true
-  /v1/admin/enablement:
-    get:
-      description: |-
-        Returns every item an operator has set an enablement state on —
-        its global state (off, beta or ga) and the orgs granted its beta. An item
-        nobody has touched is absent, because an untouched item is generally
-        available; the console composes the candidate list from the live catalog.
-        SuperAdmin only; every other caller is refused.
-      operationId: get_admin_enablement
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/adminEnablementBoard'
-          description: ok
-      summary: Returns every item an operator has set an enablement state on — its
-        global state (off, beta or ga) and the orgs granted its beta.
-      tags:
-      - pricing
-      x-app: pricing
-      x-tool: true
-    put:
-      description: |-
-        Sets one item's global enablement state — off, beta or ga — and
-        optionally replaces the list of orgs granted its beta. It is generic over
-        kind, so the same call manages models, providers and product features through
-        the one registry. `off` is an absolute kill switch: a self-service opt-in can
-        never re-open it. SuperAdmin only; every other caller is refused.
-      operationId: put_admin_enablement
-      requestBody:
-        content:
-          application/json:
-            example:
-              betaOrgs:
-              - acme
-              id: labs
-              kind: feature
-              state: beta
-            schema:
-              $ref: '#/components/schemas/setEnablementBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/adminEnablementItem'
-          description: ok
-      summary: Sets one item's global enablement state — off, beta or ga — and optionally
-        replaces the list of orgs granted its beta.
-      tags:
-      - pricing
-      x-app: pricing
       x-tool: true
   /v1/admin/finance:
     get:
@@ -50419,6 +50282,143 @@ paths:
       tags:
       - plugins
       x-app: plugins
+      x-tool: true
+  /v1/admin/pricing/catalog:
+    get:
+      description: |-
+        Returns the full model and provider catalog annotated with
+        each entry's enablement state, for the operator console. Nothing is hidden:
+        this is the admin's view of what exists and what is currently off, in beta or
+        generally available. SuperAdmin only; every other caller is refused.
+      operationId: get_admin_pricing_catalog
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adminCatalogOut'
+          description: ok
+      summary: Returns the full model and provider catalog annotated with each entry's
+        enablement state, for the operator console.
+      tags:
+      - pricing
+      x-app: pricing
+      x-tool: true
+  /v1/admin/pricing/catalog/models/{wildcard1}:
+    patch:
+      description: |-
+        Sets one model's availability overlay — and the price overrides applied on top of the catalog — then answers the new effective overlay, so a console needs no second read. The model id is the whole remaining path, so a slashed id like `acme/some-model-1` addresses intact.
+
+        SuperAdmin only; every other caller is 403, decided before the body is read. The overlay is PLATFORM-WIDE — this is the catalog every org prices against, not a per-org setting — and `betaOrgs` is what narrows a beta to named orgs.
+
+        Only the fields the patch names change; an entry with no overlay yet starts from the catalog default, which is enabled. `state` is the coherent tri-state setter (`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied AFTER it, so they win where both are sent; anything else in `state` is 400. A field sent as an explicit `null` arrives indistinguishable from an absent one, so null does not clear anything.
+
+        The rule worth reading twice: a disabled entry that still carries beta orgs IS a beta — `{"enabled":false,"betaOrgs":["acme"]}` leaves acme seeing the model. Only an explicit `off` (or `beta:false`) with an empty list is the absolute kill switch that a user's own beta opt-in can never re-open.
+
+        `overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it must be a JSON object or null — an array or a scalar is refused — and is bounded in size and nesting depth. An uninitialised overlay store answers 503.
+      operationId: patch_admin_pricing_catalog_models_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Turn one model off, into beta for named orgs, or generally available
+      tags:
+      - pricing
+      x-app: pricing
+  /v1/admin/pricing/catalog/providers/{name}:
+    patch:
+      description: |-
+        Sets one provider's availability overlay.
+
+        The overlay decides whether a provider is off, in beta for named orgs, or
+        generally available, and carries the price overrides applied on top of the
+        catalog. Only the fields the patch names change; every other field keeps the
+        value it had, and an absent overlay starts from the catalog default (enabled).
+        Answers the new effective overlay, so a console needs no second read.
+
+        SuperAdmin only.
+      operationId: patch_admin_pricing_catalog_providers_by_name
+      parameters:
+      - description: Name is the provider the overlay belongs to, from the URL.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/providerPatchIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Overlay'
+          description: ok
+      summary: Sets one provider's availability overlay.
+      tags:
+      - pricing
+      x-app: pricing
+      x-tool: true
+  /v1/admin/pricing/enablement:
+    get:
+      description: |-
+        Returns every item an operator has set an enablement state on —
+        its global state (off, beta or ga) and the orgs granted its beta. An item
+        nobody has touched is absent, because an untouched item is generally
+        available; the console composes the candidate list from the live catalog.
+        SuperAdmin only; every other caller is refused.
+      operationId: get_admin_pricing_enablement
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adminEnablementBoard'
+          description: ok
+      summary: Returns every item an operator has set an enablement state on — its
+        global state (off, beta or ga) and the orgs granted its beta.
+      tags:
+      - pricing
+      x-app: pricing
+      x-tool: true
+    put:
+      description: |-
+        Sets one item's global enablement state — off, beta or ga — and
+        optionally replaces the list of orgs granted its beta. It is generic over
+        kind, so the same call manages models, providers and product features through
+        the one registry. `off` is an absolute kill switch: a self-service opt-in can
+        never re-open it. SuperAdmin only; every other caller is refused.
+      operationId: put_admin_pricing_enablement
+      requestBody:
+        content:
+          application/json:
+            example:
+              betaOrgs:
+              - acme
+              id: labs
+              kind: feature
+              state: beta
+            schema:
+              $ref: '#/components/schemas/setEnablementBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adminEnablementItem'
+          description: ok
+      summary: Sets one item's global enablement state — off, beta or ga — and optionally
+        replaces the list of orgs granted its beta.
+      tags:
+      - pricing
+      x-app: pricing
       x-tool: true
   /v1/admin/products:
     get:
@@ -71526,92 +71526,6 @@ paths:
       - ai
       x-app: ai
       x-public: true
-  /v1/enablement:
-    get:
-      description: |-
-        Returns what the caller's org can actually use: every managed
-        item with its global state, whether it is effective here, whether this org is
-        already opted into its beta, and whether it may still opt in. Read-only and
-        safe for any caller — one without a validated principal simply sees the
-        generally-available items and no opt-in affordance, never another org's state.
-      operationId: get_enablement
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/enablementBoard'
-          description: ok
-      summary: 'Returns what the caller''s org can actually use: every managed item
-        with its global state, whether it is effective here, whether this org is already
-        opted into its beta, and whether it may still opt in.'
-      tags:
-      - pricing
-      x-app: pricing
-      x-public: true
-      x-tool: true
-  /v1/enablement/optin:
-    post:
-      description: |-
-        Opts the caller's OWN org into a beta item. The org is the
-        caller's validated one, so this can never target another org, and the registry
-        refuses anything not in beta — so it can neither re-open an item an operator
-        turned off nor touch one that is already generally available. Requires a
-        signed-in caller with an org.
-      operationId: post_enablement_optin
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: labs
-              kind: feature
-            schema:
-              $ref: '#/components/schemas/enablementOptRef'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/userEnablementItem'
-          description: ok
-      summary: Opts the caller's OWN org into a beta item.
-      tags:
-      - pricing
-      x-app: pricing
-      x-public: true
-      x-tool: true
-  /v1/enablement/optout:
-    post:
-      description: |-
-        Removes the caller's OWN org from a beta item's grant list, the
-        reverse of OptIntoBeta and idempotent. The org is the caller's validated one,
-        so this can never revoke another org's grant. Requires a signed-in caller with
-        an org.
-      operationId: post_enablement_optout
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: labs
-              kind: feature
-            schema:
-              $ref: '#/components/schemas/enablementOptRef'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/userEnablementItem'
-          description: ok
-      summary: Removes the caller's OWN org from a beta item's grant list, the reverse
-        of OptIntoBeta and idempotent.
-      tags:
-      - pricing
-      x-app: pricing
-      x-public: true
-      x-tool: true
   /v1/engine/model:
     get:
       description: |-
@@ -103542,6 +103456,92 @@ paths:
           description: ok
       summary: 'Returns the Hanzo Datastore rate card: the tier list, the per-GB storage
         and egress usage rates, the annual discount and the trial.'
+      tags:
+      - pricing
+      x-app: pricing
+      x-public: true
+      x-tool: true
+  /v1/pricing/enablement:
+    get:
+      description: |-
+        Returns what the caller's org can actually use: every managed
+        item with its global state, whether it is effective here, whether this org is
+        already opted into its beta, and whether it may still opt in. Read-only and
+        safe for any caller — one without a validated principal simply sees the
+        generally-available items and no opt-in affordance, never another org's state.
+      operationId: get_pricing_enablement
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/enablementBoard'
+          description: ok
+      summary: 'Returns what the caller''s org can actually use: every managed item
+        with its global state, whether it is effective here, whether this org is already
+        opted into its beta, and whether it may still opt in.'
+      tags:
+      - pricing
+      x-app: pricing
+      x-public: true
+      x-tool: true
+  /v1/pricing/enablement/optin:
+    post:
+      description: |-
+        Opts the caller's OWN org into a beta item. The org is the
+        caller's validated one, so this can never target another org, and the registry
+        refuses anything not in beta — so it can neither re-open an item an operator
+        turned off nor touch one that is already generally available. Requires a
+        signed-in caller with an org.
+      operationId: post_pricing_enablement_optin
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: labs
+              kind: feature
+            schema:
+              $ref: '#/components/schemas/enablementOptRef'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/userEnablementItem'
+          description: ok
+      summary: Opts the caller's OWN org into a beta item.
+      tags:
+      - pricing
+      x-app: pricing
+      x-public: true
+      x-tool: true
+  /v1/pricing/enablement/optout:
+    post:
+      description: |-
+        Removes the caller's OWN org from a beta item's grant list, the
+        reverse of OptIntoBeta and idempotent. The org is the caller's validated one,
+        so this can never revoke another org's grant. Requires a signed-in caller with
+        an org.
+      operationId: post_pricing_enablement_optout
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: labs
+              kind: feature
+            schema:
+              $ref: '#/components/schemas/enablementOptRef'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/userEnablementItem'
+          description: ok
+      summary: Removes the caller's OWN org from a beta item's grant list, the reverse
+        of OptIntoBeta and idempotent.
       tags:
       - pricing
       x-app: pricing
