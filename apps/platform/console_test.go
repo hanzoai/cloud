@@ -86,7 +86,7 @@ func TestConsoleAggregatesShape(t *testing.T) {
 	seedConsoleFixture(t, s, "maxpower")
 
 	// ── environments ── two deploy targets aggregated from the two apps.
-	code, body := do(t, app, http.MethodGet, "/v1/environments", "maxpower", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/platform/environments", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("environments want 200, got %d (%s)", code, body)
 	}
@@ -115,7 +115,7 @@ func TestConsoleAggregatesShape(t *testing.T) {
 	}
 
 	// ── pipelines ── one per app; status/timing from the latest deployment.
-	code, body = do(t, app, http.MethodGet, "/v1/pipelines", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/platform/pipelines", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("pipelines want 200, got %d (%s)", code, body)
 	}
@@ -140,7 +140,7 @@ func TestConsoleAggregatesShape(t *testing.T) {
 	}
 
 	// ── builds ── the REAL build record, joined to app repo + deployment commit.
-	code, body = do(t, app, http.MethodGet, "/v1/builds", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/platform/builds", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("builds want 200, got %d (%s)", code, body)
 	}
@@ -157,7 +157,7 @@ func TestConsoleAggregatesShape(t *testing.T) {
 	}
 
 	// ── releases ── only the applied ("deploying") version, not the "building" one.
-	code, body = do(t, app, http.MethodGet, "/v1/releases", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/platform/releases", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("releases want 200, got %d (%s)", code, body)
 	}
@@ -181,7 +181,7 @@ func TestConsoleAggregatesOrgIsolation(t *testing.T) {
 	s, app := mountConsole(t)
 	seedConsoleFixture(t, s, "maxpower")
 
-	for _, path := range []string{"/v1/environments", "/v1/pipelines", "/v1/builds", "/v1/releases"} {
+	for _, path := range []string{"/v1/platform/environments", "/v1/platform/pipelines", "/v1/platform/builds", "/v1/platform/releases"} {
 		code, body := do(t, app, http.MethodGet, path, "acme", nil)
 		if code != http.StatusOK {
 			t.Fatalf("acme %s want 200, got %d (%s)", path, code, body)
@@ -207,7 +207,7 @@ func TestConsoleAggregatesOrgIsolation(t *testing.T) {
 // Phase-1 path) is refused 403 on every aggregate.
 func TestConsoleAggregatesForgeableOrgRefused(t *testing.T) {
 	_, app := mountConsole(t)
-	for _, path := range []string{"/v1/environments", "/v1/pipelines", "/v1/builds", "/v1/releases"} {
+	for _, path := range []string{"/v1/platform/environments", "/v1/platform/pipelines", "/v1/platform/builds", "/v1/platform/releases"} {
 		if code, _ := doAs(t, app, http.MethodGet, path, "victim", "", nil); code != http.StatusForbidden {
 			t.Fatalf("forged org (no principal) %s want 403, got %d", path, code)
 		}

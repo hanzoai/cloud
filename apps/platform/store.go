@@ -51,8 +51,8 @@ type Application struct {
 	Dockerfile    string
 	Port          int
 	Replicas      int
-	MinScale      int // container-serverless autoscaling floor (0 ⇒ no HPA, fixed Replicas). Set by /v1/run.
-	MaxScale      int // container-serverless autoscaling ceiling (0 ⇒ no HPA). Set by /v1/run.
+	MinScale      int // container-serverless autoscaling floor (0 ⇒ no HPA, fixed Replicas). Set by /v1/platform/run.
+	MaxScale      int // container-serverless autoscaling ceiling (0 ⇒ no HPA). Set by /v1/platform/run.
 	StorageGB     int // persistent volume size in GiB (0 ⇒ stateless, no volume at all)
 	EnvJSON       string
 	DomainsJSON   string
@@ -224,7 +224,7 @@ CREATE INDEX IF NOT EXISTS ix_pf_domains_app ON platform_domains(org, app_id);
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	// Forward-only additive columns for the /v1/run autoscaling bounds. Idempotent:
+	// Forward-only additive columns for the /v1/platform/run autoscaling bounds. Idempotent:
 	// a fresh DB already has them (CREATE TABLE above) so ADD COLUMN reports a
 	// duplicate, which is the success case here — never a schema-fork.
 	for _, alter := range []string{
@@ -757,14 +757,14 @@ func (s *Store) GetBuild(ctx context.Context, org, id string) (Build, error) {
 // ListUnfinishedBuilds returns every build still in a non-terminal state that
 // carries a Job name, oldest first, across ALL orgs.
 //
-// It exists because a build made through POST /v1/runner has NO deployment. The
+// It exists because a build made through POST /v1/platform/runner has NO deployment. The
 // reconciler drove itself off ListBuildingDeployments alone, and reconcileBuild
 // returns early for anything whose Source is not "git" — so a direct build's row
 // was written "queued" and NOTHING ever advanced it. Its status stayed "queued"
 // for the life of the row, whether the Job had succeeded, failed, or never been
 // scheduled at all.
 //
-// That is not a cosmetic gap. It made GET /v1/builds unable to answer the only
+// That is not a cosmetic gap. It made GET /v1/platform/builds unable to answer the only
 // question it is asked: a build that pushed an image and a build that could not
 // be scheduled read IDENTICALLY. Six builds sat unschedulable for five days and
 // looked exactly like six that were merely in flight, which is precisely why

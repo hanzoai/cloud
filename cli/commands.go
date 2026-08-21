@@ -18,9 +18,9 @@ func (e *Env) platform(gf *globalFlags) *Platform {
 	return newPlatform(e.PlatformURL, e.platformToken(gf.platformToken))
 }
 
-// runner builds the client for POST /v1/runner. That route is served by the
-// cloud binary, not by the platform app, so it is reached at CloudURL — the
-// platform host answers 500 for it. One route, one implementation, one door.
+// runner builds the client for POST /v1/platform/runner. That route is served
+// by the cloud binary, not by the platform app, so it is reached at CloudURL —
+// the platform host answers 500 for it. One route, one implementation, one door.
 func (e *Env) runner(gf *globalFlags) *Platform {
 	return newPlatform(e.CloudURL, e.platformToken(gf.platformToken))
 }

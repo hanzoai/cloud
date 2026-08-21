@@ -506,10 +506,10 @@ var allowedRequestUses = map[string]string{
 		"refs on the org, so it needs the injective namespace.Sanitize form and the \"admin\" bucket a " +
 		"validated SuperAdmin with no org falls into — neither of which principal.OrgFrom can express, since " +
 		"it returns the owner claim verbatim and refuses an empty org outright. It also hands the request " +
-		"back because this plane SPENDS the caller's identity rather than only reading it: /v1/run gates and " +
-		"meters the caller's own ledger (principal.Ledger, the request id and the client IP), and every " +
+		"back because this plane SPENDS the caller's identity rather than only reading it: /v1/platform/run gates " +
+		"and meters the caller's own ledger (principal.Ledger, the request id and the client IP), and every " +
 		"deploy, preview, promote and rollback writes the actor and request id to the audit log. request is " +
-		"for the two ops that authorize on something OTHER than a tenant — /v1/runner compares a shared " +
+		"for the two ops that authorize on something OTHER than a tenant — /v1/platform/runner compares a shared " +
 		"build credential in constant time off the Authorization header, and the release reads gate on " +
 		"cloud.Super — so asking for an org would refuse the machine caller the endpoint exists for. admit is " +
 		"the fleet board's role gate, cloud.Scope.Admits over cloud.AuthorityOf, which reads X-User-IsAdmin " +
