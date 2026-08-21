@@ -42,7 +42,7 @@ import (
 // re-marshalling the same decoded value is byte-identical — which
 // sections_wire_test.go proves route by route against the live router.
 var untypedByDesign = map[string]string{
-	"PATCH /v1/admin/catalog/models/{wildcard1}": "the model id may contain '/' " +
+	"PATCH /v1/admin/pricing/catalog/models/{wildcard1}": "the model id may contain '/' " +
 		"(anthropic/claude-opus-4.6), so it routes through a greedy wildcard, and TWO facts follow. " +
 		"First, typing it does not merely publish a bad parameter — it REFUSES THE WHOLE DOCUMENT: " +
 		"zip keys a typed op by the fiber pattern (\".../models/*\") while this document keys the " +
@@ -188,7 +188,7 @@ type (
 // pricing operation with it.
 func TestTypingTheWildcardRefusesTheWholeDocument(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	zip.Patch(app, "/v1/admin/catalog/models/*", func(context.Context, *probeIn) (*probeOut, error) {
+	zip.Patch(app, "/v1/admin/pricing/catalog/models/*", func(context.Context, *probeIn) (*probeOut, error) {
 		return &probeOut{OK: true}, nil
 	})
 	_, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
@@ -211,11 +211,11 @@ func TestTypingTheWildcardRefusesTheWholeDocument(t *testing.T) {
 // fails here rather than shipping a schema no client can satisfy.
 //
 // The verbatim echo it protects is the point: the overlay this route returns, and
-// the one GET /v1/admin/catalog returns under "_overlay", must carry the admin's
+// the one GET /v1/admin/pricing/catalog returns under "_overlay", must carry the admin's
 // own key order. That is why the field stays json.RawMessage and not map[string]any.
 func TestMergePatchPublishesAnyJSON(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	zip.Patch(app, "/v1/admin/catalog/providers/:name", func(context.Context, *probePatch) (*probeOut, error) {
+	zip.Patch(app, "/v1/admin/pricing/catalog/providers/:name", func(context.Context, *probePatch) (*probeOut, error) {
 		return &probeOut{OK: true}, nil
 	})
 	doc, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})

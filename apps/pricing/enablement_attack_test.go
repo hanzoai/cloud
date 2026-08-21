@@ -31,7 +31,7 @@ func TestAttack_OptInForgedOrgNoPrincipal(t *testing.T) {
 	admin := map[string]string{"X-User-IsAdmin": "true"}
 
 	// Admin designates a real beta item.
-	if resp, b := do("PUT", "/v1/admin/enablement", `{"kind":"feature","id":"labs","state":"beta"}`, admin); resp.StatusCode != 200 {
+	if resp, b := do("PUT", "/v1/admin/pricing/enablement", `{"kind":"feature","id":"labs","state":"beta"}`, admin); resp.StatusCode != 200 {
 		t.Fatalf("admin set beta: %d (%s)", resp.StatusCode, b)
 	}
 
@@ -40,7 +40,7 @@ func TestAttack_OptInForgedOrgNoPrincipal(t *testing.T) {
 	// that simply sends `X-Org-Id: victim` off-gateway.
 	forge := map[string]string{"X-Org-Id": "victim"} // no X-User-Id ⇒ not a validated principal
 
-	resp, body := do("POST", "/v1/enablement/optin", `{"kind":"feature","id":"labs"}`, forge)
+	resp, body := do("POST", "/v1/pricing/enablement/optin", `{"kind":"feature","id":"labs"}`, forge)
 
 	// SECURE expectation: an unvalidated principal must not be able to write
 	// enablement state for ANY org. The data plane answers 401/403 here.
@@ -49,7 +49,7 @@ func TestAttack_OptInForgedOrgNoPrincipal(t *testing.T) {
 	}
 
 	// Ground truth via the admin registry: did "victim" actually get granted?
-	_, lb := do("GET", "/v1/admin/enablement", "", admin)
+	_, lb := do("GET", "/v1/admin/pricing/enablement", "", admin)
 	if strings.Contains(string(lb), `"victim"`) {
 		t.Fatalf("VULN CONFIRMED: an unauthenticated off-gateway caller granted org \"victim\" a beta it does not own — cross-tenant enablement write. registry=%s", lb)
 	}
@@ -64,21 +64,21 @@ func TestAttack_OptOutForgedOrgRevokesGrant(t *testing.T) {
 	admin := map[string]string{"X-User-IsAdmin": "true"}
 
 	// Admin puts a beta into place AND grants acme explicitly.
-	do("PUT", "/v1/admin/enablement", `{"kind":"feature","id":"labs","state":"beta","betaOrgs":["acme"]}`, admin)
+	do("PUT", "/v1/admin/pricing/enablement", `{"kind":"feature","id":"labs","state":"beta","betaOrgs":["acme"]}`, admin)
 
 	// Confirm acme is granted.
-	_, before := do("GET", "/v1/admin/enablement", "", admin)
+	_, before := do("GET", "/v1/admin/pricing/enablement", "", admin)
 	if !strings.Contains(string(before), `"acme"`) {
 		t.Fatalf("precondition: acme should be granted, registry=%s", before)
 	}
 
 	// The forge: no validated principal, X-Org-Id: acme.
 	forge := map[string]string{"X-Org-Id": "acme"} // no X-User-Id
-	do("POST", "/v1/enablement/optout", `{"kind":"feature","id":"labs"}`, forge)
+	do("POST", "/v1/pricing/enablement/optout", `{"kind":"feature","id":"labs"}`, forge)
 
 	// If acme is gone from the grant list, an unauthenticated caller revoked a
 	// legitimate tenant's beta access.
-	_, after := do("GET", "/v1/admin/enablement", "", admin)
+	_, after := do("GET", "/v1/admin/pricing/enablement", "", admin)
 	if !strings.Contains(string(after), `"acme"`) {
 		t.Fatalf("VULN CONFIRMED: an unauthenticated off-gateway caller revoked acme's beta grant (cross-tenant tamper). registry=%s", after)
 	}

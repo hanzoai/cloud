@@ -3795,11 +3795,6 @@
  ],
  "pricing": [
   {
-   "id": "get_enablement",
-   "doc": "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
-   "read": true
-  },
-  {
    "id": "get_pricing",
    "doc": "Returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing. Every model and provider it names is filtered to what\nthe caller's org may see — the same gate the leaf routes apply, so this can\nnever be an un-gated second source for what they hide.",
    "read": true
@@ -3847,6 +3842,11 @@
   {
    "id": "get_pricing_datastore",
    "doc": "Returns the Hanzo Datastore rate card: the tier list, the\nper-GB storage and egress usage rates, the annual discount and the trial. It is\nthe section as authored, un-gated — no provider identity appears in it.\n\nThe route was missing while the data existed, so this 404d and every visitor to\nhanzo.ai's Infrastructure tab was told pricing was \"temporarily unavailable\".",
+   "read": true
+  },
+  {
+   "id": "get_pricing_enablement",
+   "doc": "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
    "read": true
   },
   {
@@ -3920,11 +3920,11 @@
    "read": true
   },
   {
-   "id": "post_enablement_optin",
+   "id": "post_pricing_enablement_optin",
    "doc": "Opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org."
   },
   {
-   "id": "post_enablement_optout",
+   "id": "post_pricing_enablement_optout",
    "doc": "Removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent. The org is the caller's validated one,\nso this can never revoke another org's grant. Requires a signed-in caller with\nan org."
   },
   {
