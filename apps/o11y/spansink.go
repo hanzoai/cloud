@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 
 // spansink.go is the LLM-observability projection of the canonical event plane: it
-// consumes the analytics span fan-out (analytics.AddSpanSink) and lands each LLM-shaped
+// consumes the analytics span fan-out (event.AddSpanSink) and lands each LLM-shaped
 // span-signal fact on event.span, so a /v1/event span surfaces in the LLM views —
 // GET /v1/o11y/llm/{observations,traces,sessions,users} and the eval board's per-model
 // rollup — beside the gen_ai spans the ai emit path sends over the ZAP wire. It is the
@@ -62,7 +62,7 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
-	"github.com/hanzoai/cloud/apps/analytics"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/o11y/pkg/types/llmobstypes"
 )
 
@@ -116,7 +116,7 @@ func installSpanSink(log luxlog.Logger) {
 		log.Info("llm span lens inactive (no plane sink; spans stay on the event plane)")
 		return
 	}
-	removeSpanSink = analytics.AddSpanSink(func(org string, spans []analytics.SpanEvent) { consumeSpans(log, org, spans) })
+	removeSpanSink = event.AddSpanSink(func(org string, spans []event.SpanEvent) { consumeSpans(log, org, spans) })
 	log.Info("llm span lens installed", "sink", planeSpanTable)
 }
 
@@ -134,7 +134,7 @@ func clearSpanSink() {
 // consumeSpans is the installed span-sink handler. It runs on the goroutine analytics
 // detached, so it may do bounded synchronous work here. Every path is fail-soft: it
 // NEVER returns to a caller and NEVER propagates an error to the ingest.
-func consumeSpans(log luxlog.Logger, org string, spans []analytics.SpanEvent) {
+func consumeSpans(log luxlog.Logger, org string, spans []event.SpanEvent) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Warn("llm span-sink panic", "org", org, "err", r)
@@ -173,10 +173,10 @@ func consumeSpans(log luxlog.Logger, org string, spans []analytics.SpanEvent) {
 	}
 }
 
-// spanRow renders one analytics.SpanEvent as an event.span row in planeSpanColumns
+// spanRow renders one event.SpanEvent as an event.span row in planeSpanColumns
 // order, or (nil,false) when the span is not an LLM call. Pure — no I/O — so the
 // mapping is unit-tested, exactly as buildSentryEvent is.
-func spanRow(org string, s analytics.SpanEvent) ([]any, bool) {
+func spanRow(org string, s event.SpanEvent) ([]any, bool) {
 	attrs, ok := genAIAttributes(org, s)
 	if !ok {
 		return nil, false
@@ -223,7 +223,7 @@ func spanRow(org string, s analytics.SpanEvent) ([]any, bool) {
 // what makes the marker test below agree with the reader: a Map(String,String) returns
 // the empty string for an absent key, so a key stored empty is a key that satisfies
 // `EXISTS` while naming no provider — a row every view returns and none can explain.
-func genAIAttributes(org string, s analytics.SpanEvent) (map[string]string, bool) {
+func genAIAttributes(org string, s event.SpanEvent) (map[string]string, bool) {
 	attrs := make(map[string]string, len(s.Properties)+6)
 	for k, v := range s.Properties {
 		if str := attrString(v); str != "" {
