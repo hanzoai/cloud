@@ -20,7 +20,7 @@
 //   - the per-service MODE decide WaitlistModeForHost — a service's mode IS the switch
 //     waitlist.<svc>, evaluated through the flag engine (flags.Bool),
 //   - the admin control funcs (List/Set/Upsert) the /v1/admin/services board calls,
-//   - the guard's public mode read /v1/flags/waitlist, Mount,
+//   - the guard's public mode read /v1/admission/waitlist, Mount,
 //   - the native enforcement middleware (Enforce, this file),
 //   - the per-user approval predicate (Approvals, reused from IAM — approval.go).
 //
@@ -118,9 +118,9 @@ type EnforceConfig struct {
 // health, the auth/OIDC handshake, and the waitlist join API itself (so a gated
 // user can still submit the waitlist form).
 var defaultExemptPrefixes = []string{
-	"/v1/flags/waitlist", // the guard's public mode read (flags engine)
-	"/v1/iam/",           // auth / OIDC / approval-status / get-account handshake
-	"/v1/waitlist",       // the waitlist join API (a gated user must reach it)
+	"/v1/admission/waitlist", // the guard's public mode read (flags engine)
+	"/v1/iam/",               // auth / OIDC / approval-status / get-account handshake
+	"/v1/waitlist",           // the waitlist join API (a gated user must reach it)
 	"/health",
 	"/healthz",
 	"/__guard/", // the @file guard's own callback surface (defense in depth)

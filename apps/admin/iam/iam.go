@@ -78,33 +78,34 @@ type User struct {
 	AccessKey      string `json:"accessKey"`
 }
 
-// List is a decoded paginated read: the raw rows and the backend total.
+// List is a decoded read of one collection: the raw rows and the backend total.
 type List struct {
 	Rows  json.RawMessage
 	Total int
 }
 
-// List calls an IAM get-* endpoint and returns the raw data array + data2 total —
-// the verbatim-forward primitive (roles, applications, audit records reach the
-// operator field-for-field). A non-ok envelope is an error (surfaced honestly to
-// the operator).
-func (c *Client) List(ctx context.Context, cr Creds, path string, q url.Values) (List, error) {
-	env, err := c.get(ctx, cr, path, q)
+// List reads one IAM collection and returns its rows + total — the
+// verbatim-forward primitive (roles, applications, audit records reach the
+// operator field-for-field). `rows` is the key IAM names the array by, which is
+// its entity's own plural: there is no generic `data` any more, so the caller
+// states which collection it asked for and a body that does not carry it is an
+// error rather than an empty page.
+func (c *Client) List(ctx context.Context, cr Creds, path, rows string, q url.Values) (List, error) {
+	body, err := c.get(ctx, cr, path, q)
 	if err != nil {
 		return List{}, err
 	}
-	total := envTotal(env.Total, env.Data)
-	return List{Rows: env.Data, Total: total}, nil
+	return decodeList(body, rows)
 }
 
 // Orgs lists organizations (GET /v1/iam/organizations).
 func (c *Client) Orgs(ctx context.Context, cr Creds, q url.Values) (List, error) {
-	return c.List(ctx, cr, "/v1/iam/get-organizations", q)
+	return c.List(ctx, cr, "/v1/iam/organizations", "organizations", q)
 }
 
 // Users lists users (GET /v1/iam/users).
 func (c *Client) Users(ctx context.Context, cr Creds, q url.Values) (List, error) {
-	return c.List(ctx, cr, "/v1/iam/get-users", q)
+	return c.List(ctx, cr, "/v1/iam/users", "users", q)
 }
 
 // Org fetches ONE organization row (GET /v1/iam/organizations/get?owner=&name=)
@@ -113,37 +114,37 @@ func (c *Client) Users(ctx context.Context, cr Creds, q url.Values) (List, error
 // non-super caller can only ever read their OWN org this way (the second line of the
 // tenant-scope defense). Best-effort by design: the scoped-orgs fan-in tolerates an
 // error and falls back to a name-only row.
-func (c *Client) Org(ctx context.Context, cr Creds, id string) (Org, error) {
-	q := url.Values{"id": {id}}
-	env, err := c.get(ctx, cr, "/v1/iam/get-organization", q)
+func (c *Client) Org(ctx context.Context, cr Creds, owner, name string) (Org, error) {
+	q := url.Values{"owner": {owner}, "name": {name}}
+	body, err := c.get(ctx, cr, "/v1/iam/organizations/get", q)
 	if err != nil {
 		return Org{}, err
 	}
 	var org Org
-	if err := json.Unmarshal(env.Data, &org); err != nil {
-		return Org{}, fmt.Errorf("iam get-organization decode: %w", err)
+	if err := json.Unmarshal(body, &org); err != nil {
+		return Org{}, fmt.Errorf("iam organizations/get decode: %w", err)
 	}
 	return org, nil
 }
 
-// User fetches ONE user as its FULL wire object (GET /v1/iam/users/get?owner=&name= ; was get-user?id=
-// owner/name), preserving every field. The suspend/reactivate action reads the
-// whole object, flips isForbidden, and writes it back — update-user REPLACES the
-// row, so operating on the full object (not a typed subset) is what keeps every
-// other field intact. Replays the caller's own credential, so IAM authorizes the
-// read as the same validated SuperAdmin.
-func (c *Client) User(ctx context.Context, cr Creds, id string) (map[string]any, error) {
-	q := url.Values{"id": {id}}
-	env, err := c.get(ctx, cr, "/v1/iam/get-user", q)
+// User fetches ONE user as its FULL wire object (GET /v1/iam/users/get?owner=&name=),
+// preserving every field. The suspend/reactivate action reads the whole object,
+// flips isForbidden, and writes it back — the update REPLACES the row, so
+// operating on the full object (not a typed subset) is what keeps every other
+// field intact. Replays the caller's own credential, so IAM authorizes the read
+// as the same validated SuperAdmin.
+func (c *Client) User(ctx context.Context, cr Creds, owner, name string) (map[string]any, error) {
+	q := url.Values{"owner": {owner}, "name": {name}}
+	body, err := c.get(ctx, cr, "/v1/iam/users/get", q)
 	if err != nil {
 		return nil, err
 	}
 	var user map[string]any
-	if err := json.Unmarshal(env.Data, &user); err != nil {
-		return nil, fmt.Errorf("iam get-user decode: %w", err)
+	if err := json.Unmarshal(body, &user); err != nil {
+		return nil, fmt.Errorf("iam users/get decode: %w", err)
 	}
 	if user == nil {
-		return nil, fmt.Errorf("iam get-user %q: empty", id)
+		return nil, fmt.Errorf("iam users/get %s/%s: empty", owner, name)
 	}
 	return user, nil
 }
