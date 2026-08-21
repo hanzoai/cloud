@@ -54,6 +54,9 @@ func init() {
 			"graphFact.value":          "Value is what the relation points at. When Names is true it is another\nentity's key and the assertion is an EDGE; otherwise it is a scalar and\nthe assertion is a property. 2048 bytes at most, or 512 when it names an\nentity.",
 		},
 	})
+	zip.Describe("POST /v1/graph/graphql", zip.Doc{
+		Description: "Is the door. It answers 200 with a GraphQL error list for a query\nthat cannot run, which is the wire every GraphQL client parses — a transport\nerror would be read as the server being down rather than the query being\nwrong.",
+	})
 	zip.Describe("POST /v1/graph/neighbors", zip.Doc{
 		Fields: map[string]string{
 			"graphNeighborsIn.as_of":      "AsOf walks the graph as it stood at an instant, RFC 3339. Absent walks it\nas it stands now.",

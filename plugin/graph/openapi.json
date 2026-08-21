@@ -122,6 +122,38 @@
         "x-tool": true
       }
     },
+    "/v1/graph/graphql": {
+      "post": {
+        "operationId": "post_graph_graphql",
+        "summary": "Ask the graph in one request, traversing.",
+        "description": "Runs a GraphQL query against this organization's assertions.\n\nIt is the one door here a caller can TRAVERSE: the REST ops each answer a single question, so composing them — the entities this one points at, and what each of those resolves to — costs a request per hop with the intermediate keys held by the caller. Here that is one query and the nesting is the answer's shape.\n\nIt adds no way to ask anything new. Every field runs the SAME operation the matching REST route runs, so the tenancy, the as-of bound, the traversal bounds and the conflict rule are the ones already in force; the schema is served by introspection.\n\nA query that cannot run answers 200 with an `errors` list, which is the wire every GraphQL client parses.",
+        "tags": [
+          "graph"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/graphQLIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphQLOut"
+                }
+              }
+            }
+          }
+        },
+        "x-public": true
+      }
+    },
     "/v1/graph/neighbors": {
       "post": {
         "operationId": "graphNeighbors",
@@ -342,6 +374,44 @@
           }
         },
         "type": "object"
+      },
+      "graphQLError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "graphQLIn": {
+        "type": "object",
+        "properties": {
+          "operationName": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "variables": {}
+        }
+      },
+      "graphQLOut": {
+        "type": "object",
+        "properties": {
+          "data": {},
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/graphQLError"
+            }
+          }
+        }
       },
       "graphReadOut": {
         "properties": {
