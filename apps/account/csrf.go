@@ -10,7 +10,7 @@ package account
 // that passes VACUOUSLY when Origin/Referer/Sec-Fetch-Site are all absent (RED). So a
 // state-changing write gets a POSITIVE control: a token the caller can obtain ONLY by
 // reading a same-origin response (the Same-Origin Policy blocks a cross-site page from
-// reading GET /v1/csrf) and MUST echo in a CUSTOM header (a cross-site simple/
+// reading GET /v1/account/csrf) and MUST echo in a CUSTOM header (a cross-site simple/
 // form request cannot set X-CSRF-Token without a CORS preflight the server never
 // grants).
 //
@@ -55,7 +55,7 @@ const (
 	csrfTokenLen  = 8 + csrfMACLen // ts || mac
 )
 
-// csrfKeyOnce guards the process-wide CSRF MAC key. account@48 issues GET /v1/csrf and
+// csrfKeyOnce guards the process-wide CSRF MAC key. account@48 issues the token and
 // the money WRITES that verify the token are registered elsewhere — co-resident on
 // commerce (RequireCSRF below) — so the key must be ONE value for the process, not one
 // per Mount. Without that, the ephemeral (no CONSOLE_CSRF_KEY) case gives each
@@ -170,7 +170,7 @@ func requireCSRF(s *cloud.Service[state]) zip.Middleware {
 			}
 			tok := strings.TrimSpace(c.Header("X-CSRF-Token"))
 			if tok == "" {
-				return zip.ErrForbidden("missing CSRF token (GET /v1/csrf and echo it in X-CSRF-Token)")
+				return zip.ErrForbidden("missing CSRF token (GET /v1/account/csrf and echo it in X-CSRF-Token)")
 			}
 			if !verifyCSRF(s, tok, strings.TrimSpace(c.User()), strings.TrimSpace(c.Org())) {
 				return zip.ErrForbidden("invalid or expired CSRF token")
@@ -187,8 +187,8 @@ func requireCSRF(s *cloud.Service[state]) zip.Middleware {
 // co-resident (to break the commerce transport self-dispatch loop) must NOT silently
 // drop the gate, so the identical enforcement rides along as its own handler — and it
 // is now the ONLY thing enforcing it, the forwarder being gone. It binds to the SAME
-// process-wide key (sharedCSRFKey) the GET /v1/csrf issuer uses, so a token minted
-// at /v1/csrf verifies here byte-identically. Enforces ONLY on the ambient-cookie path (a
+// process-wide key (sharedCSRFKey) the issuer uses, so a token minted at
+// GET /v1/account/csrf verifies here byte-identically. Enforces ONLY on the ambient-cookie path (a
 // Bearer/gateway/API caller is not CSRF-able); on success it c.Next()s into the rest of
 // the chain. The minimal Service carries only the shared key — requireCSRF/verifyCSRF
 // read nothing else off it.

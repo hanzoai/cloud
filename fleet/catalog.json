@@ -1,39 +1,39 @@
 {
  "account": [
   {
-   "id": "delete_keys",
+   "id": "delete_account_keys",
    "doc": "Revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent."
   },
   {
-   "id": "get_appearance",
+   "id": "get_account_appearance",
    "doc": "Returns the signed-in caller's own appearance preference — text\nsize, density and accent — read from their IAM account so it is the same on\nevery device and every Hanzo surface. An unset preference is an empty object.\n\nA transient IAM read failure reports the empty preference rather than a 5xx, so\na surface applies its published default and never error-toasts on load — the\nsame fail-soft the key read uses.",
    "read": true
   },
   {
-   "id": "get_csrf",
+   "id": "get_account_csrf",
    "doc": "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on\nevery money write (mint/revoke a key, top up, onboard, and the billing/commerce\nwrite verbs). The token is bound to the caller's validated identity and expires,\nso one minted for one identity cannot authorize a write as another.\n\nIt is answered no-store, so it is never cached by a shared proxy. This is the\nsame-origin endpoint the embedded console reads — the Same-Origin Policy is what\nstops a cross-site page from reading the response and forging a write.",
    "read": true
   },
   {
-   "id": "get_embed",
+   "id": "get_account_embed",
    "doc": "Reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself. ENTITLEMENT is\nserver-authoritative: each app is a single shared per-BRAND instance, so only a\nmember of the owning brand org — or a SuperAdmin — is given the embed URL; every\nother caller gets phase \"not-entitled\" and no URL. REACHABILITY is a probe of\nthat origin, which a cross-origin page cannot read for itself.\n\nThe probed host is always \u003capp\u003e.\u003cthis deployment's own brand domain\u003e: no part of\nit comes from the request, so this can never be steered into probing an\narbitrary origin.",
    "read": true
   },
   {
-   "id": "get_keys",
+   "id": "get_account_keys",
    "doc": "Returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
    "read": true
   },
   {
-   "id": "post_appearance",
+   "id": "post_account_appearance",
    "doc": "Stores the caller's appearance preference on their IAM account,\npreserving every other field of the row. The accent is validated as a real\ncolour token before it is stored; an unset or invalid axis is dropped rather\nthan stored."
   },
   {
-   "id": "post_keys",
+   "id": "post_account_keys",
    "doc": "Creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie."
   },
   {
-   "id": "post_orgs",
+   "id": "post_account_orgs",
    "doc": "Onboard creates the caller's organization. Two flows, keyed on whether the caller\nalready has a home org (mirrors app/onboard/route.ts):\n\n  - FIRST-RUN (no home org): create + MOVE the user in as admin, so their next\n    JWT carries the new owner and the cloud scopes everything to it. This is the\n    path a fresh OAuth sign-up takes, from the sign-up application's org.\n  - ADDITIONAL (owner set): create the org but do NOT move the user — a move\n    changes their IAM owner (stripping a SuperAdmin's status + orphaning their\n    current org). They reach the new org via the OrgSwitcher, which re-scopes\n    X-Org-Id without touching IAM membership. A personal-org request from someone\n    who already has an org is meaningless → 409."
   }
  ],
@@ -751,16 +751,16 @@
  "entitlements": [
   {
    "id": "get_entitlements",
-   "doc": "Projection reports which console apps the CALLER's org may open, and the plan slug\nthat decides it. It is the READ side of the unified paywall: the org's plan tier\nresolved from commerce, which is a different authority from the enablement store\nbehind GET /v1/orgs/{org}/entitlements (that one is the org's own on/off intent).\n\nIt fails SAFE-TO-LOCKED, never 500: an unvalidated principal is a 403, but a\ncommerce outage reports every app locked at 200 rather than breaking the shell.\nThe ENFORCEMENT path still fails open, so functionality survives the same outage\neven while the UI conservatively shows locked.",
+   "doc": "Projection reports which console apps the CALLER's org may open, and the plan slug\nthat decides it. It is the READ side of the unified paywall: the org's plan tier\nresolved from commerce, which is a different authority from the enablement store\nbehind GET /v1/entitlements/orgs/{org} (that one is the org's own on/off intent).\n\nIt fails SAFE-TO-LOCKED, never 500: an unvalidated principal is a 403, but a\ncommerce outage reports every app locked at 200 rather than breaking the shell.\nThe ENFORCEMENT path still fails open, so functionality survives the same outage\neven while the UI conservatively shows locked.",
    "read": true
   },
   {
-   "id": "get_orgs_by_org_entitlements",
+   "id": "get_entitlements_orgs_by_org",
    "doc": "Get lists the products an org has ENABLED — its own intent, which the console's\npaid-product sidebar reads to decide what to show. It is distinct from what the\norg's plan ENTITLES it to (that is GET /v1/entitlements, resolved from commerce).\n\nA caller may only read its OWN org's row; a platform super admin may read any.",
    "read": true
   },
   {
-   "id": "post_orgs_by_org_entitlements",
+   "id": "post_entitlements_orgs_by_org",
    "doc": "Post turns products on or off for an org and returns the enabled set afterwards.\n\nA product may only be ENABLED if the org's plan already ENTITLES it, so enabling\nnever spends new money — a product the plan does not grant answers 402 and the\nconsole routes that to an upgrade prompt. DISABLING is never gated. A platform\nsuper admin bypasses the plan check (operator comp/grant) and may target any org;\neveryone else may only change their own. Commerce unreachable is a 503, never an\nimplicit yes."
   }
  ],
@@ -4513,6 +4513,10 @@
   {
    "id": "post_team_bots_sync",
    "doc": "SyncBots re-projects the caller org's agents as workspace members into EVERY\nworkspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a workspace's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched."
+  },
+  {
+   "id": "post_team_collaborator_rpc_by_documentid",
+   "doc": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists."
   }
  ],
  "tel": [

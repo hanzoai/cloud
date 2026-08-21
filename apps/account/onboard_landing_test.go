@@ -31,7 +31,7 @@ func TestOnboard_OAuthSignup_GetsItsOwnOrg(t *testing.T) {
 	}
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	code, body := call(t, app, http.MethodPost, "/v1/orgs", "dave", "hanzo", `{"personal":true}`)
+	code, body := call(t, app, http.MethodPost, "/v1/account/orgs", "dave", "hanzo", `{"personal":true}`)
 	if code != http.StatusOK {
 		t.Fatalf("OAuth signup asking for its own workspace: want 200, got %d (%s)", code, body)
 	}
@@ -60,7 +60,7 @@ func TestOnboard_OAuthSignup_NamedOrgAlsoMoves(t *testing.T) {
 	f.user["hanzo/dave"] = map[string]any{"owner": "hanzo", "name": "dave", "isAdmin": false}
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	code, body := call(t, app, http.MethodPost, "/v1/orgs", "dave", "hanzo", `{"name":"Acme Rockets"}`)
+	code, body := call(t, app, http.MethodPost, "/v1/account/orgs", "dave", "hanzo", `{"name":"Acme Rockets"}`)
 	if code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", code, body)
 	}
@@ -85,7 +85,7 @@ func TestOnboard_SuperAdminKeepsTheirOrg(t *testing.T) {
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
 	// A named additional org: created, but the SuperAdmin is NOT moved.
-	code, body := call(t, app, http.MethodPost, "/v1/orgs", "root", "admin", `{"name":"Side Project"}`)
+	code, body := call(t, app, http.MethodPost, "/v1/account/orgs", "root", "admin", `{"name":"Side Project"}`)
 	if code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", code, body)
 	}
@@ -100,7 +100,7 @@ func TestOnboard_SuperAdminKeepsTheirOrg(t *testing.T) {
 
 	// And the 409 stays correct where it was always correct: asking for a personal
 	// workspace when you already hold one is still a conflict.
-	code, _ = call(t, app, http.MethodPost, "/v1/orgs", "root", "admin", `{"personal":true}`)
+	code, _ = call(t, app, http.MethodPost, "/v1/account/orgs", "root", "admin", `{"personal":true}`)
 	if code != http.StatusConflict {
 		t.Fatalf("personal-while-orged: want 409, got %d", code)
 	}
@@ -115,7 +115,7 @@ func TestOnboard_MemberOfATenantIsNotFirstRun(t *testing.T) {
 	f.user["acme/bob"] = map[string]any{"owner": "acme", "name": "bob", "isAdmin": false}
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	code, body := call(t, app, http.MethodPost, "/v1/orgs", "bob", "acme", `{"name":"Side Project"}`)
+	code, body := call(t, app, http.MethodPost, "/v1/account/orgs", "bob", "acme", `{"name":"Side Project"}`)
 	if code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", code, body)
 	}

@@ -1,5 +1,5 @@
 // embed.go ports console's own embed-status route into the unified binary at
-// GET /v1/embed (task #41). The console route it replaced is gone, so this is
+// GET /v1/account/embed (task #41). The console route it replaced is gone, so this is
 // now the only implementation. It answers ONE question for the console's
 // data-product modules (Content Studio / ERP / Help Center): is this brand's shared
 // embedded app provisioned and reachable, so the module can decide embed-vs-provision

@@ -1875,12 +1875,12 @@ here goes red and a stale reason goes red too. What it taught, beyond the counts
 - **Two more instances of the apps/plan prefix defect, and one of them is partial —
   which is the harder shape to see.** `plugin/skills` declared no `Prefixes`,
   so the `/v1/<name>` default covered NOTHING it serves (its routes are the root
-  `/.well-known/agent-skills/…` convention). `plugin/entitlements` declared none
-  either, and its default covered ONE of its two top-level nouns: `/v1/entitlements`
-  was gated, `/v1/orgs/:org/entitlements` was not. Both now pass
-  `manifest.PrefixesFor(...)`, and `apps/entitlements/typed_wire_test.go` gates the
-  cover relation itself — including an assertion that the default is still NOT
-  enough, so the explicit list cannot be dropped by someone who does not know why.
+  `/.well-known/agent-skills/…` convention), so it passes `manifest.PrefixesFor(...)`.
+  `plugin/entitlements` declared none either, and its default covered ONE of its two
+  top-level nouns: `/v1/entitlements` was gated, `/v1/orgs/:org/entitlements` was not.
+  That half is closed at the source instead — the org sub-tree folded to
+  `/v1/entitlements/orgs/:org` (HIP-0139 §7), so one noun is the whole surface and
+  the default is right. A declaration is for an app the default gets WRONG.
 - **NONE of the six installed `cloud.Bridge`.** Serve installs it binary-wide so
   nothing was live-broken, but every one of these packages' own test harnesses runs
   without Serve — so a typed op added here would have 403'd in its own tests with no
@@ -2919,10 +2919,10 @@ registration order decide, and it found three:
   deprecated aliases and an onboard handler INSIDE iam's prefix. Measured live,
   neither ever answered in production: api.hanzo.ai routes `/v1/iam/*` to IAM, so
   both addresses return IAM's own Guard envelope from `server: zip` with no
-  `Deprecation` header and no `x-api-version`. The aliases are deleted (canonical
-  `/v1/keys` unchanged) and onboard moved to `/v1/orgs` — named for the resource,
-  the same rule that moved the key surface off `/v1/iam/keys` in the first place,
-  and it is now reachable for the first time.
+  `Deprecation` header and no `x-api-version`. The aliases are deleted and onboard
+  is `POST /v1/account/orgs` — named for the resource, under the capability that
+  serves it, the same rule that moved the key surface off `/v1/iam/keys` in the
+  first place, and it is now reachable for the first time.
 - `GET /healthz` — iam's child app declared it on its PUBLIC router while
   `cmd/cloud/main.go` registers it as the HOST's. zip's own `ops.go` states the
   rule: `/healthz`, `/readyz`, `/metrics` are a SECOND listener the deployment
@@ -3700,7 +3700,7 @@ never the audience — `TestApplicationsDoesNotWidenForATenant` is the half that
 it so. `projectCDApp` goes through `observeGitOpsApp`, so the list and the gitops
 view can never disagree about sync state, health, or applied revision.
 
-## API keys are ONE noun (`/v1/keys`), and the type is a FIELD
+## API keys are ONE noun (`/v1/account/keys`), and the type is a FIELD
 
 `POST` creates, `DELETE` revokes, `GET` lists. `apps/account/account.go`.
 `mint`, `issue` and `revoke` are HTTP methods, never path segments — the concept
@@ -3708,9 +3708,9 @@ previously had four names (`/v1/iam/mint-user-keys`, `/v1/iam/revoke-user-keys`,
 `/v1/iam/keys`, `/v1/ingest/keys`) and the only honest one 404'd.
 
 ```
-GET    /v1/keys                          -> {keys:[{type,prefix,key?,createdAt}]}   no secret
-POST   /v1/keys   {"type":"publishable"} -> {type,key}    the key, ONCE
-DELETE /v1/keys?type=publishable         -> {ok,type}
+GET    /v1/account/keys                          -> {keys:[{type,prefix,key?,createdAt}]}   no secret
+POST   /v1/account/keys   {"type":"publishable"} -> {type,key}    the key, ONCE
+DELETE /v1/account/keys?type=publishable         -> {ok,type}
 ```
 
 **Two types, and the type is the only thing that differs.** `secret` (`sk-`)

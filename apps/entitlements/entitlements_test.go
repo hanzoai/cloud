@@ -210,8 +210,8 @@ func TestStoreApplyTransaction(t *testing.T) {
 func TestForgedRequestRejected(t *testing.T) {
 	app, _ := mount(t, newFakeCommerce())
 	for _, tc := range []struct{ method, path string }{
-		{"GET", "/v1/orgs/victim/entitlements"},
-		{"POST", "/v1/orgs/victim/entitlements"},
+		{"GET", "/v1/entitlements/orgs/victim"},
+		{"POST", "/v1/entitlements/orgs/victim"},
 	} {
 		req := jsonReq(tc.method, tc.path, map[string]any{"add": []string{"engine"}})
 		req.Header.Set("X-Org-Id", "victim") // forged: no X-User-Id ⇒ not validated
@@ -225,7 +225,7 @@ func TestForgedRequestRejected(t *testing.T) {
 func TestCrossOrgWriteRejected(t *testing.T) {
 	app, _ := mount(t, newFakeCommerce())
 	// A validated member of "acme" tries to write "globex" — must 403.
-	req := orgMember("POST", "/v1/orgs/globex/entitlements", "acme", map[string]any{"add": []string{"engine"}})
+	req := orgMember("POST", "/v1/entitlements/orgs/globex", "acme", map[string]any{"add": []string{"engine"}})
 	code, body := send(t, app, req)
 	if code != http.StatusForbidden {
 		t.Fatalf("cross-org write: want 403, got %d (body=%s)", code, body)
@@ -235,14 +235,14 @@ func TestCrossOrgWriteRejected(t *testing.T) {
 func TestMalformedOrgAndProduct(t *testing.T) {
 	app, _ := mount(t, newFakeCommerce())
 	// Bad org label.
-	code, _ := send(t, app, orgMember("GET", "/v1/orgs/Bad_Org!/entitlements", "Bad_Org!", nil))
+	code, _ := send(t, app, orgMember("GET", "/v1/entitlements/orgs/Bad_Org!", "Bad_Org!", nil))
 	if code != http.StatusBadRequest {
 		t.Fatalf("bad org: want 400, got %d", code)
 	}
 	// Bad product id in body (org member, valid org).
 	fc := newFakeCommerce()
 	app2, _ := mount(t, fc)
-	code, _ = send(t, app2, orgMember("POST", "/v1/orgs/acme/entitlements", "acme", map[string]any{"add": []string{"NOT VALID"}}))
+	code, _ = send(t, app2, orgMember("POST", "/v1/entitlements/orgs/acme", "acme", map[string]any{"add": []string{"NOT VALID"}}))
 	if code != http.StatusBadRequest {
 		t.Fatalf("bad product: want 400, got %d", code)
 	}
@@ -258,7 +258,7 @@ func TestOrgMemberCanEnableEntitledProduct(t *testing.T) {
 	fc.grant("acme", "engine")
 	app, _ := mount(t, fc)
 
-	code, body := send(t, app, orgMember("POST", "/v1/orgs/acme/entitlements", "acme", map[string]any{"add": []string{"engine"}}))
+	code, body := send(t, app, orgMember("POST", "/v1/entitlements/orgs/acme", "acme", map[string]any{"add": []string{"engine"}}))
 	if code != http.StatusOK {
 		t.Fatalf("enable entitled: want 200, got %d (body=%s)", code, body)
 	}
@@ -266,7 +266,7 @@ func TestOrgMemberCanEnableEntitledProduct(t *testing.T) {
 		t.Fatalf("enabled = %v, want [engine]", got)
 	}
 	// GET reflects it.
-	code, body = send(t, app, orgMember("GET", "/v1/orgs/acme/entitlements", "acme", nil))
+	code, body = send(t, app, orgMember("GET", "/v1/entitlements/orgs/acme", "acme", nil))
 	if code != http.StatusOK || len(decodeEnabled(t, body)) != 1 {
 		t.Fatalf("get after enable: %d %s", code, body)
 	}
@@ -276,12 +276,12 @@ func TestOrgMemberCannotEnableUnentitledProduct(t *testing.T) {
 	fc := newFakeCommerce() // grants nothing
 	app, _ := mount(t, fc)
 
-	code, body := send(t, app, orgMember("POST", "/v1/orgs/acme/entitlements", "acme", map[string]any{"add": []string{"engine"}}))
+	code, body := send(t, app, orgMember("POST", "/v1/entitlements/orgs/acme", "acme", map[string]any{"add": []string{"engine"}}))
 	if code != http.StatusPaymentRequired {
 		t.Fatalf("enable unentitled: want 402, got %d (body=%s)", code, body)
 	}
 	// Nothing persisted.
-	_, body = send(t, app, orgMember("GET", "/v1/orgs/acme/entitlements", "acme", nil))
+	_, body = send(t, app, orgMember("GET", "/v1/entitlements/orgs/acme", "acme", nil))
 	if len(decodeEnabled(t, body)) != 0 {
 		t.Fatalf("unentitled product must not have been enabled: %s", body)
 	}
@@ -292,7 +292,7 @@ func TestSuperAdminBypassesEntitlementGate(t *testing.T) {
 	app, _ := mount(t, fc)
 
 	// Super admin comps "engine" to acme even though acme's plan doesn't grant it.
-	code, body := send(t, app, superAdmin("POST", "/v1/orgs/acme/entitlements", map[string]any{"add": []string{"engine"}}))
+	code, body := send(t, app, superAdmin("POST", "/v1/entitlements/orgs/acme", map[string]any{"add": []string{"engine"}}))
 	if code != http.StatusOK {
 		t.Fatalf("super-admin grant: want 200, got %d (body=%s)", code, body)
 	}
@@ -307,7 +307,7 @@ func TestSuperAdminBypassesEntitlementGate(t *testing.T) {
 func TestCommerceUnavailableFailsClosedForMemberAdd(t *testing.T) {
 	// commerce nil ⇒ a non-super-admin add cannot be verified ⇒ 503, never open.
 	app, _ := mount(t, nil)
-	code, _ := send(t, app, orgMember("POST", "/v1/orgs/acme/entitlements", "acme", map[string]any{"add": []string{"engine"}}))
+	code, _ := send(t, app, orgMember("POST", "/v1/entitlements/orgs/acme", "acme", map[string]any{"add": []string{"engine"}}))
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("member add with nil commerce: want 503, got %d", code)
 	}
@@ -323,7 +323,7 @@ func TestRemoveNeverGated(t *testing.T) {
 	compose(app)
 	routes(app, s)
 
-	code, body := send(t, app, orgMember("POST", "/v1/orgs/acme/entitlements", "acme", map[string]any{"remove": []string{"engine"}}))
+	code, body := send(t, app, orgMember("POST", "/v1/entitlements/orgs/acme", "acme", map[string]any{"remove": []string{"engine"}}))
 	if code != http.StatusOK {
 		t.Fatalf("remove with nil commerce: want 200, got %d (body=%s)", code, body)
 	}
@@ -334,7 +334,7 @@ func TestRemoveNeverGated(t *testing.T) {
 
 func TestEmptyMutationRejected(t *testing.T) {
 	app, _ := mount(t, newFakeCommerce())
-	code, _ := send(t, app, orgMember("POST", "/v1/orgs/acme/entitlements", "acme", map[string]any{}))
+	code, _ := send(t, app, orgMember("POST", "/v1/entitlements/orgs/acme", "acme", map[string]any{}))
 	if code != http.StatusBadRequest {
 		t.Fatalf("empty add+remove: want 400, got %d", code)
 	}
