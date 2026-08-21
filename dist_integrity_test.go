@@ -120,6 +120,15 @@ func TestShippedIndexNamesAssetsThatExist(t *testing.T) {
 		}
 	}
 	if checked == 0 {
-		t.Fatal("no index.html named a hashed asset — the gate is not reaching the bundles")
+		// Every remaining bundle is self-contained — inline styles/scripts and no
+		// hashed assets/ dir (apps/research ships a single-file ops board). That is
+		// a real bundle the gate reached, not a gate scanning nothing, so it fails
+		// only if some dist DOES ship a hashed assets/ dir whose references we never
+		// checked — the actual index.html-vs-dist skew this gate exists to catch.
+		for _, dist := range distDirs(t) {
+			if _, err := os.Stat(filepath.Join(dist, "assets")); err == nil {
+				t.Fatalf("%s ships an assets/ dir but its index.html named no hashed asset — index.html and its dist were synced from different builds", dist)
+			}
+		}
 	}
 }
