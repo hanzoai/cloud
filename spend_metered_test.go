@@ -20,7 +20,7 @@ import (
 // surface that charges a customer and could not be gated:
 //
 //	provisioning  routed at /v1/{datastore,docdb,kv,search,sql,vector} — the list
-//	              said "/v1/provisioning/", a path nothing answers.
+//	              said "/v1/provisioning/", a path nothing answered then.
 //	projects      answers /v1/sites; only /v1/projects was listed.
 //	venue         answers /v1/cloud; absent entirely.
 //	tools         answers /v1/skills, /v1/plugins, /v1/mcp/servers beside /v1/tools.
@@ -154,41 +154,57 @@ func pluginIsMetered(file *ast.File) bool {
 	return found
 }
 
-// A Free app's surface is not billable just because a metered app is routed a
-// SHORTER prefix over the same tree.
+// Billing follows the OWNER of a path, never the shortest tree that contains it.
 //
-// provisioning is metered and routed /v1/vector and /v1/search/query; product is
-// Free and routed the more specific /v1/vector/collections, /v1/vector/stats,
-// /v1/search/indexes and /v1/search/stats. A bare HasPrefix scan bills all four
-// on provisioning's standing, which gates a Free product behind a balance. The
-// router resolves by longest prefix; ownership has to as well.
-func TestFreeSurfaceUnderAMeteredPrefixIsNotBillable(t *testing.T) {
-	for _, p := range []string{
-		"/v1/vector/collections",
-		"/v1/vector/stats",
-		"/v1/search/indexes",
-		"/v1/search/stats",
-	} {
-		if Billable("POST", p) {
-			t.Errorf("Billable(POST %s) = true; product declares cloud.Free and owns this path", p)
+// Prefixes nest both ways and each way has a failure. A Free app under a metered
+// app's tree gets billed on its neighbour's standing — a 402 in front of
+// something nobody charges for. A metered app under a FREE app's tree stops
+// getting billed — a leak. Both are the same defect: a bare HasPrefix scan asks
+// which tree the path falls in, when the question is who answers it.
+//
+// The nesting pairs are DERIVED from the manifest rather than named, because the
+// fleet's are not stable. The pair this test was written for — product's four
+// Free reads under provisioning's metered /v1/vector and /v1/search/query — is
+// gone: product dissolved into the two capabilities that owned its roots, and it
+// was the fleet's last metered-over-free nesting. The derived half is therefore
+// allowed to find nothing; it fails the day the shape comes back, which is the
+// only thing a ratchet has to do. The other direction is live and is asserted
+// directly beneath it.
+func TestBillingFollowsTheOwnerNotTheTree(t *testing.T) {
+	for _, a := range manifest.Apps {
+		if meteredSet[a.Name] {
+			continue
+		}
+		for _, p := range manifest.PrefixesFor(a.Name) {
+			if manifest.OwnerOf(p) != a.Name {
+				continue // a deeper row answers here; not this app's address
+			}
+			if Billable("POST", p) {
+				t.Errorf("Billable(POST %s) = true, but %s owns it and declares cloud.Free — "+
+					"a metered neighbour's shorter prefix is being read as ownership", p, a.Name)
+			}
 		}
 	}
 
-	// The metered tree around them still bills — this must not become a hole.
-	for _, p := range []string{"/v1/vector", "/v1/vector/anything-else", "/v1/search/query"} {
+	// lsp is metered and routed /v1/code/lsp, inside free code's /v1/code. The
+	// leak direction: bill the owner, not the tree.
+	for _, p := range []string{"/v1/code/lsp", "/v1/code/lsp/definition"} {
+		if got := manifest.OwnerOf(p); got != "lsp" {
+			t.Fatalf("OwnerOf(%s) = %q, want lsp — this test's subject moved", p, got)
+		}
 		if !Billable("POST", p) {
-			t.Errorf("Billable(POST %s) = false; provisioning is metered and owns this path", p)
+			t.Errorf("Billable(POST %s) = false; lsp owns this path and declares cloud.Metered", p)
 		}
 	}
 }
 
 // OwnerOf resolves by LONGEST prefix, which is what makes the check above sound.
 func TestOwnerOfPrefersTheMoreSpecificApp(t *testing.T) {
-	if got := manifest.OwnerOf("/v1/vector/collections"); got != "product" {
-		t.Errorf("OwnerOf(/v1/vector/collections) = %q, want product", got)
+	if got := manifest.OwnerOf("/v1/usage/activity"); got != "leaderboard" {
+		t.Errorf("OwnerOf(/v1/usage/activity) = %q, want leaderboard", got)
 	}
-	if got := manifest.OwnerOf("/v1/vector"); got != "provisioning" {
-		t.Errorf("OwnerOf(/v1/vector) = %q, want provisioning", got)
+	if got := manifest.OwnerOf("/v1/usage"); got != "usage" {
+		t.Errorf("OwnerOf(/v1/usage) = %q, want usage", got)
 	}
 	// ai is declared the bare /v1 catch-all, so an otherwise-unmatched /v1 path
 	// legitimately resolves to it — that IS the routing, not a miss. Only a path

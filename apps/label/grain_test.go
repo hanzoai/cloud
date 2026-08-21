@@ -46,7 +46,7 @@ func TestABacktestCannotStandInTheFuture(t *testing.T) {
 	subjects := `{"kind":"transaction","subject":"tx-young","at":"` + at.Format(time.RFC3339) + `"}`
 
 	// Standing where the plane really is: not matured, and honestly so.
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme",
+	code, raw := req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme",
 		`{"horizon":30,"subjects":[`+subjects+`]}`)
 	if code != http.StatusOK {
 		t.Fatalf("resolve = %d %s", code, raw)
@@ -59,7 +59,7 @@ func TestABacktestCannotStandInTheFuture(t *testing.T) {
 
 	// Standing in the future is refused, and the refusal is the caller's to fix.
 	future := now.Add(90 * 24 * time.Hour).Format(time.RFC3339)
-	code, raw = req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme",
+	code, raw = req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme",
 		`{"horizon":30,"now":"`+future+`","subjects":[`+subjects+`]}`)
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("a backtest standing 90 days in the future = %d %s, want 422", code, raw)
@@ -67,7 +67,7 @@ func TestABacktestCannotStandInTheFuture(t *testing.T) {
 
 	// And the past still works, which is the whole point of the field.
 	past := now.Add(-time.Hour).Format(time.RFC3339)
-	code, raw = req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme",
+	code, raw = req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme",
 		`{"horizon":30,"now":"`+past+`","subjects":[`+subjects+`]}`)
 	if code != http.StatusOK {
 		t.Fatalf("a backtest standing in the past = %d %s, want 200", code, raw)
@@ -92,13 +92,13 @@ func TestTheRecordAndTheDerivedCopyShareOneGrain(t *testing.T) {
 	app, _ := wireWith(t, "", w.plane())
 	at := time.Now().UTC().Add(-200 * 24 * time.Hour).Truncate(time.Second)
 
-	one := reqProject(t, app, "acme", "u_a", "alpha", http.MethodPost, "/v1/risk/labels",
+	one := reqProject(t, app, "acme", "u_a", "alpha", http.MethodPost, "/v1/label",
 		batch(assertion("transaction", "tx-1", at, at.Add(time.Hour), Productive, Dispute, "dp-1", 1)))
 	if one != http.StatusOK {
 		t.Fatalf("write under project alpha = %d", one)
 	}
 	// A DIFFERENT project of the SAME org reads the same ground truth.
-	code, raw := reqProjectBody(t, app, "acme", "u_a", "beta", http.MethodGet, "/v1/risk/labels", "")
+	code, raw := reqProjectBody(t, app, "acme", "u_a", "beta", http.MethodGet, "/v1/label", "")
 	if code != http.StatusOK {
 		t.Fatalf("read under project beta = %d %s", code, raw)
 	}
@@ -109,7 +109,7 @@ func TestTheRecordAndTheDerivedCopyShareOneGrain(t *testing.T) {
 	}
 	// And a neighbouring ORG still sees nothing, which is the boundary that is
 	// actually load-bearing.
-	code, raw = reqProjectBody(t, app, "globex", "u_g", "alpha", http.MethodGet, "/v1/risk/labels", "")
+	code, raw = reqProjectBody(t, app, "globex", "u_g", "alpha", http.MethodGet, "/v1/label", "")
 	if code != http.StatusOK {
 		t.Fatalf("read as globex = %d %s", code, raw)
 	}

@@ -89,10 +89,11 @@ var Apps = []App{
 	// 404. The "/v1" remainder is ai's row now, at the tail. Each subtree here is
 	// DEEPER than the sibling that shares its stem, because a static prefix outranks
 	// a sibling wildcard regardless of mount order: catalog keeps its bare
-	// /v1/catalog and plan keeps the rest of /v1/plans/*. Nobody claims the bare
-	// /v1/billing or /v1/commerce REMAINDER — every leaf either row serves is named
-	// deeper here or on billing's row below, so the remainder is surface no app
-	// answers and claiming it would only re-create the catch-all that swallowed them.
+	// /v1/catalog while commerce keeps /v1/catalog/{entries,models,seed}. Nobody
+	// claims the bare /v1/billing or /v1/commerce REMAINDER — every leaf either row
+	// serves is named deeper here or on billing's row below, so the remainder is
+	// surface no app answers, and claiming it would only re-create the catch-all
+	// that swallowed them.
 	// This is NOT commerce.Prefixes imported (that would re-fatten the host): the
 	// app states its fail-closed set once (apps/commerce/mount.go); this row states
 	// what the ROUTER may hand it, and router_test.go's oracle keeps the two honest.
@@ -122,18 +123,22 @@ var Apps = []App{
 	// covered by credits: they are sibling prefixes, not parent and child.
 	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/commerce", "/v1/billing/accounts", "/v1/billing/alerts", "/v1/billing/credit-balance", "/v1/billing/credits", "/v1/billing/crypto", "/v1/billing/invoices", "/v1/billing/methods", "/v1/billing/mode", "/v1/billing/payouts", "/v1/billing/plans", "/v1/billing/portal/methods", "/v1/billing/recharge", "/v1/billing/settings", "/v1/billing/subscribe/card", "/v1/billing/subscriptions", "/v1/billing/tier", "/v1/billing/topup", "/v1/billing/transactions", "/v1/billing/usage/rollup", "/v1/billing/webhooks", "/v1/billing/wire", "/v1/cart", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/collection", "/v1/commerce/currencies", "/v1/commerce/disclosure", "/v1/commerce/discount", "/v1/commerce/movie", "/v1/commerce/note", "/v1/commerce/product", "/v1/commerce/return", "/v1/commerce/saleschannel", "/v1/commerce/stocklocation", "/v1/commerce/submission", "/v1/commerce/subscriber", "/v1/commerce/tokentransaction", "/v1/commerce/transfer", "/v1/commerce/variant", "/v1/commerce/wallet", "/v1/commerce/watchlist", "/v1/commerce/webhook", "/v1/payments", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}, Stage: Beta},
-	{Name: "plan", Prefixes: []string{"/v1/plans"}},
+	{Name: "plan", Prefixes: []string{"/v1/plan"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing"}},
-	// storage is the S3 DATA plane (buckets, objects, health); provisioning below
-	// PROVISIONS an s3 resource and answers /v1/s3 + /v1/s3/{name}. Both rows once
-	// read "/v1/s3" — one prefix, two owners — so whichever mounted first took the
-	// other's routes with it, and provisioning's /v1/s3/{name} matched
-	// /v1/s3/buckets and /v1/s3/health besides. Naming the deeper prefixes storage
-	// actually serves lets longest-prefix match separate them, which is exactly how
-	// the same pair already works for /v1/vector (provisioning) against
-	// /v1/vector/collections (product). No route moves.
+	// storage is the S3 DATA plane (buckets, objects, health). It shared this root
+	// with provisioning, which PROVISIONS an s3 resource: both rows once read
+	// "/v1/s3" — one prefix, two owners — so whichever mounted first took the
+	// other's routes with it. Allocation has since folded under its own name, so
+	// the two no longer meet and only storage answers here.
 	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
-	{Name: "provisioning", Prefixes: []string{"/v1/instances", "/v1/s3", "/v1/search/query", "/v1/vector"}},
+	// provisioning allocates a store of one of seven kinds and hands back its
+	// connection: one act, one store, one address (HIP-1164 §2). The row carried
+	// three further roots — /v1/s3, /v1/search/query and /v1/vector — that no route
+	// behind it ever registered. A routing claim with nothing behind it only takes
+	// the root from the app that does answer there, so they are gone. The admin
+	// prefix is the operator's whole-backend view of the vector store it allocates
+	// into (apps/provisioning/inventory.go).
+	{Name: "provisioning", Prefixes: []string{"/v1/admin/provisioning", "/v1/provisioning"}},
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	// The free lane's ceiling, beside the priced lane's. rollingcap bounds how fast
@@ -169,7 +174,7 @@ var Apps = []App{
 	// socket between the run and its own mailbox. A second address on one app is
 	// the ordinary shape here (tasks answers /tasks and /v1/tasks).
 	{Name: "agents", Prefixes: []string{"/v1/agent", "/v1/agents", "/v1/coding"}},
-	{Name: "link", Prefixes: []string{"/v1/links"}, Stage: Beta},
+	{Name: "link", Prefixes: []string{"/v1/link"}, Stage: Beta},
 	{Name: "wallets", Prefixes: []string{"/v1/wallets"}, Stage: Beta},
 	{Name: "x402", Prefixes: []string{"/v1/x402"}, Stage: Beta},
 	{Name: "deploy", Prefixes: []string{"/v1/deploy/account/can-i", "/v1/deploy/applications", "/v1/deploy/callback", "/v1/deploy/clusters", "/v1/deploy/gitops", "/v1/deploy/health", "/v1/deploy/login", "/v1/deploy/logout", "/v1/deploy/projects", "/v1/deploy/reconcile", "/v1/deploy/session/userinfo", "/v1/deploy/settings", "/v1/deploy/stream/applications", "/v1/deploy/version"}},
@@ -178,7 +183,7 @@ var Apps = []App{
 	{Name: "templates", Prefixes: []string{"/v1/templates"}},
 	{Name: "blueprint", Prefixes: []string{"/v1/blueprint"}},
 	{Name: "framework", Prefixes: []string{"/v1/framework"}, Stage: Beta},
-	{Name: "knowledge", Prefixes: []string{"/v1/kb/connectors", "/v1/kb/graph", "/v1/kb/import", "/v1/kb/search"}},
+	{Name: "knowledge", Prefixes: []string{"/v1/knowledge"}},
 	{Name: "help", Prefixes: []string{"/v1/help"}},
 	{Name: "content", Prefixes: []string{"/v1/content"}, Stage: Beta},
 	{Name: "catalogsync", Prefixes: []string{"/v1/catalogsync"}, Eager: true},
@@ -197,29 +202,15 @@ var Apps = []App{
 	// owner of the state, one row.
 	//
 	// label is the GROUND-TRUTH plane: what turned out to be fraud, who said so,
-	// and when they could first have said it. It addresses under /v1/risk because
-	// the ADDRESS IS THE PRODUCT — openapi.Product reads an operation's product
-	// tag off the first /v1 segment and nothing else — and ground truth is part of
-	// the risk product, not of the KServe model-SERVING product the row above
-	// carries. An earlier cut of this row said /v1/ml/labels, which is the same
-	// mistake the row above already records having made: it would have filed seven
-	// compliance operations into a live product with four paths and different
-	// customers on it.
+	// and when they could first have said it.
 	//
-	// IT DOES NOT HAVE TO PRECEDE risk, whose prefix is the bare /v1/risk. This row
-	// used to say it must, that the router takes the first prefix that matches, and
-	// that TestSpecificPrefixesPrecede pinned it. No such test exists — it never
-	// did — and the rule is not the router's: with the bare /v1/risk registered
-	// FIRST and all three specific prefixes after it, the live router still delivers
-	// /v1/risk/labels here, /v1/risk/reference to reference and /v1/risk/datasets to
-	// dataset. zip resolves NESTED static prefixes by SPECIFICITY; mount order
-	// decides only between EQUAL patterns, which is what the ai-before-zen note
-	// below is actually about.
-	//
-	// What DOES hold this is TestEveryServedPathReachesTheAppThatServesIt
-	// (manifest/router_test.go): it builds the real router from these rows and asks
-	// it, per published path, which app receives the request. That is an oracle over
-	// every row at once, so no row needs a rule of its own to remember.
+	// It answers at its OWN name. It used to answer under /v1/risk, on the reading
+	// that the address was the product — openapi.Product took an operation's product
+	// off the first /v1 segment — so ground truth had to sit inside the risk address
+	// to be counted part of the risk product. HIP-0139 §4.1 retires that reading:
+	// the tag is the app that SERVES the operation, so grouping no longer rides the
+	// address and the address is free to say who owns the store. Three capabilities
+	// left /v1/risk in that move; risk keeps its own scoring surface.
 	//
 	// It is its own subsystem rather than a leaf of the decision plane because its
 	// WRITERS are mostly not that plane — commerce adjudicates the dispute, the
@@ -227,47 +218,32 @@ var Apps = []App{
 	// is a compliance record with a retention clock of its own. A separate row also
 	// means a separate per-tenant file, so no second process ever opens the
 	// decision plane's single-writer store.
-	{Name: "label", Prefixes: []string{"/v1/risk/labels"}, Stage: Beta},
+	{Name: "label", Prefixes: []string{"/v1/label"}, Stage: Beta},
 	// reference is the LOOKUP DATA a decision consults and cannot derive:
 	// disposable-email domains, datacentre and Tor ranges, issuer prefixes, and how
-	// current the designation lists the screening engine holds are. Same address
-	// rule as label, for the same reason — openapi.Product reads the product off
-	// the first /v1 segment, and these six operations are the risk product's, not
-	// the KServe model-SERVING product's. An earlier cut said /v1/ml/reference,
-	// which would have filed them into a live product with four paths and
-	// different customers on it.
-	//
-	// Its position relative to risk is likewise free — see the label row above.
-	{Name: "reference", Prefixes: []string{"/v1/risk/reference"}, Stage: Beta},
+	// current the designation lists the screening engine holds are. It owns two
+	// stores — the tenant's overrides file and the Hanzo-maintained baseline tables
+	// nothing else writes — so it is its own capability, and it answers at its own
+	// name for the reason the label row above states.
+	{Name: "reference", Prefixes: []string{"/v1/reference"}, Stage: Beta},
 	// /v1/risk/health is this app's own REAL probe (OwnsHealth), which the generic
 	// always-ok liveness route would otherwise shadow.
 	{Name: "risk", Prefixes: []string{"/v1/risk"}, Stage: Beta},
 	// dataset is the RECORD of what a model was fitted on: a versioned, immutable
-	// snapshot of one tenant's own event surface. Same address rule as label and
-	// reference, for the third time — openapi.Product reads the product off the
-	// first /v1 segment, and these seven operations are the risk product's. This row
-	// said /v1/ml/datasets, which published them as part of the KServe model-SERVING
-	// plane: one prefix, two products, and `ml` counted 14 operations that were seven
-	// serving ops and seven dataset ops. The rows here feed the risk model, which
-	// learns in-process from the org's own events, and never KServe.
+	// snapshot of one tenant's own event surface. It owns hanzo.risk_dataset and
+	// hanzo.risk_row outright — those table names are store facts and stayed put
+	// when the address came home, for the reason the label row above states. The
+	// rows here feed the risk model, which learns in-process from the org's own
+	// events, and never KServe.
 	//
 	// It is its own subsystem rather than a leaf of the decision plane because it
 	// shares no state with a scorer — no in-memory model, no ring, no single-writer
 	// file — and its tenant boundary is a different value: risk holds an in-process
 	// per-org model, this holds a qualified `<brand>/<org>` KEY into a columnar
 	// store. One package holding two tenancy models is the shape a privilege bug
-	// grows in, so they are two rows claiming two disjoint sets of leaves, and zip
-	// refuses two owners for one prefix at compose time.
-	//
-	// IT DOES NOT NEED TO PRECEDE risk, and that is MEASURED, not assumed: with the
-	// bare /v1/risk registered FIRST, the live router still delivers
-	// /v1/risk/datasets here and /v1/risk/labels to label. zip resolves NESTED
-	// static prefixes by SPECIFICITY, so mount order decides only between EQUAL
-	// patterns — which is why ai-before-zen (below) is a real decision and this is
-	// not. So this row stays where it already sat: reordering a frozen mount
-	// sequence to satisfy a rule the router does not apply would be churn, and the
-	// four /v1/risk apps are contiguous either way.
-	{Name: "dataset", Prefixes: []string{"/v1/risk/datasets"}, Stage: Beta},
+	// grows in, so they are two rows claiming two disjoint roots, and zip refuses
+	// two owners for one prefix at compose time.
+	{Name: "dataset", Prefixes: []string{"/v1/dataset"}, Stage: Beta},
 	{Name: "usage", Prefixes: []string{"/v1/usage"}},
 	{Name: "leaderboard", Prefixes: []string{"/v1/usage/activity", "/v1/usage/leaderboard", "/v1/usage/rollup/backfill"}},
 	{Name: "crm", Prefixes: []string{"/v1/crm"}, Stage: Beta},
@@ -334,7 +310,7 @@ var Apps = []App{
 	{Name: "zt", Prefixes: []string{"/v1/mesh/services", "/v1/networks"}},
 	{Name: "share", Prefixes: []string{"/v1/share"}, Stage: Beta},
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom"}, Stage: Beta},
-	{Name: "explorer", Prefixes: []string{"/v1/indexers", "/v1/oracles"}, Stage: Beta},
+	{Name: "explorer", Prefixes: []string{"/v1/explorer"}, Stage: Beta},
 	{Name: "security", Prefixes: []string{"/v1/security"}, Stage: Beta},
 	{Name: "integrations", Prefixes: []string{"/v1/connectors", "/v1/integrations"}},
 	// /v1/tags is owned by the projects app, which holds both the handler and the
@@ -383,7 +359,7 @@ var Apps = []App{
 	// web3 is named for the domain and serves none of it under /v1/web3, so the
 	// /v1/<name> default would cover nothing it registers — the apps/plan defect.
 	// The three prefixes are its whole surface (chains, rpc, tokens).
-	{Name: "web3", Prefixes: []string{"/v1/chains", "/v1/rpc", "/v1/tokens"}, Stage: Beta},
+	{Name: "web3", Prefixes: []string{"/v1/web3"}, Stage: Beta},
 	{Name: "bot", Prefixes: []string{"/v1/bot/connect", "/v1/bot/nodes", "/v1/bot/peer/invoke"}, Stage: Beta},
 	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}, Stage: Beta},
 	// bots is the headless bot: the run control plane at /v1/bots AND the door to
@@ -400,10 +376,11 @@ var Apps = []App{
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/admin/referrals", "/v1/affiliates"}, Stage: Beta},
 	{Name: "esign", Prefixes: []string{"/v1/esign"}, Stage: Beta},
-	{Name: "product", Prefixes: []string{"/v1/search/indexes", "/v1/search/stats", "/v1/vector/collections", "/v1/vector/stats"}},
 	// search is the QUERY surface — hybrid keyword+semantic over the org's own
-	// corpora at POST /v1/search. Instance CRUD lives under /v1/instances/search
-	// (provisioning); the deeper product prefixes above still win by longest match.
+	// corpora at POST /v1/search — and, since product dissolved into the two
+	// capabilities that owned its roots, the Meilisearch inventory at
+	// /v1/search/{indexes,stats}. Allocating a search index is a different act and
+	// lives at /v1/provisioning/search.
 	{Name: "search", Prefixes: []string{"/v1/search"}},
 	{Name: "evals", Prefixes: []string{"/v1/evals"}},
 	{Name: "benchmark", Prefixes: []string{"/v1/benchmark"}, Stage: Beta},

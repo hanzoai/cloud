@@ -112,7 +112,7 @@ func oauthConfig(provider string) (oauthApp, bool) {
 // so it is never client-influenced. Providers must have this registered.
 func callbackURL(s *cloud.Service[state], provider string) string {
 	base := environ.Or("KB_OAUTH_REDIRECT_BASE", "https://"+s.Domain)
-	return strings.TrimRight(base, "/") + "/v1/kb/connectors/" + provider + "/callback"
+	return strings.TrimRight(base, "/") + "/v1/knowledge/connectors/" + provider + "/callback"
 }
 
 // kmsRef is the deterministic KMS path holding an org's provider token. It embeds the

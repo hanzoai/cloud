@@ -219,22 +219,22 @@ func TestNoCountBoundStandsWithoutAByteBound(t *testing.T) {
 	for _, tc := range []struct {
 		what, method, path, body string
 	}{
-		{"resolve: a subject over the ceiling", http.MethodPost, "/v1/risk/labels/resolve",
+		{"resolve: a subject over the ceiling", http.MethodPost, "/v1/label/resolve",
 			fmt.Sprintf(`{"subjects":[{"kind":"transaction","subject":%q,"at":%q}]}`, over, at)},
-		{"resolve: an unknown kind", http.MethodPost, "/v1/risk/labels/resolve",
+		{"resolve: an unknown kind", http.MethodPost, "/v1/label/resolve",
 			fmt.Sprintf(`{"subjects":[{"kind":"teapot","subject":"tx-1","at":%q}]}`, at)},
-		{"resolve: an oversized instant", http.MethodPost, "/v1/risk/labels/resolve",
+		{"resolve: an oversized instant", http.MethodPost, "/v1/label/resolve",
 			fmt.Sprintf(`{"subjects":[{"kind":"transaction","subject":"tx-1","at":%q}]}`, bodyInstant)},
-		{"resolve: an oversized backtest instant", http.MethodPost, "/v1/risk/labels/resolve",
+		{"resolve: an oversized backtest instant", http.MethodPost, "/v1/label/resolve",
 			fmt.Sprintf(`{"subjects":[{"kind":"transaction","subject":"tx-1","at":%q}],"now":%q}`, at, bodyInstant)},
-		{"read: a subject filter over the ceiling", http.MethodGet, "/v1/risk/labels?subject=" + over, ""},
-		{"read: an unknown kind filter", http.MethodGet, "/v1/risk/labels?kind=teapot", ""},
-		{"read: an unknown source filter", http.MethodGet, "/v1/risk/labels?source=rumour", ""},
-		{"read: an oversized from", http.MethodGet, "/v1/risk/labels?from=" + queryInstant, ""},
-		{"coverage: an oversized to", http.MethodGet, "/v1/risk/labels/coverage?to=" + queryInstant, ""},
-		{"dispose: an oversized boundary", http.MethodPost, "/v1/risk/labels/dispose",
+		{"read: a subject filter over the ceiling", http.MethodGet, "/v1/label?subject=" + over, ""},
+		{"read: an unknown kind filter", http.MethodGet, "/v1/label?kind=teapot", ""},
+		{"read: an unknown source filter", http.MethodGet, "/v1/label?source=rumour", ""},
+		{"read: an oversized from", http.MethodGet, "/v1/label?from=" + queryInstant, ""},
+		{"coverage: an oversized to", http.MethodGet, "/v1/label/coverage?to=" + queryInstant, ""},
+		{"dispose: an oversized boundary", http.MethodPost, "/v1/label/dispose",
 			fmt.Sprintf(`{"before":%q}`, bodyInstant)},
-		{"hold: an id over the ceiling", http.MethodPost, "/v1/risk/labels/hold",
+		{"hold: an id over the ceiling", http.MethodPost, "/v1/label/hold",
 			fmt.Sprintf(`{"ids":[%q],"hold":true}`, longID)},
 	} {
 		code, raw := req(t, app, tc.method, tc.path, "acme", "u_acme", tc.body)
@@ -261,7 +261,7 @@ func TestNoCountBoundStandsWithoutAByteBound(t *testing.T) {
 		fmt.Sprintf(`{"kind":"transaction","subject":"tx-ok","at":%q,"seen":%q,"disposition":"productive","source":"dispute","evidence":%q,"confidence":1}`, at, at, strings.Repeat("e", evidenceMax+1)),
 		fmt.Sprintf(`{"kind":"transaction","subject":"tx-ok","at":%q,"seen":%q,"disposition":"productive","source":"dispute","evidence":"d2","confidence":1}`, at, at),
 	)
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels", "acme", "u_acme", body)
+	code, raw := req(t, app, http.MethodPost, "/v1/label", "acme", "u_acme", body)
 	if code != http.StatusOK {
 		t.Fatalf("write = %d %s", code, raw)
 	}
@@ -285,7 +285,7 @@ func TestNoCountBoundStandsWithoutAByteBound(t *testing.T) {
 	// A bound that also refuses the legal maximum is a smaller bound wearing the
 	// number of a larger one, and nothing here would say so.
 	edge := strings.Repeat("s", subjectMax)
-	code, raw = req(t, app, http.MethodPost, "/v1/risk/labels", "acme", "u_acme",
+	code, raw = req(t, app, http.MethodPost, "/v1/label", "acme", "u_acme",
 		batch(fmt.Sprintf(`{"kind":"transaction","subject":%q,"at":%q,"seen":%q,"disposition":"productive","source":"dispute","evidence":"d3","confidence":1}`, edge, at, at)))
 	if code != http.StatusOK {
 		t.Fatalf("a subject exactly at the ceiling = %d %s", code, raw)
@@ -296,7 +296,7 @@ func TestNoCountBoundStandsWithoutAByteBound(t *testing.T) {
 	if out.Recorded != 1 {
 		t.Fatalf("a subject of exactly %d bytes was not recorded: %+v", subjectMax, out.Results)
 	}
-	if code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme",
+	if code, raw := req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme",
 		fmt.Sprintf(`{"subjects":[{"kind":"transaction","subject":%q,"at":%q}]}`, edge, at)); code != http.StatusOK {
 		t.Fatalf("resolving a subject exactly at the ceiling = %d %s", code, raw)
 	}

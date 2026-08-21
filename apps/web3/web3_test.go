@@ -83,7 +83,7 @@ func TestParseChainsRejectsAChainWithNoRPC(t *testing.T) {
 	}
 }
 
-// TestRegistryNeverLeaksTheUpstream: /v1/chains is read by a browser and the rpc
+// TestRegistryNeverLeaksTheUpstream: /v1/web3/chains is read by a browser and the rpc
 // URL routinely carries a provider key. It must not be serializable.
 func TestRegistryNeverLeaksTheUpstream(t *testing.T) {
 	c := Chain{ID: "lux", Name: "Lux", ChainID: 96369, rpc: "https://rpc.example/secret-key"}
