@@ -46,8 +46,8 @@ var readings = []struct{ id, want, route string }{
 	{"patch_commerce_product_by_productid", "update_commerce_product", "PATCH /v1/commerce/product/{productid}"},
 	{"delete_commerce_product_by_productid", "delete_commerce_product", "DELETE /v1/commerce/product/{productid}"},
 	// …nor when the row comes AFTER it: `listing` is what {key} indexes into.
-	{"put_store_by_storeid_listing_by_key", "set_store_listing", "PUT /v1/store/{storeid}/listing/{key}"},
-	{"post_store_by_storeid_listing_by_key", "create_store_listing", "POST /v1/store/{storeid}/listing/{key}"},
+	{"put_commerce_store_by_storeid_listing_by_key", "set_commerce_store_listing", "PUT /v1/commerce/store/{storeid}/listing/{key}"},
+	{"post_commerce_store_by_storeid_listing_by_key", "create_commerce_store_listing", "POST /v1/commerce/store/{storeid}/listing/{key}"},
 	{"post_sandboxes_by_id_exec", "exec_sandbox", "POST /v1/sandboxes/{id}/exec — the action shape again"},
 
 	// The inference surface.

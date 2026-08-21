@@ -14,8 +14,6 @@
 /v1/auto automations
 /v1/billing commerce
 /v1/bot bots
-/v1/cart commerce
-/v1/catalog commerce
 /v1/commands openapi
 /v1/errors analytics
 /v1/event analytics
@@ -26,11 +24,8 @@
 /v1/logs metrics
 /v1/mesh zt
 /v1/networks zt
-/v1/payments commerce
-/v1/plans commerce
 /v1/replay analytics
 /v1/s3 storage
 /v1/sentinel o11y
-/v1/store commerce
 /v1/traces metrics
 /ws o11y

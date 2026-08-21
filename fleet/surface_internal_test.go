@@ -127,7 +127,7 @@ var survivors = []struct{ name, why string }{
 	{"delete_flags_defs_key", "a feature-flag key"},
 	{"delete_todo_projects_key", "a todo project key, e.g. CLOUD-1"},
 	{"patch_todo_projects_key_issues_num", "…and an issue under it"},
-	{"delete_store_by_storeid_listing_by_key", "the `by_` filler must not become the key's context"},
+	{"delete_commerce_store_by_storeid_listing_by_key", "the `by_` filler must not become the key’s context"},
 	{"delete_cloudflare_kv_namespaces_namespace_values_key", "a KV value"},
 
 	// The whole ai CRUD surface, which zip names `by_owner_by_name`. All 45 of

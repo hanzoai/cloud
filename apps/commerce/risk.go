@@ -22,7 +22,7 @@ package commerce
 // THERE ARE TWO DOORS ONTO THAT MINT AND THE GATE HOLDS BOTH. commerce has exactly
 // ONE card money move (billing.TakePayment) and this binary opens two addresses onto
 // it — the browser's POST /v1/billing/topup/token and the agent's typed
-// POST /v1/payments (payments.go), which the module note there calls "the same core
+// POST /v1/commerce/payments (payments.go), which the module note there calls "the same core
 // the console's card top-up runs". A screen on one of them is not a control: it is a
 // control standing beside an unscreened entrance to the same ledger write.
 //
