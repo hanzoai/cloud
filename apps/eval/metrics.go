@@ -14,7 +14,7 @@ import (
 )
 
 // metrics.go serves the AI OBSERVABILITY DASHBOARD aggregation behind
-// GET /v1/evals/metrics — the native, per-org / per-project "AI overview": which
+// GET /v1/eval/metrics — the native, per-org / per-project "AI overview": which
 // models are used, request volume, cost, tokens (prompt / completion / total),
 // error & success rate, and latency percentiles (p50 / p95 / p99) over a window.
 // It is the Langfuse home-dashboard, native — the MIT datastore query shapes

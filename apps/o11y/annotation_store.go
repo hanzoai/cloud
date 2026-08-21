@@ -36,7 +36,7 @@ var (
 )
 
 // annQueue is a named review queue, org+project scoped. (org,project,name) is
-// unique. ScoreConfigIDs reference eval score-configs (/v1/evals/score-configs);
+// unique. ScoreConfigIDs reference eval score-configs (/v1/eval/score-configs);
 // they are opaque ids here, validated for shape only.
 type annQueue struct {
 	ID             string

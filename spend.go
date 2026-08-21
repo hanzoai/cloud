@@ -14,7 +14,7 @@ package cloud
 //     serve.go now mounts SpendGate.
 //   - middleware_billing.BillingGate (mounted app-wide) asked "is price(path) > 0?"
 //     and DefaultPrice returns 0 for every path, so it never evaluated ANYTHING.
-//   - clients/entitlements.RequireProduct had the RIGHT answer and was mounted on
+//   - clients/entitlement.RequireProduct had the RIGHT answer and was mounted on
 //     no route at all.
 //
 // So the binary shipped three paywalls and enforced none. One predicate, in the one
@@ -347,7 +347,7 @@ var meteredApps = []string{
 	"tools",        // per-tool dispatch.
 	"todo",         // per-project/issue fee.
 	"translate",    // per-character fee.
-	"validators",   // one validator node materialized on the cluster, 200Gi, until deleted.
+	"validator",   // one validator node materialized on the cluster, 200Gi, until deleted.
 	"visor",        // GPU clusters (compute).
 	"wallets",      // ring keygen, threshold signing and Safe proposals; KMS custody is free.
 	"websearch",    // the bought engines (Brave, Mojeek API); the keyless ones are free.
@@ -454,7 +454,7 @@ func Reachable(path string) bool {
 		"/v1/ai/signin",   // the namespaced spellings, kept so a future move cannot regress this.
 		"/v1/ai/signout",
 		"/v1/ai/account",
-		"/v1/entitlements": // the paywall's OWN projection — what the shell renders upgrade UI from.
+		"/v1/entitlement": // the paywall's OWN projection — what the shell renders upgrade UI from.
 		return true
 	}
 	for _, sub := range reachableTrees {
@@ -493,7 +493,7 @@ var reachableTrees = []string{
 	"/v1/models/",       // the model catalog the shell reads for discovery, and /v1/models/:id.
 	"/v1/waitlist/",     // admission's join API — an un-admitted user must still reach it.
 	"/v1/flags/",        // the guard's public mode read; also how the kill switch is observed.
-	"/v1/entitlements/", // per-org enablement reads/writes that sit beside the projection.
+	"/v1/entitlement/", // per-org enablement reads/writes that sit beside the projection.
 }
 
 // ── the allowance leg ───────────────────────────────────────────────────────────

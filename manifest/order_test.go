@@ -29,15 +29,15 @@ var frozen = []string{
 	"x402", "deploy", "functions", "todo", "templates", "blueprint",
 	"framework", "knowledge", "graph", "help", "content", "catalogsync", "webhooks",
 	"ml", "label", "reference", "risk", "dataset", "usage", "leaderboard", "crm", "marketing", "ads",
-	"campaign", "validators", "social", "event", "git", "sync",
+	"campaign", "validator", "social", "event", "git", "sync",
 	"visor", "captable", "code", "lsp", "network", "share",
 	"dataroom", "explorer", "security", "integrations", "destinations", "cloudflare",
-	"sbom", "team", "meet", "settings", "prefs", "notify",
-	"channels", "gateway", "entitlements", "exec", "sandboxes", "websearch", "crawl", "seo",
-	"index", "catalog", "taxonomy", "world", "web3", "bot", "node", "authors",
-	"audit", "affiliates", "esign", "search", "evals",
-	"benchmark", "research", "experiments", "books", "treasury", "admin",
-	"admission", "tasks", "tel", "auto", "flow", "engine", "registry", "tools", "marketplace", "referrals",
+	"sbom", "team", "meet", "settings", "pref", "notify",
+	"channels", "gateway", "entitlement", "exec", "sandboxes", "websearch", "crawl", "seo",
+	"index", "catalog", "taxonomy", "world", "web3", "bot", "node", "author",
+	"audit", "affiliate", "esign", "search", "eval",
+	"benchmark", "research", "experiment", "books", "treasury", "admin",
+	"admission", "tasks", "tel", "auto", "flow", "engine", "registry", "tools", "marketplace", "referral",
 	// `agent` is GONE from this sequence on purpose: it was a second app beside
 	// `agents`, one concept with two plugins and a pair of names differing by an
 	// `s`. Its surface (/v1/agent and its presets/conversations) is mounted by
