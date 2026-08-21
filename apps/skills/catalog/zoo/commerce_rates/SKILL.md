@@ -1,12 +1,12 @@
 ---
-name: bot_connect
+name: commerce_rates
 version: "8.0.0"
-description: "Read bot connect: The socket a bot node dials and holds open to become invokable.."
+description: "Read commerce rates: List what one unit of each metered thing costs."
 ---
 
-# Zoo · BOT · connect
+# Zoo · COMMERCE · rates
 
-Read-only Zoo capability derived from the `bot` OpenAPI product. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `commerce` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/bot/connect` — The socket a bot node dials and holds open to become invokable.
+- `GET https://api.zoo.ngo/v1/commerce/rates/entries` — List what one unit of each metered thing costs
 
 ## Response
 
-- `/v1/bot/connect` → JSON object.
+- `/v1/commerce/rates/entries` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/v1/bot/connect" \
+curl -sS "https://api.zoo.ngo/v1/commerce/rates/entries" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

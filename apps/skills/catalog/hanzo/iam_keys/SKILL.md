@@ -1,7 +1,7 @@
 ---
 name: iam_keys
 version: "8.0.0"
-description: "Read iam keys: Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Returns one API key: what it is called, what it may reach, and when it was issued.."
+description: "Read iam keys: Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Returns one API key: what it is called, what it may reach, and when it was issued., Resolve a PUBLISHABLE key to the organization that owns it."
 ---
 
 # Hanzo · IAM · keys
@@ -16,6 +16,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 - `GET https://api.hanzo.ai/v1/iam/keys` — Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half.
 - `GET https://api.hanzo.ai/v1/iam/keys/get` — Returns one API key: what it is called, what it may reach, and when it was issued.
+- `GET https://api.hanzo.ai/v1/iam/keys/org` — Resolve a PUBLISHABLE key to the organization that owns it
+- `GET https://api.hanzo.ai/v1/iam/keys/principal` — Resolve a SECRET key to the principal it authenticates
 
 ## Parameters
 
@@ -28,6 +30,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 - `/v1/iam/keys` → `iam.ListResponse` object with fields: `keys`.
 - `/v1/iam/keys/get` → `iam.Key` object with fields: `accessKey`, `accessSecret`, `accessSecretDigest`, `application`, `createdAt`, `createdTime`, `deleted`, `displayName`, `expireTime`, `id`, `name`, `organization`.
+- `/v1/iam/keys/org` → JSON object.
+- `/v1/iam/keys/principal` → JSON object.
 
 ## Example
 

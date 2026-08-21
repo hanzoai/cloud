@@ -30,13 +30,28 @@ import (
 // forbidden are the engines that register a driver name cloud already owns, or
 // that would put a second SQLite implementation in the binary.
 //
-// mattn/go-sqlite3 and modernc.org/sqlite both register "sqlite3"; ncruces
-// registers "sqlite3" as well. luxfi/zapdb is not SQLite at all — it is listed
-// because it embeds an exclusive OS file lock per store, which is the reason
-// apps/kms stopped using it and the reason cloud ran replicas=1 while it did.
+// mattn/go-sqlite3 and ncruces both register "sqlite3". luxfi/zapdb is not
+// SQLite at all — it is listed because it embeds an exclusive OS file lock per
+// store, which is the reason apps/kms stopped using it and the reason cloud ran
+// replicas=1 while it did.
+// modernc.org/sqlite is NOT here, and leaving it out is the rule rather than a
+// hole in it. hanzoai/sqlite's driver_nocgo.go (`//go:build !cgo ||
+// sqlite_purego`) blank-imports modernc ON PURPOSE — modernc registers "sqlite"
+// in its own init, and that registration IS the pure-Go build's driver, the
+// "cgo-free through its vendored pure-Go engine" half of the rule go.mod states.
+//
+// Listing it made this gate fail on its own tree the moment it was written: the
+// suite runs CGO_ENABLED=0, which is exactly the build that selects driver_nocgo,
+// so `go list -deps` reports modernc for the correct configuration and the check
+// called the rule a violation of itself. Measured both ways on this tree —
+// CGO_ENABLED=1 links none of it, CGO_ENABLED=0 links three packages.
+//
+// What remains below are the engines that would be a SECOND registrar. Each
+// registers "sqlite3" or "sqlite" from its own init, and database/sql.Register
+// panics on a duplicate name before main — so one of these arriving beside
+// hanzoai/sqlite is the failure this test exists for.
 var forbidden = []string{
 	"github.com/mattn/go-sqlite3",
-	"modernc.org/sqlite",
 	"github.com/ncruces/go-sqlite3",
 	"github.com/glebarez/go-sqlite",
 	"crawshaw.io/sqlite",

@@ -1,12 +1,12 @@
 ---
-name: plan_cloud
+name: projects_shot
 version: "8.0.0"
-description: "Read plan cloud: Returns the cloud plan catalog.."
+description: "Read projects shot: Get a PNG of the project's live site."
 ---
 
-# Zoo · PLAN · cloud
+# Zoo · PROJECTS · shot
 
-Read-only Zoo capability derived from the `plan` OpenAPI product. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `projects` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,16 +14,22 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/plan/cloud` — Returns the cloud plan catalog.
+- `GET https://api.zoo.ngo/v1/projects/{slug}/shot` — Get a PNG of the project's live site
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+|---|---|---|---|---|
+| `slug` | path | yes | string |  |
 
 ## Response
 
-- `/v1/plan/cloud` → `planList` object with fields: `plans`.
+- `/v1/projects/{slug}/shot` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/v1/plan/cloud" \
+curl -sS "https://api.zoo.ngo/v1/projects/{slug}/shot" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

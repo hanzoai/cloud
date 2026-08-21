@@ -5,7 +5,7 @@
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
   "scope": "master",
-  "skill_count": 675,
+  "skill_count": 676,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
@@ -1037,20 +1037,6 @@
       "sha256": "c1c200e5b8db7a7631ef126705ec764856686ec377765d018786cd84376f141c"
     },
     {
-      "description": "Read bot connect: The socket a bot node dials and holds open to become invokable..",
-      "name": "bot_connect",
-      "path": "bot_connect/SKILL.md",
-      "service": "bot",
-      "sha256": "720e2c0858d48b0148aaaac24dd7a0471574801b36ac14c9ff3bc81f960d3f87"
-    },
-    {
-      "description": "Read bot nodes: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
-      "name": "bot_nodes",
-      "path": "bot_nodes/SKILL.md",
-      "service": "bot",
-      "sha256": "423a4745314616f0a8bf022fe84adff21f57aca530ef9a5a6eaa8c5655587811"
-    },
-    {
       "description": "Read bot runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
       "name": "bot_runs",
       "path": "bot_runs/SKILL.md",
@@ -1371,6 +1357,13 @@
       "path": "commerce_product/SKILL.md",
       "service": "commerce",
       "sha256": "879f195b3e64768519e47a212ff3d1a76cd0932599dfb9d46fc6e3298af2add6"
+    },
+    {
+      "description": "Read commerce rates: List what one unit of each metered thing costs.",
+      "name": "commerce_rates",
+      "path": "commerce_rates/SKILL.md",
+      "service": "commerce",
+      "sha256": "2105452c6c373a0f3c0374a9b095e703d132f413855c59d2e1937f18a20fd2b7"
     },
     {
       "description": "Read commerce return: List your org's returns, as a page, Fetch one return.",
@@ -2479,11 +2472,11 @@
       "sha256": "762eb4d4dafaa94a6bd1138f95e4be3137ba427a316d3f4a55462393a4a0fcac"
     },
     {
-      "description": "Read iam keys: Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Returns one API key: what it is called, what it may reach, and when it was issued..",
+      "description": "Read iam keys: Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Returns one API key: what it is called, what it may reach, and when it was issued., Resolve a PUBLISHABLE key to the organization that owns it.",
       "name": "iam_keys",
       "path": "iam_keys/SKILL.md",
       "service": "iam",
-      "sha256": "501f01b937ee08169bc6be068c90bf5fd8c2802efdacedc65bf7c02c7f5db792"
+      "sha256": "9325221107267f96e1d433c7bfb8c2dca7b4b04b565b0f9b941ac5114256c6bc"
     },
     {
       "description": "Read iam linked accounts: Returns the sign-in identities linked to the calling person's account — every provider they can currently sign in with..",
@@ -3130,6 +3123,20 @@
       "sha256": "f5593c8a8aecbe5dff8a01ac724f309d412a6a34c8aad66db5622279097bbbdf"
     },
     {
+      "description": "Read node connect: The socket a bot node dials and holds open to become invokable..",
+      "name": "node_connect",
+      "path": "node_connect/SKILL.md",
+      "service": "node",
+      "sha256": "83292932cb370b8d15958aafca1e49df775fdcfeb20b9f8a4eec7c206d3b089b"
+    },
+    {
+      "description": "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
+      "name": "node_node",
+      "path": "node_node/SKILL.md",
+      "service": "node",
+      "sha256": "c835772159d6b30c8696b4281e75f226d7ee68bb9069363bf9ebfc5cb77ae695"
+    },
+    {
       "description": "Read notify health: Reports that the notify send surface is mounted..",
       "name": "notify_health",
       "path": "notify_health/SKILL.md",
@@ -3669,13 +3676,6 @@
       "sha256": "0953847fcd5251659e58a39b010cc5261b3b85db44cd152c038ed41994a213c1"
     },
     {
-      "description": "Read plan cloud: Returns the cloud plan catalog..",
-      "name": "plan_cloud",
-      "path": "plan_cloud/SKILL.md",
-      "service": "plan",
-      "sha256": "22352510ff94dd8325605b1acb03cd0f17f92033d6e3b224d37576d8fbacd51e"
-    },
-    {
       "description": "Read plan dns: ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records per zone and queries per day..",
       "name": "plan_dns",
       "path": "plan_dns/SKILL.md",
@@ -4024,6 +4024,13 @@
       "path": "projects_releases/SKILL.md",
       "service": "projects",
       "sha256": "b05cb8f9cfec5ef596c84c8909cb7a8ef05cb57925e2bae856a818c4df0d2c66"
+    },
+    {
+      "description": "Read projects shot: Get a PNG of the project's live site.",
+      "name": "projects_shot",
+      "path": "projects_shot/SKILL.md",
+      "service": "projects",
+      "sha256": "2994a4d9870273e6d1b2c592eaa8ca04d73a78251a55004e405ec77761b2ca30"
     },
     {
       "description": "Read projects sites: Returns the org's deployed sites at the pretty URLs they serve at., Returns one site — the same row ListSites carries, for one slug..",
