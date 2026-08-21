@@ -3,7 +3,9 @@ package graph
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -203,4 +205,49 @@ func has(xs []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// TestReadKeepsTheNewestAtTheCeiling is the property a resolution depends on.
+//
+// The table only grows: a correction is a row, so one (entity, relation) pair
+// accumulates assertions without bound, and a read of it is capped. Which end
+// the cap drops decides the answer rather than merely trimming it — the rows
+// that win are the last ones written, so an oldest-first read past the ceiling
+// returns a confident and wrong winner.
+func TestReadKeepsTheNewestAtTheCeiling(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+
+	// One pair, more assertions than a single read returns. Each is a distinct
+	// row because the value differs, which is how a correction is recorded.
+	facts := make([]Fact, 0, walkBound+1)
+	for i := range walkBound + 1 {
+		facts = append(facts, mk(t, "svc:api", "version",
+			fmt.Sprintf("v%d", i), false, "deploy", t0.Add(time.Duration(i)*time.Second)))
+	}
+	if _, err := s.record(ctx, facts); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	last := facts[len(facts)-1]
+	newest, err := s.read(ctx, filter{Entity: "svc:api", Relation: "version", Newest: true})
+	if err != nil {
+		t.Fatalf("read newest: %v", err)
+	}
+	if len(newest) != walkBound {
+		t.Fatalf("newest read returned %d rows, want the ceiling %d", len(newest), walkBound)
+	}
+	if !slices.ContainsFunc(newest, func(f Fact) bool { return f.ID == last.ID }) {
+		t.Fatal("the newest-first read dropped the most recent assertion, which is the one that wins")
+	}
+
+	// The default order is the opposite end, which is what makes the flag
+	// load-bearing rather than decorative.
+	oldest, err := s.read(ctx, filter{Entity: "svc:api", Relation: "version"})
+	if err != nil {
+		t.Fatalf("read oldest: %v", err)
+	}
+	if slices.ContainsFunc(oldest, func(f Fact) bool { return f.ID == last.ID }) {
+		t.Fatal("the default read reached the newest assertion; this test no longer proves the ordering matters")
+	}
 }
