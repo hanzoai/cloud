@@ -1,17 +1,20 @@
-// Package agent is a conversation that uses your org's own tools to get an answer.
+// The conversation surface: a conversation that uses your org's own tools to get
+// an answer.
 //
-// It mounts the hanzoai/agent orchestrator into cloud: POST /v1/agent (+
-// /v1/agent/presets, /v1/agent/conversations). The orchestrator logic and its
-// per-org conversation history live in github.com/hanzoai/agent, which imports
-// NEITHER cloud NOR ai. Cloud is the composition root: it injects the two seams
-// —
+// It mounts the hanzoai/agent orchestrator into cloud: POST /v1/agents/chat (+
+// /v1/agents/chat/presets, /v1/agents/chat/conversations). The orchestrator logic
+// and its per-org conversation history live in github.com/hanzoai/agent, which
+// imports NEITHER cloud NOR ai. Cloud is the composition root: it injects the two
+// seams —
 //   - Completer: the ai subsystem's /v1/chat/completions, replayed in-process (the
 //     one path that returns tool_calls AND carries per-org reserve/settle billing);
-//   - ToolPlane: the unified tool registry (tools.Default()), so /v1/agent's
+//   - ToolPlane: the unified tool registry (tools.Default()), so the round's
 //     server-executed tools are the org's activated MCP/registry tools.
 //
-// /v1/agent is a DISTINCT path (not /v1/chat, which ai owns as completions), so a
-// specific route wins over ai's /v1/* glob — no collision.
+// The round answers UNDER the agents root rather than at it, because POST
+// /v1/agents is already the typed create. Which address it takes is cloud's to
+// decide: hz.MountAt registers the four routes wherever the composer points them
+// (HIP-1210), so the surface no longer needs a root of its own.
 package agents
 
 import (
@@ -37,10 +40,15 @@ import (
 // broken upstream cannot balloon memory.
 const maxCompletionResponse = 8 << 20
 
-// UNTYPED BY DESIGN, and not fixable here. All four /v1/agent operations —
-// POST /v1/agent, GET /v1/agent/presets, GET /v1/agent/conversations,
-// GET /v1/agent/conversations/{id} — are registered by hz.Mount below, which is
-// github.com/hanzoai/agent's own router wiring (agent.go:166-169 in v0.1.3). This
+// chat is where the round answers. The agents root is spent — POST /v1/agents is
+// the typed create — so the conversation surface takes a sub-path of it, and the
+// four routes compose off this one address (HIP-1210).
+const chat = "/v1/agents/chat"
+
+// UNTYPED BY DESIGN, and not fixable here. All four operations — POST /v1/agents/chat,
+// GET /v1/agents/chat/presets, GET /v1/agents/chat/conversations,
+// GET /v1/agents/chat/conversations/{id} — are registered by hz.MountAt below, which
+// is github.com/hanzoai/agent's own router wiring (agent.go:181-184 in v1.0.6). This
 // package registers NO route of its own, so there is nothing in cloud to convert:
 // they become typeable in hanzoai/agent, which owns them, exactly as apps/tasks'
 // relayed operations become typeable in hanzoai/tasks.
@@ -48,14 +56,15 @@ const maxCompletionResponse = 8 << 20
 // Two facts have to move upstream with them, and both are visible from here:
 //
 //   - Every operation resolves its caller through a `func(*zip.Ctx) (Principal,
-//     bool)` (Deps.Principal, supplied below), and POST /v1/agent additionally
+//     bool)` (Deps.Principal, supplied below), and the round additionally
 //     dispatches server-executed tools with the LIVE *zip.Ctx (orchestratorTools.Dispatch)
 //     and replays the caller's own credential HEADERS into the in-process
 //     completion (credential, below). A typed op receives only a context, and
 //     hanzoai/agent deliberately imports neither cloud nor ai, so it cannot use
 //     cloud.Bridge — it needs a per-request seam of its own before any of its four
-//     handlers can lose its *zip.Ctx.
-//   - POST /v1/agent passes an upstream 4xx through VERBATIM — the completion's own
+//     handlers can lose its *zip.Ctx. The address moved and that seam did not: it
+//     is a per-REQUEST hole, indifferent to which path the request arrived on.
+//   - The round passes an upstream 4xx through VERBATIM — the completion's own
 //     status AND body, so a 402 insufficient_balance reaches the caller as itself
 //     rather than as a gateway 502 (round.go:104-110 upstream). A typed op's only
 //     way to answer non-2xx is to return an error, which zip renders as its flat
@@ -70,7 +79,7 @@ const maxCompletionResponse = 8 << 20
 // declaring the prose here — for routes hz.Mount registers — cannot invent an
 // operation, and it does not wait on the upstream work above.
 func init() {
-	openapi.Describe("/v1/agent", http.MethodPost,
+	openapi.Describe(chat, http.MethodPost,
 		"Run one tool-calling round against your org's own tools",
 		"Answers one turn of a conversation with four things: the model's `reply`, the "+
 			"`actions` the server executed on the caller's behalf, the `ops` the client must "+
@@ -89,15 +98,15 @@ func init() {
 			"403 — is relayed with its own status and body verbatim, so the real billing "+
 			"message reaches the client instead of an opaque gateway error. Only a genuine "+
 			"upstream fault becomes a 502.")
-	openapi.Describe("/v1/agent/presets", http.MethodGet,
+	openapi.Describe(chat+"/presets", http.MethodGet,
 		"List the agent presets available to a caller",
 		"Returns the preset catalog: each entry's id, its description and whether it is "+
 			"server-executing — the flag that decides if a preset's tool calls run here or "+
-			"come back for the client to apply. The ids are what POST /v1/agent accepts in "+
+			"come back for the client to apply. The ids are what the round accepts in "+
 			"`preset`.\n\n"+
 			"The catalog is compiled into the build, identical for every caller, and this is "+
 			"the one read in the group that needs no principal.")
-	openapi.Describe("/v1/agent/conversations", http.MethodGet,
+	openapi.Describe(chat+"/conversations", http.MethodGet,
 		"List the agent threads in your org",
 		"Returns a summary of every agent conversation in the caller's org — id, derived "+
 			"title, and when it was last appended to — for populating a thread list.\n\n"+
@@ -105,7 +114,7 @@ func init() {
 			"rather than a filter: conversations are persisted in a store opened PER ORG, so "+
 			"there is no query in which another tenant's threads could appear. A validated "+
 			"principal with a non-empty org is required; 403 without one.")
-	openapi.Describe("/v1/agent/conversations/:id", http.MethodGet,
+	openapi.Describe(chat+"/conversations/:id", http.MethodGet,
 		"Read one agent thread in full",
 		"Returns every message of one conversation in order — role, content, the assistant's "+
 			"tool calls where it made any, and each message's creation time — which is the "+
@@ -117,12 +126,12 @@ func init() {
 			"one.")
 }
 
-// Mount wires POST /v1/agent (+ reads) into cloud, injecting the ai completion and
-// the tool plane. The caller identity comes from cloud's validated principal.
-// mountConversation registers the tool-using conversation surface (/v1/agent and
-// its presets/conversations) inside this app. It was a SECOND app named `agent`
-// beside this one named `agents` — one concept, two plugins, and a pair of names a
-// reader could not tell apart.
+// mountConversation registers the tool-using conversation surface (the round and
+// its presets/conversations) inside this app, injecting the ai completion and the
+// tool plane; the caller identity comes from cloud's validated principal. It was a
+// SECOND app named `agent` beside this one named `agents` — one concept, two
+// plugins, and a pair of names a reader could not tell apart — and then a second
+// ROOT after the apps merged. Both names are now one.
 func mountConversation(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("agent.Mount: nil app")
@@ -136,7 +145,7 @@ func mountConversation(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("agent.Mount: router is not a zip app — the typed op registry is unreachable")
 	}
-	_, err := hz.Mount(zapp, hz.Deps{
+	_, err := hz.MountAt(zapp, chat, hz.Deps{
 		DataDir: deps.DataDir,
 		Brand:   deps.Brand,
 		Model:   cloud.DefaultModel,
