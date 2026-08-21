@@ -177,12 +177,24 @@ done
 # or an identity with no account here, reads exactly like a fleet of private repositories.
 # If the IAM identity served nothing and a per-job token was displaced to try it, put the
 # per-job token back and ask again rather than reporting a lane that fetches nothing.
-if [ -z "$on" ] && [ -n "${JOB_TOKEN:-}" ] && [ "$GIT_TOKEN" != "$JOB_TOKEN" ]; then
-  echo "forge-rewrites: the IAM identity served nothing — asking again as the per-job token"
+# WHAT THE IAM IDENTITY COULD NOT REACH, ASKED FOR AGAIN.
+#
+# The identity serves what its account can see, and a repository it cannot see denies
+# exactly as one that does not exist — so the answer is a 404 either way. The case is
+# PARTIAL, not total: on the run that found this, twenty-two modules were served and
+# twenty-six were refused, so a retry conditioned on nothing having been served never
+# fired and the twenty-six stayed on GitHub with no credential to fetch them.
+#
+# Only the refused ones are asked again. A module the IAM identity already served is
+# left alone: it resolved, and re-deciding it would put a second answer where there is
+# already a good one.
+if [ -n "$off" ] && [ -n "${JOB_TOKEN:-}" ] && [ "$GIT_TOKEN" != "$JOB_TOKEN" ]; then
+  retry=$(printf '%s\n' $off | sed -E 's/\(.*//')
+  echo "forge-rewrites: asking again for what the IAM identity could not reach"
   GIT_TOKEN=$JOB_TOKEN
   write_store "$GIT_TOKEN"
   off=""
-  for m in $mods; do
+  for m in $retry; do
     code=$(printf 'user = "x:%s"\n' "$GIT_TOKEN" \
       | curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --config - \
         "${FORGE_URL}/v1/repos/hanzoai/${m}" 2>/dev/null || echo 000)
