@@ -14,6 +14,7 @@ func init() {
 			"Allowance.plan":   "the tier the limit came from",
 			"Allowance.resets": "unix seconds; when the count starts again",
 			"Allowance.spent":  "the subject is at the limit",
+			"Allowance.used":   "Used is how many zero-priced calls this subject has been SERVED in the period\nending at Resets — the UTC calendar day. Only a served call counts, so an\nadmission check, a refusal, or a vendor that never answered leaves it where it\nstood. It stops AT Limit rather than climbing past it, so Limit-Used is what\nremains and never goes negative.",
 		},
 	})
 	zip.Describe("POST /allowance/read", zip.Doc{
@@ -23,6 +24,7 @@ func init() {
 			"Allowance.plan":   "the tier the limit came from",
 			"Allowance.resets": "unix seconds; when the count starts again",
 			"Allowance.spent":  "the subject is at the limit",
+			"Allowance.used":   "Used is how many zero-priced calls this subject has been SERVED in the period\nending at Resets — the UTC calendar day. Only a served call counts, so an\nadmission check, a refusal, or a vendor that never answered leaves it where it\nstood. It stops AT Limit rather than climbing past it, so Limit-Used is what\nremains and never goes negative.",
 		},
 	})
 	zip.Describe("POST /allowance/take", zip.Doc{
@@ -32,6 +34,7 @@ func init() {
 			"Allowance.plan":   "the tier the limit came from",
 			"Allowance.resets": "unix seconds; when the count starts again",
 			"Allowance.spent":  "the subject is at the limit",
+			"Allowance.used":   "Used is how many zero-priced calls this subject has been SERVED in the period\nending at Resets — the UTC calendar day. Only a served call counts, so an\nadmission check, a refusal, or a vendor that never answered leaves it where it\nstood. It stops AT Limit rather than climbing past it, so Limit-Used is what\nremains and never goes negative.",
 		},
 	})
 }
