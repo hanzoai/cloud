@@ -6,7 +6,7 @@ description: "Read legal filings: Returns the org's filing records, newest first
 
 # Lux · LEGAL · filings
 
-Read-only Lux capability derived from the `legal` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `legal` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

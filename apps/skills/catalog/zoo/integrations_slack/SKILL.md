@@ -6,7 +6,7 @@ description: "Read integrations slack: Install the Zoo app into a Slack workspac
 
 # Zoo · INTEGRATIONS · slack
 
-Read-only Zoo capability derived from the `integrations` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `integrations` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -21,10 +21,10 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/integrations/slack/install` → JSON body.
-- `/v1/integrations/slack/link` → JSON body.
-- `/v1/integrations/slack/link/callback` → JSON body.
-- `/v1/integrations/slack/link/slack` → JSON body.
+- `/v1/integrations/slack/install` → JSON object.
+- `/v1/integrations/slack/link` → JSON object.
+- `/v1/integrations/slack/link/callback` → JSON object.
+- `/v1/integrations/slack/link/slack` → JSON object.
 
 ## Example
 

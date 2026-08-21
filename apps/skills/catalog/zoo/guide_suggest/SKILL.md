@@ -6,7 +6,7 @@ description: "Read guide suggest: Suggest returns the caller org's next-best que
 
 # Zoo · GUIDE · suggest
 
-Read-only Zoo capability derived from the `guide` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `guide` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

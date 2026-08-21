@@ -6,7 +6,7 @@ description: "Read guide curriculum: Returns the journey the caller's org is act
 
 # Zoo · GUIDE · curriculum
 
-Read-only Zoo capability derived from the `guide` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `guide` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

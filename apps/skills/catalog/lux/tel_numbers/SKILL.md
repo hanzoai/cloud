@@ -6,7 +6,7 @@ description: "Read tel numbers: Lists the phone numbers this org HOLDS — the o
 
 # Lux · TEL · numbers
 
-Read-only Lux capability derived from the `tel` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `tel` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

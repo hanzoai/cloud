@@ -6,7 +6,7 @@ description: "Read ai scales: List scales, List scales across tenants, Public (s
 
 # Lux · AI · scales
 
-Read-only Lux capability derived from the `ai` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `ai` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -23,14 +23,14 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Resource name, unique within the owner. |
-| `owner` | path | yes | string | Owning organization. |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 
 ## Response
 
 - `/v1/ai/scales` → JSON object.
 - `/v1/ai/scales/global` → JSON object.
-- `/v1/ai/scales/public` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
+- `/v1/ai/scales/public` → JSON object.
 - `/v1/ai/scales/{owner}/{name}` → JSON object.
 
 ## Example

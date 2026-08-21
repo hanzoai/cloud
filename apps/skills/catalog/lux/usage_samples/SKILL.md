@@ -6,7 +6,7 @@ description: "Read usage samples: Is the PER-PROVIDER view: one connected accoun
 
 # Lux · USAGE · samples
 
-Read-only Lux capability derived from the `usage` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `usage` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,10 +20,10 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `account` | query | no | string | Account narrows to ONE linked account of that provider. Empty covers every |
+| `account` | query | no | string | Account narrows to ONE linked account of that provider. Empty covers every account the caller has linked there. |
 | `provider` | query | no | string | Provider is the upstream to read, e.g. anthropic. Required. |
-| `range` | query | no | string | Range is the window to read: a count and a unit — 1h, 24h, 90d, any <N>h or |
-| `window` | query | no | string | Window narrows to ONE window class: 6h, day, week or month. Empty covers |
+| `range` | query | no | string | Range is the window to read: a count and a unit — 1h, 24h, 90d, any <N>h or <N>d — or day, week, month, all. Empty means 24h. A label that is not a count, or one reaching past the 730-day horizon, is refused rather than silently replaced. |
+| `window` | query | no | string | Window narrows to ONE window class: 6h, day, week or month. Empty covers every class. |
 
 ## Response
 

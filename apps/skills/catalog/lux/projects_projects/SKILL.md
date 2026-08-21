@@ -6,7 +6,7 @@ description: "Read projects projects: Returns every project your org owns., Retu
 
 # Lux · PROJECTS · projects
 
-Read-only Lux capability derived from the `projects` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `projects` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `slug` | path | yes | string | Slug is the project to act on, from the path. It is unique within the |
+| `slug` | path | yes | string | Slug is the project to act on, from the path. It is unique within the caller's org and nowhere else, so another tenant's slug is a 404. |
 
 ## Response
 

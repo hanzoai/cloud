@@ -6,7 +6,7 @@ description: "Read functions deployments: Is what is live right now — each fun
 
 # Hanzo · FUNCTIONS · deployments
 
-Read-only Hanzo capability derived from the `functions` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `functions` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

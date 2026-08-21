@@ -6,7 +6,7 @@ description: "Read prompts prompts: List returns the caller org's prompt library
 
 # Zoo · PROMPTS · prompts
 
-Read-only Zoo capability derived from the `prompts` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `prompts` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

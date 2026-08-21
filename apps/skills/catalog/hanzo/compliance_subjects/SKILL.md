@@ -6,7 +6,7 @@ description: "Read compliance subjects: Returns the org's subjects as PII-MINIMI
 
 # Hanzo · COMPLIANCE · subjects
 
-Read-only Hanzo capability derived from the `compliance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `compliance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

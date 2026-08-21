@@ -6,7 +6,7 @@ description: "Read networks networks: Returns the caller's org overlay network o
 
 # Lux · NETWORKS · networks
 
-Read-only Lux capability derived from the `networks` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `networks` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the network id from the path. The URL is the addressing authority, so |
+| `id` | path | yes | string | ID is the network id from the path. The URL is the addressing authority, so it binds from there whatever else the request carries. |
 
 ## Response
 

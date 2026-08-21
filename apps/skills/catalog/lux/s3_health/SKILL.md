@@ -6,7 +6,7 @@ description: "Read s3 health: Whether object storage is usable here."
 
 # Lux · S3 · health
 
-Read-only Lux capability derived from the `s3` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `s3` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/s3/health` → JSON body.
+- `/v1/s3/health` → JSON object.
 
 ## Example
 

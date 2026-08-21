@@ -6,7 +6,7 @@ description: "Read deploy clusters: Returns the argocd ClusterList of the destin
 
 # Zoo · DEPLOY · clusters
 
-Read-only Zoo capability derived from the `deploy` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `deploy` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

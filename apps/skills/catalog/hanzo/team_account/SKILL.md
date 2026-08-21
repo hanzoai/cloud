@@ -6,7 +6,7 @@ description: "Read team account: Start a sign-in at hanzo.id, Complete a sign-in
 
 # Hanzo · TEAM · account
 
-Read-only Hanzo capability derived from the `team` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `team` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -26,8 +26,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/team/account/auth/{provider}` → JSON body.
-- `/v1/team/account/auth/{provider}/callback` → JSON body.
+- `/v1/team/account/auth/{provider}` → JSON object.
+- `/v1/team/account/auth/{provider}/callback` → JSON object.
 - `/v1/team/account/providers` → JSON array of `ProviderInfo`.
 
 ## Example

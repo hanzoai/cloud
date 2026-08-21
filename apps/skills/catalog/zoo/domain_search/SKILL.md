@@ -6,7 +6,7 @@ description: "Read domain search: Finds names built from the keyword q, plus the
 
 # Zoo · DOMAIN · search
 
-Read-only Zoo capability derived from the `domain` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `domain` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

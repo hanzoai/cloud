@@ -6,7 +6,7 @@ description: "Read bot connect: The socket a bot node dials and holds open to be
 
 # Lux · BOT · connect
 
-Read-only Lux capability derived from the `bot` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `bot` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/bot/connect` → JSON body.
+- `/v1/bot/connect` → JSON object.
 
 ## Example
 

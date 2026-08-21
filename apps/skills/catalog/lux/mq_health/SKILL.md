@@ -6,7 +6,7 @@ description: "Read mq health: Reports whether the message plane behind this surf
 
 # Lux · MQ · health
 
-Read-only Lux capability derived from the `mq` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `mq` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

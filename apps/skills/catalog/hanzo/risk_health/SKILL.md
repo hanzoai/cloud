@@ -6,7 +6,7 @@ description: "Read risk health: Whether the risk model plane can actually work r
 
 # Hanzo · RISK · health
 
-Read-only Hanzo capability derived from the `risk` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `risk` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/risk/health` → JSON body.
+- `/v1/risk/health` → JSON object.
 
 ## Example
 

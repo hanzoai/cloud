@@ -6,7 +6,7 @@ description: "Read agents builds: Returns the public index of every published bu
 
 # Zoo · AGENTS · builds
 
-Read-only Zoo capability derived from the `agents` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `agents` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

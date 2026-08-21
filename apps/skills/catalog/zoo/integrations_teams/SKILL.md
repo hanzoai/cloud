@@ -6,7 +6,7 @@ description: "Read integrations teams: Begin linking a Zoo account from Teams, M
 
 # Zoo · INTEGRATIONS · teams
 
-Read-only Zoo capability derived from the `integrations` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `integrations` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -20,9 +20,9 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/integrations/teams/link` → JSON body.
-- `/v1/integrations/teams/link/aad` → JSON body.
-- `/v1/integrations/teams/link/callback` → JSON body.
+- `/v1/integrations/teams/link` → JSON object.
+- `/v1/integrations/teams/link/aad` → JSON object.
+- `/v1/integrations/teams/link/callback` → JSON object.
 
 ## Example
 

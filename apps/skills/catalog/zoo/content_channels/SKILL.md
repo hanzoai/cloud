@@ -6,7 +6,7 @@ description: "Read content channels: Lists the distribution channels the caller'
 
 # Zoo · CONTENT · channels
 
-Read-only Zoo capability derived from the `content` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `content` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

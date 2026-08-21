@@ -6,7 +6,7 @@ description: "Read sync sync: List returns every sync link the caller's org has,
 
 # Zoo · SYNC · sync
 
-Read-only Zoo capability derived from the `sync` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `sync` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

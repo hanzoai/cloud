@@ -6,7 +6,7 @@ description: "Read dataroom datarooms: Returns every data room in the caller org
 
 # Lux · DATAROOM · datarooms
 
-Read-only Lux capability derived from the `dataroom` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `dataroom` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the room to read. It is the path segment: the URL is the addressing |
+| `id` | path | yes | string | ID is the room to read. It is the path segment: the URL is the addressing authority, and the org it is resolved in comes from the caller's principal, so an id from another tenant is simply not found. |
 
 ## Response
 

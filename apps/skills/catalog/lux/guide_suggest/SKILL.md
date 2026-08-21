@@ -6,7 +6,7 @@ description: "Read guide suggest: Suggest returns the caller org's next-best que
 
 # Lux · GUIDE · suggest
 
-Read-only Lux capability derived from the `guide` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `guide` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

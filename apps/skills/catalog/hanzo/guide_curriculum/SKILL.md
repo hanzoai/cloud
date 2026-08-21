@@ -6,7 +6,7 @@ description: "Read guide curriculum: Returns the journey the caller's org is act
 
 # Hanzo · GUIDE · curriculum
 
-Read-only Hanzo capability derived from the `guide` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `guide` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

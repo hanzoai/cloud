@@ -6,7 +6,7 @@ description: "Read iam oauth: Starts a sign-in — the address you send a browse
 
 # Zoo · IAM · oauth
 
-Read-only Zoo capability derived from the `iam` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `iam` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -21,10 +21,10 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/iam/oauth/authorize` → JSON body.
-- `/v1/iam/oauth/callback` → JSON body.
-- `/v1/iam/oauth/logout` → JSON body.
-- `/v1/iam/oauth/userinfo` → JSON body.
+- `/v1/iam/oauth/authorize` → JSON object.
+- `/v1/iam/oauth/callback` → JSON object.
+- `/v1/iam/oauth/logout` → JSON object.
+- `/v1/iam/oauth/userinfo` → JSON object.
 
 ## Example
 

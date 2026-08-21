@@ -6,7 +6,7 @@ description: "Read functions deployments: Is what is live right now — each fun
 
 # Lux · FUNCTIONS · deployments
 
-Read-only Lux capability derived from the `functions` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `functions` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

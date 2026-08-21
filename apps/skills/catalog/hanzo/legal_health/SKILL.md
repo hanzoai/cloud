@@ -6,7 +6,7 @@ description: "Read legal health: Reports that the legal subsystem is serving and
 
 # Hanzo · LEGAL · health
 
-Read-only Hanzo capability derived from the `legal` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `legal` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

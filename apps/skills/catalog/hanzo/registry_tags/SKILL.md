@@ -6,7 +6,7 @@ description: "Read registry tags: Tags lists one org-owned repository's tags, re
 
 # Hanzo · REGISTRY · tags
 
-Read-only Hanzo capability derived from the `registry` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `registry` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `image` | query | no | string | Image is the repository name inside the org's namespace, as returned by |
+| `image` | query | no | string | Image is the repository name inside the org's namespace, as returned by the images op. It rides the query string. |
 
 ## Response
 

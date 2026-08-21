@@ -6,7 +6,7 @@ description: "Read ingress tls: GetTLS returns the caller org's ACME intent toge
 
 # Lux · INGRESS · tls
 
-Read-only Lux capability derived from the `ingress` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `ingress` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

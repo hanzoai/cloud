@@ -6,7 +6,7 @@ description: "Read dns dns: Read your org's DNS zones and records."
 
 # Hanzo · DNS · dns
 
-Read-only Hanzo capability derived from the `dns` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `dns` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/dns/{wildcard1}` → JSON body.
+- `/v1/dns/{wildcard1}` → JSON object.
 
 ## Example
 

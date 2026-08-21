@@ -6,7 +6,7 @@ description: "Read dataroom view: What a share link's visitor sees before authen
 
 # Lux · DATAROOM · view
 
-Read-only Lux capability derived from the `dataroom` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `dataroom` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -26,8 +26,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/dataroom/view/{linkId}` → JSON body.
-- `/v1/dataroom/view/{linkId}/document/{documentId}/file` → JSON body.
+- `/v1/dataroom/view/{linkId}` → JSON object.
+- `/v1/dataroom/view/{linkId}/document/{documentId}/file` → JSON object.
 
 ## Example
 

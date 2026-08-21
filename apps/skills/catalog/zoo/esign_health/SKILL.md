@@ -6,7 +6,7 @@ description: "Read esign health: Whether the e-signature surface is mounted."
 
 # Zoo · ESIGN · health
 
-Read-only Zoo capability derived from the `esign` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `esign` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/esign/health` → JSON body.
+- `/v1/esign/health` → JSON object.
 
 ## Example
 

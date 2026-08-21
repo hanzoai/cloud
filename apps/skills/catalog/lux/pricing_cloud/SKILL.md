@@ -6,7 +6,7 @@ description: "Read pricing cloud: Returns the public cloud section of the catalo
 
 # Lux · PRICING · cloud
 
-Read-only Lux capability derived from the `pricing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `pricing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

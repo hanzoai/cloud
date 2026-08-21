@@ -6,7 +6,7 @@ description: "Read billing payouts: List your org's payouts, newest first."
 
 # Zoo · BILLING · payouts
 
-Read-only Zoo capability derived from the `billing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `billing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/payouts` → JSON body.
+- `/v1/billing/payouts` → JSON object.
 
 ## Example
 

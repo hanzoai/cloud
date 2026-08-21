@@ -6,7 +6,7 @@ description: "Read settings settings: Reads the caller org's configuration for o
 
 # Zoo · SETTINGS · settings
 
-Read-only Zoo capability derived from the `settings` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `settings` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

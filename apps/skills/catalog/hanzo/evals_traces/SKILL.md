@@ -6,7 +6,7 @@ description: "Read evals traces: Is the traces behind your evaluations — one p
 
 # Hanzo · EVALS · traces
 
-Read-only Hanzo capability derived from the `evals` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `evals` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

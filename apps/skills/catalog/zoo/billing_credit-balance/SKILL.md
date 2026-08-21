@@ -6,7 +6,7 @@ description: "Read billing credit balance: What is left of your credit, as one n
 
 # Zoo · BILLING · credit balance
 
-Read-only Zoo capability derived from the `billing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `billing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -19,8 +19,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/credit-balance` → JSON body.
-- `/v1/billing/credit-balance/breakdown` → JSON body.
+- `/v1/billing/credit-balance` → JSON object.
+- `/v1/billing/credit-balance/breakdown` → JSON object.
 
 ## Example
 

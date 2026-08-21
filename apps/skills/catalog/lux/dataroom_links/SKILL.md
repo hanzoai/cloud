@@ -6,7 +6,7 @@ description: "Read dataroom links: Returns every live share link in the caller o
 
 # Lux · DATAROOM · links
 
-Read-only Lux capability derived from the `dataroom` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `dataroom` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

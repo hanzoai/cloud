@@ -6,7 +6,7 @@ description: "Read legal documents: Returns the org's generated documents, newes
 
 # Lux · LEGAL · documents
 
-Read-only Lux capability derived from the `legal` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `legal` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

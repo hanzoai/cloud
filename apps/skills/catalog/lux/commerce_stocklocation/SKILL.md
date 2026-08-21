@@ -6,7 +6,7 @@ description: "Read commerce stocklocation: List your org's stock locations, as a
 
 # Lux · COMMERCE · stocklocation
 
-Read-only Lux capability derived from the `commerce` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `commerce` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/commerce/stocklocation/` → JSON body.
-- `/v1/commerce/stocklocation/{stocklocationid}` → JSON body.
+- `/v1/commerce/stocklocation/` → JSON object.
+- `/v1/commerce/stocklocation/{stocklocationid}` → JSON object.
 
 ## Example
 

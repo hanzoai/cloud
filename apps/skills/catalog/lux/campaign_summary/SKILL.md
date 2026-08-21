@@ -6,7 +6,7 @@ description: "Read campaign summary: Returns the org's go-to-market roll-up: how
 
 # Lux · CAMPAIGN · summary
 
-Read-only Lux capability derived from the `campaign` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `campaign` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

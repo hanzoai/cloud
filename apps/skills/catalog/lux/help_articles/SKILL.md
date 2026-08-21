@@ -6,7 +6,7 @@ description: "Read help articles: Returns the public knowledge base: the help ce
 
 # Lux · HELP · articles
 
-Read-only Lux capability derived from the `help` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `help` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,9 +21,9 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `slug` | path | yes | string | Slug is the article's public identifier, from the path. It IS the document |
-| `category` | query | no | string | Category narrows the list to one knowledge-base section, matched against |
-| `limit` | query | no | integer | Limit caps how many articles are returned. Anything that is not a positive |
+| `slug` | path | yes | string | Slug is the article's public identifier, from the path. It IS the document name in the help center's store. |
+| `category` | query | no | string | Category narrows the list to one knowledge-base section, matched against the article's category by exact name. Empty lists every section. |
+| `limit` | query | no | integer | Limit caps how many articles are returned. Anything that is not a positive integer uses 50, and values above 200 are clamped to 200. |
 
 ## Response
 

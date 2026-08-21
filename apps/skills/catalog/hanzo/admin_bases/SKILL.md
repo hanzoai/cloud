@@ -6,7 +6,7 @@ description: "Read admin bases: Lists the tenant Base instances in the caller's 
 
 # Hanzo · ADMIN · bases
 
-Read-only Hanzo capability derived from the `admin` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `admin` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

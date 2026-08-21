@@ -6,7 +6,7 @@ description: "Read platform projects: Returns your org's projects, each with how
 
 # Lux · PLATFORM · projects
 
-Read-only Lux capability derived from the `platform` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `platform` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

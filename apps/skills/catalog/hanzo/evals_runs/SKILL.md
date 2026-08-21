@@ -6,7 +6,7 @@ description: "Read evals runs: Is your past runs and how they scored — the dat
 
 # Hanzo · EVALS · runs
 
-Read-only Hanzo capability derived from the `evals` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `evals` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

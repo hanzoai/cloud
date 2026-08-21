@@ -6,7 +6,7 @@ description: "Read security scans: Is the org's scan history, newest first, each
 
 # Lux · SECURITY · scans
 
-Read-only Lux capability derived from the `security` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `security` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

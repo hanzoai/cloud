@@ -6,7 +6,7 @@ description: "Read prompts prompts: List returns the caller org's prompt library
 
 # Hanzo · PROMPTS · prompts
 
-Read-only Hanzo capability derived from the `prompts` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `prompts` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

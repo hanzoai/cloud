@@ -6,7 +6,7 @@ description: "Read commerce movie: List your org's movies, as a page, Fetch one 
 
 # Lux · COMMERCE · movie
 
-Read-only Lux capability derived from the `commerce` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `commerce` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/commerce/movie/` → JSON body.
-- `/v1/commerce/movie/{movieid}` → JSON body.
+- `/v1/commerce/movie/` → JSON object.
+- `/v1/commerce/movie/{movieid}` → JSON object.
 
 ## Example
 

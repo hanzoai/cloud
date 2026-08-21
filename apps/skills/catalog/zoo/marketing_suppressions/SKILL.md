@@ -6,7 +6,7 @@ description: "Read marketing suppressions: Returns the org's opt-out list, newes
 
 # Zoo · MARKETING · suppressions
 
-Read-only Zoo capability derived from the `marketing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `marketing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

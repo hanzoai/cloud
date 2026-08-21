@@ -6,7 +6,7 @@ description: "Read evals traces: Is the traces behind your evaluations — one p
 
 # Lux · EVALS · traces
 
-Read-only Lux capability derived from the `evals` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `evals` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

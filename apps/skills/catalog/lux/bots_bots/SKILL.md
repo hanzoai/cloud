@@ -6,7 +6,7 @@ description: "Read bots bots: List returns the caller org's live bot runs, read 
 
 # Lux · BOTS · bots
 
-Read-only Lux capability derived from the `bots` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `bots` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read blueprint sbom: A blueprint's bill of images and what running
 
 # Hanzo · BLUEPRINT · sbom
 
-Read-only Hanzo capability derived from the `blueprint` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `blueprint` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/blueprint/sbom` → JSON body.
+- `/v1/blueprint/sbom` → JSON object.
 
 ## Example
 

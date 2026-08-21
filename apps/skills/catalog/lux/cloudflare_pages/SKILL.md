@@ -6,7 +6,7 @@ description: "Read cloudflare pages: Lists the org's Cloudflare Pages projects.,
 
 # Lux · CLOUDFLARE · pages
 
-Read-only Lux capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

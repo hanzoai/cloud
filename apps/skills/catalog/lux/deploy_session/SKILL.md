@@ -6,7 +6,7 @@ description: "Read deploy session: Answers \"is this browser signed in, and if n
 
 # Lux · DEPLOY · session
 
-Read-only Lux capability derived from the `deploy` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `deploy` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

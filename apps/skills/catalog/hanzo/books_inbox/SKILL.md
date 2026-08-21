@@ -6,7 +6,7 @@ description: "Read books inbox: Returns the org's open document queue — everyt
 
 # Hanzo · BOOKS · inbox
 
-Read-only Hanzo capability derived from the `books` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `books` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `sandbox` | query | no | string | Sandbox reads the org's SANDBOX ledger when it is exactly "true"; anything else |
+| `sandbox` | query | no | string | Sandbox reads the org's SANDBOX ledger when it is exactly "true"; anything else reads the live one. |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read deploy projects: Returns the argocd AppProjectList this conso
 
 # Lux · DEPLOY · projects
 
-Read-only Lux capability derived from the `deploy` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `deploy` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

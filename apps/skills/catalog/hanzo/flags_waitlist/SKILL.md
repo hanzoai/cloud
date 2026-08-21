@@ -6,7 +6,7 @@ description: "Read flags waitlist: Reports whether ONE host is currently gated b
 
 # Hanzo · FLAGS · waitlist
 
-Read-only Hanzo capability derived from the `flags` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `flags` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `host` | query | no | string | Host is the host to resolve, e.g. "chat.hanzo.ai". Defaults to the request's |
+| `host` | query | no | string | Host is the host to resolve, e.g. "chat.hanzo.ai". Defaults to the request's own Host header when omitted, which is what lets a guard running on the governed host ask about itself with no argument. |
 
 ## Response
 

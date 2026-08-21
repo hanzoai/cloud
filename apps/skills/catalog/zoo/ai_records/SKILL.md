@@ -6,7 +6,7 @@ description: "Read ai records: List records, Query (record), Query Second (recor
 
 # Zoo · AI · records
 
-Read-only Zoo capability derived from the `ai` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `ai` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -23,14 +23,14 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | path | yes | string | Resource name, unique within the owner. |
-| `owner` | path | yes | string | Owning organization. |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 
 ## Response
 
 - `/v1/ai/records` → JSON object.
-- `/v1/ai/records/query` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
-- `/v1/ai/records/query-second` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
+- `/v1/ai/records/query` → JSON object.
+- `/v1/ai/records/query-second` → JSON object.
 - `/v1/ai/records/{owner}/{name}` → JSON object.
 
 ## Example

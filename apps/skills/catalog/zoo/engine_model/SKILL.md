@@ -6,7 +6,7 @@ description: "Read engine model: Read one model's load state on the serving runt
 
 # Zoo · ENGINE · model
 
-Read-only Zoo capability derived from the `engine` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `engine` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

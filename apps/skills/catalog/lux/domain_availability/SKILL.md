@@ -6,7 +6,7 @@ description: "Read domain availability: Checks exact names rather than searching
 
 # Lux · DOMAIN · availability
 
-Read-only Lux capability derived from the `domain` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `domain` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `domain` | query | yes | string | Domain is one name, or several comma-separated, to check in one call. Names |
+| `domain` | query | yes | string | Domain is one name, or several comma-separated, to check in one call. Names are lowercased. It is required. |
 
 ## Response
 

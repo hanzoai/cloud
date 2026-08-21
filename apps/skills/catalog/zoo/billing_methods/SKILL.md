@@ -6,7 +6,7 @@ description: "Read billing methods: Your saved cards, masked — the customer re
 
 # Zoo · BILLING · methods
 
-Read-only Zoo capability derived from the `billing` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `billing` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/billing/methods` → JSON body.
+- `/v1/billing/methods` → JSON object.
 
 ## Example
 

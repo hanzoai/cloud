@@ -6,7 +6,7 @@ description: "Read o11y user: Lists the org's members with their single legacy r
 
 # Zoo · O11Y · user
 
-Read-only Zoo capability derived from the `o11y` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `o11y` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

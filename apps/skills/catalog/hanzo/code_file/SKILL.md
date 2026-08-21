@@ -6,7 +6,7 @@ description: "Read code file: Returns the INDEXED content of one file — read_f
 
 # Hanzo · CODE · file
 
-Read-only Hanzo capability derived from the `code` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `code` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

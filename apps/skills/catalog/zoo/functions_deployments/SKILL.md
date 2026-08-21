@@ -6,7 +6,7 @@ description: "Read functions deployments: Is what is live right now — each fun
 
 # Zoo · FUNCTIONS · deployments
 
-Read-only Zoo capability derived from the `functions` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `functions` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

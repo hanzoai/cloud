@@ -6,7 +6,7 @@ description: "Read code tree: Returns one repository's file structure with a per
 
 # Lux · CODE · tree
 
-Read-only Lux capability derived from the `code` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `code` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

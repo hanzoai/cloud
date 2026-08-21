@@ -6,7 +6,7 @@ description: "Read cloudflare workers: Lists the Worker scripts on the org's Clo
 
 # Lux · CLOUDFLARE · workers
 
-Read-only Lux capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

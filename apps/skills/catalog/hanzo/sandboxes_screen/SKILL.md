@@ -6,7 +6,7 @@ description: "Read sandboxes screen: The screen, as a page, The screen, as a soc
 
 # Hanzo · SANDBOXES · screen
 
-Read-only Hanzo capability derived from the `sandboxes` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `sandboxes` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/sandboxes/{id}/screen` → JSON body.
-- `/v1/sandboxes/{id}/screen/ws` → JSON body.
+- `/v1/sandboxes/{id}/screen` → JSON object.
+- `/v1/sandboxes/{id}/screen/ws` → JSON object.
 
 ## Example
 

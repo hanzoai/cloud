@@ -6,7 +6,7 @@ description: "Read agents agents: Returns every agent defined in the caller's or
 
 # Hanzo · AGENTS · agents
 
-Read-only Hanzo capability derived from the `agents` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `agents` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -21,7 +21,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `ref` | path | yes | string | Ref is the agent's public id (the agent_… handle create and list return) or |
+| `ref` | path | yes | string | Ref is the agent's public id (the agent_… handle create and list return) or its org-unique name, from the path. Either resolves the same agent. |
 
 ## Response
 

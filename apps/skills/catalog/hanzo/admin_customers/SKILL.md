@@ -6,7 +6,7 @@ description: "Read admin customers: Lists every customer org at a glance, sorted
 
 # Hanzo · ADMIN · customers
 
-Read-only Hanzo capability derived from the `admin` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `admin` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

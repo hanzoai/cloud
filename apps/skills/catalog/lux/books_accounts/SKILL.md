@@ -6,7 +6,7 @@ description: "Read books accounts: Returns the org's chart of accounts — the s
 
 # Lux · BOOKS · accounts
 
-Read-only Lux capability derived from the `books` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `books` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `sandbox` | query | no | string | Sandbox reads the org's SANDBOX ledger when it is exactly "true"; anything else |
+| `sandbox` | query | no | string | Sandbox reads the org's SANDBOX ledger when it is exactly "true"; anything else reads the live one. |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read cloudflare kv: KVNamespaceList lists the Workers KV namespace
 
 # Lux · CLOUDFLARE · kv
 
-Read-only Lux capability derived from the `cloudflare` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `cloudflare` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -31,7 +31,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Response
 
 - `/v1/cloudflare/kv/namespaces` → JSON object.
-- `/v1/cloudflare/kv/namespaces/{namespace}/values/{key}` → JSON body.
+- `/v1/cloudflare/kv/namespaces/{namespace}/values/{key}` → JSON object.
 
 ## Example
 

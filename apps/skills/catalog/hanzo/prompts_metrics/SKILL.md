@@ -6,7 +6,7 @@ description: "Read prompts metrics: Metrics returns real per-prompt statistics f
 
 # Hanzo · PROMPTS · metrics
 
-Read-only Hanzo capability derived from the `prompts` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `prompts` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

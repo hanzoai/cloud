@@ -6,7 +6,7 @@ description: "Read audit audit: List reads the caller's OWN org audit trail, new
 
 # Lux · AUDIT · audit
 
-Read-only Lux capability derived from the `audit` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `audit` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -21,13 +21,13 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `action` | query | no | string | Action narrows it to one action name, e.g. "machine.create". |
-| `p` | query | no | string | Page is the 1-based page number, driving the offset. Anything below 2 reads |
-| `pageSize` | query | no | string | PageSize is rows per page, default 100. A value that is not a positive |
+| `p` | query | no | string | Page is the 1-based page number, driving the offset. Anything below 2 reads the first page. |
+| `pageSize` | query | no | string | PageSize is rows per page, default 100. A value that is not a positive integer falls back to the default. |
 | `resource` | query | no | string | Resource narrows it to one resource TYPE, e.g. "apikey". |
 | `resourceId` | query | no | string | ResourceID narrows it to one resource instance. |
 | `result` | query | no | string | Result narrows it to one outcome: "success", "deny" or "error". |
-| `since` | query | no | string | Since is the inclusive lower time bound, RFC3339. An unparseable value is |
-| `sub` | query | no | string | Sub narrows the trail to one actor — the validated subject that made the |
+| `since` | query | no | string | Since is the inclusive lower time bound, RFC3339. An unparseable value is ignored rather than refused — one malformed filter must not hide the trail. |
+| `sub` | query | no | string | Sub narrows the trail to one actor — the validated subject that made the request. Blank means every actor in the org. |
 | `until` | query | no | string | Until is the upper time bound, RFC3339, with the same tolerance. |
 
 ## Response

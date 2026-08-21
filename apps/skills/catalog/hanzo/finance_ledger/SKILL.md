@@ -1,12 +1,12 @@
 ---
 name: finance_ledger
 version: "8.0.0"
-description: "Read finance ledger: Answers the org's own postings inside `range=`, each as a signed entry: a DEPOSIT CREDITS the wallet (positive, account `credits:<org>`) and every other posting DEBITS it (negative, account `usage:<org>`), described by its notes or its tags.."
+description: "Read finance ledger: Answers the org's own postings inside `range=`, each as a signed entry: a DEPOSIT CREDITS the wallet (positive, account `credits:\u003corg\u003e`) and every other posting DEBITS it (negative, account `usage:\u003corg\u003e`), described by its notes or its tags.."
 ---
 
 # Hanzo · FINANCE · ledger
 
-Read-only Hanzo capability derived from the `finance` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `finance` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,7 +20,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `range` | query | no | string | Range is the window: 24h, 7d, 30d or 90d. Anything else — including |
+| `range` | query | no | string | Range is the window: 24h, 7d, 30d or 90d. Anything else — including absent — is 30d, so a typo silently widens the window to a month rather than failing. |
 
 ## Response
 

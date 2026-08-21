@@ -6,7 +6,7 @@ description: "Read templates templates: Lists the public starter-kit catalog plu
 
 # Hanzo · TEMPLATES · templates
 
-Read-only Hanzo capability derived from the `templates` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `templates` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

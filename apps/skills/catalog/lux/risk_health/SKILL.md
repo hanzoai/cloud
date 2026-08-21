@@ -6,7 +6,7 @@ description: "Read risk health: Whether the risk model plane can actually work r
 
 # Lux · RISK · health
 
-Read-only Lux capability derived from the `risk` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `risk` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/risk/health` → JSON body.
+- `/v1/risk/health` → JSON object.
 
 ## Example
 

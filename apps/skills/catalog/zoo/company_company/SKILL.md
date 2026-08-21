@@ -6,7 +6,7 @@ description: "Read company company: Get returns the caller org's formation and t
 
 # Zoo · COMPANY · company
 
-Read-only Zoo capability derived from the `company` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `company` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read settings settings: Reads the caller org's configuration for o
 
 # Lux · SETTINGS · settings
 
-Read-only Lux capability derived from the `settings` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `settings` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

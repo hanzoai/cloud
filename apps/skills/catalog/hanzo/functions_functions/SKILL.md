@@ -6,7 +6,7 @@ description: "Read functions functions: Is every serverless function the caller'
 
 # Hanzo · FUNCTIONS · functions
 
-Read-only Hanzo capability derived from the `functions` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `functions` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

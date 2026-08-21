@@ -6,7 +6,7 @@ description: "Read commerce note: List your org's notes, as a page, Fetch one no
 
 # Zoo · COMMERCE · note
 
-Read-only Zoo capability derived from the `commerce` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `commerce` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/commerce/note/` → JSON body.
-- `/v1/commerce/note/{noteid}` → JSON body.
+- `/v1/commerce/note/` → JSON object.
+- `/v1/commerce/note/{noteid}` → JSON object.
 
 ## Example
 

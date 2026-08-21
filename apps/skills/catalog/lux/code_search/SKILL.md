@@ -6,7 +6,7 @@ description: "Read code search: Finds code in the caller org's index across thre
 
 # Lux · CODE · search
 
-Read-only Lux capability derived from the `code` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `code` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -20,10 +20,10 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `limit` | query | no | integer | Limit caps how many spans come back: default 20, maximum 100. A value that |
-| `q` | query | no | string | Q is the search query. Required, max 4000 bytes. For type=regex it is a |
+| `limit` | query | no | integer | Limit caps how many spans come back: default 20, maximum 100. A value that is not a positive integer reads as the default. |
+| `q` | query | no | string | Q is the search query. Required, max 4000 bytes. For type=regex it is a regular expression; for type=symbol it is a symbol name. |
 | `repo` | query | no | string | Repo narrows to one repository. Empty searches every repo the org has indexed. |
-| `type` | query | no | string | Type selects the retrieval tier: "text" (FTS5 trigram), "regex", |
+| `type` | query | no | string | Type selects the retrieval tier: "text" (FTS5 trigram), "regex", "symbol" (definitions), "semantic" (embeddings) or "hybrid". Anything else — including empty — reads as hybrid. |
 
 ## Response
 

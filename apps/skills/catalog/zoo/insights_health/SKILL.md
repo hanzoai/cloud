@@ -6,7 +6,7 @@ description: "Read insights health: Reports that the unified insights surface is
 
 # Zoo · INSIGHTS · health
 
-Read-only Zoo capability derived from the `insights` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `insights` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

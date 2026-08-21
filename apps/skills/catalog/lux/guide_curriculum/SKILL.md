@@ -6,7 +6,7 @@ description: "Read guide curriculum: Returns the journey the caller's org is act
 
 # Lux · GUIDE · curriculum
 
-Read-only Lux capability derived from the `guide` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `guide` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read gateway config: Read returns the EFFECTIVE edge policy the ca
 
 # Zoo · GATEWAY · config
 
-Read-only Zoo capability derived from the `gateway` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `gateway` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

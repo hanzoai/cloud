@@ -6,7 +6,7 @@ description: "Read agents builds: Returns the public index of every published bu
 
 # Hanzo · AGENTS · builds
 
-Read-only Hanzo capability derived from the `agents` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `agents` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

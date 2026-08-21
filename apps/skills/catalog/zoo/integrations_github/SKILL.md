@@ -6,7 +6,7 @@ description: "Read integrations github: Lists the GitHub accounts the caller may
 
 # Zoo · INTEGRATIONS · github
 
-Read-only Zoo capability derived from the `integrations` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `integrations` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -22,7 +22,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `repo` | path | yes | string | Repo is the repository's short name within the org's installation, with no |
+| `repo` | path | yes | string | Repo is the repository's short name within the org's installation, with no owner prefix (the owner is server-derived from the grant). A trailing ".git" is stripped. |
 
 ## Response
 

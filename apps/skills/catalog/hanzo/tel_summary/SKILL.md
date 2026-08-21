@@ -6,7 +6,7 @@ description: "Read tel summary: Counts what this org holds on the telephony plan
 
 # Hanzo · TEL · summary
 
-Read-only Hanzo capability derived from the `tel` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `tel` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

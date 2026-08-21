@@ -6,7 +6,7 @@ description: "Read licensing download: Download resolves a release to its artifa
 
 # Lux · LICENSING · download
 
-Read-only Lux capability derived from the `licensing` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `licensing` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

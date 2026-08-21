@@ -6,7 +6,7 @@ description: "Read s3 buckets: List your org's buckets, Browse one level of a bu
 
 # Hanzo · S3 · buckets
 
-Read-only Hanzo capability derived from the `s3` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `s3` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -27,9 +27,9 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/s3/buckets` → JSON body.
-- `/v1/s3/buckets/{bucket}/objects` → JSON body.
-- `/v1/s3/buckets/{bucket}/objects/{wildcard1}` → JSON body.
+- `/v1/s3/buckets` → JSON object.
+- `/v1/s3/buckets/{bucket}/objects` → JSON object.
+- `/v1/s3/buckets/{bucket}/objects/{wildcard1}` → JSON object.
 
 ## Example
 

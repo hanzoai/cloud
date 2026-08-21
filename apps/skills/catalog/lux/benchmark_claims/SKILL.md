@@ -6,7 +6,7 @@ description: "Read benchmark claims: Lists the effective published claims: what 
 
 # Lux · BENCHMARK · claims
 
-Read-only Lux capability derived from the `benchmark` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `benchmark` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -22,9 +22,9 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 |---|---|---|---|---|
 | `Benchmark` | query | no | string | Benchmark filters to one benchmark id. Empty returns every benchmark. |
 | `Model` | query | no | string | Model filters to one model. Empty returns every model. |
-| `Protocol` | query | no | string | Protocol filters by HOW a claim was scored, so provider cards can be read |
-| `Provider` | query | no | string | Provider filters to one lab or leaderboard — the way to read what a single |
-| `Source` | query | no | string | Source filters to one citation, which is the finest grain there is: a |
+| `Protocol` | query | no | string | Protocol filters by HOW a claim was scored, so provider cards can be read apart from third parties running their own harness. |
+| `Provider` | query | no | string | Provider filters to one lab or leaderboard — the way to read what a single source claims across every model it covers. |
+| `Source` | query | no | string | Source filters to one citation, which is the finest grain there is: a source is what makes two claims about one model independent rather than a restatement of each other. |
 
 ## Response
 

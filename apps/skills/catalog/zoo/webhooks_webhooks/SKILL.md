@@ -6,7 +6,7 @@ description: "Read webhooks webhooks: Returns every webhook endpoint the caller'
 
 # Zoo · WEBHOOKS · webhooks
 
-Read-only Zoo capability derived from the `webhooks` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `webhooks` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

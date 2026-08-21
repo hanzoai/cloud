@@ -6,7 +6,7 @@ description: "Read agent conversations: List the agent threads in your org, Read
 
 # Lux · AGENT · conversations
 
-Read-only Lux capability derived from the `agent` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `agent` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/agent/conversations` → JSON body.
-- `/v1/agent/conversations/{id}` → JSON body.
+- `/v1/agent/conversations` → JSON object.
+- `/v1/agent/conversations/{id}` → JSON object.
 
 ## Example
 

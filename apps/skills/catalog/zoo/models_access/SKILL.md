@@ -6,7 +6,7 @@ description: "Read models access: Returns the caller's own standing for a gated 
 
 # Zoo · MODELS · access
 
-Read-only Zoo capability derived from the `models` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `models` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/models/{model}/access` → JSON body.
+- `/v1/models/{model}/access` → JSON object.
 
 ## Example
 

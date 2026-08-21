@@ -6,7 +6,7 @@ description: "Read help categories: Returns the knowledge-base sections for the 
 
 # Lux · HELP · categories
 
-Read-only Lux capability derived from the `help` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `help` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

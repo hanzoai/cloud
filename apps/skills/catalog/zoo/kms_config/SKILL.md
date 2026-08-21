@@ -6,7 +6,7 @@ description: "Read kms config: Runtime configuration for the KMS console."
 
 # Zoo · KMS · config
 
-Read-only Zoo capability derived from the `kms` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `kms` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/kms/config` → JSON body.
+- `/v1/kms/config` → JSON object.
 
 ## Example
 

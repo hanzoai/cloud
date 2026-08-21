@@ -6,7 +6,7 @@ description: "Read prompts prompts: List returns the caller org's prompt library
 
 # Lux · PROMPTS · prompts
 
-Read-only Lux capability derived from the `prompts` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `prompts` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

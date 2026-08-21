@@ -6,7 +6,7 @@ description: "Read marketing calendar: Returns the org's calendar, soonest sched
 
 # Hanzo · MARKETING · calendar
 
-Read-only Hanzo capability derived from the `marketing` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `marketing` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 |---|---|---|---|---|
 | `id` | path | yes | string | ID is the post id from the path, as returned by create. |
 | `limit` | query | no | integer | Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured. |
-| `status` | query | no | string | Status keeps only posts in that state (draft, scheduled, published, |
+| `status` | query | no | string | Status keeps only posts in that state (draft, scheduled, published, failed, canceled). Empty means every post. |
 
 ## Response
 

@@ -6,7 +6,7 @@ description: "Read agents metrics: Serves the invocations-over-time histogram fo
 
 # Zoo · AGENTS · metrics
 
-Read-only Zoo capability derived from the `agents` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `agents` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

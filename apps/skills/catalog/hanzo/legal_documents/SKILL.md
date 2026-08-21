@@ -6,7 +6,7 @@ description: "Read legal documents: Returns the org's generated documents, newes
 
 # Hanzo · LEGAL · documents
 
-Read-only Hanzo capability derived from the `legal` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `legal` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

@@ -6,7 +6,7 @@ description: "Read sandboxes terminal: The terminal, as a page, The terminal, as
 
 # Lux · SANDBOXES · terminal
 
-Read-only Lux capability derived from the `sandboxes` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `sandboxes` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -25,8 +25,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/sandboxes/{id}/terminal` → JSON body.
-- `/v1/sandboxes/{id}/terminal/ws` → JSON body.
+- `/v1/sandboxes/{id}/terminal` → JSON object.
+- `/v1/sandboxes/{id}/terminal/ws` → JSON object.
 
 ## Example
 

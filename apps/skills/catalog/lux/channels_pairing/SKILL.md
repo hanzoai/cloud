@@ -6,7 +6,7 @@ description: "Read channels pairing: Returns the pairing requests waiting for th
 
 # Lux · CHANNELS · pairing
 
-Read-only Lux capability derived from the `channels` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `channels` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

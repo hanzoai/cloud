@@ -6,7 +6,7 @@ description: "Read crm summary: Summary counts the caller org's CRM records: com
 
 # Hanzo · CRM · summary
 
-Read-only Hanzo capability derived from the `crm` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `crm` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

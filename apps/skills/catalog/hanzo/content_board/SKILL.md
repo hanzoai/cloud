@@ -6,7 +6,7 @@ description: "Read content board: Aggregates the caller org's marketing content 
 
 # Hanzo · CONTENT · board
 
-Read-only Hanzo capability derived from the `content` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `content` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -20,10 +20,10 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `doctype` | query | no | string | DocType keeps only one content type; omitted, the board spans every |
-| `limit` | query | no | integer | Limit caps the rows returned, clamped to 1000. Defaults to 200, which is also |
+| `doctype` | query | no | string | DocType keeps only one content type; omitted, the board spans every publishable type. An unknown type is refused. |
+| `limit` | query | no | integer | Limit caps the rows returned, clamped to 1000. Defaults to 200, which is also what a non-positive or unparseable value takes. |
 | `project` | query | no | string | Project keeps only items in one brand/site sub-scope. |
-| `status` | query | no | string | Status keeps only items in one lifecycle state (draft, in_review, approved, |
+| `status` | query | no | string | Status keeps only items in one lifecycle state (draft, in_review, approved, queued, published, archived). An undefined state is refused. |
 
 ## Response
 

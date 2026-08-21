@@ -6,7 +6,7 @@ description: "Read finance payment methods: Answers the masked card descriptors 
 
 # Zoo · FINANCE · payment methods
 
-Read-only Zoo capability derived from the `finance` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `finance` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

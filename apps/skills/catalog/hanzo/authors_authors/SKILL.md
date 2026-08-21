@@ -6,7 +6,7 @@ description: "Read authors authors: Returns the caller's author-program dashboar
 
 # Hanzo · AUTHORS · authors
 
-Read-only Hanzo capability derived from the `authors` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `authors` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

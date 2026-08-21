@@ -6,7 +6,7 @@ description: "Read sandboxes fs: Read a file, or list a directory."
 
 # Hanzo · SANDBOXES · fs
 
-Read-only Hanzo capability derived from the `sandboxes` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `sandboxes` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -24,7 +24,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/sandboxes/{id}/fs` → JSON body.
+- `/v1/sandboxes/{id}/fs` → JSON object.
 
 ## Example
 

@@ -6,7 +6,7 @@ description: "Read share share: Returns the tunnel shares the caller's org curre
 
 # Hanzo · SHARE · share
 
-Read-only Hanzo capability derived from the `share` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `share` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 

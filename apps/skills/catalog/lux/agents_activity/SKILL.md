@@ -6,7 +6,7 @@ description: "Read agents activity: Serves the org-wide recent-activity feed.."
 
 # Lux · AGENTS · activity
 
-Read-only Lux capability derived from the `agents` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `agents` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

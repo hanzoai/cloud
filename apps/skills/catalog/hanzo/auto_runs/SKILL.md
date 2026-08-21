@@ -1,12 +1,12 @@
 ---
 name: auto_runs
 version: "8.0.0"
-description: "Read auto runs: Runs lists the caller's run records, newest first — optionally one flow's., Run reads one run record: status, input, output (each executed node's result keyed by node id once completed), error detail if it failed, and timestamps.."
+description: "Read auto runs: Returns the caller org's run history, newest first., Returns one run.."
 ---
 
 # Hanzo · AUTO · runs
 
-Read-only Hanzo capability derived from the `auto` OpenAPI service. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `auto` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -14,20 +14,21 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/auto/runs` — Runs lists the caller's run records, newest first — optionally one flow's.
-- `GET https://api.hanzo.ai/v1/auto/runs/{run}` — Run reads one run record: status, input, output (each executed node's result keyed by node id once completed), error detail if it failed, and timestamps.
+- `GET https://api.hanzo.ai/v1/auto/runs` — Returns the caller org's run history, newest first.
+- `GET https://api.hanzo.ai/v1/auto/runs/{id}` — Returns one run.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `run` | path | yes | string | Run is the run's id, taken from the path. |
-| `flow` | query | no | string | Flow narrows the list to one flow's runs when present. |
+| `id` | path | yes | string | ID is the run to read, from the path. |
+| `flowId` | query | no | string | FlowID narrows the history to one flow. Omit it for the whole org's runs. |
+| `limit` | query | no | integer | Limit bounds the page (default 200, maximum 1000). |
 
 ## Response
 
-- `/v1/auto/runs` → JSON object.
-- `/v1/auto/runs/{run}` → JSON object.
+- `/v1/auto/runs` → `runPage` object with fields: `data`.
+- `/v1/auto/runs/{id}` → `FlowRun` object with fields: `created`, `finishTime`, `flowId`, `flowVersionId`, `id`, `startTime`, `status`, `updated`.
 
 ## Example
 

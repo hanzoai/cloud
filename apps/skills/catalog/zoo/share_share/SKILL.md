@@ -6,7 +6,7 @@ description: "Read share share: Returns the tunnel shares the caller's org curre
 
 # Zoo · SHARE · share
 
-Read-only Zoo capability derived from the `share` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `share` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

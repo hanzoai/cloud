@@ -6,7 +6,7 @@ description: "Read compliance subjects: Returns the org's subjects as PII-MINIMI
 
 # Lux · COMPLIANCE · subjects
 
-Read-only Lux capability derived from the `compliance` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `compliance` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

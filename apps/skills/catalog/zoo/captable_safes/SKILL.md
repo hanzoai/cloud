@@ -6,7 +6,7 @@ description: "Read captable safes: Returns the caller org's SAFEs, newest first.
 
 # Zoo · CAPTABLE · safes
 
-Read-only Zoo capability derived from the `captable` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `captable` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 

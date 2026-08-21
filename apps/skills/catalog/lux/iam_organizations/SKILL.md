@@ -6,7 +6,7 @@ description: "Read iam organizations: Returns the organizations you can see, new
 
 # Lux · IAM · organizations
 
-Read-only Lux capability derived from the `iam` OpenAPI service. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `iam` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 

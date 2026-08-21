@@ -6,7 +6,7 @@ description: "Read agents targets: Returns every machine registered to the calle
 
 # Zoo · AGENTS · targets
 
-Read-only Zoo capability derived from the `agents` OpenAPI service. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `agents` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
