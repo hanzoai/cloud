@@ -21,14 +21,14 @@ import (
 // Mount wires the native single-connector execution surface onto the cloud
 // binary, per HIP-0126 / HIP-0106:
 //
-//	✓ POST /v1/automations/connectors/:id/run   run one connector action in-process
+//	✓ POST /v1/auto/connectors/:id/run   run one connector action in-process
 //
 // This is the native replacement for the standalone ActivePieces Node engine's
 // /v1/auto/pieces/{piece}/run — same {action,auth,props} -> {ok,output,error}
 // contract, executed in goja in-process (no `auto` pod). It is org-gated: only
 // a validated principal may run a connector, and the caller's resolved
 // credential travels in the request `auth`. The route is DISTINCT from
-// automations' GET /v1/automations/connectors (the catalogue), so the two
+// automations' GET /v1/auto/connectors (the catalogue), so the two
 // subsystems compose without collision. It is a TYPED op — one registry entry
 // from which the REST route, the OpenAPI operation, the MCP tool, the CLI
 // command and every generated SDK method follow.
@@ -37,7 +37,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("connectorruntime.Mount: nil app")
 	}
 	log := luxlog.Default()
-	g := app.Group("/v1/automations/connectors")
+	g := app.Group("/v1/auto/connectors")
 	// cloud.Bridge is not installed here. Whoever composes the program installs it
 	// once at the root — after the identity check that mints the validated org and
 	// before any subsystem registers a route (serve.go) — because that order is a

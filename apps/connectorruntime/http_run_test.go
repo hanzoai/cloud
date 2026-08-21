@@ -68,16 +68,16 @@ func post(t *testing.T, app *zip.App, path, org string, body any) (int, []byte) 
 func TestRunWire(t *testing.T) {
 	app := newApp(t)
 
-	if code, body := post(t, app, "/v1/automations/connectors/notion/run", "", map[string]any{"action": "x"}); code != http.StatusForbidden {
+	if code, body := post(t, app, "/v1/auto/connectors/notion/run", "", map[string]any{"action": "x"}); code != http.StatusForbidden {
 		t.Fatalf("no principal want 403, got %d (%s)", code, body)
 	}
-	if code, body := post(t, app, "/v1/automations/connectors/nope/run", "acme", map[string]any{"action": "x"}); code != http.StatusNotFound {
+	if code, body := post(t, app, "/v1/auto/connectors/nope/run", "acme", map[string]any{"action": "x"}); code != http.StatusNotFound {
 		t.Fatalf("unknown connector want 404, got %d (%s)", code, body)
 	}
-	if code, body := post(t, app, "/v1/automations/connectors/notion/run", "acme", map[string]any{}); code != http.StatusUnprocessableEntity {
+	if code, body := post(t, app, "/v1/auto/connectors/notion/run", "acme", map[string]any{}); code != http.StatusUnprocessableEntity {
 		t.Fatalf("missing action want 422, got %d (%s)", code, body)
 	}
-	code, body := post(t, app, "/v1/automations/connectors/notion/run", "acme", map[string]any{"action": "no_such_action"})
+	code, body := post(t, app, "/v1/auto/connectors/notion/run", "acme", map[string]any{"action": "no_such_action"})
 	if code != http.StatusOK {
 		t.Fatalf("piece-level failure want 200, got %d (%s)", code, body)
 	}
