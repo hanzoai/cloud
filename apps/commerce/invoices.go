@@ -2,20 +2,26 @@
 
 package commerce
 
-// The INVOICE LIFECYCLE as typed ops — raise, issue, collect, void, read.
+// The INVOICE LIFECYCLE as plane ops — raise, issue, collect, void, read.
 //
 // The lifecycle was already implemented and already correct; what it was not was
 // REACHABLE. commerce implements the whole of it, and cloud mounted exactly two
-// routes off it — the list and the PDF, both GETs (mount.go's billingRead table).
-// So an org could read invoices it had no way to create. `tools/list` published
-// no invoice tool of any kind, which is why "invoice a customer" was not a step an
-// agent could take.
+// routes off it — the list and the PDF, both GETs. So an org could read invoices
+// it had no way to create, and `tools/list` published no invoice tool of any
+// kind, which is why "invoice a customer" was not a step an agent could take.
 //
 // These five ops close that. Each delegates to the SAME core commerce's own HTTP
-// handlers now delegate to (invoice_core.go), so mounting the lifecycle here adds
-// doors rather than a second lifecycle — which matters most for collect, where a
-// second implementation would mean a second idempotency guard and, eventually, an
+// handlers delegate to (invoice_core.go), so the lifecycle gains doors rather
+// than a second lifecycle — which matters most for collect, where a second
+// implementation would mean a second idempotency guard and, eventually, an
 // invoice charged twice.
+//
+// THEY ANSWER BY NAME RATHER THAN AT AN ADDRESS. /v1/billing is the billing
+// capability's root (HIP-0018), and these rows are in the store this process
+// owns, so the door is billing's and the answer is this app's. apps/billing
+// declares the five REST addresses and relays each one here; the shapes are
+// plane's, declared once and served without re-rendering, so the wire a customer
+// reads is the wire this file produced.
 //
 // RAISE AND ISSUE ARE SEPARATE, deliberately. A raised invoice is a DRAFT and is
 // not collectible; issuing is what makes it a demand for payment and gives it its
@@ -39,124 +45,57 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
 )
-
-// InvoiceLineIn is one charge to put on an invoice.
-type InvoiceLineIn struct {
-	// Description is the human-readable line, e.g. "Advisory retainer — August".
-	Description string `json:"description"`
-	// Amount is the line total in whole cents (250000 is $2,500.00).
-	Amount int64 `json:"amount"`
-	// Quantity is the number of units, when the line is metered. Optional.
-	Quantity int64 `json:"quantity,omitempty"`
-	// UnitPrice is the per-unit price in cents, when the line is metered. Optional.
-	UnitPrice int64 `json:"unitPrice,omitempty"`
-}
-
-// RaiseInvoiceIn is a draft invoice to raise against a customer.
-type RaiseInvoiceIn struct {
-	// UserID identifies the customer being billed, within the caller's own org.
-	// Required — an invoice with no addressee is not an invoice.
-	UserID string `json:"userId"`
-	// CustomerEmail is where the invoice is sent. Optional.
-	CustomerEmail string `json:"customerEmail,omitempty"`
-	// Currency is the ISO 4217 code, lower-cased. Empty means usd.
-	Currency string `json:"currency,omitempty"`
-	// Lines are the charges. The invoice subtotal and amount due are COMPUTED
-	// from these — there is no total field to send, because a total that
-	// disagreed with its own lines would bill a number nobody could derive.
-	Lines []InvoiceLineIn `json:"lines,omitempty"`
-}
-
-// InvoiceOut is an invoice.
-type InvoiceOut struct {
-	// ID is the invoice id — what the issue, collect and void ops address.
-	ID string `json:"id"`
-	// Number is the human-facing invoice number, e.g. "INV-0042". A draft has
-	// none; issuing assigns it.
-	Number string `json:"number,omitempty"`
-	// UserID is the customer billed.
-	UserID string `json:"userId"`
-	// CustomerEmail is where it is sent.
-	CustomerEmail string `json:"customerEmail,omitempty"`
-	// Status is draft, open, paid, void or uncollectible. A draft is not
-	// collectible; issuing moves it to open.
-	Status string `json:"status"`
-	// Currency is the ISO 4217 code.
-	Currency string `json:"currency"`
-	// SubtotalCents is the sum of the lines.
-	SubtotalCents int64 `json:"subtotalCents"`
-	// AmountDueCents is what remains collectible.
-	AmountDueCents int64 `json:"amountDueCents"`
-	// AmountPaidCents is what has been collected so far.
-	AmountPaidCents int64 `json:"amountPaidCents"`
-	// Lines are the charges on the invoice.
-	Lines []InvoiceLineIn `json:"lines,omitempty"`
-	// PaymentRef is the processor reference for the collection, once paid.
-	PaymentRef string `json:"paymentRef,omitempty"`
-	// CreatedAt is when the draft was raised, RFC3339.
-	CreatedAt string `json:"createdAt,omitempty"`
-}
-
-// InvoiceRefIn names one invoice to act on.
-type InvoiceRefIn struct {
-	// ID is the invoice id.
-	ID string `json:"id"`
-}
-
-// CollectOut is the outcome of attempting to collect an invoice.
-type CollectOut struct {
-	// Invoice is the invoice AFTER the attempt — its status is the authority on
-	// what happened, not this struct's other fields.
-	Invoice *InvoiceOut `json:"invoice"`
-	// Paid reports whether the invoice is now settled in full. A false here with
-	// no error is a DECLINE: the invoice stays open and may be collected again.
-	Paid bool `json:"paid"`
-	// CreditUsedCents is how much was covered by credit grants.
-	CreditUsedCents int64 `json:"creditUsedCents"`
-	// BalanceUsedCents is how much was covered by prepaid balance.
-	BalanceUsedCents int64 `json:"balanceUsedCents"`
-	// CardChargedCents is how much was charged to the card on file.
-	CardChargedCents int64 `json:"cardChargedCents"`
-	// ProcessorRef is the processor's reference for any card charge — the field
-	// that proves money moved at the gateway rather than only in our ledger.
-	ProcessorRef string `json:"processorRef,omitempty"`
-	// Reason explains a decline or partial collection. Empty on success.
-	Reason string `json:"reason,omitempty"`
-}
 
 // invoiceOps binds the invoice ops to the subsystem. Method values, not
 // closures, so zipdoc can lift each op's prose into the registry.
 type invoiceOps struct{}
 
-// exposeInvoices publishes the invoice lifecycle. Mount calls it.
-//
-// The addresses sit under the /v1/billing/invoices prefix commerce already owns
-// and the console already reads, so an invoice raised by an agent shows up in the
-// same list a human is looking at without anything being told where to look.
-func exposeInvoices(app *zip.App) {
+// exposeInvoices publishes the invoice lifecycle on the plane. Mount calls it.
+func exposeInvoices() {
 	o := invoiceOps{}
-	zip.Post(app, "/v1/billing/invoices", o.raise,
-		zip.WithOperationID("raiseInvoice"),
-		zip.WithSummary("Raise a draft invoice against a customer"),
-		zip.WithTags("invoices"),
-		zip.WithStatus(http.StatusCreated))
-	zip.Get(app, "/v1/billing/invoices/:id", o.read,
-		zip.WithOperationID("getInvoice"),
-		zip.WithSummary("Read one invoice"),
-		zip.WithTags("invoices"))
-	zip.Post(app, "/v1/billing/invoices/:id/issue", o.issue,
-		zip.WithOperationID("issueInvoice"),
-		zip.WithSummary("Issue a draft invoice, making it collectible"),
-		zip.WithTags("invoices"))
-	zip.Post(app, "/v1/billing/invoices/:id/collect", o.collect,
-		zip.WithOperationID("collectInvoice"),
-		zip.WithSummary("Collect an issued invoice from credits, balance, then card"),
-		zip.WithTags("invoices"))
-	zip.Post(app, "/v1/billing/invoices/:id/void", o.void,
-		zip.WithOperationID("voidInvoice"),
-		zip.WithSummary("Void a draft or issued invoice"),
-		zip.WithTags("invoices"))
+	zip.Post[plane.RaiseIn, plane.Invoice](cloud.Plane(), "/billing/invoice/raise", o.raise,
+		zip.WithOperationID(plane.BillingInvoiceRaise),
+		zip.WithSummary("Raise a draft invoice against a customer"))
+	zip.Post[plane.InvoiceRef, plane.Invoice](cloud.Plane(), "/billing/invoice/read", o.read,
+		zip.WithOperationID(plane.BillingInvoiceRead),
+		zip.WithSummary("Read one invoice"))
+	zip.Post[plane.InvoiceRef, plane.Invoice](cloud.Plane(), "/billing/invoice/issue", o.issue,
+		zip.WithOperationID(plane.BillingInvoiceIssue),
+		zip.WithSummary("Issue a draft invoice, making it collectible"))
+	zip.Post[plane.InvoiceRef, plane.Collected](cloud.Plane(), "/billing/invoice/collect", o.collect,
+		zip.WithOperationID(plane.BillingInvoiceCollect),
+		zip.WithSummary("Collect an issued invoice from credits, balance, then card"))
+	zip.Post[plane.InvoiceRef, plane.Invoice](cloud.Plane(), "/billing/invoice/void", o.void,
+		zip.WithOperationID(plane.BillingInvoiceVoid),
+		zip.WithSummary("Void a draft or issued invoice"))
+	zip.Post[plane.InvoiceRef, plane.Document](cloud.Plane(), "/billing/invoice/pdf", o.pdf,
+		zip.WithOperationID(plane.BillingInvoicePDF),
+		zip.WithSummary("Render one invoice as a PDF"))
+}
+
+// Renders one invoice as a PDF — the bytes and the filename they are offered
+// under, so the door that serves the download does not need its own renderer.
+//
+// The render is a pure function of the invoice: no timestamps, no random ids, so
+// the same invoice renders the same bytes however many times it is asked for,
+// and a retry after a dropped connection costs a re-render and nothing else.
+//
+// The org scopes the lookup at the storage layer, so a foreign id resolves to
+// nothing and is a 404 rather than a filtered hit.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func (invoiceOps) pdf(ctx context.Context, in *plane.InvoiceRef) (*plane.Document, error) {
+	org, err := payingOrg(ctx, "invoice pdf")
+	if err != nil {
+		return nil, err
+	}
+	doc, derr := commercebilling.InvoicePDF(ctx, org, in.ID)
+	if derr != nil {
+		return nil, zip.Errorf(http.StatusNotFound, "invoice pdf: %v", derr)
+	}
+	return &plane.Document{Filename: doc.Filename, Body: doc.Body}, nil
 }
 
 // Raises a DRAFT invoice against a customer in the caller's own org.
@@ -170,7 +109,7 @@ func exposeInvoices(app *zip.App) {
 // invoice can only ever be raised on the caller's own books.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) raise(ctx context.Context, in *RaiseInvoiceIn) (*InvoiceOut, error) {
+func (invoiceOps) raise(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice, error) {
 	org, err := payingOrg(ctx, "raise invoice")
 	if err != nil {
 		return nil, err
@@ -198,7 +137,7 @@ func (invoiceOps) raise(ctx context.Context, in *RaiseInvoiceIn) (*InvoiceOut, e
 // id belonging to another tenant is not found rather than found and then filtered.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) read(ctx context.Context, in *InvoiceRefIn) (*InvoiceOut, error) {
+func (invoiceOps) read(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
 	org, err := payingOrg(ctx, "read invoice")
 	if err != nil {
 		return nil, err
@@ -215,7 +154,7 @@ func (invoiceOps) read(ctx context.Context, in *InvoiceRefIn) (*InvoiceOut, erro
 // would mint a second number for one debt.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) issue(ctx context.Context, in *InvoiceRefIn) (*InvoiceOut, error) {
+func (invoiceOps) issue(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
 	org, err := payingOrg(ctx, "issue invoice")
 	if err != nil {
 		return nil, err
@@ -231,7 +170,7 @@ func (invoiceOps) issue(ctx context.Context, in *InvoiceRefIn) (*InvoiceOut, err
 // the answer.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) void(ctx context.Context, in *InvoiceRefIn) (*InvoiceOut, error) {
+func (invoiceOps) void(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
 	org, err := payingOrg(ctx, "void invoice")
 	if err != nil {
 		return nil, err
@@ -250,7 +189,7 @@ func (invoiceOps) void(ctx context.Context, in *InvoiceRefIn) (*InvoiceOut, erro
 // retry of a paid invoice replays the receipt instead of charging again.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (invoiceOps) collect(ctx context.Context, in *InvoiceRefIn) (*CollectOut, error) {
+func (invoiceOps) collect(ctx context.Context, in *plane.InvoiceRef) (*plane.Collected, error) {
 	org, err := payingOrg(ctx, "collect invoice")
 	if err != nil {
 		return nil, err
@@ -259,7 +198,7 @@ func (invoiceOps) collect(ctx context.Context, in *InvoiceRefIn) (*CollectOut, e
 	if f != nil {
 		return nil, zip.Errorf(f.Status, "%s", f.Message)
 	}
-	return &CollectOut{
+	return &plane.Collected{
 		Invoice:          viewOf(res.Invoice),
 		Paid:             res.Paid,
 		CreditUsedCents:  res.CreditUsedCents,
@@ -272,7 +211,7 @@ func (invoiceOps) collect(ctx context.Context, in *InvoiceRefIn) (*CollectOut, e
 
 // invoiceAnswer is the ONE fault-to-error and view-to-out mapping the five ops
 // share, so they cannot disagree about how a 404 or a state refusal reads.
-func invoiceAnswer(v *commercebilling.InvoiceView, f *commercebilling.PaymentFault) (*InvoiceOut, error) {
+func invoiceAnswer(v *commercebilling.InvoiceView, f *commercebilling.PaymentFault) (*plane.Invoice, error) {
 	if f != nil {
 		return nil, zip.Errorf(f.Status, "%s", f.Message)
 	}
@@ -280,11 +219,11 @@ func invoiceAnswer(v *commercebilling.InvoiceView, f *commercebilling.PaymentFau
 }
 
 // viewOf projects commerce's typed invoice onto this surface's wire type.
-func viewOf(v *commercebilling.InvoiceView) *InvoiceOut {
+func viewOf(v *commercebilling.InvoiceView) *plane.Invoice {
 	if v == nil {
 		return nil
 	}
-	out := &InvoiceOut{
+	out := &plane.Invoice{
 		ID:              v.ID,
 		Number:          v.Number,
 		UserID:          v.UserID,
@@ -298,7 +237,7 @@ func viewOf(v *commercebilling.InvoiceView) *InvoiceOut {
 		CreatedAt:       v.CreatedAt,
 	}
 	for _, l := range v.Lines {
-		out.Lines = append(out.Lines, InvoiceLineIn{
+		out.Lines = append(out.Lines, plane.InvoiceLine{
 			Description: l.Description,
 			Amount:      l.Amount,
 			Quantity:    l.Quantity,
@@ -308,32 +247,40 @@ func viewOf(v *commercebilling.InvoiceView) *InvoiceOut {
 	return out
 }
 
-// eventsFrom and kmsFrom lift the two request-scoped side channels off the
-// request a typed op is serving, when there is one. Both are optional by design:
-// a missing analytics collector must never fail a money move, and a missing KMS
-// client is the dev/test posture where credentials come from the environment.
+// eventsFrom and kmsFrom lift the two side channels these ops use: the request's
+// copy when a request is being served, and the process-wide one the embed built
+// when a PEER asked by name. The peer half is not a nicety — a plane call carries
+// no fiber locals, so without it collect would reach Square with whatever
+// credentials the environment happened to hold rather than the ones the tenant
+// configured, and every settled charge would go unreported to analytics.
+//
+// Both remain optional: a missing analytics collector must never fail a money
+// move, and a missing KMS client is the dev/test posture where credentials come
+// from the environment.
 func eventsFrom(ctx context.Context) *events.Client {
-	c, ok := cloud.Request(ctx)
-	if !ok {
-		return nil
-	}
-	if v := c.Locals("events"); v != nil {
-		if ev, ok := v.(*events.Client); ok {
-			return ev
+	if c, ok := cloud.Request(ctx); ok {
+		if v := c.Locals("events"); v != nil {
+			if ev, ok := v.(*events.Client); ok {
+				return ev
+			}
 		}
+	}
+	if e := currentEmbedded(); e != nil && e.App() != nil {
+		return e.App().Events
 	}
 	return nil
 }
 
 func kmsFrom(ctx context.Context) *kms.CachedClient {
-	c, ok := cloud.Request(ctx)
-	if !ok {
-		return nil
-	}
-	if v := c.Locals("kms"); v != nil {
-		if k, ok := v.(*kms.CachedClient); ok {
-			return k
+	if c, ok := cloud.Request(ctx); ok {
+		if v := c.Locals("kms"); v != nil {
+			if k, ok := v.(*kms.CachedClient); ok {
+				return k
+			}
 		}
+	}
+	if e := currentEmbedded(); e != nil && e.App() != nil {
+		return e.App().KMS
 	}
 	return nil
 }
