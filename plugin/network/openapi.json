@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package zt mounts the Hanzo Cloud NETWORKING surface: the tenant's Hanzo Zero Trust footprint — overlay networks, their routers and mesh services — served as clean, org-scoped REST off the unified cloud binary and fronting the Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).",
+    "description": "Package network mounts the Hanzo Cloud NETWORKING surface: the tenant's Hanzo Zero Trust footprint — the overlay network, its routers and its services — served as clean, org-scoped REST off the unified cloud binary and fronting the Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).",
     "version": "v1"
   },
   "servers": [
@@ -17,44 +17,17 @@
   ],
   "tags": [
     {
-      "name": "mesh"
-    },
-    {
-      "name": "networks"
+      "name": "network"
     }
   ],
   "paths": {
-    "/v1/mesh/services": {
+    "/v1/network": {
       "get": {
-        "operationId": "get_mesh_services",
-        "summary": "Returns the Zero Trust edge services the caller's org owns.",
-        "description": "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-\u003corg\u003e\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and router reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
-        "tags": [
-          "mesh"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/meshServiceList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/networks": {
-      "get": {
-        "operationId": "get_networks",
+        "operationId": "get_network",
         "summary": "Returns the caller's org overlay network on the Zero Trust fabric.",
         "description": "Returns the caller's org overlay network on the Zero Trust fabric.\n\nThe org has at most ONE overlay, projected from the edge-routers tagged with its\n\"org-\u003corg\u003e\" role attribute: nodes is the real router count and status is\n\"connected\" once at least one router has dialed home, \"provisioning\" while none\nhas. An org with no routers gets an empty list, never a fabricated network.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list so the\nconsole's Networks page renders a clean empty state instead of an error.",
         "tags": [
-          "networks"
+          "network"
         ],
         "responses": {
           "200": {
@@ -72,13 +45,13 @@
         "x-tool": true
       }
     },
-    "/v1/networks/routers": {
+    "/v1/network/routers": {
       "get": {
-        "operationId": "get_networks_routers",
+        "operationId": "get_network_routers",
         "summary": "Returns the Zero Trust routers the caller's org owns.",
         "description": "Returns the Zero Trust routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-\u003corg\u003e\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-\u003cslug\u003e\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
         "tags": [
-          "networks"
+          "network"
         ],
         "responses": {
           "200": {
@@ -96,13 +69,37 @@
         "x-tool": true
       }
     },
-    "/v1/networks/{id}": {
+    "/v1/network/services": {
       "get": {
-        "operationId": "get_networks_by_id",
+        "operationId": "get_network_services",
+        "summary": "Returns the Zero Trust edge services the caller's org owns.",
+        "description": "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-\u003corg\u003e\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and router reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
+        "tags": [
+          "network"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/meshServiceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/network/{id}": {
+      "get": {
+        "operationId": "get_network_by_id",
         "summary": "Returns one overlay network by id, scoped to the caller's org.",
         "description": "Returns one overlay network by id, scoped to the caller's org.\n\nThe org has exactly one overlay network and its id is derived from the org, so\nany other id — another tenant's, or one that does not exist — is 404 rather than\na peek across the tenant boundary. An org whose network exists but has no\nedge-routers is 404 too, for the same reason the list is empty: there is no\noverlay until something is on it.",
         "tags": [
-          "networks"
+          "network"
         ],
         "parameters": [
           {
@@ -182,7 +179,7 @@
       "networkView": {
         "properties": {
           "id": {
-            "description": "ID is the org-derived id of the overlay network — the key\nGET /v1/networks/{id} addresses.",
+            "description": "ID is the org-derived id of the overlay network — the key\nGET /v1/network/{id} addresses.",
             "type": "string"
           },
           "name": {

@@ -31,7 +31,7 @@
 // ZT_INSECURE_SKIP_VERIFY is an explicit, documented dev-only escape hatch; the
 // secure default is full verification.
 
-package zt
+package network
 
 import (
 	"bytes"
