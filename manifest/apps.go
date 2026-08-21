@@ -412,21 +412,23 @@ var Apps = []App{
 	// /v1/<name> default would cover nothing it registers — the apps/plan defect.
 	// The three prefixes are its whole surface (chains, rpc, tokens).
 	{Name: "web3", Prefixes: []string{"/v1/web3"}},
-	// ONE ROW, because bot and bots were one capability wearing two names.
-	// HIP-0139 §2.4 refuses a pair differing only in number and keeps the singular,
-	// and §1 puts one capability in bijection with one package and one plugin — so
-	// two rows both serving /v1/bot were a collision, not a convention. The two
-	// halves are three route families under one prefix now:
+	// A bot RUN and the relay to the executor that drives it — two route families
+	// under one prefix:
 	//
-	//	/v1/bot/{connect,nodes,peer/invoke}  the node control plane
-	//	/v1/bot/runs[/{runId}/stop]          the run control plane (was /v1/bots)
-	//	/v1/bot/runtime/*                    @hanzo/bot's own ops paths, relayed
+	//	/v1/bots/runs[/{runId}/stop]  the run control plane
+	//	/v1/bots/runtime/*            @hanzo/bot's own ops paths, relayed
 	//
-	// The relay's greedy wildcard moved under its own segment in the same change.
-	// It was app.All("/v1/bot/*") in the other app, one specificity rule away from
-	// swallowing every sibling above; in one router that would have been a live
-	// hazard rather than a latent one.
-	{Name: "bots", Prefixes: []string{"/v1/bots", "/v1/nodes"}},
+	// The relay's greedy wildcard sits under its own segment. It was
+	// app.All("/v1/bots/*") once, one specificity rule away from swallowing every
+	// sibling above it.
+	{Name: "bots", Prefixes: []string{"/v1/bots"}},
+	// The MACHINES, which are not a kind of bot. A node dials in over a socket and
+	// is asked to run commands it declared it can run; a bot run is a task the
+	// executor drives on a surface it rents. Two stores, two addresses, two names
+	// — HIP-0139 §7.2, which permits a split along a store boundary and only
+	// there: the node plane's is the presence registry over Hanzo KV, the run
+	// plane's is the executor's own, and neither reads the other's.
+	{Name: "nodes", Prefixes: []string{"/v1/nodes"}},
 	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
 	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}},
