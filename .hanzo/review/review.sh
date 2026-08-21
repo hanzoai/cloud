@@ -19,24 +19,21 @@ BASE="${1:?usage: review.sh <base-sha> <head-sha>}"
 HEAD="${2:?usage: review.sh <base-sha> <head-sha>}"
 
 API="${REVIEW_API:-https://api.hanzo.ai}"
-# The default is a model this gateway can actually reach on its own paid
-# providers. claude-sonnet-4-6 routes to do-ai, whose token was revoked — the
-# gate then answered 401 on every push and nothing shipped for a day. Whatever
-# stands here must be PAID and private: never the `free` pool, which is
-# data-shared, and this reviewer is handed the diff of a private repository.
+# The model is OURS and carries no provider prefix. Both halves are the house
+# rule and both have broken this gate: `claude-sonnet-4-6` routed to do-ai, whose
+# token was revoked, and the gate answered 401 on every push for a day;
+# `fireworks/gpt-oss-120b` named a provider we do not use and an id the catalog
+# does not serve, so every review call failed and the train stopped for far
+# longer. The gate refused correctly both times — there was nothing on the other
+# end. Check an id against the live catalog before it stands here:
 #
-# AND IT MUST BE A MODEL THE CATALOG ACTUALLY SERVES, which is the same failure
-# again: `fireworks/gpt-oss-120b` appears in no entry of GET /v1/models, so every
-# review call failed, the gate refused as it is built to, and nothing shipped —
-# for far longer than a day. Check the id against the live catalog before
-# changing it, because a name that merely reads plausibly refuses every release:
+#   curl -s https://api.hanzo.ai/v1/models | jq -r '.data[].id' | grep -v /
 #
-#   curl -s https://api.hanzo.ai/v1/models | jq -r '.data[].id' | grep gpt-oss
-#
-# openai/gpt-oss-120b is served, premium (so not the shared free pool) and
-# declares a 131072 context — the diff bound above is 400 KB, so the window is
-# part of what makes it a fit rather than a coincidence.
-MODEL="${REVIEW_MODEL:-openai/gpt-oss-120b}"
+# zen5-coder is the Zen family's coding model: premium rather than the shared
+# free pool (this reviewer is handed the diff of a private repository), and a
+# 1,000,000-token context against the 400 KB diff bound below — zen5-flash's
+# 65536 would truncate exactly the hunk the bound exists to keep whole.
+MODEL="${REVIEW_MODEL:-zen5-coder}"
 
 # An IAM access token, minted for this run by whoever invokes the reviewer.
 # There is no API key here and there is not meant to be one: IAM issues tokens,
