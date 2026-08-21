@@ -666,10 +666,18 @@ func syncNow(ctx context.Context, _ *core.None) (*syncOut, error) {
 
 // ── aggregation helpers ──────────────────────────────────────────────────────
 
+// Directory page sizes. 20 is what an admin table shows before anyone scrolls;
+// 100 is the ceiling the common APIs settled on (GitHub 30/100, Stripe 10/100)
+// and is enough for a bulk read without letting one query walk the whole fleet.
+const (
+	defaultOrgPage = 20
+	maxOrgPage     = 100
+)
+
 // pageOrgs narrows the directory to one page. An out-of-range page is an empty
 // page, not an error: a client that walks past the end gets a clean stop.
 func pageOrgs(all []iam.Org, in *orgsIn) []iam.Org {
-	page, size := 1, 200
+	page, size := 1, defaultOrgPage
 	if in != nil {
 		if n, err := strconv.Atoi(strings.TrimSpace(in.Page)); err == nil && n > 0 {
 			page = n
@@ -677,6 +685,13 @@ func pageOrgs(all []iam.Org, in *orgsIn) []iam.Org {
 		if n, err := strconv.Atoi(strings.TrimSpace(in.PageSize)); err == nil && n > 0 {
 			size = n
 		}
+	}
+	// A ceiling, not a suggestion. Without it a caller asking for ten thousand
+	// rows reinstates the unbounded directory this paging exists to remove, and
+	// it would arrive as an ordinary query string rather than as a change anyone
+	// reviewed.
+	if size > maxOrgPage {
+		size = maxOrgPage
 	}
 	start := (page - 1) * size
 	if start >= len(all) {
