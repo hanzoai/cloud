@@ -1,7 +1,7 @@
 ---
 name: index_version
 version: "8.0.0"
-description: "Read index version: Identify the search implementation answering."
+description: "Read index version: Identifies the search implementation answering.."
 ---
 
 # Lux · INDEX · version
@@ -14,11 +14,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/index/version` — Identify the search implementation answering
+- `GET https://api.lux.network/v1/index/version` — Identifies the search implementation answering.
 
 ## Response
 
-- `/v1/index/version` → JSON object.
+- `/v1/index/version` → `indexVersion` object with fields: `commitDate`, `commitSha`, `pkgVersion`.
 
 ## Example
 

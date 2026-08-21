@@ -1,7 +1,7 @@
 ---
 name: admin_affiliates
 version: "8.0.0"
-description: "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents.."
+description: "Read admin affiliates: Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents., Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (ref"
 ---
 
 # Hanzo · ADMIN · affiliates
@@ -15,6 +15,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.hanzo.ai/v1/admin/affiliates` — Lists every affiliate across the fleet with its ORG exposed, plus a fleet summary of lifetime accrued, still-pending and paid commission in integer cents.
+- `GET https://api.hanzo.ai/v1/admin/affiliates/referrals` — Answers the referral board: the top referrers by lifetime commission, the funnel conversion rate (referred orgs that have actually produced commission, over all referred orgs), and the accrual LIABILITY the platform owes, broken out by upline level.
 
 ## Parameters
 
@@ -25,6 +26,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/admin/affiliates` → `directoryOut` object with fields: `data`, `msg`, `status`.
+- `/v1/admin/affiliates/referrals` → `referralsOut` object with fields: `data`, `msg`, `status`.
 
 ## Example
 

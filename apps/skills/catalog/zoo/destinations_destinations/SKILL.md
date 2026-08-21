@@ -21,12 +21,12 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `platform` | path | yes | string | Platform is the destination to act on, from the path: ga4 \| meta \| tiktok \| linkedin \| x \| reddit \| posthog \| umami. |
+| `platform` | path | yes | string | Platform is the destination to act on, from the path: ga4 \| meta \| tiktok \| linkedin \| x \| reddit \| insights \| analytics. |
 
 ## Response
 
 - `/v1/destinations` → `destinationList` object with fields: `destinations`.
-- `/v1/destinations/{platform}` → `DestinationStatus` object with fields: `account`, `category`, `config`, `connected`, `enabled`, `fields`, `live`, `name`, `platform`, `secrets`.
+- `/v1/destinations/{platform}` → `DestinationStatus` object with fields: `account`, `category`, `config`, `connected`, `enabled`, `fields`, `live`, `name`, `pixel`, `platform`, `secrets`.
 
 ## Example
 

@@ -1,7 +1,7 @@
 ---
 name: social_posts
 version: "8.0.0"
-description: "Read social posts: List your org's posts, Read one post."
+description: "Read social posts: Returns the org's posts — content, channel, status, scheduled time, media and timestamps — most-recently-updated first., Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external "
 ---
 
 # Lux · SOCIAL · posts
@@ -14,19 +14,21 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/social/posts` — List your org's posts
-- `GET https://api.lux.network/v1/social/posts/{id}` — Read one post
+- `GET https://api.lux.network/v1/social/posts` — Returns the org's posts — content, channel, status, scheduled time, media and timestamps — most-recently-updated first.
+- `GET https://api.lux.network/v1/social/posts/{id}` — Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external id it published under.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string |  |
+| `id` | path | yes | string | ID is the account or post to act on, taken from the path. |
+| `limit` | query | no | string | Limit bounds the page, defaulting to 200 and capped at 1000. A string for the same reason accountFilter.Limit is. |
+| `status` | query | no | string | Status keeps only posts in one state — draft, scheduled, published or failed. Omit it for every state. The transient publishing claim is not a user-visible state and matching it is not useful. |
 
 ## Response
 
-- `/v1/social/posts` → JSON object.
-- `/v1/social/posts/{id}` → JSON object.
+- `/v1/social/posts` → `socialPosts` object with fields: `data`.
+- `/v1/social/posts/{id}` → `socialPost` object with fields: `accountId`, `channel`, `content`, `createdAt`, `error`, `externalId`, `id`, `media`, `scheduleAt`, `status`, `updatedAt`.
 
 ## Example
 

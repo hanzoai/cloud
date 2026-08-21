@@ -1,7 +1,7 @@
 ---
 name: kms_secrets
 version: "8.0.0"
-description: "Read kms secrets: List the secrets your org holds, without their values, Read one secret's value."
+description: "Read kms secrets: Lists the secrets your org holds, without their values., Read one secret's value."
 ---
 
 # Lux · KMS · secrets
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/kms/secrets` — List the secrets your org holds, without their values
+- `GET https://api.lux.network/v1/kms/secrets` — Lists the secrets your org holds, without their values.
 - `GET https://api.lux.network/v1/kms/secrets/{wildcard1}` — Read one secret's value
 
 ## Parameters
@@ -22,10 +22,14 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `wildcard1` | path | yes | string |  |
+| `env` | query | no | string |  |
+| `environment` | query | no | string |  |
+| `path` | query | no | string |  |
+| `secretPath` | query | no | string |  |
 
 ## Response
 
-- `/v1/kms/secrets` → JSON object.
+- `/v1/kms/secrets` → `kmsSecrets` object with fields: `names`, `secrets`, `total`.
 - `/v1/kms/secrets/{wildcard1}` → JSON object.
 
 ## Example

@@ -1,7 +1,7 @@
 ---
 name: commerce_catalog
 version: "8.0.0"
-description: "Read commerce catalog: The public product catalog projection for a brand."
+description: "Read commerce catalog: The public product catalog projection for a brand, The raw catalog entries, including the unpublished ones."
 ---
 
 # Lux · COMMERCE · catalog
@@ -15,10 +15,12 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Endpoints
 
 - `GET https://api.lux.network/v1/commerce/catalog` — The public product catalog projection for a brand
+- `GET https://api.lux.network/v1/commerce/catalog/entries` — The raw catalog entries, including the unpublished ones
 
 ## Response
 
 - `/v1/commerce/catalog` → JSON object.
+- `/v1/commerce/catalog/entries` → JSON object.
 
 ## Example
 
