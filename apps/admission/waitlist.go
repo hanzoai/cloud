@@ -12,7 +12,7 @@ package admission
 //
 // The decide is WaitlistModeForHost(host) → (mode, service, known): resolve host→svc,
 // then read waitlist.<svc>. Enforce (middleware.go) consumes this decide; the admin
-// board (/v1/admin/services) and the guard's runtime mode read (/v1/flags/waitlist,
+// board (/v1/admin/services) and the guard's runtime mode read (/v1/admission/waitlist,
 // served here) read it too. Per-user approval (pending|approved) is the second,
 // orthogonal axis — IAM's, in approval.go.
 //
@@ -135,7 +135,7 @@ func requireRegistry() (*waitlistStore, error) {
 	return mounted.store.For(ns)
 }
 
-// WaitlistModeForHost is THE decide the Enforce consumer, /v1/flags/waitlist, and
+// WaitlistModeForHost is THE decide the Enforce consumer, /v1/admission/waitlist, and
 // the admin board call: resolve host→service, then read the waitlist.<svc> switch
 // through the flag engine. FAIL-OPEN by construction — an unmounted registry, a store
 // error, or an un-governed host all return known=false, so a request is NEVER gated
@@ -326,7 +326,7 @@ func requestHost(ctx context.Context) string {
 // Mount installs the launch-control gate: it opens the platform-tenant host→service
 // registry, seeds it for the deployment brand, registers a waitlist.<svc> switch per
 // service in the flag engine (flags.Register), and serves the guard's public mode read
-// at /v1/flags/waitlist. Fail-safe: a registry error (e.g. cek master key not yet
+// at /v1/admission/waitlist. Fail-safe: a registry error (e.g. cek master key not yet
 // injected) degrades to the in-memory seed switches — WaitlistModeForHost then
 // fail-opens. Mounts AFTER flags so the engine's platform-switch plane is installed first.
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -347,10 +347,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// A typed op receives only a context, so the request the ?host= default falls
 	// back to reaches it from that context. Whoever composes the app parks it there,
 	// at the root, ahead of every leaf; this surface installs no middleware of its
-	// own. One that it installed for itself could only hang on a /v1/flags/waitlist
+	// own. One that it installed for itself could only hang on a /v1/admission/waitlist
 	// node, and the leaf below registers through the root, so that node would carry
 	// middleware over an empty subtree and zip refuses to compose it.
-	zip.Get(cloud.ZipApp(app), "/v1/flags/waitlist", waitlistOps{}.mode)
+	zip.Get(cloud.ZipApp(app), "/v1/admission/waitlist", waitlistOps{}.mode)
 	log.Info("admission gate ready", "services", n)
 	return nil
 }
