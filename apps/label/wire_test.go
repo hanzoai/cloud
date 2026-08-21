@@ -187,9 +187,9 @@ func batch(facts ...string) string { return `{"labels":[` + strings.Join(facts, 
 
 func post(t *testing.T, app *zip.App, org, user, body string) riskLabelOut {
 	t.Helper()
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels", org, user, body)
+	code, raw := req(t, app, http.MethodPost, "/v1/label", org, user, body)
 	if code != http.StatusOK {
-		t.Fatalf("POST /v1/risk/labels = %d %s", code, raw)
+		t.Fatalf("POST /v1/label = %d %s", code, raw)
 	}
 	var out riskLabelOut
 	if err := json.Unmarshal(raw, &out); err != nil {
@@ -207,13 +207,13 @@ func TestEveryOpRefusesAnUnvalidatedPrincipal(t *testing.T) {
 	app, _ := wireApp(t, "")
 	now := time.Now().UTC()
 	for _, tc := range []struct{ method, path, body string }{
-		{http.MethodPost, "/v1/risk/labels", batch(assertion("transaction", "tx-1", now, now, Productive, Dispute, "d-1", 1))},
-		{http.MethodGet, "/v1/risk/labels", ""},
-		{http.MethodPost, "/v1/risk/labels/resolve", `{"subjects":[{"kind":"transaction","subject":"tx-1","at":"2026-01-01T00:00:00Z"}]}`},
-		{http.MethodGet, "/v1/risk/labels/coverage", ""},
-		{http.MethodGet, "/v1/risk/labels/vocabulary", ""},
-		{http.MethodPost, "/v1/risk/labels/dispose", `{"before":"2000-01-01T00:00:00Z"}`},
-		{http.MethodPost, "/v1/risk/labels/hold", `{"ids":["a"],"hold":true}`},
+		{http.MethodPost, "/v1/label", batch(assertion("transaction", "tx-1", now, now, Productive, Dispute, "d-1", 1))},
+		{http.MethodGet, "/v1/label", ""},
+		{http.MethodPost, "/v1/label/resolve", `{"subjects":[{"kind":"transaction","subject":"tx-1","at":"2026-01-01T00:00:00Z"}]}`},
+		{http.MethodGet, "/v1/label/coverage", ""},
+		{http.MethodGet, "/v1/label/vocabulary", ""},
+		{http.MethodPost, "/v1/label/dispose", `{"before":"2000-01-01T00:00:00Z"}`},
+		{http.MethodPost, "/v1/label/hold", `{"ids":["a"],"hold":true}`},
 	} {
 		code, body := req(t, app, tc.method, tc.path, "acme", "", tc.body)
 		if code != http.StatusForbidden {
@@ -244,7 +244,7 @@ func TestTenantIsolation(t *testing.T) {
 	}
 
 	// Acme sees it.
-	code, raw := req(t, app, http.MethodGet, "/v1/risk/labels", "acme", "u_acme", "")
+	code, raw := req(t, app, http.MethodGet, "/v1/label", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("acme list = %d %s", code, raw)
 	}
@@ -256,7 +256,7 @@ func TestTenantIsolation(t *testing.T) {
 
 	// Zephyr does not — SAME subject id, which is the case a shared table with a
 	// forgotten predicate gets wrong.
-	code, raw = req(t, app, http.MethodGet, "/v1/risk/labels?subject=tx-shared", "zephyr", "u_zephyr", "")
+	code, raw = req(t, app, http.MethodGet, "/v1/label?subject=tx-shared", "zephyr", "u_zephyr", "")
 	if code != http.StatusOK {
 		t.Fatalf("zephyr list = %d %s", code, raw)
 	}
@@ -270,7 +270,7 @@ func TestTenantIsolation(t *testing.T) {
 	// here would put another tenant's ground truth into a training set.
 	body := fmt.Sprintf(`{"subjects":[{"kind":"transaction","subject":"tx-shared","at":%q}],"horizon":120}`,
 		at.Format(time.RFC3339))
-	code, raw = req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "zephyr", "u_zephyr", body)
+	code, raw = req(t, app, http.MethodPost, "/v1/label/resolve", "zephyr", "u_zephyr", body)
 	if code != http.StatusOK {
 		t.Fatalf("zephyr resolve = %d %s", code, raw)
 	}
@@ -287,7 +287,7 @@ func TestTenantIsolation(t *testing.T) {
 	// to decide a model is trainable; counting a neighbour's labels would make it
 	// a number about somebody else's business.
 	code, raw = req(t, app, http.MethodGet,
-		"/v1/risk/labels/coverage?from="+at.Add(-24*time.Hour).Format(time.RFC3339)+"&to="+time.Now().UTC().Format(time.RFC3339),
+		"/v1/label/coverage?from="+at.Add(-24*time.Hour).Format(time.RFC3339)+"&to="+time.Now().UTC().Format(time.RFC3339),
 		"zephyr", "u_zephyr", "")
 	if code != http.StatusOK {
 		t.Fatalf("zephyr coverage = %d %s", code, raw)
@@ -343,7 +343,7 @@ func TestNoInStructCanCarryATenant(t *testing.T) {
 		t.Fatalf("recorded %d, want 1 (%+v)", out.Recorded, out.Results)
 	}
 
-	code, raw := req(t, app, http.MethodGet, "/v1/risk/labels", "zephyr", "u_zephyr", "")
+	code, raw := req(t, app, http.MethodGet, "/v1/label", "zephyr", "u_zephyr", "")
 	if code != http.StatusOK {
 		t.Fatalf("zephyr list = %d %s", code, raw)
 	}
@@ -356,7 +356,7 @@ func TestNoInStructCanCarryATenant(t *testing.T) {
 	// And the ASSERTER is the credential, not the body. `by` was set to
 	// "someone-else" above; an attributable record whose attribution the caller
 	// chose is not attributable.
-	code, raw = req(t, app, http.MethodGet, "/v1/risk/labels", "acme", "u_acme", "")
+	code, raw = req(t, app, http.MethodGet, "/v1/label", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("acme list = %d %s", code, raw)
 	}
@@ -398,7 +398,7 @@ func TestTheRecordSurvivesTheProcess(t *testing.T) {
 	}
 
 	second, _ := wireApp(t, dir)
-	code, raw := req(t, second, http.MethodGet, "/v1/risk/labels?subject=tx-durable", "acme", "u_acme", "")
+	code, raw := req(t, second, http.MethodGet, "/v1/label?subject=tx-durable", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("list after restart = %d %s", code, raw)
 	}
@@ -444,7 +444,7 @@ func TestRedeliveryIsOneRecord(t *testing.T) {
 		t.Fatal("a redelivery resolved to a different id")
 	}
 
-	code, raw := req(t, app, http.MethodGet, "/v1/risk/labels?subject=tx-retry", "acme", "u_acme", "")
+	code, raw := req(t, app, http.MethodGet, "/v1/label?subject=tx-retry", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("list = %d %s", code, raw)
 	}
@@ -498,7 +498,7 @@ func TestResolveOverTheWireKeepsTheFutureOut(t *testing.T) {
 		t.Helper()
 		body := fmt.Sprintf(`{"subjects":[{"kind":"transaction","subject":"tx-late","at":%q}],"horizon":%d}`,
 			at.Format(time.RFC3339), horizon)
-		code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme", body)
+		code, raw := req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme", body)
 		if code != http.StatusOK {
 			t.Fatalf("resolve horizon=%d = %d %s", horizon, code, raw)
 		}
@@ -557,7 +557,7 @@ func TestAnUnmaturedEventIsNotAnUnjudgedOne(t *testing.T) {
 	  {"kind":"transaction","subject":"tx-fresh","at":%q},
 	  {"kind":"transaction","subject":"tx-old","at":%q}],"horizon":120}`,
 		fresh.Format(time.RFC3339), old.Format(time.RFC3339))
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme", body)
+	code, raw := req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme", body)
 	if code != http.StatusOK {
 		t.Fatalf("resolve = %d %s", code, raw)
 	}
@@ -586,7 +586,7 @@ func TestBacktestCanStandAtAPastInstant(t *testing.T) {
 	// matured, and the day-200 chargeback is still in the future.
 	body := fmt.Sprintf(`{"subjects":[{"kind":"transaction","subject":"tx-bt","at":%q}],"horizon":120,"now":%q}`,
 		at.Format(time.RFC3339), at.Add(150*24*time.Hour).Format(time.RFC3339))
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme", body)
+	code, raw := req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme", body)
 	if code != http.StatusOK {
 		t.Fatalf("resolve = %d %s", code, raw)
 	}
@@ -620,7 +620,7 @@ func TestAnAssertionIsNotItsOwnConflict(t *testing.T) {
 		named = append(named, fmt.Sprintf(`{"kind":"transaction","subject":%q,"at":%q}`, subject, at.Format(time.RFC3339)))
 	}
 	body := `{"subjects":[` + strings.Join(named, ",") + `],"horizon":120}`
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme", body)
+	code, raw := req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme", body)
 	if code != http.StatusOK {
 		t.Fatalf("resolve = %d %s", code, raw)
 	}
@@ -671,7 +671,7 @@ func TestCoverageCountsWhatMaturedAndWhoWon(t *testing.T) {
 	from := old.Add(-24 * time.Hour).Format(time.RFC3339)
 	to := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
 	code, raw := req(t, app, http.MethodGet,
-		"/v1/risk/labels/coverage?from="+from+"&to="+to+"&horizon=120", "acme", "u_acme", "")
+		"/v1/label/coverage?from="+from+"&to="+to+"&horizon=120", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("coverage = %d %s", code, raw)
 	}
@@ -735,7 +735,7 @@ func TestTheTrainingGateAnswersOnItsOwnDefaults(t *testing.T) {
 			fmt.Sprintf("dp-%02d", i), 1)
 	}
 
-	code, raw := req(t, app, http.MethodGet, "/v1/risk/labels/coverage", "acme", "u_acme", "")
+	code, raw := req(t, app, http.MethodGet, "/v1/label/coverage", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("coverage = %d %s", code, raw)
 	}
@@ -768,13 +768,13 @@ func TestRetentionRefusesToDisposeInsideThePlatformFloor(t *testing.T) {
 
 	// Yesterday is inside the floor.
 	body := fmt.Sprintf(`{"before":%q}`, time.Now().UTC().Add(-24*time.Hour).Format(time.RFC3339))
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/dispose", "acme", "u_acme", body)
+	code, raw := req(t, app, http.MethodPost, "/v1/label/dispose", "acme", "u_acme", body)
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("dispose inside the floor = %d %s, want 422", code, raw)
 	}
 
 	// The record is untouched.
-	code, raw = req(t, app, http.MethodGet, "/v1/risk/labels", "acme", "u_acme", "")
+	code, raw = req(t, app, http.MethodGet, "/v1/label", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("list = %d %s", code, raw)
 	}
@@ -797,7 +797,7 @@ func TestDisposalIsRefusedWhenTheDerivedCopyCannotBeReached(t *testing.T) {
 		assertion("transaction", "tx-old", at, at, Productive, Dispute, "dp-old", 1)))
 
 	body := fmt.Sprintf(`{"before":%q}`, time.Now().UTC().Add(-minRetention-24*time.Hour).Format(time.RFC3339))
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/dispose", "acme", "u_acme", body)
+	code, raw := req(t, app, http.MethodPost, "/v1/label/dispose", "acme", "u_acme", body)
 	// Nothing is old enough to dispose of here, so the sweep answers cleanly and
 	// never reaches the warehouse: an empty sweep must not be blocked by it.
 	if code != http.StatusOK {
@@ -971,9 +971,9 @@ func hold(t *testing.T, app *zip.App, org string, on bool, ids ...string) riskHo
 	if err != nil {
 		t.Fatal(err)
 	}
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/hold", org, "u_"+org, string(body))
+	code, raw := req(t, app, http.MethodPost, "/v1/label/hold", org, "u_"+org, string(body))
 	if code != http.StatusOK {
-		t.Fatalf("POST /v1/risk/labels/hold = %d %s", code, raw)
+		t.Fatalf("POST /v1/label/hold = %d %s", code, raw)
 	}
 	var out riskHoldOut
 	if err := json.Unmarshal(raw, &out); err != nil {
@@ -985,7 +985,7 @@ func hold(t *testing.T, app *zip.App, org string, on bool, ids ...string) riskHo
 // heldFlag reads back whether a named record carries a hold, over the wire.
 func heldFlag(t *testing.T, app *zip.App, org, id string) bool {
 	t.Helper()
-	code, raw := req(t, app, http.MethodGet, "/v1/risk/labels", org, "u_"+org, "")
+	code, raw := req(t, app, http.MethodGet, "/v1/label", org, "u_"+org, "")
 	if code != http.StatusOK {
 		t.Fatalf("list = %d %s", code, raw)
 	}
@@ -1009,7 +1009,7 @@ func heldFlag(t *testing.T, app *zip.App, org, id string) bool {
 // label rests entirely on being able to say why one assertion beat another.
 func TestVocabularyPublishesTheRuleThatIsEnforced(t *testing.T) {
 	app, _ := wireApp(t, "")
-	code, raw := req(t, app, http.MethodGet, "/v1/risk/labels/vocabulary", "acme", "u_acme", "")
+	code, raw := req(t, app, http.MethodGet, "/v1/label/vocabulary", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("vocabulary = %d %s", code, raw)
 	}
@@ -1067,7 +1067,7 @@ func TestEveryBoundIsEnforced(t *testing.T) {
 	for i := range big {
 		big[i] = assertion("transaction", fmt.Sprintf("tx-%d", i), at, at, Productive, Dispute, "d", 1)
 	}
-	if code, raw := req(t, app, http.MethodPost, "/v1/risk/labels", "acme", "u_acme", batch(big...)); code != http.StatusBadRequest {
+	if code, raw := req(t, app, http.MethodPost, "/v1/label", "acme", "u_acme", batch(big...)); code != http.StatusBadRequest {
 		t.Errorf("an oversized batch = %d %s, want 400", code, raw)
 	}
 
@@ -1076,17 +1076,17 @@ func TestEveryBoundIsEnforced(t *testing.T) {
 		subjects[i] = fmt.Sprintf(`{"kind":"transaction","subject":"tx-%d","at":%q}`, i, at.Format(time.RFC3339))
 	}
 	body := `{"subjects":[` + strings.Join(subjects, ",") + `],"horizon":120}`
-	if code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme", body); code != http.StatusBadRequest {
+	if code, raw := req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme", body); code != http.StatusBadRequest {
 		t.Errorf("an oversized resolve = %d %s, want 400", code, raw)
 	}
 
 	from := time.Now().UTC().Add(-2 * maxWindow).Format(time.RFC3339)
 	to := time.Now().UTC().Format(time.RFC3339)
-	if code, raw := req(t, app, http.MethodGet, "/v1/risk/labels/coverage?from="+from+"&to="+to, "acme", "u_acme", ""); code != http.StatusBadRequest {
+	if code, raw := req(t, app, http.MethodGet, "/v1/label/coverage?from="+from+"&to="+to, "acme", "u_acme", ""); code != http.StatusBadRequest {
 		t.Errorf("an oversized coverage window = %d %s, want 400", code, raw)
 	}
 
-	if code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/resolve", "acme", "u_acme",
+	if code, raw := req(t, app, http.MethodPost, "/v1/label/resolve", "acme", "u_acme",
 		`{"subjects":[{"kind":"transaction","subject":"t","at":"2026-01-01T00:00:00Z"}],"horizon":99999}`); code != http.StatusBadRequest {
 		t.Errorf("an out-of-range horizon = %d %s, want 400", code, raw)
 	}

@@ -121,11 +121,11 @@ func TestIndexersGatedAndShape(t *testing.T) {
 	app := mountApp(t, f.server(t).URL)
 
 	// No validated principal → 403, and the request never reaches the indexer.
-	if code, _ := do(t, app, http.MethodGet, "/v1/indexers", ""); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/explorer/indexers", ""); code != http.StatusForbidden {
 		t.Fatalf("no-org indexers want 403, got %d", code)
 	}
 
-	code, body := do(t, app, http.MethodGet, "/v1/indexers", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/indexers", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("indexers want 200, got %d (%s)", code, body)
 	}
@@ -153,7 +153,7 @@ func TestIndexerUnhealthyDegraded(t *testing.T) {
 	f := &fakeChain{healthy: false, chainName: "Lux C-Chain", blocks: []map[string]any{}}
 	app := mountApp(t, f.server(t).URL)
 
-	code, body := do(t, app, http.MethodGet, "/v1/indexers", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/indexers", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("indexers want 200, got %d (%s)", code, body)
 	}
@@ -175,7 +175,7 @@ func TestIndexerUnreachableHonestEmpty(t *testing.T) {
 
 	// Unreachable indexer degrades to an honest-EMPTY list (200), not a console-error
 	// 502 — and never a fabricated row.
-	code, body := do(t, app, http.MethodGet, "/v1/indexers", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/indexers", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("unreachable indexer want 200 (honest-empty), got %d (%s)", code, body)
 	}
@@ -198,11 +198,11 @@ func TestOraclesGatedShapeAndEmpty(t *testing.T) {
 	app := mountApp(t, f.server(t).URL)
 
 	// No validated principal → 403.
-	if code, _ := do(t, app, http.MethodGet, "/v1/oracles", ""); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/explorer/oracles", ""); code != http.StatusForbidden {
 		t.Fatalf("no-org oracles want 403, got %d", code)
 	}
 
-	code, body := do(t, app, http.MethodGet, "/v1/oracles", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/oracles", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("oracles want 200, got %d (%s)", code, body)
 	}
@@ -223,7 +223,7 @@ func TestOraclesGatedShapeAndEmpty(t *testing.T) {
 
 	// An empty registry is an honest empty list — a real, gated route, not a 404.
 	f.priceFeeds = nil
-	code, body = do(t, app, http.MethodGet, "/v1/oracles", "acme")
+	code, body = do(t, app, http.MethodGet, "/v1/explorer/oracles", "acme")
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Oracles) != 0 {
 		t.Fatalf("empty registry want 200 [], got %d %+v", code, listed.Oracles)
@@ -235,7 +235,7 @@ func TestOraclesGraphQLErrorHonestEmpty(t *testing.T) {
 	app := mountApp(t, f.server(t).URL)
 	// A GraphQL {errors} envelope degrades to an honest-EMPTY list (200), not a
 	// console-error 502 — and never a fabricated feed.
-	code, body := do(t, app, http.MethodGet, "/v1/oracles", "acme")
+	code, body := do(t, app, http.MethodGet, "/v1/explorer/oracles", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("graphql error want 200 (honest-empty), got %d (%s)", code, body)
 	}
@@ -260,7 +260,7 @@ func TestPublicDataSameAcrossOrgsButAuthRequired(t *testing.T) {
 
 	// Two different validated orgs both see the SAME public ledger (a blockchain has
 	// no per-org private row to leak); an UNauthenticated caller sees nothing (403).
-	for _, path := range []string{"/v1/indexers", "/v1/oracles"} {
+	for _, path := range []string{"/v1/explorer/indexers", "/v1/explorer/oracles"} {
 		if code, _ := do(t, app, http.MethodGet, path, ""); code != http.StatusForbidden {
 			t.Fatalf("unauth %s want 403, got %d", path, code)
 		}
@@ -300,7 +300,7 @@ func TestCallerAuthorizationIsForwarded(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	app := mountApp(t, srv.URL)
-	for _, path := range []string{"/v1/indexers", "/v1/oracles"} {
+	for _, path := range []string{"/v1/explorer/indexers", "/v1/explorer/oracles"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		req.Header.Set("X-Org-Id", "acme")
 		req.Header.Set("X-User-Id", "u-acme")
@@ -339,7 +339,7 @@ func TestServiceTokenWinsOverCallerAuthorization(t *testing.T) {
 	app := mountApp(t, srv.URL)
 	t.Setenv("CHAIN_DATA_TOKEN", "svc-token")
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/indexers", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/explorer/indexers", nil)
 	req.Header.Set("X-Org-Id", "acme")
 	req.Header.Set("X-User-Id", "u-acme")
 	req.Header.Set("Authorization", "Bearer caller-token")

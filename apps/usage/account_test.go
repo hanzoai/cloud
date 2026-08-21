@@ -33,7 +33,7 @@ import (
 // trusted for anything that bills.
 //
 // The plane records usage ONLY (POST /v1/usage → the warehouse series); keeping the
-// link REGISTRY current is clients/link's own concern (POST /v1/links), tested in
+// link REGISTRY current is clients/link's own concern (POST /v1/link), tested in
 // that package — so the former "a report also upserts a Link" tests do not live here.
 
 const usageTestTimeout = 60 * time.Second

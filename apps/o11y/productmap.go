@@ -203,8 +203,8 @@ type service struct {
 	// product — the manifest's own answer where there is one.
 	//
 	// It is NOT `/v1/<id>` by convention, because for ~20 apps that convention is
-	// simply wrong: plan serves /v1/plans, storage serves /v1/s3/buckets, account
-	// serves /v1/orgs (and five more), knowledge serves /v1/kb/*. Reading the RED
+	// simply wrong: plan serves /v1/plan, storage serves /v1/s3/buckets, account
+	// serves /v1/orgs (and five more), knowledge serves /v1/knowledge/*. Reading the RED
 	// series off `/v1/<name>` for those scopes the query to a subtree nobody
 	// serves, which returns zero and looks exactly like a healthy idle service.
 	Routes []string

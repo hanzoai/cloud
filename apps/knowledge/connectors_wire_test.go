@@ -3,7 +3,7 @@ package knowledge
 // The wire contract of the typed connector surface — the part a status-code test
 // would not see.
 //
-// GET /v1/kb/connectors answers a row per provider, and the row's SHAPE carries
+// GET /v1/knowledge/connectors answers a row per provider, and the row's SHAPE carries
 // meaning: a provider this org has never connected omits account, lastSync and
 // error ENTIRELY, while a connected one carries them even when they are empty
 // strings. That distinction is why connectorView holds *string and not string
@@ -25,7 +25,7 @@ func TestConnectorRowOmitsUnsetFieldsOnly(t *testing.T) {
 	app := mountKB(t)
 	installKB(t, app, "acme")
 
-	code, body := req(t, app, http.MethodGet, "/v1/kb/connectors", "acme", nil)
+	code, body := req(t, app, http.MethodGet, "/v1/knowledge/connectors", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list connectors: want 200, got %d (%s)", code, body)
 	}
@@ -67,7 +67,7 @@ func TestConnectorRowOmitsUnsetFieldsOnly(t *testing.T) {
 		t.Fatalf("upsert connector: %v", err)
 	}
 
-	code, body = req(t, app, http.MethodGet, "/v1/kb/connectors", "acme", nil)
+	code, body = req(t, app, http.MethodGet, "/v1/knowledge/connectors", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list connectors after connect: want 200, got %d (%s)", code, body)
 	}

@@ -65,7 +65,7 @@ func TestAHoldPlacedDuringASweepKeepsTheRecordInBothPlanes(t *testing.T) {
 	b := asserted(t, st, "tx-old-2", old, old, Unproductive, Review, "rv_1", 0.4)
 
 	before := time.Now().UTC().Add(-5*365*24*time.Hour - 24*time.Hour).Format(time.RFC3339)
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/dispose", "acme", "u_acme",
+	code, raw := req(t, app, http.MethodPost, "/v1/label/dispose", "acme", "u_acme",
 		`{"before":"`+before+`"}`)
 	if code != http.StatusOK {
 		t.Fatalf("dispose = %d %s", code, raw)
@@ -143,7 +143,7 @@ func TestARepairTheDerivedCopyRefusesIsNotAcknowledged(t *testing.T) {
 	asserted(t, st, "tx-old-1", old, old, Productive, Dispute, "dp_1", 1)
 
 	before := time.Now().UTC().Add(-5*365*24*time.Hour - 24*time.Hour).Format(time.RFC3339)
-	code, raw := req(t, app, http.MethodPost, "/v1/risk/labels/dispose", "acme", "u_acme",
+	code, raw := req(t, app, http.MethodPost, "/v1/label/dispose", "acme", "u_acme",
 		`{"before":"`+before+`"}`)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("dispose = %d %s, want 503 — a copy that is short must not be acknowledged as a clean sweep", code, raw)

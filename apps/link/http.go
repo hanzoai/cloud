@@ -16,16 +16,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// This file mounts the login-manager registry under /v1/links — the cross-machine
+// This file mounts the login-manager registry under /v1/link — the cross-machine
 // account view console renders and the collector reports into.
 //
-//	POST   /v1/links                          register/upsert a link (device+account+usage) -> Link
-//	GET    /v1/links                          the caller's links + device projection -> {links,devices}
-//	GET    /v1/links/route                    the redundancy route plan across the caller's accounts -> RoutePlan
-//	GET    /v1/links/devices/:machine         one device: its accounts + usage + active sessions -> Device
-//	POST   /v1/links/devices/:machine/revoke  revoke every account on a device + stop its sessions
-//	GET    /v1/links/:id                       one link -> Link
-//	DELETE /v1/links/:id                       revoke a link (log out) + stop its sessions
+//	POST   /v1/link                          register/upsert a link -> Link
+//	GET    /v1/link                          the caller's links + devices -> {links,devices}
+//	GET    /v1/link/route                    the redundancy route plan -> RoutePlan
+//	GET    /v1/link/devices/:machine         one device: accounts, usage, sessions -> Device
+//	POST   /v1/link/devices/:machine/revoke  revoke a device's accounts + sessions
+//	GET    /v1/link/:id                      one link -> Link
+//	DELETE /v1/link/:id                      revoke a link (log out) + its sessions
 //
 // Every route is org+user scoped through principal.Org (a validated principal AND
 // a non-empty org) plus c.User() (the owning subject), so a caller sees and
@@ -92,7 +92,7 @@ type state struct {
 
 var mounted *cloud.Service[state]
 
-// Mount wires the /v1/links surface. The sessions seam is set from the agents
+// Mount wires the /v1/link surface. The sessions seam is set from the agents
 // in-process adapter (adapters.go) so a revoke can stop the affected sessions.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
@@ -114,7 +114,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// Every route is a TYPED op — the one registration REST, OpenAPI, the MCP tool
 	// list, the CLI and the by-name call plane all project from. Declared on the
-	// registry with FULL paths (a group leaf of "" would publish "/v1/links/", a
+	// registry with FULL paths (a group leaf of "" would publish "/v1/link/", a
 	// path this API has never served). cloud.Bridge — what carries the validated
 	// request to a typed op — is the composer's install, once at the root of every
 	// program, so this package does not install its own.
@@ -123,23 +123,23 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("link.Mount: router carries no typed-op registry")
 	}
 	o := ops{s: s}
-	zip.Post(r, "/v1/links", o.upsertLink, zip.WithStatus(http.StatusCreated))
-	zip.Get(r, "/v1/links", o.listLinks)
+	zip.Post(r, "/v1/link", o.upsertLink, zip.WithStatus(http.StatusCreated))
+	zip.Get(r, "/v1/link", o.listLinks)
 	// Static literals before the :id param — Fiber matches in registration order,
 	// so "route"/"devices"/"usage" must win over :id.
-	zip.Get(r, "/v1/links/route", o.routePlan)
+	zip.Get(r, "/v1/link/route", o.routePlan)
 	// The account-usage plane (usage.go): report samples, one account's own dash,
 	// and the global view across every account + Hanzo-routed usage.
-	zip.Post(r, "/v1/links/usage", o.reportUsage, zip.WithStatus(http.StatusAccepted))
-	zip.Get(r, "/v1/links/usage/summary", o.usageSummary)
+	zip.Post(r, "/v1/link/usage", o.reportUsage, zip.WithStatus(http.StatusAccepted))
+	zip.Get(r, "/v1/link/usage/summary", o.usageSummary)
 	// The per-account SERVER-ROUTED breakdown (usage_accounts.go). Static, so it must
 	// register before the "/usage" catch and the ":id" param.
-	zip.Get(r, "/v1/links/usage/accounts", o.usageAccounts)
-	zip.Get(r, "/v1/links/usage", o.usageDash)
-	zip.Get(r, "/v1/links/devices/:machine", o.deviceDetail)
-	zip.Post(r, "/v1/links/devices/:machine/revoke", o.revokeDevice)
-	zip.Get(r, "/v1/links/:id", o.getLink)
-	zip.Delete(r, "/v1/links/:id", o.revokeLink)
+	zip.Get(r, "/v1/link/usage/accounts", o.usageAccounts)
+	zip.Get(r, "/v1/link/usage", o.usageDash)
+	zip.Get(r, "/v1/link/devices/:machine", o.deviceDetail)
+	zip.Post(r, "/v1/link/devices/:machine/revoke", o.revokeDevice)
+	zip.Get(r, "/v1/link/:id", o.getLink)
+	zip.Delete(r, "/v1/link/:id", o.revokeLink)
 
 	log.Info("link mounted", "brand", deps.Brand)
 	return nil

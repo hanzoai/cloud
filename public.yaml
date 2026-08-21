@@ -29710,55 +29710,6 @@ components:
             the metric still counts, only the name is withheld.
           type: boolean
       type: object
-    vectorCollection:
-      properties:
-        createdAt:
-          description: |-
-            CreatedAt is the collection's creation time (RFC 3339); Qdrant does not
-            report one, so it is empty today.
-          type: string
-        dimension:
-          description: Dimension is the size of one vector in the collection.
-          type: integer
-        distanceMetric:
-          description: |-
-            DistanceMetric is the collection's distance function; "cosine" when the
-            collection's detail could not be read.
-          type: string
-        name:
-          description: Name is the collection name.
-          type: string
-        storageBytes:
-          description: StorageBytes is the collection's on-disk size, omitted when
-            unknown.
-          type: integer
-        vectorCount:
-          description: VectorCount is the collection's point count.
-          type: integer
-      type: object
-    vectorCollectionList:
-      properties:
-        collections:
-          description: |-
-            Collections is one row per Qdrant collection, sorted by name. Empty — never
-            absent — when the vector service cannot be reached.
-          items:
-            $ref: '#/components/schemas/vectorCollection'
-          type: array
-      type: object
-    vectorStats:
-      properties:
-        totalCollections:
-          description: TotalCollections is how many collections the store holds.
-          type: integer
-        totalStorageBytes:
-          description: TotalStorageBytes is the sum of every collection's on-disk
-            size.
-          type: integer
-        totalVectors:
-          description: TotalVectors is the sum of every collection's point count.
-          type: integer
-      type: object
     verdict:
       properties:
         builds:
@@ -53309,764 +53260,6 @@ paths:
       - ai
       x-app: ai
       x-public: true
-  /v1/instances/datastore:
-    get:
-      description: |-
-        Lists the caller org's Hanzo Datastore warehouses. Each one is
-        a DEDICATED analytical instance the org alone runs, so the host is that
-        instance's own in-cluster Service and the port is its HTTP port, 8123.
-      operationId: get_instances_datastore
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/provisionedSummary'
-                type: array
-          description: ok
-      summary: Lists the caller org's Hanzo Datastore warehouses.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Launches your org's OWN Hanzo Datastore instance and answers with its `datastore://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.
-
-        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
-
-        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
-
-        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
-
-        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
-      operationId: post_instances_datastore
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/provisionRequest'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionResult'
-          description: Success
-      summary: Provision a Hanzo Datastore instance for your org
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-  /v1/instances/datastore/{name}:
-    delete:
-      description: |-
-        Deprovisions one Hanzo Datastore warehouse. It reverts any app
-        instance bound to it back to Base BEFORE tearing down the org's dedicated
-        instance, then deletes the sealed credential and removes the metadata row.
-        Answers 204 with no body; a second call is a 404.
-      operationId: delete_instances_datastore_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: warehouse
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Deprovisions one Hanzo Datastore warehouse.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one Hanzo Datastore warehouse's metadata. It carries the
-        warehouse's status, its instance address and the admin user the instance
-        booted with — never the password. A still-booting instance reads
-        "provisioning", reconciled from the operator's live view rather than the row.
-      operationId: get_instances_datastore_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: warehouse
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionedResource'
-          description: ok
-      summary: Returns one Hanzo Datastore warehouse's metadata.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-  /v1/instances/docdb:
-    get:
-      description: |-
-        ListDocDB lists the caller org's Hanzo DocDB document databases. Each one is
-        a DEDICATED FerretDB instance the org alone runs, speaking the MongoDB wire
-        protocol, so the host is that instance's own in-cluster Service and the port
-        is 27017.
-      operationId: get_instances_docdb
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/provisionedSummary'
-                type: array
-          description: ok
-      summary: ListDocDB lists the caller org's Hanzo DocDB document databases.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Launches your org's OWN document-database instance — it speaks the MongoDB wire protocol, so existing MongoDB drivers connect unchanged — and answers with its `mongodb://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.
-
-        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
-
-        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
-
-        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
-
-        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
-      operationId: post_instances_docdb
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/provisionRequest'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionResult'
-          description: Success
-      summary: Provision a document database for your org
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-  /v1/instances/docdb/{name}:
-    delete:
-      description: |-
-        DropDocDB deprovisions one Hanzo DocDB database. It reverts any app instance
-        bound to it back to Base BEFORE tearing down the org's dedicated FerretDB
-        instance, then deletes the sealed credential and removes the metadata row.
-        Answers 204 with no body; a second call is a 404.
-      operationId: delete_instances_docdb_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: sessions
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: DropDocDB deprovisions one Hanzo DocDB database.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        GetDocDB returns one Hanzo DocDB database's metadata. It carries the
-        database's status, its instance address and the SCRAM user the instance was
-        set up with — never the password. A still-booting instance reads
-        "provisioning", reconciled from the operator's live view.
-      operationId: get_instances_docdb_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: sessions
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionedResource'
-          description: ok
-      summary: GetDocDB returns one Hanzo DocDB database's metadata.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-  /v1/instances/kv:
-    get:
-      description: |-
-        ListKV lists the caller org's Hanzo KV stores. Each one is a DEDICATED Valkey
-        instance the org alone runs, so the host is that instance's own in-cluster
-        Service and the port is 6379.
-      operationId: get_instances_kv
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/provisionedSummary'
-                type: array
-          description: ok
-      summary: ListKV lists the caller org's Hanzo KV stores.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Launches your org's OWN key-value instance and answers with its `kv://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.
-
-        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
-
-        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
-
-        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
-
-        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
-      operationId: post_instances_kv
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/provisionRequest'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionResult'
-          description: Success
-      summary: Provision a key-value store for your org
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-  /v1/instances/kv/{name}:
-    delete:
-      description: |-
-        DropKV deprovisions one Hanzo KV store. It reverts any app instance bound to
-        it back to Base BEFORE tearing down the org's dedicated Valkey instance, then
-        deletes the sealed credential and removes the metadata row. Answers 204 with
-        no body; a second call is a 404.
-      operationId: delete_instances_kv_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: sessions
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: DropKV deprovisions one Hanzo KV store.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        GetKV returns one Hanzo KV store's metadata. It carries the store's status,
-        its instance address and the Valkey user it authenticates as ("default", the
-        only user a requirepass instance has) — never the password. A still-booting
-        instance reads "provisioning", reconciled from the operator's live view.
-      operationId: get_instances_kv_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: sessions
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionedResource'
-          description: ok
-      summary: GetKV returns one Hanzo KV store's metadata.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-  /v1/instances/s3:
-    get:
-      description: |-
-        Lists the caller org's object-storage buckets. A bucket lives in an
-        already-live shared object store and is reached through the public gateway.
-        The names here are the friendly ones the org provisioned; the physical bucket
-        is org-namespaced underneath, which is what keeps two tenants' buckets
-        distinct.
-      operationId: get_instances_s3
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/provisionedSummary'
-                type: array
-          description: ok
-      summary: Lists the caller org's object-storage buckets.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Creates an S3-compatible bucket inside the already-running shared object store and answers with the endpoint that reaches it.
-
-        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
-
-        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
-
-        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
-
-        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
-      operationId: post_instances_s3
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/provisionRequest'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionResult'
-          description: Success
-      summary: Provision an object storage bucket for your org
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-  /v1/instances/s3/{name}:
-    delete:
-      description: |-
-        Deletes one bucket from the shared object store and removes its
-        metadata row. Answers 204 with no body; a second call is a 404.
-      operationId: delete_instances_s3_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: uploads
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Deletes one bucket from the shared object store and removes its metadata
-        row.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one bucket's metadata. It carries the bucket's status and the
-        gateway address it is reached at, and no username: the object store
-        authenticates with a shared, out-of-band key rather than a per-bucket
-        credential.
-      operationId: get_instances_s3_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: uploads
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionedResource'
-          description: ok
-      summary: Returns one bucket's metadata.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-  /v1/instances/search:
-    get:
-      description: |-
-        Lists the caller org's search indexes. An index is a logical
-        resource inside an already-live shared backend, so every one of them is
-        reached through the public gateway rather than at an instance of its own.
-      operationId: get_instances_search
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/provisionedSummary'
-                type: array
-          description: ok
-      summary: Lists the caller org's search indexes.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Creates a search index inside the already-running shared search backend and answers with the endpoint that reaches it.
-
-        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
-
-        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
-
-        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
-
-        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
-      operationId: post_instances_search
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/provisionRequest'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionResult'
-          description: Success
-      summary: Provision a search index for your org
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-  /v1/instances/search/{name}:
-    delete:
-      description: |-
-        Deletes one search index from the shared backend and removes its
-        metadata row. Answers 204 with no body; a second call is a 404.
-      operationId: delete_instances_search_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: products
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Deletes one search index from the shared backend and removes its metadata
-        row.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one search index's metadata. It carries the index's status
-        and the gateway address it is reached at, and no username: the backend
-        authenticates with a shared, out-of-band key rather than a per-index
-        credential.
-      operationId: get_instances_search_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: products
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionedResource'
-          description: ok
-      summary: Returns one search index's metadata.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-  /v1/instances/sql:
-    get:
-      description: |-
-        ListSQL lists the caller org's Hanzo SQL databases. Each one is a DEDICATED
-        PostgreSQL instance the org alone runs, so the host is that instance's own
-        in-cluster Service and the port is 5432.
-      operationId: get_instances_sql
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/provisionedSummary'
-                type: array
-          description: ok
-      summary: ListSQL lists the caller org's Hanzo SQL databases.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Launches your org's OWN PostgreSQL instance and answers with its `postgres://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.
-
-        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
-
-        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
-
-        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
-
-        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
-      operationId: post_instances_sql
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/provisionRequest'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionResult'
-          description: Success
-      summary: Provision a PostgreSQL database for your org
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-  /v1/instances/sql/{name}:
-    delete:
-      description: |-
-        DropSQL deprovisions one Hanzo SQL database. It reverts any app instance
-        bound to it back to Base BEFORE tearing down the org's dedicated Postgres
-        instance — never a live app pointed at a deleted backend — then deletes the
-        sealed credential and removes the metadata row. Answers 204 with no body; a
-        second call is a 404, not a second delete.
-      operationId: delete_instances_sql_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: orders
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: DropSQL deprovisions one Hanzo SQL database.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        GetSQL returns one Hanzo SQL database's metadata. It carries the database's
-        status, its instance address and the admin user Postgres booted with — never
-        the password, which is returned once at create and otherwise lives only in
-        Hanzo KMS. A still-booting instance reads "provisioning", reconciled from the
-        operator's live view rather than from the row.
-      operationId: get_instances_sql_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: orders
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionedResource'
-          description: ok
-      summary: GetSQL returns one Hanzo SQL database's metadata.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-  /v1/instances/vector:
-    get:
-      description: |-
-        Lists the caller org's vector collections. A collection is a
-        logical resource inside an already-live shared backend, so every one of them
-        is reached through the public gateway rather than at an instance of its own.
-      operationId: get_instances_vector
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/provisionedSummary'
-                type: array
-          description: ok
-      summary: Lists the caller org's vector collections.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Creates a vector collection inside the already-running shared vector backend and answers with the endpoint that reaches it.
-
-        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
-
-        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
-
-        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
-
-        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
-      operationId: post_instances_vector
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/provisionRequest'
-      responses:
-        2XX:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionResult'
-          description: Success
-      summary: Provision a vector collection for your org
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-  /v1/instances/vector/{name}:
-    delete:
-      description: |-
-        Deletes one vector collection from the shared backend and removes
-        its metadata row. Answers 204 with no body; a second call is a 404.
-      operationId: delete_instances_vector_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: embeddings
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Deletes one vector collection from the shared backend and removes its
-        metadata row.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one vector collection's metadata. It carries the
-        collection's status and the gateway address it is reached at, and no username:
-        the backend authenticates with a shared, out-of-band key rather than a
-        per-collection credential, so there is no per-resource user to report.
-      operationId: get_instances_vector_by_name
-      parameters:
-      - description: |-
-          Name is the resource's org-unique slug, from the path. Lower-cased and
-          trimmed before lookup, exactly as it was at create.
-        example: embeddings
-        in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/provisionedResource'
-          description: ok
-      summary: Returns one vector collection's metadata.
-      tags:
-      - provisioning
-      x-app: provisioning
-      x-public: true
-      x-tool: true
   /v1/integrations:
     get:
       description: |-
@@ -55318,295 +54511,6 @@ paths:
       x-app: visor
       x-public: true
       x-tool: true
-  /v1/kb/connectors:
-    get:
-      description: |-
-        Returns every supported knowledge connector with THIS org's
-        connection state and the REAL number of documents each has ingested into the
-        org's store. A provider that is configured for the deployment but not yet
-        connected appears as disconnected, so the console can offer a Connect button.
-        No secret is ever returned.
-      operationId: get_kb_connectors
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/kbConnectorsOut'
-          description: ok
-      summary: Returns every supported knowledge connector with THIS org's connection
-        state and the REAL number of documents each has ingested into the org's store.
-      tags:
-      - knowledge
-      x-app: knowledge
-      x-public: true
-      x-tool: true
-  /v1/kb/connectors/{provider}:
-    delete:
-      description: |-
-        Revokes a connection: it tombstones the stored credential
-        so a later sync cannot reuse it, purges this provider's points from the org's
-        vector namespace, and marks the connector disconnected. The documents already
-        ingested stay in the org's store — they are the org's own data — but stop being
-        retrievable by search; a caller deletes them through the document surface.
-      operationId: delete_kb_connectors_by_provider
-      parameters:
-      - description: 'Provider is the connector to act on: github, slack, google or
-          notion.'
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/connectionOut'
-          description: ok
-      summary: 'Revokes a connection: it tombstones the stored credential so a later
-        sync cannot reuse it, purges this provider''s points from the org''s vector
-        namespace, and marks the connector disconnected.'
-      tags:
-      - knowledge
-      x-app: knowledge
-      x-public: true
-      x-tool: true
-  /v1/kb/connectors/{provider}/callback:
-    get:
-      description: |-
-        CompleteConnectorOAuth finishes an OAuth connection: it exchanges the
-        provider's code for a token, seals that token in KMS, and records the
-        connection. THE ORG COMES FROM THE SIGNED STATE, not from a header and not from
-        the provider, so an attacker cannot bind their own account to someone else's
-        org — a tampered, expired or foreign-provider state is refused outright. The
-        token itself is never returned, never written into the document, and never
-        logged; the document holds only its KMS path.
-      operationId: get_kb_connectors_by_provider_callback
-      parameters:
-      - description: Provider is the connector completing its flow, from the path.
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      - description: Code is the provider's authorization code, exchanged for a token.
-        in: query
-        name: code
-        required: false
-        schema:
-          type: string
-      - description: State is the org-bound value this server signed at connect time.
-        in: query
-        name: state
-        required: false
-        schema:
-          type: string
-      - description: Error is the provider's denial reason when the user refused consent.
-        in: query
-        name: error
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/connectionOut'
-          description: ok
-      summary: 'CompleteConnectorOAuth finishes an OAuth connection: it exchanges
-        the provider''s code for a token, seals that token in KMS, and records the
-        connection.'
-      tags:
-      - knowledge
-      x-app: knowledge
-      x-public: true
-      x-tool: true
-  /v1/kb/connectors/{provider}/connect:
-    get:
-      description: |-
-        StartConnectorOAuth returns the provider authorize URL the console opens to
-        connect this org's account. There is no server-side redirect — the console
-        stays in control of the navigation. The URL carries a state this server SIGNED
-        over the caller's validated org, so the connection the callback completes can
-        only ever land in that org.
-      operationId: get_kb_connectors_by_provider_connect
-      parameters:
-      - description: 'Provider is the connector to act on: github, slack, google or
-          notion.'
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/kbAuthorizeOut'
-          description: ok
-      summary: StartConnectorOAuth returns the provider authorize URL the console
-        opens to connect this org's account.
-      tags:
-      - knowledge
-      x-app: knowledge
-      x-public: true
-      x-tool: true
-  /v1/kb/connectors/{provider}/sync:
-    post:
-      description: |-
-        Pulls the provider's documents for the caller's org and files
-        them as knowledge sources, which the store's own hook then indexes — so a
-        synced document is retrievable exactly like a hand-written page. The org is the
-        validated tenant and the credential is read from KMS, so an org can only ever
-        sync its own connection. A provider failure is reported honestly (502) and
-        recorded on the connector rather than silently swallowed.
-      operationId: post_kb_connectors_by_provider_sync
-      parameters:
-      - description: 'Provider is the connector to act on: github, slack, google or
-          notion.'
-        in: path
-        name: provider
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/kbSyncOut'
-          description: ok
-      summary: Pulls the provider's documents for the caller's org and files them
-        as knowledge sources, which the store's own hook then indexes — so a synced
-        document is retrievable exactly like a hand-written page.
-      tags:
-      - knowledge
-      x-app: knowledge
-      x-public: true
-      x-tool: true
-  /v1/kb/connectors/catalog:
-    get:
-      description: |-
-        Returns the ONE catalog of everything a caller can
-        connect: every first-party connector and every long-tail one, in a single list
-        sorted by provider. `configured` reports whether this deployment holds OAuth
-        credentials for a source, so the console can show Connect rather than a dead
-        button, and `kind` is a badge only — the connect and sync lifecycle is
-        identical for both. The catalog itself is org-independent; a validated
-        principal is still required. It is metadata only: no secret is ever returned.
-      operationId: get_kb_connectors_catalog
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                connectors:
-                - configured: true
-                  description: Repositories, READMEs, and issues.
-                  displayName: GitHub
-                  kind: native
-                  provider: github
-              schema:
-                $ref: '#/components/schemas/catalogOut'
-          description: ok
-      summary: 'Returns the ONE catalog of everything a caller can connect: every
-        first-party connector and every long-tail one, in a single list sorted by
-        provider.'
-      tags:
-      - knowledge
-      x-app: knowledge
-      x-public: true
-      x-tool: true
-  /v1/kb/graph:
-    get:
-      description: |-
-        Returns the caller org's knowledge as a node/edge graph
-        shaped for a force-directed renderer: pages, memories and synced sources as
-        nodes; the page parent tree, the wikilinks between pages, and each source's
-        connector provenance as edges. Wikilink targets are resolved HERE by title or
-        slug, so a rename never needs an edge rewrite and a link that matches no page
-        renders as its own "unresolved" node instead of vanishing. ?project= narrows
-        it. A store outage degrades to an honest empty graph, never a 5xx.
-      operationId: get_kb_graph
-      parameters:
-      - description: Project narrows the graph to one project scope. Empty reads the
-          whole org.
-        in: query
-        name: project
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/graphOut'
-          description: ok
-      summary: 'Returns the caller org''s knowledge as a node/edge graph shaped for
-        a force-directed renderer: pages, memories and synced sources as nodes; the
-        page parent tree, the wikilinks between pages, and each source''s connector
-        provenance as edges.'
-      tags:
-      - knowledge
-      x-app: knowledge
-      x-public: true
-      x-tool: true
-  /v1/kb/import:
-    post:
-      description: |-
-        Ingests an uploaded export as a tree of kb-page documents with its link structure intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and the export arrives as a multipart `file` part, or as the raw request body when there is no multipart part: an Obsidian or Notion vault zip, a Roam JSON (raw or inside the zip Roam downloads), or an Evernote .enex.
-
-        The pages are filed through the SAME ingest path a connector sync uses, so the kb-page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into kb-link edges — the imported vault is searchable and its graph is navigable without a second pass. Parents are filed before their children, and each page takes a slug unique within the org (suffixed -2, -3, … on collision), so a re-import adds pages rather than overwriting the ones already there.
-
-        Scoped to the caller's validated org; `?project=` narrows every imported page to one project. No validated principal is 403, and an org that has not installed the kb module is refused with the install call to make first. The bounds are 64 MB per upload, 5000 pages and 8 MB per archive entry: pages past the five-thousandth are dropped and a larger entry is truncated at its bound, and a page the store rejects is skipped — so the answer's `imported` count is what was actually filed, not what was sent.
-      operationId: post_kb_import
-      summary: Import an Obsidian, Notion, Roam or Evernote export into the org's
-        knowledge base
-      tags:
-      - knowledge
-      x-app: knowledge
-      x-public: true
-  /v1/kb/search:
-    post:
-      description: |-
-        Runs a semantic search over the caller org's own knowledge —
-        its wiki pages, its agent memories and everything its connectors have synced —
-        and returns the matching passages. This is the RAG entry point: an agent asks
-        "what does this org know about X" and the org's OWN vector namespace answers.
-        The org comes from the validated principal, and both the collection and the
-        payload filter are pinned to it, so cross-tenant retrieval is impossible. An
-        unreachable index returns an honest empty result set with degraded=true, never
-        a 5xx.
-      operationId: post_kb_search
-      requestBody:
-        content:
-          application/json:
-            example:
-              limit: 5
-              query: how do we rotate the signing key
-            schema:
-              $ref: '#/components/schemas/searchIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/searchOut'
-          description: ok
-      summary: Runs a semantic search over the caller org's own knowledge — its wiki
-        pages, its agent memories and everything its connectors have synced — and
-        returns the matching passages.
-      tags:
-      - knowledge
-      x-app: knowledge
-      x-public: true
-      x-tool: true
   /v1/keys:
     delete:
       description: |-
@@ -55771,6 +54675,295 @@ paths:
       - kms
       x-app: kms
       x-public: true
+  /v1/knowledge/connectors:
+    get:
+      description: |-
+        Returns every supported knowledge connector with THIS org's
+        connection state and the REAL number of documents each has ingested into the
+        org's store. A provider that is configured for the deployment but not yet
+        connected appears as disconnected, so the console can offer a Connect button.
+        No secret is ever returned.
+      operationId: get_knowledge_connectors
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kbConnectorsOut'
+          description: ok
+      summary: Returns every supported knowledge connector with THIS org's connection
+        state and the REAL number of documents each has ingested into the org's store.
+      tags:
+      - knowledge
+      x-app: knowledge
+      x-public: true
+      x-tool: true
+  /v1/knowledge/connectors/{provider}:
+    delete:
+      description: |-
+        Revokes a connection: it tombstones the stored credential
+        so a later sync cannot reuse it, purges this provider's points from the org's
+        vector namespace, and marks the connector disconnected. The documents already
+        ingested stay in the org's store — they are the org's own data — but stop being
+        retrievable by search; a caller deletes them through the document surface.
+      operationId: delete_knowledge_connectors_by_provider
+      parameters:
+      - description: 'Provider is the connector to act on: github, slack, google or
+          notion.'
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/connectionOut'
+          description: ok
+      summary: 'Revokes a connection: it tombstones the stored credential so a later
+        sync cannot reuse it, purges this provider''s points from the org''s vector
+        namespace, and marks the connector disconnected.'
+      tags:
+      - knowledge
+      x-app: knowledge
+      x-public: true
+      x-tool: true
+  /v1/knowledge/connectors/{provider}/callback:
+    get:
+      description: |-
+        CompleteConnectorOAuth finishes an OAuth connection: it exchanges the
+        provider's code for a token, seals that token in KMS, and records the
+        connection. THE ORG COMES FROM THE SIGNED STATE, not from a header and not from
+        the provider, so an attacker cannot bind their own account to someone else's
+        org — a tampered, expired or foreign-provider state is refused outright. The
+        token itself is never returned, never written into the document, and never
+        logged; the document holds only its KMS path.
+      operationId: get_knowledge_connectors_by_provider_callback
+      parameters:
+      - description: Provider is the connector completing its flow, from the path.
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      - description: Code is the provider's authorization code, exchanged for a token.
+        in: query
+        name: code
+        required: false
+        schema:
+          type: string
+      - description: State is the org-bound value this server signed at connect time.
+        in: query
+        name: state
+        required: false
+        schema:
+          type: string
+      - description: Error is the provider's denial reason when the user refused consent.
+        in: query
+        name: error
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/connectionOut'
+          description: ok
+      summary: 'CompleteConnectorOAuth finishes an OAuth connection: it exchanges
+        the provider''s code for a token, seals that token in KMS, and records the
+        connection.'
+      tags:
+      - knowledge
+      x-app: knowledge
+      x-public: true
+      x-tool: true
+  /v1/knowledge/connectors/{provider}/connect:
+    get:
+      description: |-
+        StartConnectorOAuth returns the provider authorize URL the console opens to
+        connect this org's account. There is no server-side redirect — the console
+        stays in control of the navigation. The URL carries a state this server SIGNED
+        over the caller's validated org, so the connection the callback completes can
+        only ever land in that org.
+      operationId: get_knowledge_connectors_by_provider_connect
+      parameters:
+      - description: 'Provider is the connector to act on: github, slack, google or
+          notion.'
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kbAuthorizeOut'
+          description: ok
+      summary: StartConnectorOAuth returns the provider authorize URL the console
+        opens to connect this org's account.
+      tags:
+      - knowledge
+      x-app: knowledge
+      x-public: true
+      x-tool: true
+  /v1/knowledge/connectors/{provider}/sync:
+    post:
+      description: |-
+        Pulls the provider's documents for the caller's org and files
+        them as knowledge sources, which the store's own hook then indexes — so a
+        synced document is retrievable exactly like a hand-written page. The org is the
+        validated tenant and the credential is read from KMS, so an org can only ever
+        sync its own connection. A provider failure is reported honestly (502) and
+        recorded on the connector rather than silently swallowed.
+      operationId: post_knowledge_connectors_by_provider_sync
+      parameters:
+      - description: 'Provider is the connector to act on: github, slack, google or
+          notion.'
+        in: path
+        name: provider
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kbSyncOut'
+          description: ok
+      summary: Pulls the provider's documents for the caller's org and files them
+        as knowledge sources, which the store's own hook then indexes — so a synced
+        document is retrievable exactly like a hand-written page.
+      tags:
+      - knowledge
+      x-app: knowledge
+      x-public: true
+      x-tool: true
+  /v1/knowledge/connectors/catalog:
+    get:
+      description: |-
+        Returns the ONE catalog of everything a caller can
+        connect: every first-party connector and every long-tail one, in a single list
+        sorted by provider. `configured` reports whether this deployment holds OAuth
+        credentials for a source, so the console can show Connect rather than a dead
+        button, and `kind` is a badge only — the connect and sync lifecycle is
+        identical for both. The catalog itself is org-independent; a validated
+        principal is still required. It is metadata only: no secret is ever returned.
+      operationId: get_knowledge_connectors_catalog
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                connectors:
+                - configured: true
+                  description: Repositories, READMEs, and issues.
+                  displayName: GitHub
+                  kind: native
+                  provider: github
+              schema:
+                $ref: '#/components/schemas/catalogOut'
+          description: ok
+      summary: 'Returns the ONE catalog of everything a caller can connect: every
+        first-party connector and every long-tail one, in a single list sorted by
+        provider.'
+      tags:
+      - knowledge
+      x-app: knowledge
+      x-public: true
+      x-tool: true
+  /v1/knowledge/graph:
+    get:
+      description: |-
+        Returns the caller org's knowledge as a node/edge graph
+        shaped for a force-directed renderer: pages, memories and synced sources as
+        nodes; the page parent tree, the wikilinks between pages, and each source's
+        connector provenance as edges. Wikilink targets are resolved HERE by title or
+        slug, so a rename never needs an edge rewrite and a link that matches no page
+        renders as its own "unresolved" node instead of vanishing. ?project= narrows
+        it. A store outage degrades to an honest empty graph, never a 5xx.
+      operationId: get_knowledge_graph
+      parameters:
+      - description: Project narrows the graph to one project scope. Empty reads the
+          whole org.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphOut'
+          description: ok
+      summary: 'Returns the caller org''s knowledge as a node/edge graph shaped for
+        a force-directed renderer: pages, memories and synced sources as nodes; the
+        page parent tree, the wikilinks between pages, and each source''s connector
+        provenance as edges.'
+      tags:
+      - knowledge
+      x-app: knowledge
+      x-public: true
+      x-tool: true
+  /v1/knowledge/import:
+    post:
+      description: |-
+        Ingests an uploaded export as a tree of kb-page documents with its link structure intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and the export arrives as a multipart `file` part, or as the raw request body when there is no multipart part: an Obsidian or Notion vault zip, a Roam JSON (raw or inside the zip Roam downloads), or an Evernote .enex.
+
+        The pages are filed through the SAME ingest path a connector sync uses, so the kb-page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into kb-link edges — the imported vault is searchable and its graph is navigable without a second pass. Parents are filed before their children, and each page takes a slug unique within the org (suffixed -2, -3, … on collision), so a re-import adds pages rather than overwriting the ones already there.
+
+        Scoped to the caller's validated org; `?project=` narrows every imported page to one project. No validated principal is 403, and an org that has not installed the kb module is refused with the install call to make first. The bounds are 64 MB per upload, 5000 pages and 8 MB per archive entry: pages past the five-thousandth are dropped and a larger entry is truncated at its bound, and a page the store rejects is skipped — so the answer's `imported` count is what was actually filed, not what was sent.
+      operationId: post_knowledge_import
+      summary: Import an Obsidian, Notion, Roam or Evernote export into the org's
+        knowledge base
+      tags:
+      - knowledge
+      x-app: knowledge
+      x-public: true
+  /v1/knowledge/search:
+    post:
+      description: |-
+        Runs a semantic search over the caller org's own knowledge —
+        its wiki pages, its agent memories and everything its connectors have synced —
+        and returns the matching passages. This is the RAG entry point: an agent asks
+        "what does this org know about X" and the org's OWN vector namespace answers.
+        The org comes from the validated principal, and both the collection and the
+        payload filter are pinned to it, so cross-tenant retrieval is impossible. An
+        unreachable index returns an honest empty result set with degraded=true, never
+        a 5xx.
+      operationId: post_knowledge_search
+      requestBody:
+        content:
+          application/json:
+            example:
+              limit: 5
+              query: how do we rotate the signing key
+            schema:
+              $ref: '#/components/schemas/searchIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchOut'
+          description: ok
+      summary: Runs a semantic search over the caller org's own knowledge — its wiki
+        pages, its agent memories and everything its connectors have synced — and
+        returns the matching passages.
+      tags:
+      - knowledge
+      x-app: knowledge
+      x-public: true
+      x-tool: true
   /v1/logs/health:
     get:
       description: |-
@@ -69322,14 +68515,14 @@ paths:
       x-app: platform
       x-public: true
       x-tool: true
-  /v1/plans:
+  /v1/plan:
     get:
       description: |-
         Returns the Hanzo cloud plan catalog: every cloud tier with its
         price, included capacity, limits and feature list, scoped to the caller's
         catalog. A reseller org sees its own overrides in place of the canonical
         records it has replaced, and the canonical record for every tier it has not.
-      operationId: get_plans
+      operationId: get_plan
       responses:
         "200":
           content:
@@ -69344,14 +68537,14 @@ paths:
       x-app: plan
       x-public: true
       x-tool: true
-  /v1/plans/blockchain:
+  /v1/plan/blockchain:
     get:
       description: |-
         Returns the blockchain RPC plan catalog: the tiers metered
         in monthly compute units, with their prices, limits and overage terms. It is
         the canonical catalog for every caller — these plans carry no reseller
         overrides.
-      operationId: get_plans_blockchain
+      operationId: get_plan_blockchain
       responses:
         "200":
           content:
@@ -69366,13 +68559,13 @@ paths:
       x-app: plan
       x-public: true
       x-tool: true
-  /v1/plans/cloud:
+  /v1/plan/cloud:
     get:
       description: |-
         Returns the cloud plan catalog. It is the same section
         ListCloudPlans answers and a separate operation because it is a separate
         address, and an address is what every projection keys on.
-      operationId: get_plans_cloud
+      operationId: get_plan_cloud
       responses:
         "200":
           content:
@@ -69386,13 +68579,13 @@ paths:
       x-app: plan
       x-public: true
       x-tool: true
-  /v1/plans/dns:
+  /v1/plan/dns:
     get:
       description: |-
         ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records
         per zone and queries per day. It is the canonical catalog for every caller —
         these plans carry no reseller overrides.
-      operationId: get_plans_dns
+      operationId: get_plan_dns
       responses:
         "200":
           content:
@@ -69407,7 +68600,7 @@ paths:
       x-app: plan
       x-public: true
       x-tool: true
-  /v1/plans/entitlements/{id}:
+  /v1/plan/entitlements/{id}:
     get:
       description: |-
         Returns what one plan GRANTS and not what it costs: the
@@ -69415,7 +68608,7 @@ paths:
         derived from it. It is the entitlement half of ResolvePlan, over the same
         catalog and the same 404 for an id no catalog holds — the read a licensing or
         quota gate makes.
-      operationId: get_plans_entitlements_by_id
+      operationId: get_plan_entitlements_by_id
       parameters:
       - description: |-
           ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
@@ -69436,6 +68629,236 @@ paths:
       summary: 'Returns what one plan GRANTS and not what it costs: the canonical
         namespaced entitlement block and the flat license-feature list derived from
         it.'
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/gpu:
+    get:
+      description: |-
+        ListGPUTiers returns the rentable GPU configurations, each with its accelerator
+        count and model, VRAM, vCPUs, host memory and hourly price.
+      operationId: get_plan_gpu
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planTierList'
+          description: ok
+      summary: ListGPUTiers returns the rentable GPU configurations, each with its
+        accelerator count and model, VRAM, vCPUs, host memory and hourly price.
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/health:
+    get:
+      description: |-
+        Health reports that the plans subsystem is mounted and serving. It answers from
+        the process itself and consults neither the catalog bundle nor the goja host,
+        so it stays "ok" while either is degraded.
+      operationId: get_plan_health
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                service: plans
+                status: ok
+              schema:
+                $ref: '#/components/schemas/planHealth'
+          description: ok
+      summary: Health reports that the plans subsystem is mounted and serving.
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/policy:
+    get:
+      description: |-
+        Returns the published pricing policy: whether pricing is
+        transparent, the revenue-sharing terms (idle compute resale and the open-source
+        share) and the principles the catalog is priced by.
+      operationId: get_plan_policy
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties: {}
+                type: object
+          description: ok
+      summary: 'Returns the published pricing policy: whether pricing is transparent,
+        the revenue-sharing terms (idle compute resale and the open-source share)
+        and the principles the catalog is priced by.'
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/regions:
+    get:
+      description: |-
+        Returns the regions cloud capacity is offered in, each with its
+        display name and physical location.
+      operationId: get_plan_regions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planRegionList'
+          description: ok
+      summary: Returns the regions cloud capacity is offered in, each with its display
+        name and physical location.
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/resolve/{id}:
+    get:
+      description: |-
+        Resolves one plan to everything a consumer of the catalog needs at
+        once: its canonical entitlement block, the flat license-feature list a signed
+        license carries, its billing reference, and the catalog it came from. The id
+        may be the plan's id or its slug, and it is resolved against the caller's
+        catalog, so a reseller's override wins over the canonical record. An id no
+        catalog holds answers 404.
+      operationId: get_plan_resolve_by_id
+      parameters:
+      - description: |-
+          ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
+          "rpc-growth". Both are matched, so a slug resolves the plan it names.
+        example: pro
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planResolution'
+          description: ok
+      summary: 'Resolves one plan to everything a consumer of the catalog needs at
+        once: its canonical entitlement block, the flat license-feature list a signed
+        license carries, its billing reference, and the catalog it came from.'
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/schema:
+    get:
+      description: |-
+        Returns the two JSON Schema documents this surface speaks:
+        entitlements.schema.json, which declares every entitlement key with its type,
+        unit and enum, and plan.schema.json, which a catalog plan record conforms to.
+      operationId: get_plan_schema
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planSchemas'
+          description: ok
+      summary: 'Returns the two JSON Schema documents this surface speaks: entitlements.schema.json,
+        which declares every entitlement key with its type, unit and enum, and plan.schema.json,
+        which a catalog plan record conforms to.'
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/storage:
+    get:
+      description: |-
+        Returns the block-storage price block: the price per GB per
+        month and the volume size bounds a cloud plan may attach.
+      operationId: get_plan_storage
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties: {}
+                type: object
+          description: ok
+      summary: 'Returns the block-storage price block: the price per GB per month
+        and the volume size bounds a cloud plan may attach.'
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/subscriptions:
+    get:
+      description: |-
+        Returns the subscription ladder — the personal and team
+        tiers a customer buys to use the cloud, each with its monthly and annual price,
+        seat rules, limits and billing reference. Scoped to the caller's catalog.
+      operationId: get_plan_subscriptions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planList'
+          description: ok
+      summary: Returns the subscription ladder — the personal and team tiers a customer
+        buys to use the cloud, each with its monthly and annual price, seat rules,
+        limits and billing reference.
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/tools:
+    get:
+      description: |-
+        Returns the per-use price of every metered tool — web search,
+        code interpreter, image generation, speech — each with the unit it is billed
+        in.
+      operationId: get_plan_tools
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planToolList'
+          description: ok
+      summary: Returns the per-use price of every metered tool — web search, code
+        interpreter, image generation, speech — each with the unit it is billed in.
+      tags:
+      - plan
+      x-app: plan
+      x-public: true
+      x-tool: true
+  /v1/plan/vocab:
+    get:
+      description: |-
+        Returns the entitlement key vocabulary: every key with
+        its namespace, JSON type, nullability, unit, enum and title, the list of
+        namespaces, and the engine features a license can grant. It is derived from
+        entitlements.schema.json on every call, so it cannot fall behind the schema.
+      operationId: get_plan_vocab
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planVocab'
+          description: ok
+      summary: 'Returns the entitlement key vocabulary: every key with its namespace,
+        JSON type, nullability, unit, enum and title, the list of namespaces, and
+        the engine features a license can grant.'
       tags:
       - plan
       x-app: plan
@@ -69504,149 +68927,6 @@ paths:
       - commerce
       x-app: commerce
       x-public: true
-  /v1/plans/gpu:
-    get:
-      description: |-
-        ListGPUTiers returns the rentable GPU configurations, each with its accelerator
-        count and model, VRAM, vCPUs, host memory and hourly price.
-      operationId: get_plans_gpu
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/planTierList'
-          description: ok
-      summary: ListGPUTiers returns the rentable GPU configurations, each with its
-        accelerator count and model, VRAM, vCPUs, host memory and hourly price.
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
-  /v1/plans/health:
-    get:
-      description: |-
-        Health reports that the plans subsystem is mounted and serving. It answers from
-        the process itself and consults neither the catalog bundle nor the goja host,
-        so it stays "ok" while either is degraded.
-      operationId: get_plans_health
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                service: plans
-                status: ok
-              schema:
-                $ref: '#/components/schemas/planHealth'
-          description: ok
-      summary: Health reports that the plans subsystem is mounted and serving.
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
-  /v1/plans/policy:
-    get:
-      description: |-
-        Returns the published pricing policy: whether pricing is
-        transparent, the revenue-sharing terms (idle compute resale and the open-source
-        share) and the principles the catalog is priced by.
-      operationId: get_plans_policy
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                additionalProperties: {}
-                type: object
-          description: ok
-      summary: 'Returns the published pricing policy: whether pricing is transparent,
-        the revenue-sharing terms (idle compute resale and the open-source share)
-        and the principles the catalog is priced by.'
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
-  /v1/plans/regions:
-    get:
-      description: |-
-        Returns the regions cloud capacity is offered in, each with its
-        display name and physical location.
-      operationId: get_plans_regions
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/planRegionList'
-          description: ok
-      summary: Returns the regions cloud capacity is offered in, each with its display
-        name and physical location.
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
-  /v1/plans/resolve/{id}:
-    get:
-      description: |-
-        Resolves one plan to everything a consumer of the catalog needs at
-        once: its canonical entitlement block, the flat license-feature list a signed
-        license carries, its billing reference, and the catalog it came from. The id
-        may be the plan's id or its slug, and it is resolved against the caller's
-        catalog, so a reseller's override wins over the canonical record. An id no
-        catalog holds answers 404.
-      operationId: get_plans_resolve_by_id
-      parameters:
-      - description: |-
-          ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
-          "rpc-growth". Both are matched, so a slug resolves the plan it names.
-        example: pro
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/planResolution'
-          description: ok
-      summary: 'Resolves one plan to everything a consumer of the catalog needs at
-        once: its canonical entitlement block, the flat license-feature list a signed
-        license carries, its billing reference, and the catalog it came from.'
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
-  /v1/plans/schema:
-    get:
-      description: |-
-        Returns the two JSON Schema documents this surface speaks:
-        entitlements.schema.json, which declares every entitlement key with its type,
-        unit and enum, and plan.schema.json, which a catalog plan record conforms to.
-      operationId: get_plans_schema
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/planSchemas'
-          description: ok
-      summary: 'Returns the two JSON Schema documents this surface speaks: entitlements.schema.json,
-        which declares every entitlement key with its type, unit and enum, and plan.schema.json,
-        which a catalog plan record conforms to.'
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
   /v1/plans/seed:
     post:
       description: Upserts the shipped plan rows and answers how many were created
@@ -69662,93 +68942,6 @@ paths:
       - commerce
       x-app: commerce
       x-public: true
-  /v1/plans/storage:
-    get:
-      description: |-
-        Returns the block-storage price block: the price per GB per
-        month and the volume size bounds a cloud plan may attach.
-      operationId: get_plans_storage
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                additionalProperties: {}
-                type: object
-          description: ok
-      summary: 'Returns the block-storage price block: the price per GB per month
-        and the volume size bounds a cloud plan may attach.'
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
-  /v1/plans/subscriptions:
-    get:
-      description: |-
-        Returns the subscription ladder — the personal and team
-        tiers a customer buys to use the cloud, each with its monthly and annual price,
-        seat rules, limits and billing reference. Scoped to the caller's catalog.
-      operationId: get_plans_subscriptions
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/planList'
-          description: ok
-      summary: Returns the subscription ladder — the personal and team tiers a customer
-        buys to use the cloud, each with its monthly and annual price, seat rules,
-        limits and billing reference.
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
-  /v1/plans/tools:
-    get:
-      description: |-
-        Returns the per-use price of every metered tool — web search,
-        code interpreter, image generation, speech — each with the unit it is billed
-        in.
-      operationId: get_plans_tools
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/planToolList'
-          description: ok
-      summary: Returns the per-use price of every metered tool — web search, code
-        interpreter, image generation, speech — each with the unit it is billed in.
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
-  /v1/plans/vocab:
-    get:
-      description: |-
-        Returns the entitlement key vocabulary: every key with
-        its namespace, JSON type, nullability, unit, enum and title, the list of
-        namespaces, and the engine features a license can grant. It is derived from
-        entitlements.schema.json on every call, so it cannot fall behind the schema.
-      operationId: get_plans_vocab
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/planVocab'
-          description: ok
-      summary: 'Returns the entitlement key vocabulary: every key with its namespace,
-        JSON type, nullability, unit, enum and title, the list of namespaces, and
-        the engine features a license can grant.'
-      tags:
-      - plan
-      x-app: plan
-      x-public: true
-      x-tool: true
   /v1/platform/apps:
     get:
       description: |-
@@ -73323,6 +72516,764 @@ paths:
       x-app: prompts
       x-public: true
       x-tool: true
+  /v1/provisioning/datastore:
+    get:
+      description: |-
+        Lists the caller org's Hanzo Datastore warehouses. Each one is
+        a DEDICATED analytical instance the org alone runs, so the host is that
+        instance's own in-cluster Service and the port is its HTTP port, 8123.
+      operationId: get_provisioning_datastore
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/provisionedSummary'
+                type: array
+          description: ok
+      summary: Lists the caller org's Hanzo Datastore warehouses.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Launches your org's OWN Hanzo Datastore instance and answers with its `datastore://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.
+
+        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
+
+        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
+
+        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
+
+        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
+      operationId: post_provisioning_datastore
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/provisionRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionResult'
+          description: Success
+      summary: Provision a Hanzo Datastore instance for your org
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+  /v1/provisioning/datastore/{name}:
+    delete:
+      description: |-
+        Deprovisions one Hanzo Datastore warehouse. It reverts any app
+        instance bound to it back to Base BEFORE tearing down the org's dedicated
+        instance, then deletes the sealed credential and removes the metadata row.
+        Answers 204 with no body; a second call is a 404.
+      operationId: delete_provisioning_datastore_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: warehouse
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Deprovisions one Hanzo Datastore warehouse.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one Hanzo Datastore warehouse's metadata. It carries the
+        warehouse's status, its instance address and the admin user the instance
+        booted with — never the password. A still-booting instance reads
+        "provisioning", reconciled from the operator's live view rather than the row.
+      operationId: get_provisioning_datastore_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: warehouse
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionedResource'
+          description: ok
+      summary: Returns one Hanzo Datastore warehouse's metadata.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+  /v1/provisioning/docdb:
+    get:
+      description: |-
+        ListDocDB lists the caller org's Hanzo DocDB document databases. Each one is
+        a DEDICATED FerretDB instance the org alone runs, speaking the MongoDB wire
+        protocol, so the host is that instance's own in-cluster Service and the port
+        is 27017.
+      operationId: get_provisioning_docdb
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/provisionedSummary'
+                type: array
+          description: ok
+      summary: ListDocDB lists the caller org's Hanzo DocDB document databases.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Launches your org's OWN document-database instance — it speaks the MongoDB wire protocol, so existing MongoDB drivers connect unchanged — and answers with its `mongodb://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.
+
+        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
+
+        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
+
+        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
+
+        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
+      operationId: post_provisioning_docdb
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/provisionRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionResult'
+          description: Success
+      summary: Provision a document database for your org
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+  /v1/provisioning/docdb/{name}:
+    delete:
+      description: |-
+        DropDocDB deprovisions one Hanzo DocDB database. It reverts any app instance
+        bound to it back to Base BEFORE tearing down the org's dedicated FerretDB
+        instance, then deletes the sealed credential and removes the metadata row.
+        Answers 204 with no body; a second call is a 404.
+      operationId: delete_provisioning_docdb_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: sessions
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: DropDocDB deprovisions one Hanzo DocDB database.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        GetDocDB returns one Hanzo DocDB database's metadata. It carries the
+        database's status, its instance address and the SCRAM user the instance was
+        set up with — never the password. A still-booting instance reads
+        "provisioning", reconciled from the operator's live view.
+      operationId: get_provisioning_docdb_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: sessions
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionedResource'
+          description: ok
+      summary: GetDocDB returns one Hanzo DocDB database's metadata.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+  /v1/provisioning/kv:
+    get:
+      description: |-
+        ListKV lists the caller org's Hanzo KV stores. Each one is a DEDICATED Valkey
+        instance the org alone runs, so the host is that instance's own in-cluster
+        Service and the port is 6379.
+      operationId: get_provisioning_kv
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/provisionedSummary'
+                type: array
+          description: ok
+      summary: ListKV lists the caller org's Hanzo KV stores.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Launches your org's OWN key-value instance and answers with its `kv://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.
+
+        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
+
+        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
+
+        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
+
+        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
+      operationId: post_provisioning_kv
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/provisionRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionResult'
+          description: Success
+      summary: Provision a key-value store for your org
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+  /v1/provisioning/kv/{name}:
+    delete:
+      description: |-
+        DropKV deprovisions one Hanzo KV store. It reverts any app instance bound to
+        it back to Base BEFORE tearing down the org's dedicated Valkey instance, then
+        deletes the sealed credential and removes the metadata row. Answers 204 with
+        no body; a second call is a 404.
+      operationId: delete_provisioning_kv_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: sessions
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: DropKV deprovisions one Hanzo KV store.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        GetKV returns one Hanzo KV store's metadata. It carries the store's status,
+        its instance address and the Valkey user it authenticates as ("default", the
+        only user a requirepass instance has) — never the password. A still-booting
+        instance reads "provisioning", reconciled from the operator's live view.
+      operationId: get_provisioning_kv_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: sessions
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionedResource'
+          description: ok
+      summary: GetKV returns one Hanzo KV store's metadata.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+  /v1/provisioning/s3:
+    get:
+      description: |-
+        Lists the caller org's object-storage buckets. A bucket lives in an
+        already-live shared object store and is reached through the public gateway.
+        The names here are the friendly ones the org provisioned; the physical bucket
+        is org-namespaced underneath, which is what keeps two tenants' buckets
+        distinct.
+      operationId: get_provisioning_s3
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/provisionedSummary'
+                type: array
+          description: ok
+      summary: Lists the caller org's object-storage buckets.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Creates an S3-compatible bucket inside the already-running shared object store and answers with the endpoint that reaches it.
+
+        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
+
+        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
+
+        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
+
+        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
+      operationId: post_provisioning_s3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/provisionRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionResult'
+          description: Success
+      summary: Provision an object storage bucket for your org
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+  /v1/provisioning/s3/{name}:
+    delete:
+      description: |-
+        Deletes one bucket from the shared object store and removes its
+        metadata row. Answers 204 with no body; a second call is a 404.
+      operationId: delete_provisioning_s3_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: uploads
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Deletes one bucket from the shared object store and removes its metadata
+        row.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one bucket's metadata. It carries the bucket's status and the
+        gateway address it is reached at, and no username: the object store
+        authenticates with a shared, out-of-band key rather than a per-bucket
+        credential.
+      operationId: get_provisioning_s3_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: uploads
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionedResource'
+          description: ok
+      summary: Returns one bucket's metadata.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+  /v1/provisioning/search:
+    get:
+      description: |-
+        Lists the caller org's search indexes. An index is a logical
+        resource inside an already-live shared backend, so every one of them is
+        reached through the public gateway rather than at an instance of its own.
+      operationId: get_provisioning_search
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/provisionedSummary'
+                type: array
+          description: ok
+      summary: Lists the caller org's search indexes.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Creates a search index inside the already-running shared search backend and answers with the endpoint that reaches it.
+
+        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
+
+        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
+
+        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
+
+        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
+      operationId: post_provisioning_search
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/provisionRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionResult'
+          description: Success
+      summary: Provision a search index for your org
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+  /v1/provisioning/search/{name}:
+    delete:
+      description: |-
+        Deletes one search index from the shared backend and removes its
+        metadata row. Answers 204 with no body; a second call is a 404.
+      operationId: delete_provisioning_search_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: products
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Deletes one search index from the shared backend and removes its metadata
+        row.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one search index's metadata. It carries the index's status
+        and the gateway address it is reached at, and no username: the backend
+        authenticates with a shared, out-of-band key rather than a per-index
+        credential.
+      operationId: get_provisioning_search_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: products
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionedResource'
+          description: ok
+      summary: Returns one search index's metadata.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+  /v1/provisioning/sql:
+    get:
+      description: |-
+        ListSQL lists the caller org's Hanzo SQL databases. Each one is a DEDICATED
+        PostgreSQL instance the org alone runs, so the host is that instance's own
+        in-cluster Service and the port is 5432.
+      operationId: get_provisioning_sql
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/provisionedSummary'
+                type: array
+          description: ok
+      summary: ListSQL lists the caller org's Hanzo SQL databases.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Launches your org's OWN PostgreSQL instance and answers with its `postgres://` connection string. The instance is yours alone: a deployment in your own tenant namespace, so its admin credential is naturally scoped to you and no other tenant shares the process. Off-cluster, where there is no orchestrator to launch one, this fails closed with 503 rather than handing back a shared one.
+
+        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
+
+        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
+
+        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
+
+        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
+      operationId: post_provisioning_sql
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/provisionRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionResult'
+          description: Success
+      summary: Provision a PostgreSQL database for your org
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+  /v1/provisioning/sql/{name}:
+    delete:
+      description: |-
+        DropSQL deprovisions one Hanzo SQL database. It reverts any app instance
+        bound to it back to Base BEFORE tearing down the org's dedicated Postgres
+        instance — never a live app pointed at a deleted backend — then deletes the
+        sealed credential and removes the metadata row. Answers 204 with no body; a
+        second call is a 404, not a second delete.
+      operationId: delete_provisioning_sql_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: orders
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: DropSQL deprovisions one Hanzo SQL database.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        GetSQL returns one Hanzo SQL database's metadata. It carries the database's
+        status, its instance address and the admin user Postgres booted with — never
+        the password, which is returned once at create and otherwise lives only in
+        Hanzo KMS. A still-booting instance reads "provisioning", reconciled from the
+        operator's live view rather than from the row.
+      operationId: get_provisioning_sql_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: orders
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionedResource'
+          description: ok
+      summary: GetSQL returns one Hanzo SQL database's metadata.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+  /v1/provisioning/vector:
+    get:
+      description: |-
+        Lists the caller org's vector collections. A collection is a
+        logical resource inside an already-live shared backend, so every one of them
+        is reached through the public gateway rather than at an instance of its own.
+      operationId: get_provisioning_vector
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/provisionedSummary'
+                type: array
+          description: ok
+      summary: Lists the caller org's vector collections.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Creates a vector collection inside the already-running shared vector backend and answers with the endpoint that reaches it.
+
+        `name` is the org-unique slug every physical name derives from, and must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. `instance` optionally BINDS the add-on to one of your app instances: the DSN is injected into that instance's addons secret as <KIND>_URL, switching the app off its built-in store and onto this one. Omit it and the connection string is yours to wire.
+
+        THE CREDENTIAL COMES BACK ONCE. The connection string and password are in this response and nowhere else — every read beside it omits the password — so a caller that does not keep them has to provision again. Where KMS is configured the password is sealed there and only a reference is persisted; where it is not, it is returned this once and stored nowhere. It is never held in plaintext.
+
+        Scoped to the caller's validated org (403 without one), which also namespaces the physical resource under a fixed-width hash, so two tenants can never fold onto one backend resource — a residual collision fails closed with 409 rather than silently sharing. A name already taken in your org is 409; an invalid name or instance slug is 400; a backend that refuses the create is 502. Where a later step fails after the backend resource already exists, it is torn back down rather than left orphaned.
+
+        Billing is gated BEFORE anything is created: an unfunded org — or, in the fail-closed default, an unreachable meter — gets the fleet-wide 402/503 and nothing is provisioned. The fee is per-kind and set by the deployment.
+      operationId: post_provisioning_vector
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/provisionRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionResult'
+          description: Success
+      summary: Provision a vector collection for your org
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+  /v1/provisioning/vector/{name}:
+    delete:
+      description: |-
+        Deletes one vector collection from the shared backend and removes
+        its metadata row. Answers 204 with no body; a second call is a 404.
+      operationId: delete_provisioning_vector_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: embeddings
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Deletes one vector collection from the shared backend and removes its
+        metadata row.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one vector collection's metadata. It carries the
+        collection's status and the gateway address it is reached at, and no username:
+        the backend authenticates with a shared, out-of-band key rather than a
+        per-collection credential, so there is no per-resource user to report.
+      operationId: get_provisioning_vector_by_name
+      parameters:
+      - description: |-
+          Name is the resource's org-unique slug, from the path. Lower-cased and
+          trimmed before lookup, exactly as it was at create.
+        example: embeddings
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/provisionedResource'
+          description: ok
+      summary: Returns one vector collection's metadata.
+      tags:
+      - provisioning
+      x-app: provisioning
+      x-public: true
+      x-tool: true
   /v1/pubsub/kv/{bucket}:
     delete:
       description: |-
@@ -75448,10 +75399,9 @@ paths:
       parameters:
       - description: |-
           Authorization carries the surface's bearer key (`Bearer <key>`); the bare
-          key is accepted too. Search and vector are two surfaces with two keys.
-          It is not `validate:"required"` on purpose: requireKey answers absence
-          itself, so an unconfigured surface 503s and a missing bearer 401s — a
-          validation refusal would rewrite both statuses.
+          key is accepted too. It is not `validate:"required"` on purpose: requireKey
+          answers absence itself, so an unconfigured surface 503s and a missing bearer
+          401s — a validation refusal would rewrite both statuses.
         in: header
         name: Authorization
         required: false
@@ -75466,8 +75416,8 @@ paths:
           description: ok
       summary: Lists the search indexes with their document counts and timestamps.
       tags:
-      - product
-      x-app: product
+      - search
+      x-app: search
       x-public: true
       x-tool: true
   /v1/search/stats:
@@ -75484,10 +75434,9 @@ paths:
       parameters:
       - description: |-
           Authorization carries the surface's bearer key (`Bearer <key>`); the bare
-          key is accepted too. Search and vector are two surfaces with two keys.
-          It is not `validate:"required"` on purpose: requireKey answers absence
-          itself, so an unconfigured surface 503s and a missing bearer 401s — a
-          validation refusal would rewrite both statuses.
+          key is accepted too. It is not `validate:"required"` on purpose: requireKey
+          answers absence itself, so an unconfigured surface 503s and a missing bearer
+          401s — a validation refusal would rewrite both statuses.
         in: header
         name: Authorization
         required: false
@@ -75502,8 +75451,8 @@ paths:
           description: ok
       summary: Totals the documents across every search index.
       tags:
-      - product
-      x-app: product
+      - search
+      x-app: search
       x-public: true
       x-tool: true
   /v1/sentinel/discover:
@@ -80000,7 +79949,7 @@ paths:
 
         It is FAIL-SOFT on storage: a warehouse outage costs a poll of history
         (stored:false), never a failed request. It records usage ONLY — the link registry
-        is refreshed separately via POST /v1/links, so there is one and only one way to
+        is refreshed separately via POST /v1/link, so there is one and only one way to
         update an account row.
       operationId: post_usage
       requestBody:
@@ -80473,76 +80422,6 @@ paths:
       tags:
       - usage
       x-app: usage
-      x-public: true
-      x-tool: true
-  /v1/vector/collections:
-    get:
-      description: |-
-        Lists the vector collections with their size and geometry.
-
-        It reads the in-cluster Qdrant service: the collection list, then each
-        collection's detail for its point count, vector dimension and distance metric.
-        Per-collection detail is best-effort — one collection that fails to describe
-        itself keeps its name and defaults (dimension 0, cosine) rather than blanking
-        the whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.
-      operationId: get_vector_collections
-      parameters:
-      - description: |-
-          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
-          key is accepted too. Search and vector are two surfaces with two keys.
-          It is not `validate:"required"` on purpose: requireKey answers absence
-          itself, so an unconfigured surface 503s and a missing bearer 401s — a
-          validation refusal would rewrite both statuses.
-        in: header
-        name: Authorization
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/vectorCollectionList'
-          description: ok
-      summary: Lists the vector collections with their size and geometry.
-      tags:
-      - product
-      x-app: product
-      x-public: true
-      x-tool: true
-  /v1/vector/stats:
-    get:
-      description: |-
-        Totals the collections, vectors and storage across the vector store.
-
-        Every figure is summed from the same per-collection detail
-        GET /v1/vector/collections returns, so the two panels can never disagree. An
-        unreachable Qdrant answers 200 with all zeros rather than an error.
-      operationId: get_vector_stats
-      parameters:
-      - description: |-
-          Authorization carries the surface's bearer key (`Bearer <key>`); the bare
-          key is accepted too. Search and vector are two surfaces with two keys.
-          It is not `validate:"required"` on purpose: requireKey answers absence
-          itself, so an unconfigured surface 503s and a missing bearer 401s — a
-          validation refusal would rewrite both statuses.
-        in: header
-        name: Authorization
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/vectorStats'
-          description: ok
-      summary: Totals the collections, vectors and storage across the vector store.
-      tags:
-      - product
-      x-app: product
       x-public: true
       x-tool: true
   /v1/videos/{id}:
@@ -81185,10 +81064,6 @@ tags:
 - description: 'Package pricing is the price list: what every model, provider, GPU
     tier, tool and hosting plan costs.'
   name: pricing
-- description: 'Package product is the read-only inventory of the search and vector
-    backends: /v1/search/{indexes,stats} read from Meilisearch and /v1/vector/{collections,stats}
-    from Qdrant, reshaped into the rows the console renders.'
-  name: product
 - description: 'Package projects is where your sites live: create one, deploy a build,
     roll back to any release.'
   name: projects

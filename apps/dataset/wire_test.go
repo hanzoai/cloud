@@ -77,13 +77,13 @@ func TestEveryRouteIsATypedOp(t *testing.T) {
 // generated artefacts at once and must be a deliberate edit here.
 func TestTheSurfaceIsExactlyWhatItSays(t *testing.T) {
 	want := []string{
-		"DELETE /v1/risk/datasets/{name}",
-		"GET /v1/risk/datasets",
-		"GET /v1/risk/datasets/{name}",
-		"GET /v1/risk/datasets/{name}/export",
-		"GET /v1/risk/datasets/{name}/lineage",
-		"POST /v1/risk/datasets",
-		"POST /v1/risk/datasets/{name}/materialize",
+		"DELETE /v1/dataset/{name}",
+		"GET /v1/dataset",
+		"GET /v1/dataset/{name}",
+		"GET /v1/dataset/{name}/export",
+		"GET /v1/dataset/{name}/lineage",
+		"POST /v1/dataset",
+		"POST /v1/dataset/{name}/materialize",
 	}
 	served, _ := projections(t)
 	var got []string

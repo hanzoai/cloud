@@ -2,7 +2,7 @@
 // meaning.
 //
 // Wiki pages, memories and connector-ingested documents are ONE framework
-// document store at /v1/kb, indexed into the org's own vector namespace on
+// document store at /v1/knowledge, indexed into the org's own vector namespace on
 // every save and read back as semantic search, a link graph, or an imported
 // vault.
 //
@@ -22,7 +22,7 @@
 // a knowledge document the after_save hook upserts its text to the org's vector
 // namespace, and on trash it removes it. Human wiki + AI memory therefore share
 // ONE per-org knowledge store, indexed once. kb ALSO mounts a thin retrieval +
-// ingestion control-plane subsystem (subsystem.go, /v1/kb/*): semantic search
+// ingestion control-plane subsystem (subsystem.go, /v1/knowledge/*): semantic search
 // (the RAG entry point an agent/chat calls) and app connectors (Slack/GitHub/
 // Google) that ingest external docs INTO the same store. Connectors are just
 // producers of framework documents — they never fork the vector-write path.

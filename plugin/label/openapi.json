@@ -17,17 +17,17 @@
   ],
   "tags": [
     {
-      "name": "risk"
+      "name": "label"
     }
   ],
   "paths": {
-    "/v1/risk/labels": {
+    "/v1/label": {
       "get": {
         "operationId": "riskLabels",
         "summary": "Read the assertions this tenant has recorded",
         "description": "Reads the assertions this tenant has recorded, newest event first.\n\nIt reads the RECORD — the tenant's own store — and not the columnar copy, so\nwhat it returns is what would be produced in an audit. Narrow it by entity, by\nasserter, or by event window.",
         "tags": [
-          "risk"
+          "label"
         ],
         "parameters": [
           {
@@ -103,7 +103,7 @@
         "summary": "Assert ground truth about events",
         "description": "Records a batch of ground truth against the entities it judges.\n\nEach assertion carries TWO times — when the judged event happened, and when\nthe assertion became knowable — and both are required. The second is what\nkeeps a chargeback that landed in June out of a model that had to decide in\nFebruary.\n\nIt is idempotent on the CONTENT of an assertion, so a webhook that redelivers\nis safe. It never overwrites: a source that corrects itself later files a NEW\nassertion, which wins from the moment it became knowable and leaves every\nearlier observation instant seeing exactly what it saw.\n\nThe asserter is stamped from the validated credential and is not a body field.",
         "tags": [
-          "risk"
+          "label"
         ],
         "requestBody": {
           "content": {
@@ -131,13 +131,13 @@
         "x-tool": true
       }
     },
-    "/v1/risk/labels/coverage": {
+    "/v1/label/coverage": {
       "get": {
         "operationId": "riskLabelCoverage",
         "summary": "How much of the window has matured, and how much of that is judged",
         "description": "Reports how much of a window has matured and how much of that is\njudged, per source.\n\nIt is the gate on training. A supervised fit over a window whose judged count\nis near zero produces a number, and the number is meaningless; this op is what\nlets that be stated before the fit rather than discovered after it.\n\nIt reads the RECORD plane and folds every assertion at that event's OWN as-of,\nso the counts obey exactly the leakage rule a materialisation would. It counts\nonly what was ASSERTED: what share of the whole event STREAM carries a label is\na question about the feature plane's denominator and is not answerable here.",
         "tags": [
-          "risk"
+          "label"
         ],
         "parameters": [
           {
@@ -183,13 +183,13 @@
         "x-tool": true
       }
     },
-    "/v1/risk/labels/dispose": {
+    "/v1/label/dispose": {
       "post": {
         "operationId": "riskDisposeLabels",
         "summary": "Dispose of this tenant's expired assertions, whole records only",
         "description": "Applies this tenant's retention, and only this tenant's.\n\nIt is bounded three ways, each a compliance property rather than a\nconvenience. It refuses a boundary younger than the platform floor, because a\nlabel can be the input to an adverse action and five years is what the\nretention ledger holds such a record for. It never touches a record under\nlitigation hold. And it disposes of whole records rather than redacting\nfields.\n\nIt removes the derived columnar copy BEFORE the record, and refuses the whole\ndisposal if the warehouse cannot be reached. The other order would leave rows\nin the warehouse that nothing can identify any more, which is a disposal that\ndid not happen and says it did.",
         "tags": [
-          "risk"
+          "label"
         ],
         "requestBody": {
           "content": {
@@ -217,13 +217,13 @@
         "x-tool": true
       }
     },
-    "/v1/risk/labels/hold": {
+    "/v1/label/hold": {
       "post": {
         "operationId": "riskHoldLabels",
         "summary": "Place or release a litigation hold on named records",
         "description": "Places or releases a litigation hold on named records.\n\nA hold is a fact about the RECORD, not about the world: it says retention may\nnot dispose of this row, and it asserts nothing about what happened. So it is\nnot a field on an assertion and it is not folded into the content digest —\ncarried there it was silently a no-op on any record that already existed, since\nre-filing the same assertion with a hold flag produced the same digest, the\ninsert was ignored, and the caller was answered `duplicate` while the hold it\nasked for was never placed. This op is the one way a hold moves, in either\ndirection, and the move is written to the audit log.\n\nEvery named id is this tenant's or is nothing. The statement runs against the\ntenant's own file, which holds no other tenant's rows and has no column that\ncould name one.",
         "tags": [
-          "risk"
+          "label"
         ],
         "requestBody": {
           "content": {
@@ -251,13 +251,13 @@
         "x-tool": true
       }
     },
-    "/v1/risk/labels/resolve": {
+    "/v1/label/resolve": {
       "post": {
         "operationId": "riskResolveLabels",
         "summary": "Resolve the label in force for named events, as of each event's own horizon",
         "description": "Answers, for each named event, which assertion was in force AS OF that\nevent's own horizon — and what disagreed with it.\n\nThis is the join surface: the dataset materialiser calls it to attach ground\ntruth to training rows, and the evaluator calls it to score a past decision\nagainst what was knowable when the decision had to be made. One mechanism for\nboth, so a model can never be trained under one leakage rule and scored under\nanother.\n\nThree answers are distinct and all three are honest: a resolved label, an\nevent that has not matured, and a matured event nobody has judged. The last is\nnever reported as unproductive.",
         "tags": [
-          "risk"
+          "label"
         ],
         "requestBody": {
           "content": {
@@ -285,13 +285,13 @@
         "x-tool": true
       }
     },
-    "/v1/risk/labels/vocabulary": {
+    "/v1/label/vocabulary": {
       "get": {
         "operationId": "riskLabelVocabulary",
         "summary": "The closed vocabularies and the precedence rule that resolves a conflict",
         "description": "Publishes the closed vocabularies and the precedence rule that\nresolves a conflict between two sources.\n\nA precedence rule nobody can read is a rule nobody can audit or dispute, and\nthe whole defensibility of a contested label rests on being able to say why\none assertion beat another. The order returned here is derived from the same\ndeclaration the resolver reads — it is not a description of it.",
         "tags": [
-          "risk"
+          "label"
         ],
         "responses": {
           "200": {

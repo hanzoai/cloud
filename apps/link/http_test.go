@@ -76,11 +76,11 @@ func TestFailClosedNoPrincipal(t *testing.T) {
 		method, path string
 		body         any
 	}{
-		{http.MethodGet, "/v1/links", nil},
-		{http.MethodGet, "/v1/links/route", nil},
-		{http.MethodGet, "/v1/links/devices/m1", nil},
-		{http.MethodPost, "/v1/links", map[string]any{"machine": "m1", "provider": "claude"}},
-		{http.MethodDelete, "/v1/links/link_x", nil},
+		{http.MethodGet, "/v1/link", nil},
+		{http.MethodGet, "/v1/link/route", nil},
+		{http.MethodGet, "/v1/link/devices/m1", nil},
+		{http.MethodPost, "/v1/link", map[string]any{"machine": "m1", "provider": "claude"}},
+		{http.MethodDelete, "/v1/link/link_x", nil},
 	} {
 		if code, _ := req(t, app, tc.method, tc.path, "acme", "", tc.body); code != http.StatusForbidden {
 			t.Fatalf("%s %s with no validated principal want 403, got %d", tc.method, tc.path, code)
@@ -94,7 +94,7 @@ func TestRegisterListGetRevoke(t *testing.T) {
 	app := mountLink(t)
 
 	// Register a subscription account (Claude Max) with a usage snapshot.
-	code, body := req(t, app, http.MethodPost, "/v1/links", "acme", "alice", map[string]any{
+	code, body := req(t, app, http.MethodPost, "/v1/link", "acme", "alice", map[string]any{
 		"machine": "m1", "host": "box", "os": "darwin",
 		"provider": "claude", "account": "alice@x", "plan": "Claude Max", "kind": "subscription",
 		"usage": map[string]any{"sessionPct": 42, "weeklyPct": 12, "tokens": 1000},
@@ -113,7 +113,7 @@ func TestRegisterListGetRevoke(t *testing.T) {
 	}
 
 	// Register an api-key account (bills via commerce).
-	code, body = req(t, app, http.MethodPost, "/v1/links", "acme", "alice", map[string]any{
+	code, body = req(t, app, http.MethodPost, "/v1/link", "acme", "alice", map[string]any{
 		"machine": "m1", "host": "box", "provider": "hanzo", "account": "sk-1", "kind": "apikey",
 	})
 	if code != http.StatusCreated {
@@ -126,7 +126,7 @@ func TestRegisterListGetRevoke(t *testing.T) {
 	}
 
 	// List returns both + a device projection grouping them under m1.
-	code, body = req(t, app, http.MethodGet, "/v1/links", "acme", "alice", nil)
+	code, body = req(t, app, http.MethodGet, "/v1/link", "acme", "alice", nil)
 	var list struct {
 		Links   []linkView   `json:"links"`
 		Devices []deviceView `json:"devices"`
@@ -140,7 +140,7 @@ func TestRegisterListGetRevoke(t *testing.T) {
 	}
 
 	// The route plan puts the subscription first and carries the billing mode.
-	code, body = req(t, app, http.MethodGet, "/v1/links/route", "acme", "alice", nil)
+	code, body = req(t, app, http.MethodGet, "/v1/link/route", "acme", "alice", nil)
 	var plan RoutePlan
 	_ = json.Unmarshal(body, &plan)
 	if code != http.StatusOK || len(plan.Candidates) != 2 {
@@ -151,19 +151,19 @@ func TestRegisterListGetRevoke(t *testing.T) {
 	}
 
 	// Revoke the subscription → it drops out of the route; the api key remains.
-	code, body = req(t, app, http.MethodDelete, "/v1/links/"+sub.ID, "acme", "alice", nil)
+	code, body = req(t, app, http.MethodDelete, "/v1/link/"+sub.ID, "acme", "alice", nil)
 	var rev revokeResp
 	_ = json.Unmarshal(body, &rev)
 	if code != http.StatusOK || rev.Revoked != 1 {
 		t.Fatalf("revoke want 200 revoked=1, got %d %+v", code, rev)
 	}
-	code, body = req(t, app, http.MethodGet, "/v1/links/route", "acme", "alice", nil)
+	code, body = req(t, app, http.MethodGet, "/v1/link/route", "acme", "alice", nil)
 	_ = json.Unmarshal(body, &plan)
 	if len(plan.Candidates) != 1 || plan.Candidates[0].Kind != KindAPIKey {
 		t.Fatalf("after revoke only the api key routes, got %+v", plan.Candidates)
 	}
 	// The revoked link is still listed (retained) but marked revoked.
-	code, body = req(t, app, http.MethodGet, "/v1/links/"+sub.ID, "acme", "alice", nil)
+	code, body = req(t, app, http.MethodGet, "/v1/link/"+sub.ID, "acme", "alice", nil)
 	var got linkView
 	_ = json.Unmarshal(body, &got)
 	if code != http.StatusOK || got.Status != StatusRevoked {
@@ -175,7 +175,7 @@ func TestRegisterListGetRevoke(t *testing.T) {
 // see/get/revoke none of the first user's links.
 func TestHTTPUserAndOrgIsolation(t *testing.T) {
 	app := mountLink(t)
-	code, body := req(t, app, http.MethodPost, "/v1/links", "acme", "alice", map[string]any{
+	code, body := req(t, app, http.MethodPost, "/v1/link", "acme", "alice", map[string]any{
 		"machine": "m1", "provider": "claude", "account": "a", "kind": "subscription",
 	})
 	if code != http.StatusCreated {
@@ -185,7 +185,7 @@ func TestHTTPUserAndOrgIsolation(t *testing.T) {
 	_ = json.Unmarshal(body, &al)
 
 	// bob (same org) sees nothing and cannot get/revoke alice's link by id.
-	_, body = req(t, app, http.MethodGet, "/v1/links", "acme", "bob", nil)
+	_, body = req(t, app, http.MethodGet, "/v1/link", "acme", "bob", nil)
 	var bobList struct {
 		Links []linkView `json:"links"`
 	}
@@ -193,15 +193,15 @@ func TestHTTPUserAndOrgIsolation(t *testing.T) {
 	if len(bobList.Links) != 0 {
 		t.Fatalf("bob must see zero links, got %d", len(bobList.Links))
 	}
-	if code, _ := req(t, app, http.MethodGet, "/v1/links/"+al.ID, "acme", "bob", nil); code != http.StatusNotFound {
+	if code, _ := req(t, app, http.MethodGet, "/v1/link/"+al.ID, "acme", "bob", nil); code != http.StatusNotFound {
 		t.Fatalf("bob GET alice's link want 404, got %d", code)
 	}
-	if code, _ := req(t, app, http.MethodDelete, "/v1/links/"+al.ID, "acme", "bob", nil); code != http.StatusNotFound {
+	if code, _ := req(t, app, http.MethodDelete, "/v1/link/"+al.ID, "acme", "bob", nil); code != http.StatusNotFound {
 		t.Fatalf("bob DELETE alice's link want 404, got %d", code)
 	}
 
 	// evil org sees nothing either.
-	_, body = req(t, app, http.MethodGet, "/v1/links", "evil", "alice", nil)
+	_, body = req(t, app, http.MethodGet, "/v1/link", "evil", "alice", nil)
 	var evilList struct {
 		Links []linkView `json:"links"`
 	}
@@ -211,7 +211,7 @@ func TestHTTPUserAndOrgIsolation(t *testing.T) {
 	}
 
 	// alice's link is intact after the foreign attempts.
-	if code, _ := req(t, app, http.MethodGet, "/v1/links/"+al.ID, "acme", "alice", nil); code != http.StatusOK {
+	if code, _ := req(t, app, http.MethodGet, "/v1/link/"+al.ID, "acme", "alice", nil); code != http.StatusOK {
 		t.Fatalf("alice's own link must survive, got %d", code)
 	}
 }
@@ -226,12 +226,12 @@ func TestHTTPInputValidation(t *testing.T) {
 		{"machine": "m1", "provider": "claude", "kind": "freeloader"}, // bad kind
 	}
 	for _, b := range bad {
-		if code, _ := req(t, app, http.MethodPost, "/v1/links", "acme", "alice", b); code != http.StatusBadRequest {
+		if code, _ := req(t, app, http.MethodPost, "/v1/link", "acme", "alice", b); code != http.StatusBadRequest {
 			t.Fatalf("invalid register %+v want 400, got %d", b, code)
 		}
 	}
 	// A device with no accounts is a 404.
-	if code, _ := req(t, app, http.MethodGet, "/v1/links/devices/nope", "acme", "alice", nil); code != http.StatusNotFound {
+	if code, _ := req(t, app, http.MethodGet, "/v1/link/devices/nope", "acme", "alice", nil); code != http.StatusNotFound {
 		t.Fatalf("unknown device want 404, got %d", code)
 	}
 }
@@ -289,7 +289,7 @@ func TestRevokeStopsSessions(t *testing.T) {
 	_ = json.Unmarshal(body, &evil)
 
 	// Register the link for that account, then revoke it (log out).
-	code, body = req(t, app, http.MethodPost, "/v1/links", "acme", "alice", map[string]any{
+	code, body = req(t, app, http.MethodPost, "/v1/link", "acme", "alice", map[string]any{
 		"machine": "m1", "host": "box1", "provider": "claude", "account": "alice@x", "kind": "subscription",
 	})
 	if code != http.StatusCreated {
@@ -298,7 +298,7 @@ func TestRevokeStopsSessions(t *testing.T) {
 	var l linkView
 	_ = json.Unmarshal(body, &l)
 
-	code, body = req(t, app, http.MethodDelete, "/v1/links/"+l.ID, "acme", "alice", nil)
+	code, body = req(t, app, http.MethodDelete, "/v1/link/"+l.ID, "acme", "alice", nil)
 	var rev revokeResp
 	_ = json.Unmarshal(body, &rev)
 	if code != http.StatusOK {
@@ -366,7 +366,7 @@ func TestRevokeCannotStopCoTenantSessions(t *testing.T) {
 
 	// Alice registers her OWN claude link and logs it out. She could also forge Host
 	// to Bob's box — the actor scope makes it moot, so the minimal case is enough.
-	code, body = req(t, app, http.MethodPost, "/v1/links", "acme", "alice", map[string]any{
+	code, body = req(t, app, http.MethodPost, "/v1/link", "acme", "alice", map[string]any{
 		"machine": "mAlice", "host": "boxBob", "provider": "claude", "account": "alice@x", "kind": "subscription",
 	})
 	if code != http.StatusCreated {
@@ -375,7 +375,7 @@ func TestRevokeCannotStopCoTenantSessions(t *testing.T) {
 	var l linkView
 	_ = json.Unmarshal(body, &l)
 
-	code, body = req(t, app, http.MethodDelete, "/v1/links/"+l.ID, "acme", "alice", nil)
+	code, body = req(t, app, http.MethodDelete, "/v1/link/"+l.ID, "acme", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("revoke want 200, got %d (%s)", code, body)
 	}

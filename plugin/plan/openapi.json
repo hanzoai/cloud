@@ -17,17 +17,17 @@
   ],
   "tags": [
     {
-      "name": "plans"
+      "name": "plan"
     }
   ],
   "paths": {
-    "/v1/plans": {
+    "/v1/plan": {
       "get": {
-        "operationId": "get_plans",
+        "operationId": "get_plan",
         "summary": "Returns the Hanzo cloud plan catalog: every cloud tier with its price, included capacity, limits and feature list, scoped to the caller's catalog.",
         "description": "Returns the Hanzo cloud plan catalog: every cloud tier with its\nprice, included capacity, limits and feature list, scoped to the caller's\ncatalog. A reseller org sees its own overrides in place of the canonical\nrecords it has replaced, and the canonical record for every tier it has not.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -45,13 +45,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/blockchain": {
+    "/v1/plan/blockchain": {
       "get": {
-        "operationId": "get_plans_blockchain",
+        "operationId": "get_plan_blockchain",
         "summary": "Returns the blockchain RPC plan catalog: the tiers metered in monthly compute units, with their prices, limits and overage terms.",
         "description": "Returns the blockchain RPC plan catalog: the tiers metered\nin monthly compute units, with their prices, limits and overage terms. It is\nthe canonical catalog for every caller — these plans carry no reseller\noverrides.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -69,13 +69,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/cloud": {
+    "/v1/plan/cloud": {
       "get": {
-        "operationId": "get_plans_cloud",
+        "operationId": "get_plan_cloud",
         "summary": "Returns the cloud plan catalog.",
         "description": "Returns the cloud plan catalog. It is the same section\nListCloudPlans answers and a separate operation because it is a separate\naddress, and an address is what every projection keys on.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -93,13 +93,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/dns": {
+    "/v1/plan/dns": {
       "get": {
-        "operationId": "get_plans_dns",
+        "operationId": "get_plan_dns",
         "summary": "ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records per zone and queries per day.",
         "description": "ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records\nper zone and queries per day. It is the canonical catalog for every caller —\nthese plans carry no reseller overrides.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -117,13 +117,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/entitlements/{id}": {
+    "/v1/plan/entitlements/{id}": {
       "get": {
-        "operationId": "get_plans_entitlements_by_id",
+        "operationId": "get_plan_entitlements_by_id",
         "summary": "Returns what one plan GRANTS and not what it costs: the canonical namespaced entitlement block and the flat license-feature list derived from it.",
         "description": "Returns what one plan GRANTS and not what it costs: the\ncanonical namespaced entitlement block and the flat license-feature list\nderived from it. It is the entitlement half of ResolvePlan, over the same\ncatalog and the same 404 for an id no catalog holds — the read a licensing or\nquota gate makes.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "parameters": [
           {
@@ -153,13 +153,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/gpu": {
+    "/v1/plan/gpu": {
       "get": {
-        "operationId": "get_plans_gpu",
+        "operationId": "get_plan_gpu",
         "summary": "ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPUs, host memory and hourly price.",
         "description": "ListGPUTiers returns the rentable GPU configurations, each with its accelerator\ncount and model, VRAM, vCPUs, host memory and hourly price.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -177,13 +177,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/health": {
+    "/v1/plan/health": {
       "get": {
-        "operationId": "get_plans_health",
+        "operationId": "get_plan_health",
         "summary": "Health reports that the plans subsystem is mounted and serving.",
         "description": "Health reports that the plans subsystem is mounted and serving. It answers from\nthe process itself and consults neither the catalog bundle nor the goja host,\nso it stays \"ok\" while either is degraded.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -205,13 +205,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/policy": {
+    "/v1/plan/policy": {
       "get": {
-        "operationId": "get_plans_policy",
+        "operationId": "get_plan_policy",
         "summary": "Returns the published pricing policy: whether pricing is transparent, the revenue-sharing terms (idle compute resale and the open-source share) and the principles the catalog is priced by.",
         "description": "Returns the published pricing policy: whether pricing is\ntransparent, the revenue-sharing terms (idle compute resale and the open-source\nshare) and the principles the catalog is priced by.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -230,13 +230,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/regions": {
+    "/v1/plan/regions": {
       "get": {
-        "operationId": "get_plans_regions",
+        "operationId": "get_plan_regions",
         "summary": "Returns the regions cloud capacity is offered in, each with its display name and physical location.",
         "description": "Returns the regions cloud capacity is offered in, each with its\ndisplay name and physical location.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -254,13 +254,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/resolve/{id}": {
+    "/v1/plan/resolve/{id}": {
       "get": {
-        "operationId": "get_plans_resolve_by_id",
+        "operationId": "get_plan_resolve_by_id",
         "summary": "Resolves one plan to everything a consumer of the catalog needs at once: its canonical entitlement block, the flat license-feature list a signed license carries, its billing reference, and the catalog it came from.",
         "description": "Resolves one plan to everything a consumer of the catalog needs at\nonce: its canonical entitlement block, the flat license-feature list a signed\nlicense carries, its billing reference, and the catalog it came from. The id\nmay be the plan's id or its slug, and it is resolved against the caller's\ncatalog, so a reseller's override wins over the canonical record. An id no\ncatalog holds answers 404.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "parameters": [
           {
@@ -290,13 +290,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/schema": {
+    "/v1/plan/schema": {
       "get": {
-        "operationId": "get_plans_schema",
+        "operationId": "get_plan_schema",
         "summary": "Returns the two JSON Schema documents this surface speaks: entitlements.schema.json, which declares every entitlement key with its type, unit and enum, and plan.schema.json, which a catalog plan record conforms to.",
         "description": "Returns the two JSON Schema documents this surface speaks:\nentitlements.schema.json, which declares every entitlement key with its type,\nunit and enum, and plan.schema.json, which a catalog plan record conforms to.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -314,13 +314,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/storage": {
+    "/v1/plan/storage": {
       "get": {
-        "operationId": "get_plans_storage",
+        "operationId": "get_plan_storage",
         "summary": "Returns the block-storage price block: the price per GB per month and the volume size bounds a cloud plan may attach.",
         "description": "Returns the block-storage price block: the price per GB per\nmonth and the volume size bounds a cloud plan may attach.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -339,13 +339,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/subscriptions": {
+    "/v1/plan/subscriptions": {
       "get": {
-        "operationId": "get_plans_subscriptions",
+        "operationId": "get_plan_subscriptions",
         "summary": "Returns the subscription ladder — the personal and team tiers a customer buys to use the cloud, each with its monthly and annual price, seat rules, limits and billing reference.",
         "description": "Returns the subscription ladder — the personal and team\ntiers a customer buys to use the cloud, each with its monthly and annual price,\nseat rules, limits and billing reference. Scoped to the caller's catalog.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -363,13 +363,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/tools": {
+    "/v1/plan/tools": {
       "get": {
-        "operationId": "get_plans_tools",
+        "operationId": "get_plan_tools",
         "summary": "Returns the per-use price of every metered tool — web search, code interpreter, image generation, speech — each with the unit it is billed in.",
         "description": "Returns the per-use price of every metered tool — web search,\ncode interpreter, image generation, speech — each with the unit it is billed\nin.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {
@@ -387,13 +387,13 @@
         "x-tool": true
       }
     },
-    "/v1/plans/vocab": {
+    "/v1/plan/vocab": {
       "get": {
-        "operationId": "get_plans_vocab",
+        "operationId": "get_plan_vocab",
         "summary": "Returns the entitlement key vocabulary: every key with its namespace, JSON type, nullability, unit, enum and title, the list of namespaces, and the engine features a license can grant.",
         "description": "Returns the entitlement key vocabulary: every key with\nits namespace, JSON type, nullability, unit, enum and title, the list of\nnamespaces, and the engine features a license can grant. It is derived from\nentitlements.schema.json on every call, so it cannot fall behind the schema.",
         "tags": [
-          "plans"
+          "plan"
         ],
         "responses": {
           "200": {

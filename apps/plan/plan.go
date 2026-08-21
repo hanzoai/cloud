@@ -1,7 +1,7 @@
 // Package plan is the plan catalog: every tier you can buy, what it costs, and
 // what it grants.
 //
-// It serves /v1/plans/* — cloud, subscription, blockchain, DNS, GPU and storage
+// It serves /v1/plan/* — cloud, subscription, blockchain, DNS, GPU and storage
 // tiers, the entitlement vocabulary each grants and its JSON Schema, and a resolver
 // from a plan id to both. It is the catalog of RECORD; apps/pricing reads the same
 // @hanzo/plans source and answers eight of these sections again under /v1/pricing/*.
@@ -11,7 +11,7 @@
 // vocabulary in Go and we do NOT copy the catalog into cloud. Instead:
 //
 //   - github.com/hanzoai/plans (the service repo's Go embed module) ships
-//     goja/bundle.js — the ESM-free port of entitlements.mjs + the /v1/plans
+//     goja/bundle.js — the ESM-free port of entitlements.mjs + the /v1/plan
 //     route table — plus the embedded *.json catalog (plans.Data()).
 //   - This wrapper loads that bundle into a goja runtime (apps/goja),
 //     injects the catalog as globalThis.__PLANS_DATA__, and declares one TYPED op
@@ -23,7 +23,7 @@
 // here. The licensing SIGNER/fingerprint that consumes toLicenseFeatures stays
 // in hanzoai/licensing. This wrapper is pure glue.
 //
-// IAM gating + X-Org-Id tenant scope: every /v1/plans route threads the
+// IAM gating + X-Org-Id tenant scope: every /v1/plan route threads the
 // VALIDATED org into the bundle as the tenant, so a reseller org
 // (tenant_id != "hanzo") sees its own catalog overrides. A typed op receives only
 // a context, so that org arrives on the context (cloud.Bridge parks it,
@@ -50,7 +50,7 @@ import (
 // host is the process-global goja host for the plans bundle. nil before Mount.
 var host *goja.Host
 
-// Mount registers the /v1/plans/* surface on app per HIP-0106.
+// Mount registers the /v1/plan/* surface on app per HIP-0106.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("plan.Mount: nil app")
@@ -86,8 +86,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// every consumer follows from it. See ops.go.
 	//
 	// They are declared on the APP with absolute paths rather than on a group,
-	// because one of them IS the prefix: GET /v1/plans has no leaf, and a group
-	// cannot express it — zip.Get(g, "") composes to "/v1/plans/", a different
+	// because one of them IS the prefix: GET /v1/plan has no leaf, and a group
+	// cannot express it — zip.Get(g, "") composes to "/v1/plan/", a different
 	// route. A group for fourteen plus an app-level exception for one is two
 	// idioms; one absolute address per op is one, and it is the form apps/pricing
 	// already uses for the same reason.
@@ -102,30 +102,30 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	o := ops{log: logger}
 
 	// Native health probe — no JS, no auth, answers while the bundle is degraded.
-	zip.Get(zapp, "/v1/plans/health", o.health)
+	zip.Get(zapp, "/v1/plan/health", o.health)
 
 	// The catalog sections. Each relays one @hanzo/plans bundle route; the tenant
 	// is the validated org, so a reseller org reads its own catalog (ops.go,
 	// catalogTenant).
-	zip.Get(zapp, "/v1/plans", o.listPlans)
-	zip.Get(zapp, "/v1/plans/subscriptions", o.listSubscriptions)
-	zip.Get(zapp, "/v1/plans/cloud", o.listCloud)
-	zip.Get(zapp, "/v1/plans/blockchain", o.listBlockchain)
-	zip.Get(zapp, "/v1/plans/dns", o.listDNS)
-	zip.Get(zapp, "/v1/plans/gpu", o.listGPU)
-	zip.Get(zapp, "/v1/plans/regions", o.listRegions)
-	zip.Get(zapp, "/v1/plans/storage", o.getStorage)
-	zip.Get(zapp, "/v1/plans/tools", o.listTools)
-	zip.Get(zapp, "/v1/plans/policy", o.getPolicy)
-	zip.Get(zapp, "/v1/plans/schema", o.getSchemas)
-	zip.Get(zapp, "/v1/plans/vocab", o.getVocab)
+	zip.Get(zapp, "/v1/plan", o.listPlans)
+	zip.Get(zapp, "/v1/plan/subscriptions", o.listSubscriptions)
+	zip.Get(zapp, "/v1/plan/cloud", o.listCloud)
+	zip.Get(zapp, "/v1/plan/blockchain", o.listBlockchain)
+	zip.Get(zapp, "/v1/plan/dns", o.listDNS)
+	zip.Get(zapp, "/v1/plan/gpu", o.listGPU)
+	zip.Get(zapp, "/v1/plan/regions", o.listRegions)
+	zip.Get(zapp, "/v1/plan/storage", o.getStorage)
+	zip.Get(zapp, "/v1/plan/tools", o.listTools)
+	zip.Get(zapp, "/v1/plan/policy", o.getPolicy)
+	zip.Get(zapp, "/v1/plan/schema", o.getSchemas)
+	zip.Get(zapp, "/v1/plan/vocab", o.getVocab)
 
 	// Entitlement resolution — the data contract, end to end, in goja.
-	zip.Get(zapp, "/v1/plans/resolve/:id", o.resolve)
-	zip.Get(zapp, "/v1/plans/entitlements/:id", o.getEntitlements)
+	zip.Get(zapp, "/v1/plan/resolve/:id", o.resolve)
+	zip.Get(zapp, "/v1/plan/entitlements/:id", o.getEntitlements)
 
 	logger.Info("plans mounted",
-		"prefix", "/v1/plans",
+		"prefix", "/v1/plan",
 		"routes", 15,
 		"typed", 15,
 		"brand", deps.Brand,
@@ -170,7 +170,7 @@ func Entitlements(ctx context.Context, id string) (map[string]any, error) {
 // LicenseEntitlement resolves BOTH the canonical entitlement block AND the flat
 // license-feature list for a plan id from the @hanzo/plans catalog (the single
 // source of truth). It runs the bundle's "entitlements" route on the shared goja
-// host — the SAME route /v1/plans/entitlements/:id serves — and returns the parsed
+// host — the SAME route /v1/plan/entitlements/:id serves — and returns the parsed
 // `entitlements` map plus the `license_features` list the bundle's toLicenseFeatures
 // transform produces. It is the seam the commerce entitlement resolver
 // (commerce.CheckEntitlement) uses to map a subscription's plan tier to the flat

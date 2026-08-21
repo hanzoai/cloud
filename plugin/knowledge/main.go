@@ -6,7 +6,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/knowledge"
-	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the knowledge app.
@@ -24,13 +23,9 @@ import (
 // run: the native-Go connectors beside it start no pod and stay free.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name: "knowledge",
-		// Declared: undeclared falls back to /v1/knowledge, which this app does not
-		// serve — the scope then guards a path with no routes and zip refuses to
-		// compose (see plugin/account/main.go).
-		Prefixes: manifest.PrefixesFor("knowledge"),
-		Price:    cloud.Metered,
-		Mount:    knowledge.Mount,
+		Name:  "knowledge",
+		Price: cloud.Metered,
+		Mount: knowledge.Mount,
 	}}, []string{"knowledge"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
