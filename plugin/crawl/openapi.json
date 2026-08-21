@@ -91,6 +91,7 @@
       "crawlRequest": {
         "properties": {
           "url": {
+            "description": "URL is the page to read, absolute and http or https — no other scheme is\ndialled. It is resolved from inside the cluster, so an address that turns out\nto be loopback, link-local, private or multicast is refused at the dialer,\nredirects included. Empty is not an error status: the answer comes back with\nsuccess false and the reason in error.",
             "type": "string"
           }
         },
