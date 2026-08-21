@@ -80,7 +80,7 @@ type relay struct {
 //
 // IT HAS ITS OWN SEGMENT, and that is what made the merge safe. The relay was
 // app.All("/v1/bot/*") in a separate app while the node plane served
-// /v1/bot/connect, /v1/bot/nodes and /v1/bot/peer/invoke from another — one greedy
+// /v1/node/connect, /v1/node and /v1/node/peer/invoke from another — one greedy
 // wildcard over the whole of a sibling's subtree, kept apart only by two manifest
 // rows and the router's specificity rule. In one app the wildcard would sit beside
 // the routes it can swallow, so it does not: it forwards from under
