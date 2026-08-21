@@ -24,39 +24,102 @@
     "/v1/index/health": {
       "get": {
         "operationId": "get_index_health",
-        "summary": "Report whether the search plane can serve",
-        "description": "Answers Meilisearch's `{\"status\":\"available\"}` when the index store is readable. It FAILS CLOSED — an unreadable store answers 503 and `unavailable` — so a replica whose volume has gone bad stops taking traffic instead of answering every search with nothing found. It touches no tenant data and needs no credential.",
+        "summary": "Reports whether the search plane can serve.",
+        "description": "Reports whether the search plane can serve.\n\nAnswers the dialect's `{\"status\":\"available\"}` when the index store is\nreadable. It FAILS CLOSED — an unreadable store answers 503 with\n`{\"status\":\"unavailable\"}` rather than an empty result set, because a\nMeilisearch client probes this before it will use a server at all and a\ncheerful 200 over a broken volume turns \"search is down\" into \"nothing\nmatched\". It requires no principal and reads no tenant data.",
         "tags": [
           "index"
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexHealth"
+                }
+              }
+            },
+            "description": "service unavailable"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/index/indexes": {
       "get": {
         "operationId": "get_index_indexes",
-        "summary": "List the indexes your org holds",
-        "description": "Answers every index in the caller's org with its primary key and timestamps. It is the only way to enumerate what an org holds — without it an index whose uid a caller has forgotten is unreachable. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.",
+        "summary": "Lists the indexes your org holds.",
+        "description": "Lists the indexes your org holds.\n\nAnswers every index in the caller's own org with its primary key and\ntimestamps. Without it an index whose uid a caller has forgotten is\nunreachable — there is no other way to enumerate what an org holds. The page\nis the whole set: an org's index count is small by construction, so `limit`\nand `total` both report it.\n\nThe tenant is the org minted from the VALIDATED bearer's owner claim, never a\nclient-supplied header, and two orgs may both hold an index named \"messages\"\nwithout either seeing the other. Without a validated principal the answer is\n403 carrying the dialect's `invalid_api_key` body.",
         "tags": [
           "index"
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "post": {
         "operationId": "post_index_indexes",
-        "summary": "Create an index",
-        "description": "Creates an index named by `uid` in the caller's org. `primaryKey` names the document field that identifies a document and defaults to `id`. Creating an index that already exists is not an error — it settles on the existing one, primary key included — so a client that creates before every write is safe to run repeatedly. A missing or over-long uid is 400 `invalid_index_uid`. A new index starts with `user` filterable, which is what lets a multi-user app narrow searches to one end user without configuring anything. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.",
+        "summary": "Creates an index.",
+        "description": "Creates an index.\n\nRegisters a named index in the caller's own org and answers the dialect's\nEnqueuedTask. It is idempotent: creating an index that already exists returns\nthe same receipt and changes nothing, which is what lets a client create on\nstartup without checking first.\n\n`primaryKey` is optional — the first write establishes one when it is omitted.\nAn index is a ROW here rather than a table, so an unusual uid is stored\nverbatim instead of being sanitised into a schema name.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the write is already applied when this answers. A client that\npolls waitForTask resolves immediately.",
         "tags": [
           "index"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "primaryKey": "id",
+                "uid": "messages"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/indexNew"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexEnqueued"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/index/indexes/{uid}": {
       "delete": {
         "operationId": "delete_index_indexes_by_uid",
-        "summary": "Delete an index and everything in it",
-        "description": "Drops one index in the caller's org together with all of its documents. This is the only way to retire an index; without it a mistaken uid would be permanent. It is idempotent — dropping an index that is not there still succeeds. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.",
+        "summary": "Deletes an index and everything in it.",
+        "description": "Deletes an index and everything in it.\n\nDrops the index and every document in it from the caller's own org, and\nanswers the dialect's EnqueuedTask. This is the only way to retire an index;\nwithout it a mistaken uid is permanent. Deleting an index that is not there\nsucceeds, so a cleanup pass is safe to re-run.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the documents are already gone when this answers.",
         "tags": [
           "index"
         ],
@@ -70,12 +133,25 @@
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexEnqueued"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "get": {
         "operationId": "get_index_indexes_by_uid",
-        "summary": "Read one index's definition",
-        "description": "Answers a single index's uid, primary key and timestamps. An index the caller's org does not hold is 404 `index_not_found` — which is the same answer another org's index gives, since the org is a bound predicate on the read. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.",
+        "summary": "Reads one index's definition.",
+        "description": "Reads one index's definition.\n\nAnswers the index's uid, primary key and timestamps. An index this org does\nnot hold answers 404 carrying the dialect's `index_not_found` — the code a\nMeilisearch client reads as permission to create it, which is why this is a\nrefusal rather than an empty object.\n\nThe uid is scoped to the caller's own org, so another tenant's index is\nindistinguishable from one that never existed: this surface is not an\nexistence oracle.",
         "tags": [
           "index"
         ],
@@ -89,14 +165,27 @@
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/index/indexes/{uid}/documents": {
       "get": {
         "operationId": "get_index_indexes_by_uid_documents",
-        "summary": "Page through the documents in an index",
-        "description": "Answers the documents in one index with a total count. `limit` defaults to 20 and is capped at 1000, `offset` pages, and the response echoes both back so a pager knows what it actually got. An index the caller's org does not hold is 404 `index_not_found`. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.",
+        "summary": "Pages through the documents in an index.",
+        "description": "Pages through the documents in an index.\n\nAnswers the org's stored documents in insertion order, whole, with the page's\nbounds and the index's total. It is the enumeration surface — search ranks by\nrelevance and cannot walk a corpus — so a caller reconciling what it has\nwritten reads it here.\n\nAn index this org does not hold answers 404 carrying the dialect's\n`index_not_found`.",
         "tags": [
           "index"
         ],
@@ -108,14 +197,43 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexDocuments"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "post": {
         "operationId": "post_index_indexes_by_uid_documents",
         "summary": "Add or replace documents in an index",
-        "description": "Upserts documents into one index, keyed by the index's primary key: a document whose key is already present is REPLACED, one that is not is added, and it becomes searchable immediately. Send an array, or a single object — a hand-rolled caller sending one document is accepted rather than 400'd. The index is created on demand, so a first write needs no create call.\n\nThis and the PUT on the same path are the SAME operation: both are a whole document upsert, which is what a Meilisearch client's addDocuments and updateDocuments both reduce to here. A body that is neither an array nor an object is 400. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.",
+        "description": "Writes documents into the caller's own index, keyed by the index's primary key: a document whose key is already present is REPLACED whole. The body is the dialect's own — an array of documents, or a single document — and each is stored verbatim, so a read gives back exactly what was written.\n\nThe index is CREATED when it is missing rather than refused, because a Meilisearch client writes before it configures.\n\nThe tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying the dialect's `invalid_api_key` body.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the documents are searchable when this answers, and a client that polls waitForTask resolves immediately.",
         "tags": [
           "index"
         ],
@@ -129,12 +247,39 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "items": {}
+                  },
+                  {}
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexEnqueued"
+                }
+              }
+            }
+          }
+        },
         "x-public": true
       },
       "put": {
         "operationId": "put_index_indexes_by_uid_documents",
         "summary": "Add or update documents in an index",
-        "description": "Upserts documents into one index, keyed by the index's primary key: a document whose key is already present is REPLACED, one that is not is added, and it becomes searchable immediately. Send an array, or a single object — a hand-rolled caller sending one document is accepted rather than 400'd. The index is created on demand, so a first write needs no create call.\n\nThis and the POST on the same path are the SAME operation, served by one handler. Both exist because the Meilisearch dialect has both verbs; there is no partial-update semantics on this one — a document is replaced whole either way. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.",
+        "description": "The dialect's update spelling of the write above, and the same act: an upsert keyed by the index's primary key. The JS client's addDocuments and updateDocuments both reduce to this for whole documents, so both spellings are served and both behave identically.\n\nThe tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header. Without a validated principal the answer is 403 carrying the dialect's `invalid_api_key` body.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers.",
         "tags": [
           "index"
         ],
@@ -148,6 +293,33 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "items": {}
+                  },
+                  {}
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexEnqueued"
+                }
+              }
+            }
+          }
+        },
         "x-public": true
       }
     },
@@ -155,7 +327,7 @@
       "post": {
         "operationId": "post_index_indexes_by_uid_documents_delete-batch",
         "summary": "Delete many documents by primary key in one call",
-        "description": "Removes every document named by an array of primary keys. Keys may be sent as strings or numbers — a number keeps its exact decimal form, so an integer key round-trips as `42` and never as scientific notation. Keys that are absent from the index are skipped rather than failing the batch, so this is idempotent. A body that is not an array is 400. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.",
+        "description": "Removes every named document from the caller's own index. The body is the dialect's own: a bare array of primary keys, which may be strings or numbers. A key that is not there is not an error, so a client reconciling its own corpus can send one list rather than checking each key first.\n\nThe tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header. Without a validated principal the answer is 403 carrying the dialect's `invalid_api_key` body.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the documents are already gone when this answers.",
         "tags": [
           "index"
         ],
@@ -169,14 +341,48 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexEnqueued"
+                }
+              }
+            }
+          }
+        },
         "x-public": true
       }
     },
     "/v1/index/indexes/{uid}/documents/{id}": {
       "delete": {
         "operationId": "delete_index_indexes_by_uid_documents_by_id",
-        "summary": "Delete one document by its primary key",
-        "description": "Removes one document from an index. It is IDEMPOTENT: deleting a key that is not there succeeds rather than 404, so a retry after a lost response is safe. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.",
+        "summary": "Deletes one document by its primary key.",
+        "description": "Deletes one document by its primary key.\n\nRemoves the document from the caller's own org and answers the dialect's\nEnqueuedTask. Deleting a key that is not there succeeds, so a client\nreconciling its own corpus can delete without checking first.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the document is already gone when this answers.",
         "tags": [
           "index"
         ],
@@ -198,12 +404,25 @@
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexEnqueued"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "get": {
         "operationId": "get_index_indexes_by_uid_documents_by_id",
-        "summary": "Read one document by its primary key",
-        "description": "Answers the stored document whose primary key matches, exactly as it was written. A missing document is 404 `document_not_found` and a missing index is 404 `index_not_found` — two different codes, because a client that branches on them treats the cases differently. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.",
+        "summary": "Reads one document by its primary key.",
+        "description": "Reads one document by its primary key.\n\nAnswers the stored document exactly as it was written — this surface keeps\ndocuments whole rather than projecting them, so what comes back is what went\nin. A primary key this index does not hold answers 404 carrying the dialect's\n`document_not_found`; an index this org does not hold answers\n`index_not_found`, and the two are different facts a client acts on\ndifferently.",
         "tags": [
           "index"
         ],
@@ -225,14 +444,25 @@
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/index/indexes/{uid}/search": {
       "post": {
         "operationId": "post_index_indexes_by_uid_search",
-        "summary": "Search an index, forgiving typos",
-        "description": "Answers the documents in one index matching `q`, ranked by how many of the query's terms they match, with prefix matching so a partial word still finds its document. `limit` defaults to 20 and is capped at 1000, `offset` pages; a negative value falls back to the default rather than erroring.\n\n`filter` takes a Meilisearch filter expression, or an array of them, and the `user = \"…\"` and `user IN […]` forms are honoured — that is how an app with many end users narrows results to one of them WITHIN the org. `estimatedTotalHits` is exact for the page returned, not an estimate, because every hit is materialised. An index the caller's org does not hold is 404 `index_not_found`. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.",
+        "summary": "Searches an index, forgiving typos.",
+        "description": "Searches an index, forgiving typos.\n\nRanks the org's documents in one index against `q` and answers the matching\ndocuments whole, most relevant first. A prefix matches, so a partial word\nfinds the documents containing it, and `filter` narrows the result to\ndocuments whose filterable attributes match — which is how a caller scopes\nresults to one end user within its own org.\n\n`estimatedTotalHits` is the dialect's name for the count; every hit is\nmaterialised here, so for this page it is exact. An index this org does not\nhold answers 404 carrying the dialect's `index_not_found`.",
         "tags": [
           "index"
         ],
@@ -246,14 +476,42 @@
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "filter": "user = alice",
+                "limit": 20,
+                "q": "roadmap"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/indexQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexHits"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/index/indexes/{uid}/settings": {
       "get": {
         "operationId": "get_index_indexes_by_uid_settings",
-        "summary": "Read an index's filterable attributes",
-        "description": "Answers the attributes an index allows filtering on. This dialect implements the filterable-attributes setting and no other, so that is the whole of what comes back. An index the caller's org does not hold is 404 `index_not_found`. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.",
+        "summary": "Reads an index's filterable attributes.",
+        "description": "Reads an index's filterable attributes.\n\nAnswers the settings subset this surface implements: the attributes a search\n`filter` may constrain. An index this org does not hold answers 404 carrying\nthe dialect's `index_not_found`.",
         "tags": [
           "index"
         ],
@@ -267,12 +525,25 @@
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexSettings"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "patch": {
         "operationId": "patch_index_indexes_by_uid_settings",
-        "summary": "Set which attributes an index can be filtered on",
-        "description": "Replaces an index's filterable attributes with the list in `filterableAttributes`; omitting the field leaves them as they are. The index is CREATED ON DEMAND rather than 404'd, because a client that configures an index it has just asked for should not have to create it first — this is the one read-shaped path on the surface that writes. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of later work: the write is already applied when this answers, and the task it names is already complete. A client that polls waitForTask resolves immediately rather than waiting, and a client that does not poll has still had its write committed.",
+        "summary": "Sets which attributes an index can be filtered on.",
+        "description": "Sets which attributes an index can be filtered on.\n\nReplaces the whole filterable set. An attribute not listed here cannot be\nused in a search `filter`, so this is what makes a per-user or per-tag\nnarrowing possible at all.\n\nIt CREATES the index when it is missing rather than answering 404, because a\nMeilisearch client configures settings on an index it has just asked for and\na refusal there leaves the client with no index at all.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the setting is already applied when this answers.",
         "tags": [
           "index"
         ],
@@ -286,25 +557,67 @@
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "filterableAttributes": [
+                  "user",
+                  "conversationId"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/indexFilter"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexEnqueued"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/index/stats": {
       "get": {
         "operationId": "get_index_stats",
-        "summary": "Count the documents in each of your indexes",
-        "description": "Answers a document count per index for the caller's org, plus their sum. `isIndexing` is always false, which is the honest answer here rather than a stub: writes are applied before their response, so there is never a backlog in progress to report. The tenant is the org minted from the VALIDATED bearer's owner claim, never a client-supplied header, and every query filters on it, so two orgs may both hold an index named \"messages\" and neither can see the other's documents. Without a validated principal the answer is 403 carrying Meilisearch's `invalid_api_key` body. Errors use Meilisearch's {message, code, type, link} shape rather than cloud's, because that `code` is a wire contract a Meilisearch client branches on.",
+        "summary": "Counts the documents in each of your indexes.",
+        "description": "Counts the documents in each of your indexes.\n\nReports every index the caller's own org holds with its document count, plus\nthe org's total. `isIndexing` is always false because writes here are applied\nbefore their response — there is never a background pass to wait on.\n\nThe tenant is the org minted from the VALIDATED bearer's owner claim, never a\nclient-supplied header, so this counts the caller's own documents and no\nother tenant's. Without a validated principal the answer is 403 carrying the\ndialect's `invalid_api_key` body.",
         "tags": [
           "index"
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexStats"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/index/tasks/{uid}": {
       "get": {
         "operationId": "get_index_tasks_by_uid",
-        "summary": "Check a write task, which has already finished",
-        "description": "Answers `succeeded` for the task id given. It ALWAYS answers succeeded, and that is honest rather than a stub: writes on this surface are applied before their response returns, so by the time any task id exists to ask about, its work is done. It exists so a Meilisearch client's waitForTask resolves at once instead of polling forever for a queue that was never there. It requires a validated principal but reads no tenant data.",
+        "summary": "Checks a write task, which has already finished.",
+        "description": "Checks a write task, which has already finished.\n\nAlways reports `succeeded`. Writes here are applied to SQLite before their\nEnqueuedTask is returned, so a client polling waitForTask resolves on its\nfirst call rather than waiting for a queue that was never there. The three\ntimestamps are the same instant for the same reason.\n\nIt requires a validated principal but reads no tenant data: the task id it\nechoes was minted by this process and names nothing about any org.",
         "tags": [
           "index"
         ],
@@ -314,26 +627,317 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexTask"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/index/version": {
       "get": {
         "operationId": "get_index_version",
-        "summary": "Identify the search implementation answering",
-        "description": "Answers the version shape a Meilisearch client expects. It names THIS implementation rather than a Meilisearch release — the commit field reads `hanzo-cloud` — so a client that logs it records which server actually answered instead of implying a Meilisearch build. Needs no credential.",
+        "summary": "Identifies the search implementation answering.",
+        "description": "Identifies the search implementation answering.\n\nReports the dialect's version shape with `commitSha` naming this\nimplementation rather than a Meilisearch build, so a client that logs the\nversion records which server answered instead of implying a release of\nsoftware this is not. It requires no principal and reads no tenant data.",
         "tags": [
           "index"
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/indexVersion"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     }
   },
   "components": {
+    "schemas": {
+      "indexCount": {
+        "properties": {
+          "isIndexing": {
+            "description": "IsIndexing is always false: writes are applied before their response, so\nthere is never a background pass a caller could be waiting on.",
+            "type": "boolean"
+          },
+          "numberOfDocuments": {
+            "description": "NumberOfDocuments is how many documents this org holds in that index.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "indexDocuments": {
+        "properties": {
+          "limit": {
+            "description": "Limit is how many documents this page could hold.",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Offset is where this page starts.",
+            "type": "integer"
+          },
+          "results": {
+            "description": "Results are the documents themselves, exactly as they were stored.",
+            "items": {},
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many documents the index holds altogether.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "indexEnqueued": {
+        "properties": {
+          "enqueuedAt": {
+            "description": "EnqueuedAt is when the task was recorded, RFC 3339 — which is also when it\ncompleted.",
+            "type": "string"
+          },
+          "indexUid": {
+            "description": "IndexUID names the index the write landed in.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is always `enqueued`, for dialect compatibility. The work is\nalready done.",
+            "type": "string"
+          },
+          "taskUid": {
+            "description": "TaskUID identifies the task for a client that polls it. Polling resolves\nimmediately.",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Type is the dialect's name for the kind of write: indexCreation,\nindexDeletion, settingsUpdate, documentAdditionOrUpdate, documentDeletion.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "indexFilter": {
+        "properties": {
+          "filterableAttributes": {
+            "description": "FilterableAttributes replaces the whole filterable set. Omitted leaves it\nunchanged; an empty array clears it.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "indexHealth": {
+        "properties": {
+          "status": {
+            "description": "Status is `available` when the store is readable and `unavailable` when it\nis not — the second answer rides a 503, so a pod with a broken volume is\ntaken out of rotation rather than serving empty searches.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "indexHits": {
+        "properties": {
+          "estimatedTotalHits": {
+            "description": "EstimatedTotalHits is the dialect's name for the match count. Every hit is\nmaterialised here, so for this page it is exact rather than estimated.",
+            "type": "integer"
+          },
+          "hits": {
+            "description": "Hits are the matching documents, most relevant first, exactly as stored.",
+            "items": {},
+            "type": "array"
+          },
+          "limit": {
+            "description": "Limit is how many hits this page could hold.",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Offset is where this page starts.",
+            "type": "integer"
+          },
+          "processingTimeMs": {
+            "description": "ProcessingTimeMs is how long the query took, in milliseconds.",
+            "type": "integer"
+          },
+          "query": {
+            "description": "Query echoes the search terms, which is what a client renders above the\nresults.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "indexList": {
+        "properties": {
+          "limit": {
+            "description": "Limit is how many rows this page could hold.",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Offset is where this page starts.",
+            "type": "integer"
+          },
+          "results": {
+            "description": "Results are the index definitions themselves.",
+            "items": {
+              "$ref": "#/components/schemas/indexView"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many indexes the org holds altogether.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "indexNew": {
+        "properties": {
+          "primaryKey": {
+            "description": "PrimaryKey is the document field that identifies a row. Optional — the\nfirst write establishes one when it is omitted.",
+            "type": "string"
+          },
+          "uid": {
+            "description": "UID is the index's name within the org. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "indexQuery": {
+        "properties": {
+          "filter": {
+            "description": "Filter narrows the hits, in the dialect's filter syntax: a string, or an\narray of strings combined with AND. Only attributes named in the index's\nfilterableAttributes can be constrained. Left unconstrained here because\nthe dialect accepts both shapes and naming one would publish an API that\ncannot send the other."
+          },
+          "limit": {
+            "description": "Limit is how many hits to return. Absent means 20; the ceiling is 1000.",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Offset is where to start. Absent means 0.",
+            "type": "integer"
+          },
+          "q": {
+            "description": "Q is the search text. Typos are forgiven. An empty Q matches everything,\nwhich is how a client lists an index by relevance rather than by insertion\norder.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "indexSettings": {
+        "properties": {
+          "filterableAttributes": {
+            "description": "FilterableAttributes are the document fields a search `filter` may\nconstrain. A field not listed here cannot be filtered on.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "indexStats": {
+        "properties": {
+          "databaseSize": {
+            "description": "DatabaseSize is the org's total document count across its indexes. It is a\ncount, not bytes: the store is shared by every tenant, so a byte figure\nwould either be the whole file (another tenant's size) or a fiction.",
+            "type": "integer"
+          },
+          "indexes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/indexCount"
+            },
+            "description": "Indexes maps each index uid to its own count.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "indexTask": {
+        "properties": {
+          "enqueuedAt": {
+            "description": "EnqueuedAt, StartedAt and FinishedAt are the same instant: the write was\napplied before its task id was minted.",
+            "type": "string"
+          },
+          "finishedAt": {
+            "description": "FinishedAt is when the write completed.",
+            "type": "string"
+          },
+          "startedAt": {
+            "description": "StartedAt is when the write began.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is always `succeeded`.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type names the kind of write, for a client that inspects it.",
+            "type": "string"
+          },
+          "uid": {
+            "description": "UID echoes the task id that was asked about.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "indexVersion": {
+        "properties": {
+          "commitDate": {
+            "description": "CommitDate is empty here: this surface is a dialect implementation, not a\nbuild of Meilisearch, so there is no upstream commit to date.",
+            "type": "string"
+          },
+          "commitSha": {
+            "description": "CommitSha names the implementation (`hanzo-cloud`) rather than a build\nhash, so a client logging it records which server answered instead of\nimplying a Meilisearch release.",
+            "type": "string"
+          },
+          "pkgVersion": {
+            "description": "PkgVersion is this dialect implementation's own version.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "indexView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when this org first created the index, RFC 3339.",
+            "type": "string"
+          },
+          "primaryKey": {
+            "description": "PrimaryKey is the document field that identifies a row; an upsert is keyed\non it. Empty until a document establishes one.",
+            "type": "string"
+          },
+          "uid": {
+            "description": "UID is the index's name within the org. Two orgs may both hold `messages`.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the index or its settings last changed, RFC 3339.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
     "securitySchemes": {
       "bearer": {
         "type": "http",
