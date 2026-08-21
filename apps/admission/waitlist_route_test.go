@@ -32,7 +32,7 @@ func mountGate(t *testing.T) *zip.App {
 	return app
 }
 
-// ask drives GET /v1/flags/waitlist. hostHeader "" leaves the request's own Host
+// ask drives GET /v1/admission/waitlist. hostHeader "" leaves the request's own Host
 // as httptest set it.
 func ask(t *testing.T, app *zip.App, url, hostHeader string) waitlistModeView {
 	t.Helper()
@@ -61,7 +61,7 @@ func ask(t *testing.T, app *zip.App, url, hostHeader string) waitlistModeView {
 // GATED until an admin opens it.
 func TestQueriedHostResolvesToItsService(t *testing.T) {
 	app := mountGate(t)
-	v := ask(t, app, "/v1/flags/waitlist?host=chat.hanzo.ai", "")
+	v := ask(t, app, "/v1/admission/waitlist?host=chat.hanzo.ai", "")
 	if !v.Known || v.Service != "chat" {
 		t.Fatalf("chat.hanzo.ai = %+v, want known chat", v)
 	}
@@ -77,7 +77,7 @@ func TestQueriedHostResolvesToItsService(t *testing.T) {
 // which is what makes a guard's cache key stable across the forms a browser sends.
 func TestHostIsNormalized(t *testing.T) {
 	app := mountGate(t)
-	v := ask(t, app, "/v1/flags/waitlist?host=CHAT.hanzo.ai:443", "")
+	v := ask(t, app, "/v1/admission/waitlist?host=CHAT.hanzo.ai:443", "")
 	if v.Host != "chat.hanzo.ai" || v.Service != "chat" {
 		t.Fatalf("normalization lost: %+v", v)
 	}
@@ -90,7 +90,7 @@ func TestHostIsNormalized(t *testing.T) {
 // every such guard silently stops gating.
 func TestOmittedHostFallsBackToTheREQUESTHost(t *testing.T) {
 	app := mountGate(t)
-	v := ask(t, app, "/v1/flags/waitlist", "chat.hanzo.ai")
+	v := ask(t, app, "/v1/admission/waitlist", "chat.hanzo.ai")
 	if !v.Known || v.Service != "chat" {
 		t.Fatalf("no-query request from chat.hanzo.ai = %+v, want known chat — the Host fallback is gone", v)
 	}
@@ -104,7 +104,7 @@ func TestOmittedHostFallsBackToTheREQUESTHost(t *testing.T) {
 // resolve.
 func TestUngovernedHostFailsOpen(t *testing.T) {
 	app := mountGate(t)
-	v := ask(t, app, "/v1/flags/waitlist?host=example.com", "")
+	v := ask(t, app, "/v1/admission/waitlist?host=example.com", "")
 	if v.Known || v.Service != "" || v.WaitlistMode {
 		t.Fatalf("example.com = %+v, want unknown/open", v)
 	}
@@ -115,7 +115,7 @@ func TestUngovernedHostFailsOpen(t *testing.T) {
 // their own mode.
 func TestNoCredentialRequired(t *testing.T) {
 	app := mountGate(t)
-	if v := ask(t, app, "/v1/flags/waitlist?host=api.hanzo.ai", ""); v.Service != "api" {
+	if v := ask(t, app, "/v1/admission/waitlist?host=api.hanzo.ai", ""); v.Service != "api" {
 		t.Fatalf("anonymous read = %+v, want the api service", v)
 	}
 }

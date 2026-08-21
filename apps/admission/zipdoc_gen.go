@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/flags/waitlist", zip.Doc{
+	zip.Describe("GET /v1/admission/waitlist", zip.Doc{
 		Description: "Reports whether ONE host is currently gated by the launch waitlist.\nIt resolves the host to the service that governs it and reads that service's\nwaitlist switch, so a guard sitting in front of a hosted surface can decide in one\ncall whether to show the waitlist or the product. It answers for the ONE host\nasked about and never enumerates the registry, which is why it needs no\ncredential. It FAILS OPEN: an unregistered host, an unmounted registry and a store\nfault all answer known=false with mode=false, so a request is never gated pre-boot\nor on a registry fault.",
 		Fields: map[string]string{
 			"waitlistModeView.host":         "Host is the queried host, normalized (lowercased, port stripped).",

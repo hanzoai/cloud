@@ -51436,6 +51436,41 @@ paths:
       - admin
       x-app: admin
       x-tool: true
+  /v1/admission/waitlist:
+    get:
+      description: |-
+        Reports whether ONE host is currently gated by the launch waitlist.
+        It resolves the host to the service that governs it and reads that service's
+        waitlist switch, so a guard sitting in front of a hosted surface can decide in one
+        call whether to show the waitlist or the product. It answers for the ONE host
+        asked about and never enumerates the registry, which is why it needs no
+        credential. It FAILS OPEN: an unregistered host, an unmounted registry and a store
+        fault all answer known=false with mode=false, so a request is never gated pre-boot
+        or on a registry fault.
+      operationId: get_admission_waitlist
+      parameters:
+      - description: |-
+          Host is the host to resolve, e.g. "chat.hanzo.ai". Defaults to the request's
+          own Host header when omitted, which is what lets a guard running on the
+          governed host ask about itself with no argument.
+        in: query
+        name: host
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/waitlistModeView'
+          description: ok
+      summary: Reports whether ONE host is currently gated by the launch waitlist.
+      tags:
+      - admission
+      x-app: admission
+      x-public: true
+      x-tool: true
   /v1/ads/campaigns:
     get:
       description: |-
@@ -64024,23 +64059,6 @@ paths:
       x-app: code
       x-public: true
       x-tool: true
-  /v1/commands:
-    get:
-      description: |-
-        The command projection of the OpenAPI document at /v1/openapi.json — each operation reduced to what running it by name needs: its service and command token, its method and path, the prose lifted from the handler, its path parameters as positional arguments and its remaining inputs as typed flags.
-
-        It is a separate address for one measured reason: the fleet document is megabytes and a command palette cannot load it, while this projection of the same operations is several times smaller because it carries no schemas, responses or components.
-
-        Unauthenticated by design, exactly as the document it derives from: a client has to be able to read the contract before it holds a credential, and a list of operation names grants nothing. The list is TOTAL and is never filtered by caller — what you may run is decided per request by the authorizer, on the decoded input, so a filtered list would be a second claim about permission that is free to be wrong.
-
-        Rendered once and served as bytes thereafter, under a strong ETag.
-      operationId: get_commands
-      security: []
-      summary: Every operation this API answers, as a command
-      tags:
-      - openapi
-      x-app: openapi
-      x-public: true
   /v1/commerce/admin/catalog:
     get:
       description: 'Returns the brand-scoped catalog carrying the administrative economics
@@ -74349,41 +74367,6 @@ paths:
       tags:
       - flags
       x-app: flags
-      x-public: true
-      x-tool: true
-  /v1/flags/waitlist:
-    get:
-      description: |-
-        Reports whether ONE host is currently gated by the launch waitlist.
-        It resolves the host to the service that governs it and reads that service's
-        waitlist switch, so a guard sitting in front of a hosted surface can decide in one
-        call whether to show the waitlist or the product. It answers for the ONE host
-        asked about and never enumerates the registry, which is why it needs no
-        credential. It FAILS OPEN: an unregistered host, an unmounted registry and a store
-        fault all answer known=false with mode=false, so a request is never gated pre-boot
-        or on a registry fault.
-      operationId: get_flags_waitlist
-      parameters:
-      - description: |-
-          Host is the host to resolve, e.g. "chat.hanzo.ai". Defaults to the request's
-          own Host header when omitted, which is what lets a guard running on the
-          governed host ask about itself with no argument.
-        in: query
-        name: host
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/waitlistModeView'
-          description: ok
-      summary: Reports whether ONE host is currently gated by the launch waitlist.
-      tags:
-      - admission
-      x-app: admission
       x-public: true
       x-tool: true
   /v1/flow/runs:
@@ -101829,6 +101812,23 @@ paths:
       operationId: get_openapi.json
       security: []
       summary: The API description this SDK was generated from
+      tags:
+      - openapi
+      x-app: openapi
+      x-public: true
+  /v1/openapi/commands:
+    get:
+      description: |-
+        The command projection of the OpenAPI document at /v1/openapi.json — each operation reduced to what running it by name needs: its service and command token, its method and path, the prose lifted from the handler, its path parameters as positional arguments and its remaining inputs as typed flags.
+
+        It is a separate address for one measured reason: the fleet document is megabytes and a command palette cannot load it, while this projection of the same operations is several times smaller because it carries no schemas, responses or components.
+
+        Unauthenticated by design, exactly as the document it derives from: a client has to be able to read the contract before it holds a credential, and a list of operation names grants nothing. The list is TOTAL and is never filtered by caller — what you may run is decided per request by the authorizer, on the decoded input, so a filtered list would be a second claim about permission that is free to be wrong.
+
+        Rendered once and served as bytes thereafter, under a strong ETag.
+      operationId: get_openapi_commands
+      security: []
+      summary: Every operation this API answers, as a command
       tags:
       - openapi
       x-app: openapi
