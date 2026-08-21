@@ -55,11 +55,28 @@ CREATE INDEX IF NOT EXISTS assertion_wrote ON assertion(wrote);
 // or in none.
 const cols = `seq, id, entity, relation, value, names, at, seen, knowable, source, evidence, "by", confidence, hold, wrote`
 
-// walkBound is the ceiling on one traversal, and it is the number
-// apps/knowledge/graph.go already renders with. An unbounded walk is not a slow
-// request: because the store holds one connection, it blocks every other write
-// for that organization until it finishes.
-const walkBound = 10000
+// The three ceilings on one traversal, and they bound the WORK rather than only
+// the answer. Because the store holds one connection, a walk that runs long does
+// not merely answer slowly — it blocks every other write for that organization
+// until it finishes, so a caller-supplied depth or seed count is a caller-supplied
+// hold on the org's write path.
+//
+// walkBound is the ceiling on nodes returned, and it is the number
+// apps/knowledge/graph.go already renders with. depthMax and seedMax bound the
+// two terms the caller sizes: the recursive step count, and the width the first
+// step starts from. Every one of them is reported when it binds, because a
+// truncated walk that says nothing is a wrong answer wearing a right one.
+const (
+	walkBound = 10000
+	depthMax  = 32
+	// seedMax is set BELOW the engine's own ceiling, not at it. Each seed is a
+	// term in the recursive query's compound SELECT, and SQLite refuses the 500th
+	// with "too many terms in compound SELECT" (measured: 499 runs, 500 does
+	// not). Leaving the ceiling above that makes the store's internal limit the
+	// API's contract, surfacing as an engine error for a request the door should
+	// have named. 256 is under it with room for the query to grow a term.
+	seedMax = 256
+)
 
 type store struct{ db *sql.DB }
 
@@ -184,8 +201,14 @@ func (s *store) walk(ctx context.Context, seeds []string, relation, direction st
 	if len(seeds) == 0 {
 		return nil, 0, false, fmt.Errorf("a walk needs at least one seed")
 	}
+	if len(seeds) > seedMax {
+		return nil, 0, false, fmt.Errorf("a walk starts from at most %d seeds, not %d", seedMax, len(seeds))
+	}
 	if depth <= 0 {
 		depth = 1
+	}
+	if depth > depthMax {
+		return nil, 0, false, fmt.Errorf("a walk runs at most %d hops, not %d", depthMax, depth)
 	}
 
 	var args []any

@@ -132,6 +132,13 @@ func Resolve(facts []Fact, asOf time.Time) (winner Fact, conflicts []Fact, conte
 // is asked here so no reader below has to ask again.
 func admit(f Fact, now time.Time) (Fact, error) {
 	var err error
+	// An EDGE names another entity, so an empty value names nothing: the row
+	// would claim a relation to a thing that cannot be walked to, and the walk
+	// joining on it would follow it to nowhere. A PROPERTY may be empty — the
+	// empty string is a value somebody can mean to assert.
+	if f.Names && strings.TrimSpace(f.Value) == "" {
+		return f, fmt.Errorf("an edge names an entity, so value is required")
+	}
 	if f.Entity, err = bounded("entity", f.Entity, entityMax); err != nil {
 		return f, err
 	}
