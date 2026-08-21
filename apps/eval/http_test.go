@@ -137,24 +137,24 @@ func TestHTTPDatasetLifecycleAndIsolation(t *testing.T) {
 	app, _ := mountApp(t)
 
 	// No org header → 403 on every collection.
-	for _, p := range []string{"/v1/evals/datasets", "/v1/evals/evaluators", "/v1/evals/rubrics"} {
+	for _, p := range []string{"/v1/eval/datasets", "/v1/eval/evaluators", "/v1/eval/rubrics"} {
 		if code, _ := do(t, app, http.MethodGet, p, "", nil); code != http.StatusForbidden {
 			t.Fatalf("no-org GET %s want 403, got %d", p, code)
 		}
 	}
 
 	// maxpower creates a dataset + item.
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets", "maxpower",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets", "maxpower",
 		map[string]any{"name": "qa", "description": "quality"}); code != http.StatusCreated {
 		t.Fatalf("create dataset want 201, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "maxpower",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets/qa/items", "maxpower",
 		map[string]any{"input": "2+2", "expectedOutput": "4"}); code != http.StatusCreated {
 		t.Fatalf("create item want 201, got %d", code)
 	}
 
 	// maxpower lists its one dataset.
-	code, body := do(t, app, http.MethodGet, "/v1/evals/datasets", "maxpower", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/eval/datasets", "maxpower", nil)
 	var listed struct {
 		Data []datasetView `json:"data"`
 	}
@@ -164,25 +164,25 @@ func TestHTTPDatasetLifecycleAndIsolation(t *testing.T) {
 	}
 
 	// acme sees none, and 404s on maxpower's dataset.
-	code, body = do(t, app, http.MethodGet, "/v1/evals/datasets", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/eval/datasets", "acme", nil)
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Data) != 0 {
 		t.Fatalf("acme must see zero datasets, got %d %+v", code, listed.Data)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/evals/datasets/qa", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/eval/datasets/qa", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("acme GET maxpower dataset want 404, got %d", code)
 	}
 	// acme cannot add an item to maxpower's dataset (404, not silent create).
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets/qa/items", "acme",
 		map[string]any{"input": "x"}); code != http.StatusNotFound {
 		t.Fatalf("acme add item to maxpower dataset want 404, got %d", code)
 	}
 	// acme cannot delete maxpower's dataset.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/evals/datasets/qa", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/eval/datasets/qa", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("acme delete maxpower dataset want 404, got %d", code)
 	}
 	// maxpower's dataset survives.
-	if code, _ := do(t, app, http.MethodGet, "/v1/evals/datasets/qa", "maxpower", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodGet, "/v1/eval/datasets/qa", "maxpower", nil); code != http.StatusOK {
 		t.Fatalf("maxpower dataset must survive, got %d", code)
 	}
 }
@@ -194,43 +194,43 @@ func TestHTTPScoreIntegrity(t *testing.T) {
 	app, _ := mountApp(t)
 
 	// A NUMERIC config in [0,1].
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/rubrics", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/rubrics", "o",
 		map[string]any{"name": "quality", "dataType": "NUMERIC", "minValue": 0, "maxValue": 1}); code != http.StatusCreated {
 		t.Fatalf("create score-config want 201, got %d", code)
 	}
 
 	// Valid numeric score in range → 201.
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/scores", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/scores", "o",
 		map[string]any{"name": "quality", "value": 0.9}); code != http.StatusCreated {
 		t.Fatalf("valid score want 201, got %d", code)
 	}
 	// Above configured max → 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/scores", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/scores", "o",
 		map[string]any{"name": "quality", "value": 2.5}); code != http.StatusBadRequest {
 		t.Fatalf("out-of-range score want 400, got %d", code)
 	}
 	// Missing numeric value → 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/scores", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/scores", "o",
 		map[string]any{"name": "quality"}); code != http.StatusBadRequest {
 		t.Fatalf("missing value want 400, got %d", code)
 	}
 
 	// A CATEGORICAL config; a forged label outside the set is rejected.
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/rubrics", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/rubrics", "o",
 		map[string]any{"name": "tone", "dataType": "CATEGORICAL", "categories": []string{"good", "bad"}}); code != http.StatusCreated {
 		t.Fatalf("create categorical config want 201, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/scores", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/scores", "o",
 		map[string]any{"name": "tone", "stringValue": "good"}); code != http.StatusCreated {
 		t.Fatalf("valid categorical want 201, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/scores", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/scores", "o",
 		map[string]any{"name": "tone", "stringValue": "sarcastic"}); code != http.StatusBadRequest {
 		t.Fatalf("forged categorical label want 400, got %d", code)
 	}
 
 	// Scores are org-scoped: another org sees none of o's scores.
-	code, body := do(t, app, http.MethodGet, "/v1/evals/scores", "o", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/eval/scores", "o", nil)
 	var listed struct {
 		Data []scoreView `json:"data"`
 	}
@@ -238,7 +238,7 @@ func TestHTTPScoreIntegrity(t *testing.T) {
 	if code != http.StatusOK || len(listed.Data) != 2 { // 0.9 numeric + good categorical
 		t.Fatalf("o should see its 2 scores, got %d %+v", code, listed.Data)
 	}
-	code, body = do(t, app, http.MethodGet, "/v1/evals/scores", "intruder", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/eval/scores", "intruder", nil)
 	_ = json.Unmarshal(body, &listed)
 	if code != http.StatusOK || len(listed.Data) != 0 {
 		t.Fatalf("intruder must see zero scores, got %d %+v", code, listed.Data)
@@ -252,28 +252,28 @@ func TestHTTPRunRequiresAuthAndOwnDataset(t *testing.T) {
 	app, _ := mountApp(t)
 
 	// No Authorization bearer → 401 (even with a valid org + dataset).
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets", "o", map[string]any{"name": "qa"}); code != http.StatusCreated {
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets", "o", map[string]any{"name": "qa"}); code != http.StatusCreated {
 		t.Fatalf("seed dataset: %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/runs", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/runs", "o",
 		map[string]any{"dataset": "qa", "model": "m"}); code != http.StatusUnauthorized {
 		t.Fatalf("run without bearer want 401, got %d", code)
 	}
 
 	// With a bearer but a dataset the org does not own → 404.
-	if code, _ := doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer sk-test",
+	if code, _ := doAuth(t, app, http.MethodPost, "/v1/eval/runs", "o", "Bearer sk-test",
 		map[string]any{"dataset": "does-not-exist", "model": "m"}); code != http.StatusNotFound {
 		t.Fatalf("run on missing dataset want 404, got %d", code)
 	}
 
 	// Seed two active items, then run: the stub runner scores both.
 	for _, in := range []string{"a", "b"} {
-		if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "o",
+		if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets/qa/items", "o",
 			map[string]any{"input": in, "expectedOutput": in}); code != http.StatusCreated {
 			t.Fatalf("seed item %q: %d", in, code)
 		}
 	}
-	code, body := doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer sk-test",
+	code, body := doAuth(t, app, http.MethodPost, "/v1/eval/runs", "o", "Bearer sk-test",
 		map[string]any{"dataset": "qa", "model": "m"})
 	if code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
@@ -290,12 +290,12 @@ func TestHTTPRunRequiresAuthAndOwnDataset(t *testing.T) {
 	}
 
 	// The run is now a listable record, org-scoped.
-	code, body = do(t, app, http.MethodGet, "/v1/evals/runs", "o", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/eval/runs", "o", nil)
 	if code != http.StatusOK || !bytes.Contains(body, []byte(`"scored":2`)) {
 		t.Fatalf("run record want scored:2, got %d %s", code, body)
 	}
 	// The stub judge wrote 2 score events into telemetry, readable by o only.
-	code, body = do(t, app, http.MethodGet, "/v1/evals/scores", "o", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/eval/scores", "o", nil)
 	var scores struct {
 		Data []scoreView `json:"data"`
 	}
@@ -316,11 +316,11 @@ func TestRunDeadlineBounded(t *testing.T) {
 	app, s := mountApp(t)
 	s.runner = blockingRunner{} // handlers read s.runner per call, so this takes effect
 
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets", "o", map[string]any{"name": "qa"}); code != http.StatusCreated {
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets", "o", map[string]any{"name": "qa"}); code != http.StatusCreated {
 		t.Fatalf("seed dataset: %d", code)
 	}
 	for _, in := range []string{"a", "b"} {
-		if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "o",
+		if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets/qa/items", "o",
 			map[string]any{"input": in, "expectedOutput": in}); code != http.StatusCreated {
 			t.Fatalf("seed item %q: %d", in, code)
 		}
@@ -330,7 +330,7 @@ func TestRunDeadlineBounded(t *testing.T) {
 	var code int
 	var body []byte
 	go func() {
-		code, body = doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer sk-test",
+		code, body = doAuth(t, app, http.MethodPost, "/v1/eval/runs", "o", "Bearer sk-test",
 			map[string]any{"dataset": "qa", "model": "m"})
 		close(done)
 	}()

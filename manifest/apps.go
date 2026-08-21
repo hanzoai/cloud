@@ -287,7 +287,7 @@ var Apps = []App{
 	{Name: "marketing", Prefixes: []string{"/v1/marketing"}},
 	{Name: "ads", Prefixes: []string{"/v1/ads"}},
 	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
-	{Name: "validators", Prefixes: []string{"/v1/validators"}},
+	{Name: "validator", Prefixes: []string{"/v1/validator"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
 	// The INGESTION door is load-bearing, not decorative: apps/event/event.go's
 	// `doors` table serves /v1/event, and every beacon the products emit lands on it.
@@ -382,11 +382,11 @@ var Apps = []App{
 	// whichever row holds the bare remainder.
 	{Name: "meet", Prefixes: []string{"/v1/meet"}},
 	{Name: "settings", Prefixes: []string{"/v1/settings"}},
-	{Name: "prefs", Prefixes: []string{"/v1/prefs"}},
+	{Name: "pref", Prefixes: []string{"/v1/pref"}},
 	{Name: "notify", Prefixes: []string{"/v1/notify"}},
 	{Name: "channels", Prefixes: []string{"/v1/channels"}},
 	{Name: "gateway", Prefixes: []string{"/v1/gateway"}},
-	{Name: "entitlements", Prefixes: []string{"/v1/entitlements"}},
+	{Name: "entitlement", Prefixes: []string{"/v1/entitlement"}},
 	// The three file addresses used to be roots of their own — /v1/upload,
 	// /v1/download, /v1/files — because that is the shape the LibreChat code
 	// interpreter's clients compose. They compose them off a CONFIGURABLE base,
@@ -429,9 +429,9 @@ var Apps = []App{
 	// there: the node plane's is the presence registry over Hanzo KV, the run
 	// plane's is the executor's own, and neither reads the other's.
 	{Name: "node", Prefixes: []string{"/v1/node"}},
-	{Name: "authors", Prefixes: []string{"/v1/admin/authors", "/v1/authors"}},
+	{Name: "author", Prefixes: []string{"/v1/admin/author", "/v1/author"}},
 	{Name: "audit", Prefixes: []string{"/v1/audit"}},
-	{Name: "affiliates", Prefixes: []string{"/v1/admin/affiliates", "/v1/affiliates"}},
+	{Name: "affiliate", Prefixes: []string{"/v1/admin/affiliate", "/v1/affiliate"}},
 	{Name: "esign", Prefixes: []string{"/v1/esign"}},
 	// search is the QUERY surface — hybrid keyword+semantic over the org's own
 	// corpora at POST /v1/search — and, since product dissolved into the two
@@ -439,10 +439,10 @@ var Apps = []App{
 	// /v1/search/{indexes,stats}. Allocating a search index is a different act and
 	// lives at /v1/provisioning/search.
 	{Name: "search", Prefixes: []string{"/v1/search"}},
-	{Name: "evals", Prefixes: []string{"/v1/evals"}},
+	{Name: "eval", Prefixes: []string{"/v1/eval"}},
 	{Name: "benchmark", Prefixes: []string{"/v1/benchmark"}},
 	{Name: "research", Prefixes: []string{"/v1/research"}, Stage: Alpha},
-	{Name: "experiments", Prefixes: []string{"/v1/experiments"}},
+	{Name: "experiment", Prefixes: []string{"/v1/experiment"}},
 	{Name: "books", Prefixes: []string{"/v1/books/accounts", "/v1/books/ask", "/v1/books/bank/exchange", "/v1/books/bank/import", "/v1/books/bank/token", "/v1/books/bank/sync", "/v1/books/bank/transactions", "/v1/books/bank/unreconciled", "/v1/books/export", "/v1/books/gl", "/v1/books/inbox", "/v1/books/metrics", "/v1/books/pnl", "/v1/books/questions", "/v1/books/rules", "/v1/books/scan", "/v1/books/sync", "/v1/books/transactions", "/v1/books/position", "/v1/books/trial", "/v1/books/vendors"}},
 	{Name: "treasury", Prefixes: []string{"/v1/admin/treasury", "/v1/treasury"}},
 	{Name: "admin", Prefixes: []string{"/v1/admin"}},
@@ -479,7 +479,7 @@ var Apps = []App{
 	// /v1/mcp root entirely: that address is the host's agent door.
 	{Name: "tools", Prefixes: []string{"/v1/tools"}},
 	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}},
-	{Name: "referrals", Prefixes: []string{"/v1/admin/referrals/bonuses", "/v1/admin/referrals/sweep", "/v1/referrals"}},
+	{Name: "referral", Prefixes: []string{"/v1/admin/referral/bonuses", "/v1/admin/referral/sweep", "/v1/referral"}},
 	{Name: "guide", Prefixes: []string{"/v1/guide"}},
 	{Name: "company", Prefixes: []string{"/v1/company"}},
 	{Name: "compliance", Prefixes: []string{"/v1/compliance"}},

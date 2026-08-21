@@ -36,7 +36,7 @@ func TestMisfileReadsTheRuleOffTheAddress(t *testing.T) {
 		"/.well-known/openid-configuration": "iam",       // RFC 8615: exempt
 		"/v1/admin/pricing/catalog":         "pricing",   // the operator's view of pricing: exempt
 		"/v1/admin/apps":                    "admin",     // admin's own: clean
-		"/v1/admin/authors":                 "referrals", // the operator's view of a DIFFERENT app
+		"/v1/admin/author":                 "referrals", // the operator's view of a DIFFERENT app
 	}))
 	want := openapi.Misfiled{
 		"/git git",

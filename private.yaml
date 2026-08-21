@@ -54295,8 +54295,8 @@ components:
     validatorClaim:
       properties:
         nonce:
-          description: Nonce is the value GET /v1/validators/challenge issued for
-            this slot.
+          description: Nonce is the value GET /v1/validator/challenge issued for this
+            slot.
           type: string
         signature:
           description: |-
@@ -55313,7 +55313,7 @@ paths:
       x-app: account
       x-public: true
       x-tool: true
-  /v1/admin/affiliates:
+  /v1/admin/affiliate:
     get:
       description: |-
         Lists every affiliate across the fleet with its ORG exposed, plus a
@@ -55325,7 +55325,7 @@ paths:
         leaderboard refuses to do. There is deliberately no org-scoped variant of this
         read; a partner sees its own standing through its own dashboard. Bounded per
         request.
-      operationId: get_admin_affiliates
+      operationId: get_admin_affiliate
       parameters:
       - description: |-
           Limit caps the rows returned. Absent or non-positive means the default of
@@ -55346,10 +55346,10 @@ paths:
         fleet summary of lifetime accrued, still-pending and paid commission in integer
         cents.
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-tool: true
-  /v1/admin/affiliates/{id}/approve:
+  /v1/admin/affiliate/{id}/approve:
     post:
       description: |-
         Approves an affiliate and MINTS its referral code — the moment
@@ -55365,7 +55365,7 @@ paths:
         Approval is what makes an affiliate eligible: before it, attribution against
         its code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY.
         Audited.
-      operationId: post_admin_affiliates_by_id_approve
+      operationId: post_admin_affiliate_by_id_approve
       parameters:
       - description: ID is the affiliate to approve, from the path.
         in: path
@@ -55389,10 +55389,10 @@ paths:
       summary: Approves an affiliate and MINTS its referral code — the moment the
         partner has a working share link and starts accruing.
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-tool: true
-  /v1/admin/affiliates/{id}/payout:
+  /v1/admin/affiliate/{id}/payout:
     post:
       description: |-
         Pays out accrued commission and answers the payout row with the
@@ -55408,7 +55408,7 @@ paths:
 
         The amount is integer cents and must be positive. PLATFORM SUDO ONLY.
         Audited.
-      operationId: post_admin_affiliates_by_id_payout
+      operationId: post_admin_affiliate_by_id_payout
       parameters:
       - description: ID is the affiliate to pay, from the path.
         in: path
@@ -55436,10 +55436,10 @@ paths:
       summary: Pays out accrued commission and answers the payout row with the affiliate's
         updated balances.
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-tool: true
-  /v1/admin/affiliates/{id}/rate:
+  /v1/admin/affiliate/{id}/rate:
     post:
       description: |-
         Sets one affiliate's DIRECT commission rate, in basis points of
@@ -55456,7 +55456,7 @@ paths:
         platform switches and are not settable here. The change applies to FUTURE
         accruals — commission already latched for a period is not recomputed. PLATFORM
         SUDO ONLY. Audited.
-      operationId: post_admin_affiliates_by_id_rate
+      operationId: post_admin_affiliate_by_id_rate
       parameters:
       - description: ID is the affiliate whose direct rate moves, from the path.
         in: path
@@ -55482,10 +55482,10 @@ paths:
       summary: Sets one affiliate's DIRECT commission rate, in basis points of Hanzo's
         margin.
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-tool: true
-  /v1/admin/affiliates/{id}/suspend:
+  /v1/admin/affiliate/{id}/suspend:
     post:
       description: |-
         Suspends an affiliate: it stops accruing on the next sweep, and
@@ -55494,7 +55494,7 @@ paths:
         It CLAWS NOTHING BACK. Commission already accrued stays accrued and stays
         payable, and existing attribution edges are left standing — suspension ends
         earning, it does not unwind history. PLATFORM SUDO ONLY. Audited.
-      operationId: post_admin_affiliates_by_id_suspend
+      operationId: post_admin_affiliate_by_id_suspend
       parameters:
       - description: ID is the affiliate's server-minted handle, "aff_"-prefixed.
         in: path
@@ -55512,10 +55512,10 @@ paths:
       summary: 'Suspends an affiliate: it stops accruing on the next sweep, and its
         code stops resolving for new attributions.'
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-tool: true
-  /v1/admin/affiliates/referrals:
+  /v1/admin/affiliate/referrals:
     get:
       description: |-
         Answers the referral board: the top referrers by lifetime
@@ -55530,7 +55530,7 @@ paths:
         PLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single
         attribution spine the accrual itself walks, so the board and the ledger cannot
         disagree. Amounts are integer cents.
-      operationId: get_admin_affiliates_referrals
+      operationId: get_admin_affiliate_referrals
       responses:
         "200":
           content:
@@ -55543,10 +55543,10 @@ paths:
         over all referred orgs), and the accrual LIABILITY the platform owes, broken
         out by upline level.'
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-tool: true
-  /v1/admin/affiliates/sweep:
+  /v1/admin/affiliate/sweep:
     post:
       description: |-
         Runs the accrual: for each referred org it reads that org's metered
@@ -55568,7 +55568,7 @@ paths:
         so the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded
         per run; a source whose spend cannot be read is skipped and picked up next
         time, never half-accrued.
-      operationId: post_admin_affiliates_sweep
+      operationId: post_admin_affiliate_sweep
       responses:
         "200":
           content:
@@ -55581,8 +55581,8 @@ paths:
         its referral chain, then answers how many sources were swept and how many
         NEW accruals landed.'
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-tool: true
   /v1/admin/aimetrics:
     get:
@@ -55893,7 +55893,7 @@ paths:
       - admin
       x-app: admin
       x-tool: true
-  /v1/admin/authors:
+  /v1/admin/author:
     get:
       description: |-
         Returns the platform's whole author program — every org's author
@@ -55902,7 +55902,7 @@ paths:
 
         It is a Hanzo platform operation: a caller who is not a SuperAdmin gets 403. It
         exposes the owning org of each author, which no tenant-facing read ever does.
-      operationId: get_admin_authors
+      operationId: get_admin_author
       parameters:
       - description: |-
           Limit bounds the page. 0 or less means the default of 500; anything above
@@ -55923,10 +55923,10 @@ paths:
         not the caller's — with each one's repository and deploy counts and a fleet
         roll-up of the money accrued, pending and paid.
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-tool: true
-  /v1/admin/authors/{id}/approve:
+  /v1/admin/author/{id}/approve:
     post:
       description: |-
         Admits one author to EARNING, optionally on a negotiated royalty
@@ -55938,7 +55938,7 @@ paths:
         rewrite what was already owed.
 
         A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-      operationId: post_admin_authors_by_id_approve
+      operationId: post_admin_author_by_id_approve
       parameters:
       - description: ID is the author to approve, from the path.
         example: aut_1f…
@@ -55965,14 +55965,14 @@ paths:
           description: ok
       summary: Admits one author to EARNING, optionally on a negotiated royalty share.
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-tool: true
-  /v1/admin/authors/{id}/basis:
+  /v1/admin/author/{id}/basis:
     get:
       description: |-
         Returns the audit trail behind ONE author's royalty — the same
-        payload the author reads at /v1/authors/basis, from the same builder, so support
+        payload the author reads at /v1/author/basis, from the same builder, so support
         sees exactly what the author sees rather than a parallel view free to drift.
 
         The data object carries: id, status, asOf, shareBps, platformShareBps,
@@ -55983,7 +55983,7 @@ paths:
         slice was actually returned) — plus period when one was requested.
 
         A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-      operationId: get_admin_authors_by_id_basis
+      operationId: get_admin_author_by_id_basis
       parameters:
       - description: ID is the author record's handle, from the path.
         example: aut_1f…
@@ -56009,13 +56009,13 @@ paths:
                 $ref: '#/components/schemas/basisResult'
           description: ok
       summary: Returns the audit trail behind ONE author's royalty — the same payload
-        the author reads at /v1/authors/basis, from the same builder, so support sees
+        the author reads at /v1/author/basis, from the same builder, so support sees
         exactly what the author sees rather than a parallel view free to drift.
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-tool: true
-  /v1/admin/authors/{id}/payout:
+  /v1/admin/author/{id}/payout:
     post:
       description: |-
         Records a payout of accrued royalty and settles it.
@@ -56030,7 +56030,7 @@ paths:
         wallet, and every payout row discloses which of the three it was.
 
         A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-      operationId: post_admin_authors_by_id_payout
+      operationId: post_admin_author_by_id_payout
       parameters:
       - description: ID is the author to pay, from the path.
         example: aut_1f…
@@ -56058,10 +56058,10 @@ paths:
           description: ok
       summary: Records a payout of accrued royalty and settles it.
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-tool: true
-  /v1/admin/authors/{id}/suspend:
+  /v1/admin/author/{id}/suspend:
     post:
       description: |-
         Stops one author earning. Their record, verified claims and ledger
@@ -56069,7 +56069,7 @@ paths:
         owed, and it does not delete the evidence behind it.
 
         A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-      operationId: post_admin_authors_by_id_suspend
+      operationId: post_admin_author_by_id_suspend
       parameters:
       - description: ID is the author record's handle, "aut_"-prefixed.
         in: path
@@ -56086,10 +56086,10 @@ paths:
           description: ok
       summary: Stops one author earning.
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-tool: true
-  /v1/admin/authors/sweep:
+  /v1/admin/author/sweep:
     post:
       description: |-
         Runs the accrual sweep across every approved author: for each of
@@ -56102,7 +56102,7 @@ paths:
         the per-period latch means running it twice accrues nothing the second time.
 
         A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
-      operationId: post_admin_authors_sweep
+      operationId: post_admin_author_sweep
       responses:
         "200":
           content:
@@ -56114,8 +56114,8 @@ paths:
         deploying orgs it computes this period''s royalty from that org''s metered
         spend and latches it at most once per period.'
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-tool: true
   /v1/admin/bases:
     get:
@@ -58140,7 +58140,7 @@ paths:
       - provisioning
       x-app: provisioning
       x-tool: true
-  /v1/admin/referrals/bonuses:
+  /v1/admin/referral/bonuses:
     get:
       description: |-
         Returns every referral edge in the directory with a fleet summary.
@@ -58148,9 +58148,9 @@ paths:
         SuperAdmin only, fail-closed. This is the ATTRIBUTION directory — who referred
         whom and whether that referee became a customer. It carries no amounts because
         this package issues none. The cross-tenant referral ANALYTICS board (top
-        referrers, conversion) is a different surface, GET /v1/admin/affiliates/referrals,
+        referrers, conversion) is a different surface, GET /v1/admin/affiliate/referrals,
         owned by the affiliates subsystem over the shared attribution spine.
-      operationId: get_admin_referrals_bonuses
+      operationId: get_admin_referral_bonuses
       parameters:
       - description: |-
           Limit is how many referrals to return, as a decimal string in the `?limit=`
@@ -58172,10 +58172,10 @@ paths:
           description: ok
       summary: Returns every referral edge in the directory with a fleet summary.
       tags:
-      - referrals
-      x-app: referrals
+      - referral
+      x-app: referral
       x-tool: true
-  /v1/admin/referrals/sweep:
+  /v1/admin/referral/sweep:
     post:
       description: |-
         Qualify-checks every pending referral and advances the ones that now qualify.
@@ -58191,7 +58191,7 @@ paths:
         under a concurrent sweep.
 
         It reads nothing from the caller — the counters it returns are the whole result.
-      operationId: post_admin_referrals_sweep
+      operationId: post_admin_referral_sweep
       responses:
         "200":
           content:
@@ -58202,8 +58202,8 @@ paths:
       summary: Qualify-checks every pending referral and advances the ones that now
         qualify.
       tags:
-      - referrals
-      x-app: referrals
+      - referral
+      x-app: referral
       x-tool: true
   /v1/admin/revenue:
     get:
@@ -59286,7 +59286,7 @@ paths:
       x-app: ads
       x-public: true
       x-tool: true
-  /v1/affiliates:
+  /v1/affiliate:
     get:
       description: |-
         Answers the caller org's OWN affiliate standing: status, referral
@@ -59302,7 +59302,7 @@ paths:
         is a PURE READ: nothing accrues until the sweep runs. Commission is earned on
         Hanzo's MARGIN, never on the referred customer's bill, so nothing here changes
         what that customer pays.
-      operationId: get_affiliates
+      operationId: get_affiliate
       responses:
         "200":
           content:
@@ -59315,11 +59315,11 @@ paths:
         lifetime accrued, still-pending and already-paid commission in integer cents,
         with its payout history.'
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
-  /v1/affiliates/apply:
+  /v1/affiliate/apply:
     post:
       description: |-
         Enrolls the caller's OWN org as an affiliate at status `applied`,
@@ -59334,7 +59334,7 @@ paths:
         The org is the validated caller's, never a field. A malformed vanity code is
         refused up front; the code is only REQUESTED here, and approval may mint a
         different one if the requested code is taken.
-      operationId: post_affiliates_apply
+      operationId: post_affiliate_apply
       requestBody:
         content:
           application/json:
@@ -59360,11 +59360,11 @@ paths:
         requesting a vanity code, and answers the record — 201 on the first apply,
         200 with `created:false` afterwards.
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
-  /v1/affiliates/attribute:
+  /v1/affiliate/attribute:
     post:
       description: |-
         Records the first-touch edge every later commission is computed
@@ -59384,7 +59384,7 @@ paths:
 
         A user-level mirror of the edge is written best-effort; a conflict there never
         fails the org attribution, which is the money-bearing one.
-      operationId: post_affiliates_attribute
+      operationId: post_affiliate_attribute
       requestBody:
         content:
           application/json:
@@ -59409,11 +59409,11 @@ paths:
       summary: 'Records the first-touch edge every later commission is computed from:
         the caller''s org was referred by the affiliate that owns this code.'
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
-  /v1/affiliates/click:
+  /v1/affiliate/click:
     post:
       description: |-
         Counts a click on a share link. PUBLIC — it takes no principal, because
@@ -59430,7 +59430,7 @@ paths:
         deliberately: this is not a code-existence oracle. `counted` reports that the
         buffer took the ping, not that the code is real; an unknown code simply no-ops
         at flush time.
-      operationId: post_affiliates_click
+      operationId: post_affiliate_click
       requestBody:
         content:
           application/json:
@@ -59448,11 +59448,11 @@ paths:
           description: ok
       summary: Counts a click on a share link.
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
-  /v1/affiliates/leaderboard:
+  /v1/affiliate/leaderboard:
     get:
       description: |-
         Answers the top affiliates by lifetime accrued commission, shown by
@@ -59468,7 +59468,7 @@ paths:
         the board. Only an approved affiliate has a rank. Requires a validated
         principal; a signed-in non-affiliate may read the board but gets no personal
         row.
-      operationId: get_affiliates_leaderboard
+      operationId: get_affiliate_leaderboard
       responses:
         "200":
           content:
@@ -59479,11 +59479,11 @@ paths:
       summary: Answers the top affiliates by lifetime accrued commission, shown by
         OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
-  /v1/affiliates/me:
+  /v1/affiliate/me:
     get:
       description: |-
         Answers the richer self-view: the same lifetime accrued, pending and paid
@@ -59500,7 +59500,7 @@ paths:
 
         Scoped to the validated org and nothing else, and refused without a
         principal. A PURE READ — it reports the downline but accrues nothing.
-      operationId: get_affiliates_me
+      operationId: get_affiliate_me
       responses:
         "200":
           content:
@@ -59513,11 +59513,11 @@ paths:
         by upline LEVEL — direct, second, third — each with the rate paid at that
         level and how many orgs sit there.'
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
-  /v1/affiliates/me/earnings:
+  /v1/affiliate/me/earnings:
     get:
       description: |-
         Answers the caller's own commission ledger: per period, the margin it
@@ -59531,7 +59531,7 @@ paths:
 
         Scoped server-side to the validated caller's affiliate; a caller that is not
         one gets `isAffiliate:false`.
-      operationId: get_affiliates_me_earnings
+      operationId: get_affiliate_me_earnings
       responses:
         "200":
           content:
@@ -59543,11 +59543,11 @@ paths:
         it earned against and the commission taken from that margin; and per referred
         org, that referral''s aggregate contribution.'
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
-  /v1/affiliates/me/handle:
+  /v1/affiliate/me/handle:
     post:
       description: |-
         Sets the caller's public leaderboard display name, or clears it.
@@ -59560,7 +59560,7 @@ paths:
         Requires a validated principal and an existing affiliate record; apply first.
         The handle is bounded and restricted to letters, digits, space, hyphen,
         underscore and dot.
-      operationId: post_affiliates_me_handle
+      operationId: post_affiliate_me_handle
       requestBody:
         content:
           application/json:
@@ -59578,11 +59578,11 @@ paths:
           description: ok
       summary: Sets the caller's public leaderboard display name, or clears it.
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
-  /v1/affiliates/me/links:
+  /v1/affiliate/me/links:
     get:
       description: |-
         Answers the caller's share links, each with its URL and its funnel:
@@ -59597,7 +59597,7 @@ paths:
         one batch — which is how the counters stay current without a database write
         per click. Scoped to the validated caller's own affiliate; a non-affiliate
         gets `isAffiliate:false` and the link cap.
-      operationId: get_affiliates_me_links
+      operationId: get_affiliate_me_links
       responses:
         "200":
           content:
@@ -59609,8 +59609,8 @@ paths:
         clicks tracked, signups — orgs attributed with that code — and conversions,
         meaning how many of those signups have actually produced commission.'
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
     post:
@@ -59626,7 +59626,7 @@ paths:
 
         Bounded per affiliate. The label is cosmetic: it is trimmed, stripped of
         control characters and capped, and it is never part of a code.
-      operationId: post_affiliates_me_links
+      operationId: post_affiliate_me_links
       requestBody:
         content:
           application/json:
@@ -59645,8 +59645,8 @@ paths:
       summary: Mints a new share link for the caller's own affiliate and answers it
         with its full URL, 201.
       tags:
-      - affiliates
-      x-app: affiliates
+      - affiliate
+      x-app: affiliate
       x-public: true
       x-tool: true
   /v1/agents:
@@ -65536,7 +65536,7 @@ paths:
       x-app: audit
       x-public: true
       x-tool: true
-  /v1/authors:
+  /v1/author:
     get:
       description: |-
         Returns the caller's author-program dashboard: enrolment status,
@@ -65553,7 +65553,7 @@ paths:
         For an APPROVED author this read ALSO runs the accrual sweep opportunistically, so
         the dashboard is self-updating. That is why the royalty AUDIT lives at its own
         address: an audit must not move the money it is auditing.
-      operationId: get_authors
+      operationId: get_author
       responses:
         "200":
           content:
@@ -65567,11 +65567,11 @@ paths:
         linked forge login, verified repositories and owner-wide claims, recorded
         deploys, accrued / pending / paid royalty, and the payout history.'
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-public: true
       x-tool: true
-  /v1/authors/basis:
+  /v1/author/basis:
     get:
       description: |-
         Returns the AUDIT TRAIL behind the caller's own royalty: every
@@ -65589,7 +65589,7 @@ paths:
         This read NEVER sweeps, and that is the point of it being a separate address from
         the dashboard: an audit must not move the money it is auditing, so calling it N
         times leaves the balances and the ledger byte-identical.
-      operationId: get_authors_basis
+      operationId: get_author_basis
       parameters:
       - description: |-
           Period is the UTC accrual month, YYYY-MM. Empty means every period; any other
@@ -65615,11 +65615,11 @@ paths:
         platform''s matching half, whether each row satisfies the formula, and the
         attribution edges that already existed when the row was written.'
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-public: true
       x-tool: true
-  /v1/authors/connect:
+  /v1/author/connect:
     post:
       description: |-
         Enrols the caller's org in the author program at status "connected"
@@ -65632,7 +65632,7 @@ paths:
         org to earning: a platform reviewer approves that separately.
 
         Answers 201 when it enrolled the org and 200 when it found an existing enrolment.
-      operationId: post_authors_connect
+      operationId: post_author_connect
       requestBody:
         content:
           application/json:
@@ -65652,11 +65652,11 @@ paths:
       summary: Enrols the caller's org in the author program at status "connected"
         and returns its enrolment, including the verify code the file method needs.
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-public: true
       x-tool: true
-  /v1/authors/deploys/record:
+  /v1/author/deploys/record:
     post:
       description: |-
         Records that the caller's org deployed a project built from a
@@ -65674,7 +65674,7 @@ paths:
         repository+project+org.
 
         Answers 201 when it recorded a new edge and 200 otherwise.
-      operationId: post_authors_deploys_record
+      operationId: post_author_deploys_record
       requestBody:
         content:
           application/json:
@@ -65694,11 +65694,11 @@ paths:
       summary: Records that the caller's org deployed a project built from a source
         repository, which is the edge that makes an author's work earn royalty.
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-public: true
       x-tool: true
-  /v1/authors/repos/verify:
+  /v1/author/repos/verify:
     post:
       description: |-
         Proves that the caller owns a repository — or a whole OWNER — and
@@ -65715,7 +65715,7 @@ paths:
         already verified is a 409. The org must have connected first.
 
         Answers 201 when it recorded a new claim and 200 when the claim already existed.
-      operationId: post_authors_repos_verify
+      operationId: post_author_repos_verify
       requestBody:
         content:
           application/json:
@@ -65734,8 +65734,8 @@ paths:
       summary: Proves that the caller owns a repository — or a whole OWNER — and records
         the claim, which is what makes deploys of that code earn royalty.
       tags:
-      - authors
-      x-app: authors
+      - author
+      x-app: author
       x-public: true
       x-tool: true
   /v1/authz/check:
@@ -80279,19 +80279,19 @@ paths:
       x-app: engine
       x-public: true
       x-tool: true
-  /v1/entitlements:
+  /v1/entitlement:
     get:
       description: |-
         Projection reports which console apps the CALLER's org may open, and the plan slug
         that decides it. It is the READ side of the unified paywall: the org's plan tier
         resolved from commerce, which is a different authority from the enablement store
-        behind GET /v1/entitlements/orgs/{org} (that one is the org's own on/off intent).
+        behind GET /v1/entitlement/orgs/{org} (that one is the org's own on/off intent).
 
         It fails SAFE-TO-LOCKED, never 500: an unvalidated principal is a 403, but a
         commerce outage reports every app locked at 200 rather than breaking the shell.
         The ENFORCEMENT path still fails open, so functionality survives the same outage
         even while the UI conservatively shows locked.
-      operationId: get_entitlements
+      operationId: get_entitlement
       responses:
         "200":
           content:
@@ -80302,19 +80302,19 @@ paths:
       summary: Projection reports which console apps the CALLER's org may open, and
         the plan slug that decides it.
       tags:
-      - entitlements
-      x-app: entitlements
+      - entitlement
+      x-app: entitlement
       x-public: true
       x-tool: true
-  /v1/entitlements/orgs/{org}:
+  /v1/entitlement/orgs/{org}:
     get:
       description: |-
         Get lists the products an org has ENABLED — its own intent, which the console's
         paid-product sidebar reads to decide what to show. It is distinct from what the
-        org's plan ENTITLES it to (that is GET /v1/entitlements, resolved from commerce).
+        org's plan ENTITLES it to (that is GET /v1/entitlement, resolved from commerce).
 
         A caller may only read its OWN org's row; a platform super admin may read any.
-      operationId: get_entitlements_orgs_by_org
+      operationId: get_entitlement_orgs_by_org
       parameters:
       - in: path
         name: org
@@ -80331,8 +80331,8 @@ paths:
       summary: Get lists the products an org has ENABLED — its own intent, which the
         console's paid-product sidebar reads to decide what to show.
       tags:
-      - entitlements
-      x-app: entitlements
+      - entitlement
+      x-app: entitlement
       x-public: true
       x-tool: true
     post:
@@ -80345,7 +80345,7 @@ paths:
         super admin bypasses the plan check (operator comp/grant) and may target any org;
         everyone else may only change their own. Commerce unreachable is a 503, never an
         implicit yes.
-      operationId: post_entitlements_orgs_by_org
+      operationId: post_entitlement_orgs_by_org
       parameters:
       - in: path
         name: org
@@ -80373,8 +80373,8 @@ paths:
       summary: Post turns products on or off for an org and returns the enabled set
         afterwards.
       tags:
-      - entitlements
-      x-app: entitlements
+      - entitlement
+      x-app: entitlement
       x-public: true
       x-tool: true
   /v1/esign/documents:
@@ -80884,7 +80884,7 @@ paths:
       x-app: esign
       x-public: true
       x-tool: true
-  /v1/evals/datasets:
+  /v1/eval/datasets:
     get:
       description: |-
         Is the datasets your org has, each with its name, description,
@@ -80894,7 +80894,7 @@ paths:
         principal; 403 without one. Every row is filtered on the validated org, so
         there is no parameter that reaches another tenant's datasets. The item count is
         NOT populated here — read one dataset to get it.
-      operationId: get_evals_datasets
+      operationId: get_eval_datasets
       parameters:
       - description: |-
           Limit caps the rows returned. It defaults to 100 and is capped at 500; a
@@ -80915,8 +80915,8 @@ paths:
       summary: Is the datasets your org has, each with its name, description, metadata
         and timestamps.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
     post:
@@ -80931,7 +80931,7 @@ paths:
         Requires a validated principal; 403 without one. The org comes from the
         validated owner claim, never from a client X-Org-Id, so a dataset can only ever
         be written under the caller's own tenant. A description over 64 KiB is 400.
-      operationId: post_evals_datasets
+      operationId: post_eval_datasets
       requestBody:
         content:
           application/json:
@@ -80948,11 +80948,11 @@ paths:
       summary: Writes a dataset — the named set of graded examples a run scores a
         model against — under the caller's org and answers 201 with it.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
-  /v1/evals/datasets/{name}:
+  /v1/eval/datasets/{name}:
     delete:
       description: |-
         Removes the named dataset of the caller's org AND all of its
@@ -80964,7 +80964,7 @@ paths:
         404, because the delete is predicated on the validated org. Requires a
         validated principal; 403 without one. Runs and scores already recorded against
         the dataset are telemetry events and are NOT deleted with it.
-      operationId: delete_evals_datasets_by_name
+      operationId: delete_eval_datasets_by_name
       parameters:
       - description: Name is the dataset the URL names.
         in: path
@@ -80982,8 +80982,8 @@ paths:
       summary: Removes the named dataset of the caller's org AND all of its examples,
         in one transaction.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
     get:
@@ -80993,7 +80993,7 @@ paths:
 
         A name this org does not have is 404, which is also what another tenant's
         dataset looks like from here. Requires a validated principal; 403 without one.
-      operationId: get_evals_datasets_by_name
+      operationId: get_eval_datasets_by_name
       parameters:
       - description: Name is the dataset the URL names.
         in: path
@@ -81011,11 +81011,11 @@ paths:
       summary: Returns one dataset of the caller's org by name, together with its
         live item count — the one read that answers how big the set actually is.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
-  /v1/evals/datasets/{name}/items:
+  /v1/eval/datasets/{name}/items:
     get:
       description: |-
         Is the examples in one of your datasets — the set is named in the
@@ -81025,7 +81025,7 @@ paths:
         only what a run would use. Requires a validated principal; 403 without one, and
         the read is filtered on the validated org, so naming another tenant's dataset
         returns nothing rather than its contents.
-      operationId: get_evals_datasets_by_name_items
+      operationId: get_eval_datasets_by_name_items
       parameters:
       - description: |-
           Dataset is the set to read, from the path — this collection only exists
@@ -81050,8 +81050,8 @@ paths:
       summary: Is the examples in one of your datasets — the set is named in the path,
         because this collection only exists inside one.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
     post:
@@ -81062,7 +81062,7 @@ paths:
 
         That dataset MUST already exist for this org: an unknown one is 404, never a
         silent create. Requires a validated principal; 403 without one.
-      operationId: post_evals_datasets_by_name_items
+      operationId: post_eval_datasets_by_name_items
       parameters:
       - in: path
         name: name
@@ -81086,11 +81086,11 @@ paths:
         metadata and a status — into the dataset named in the path, and answers 201
         with it.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
-  /v1/evals/evaluators:
+  /v1/eval/evaluators:
     get:
       description: |-
         Is the judges your org has defined, each with its judge model,
@@ -81098,7 +81098,7 @@ paths:
 
         Requires a validated principal; 403 without one, and the listing is filtered on
         the validated org.
-      operationId: get_evals_evaluators
+      operationId: get_eval_evaluators
       parameters:
       - description: |-
           Limit caps the rows returned. It defaults to 100 and is capped at 500; a
@@ -81119,8 +81119,8 @@ paths:
       summary: Is the judges your org has defined, each with its judge model, criteria
         and the score name it writes under.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
     post:
@@ -81130,7 +81130,7 @@ paths:
 
         Like a dataset, the NAME is the key: re-posting a name edits that judge rather
         than adding a second one. Requires a validated principal; 403 without one.
-      operationId: post_evals_evaluators
+      operationId: post_eval_evaluators
       requestBody:
         content:
           application/json:
@@ -81147,11 +81147,11 @@ paths:
       summary: Saves a reusable judge for the caller's org — the judge model and the
         written criteria it grades against — and answers 201 with it.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
-  /v1/evals/metrics:
+  /v1/eval/metrics:
     get:
       description: |-
         Is your org's AI overview board over a window: totals
@@ -81168,7 +81168,7 @@ paths:
         or under a named project scope the usage ledger does not yet carry, it answers a
         valid board with zero totals and a flat series rather than a fabricated number
         or a 500. Requires a validated principal; 403 without one.
-      operationId: get_evals_metrics
+      operationId: get_eval_metrics
       parameters:
       - description: |-
           Range is 24h (the default), 7d or 30d. Anything else normalises to 24h
@@ -81199,11 +81199,11 @@ paths:
         long tail folded into "other", and latency percentiles read from the GenAI
         spans.'
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
-  /v1/evals/rubrics:
+  /v1/eval/rubrics:
     get:
       description: |-
         Is the score shapes your org has declared — each name's data
@@ -81211,7 +81211,7 @@ paths:
 
         Requires a validated principal; 403 without one, and the listing is filtered on
         the validated org.
-      operationId: get_evals_rubrics
+      operationId: get_eval_rubrics
       parameters:
       - description: |-
           Limit caps the rows returned. It defaults to 100 and is capped at 500; a
@@ -81232,8 +81232,8 @@ paths:
       summary: Is the score shapes your org has declared — each name's data type,
         its numeric bounds and its allowed categories.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
     post:
@@ -81249,7 +81249,7 @@ paths:
 
         A CATEGORICAL rubric with no categories is 400, as is a non-finite bound or a
         minValue above maxValue. Requires a validated principal; 403 without one.
-      operationId: post_evals_rubrics
+      operationId: post_eval_rubrics
       requestBody:
         content:
           application/json:
@@ -81266,11 +81266,11 @@ paths:
       summary: Defines the shape of one score name for the caller's org and answers
         201 with it.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
-  /v1/evals/runs:
+  /v1/eval/runs:
     get:
       description: |-
         Is your past runs and how they scored — the dataset and model, the
@@ -81281,7 +81281,7 @@ paths:
         validated org. These records come from the metastore rather than the datastore,
         so they are readable on a deployment with no telemetry wired — but a run's
         traces and scores are not.
-      operationId: get_evals_runs
+      operationId: get_eval_runs
       parameters:
       - description: Dataset narrows to the runs against one dataset.
         in: query
@@ -81305,8 +81305,8 @@ paths:
         judge model, how many examples were attempted and how many scored, the average
         score, and when it happened.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
     post:
@@ -81334,7 +81334,7 @@ paths:
         a 200 that looks like an evaluation. A run must be able to persist what it
         produces, so a deployment with no datastore wired is 503 up front. Requires a
         validated principal; 403 without one.
-      operationId: post_evals_runs
+      operationId: post_eval_runs
       parameters:
       - in: header
         name: Authorization
@@ -81363,11 +81363,11 @@ paths:
       summary: Runs a real evaluation and answers the summary when it is finished
         — this is synchronous work, not a job id.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
-  /v1/evals/scores:
+  /v1/eval/scores:
     get:
       description: |-
         Is the score events your org has recorded, narrowed by any of name,
@@ -81378,7 +81378,7 @@ paths:
         them. Requires a validated principal; 403 without one. Scores live in the
         datastore, so a deployment with none wired answers 503 rather than an empty
         page that would read as "no scores".
-      operationId: get_evals_scores
+      operationId: get_eval_scores
       parameters:
       - description: Name narrows to one score name.
         in: query
@@ -81413,8 +81413,8 @@ paths:
       summary: Is the score events your org has recorded, narrowed by any of name,
         runName and traceId.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
     post:
@@ -81435,7 +81435,7 @@ paths:
         with none wired answers 503 rather than accepting a score it cannot persist.
         Requires a validated principal; 403 without one, and the org is stamped from
         the validated claim rather than read off the body.
-      operationId: post_evals_scores
+      operationId: post_eval_scores
       requestBody:
         content:
           application/json:
@@ -81451,11 +81451,11 @@ paths:
           description: created
       summary: Files one score event for the caller's org and answers 201 with it.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
-  /v1/evals/traces:
+  /v1/eval/traces:
     get:
       description: |-
         Is the traces behind your evaluations — one per model call an
@@ -81466,7 +81466,7 @@ paths:
         not a parameter, so it cannot be widened by asking. Requires a validated
         principal; 403 without one. Traces live in the datastore, so a deployment with
         none wired answers 503 rather than an empty page.
-      operationId: get_evals_traces
+      operationId: get_eval_traces
       parameters:
       - description: SessionID narrows to one session, which for an evaluation is
           one run.
@@ -81503,8 +81503,8 @@ paths:
         made, carrying its input, output, model and timing — narrowed by any of sessionId,
         runName and datasetName.
       tags:
-      - evals
-      x-app: evals
+      - eval
+      x-app: eval
       x-public: true
       x-tool: true
   /v1/event:
@@ -82090,7 +82090,7 @@ paths:
       - exec
       x-app: exec
       x-public: true
-  /v1/experiments:
+  /v1/experiment:
     get:
       description: |-
         Is every experiment in the caller's org, with its variants, status and
@@ -82105,7 +82105,7 @@ paths:
 
         Requires a validated principal; refuses without one rather than answering an
         empty list.
-      operationId: get_experiments
+      operationId: get_experiment
       responses:
         "200":
           content:
@@ -82116,8 +82116,8 @@ paths:
       summary: Is every experiment in the caller's org, with its variants, status
         and decision, ordered by project then id.
       tags:
-      - experiments
-      x-app: experiments
+      - experiment
+      x-app: experiment
       x-public: true
       x-tool: true
     post:
@@ -82138,7 +82138,7 @@ paths:
 
         It fails closed on the flag write. An experiment whose assignment flag does not
         exist would assign nobody, so if that write fails nothing is registered.
-      operationId: post_experiments
+      operationId: post_experiment
       requestBody:
         content:
           application/json:
@@ -82157,11 +82157,11 @@ paths:
         201 — the flag is created active at 100% rollout, with each variant weighted
         as declared.
       tags:
-      - experiments
-      x-app: experiments
+      - experiment
+      x-app: experiment
       x-public: true
       x-tool: true
-  /v1/experiments/{id}:
+  /v1/experiment/{id}:
     get:
       description: |-
         Is one experiment's definition and lifecycle: variants, weights, control
@@ -82175,7 +82175,7 @@ paths:
         tenant's experiment of the same id is simply not found. An id that is not a
         legal slug is answered the same way, without a store read — the shape check and
         the existence check are one answer, so neither leaks the other.
-      operationId: get_experiments_by_id
+      operationId: get_experiment_by_id
       parameters:
       - description: ID is the experiment the URL names.
         in: path
@@ -82193,11 +82193,11 @@ paths:
       summary: 'Is one experiment''s definition and lifecycle: variants, weights,
         control arm, status and winner.'
       tags:
-      - experiments
-      x-app: experiments
+      - experiment
+      x-app: experiment
       x-public: true
       x-tool: true
-  /v1/experiments/{id}/analyze:
+  /v1/experiment/{id}/analyze:
     post:
       description: |-
         Is per-variant conversion, lift and statistical significance against
@@ -82228,7 +82228,7 @@ paths:
         written to the research evidence plane as immutable ab rows, best-effort: the
         analysis is still returned if that write fails, because the samples are
         recomputable, and the failure is logged rather than swallowed.
-      operationId: post_experiments_by_id_analyze
+      operationId: post_experiment_by_id_analyze
       parameters:
       - description: ID is the experiment the URL names.
         in: path
@@ -82252,11 +82252,11 @@ paths:
       summary: Is per-variant conversion, lift and statistical significance against
         the control arm.
       tags:
-      - experiments
-      x-app: experiments
+      - experiment
+      x-app: experiment
       x-public: true
       x-tool: true
-  /v1/experiments/{id}/assign:
+  /v1/experiment/{id}/assign:
     get:
       description: |-
         Is the variant one subject is bucketed into, and the payload that
@@ -82272,7 +82272,7 @@ paths:
         nothing for this subject, so the subject is not enrolled. A flags engine that is
         unavailable refuses rather than defaulting to an arm. Requires a validated
         principal, and the experiment must exist in the caller's org and project.
-      operationId: get_experiments_by_id_assign
+      operationId: get_experiment_by_id_assign
       parameters:
       - description: ID is the experiment the URL names.
         in: path
@@ -82307,11 +82307,11 @@ paths:
       summary: Is the variant one subject is bucketed into, and the payload that variant
         carries.
       tags:
-      - experiments
-      x-app: experiments
+      - experiment
+      x-app: experiment
       x-public: true
       x-tool: true
-  /v1/experiments/{id}/decide:
+  /v1/experiment/{id}/decide:
     post:
       description: |-
         Promotes one variant to the whole rollout and records who decided.
@@ -82337,7 +82337,7 @@ paths:
         flag to its original weights either, so an experiment cannot be un-decided
         through this route — restoring a split means writing the flag definition back
         through the flags plane.
-      operationId: post_experiments_by_id_decide
+      operationId: post_experiment_by_id_decide
       parameters:
       - in: path
         name: id
@@ -82359,11 +82359,11 @@ paths:
           description: ok
       summary: Promotes one variant to the whole rollout and records who decided.
       tags:
-      - experiments
-      x-app: experiments
+      - experiment
+      x-app: experiment
       x-public: true
       x-tool: true
-  /v1/experiments/health:
+  /v1/experiment/health:
     get:
       description: |-
         Is whether the experiments subsystem is mounted and serving in this
@@ -82379,7 +82379,7 @@ paths:
         The static path is registered ahead of the /:id read, so it always wins the
         first-match scan. "health" is a legal experiment id, which means an experiment
         created under that id can never be fetched by id — pick another.
-      operationId: get_experiments_health
+      operationId: get_experiment_health
       responses:
         "200":
           content:
@@ -82390,8 +82390,8 @@ paths:
       summary: Is whether the experiments subsystem is mounted and serving in this
         process.
       tags:
-      - experiments
-      x-app: experiments
+      - experiment
+      x-app: experiment
       x-public: true
       x-tool: true
   /v1/explorer/indexers:
@@ -113221,7 +113221,7 @@ paths:
       x-app: platform
       x-public: true
       x-tool: true
-  /v1/prefs:
+  /v1/pref:
     get:
       description: |-
         Returns the signed-in caller's OWN preference document — the theme,
@@ -113230,7 +113230,7 @@ paths:
         SuperAdmin, because the subject is built from the validated credential and is the
         mandatory predicate on the read. A caller who has never saved anything gets an
         empty document at 200, never a 404, so the user menu always renders.
-      operationId: get_prefs
+      operationId: get_pref
       responses:
         "200":
           content:
@@ -113241,8 +113241,8 @@ paths:
       summary: Returns the signed-in caller's OWN preference document — the theme,
         density and pinned nav that follow them across every Hanzo surface.
       tags:
-      - prefs
-      x-app: prefs
+      - pref
+      x-app: pref
       x-public: true
       x-tool: true
     patch:
@@ -113257,12 +113257,12 @@ paths:
         a platform SuperAdmin. Fails closed: no validated principal is 403; an empty
         body or a literal `null` is 400; and a patch or a resulting document over
         16 KiB or 128 keys is 413.'
-      operationId: patch_prefs
+      operationId: patch_pref
       summary: Save the preference keys your surface owns, leaving every other key
         alone
       tags:
-      - prefs
-      x-app: prefs
+      - pref
+      x-app: pref
       x-public: true
   /v1/pricing:
     get:
@@ -116247,7 +116247,7 @@ paths:
       x-app: reference
       x-public: true
       x-tool: true
-  /v1/referrals:
+  /v1/referral:
     get:
       description: |-
         Returns the caller's referral code, share link and the referrals they have made.
@@ -116258,11 +116258,11 @@ paths:
 
         IT IS A PURE READ. It advances no referral, grants nothing and deposits nothing
         — a GET reports state, it never changes it. Qualification is the admin sweep's
-        job (POST /v1/admin/referrals/sweep). The one row this handler can write is the
+        job (POST /v1/admin/referral/sweep). The one row this handler can write is the
         caller's OWN code-directory entry (EnsureCode), which materialises a value
         deriveCode already computes deterministically from the org id so the code has an
         O(1) reverse lookup; it carries no money, no referral state and no other tenant.
-      operationId: get_referrals
+      operationId: get_referral
       responses:
         "200":
           content:
@@ -116273,11 +116273,11 @@ paths:
       summary: Returns the caller's referral code, share link and the referrals they
         have made.
       tags:
-      - referrals
-      x-app: referrals
+      - referral
+      x-app: referral
       x-public: true
       x-tool: true
-  /v1/referrals/claim:
+  /v1/referral/claim:
     post:
       description: |-
         Records that the caller's org signed up through a referral code.
@@ -116292,9 +116292,9 @@ paths:
 
         Recording a referral grants nothing, and neither does anything downstream of it:
         the edge later advances to qualified when the referee makes metered spend
-        (POST /v1/admin/referrals/sweep), and that is the end of it. No credit is ever
+        (POST /v1/admin/referral/sweep), and that is the end of it. No credit is ever
         issued from this package.
-      operationId: post_referrals_claim
+      operationId: post_referral_claim
       requestBody:
         content:
           application/json:
@@ -116312,8 +116312,8 @@ paths:
           description: ok
       summary: Records that the caller's org signed up through a referral code.
       tags:
-      - referrals
-      x-app: referrals
+      - referral
+      x-app: referral
       x-public: true
       x-tool: true
   /v1/registry/images:
@@ -121939,7 +121939,7 @@ paths:
       x-app: usage
       x-public: true
       x-tool: true
-  /v1/validators:
+  /v1/validator:
     get:
       description: |-
         Returns the validator slots the caller's org has claimed.
@@ -121949,7 +121949,7 @@ paths:
         validated identity, so a caller can only ever see their own — a slot claimed by
         another org is not merely hidden from this list, it is unreachable through the
         whole surface.
-      operationId: get_validators
+      operationId: get_validator
       parameters:
       - description: |-
           Limit is how many slots to return, as a decimal string in the `?limit=`
@@ -121971,8 +121971,8 @@ paths:
           description: ok
       summary: Returns the validator slots the caller's org has claimed.
       tags:
-      - validators
-      x-app: validators
+      - validator
+      x-app: validator
       x-public: true
       x-tool: true
     post:
@@ -121995,7 +121995,7 @@ paths:
         with the existing identity (keys and NodeID are stable); a slot held by another
         org is 409. A cluster-less deployment still claims the slot, seals the keys and
         queues the registration, reporting the node as "node_pending".
-      operationId: post_validators
+      operationId: post_validator
       requestBody:
         content:
           application/json:
@@ -122016,18 +122016,18 @@ paths:
       summary: Claims a validator slot and provisions its node, after proving the
         caller's wallet owns the slot's NFT.
       tags:
-      - validators
-      x-app: validators
+      - validator
+      x-app: validator
       x-public: true
       x-tool: true
-  /v1/validators/{tokenId}:
+  /v1/validator/{tokenId}:
     get:
       description: |-
         Returns one claimed validator slot, scoped to the caller's org.
 
         A slot another org holds, and a slot nobody holds, are both 404 — never a
         different status, so this route cannot be used to probe which slots are taken.
-      operationId: get_validators_by_tokenid
+      operationId: get_validator_by_tokenid
       parameters:
       - description: |-
           TokenID is the slot's GenesisNFT token id, from the path, as a decimal
@@ -122048,11 +122048,11 @@ paths:
           description: ok
       summary: Returns one claimed validator slot, scoped to the caller's org.
       tags:
-      - validators
-      x-app: validators
+      - validator
+      x-app: validator
       x-public: true
       x-tool: true
-  /v1/validators/challenge:
+  /v1/validator/challenge:
     get:
       description: |-
         Issues the single-use nonce and the exact message a wallet must sign
@@ -122060,12 +122060,12 @@ paths:
 
         The nonce is bound to (validated org, slot) and stored server-side, so a
         signature obtained for one org or one slot can never be replayed for another,
-        and the message POST /v1/validators verifies is rebuilt from those same server
+        and the message POST /v1/validator verifies is rebuilt from those same server
         facts rather than trusted from the caller. Redeem it with
-        POST /v1/validators before it expires; it can be redeemed once.
+        POST /v1/validator before it expires; it can be redeemed once.
 
         A tokenId outside the Validator tier is refused here rather than after signing.
-      operationId: get_validators_challenge
+      operationId: get_validator_challenge
       parameters:
       - description: |-
           TokenID is the Validator-tier GenesisNFT token id, as a decimal string in
@@ -122087,8 +122087,8 @@ paths:
       summary: Issues the single-use nonce and the exact message a wallet must sign
         to claim a validator slot.
       tags:
-      - validators
-      x-app: validators
+      - validator
+      x-app: validator
       x-public: true
       x-tool: true
   /v1/videos/{id}:
@@ -124324,7 +124324,7 @@ tags:
   name: ads
 - description: Package affiliates is a partner program that pays commission on what
     your referrals spend.
-  name: affiliates
+  name: affiliate
 - description: 'Package agents is autonomous agents for your org: define them, run
     them, keep every run.'
   name: agents
@@ -124344,7 +124344,7 @@ tags:
   name: audit
 - description: 'Package authors is a royalty for open-source work: your repo runs,
     you get paid.'
-  name: authors
+  name: author
 - description: 'Package serve is the access decision behind an org-scoped call: who
     may do what, where, answered allow or deny.'
   name: authz
@@ -124428,13 +124428,13 @@ tags:
   name: engine
 - description: 'Package entitlements is what your org may run: what the plan grants,
     and which of those products are switched on.'
-  name: entitlements
+  name: entitlement
 - description: Package esign is a document out for signature, signed and filed with
     an audit trail.
   name: esign
 - description: Package eval is scoring a model on your own data, with a judge you
     choose.
-  name: evals
+  name: eval
 - description: 'Package analytics is product analytics: send an event, read back who
     did what.'
   name: event
@@ -124443,7 +124443,7 @@ tags:
   name: exec
 - description: 'Package experiments is A/B testing anything: a flag, an ad, a subject
     line, a model.'
-  name: experiments
+  name: experiment
 - description: 'Package explorer is chain data: your block indexers and how far each
     has caught up, plus the on-chain price feeds.'
   name: explorer
@@ -124563,7 +124563,7 @@ tags:
   name: plugins
 - description: Package prefs is your own settings — theme, density, pinned nav — following
     you across every Hanzo app.
-  name: prefs
+  name: pref
 - description: 'Package pricing is the price list: what every model, provider, GPU
     tier, tool and hosting plan costs.'
   name: pricing
@@ -124587,7 +124587,7 @@ tags:
   name: reference
 - description: 'Package referrals is referral ATTRIBUTION: who referred whom, and
     whether that referee ever became a real customer.'
-  name: referrals
+  name: referral
 - description: 'Package registry is your container and package registry: push images,
     pull them back, see what you store.'
   name: registry
@@ -124663,7 +124663,7 @@ tags:
   name: usage
 - description: 'Package validators is one-click validator onboarding: prove your Genesis
     NFT, get a node provisioned, queue its registration.'
-  name: validators
+  name: validator
 - description: 'Package visor is the compute you rent from Hanzo: machines, GPUs and
     clusters — launch one, resize it, tear it down.'
   name: visor

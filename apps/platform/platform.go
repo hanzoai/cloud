@@ -156,7 +156,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("platform.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	// UNIFIED PAYWALL (server-side enforcement). To gate the /v1/platform surface
-	// behind the caller's plan, wrap it with entitlements.RequireProduct(deps.Commerce,
+	// behind the caller's plan, wrap it with entitlement.RequireProduct(deps.Commerce,
 	// "platform") — note routes() registers FLAT absolute paths (not a group), so
 	// enabling means converting them to app.Group("/v1/platform", mw) or wrapping each.
 	// DEFERRED — DO NOT ENABLE YET: the "platform" product is ABSENT from @hanzo/plans

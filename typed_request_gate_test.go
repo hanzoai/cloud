@@ -211,8 +211,8 @@ var allowedRequestUses = map[string]string{
 		"typed op returns its Out and has no response value of its own. audited carries the ACTOR — the " +
 		"validated subject, email and admin bit, all headers principal.OrgFrom does not carry — onto the " +
 		"tamper-evident trail, and an audit record without its actor is a log, not a trail.",
-	"apps/authors/typed.go": "requireAdmin / connect+verify / requireBody. requireAdmin is the SuperAdmin " +
-		"gate on the six /v1/admin/authors ops, reading X-User-IsAdmin, which principal.OrgFrom does not " +
+	"apps/author/typed.go": "requireAdmin / connect+verify / requireBody. requireAdmin is the SuperAdmin " +
+		"gate on the six /v1/admin/author ops, reading X-User-IsAdmin, which principal.OrgFrom does not " +
 		"carry. connect and verify need the validated user subject (X-User-Id) to ask IAM for the caller's " +
 		"LINKED forge account, which is the strong proof of a login and the difference between a claimed " +
 		"and a proven identity. requireBody replays the c.Bind refusal the payout route has always answered " +
@@ -411,7 +411,7 @@ var allowedRequestUses = map[string]string{
 		"same read marks itself no-store, which is a RESPONSE header a typed op's signature drops. It may " +
 		"never be an In field: a subject a caller states is someone else's allowance. ONE call site; it " +
 		"fails closed off the HTTP path, where there is no principal and so no `own` count to answer.",
-	"apps/prefs/prefs.go": "subjectFrom — the preference OWNER, and it is not the org. The isolation " +
+	"apps/pref/prefs.go": "subjectFrom — the preference OWNER, and it is not the org. The isolation " +
 		"key is the canonical `<owner>/<name>` identity, so it needs the validated USER claim " +
 		"(X-User-Id) and validated-ness itself alongside the org; principal.OrgFrom carries only the " +
 		"owner half, and keying on that alone would hand every member of an org the same document. ONE " +
@@ -435,13 +435,13 @@ var allowedRequestUses = map[string]string{
 		"an image DIGEST, not a tenant), so there is no org predicate here at all — the one identity fact this " +
 		"surface reads is X-User-IsAdmin, which the build fleet / CI carries and principal.OrgFrom does not. " +
 		"Fails closed off the HTTP path: no request, no attested admin, no ingest.",
-	"apps/entitlements/entitlements.go": "resolveOrg — the ONE trust decision both enablement ops share. It " +
+	"apps/entitlement/entitlements.go": "resolveOrg — the ONE trust decision both enablement ops share. It " +
 		"needs two facts beyond the parked org: SuperAdmin-ness (X-User-IsAdmin, which lets an operator " +
 		"comp a product to ANY org) and the VALIDATED owner claim to compare the :org path segment against, " +
 		"which is what makes that segment an address the gate re-checks rather than an assertion it believes. " +
 		"It also hands back the request so a write is ATTRIBUTED to the validated user id. Fails closed off " +
 		"the HTTP path: no request, no attested principal, no access.",
-	"apps/entitlements/projection.go": "the platform-sudo bit on the console's paywall read. \"admin\" is " +
+	"apps/entitlement/projection.go": "the platform-sudo bit on the console's paywall read. \"admin\" is " +
 		"not a commerce product — it is X-User-IsAdmin, resolved from the unforgeable claim rather than " +
 		"through CheckEntitlement — and principal.OrgFrom does not carry it. The org itself is read with " +
 		"principal.OrgFrom, right above. Off the HTTP path it is simply false, which is this read's " +
@@ -532,7 +532,7 @@ var allowedRequestUses = map[string]string{
 		"an int field cannot tell ?limit=0 (a page of nothing) from ?limit=abc (unset). The TENANT and " +
 		"the SUBJECT are resolved through payer, never from the query. Answers the defaults off the HTTP " +
 		"path, where there is no page to ask for.",
-	"apps/affiliates/typed.go": "sudo / actor / requireBody — the affiliate program's ONE resolver of the request. " +
+	"apps/affiliate/typed.go": "sudo / actor / requireBody — the affiliate program's ONE resolver of the request. " +
 		"Every /v1/admin route gates on platform sudo (X-User-IsAdmin), which principal.OrgFrom does not " +
 		"carry; an application and the user-level referral mirror are ATTRIBUTED to the validated user id " +
 		"(X-User-Id) — an attribution, never an authority; and requireBody replays the c.Bind refusal the " +
@@ -606,7 +606,7 @@ var allowedRequestUses = map[string]string{
 		"authority, so it can never be an In field a caller supplies for itself, and principal.OrgFrom " +
 		"does not carry it. The org every query keys on is authoritative from principal.OrgFrom (tenant, " +
 		"in eval.go). False off the HTTP path: no request, no attested caller, no cross-tenant board.",
-	"apps/experiments/experiments.go": "actorOf / orgAdmin — the experiment plane's two identity seams, " +
+	"apps/experiment/experiments.go": "actorOf / orgAdmin — the experiment plane's two identity seams, " +
 		"and neither of them is the tenant. actorOf is the credential's email (c.UserEmail()), what a " +
 		"create and a decision are STAMPED with — an attribution, never an authority. orgAdmin is the " +
 		"gate promoting a winner takes, org-admin-ness (principal.IsOrgAdmin, X-User-IsOrgAdmin), because " +

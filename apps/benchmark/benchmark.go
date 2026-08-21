@@ -3,7 +3,7 @@
 // It is the native benchmark ARENA — run the top-N canonical public benchmarks
 // against any model or endpoint, under ONE standardized harness, measure
 // Hanzo's own models (enso, zen), and reconcile any external provider-reported
-// claim against that measurement. Sibling to /v1/evals (evals = YOUR data +
+// claim against that measurement. Sibling to /v1/eval (evals = YOUR data +
 // YOUR judge; benchmark = the canonical public tests, comparable +
 // provenance-first + leaderboard).
 //
