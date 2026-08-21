@@ -80,6 +80,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
+	github.com/graph-gophers/graphql-go v1.9.0 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.17 // indirect

@@ -1,6 +1,6 @@
 {
-  "paths": 1773,
-  "operations": 2403,
+  "paths": 1774,
+  "operations": 2404,
   "products": {
     "account": 10,
     "admin": 56,
@@ -53,7 +53,7 @@
     "functions": 11,
     "gateway": 3,
     "git": 46,
-    "graph": 5,
+    "graph": 6,
     "guide": 19,
     "help": 4,
     "iam": 208,

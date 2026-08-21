@@ -60,6 +60,22 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 		zip.WithOperationID("graphVocabulary"),
 		zip.WithSummary("The relations in use, and the rule that resolves a conflict"),
 		zip.WithTags("graph"))
+
+	// The GraphQL door, at the address apps/explorer already established for one
+	// (/v1/<product>/graphql). It is UNTYPED by construction rather than by
+	// omission: a typed op declares one In and one Out, and this route's input is
+	// a query whose OUTPUT SHAPE the caller chooses. Its bodies are declared
+	// instead, beside the routes, in the same init the rest of this package uses.
+	//
+	// A schema its resolvers do not satisfy is a mount failure, not a 500 on the
+	// first request — the parse happens once, here.
+	sc, err := schemaOf(o)
+	if err != nil {
+		// Same shape as openapi.Register's duplicate: a fact about the code, so
+		// it stops the binary rather than waiting for a caller to discover it.
+		panic("graph: graphql schema does not match its resolvers: " + err.Error())
+	}
+	zapp.Post("/v1/graph/graphql", serveGraphQL(sc))
 }
 
 // ── assert ───────────────────────────────────────────────────────────────────

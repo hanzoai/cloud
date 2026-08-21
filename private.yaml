@@ -24194,6 +24194,31 @@ components:
             $ref: '#/components/schemas/graphNode'
           type: array
       type: object
+    graphQLError:
+      properties:
+        message:
+          type: string
+        path:
+          items:
+            type: string
+          type: array
+      type: object
+    graphQLIn:
+      properties:
+        operationName:
+          type: string
+        query:
+          type: string
+        variables: {}
+      type: object
+    graphQLOut:
+      properties:
+        data: {}
+        errors:
+          items:
+            $ref: '#/components/schemas/graphQLError'
+          type: array
+      type: object
     graphReadOut:
       properties:
         assertions:
@@ -85547,6 +85572,34 @@ paths:
       x-app: graph
       x-public: true
       x-tool: true
+  /v1/graph/graphql:
+    post:
+      description: |-
+        Runs a GraphQL query against this organization's assertions.
+
+        It is the one door here a caller can TRAVERSE: the REST ops each answer a single question, so composing them — the entities this one points at, and what each of those resolves to — costs a request per hop with the intermediate keys held by the caller. Here that is one query and the nesting is the answer's shape.
+
+        It adds no way to ask anything new. Every field runs the SAME operation the matching REST route runs, so the tenancy, the as-of bound, the traversal bounds and the conflict rule are the ones already in force; the schema is served by introspection.
+
+        A query that cannot run answers 200 with an `errors` list, which is the wire every GraphQL client parses.
+      operationId: post_graph_graphql
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/graphQLIn'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphQLOut'
+          description: Success
+      summary: Ask the graph in one request, traversing.
+      tags:
+      - graph
+      x-app: graph
+      x-public: true
   /v1/graph/neighbors:
     post:
       operationId: graphNeighbors
