@@ -1,12 +1,12 @@
 ---
-name: bot_connect
+name: node_node
 version: "8.0.0"
-description: "Read bot connect: The socket a bot node dials and holds open to become invokable.."
+description: "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.."
 ---
 
-# Lux · BOT · connect
+# Lux · NODE · node
 
-Read-only Lux capability derived from the `bot` OpenAPI product. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `node` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/bot/connect` — The socket a bot node dials and holds open to become invokable.
+- `GET https://api.lux.network/v1/node` — Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.
 
 ## Response
 
-- `/v1/bot/connect` → JSON object.
+- `/v1/node` → `nodesView` object with fields: `nodes`.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/v1/bot/connect" \
+curl -sS "https://api.lux.network/v1/node" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

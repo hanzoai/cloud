@@ -1,12 +1,12 @@
 ---
-name: bot_nodes
+name: node_connect
 version: "8.0.0"
-description: "Read bot nodes: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.."
+description: "Read node connect: The socket a bot node dials and holds open to become invokable.."
 ---
 
-# Zoo · BOT · nodes
+# Zoo · NODE · connect
 
-Read-only Zoo capability derived from the `bot` OpenAPI product. Base URL `https://api.zoo.ngo`.
+Read-only Zoo capability derived from the `node` OpenAPI product. Base URL `https://api.zoo.ngo`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/bot/nodes` — Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.
+- `GET https://api.zoo.ngo/v1/node/connect` — The socket a bot node dials and holds open to become invokable.
 
 ## Response
 
-- `/v1/bot/nodes` → `nodesView` object with fields: `nodes`.
+- `/v1/node/connect` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.zoo.ngo/v1/bot/nodes" \
+curl -sS "https://api.zoo.ngo/v1/node/connect" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

@@ -25318,10 +25318,21 @@ components:
           description: |-
             AccessKey (pk-*) is the publishable identifier and lookup index;
             AccessSecret (sk-*) is the confidential secret.
+            AccessSecret IS NOT PERSISTED for a key minted at or after the digest
+            change: it carries the secret out to its holder once, in the mint response,
+            and the row keeps only AccessSecretDigest. It stays on the struct because
+            that one-time reveal is the whole point of minting, and it stays in the
+            schema because rows written before the change still hold a plaintext secret
+            that the resolver drains on first use.
           type: string
         accessSecret:
           type: string
         accessSecretDigest:
+          description: |-
+            AccessSecretDigest is how a presented secret finds its key: the resolver
+            digests what the caller sent and looks THAT up. It is what lets the row hold
+            no plaintext and still be found in one indexed read — a salted hash cannot be
+            looked up by value, which is the reason the plaintext was here.
           type: string
         application:
           type: string
@@ -86638,8 +86649,14 @@ paths:
         Creates a person or updates them in place, so a deployment can
         declare the accounts it needs and re-run that declaration safely.
 
+        It DESCRIBES an account it meets and GRANTS only to one it creates: org-admin is
+        never raised on a row that already exists, and a machine identity is answered by
+        name rather than adopted. Both are properties of the update itself, so a
+        steady-state reconcile — which changes neither — is unaffected.
+
         Passwords are hashed before they are stored. Leave the password out and their
-        current one is kept, so a redeploy never locks somebody out.
+        current one is kept, so a redeploy never locks somebody out; send the same one
+        again and it is kept too, so a steady-state re-run is not a rotation.
       operationId: upsertUser
       parameters:
       - in: header
@@ -88454,6 +88471,34 @@ paths:
       - iam
       x-app: iam
       x-public: true
+  /v1/iam/keys/org:
+    get:
+      description: |-
+        Answers which organization a publishable key belongs to — what a service calls to attribute a request that arrived carrying a key shipped in a browser. This is the noun spelling of `/v1/iam/resolve-key`, the same handler at the address that replaces it; both answer while callers migrate.
+
+        It names an ORGANIZATION and never a person. No path through it loads or returns a user, so a key placed in client code cannot become a way to learn who anyone is — which is the whole reason this is a separate door from the one below.
+
+        A key that is expired, secret rather than publishable, or simply unknown all answer with the same sentence and a `code` saying which it was. Only a confidential service that has already proved it may resolve keys reads that code — there is no anonymous caller here to probe which keys exist — and telling those apart is what lets a holder be told to re-mint an expired key instead of hunting a configuration error.
+      operationId: get_iam_keys_org
+      summary: Resolve a PUBLISHABLE key to the organization that owns it
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+  /v1/iam/keys/principal:
+    get:
+      description: |-
+        Answers who a secret key belongs to — the owner and name a gateway needs to attribute and bill a request that arrived carrying an `sk-`. This is the noun spelling of `/v1/iam/get-user?accessKey=`, the same handler at the address that replaces it; both answer while callers migrate.
+
+        It resolves a KEY and nothing else. The verb it replaces also reads a user by `?id=`, and carrying that here would make this a second address for the user read — the exact thing being retired. Ask for a person by name at the user read; ask here only what a credential resolves to.
+
+        Requires a confidential caller: the resolver authenticates as an app, so a request without that credential resolves nothing rather than falling back to an anonymous lookup. An unresolvable key answers with a `code` distinguishing expired from wrong-door from unknown, so the holder can be told which one cure applies.
+      operationId: get_iam_keys_principal
+      summary: Resolve a SECRET key to the principal it authenticates
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
   /v1/iam/keys/revoke:
     post:
       description: |-
@@ -89009,6 +89054,23 @@ paths:
       description: |-
         Returns the organizations you can see, newest first. Narrow it to one
         parent account, and set a limit and offset to page through the rest.
+
+        READING THE REGISTRY IS AN OPERATOR ACT, and the handler now says so itself.
+
+        It never did: the scope lived only in the Guard, which refuses a non-operator
+        GET with 403 before the handler runs. That was true and sufficient for as long
+        as HTTP was the only way in. It stopped being sufficient when the same typed op
+        became reachable over the agent door, where a request arrives at the handler
+        with no middleware in front of it — and this handler, reading no principal and
+        treating an absent Owner selector as no filter, answered with the whole table.
+        Measured on production: 670 organizations, 898KB, to a caller holding no
+        credential at all.
+
+        So the fact moves to where every door reaches it. The Guard keeps its own
+        refusal — two checks of one rule is not two rules, and the outer one still
+        spends nothing to refuse — but the rule no longer depends on which door was
+        used. A caller who wants the organizations they can ACT in asks Search, which
+        answers everyone from their own memberships.
       operationId: listOrganizations
       parameters:
       - in: query
