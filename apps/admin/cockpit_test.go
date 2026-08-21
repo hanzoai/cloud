@@ -620,7 +620,8 @@ func TestAnalytics_HandlerRealWiring(t *testing.T) {
 // IT IS THE ARRANGEMENT PRODUCTION HAS, and the reason these tests exist in this
 // shape. The cockpit's read surfaces (balance, subscriptions, ledger) still fan out
 // over HTTP to a commerce that may be anywhere, so the httptest commerce server
-// stays. The grant does not: a credit is a WRITE to a per-org ledger with ONE
+// stays for the ones still on it — subscriptions left for the plane and is served
+// here. The grant does not: a credit is a WRITE to a per-org ledger with ONE
 // writer, and that writer is the commerce PROCESS. Giving the test a reachable
 // commerce URL is what once made this suite green while every production grant
 // answered "commerce not configured" — the fake supplied a base URL the admin
@@ -650,6 +651,23 @@ func (f *cockpitFakes) servePlaneBooks(t *testing.T) {
 				Balance:  plane.Amount(money.FromCents(f.balances[org]).Unwrap()),
 			}, nil
 		}, zip.WithOperationID(plane.FinanceSpend))
+
+	// Subscriptions, on the same stand-in for the same reason: two apps answering
+	// "commerce" would shadow each other. Pro on acme, nothing on globex — the
+	// split the HTTP fixture served before the plan read left HTTP.
+	zip.Post[plane.SubsIn, plane.Subs](cloud.Plane(), "/finance/subs",
+		func(ctx context.Context, _ *plane.SubsIn) (*plane.Subs, error) {
+			org := cloud.Who(ctx).Org
+			if org == "" {
+				return nil, zip.ErrForbidden("subs: no org on the call")
+			}
+			if org != "acme" {
+				return &plane.Subs{}, nil
+			}
+			return &plane.Subs{Rows: []plane.Sub{
+				{Status: "active", MRRCents: 5000, PlanName: "Pro"},
+			}}, nil
+		}, zip.WithOperationID(plane.FinanceSubs))
 
 	zip.Post[plane.CreditIn, plane.Credited](cloud.Plane(), "/finance/credit",
 		func(ctx context.Context, in *plane.CreditIn) (*plane.Credited, error) {
