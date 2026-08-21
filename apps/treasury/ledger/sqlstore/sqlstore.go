@@ -375,12 +375,34 @@ func (s *Store) BalancesWithPrefix(ctx context.Context, prefix string) (map[stri
 	return out, rows.Err()
 }
 
+// Entries is the whole journal: every account, newest first, bounded.
 func (s *Store) Entries(ctx context.Context, limit int) ([]ledger.JournalEntry, error) {
+	return s.EntriesOn(ctx, "", limit)
+}
+
+// EntriesOn is [Store.Entries] narrowed to the entries that POST to one account —
+// the movements of a single wallet out of a file that holds many.
+//
+// The narrowing is in the QUERY and not in the caller, because limit is a page
+// size and the two orders give different answers: filtering after the limit pages
+// the FILE and then keeps whatever survives, so a quiet account in a busy file
+// reads back empty while its money sits there. Filtering first pages the account,
+// which is the page the caller asked for. treasury_postings is indexed on account,
+// so the narrow read is the cheap one.
+//
+// An empty account is every account, which is what makes [Store.Entries] this
+// function rather than a second copy of it.
+func (s *Store) EntriesOn(ctx context.Context, account string, limit int) ([]ledger.JournalEntry, error) {
 	// limit <= 0 means EVERY entry (the ledger.Root full scan); a positive limit
 	// bounds the admin journal read.
-	q := `SELECT id,kind,program,ref,memo,amount,created_at
-		   FROM treasury_entries ORDER BY created_at DESC, id DESC`
+	q := `SELECT id,kind,program,ref,memo,amount,created_at FROM treasury_entries`
 	args := []any{}
+	if account != "" {
+		q += ` WHERE EXISTS (SELECT 1 FROM treasury_postings p
+		                      WHERE p.entry_id = treasury_entries.id AND p.account = ?)`
+		args = append(args, account)
+	}
+	q += ` ORDER BY created_at DESC, id DESC`
 	if limit > 0 {
 		q += " LIMIT ?"
 		args = append(args, limit)
