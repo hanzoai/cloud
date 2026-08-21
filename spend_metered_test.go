@@ -187,9 +187,10 @@ func TestBillingFollowsTheOwnerNotTheTree(t *testing.T) {
 		}
 	}
 
-	// lsp is metered and routed /v1/code/lsp, inside free code's /v1/code. The
-	// leak direction: bill the owner, not the tree.
-	for _, p := range []string{"/v1/code/lsp", "/v1/code/lsp/definition"} {
+	// lsp is metered at its own root now (/v1/lsp, out from under free code's
+	// /v1/code — HIP-0139 §3). The live direction is the mirror: the metered
+	// owner is billed at its own address, and free code beside it is not.
+	for _, p := range []string{"/v1/lsp", "/v1/lsp/definition"} {
 		if got := manifest.OwnerOf(p); got != "lsp" {
 			t.Fatalf("OwnerOf(%s) = %q, want lsp — this test's subject moved", p, got)
 		}
@@ -197,12 +198,18 @@ func TestBillingFollowsTheOwnerNotTheTree(t *testing.T) {
 			t.Errorf("Billable(POST %s) = false; lsp owns this path and declares cloud.Metered", p)
 		}
 	}
+	if Billable("POST", "/v1/code/symbols") {
+		t.Error("Billable(POST /v1/code/symbols) = true; code declares cloud.Free and lsp no longer nests inside it")
+	}
 }
 
 // OwnerOf resolves by LONGEST prefix, which is what makes the check above sound.
 func TestOwnerOfPrefersTheMoreSpecificApp(t *testing.T) {
-	if got := manifest.OwnerOf("/v1/usage/activity"); got != "leaderboard" {
-		t.Errorf("OwnerOf(/v1/usage/activity) = %q, want leaderboard", got)
+	// leaderboard folded out of usage's tree (/v1/leaderboard); the deeper-row
+	// pair that remains is lsp-under-nothing vs code — so the specificity claim
+	// is held on entitlements' org subtree, which still nests by design.
+	if got := manifest.OwnerOf("/v1/entitlements/orgs/acme"); got != "entitlements" {
+		t.Errorf("OwnerOf(/v1/entitlements/orgs/acme) = %q, want entitlements", got)
 	}
 	if got := manifest.OwnerOf("/v1/usage"); got != "usage" {
 		t.Errorf("OwnerOf(/v1/usage) = %q, want usage", got)
