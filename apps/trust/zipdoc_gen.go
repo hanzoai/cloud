@@ -193,14 +193,6 @@ func init() {
 			"frameworkRow.units":       "Units is the plural of Unit.",
 		},
 	})
-	zip.Describe("GET /v1/trust/health", zip.Doc{
-		Description: "Health reports that the trust subsystem is mounted and which inventory it is\nrunning. Open: a liveness probe that needs a credential cannot answer the\nquestion it is asked.",
-		Fields: map[string]string{
-			"probe.service": "Service names the subsystem answering, always \"trust\".",
-			"probe.status":  "Status is \"ok\" when the bundle is compiled and dispatching.",
-			"probe.version": "Version is the embedded inventory's version — which inventory is running.",
-		},
-	})
 	zip.Describe("GET /v1/trust/policies", zip.Doc{
 		Description: "Lists your organization's published policies.",
 		Fields: map[string]string{
