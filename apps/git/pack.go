@@ -23,7 +23,13 @@ import (
 // sshUploadPack streams a clone/fetch over the SSH channel via
 // `git upload-pack <bareDir>`. Read-only: no side effects.
 func sshUploadPack(s *cloud.Service[state], ctx context.Context, org, project, name, protocol string, ch io.ReadWriteCloser) error {
-	bareDir := s.State.storage.absRepoPath(org, project, name)
+	// Both SSH doors run the pack to completion before returning — the channel
+	// IS the stream — so unlike the smart-HTTP clone the reader can be deferred.
+	bareDir, done, err := materializeAt(ctx, s, org, project, name)
+	if err != nil {
+		return err
+	}
+	defer done()
 	return runPackSSH(ctx, bareDir, svcUploadPack, protocol, ch)
 }
 
@@ -44,10 +50,14 @@ func sshUploadPack(s *cloud.Service[state], ctx context.Context, org, project, n
 // authenticates by key — so the confinement argument is "" and the namespace
 // rules apply alone, which is the same thing a human pushing over HTTPS gets.
 func sshReceivePack(s *cloud.Service[state], ctx context.Context, org, project, name, pusher, protocol string, ch io.ReadWriteCloser) error {
-	bareDir := s.State.storage.absRepoPath(org, project, name)
+	bareDir, done, err := materializeAt(ctx, s, org, project, name)
+	if err != nil {
+		return err
+	}
+	defer done()
 	before := branchTips(ctx, bareDir)
 	def := defaultBranchOf(ctx, bareDir)
-	err := runPackSSHScreened(ctx, bareDir, svcReceivePack, protocol, ch,
+	err = runPackSSHScreened(ctx, bareDir, svcReceivePack, protocol, ch,
 		func(cmds []refCommand, _ string) error {
 			verr := checkRefPolicy(cmds, def, "")
 			if verr != nil {

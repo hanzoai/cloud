@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
+	"errors"
 	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"net/http"
@@ -141,7 +142,11 @@ func infoRefs(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// Advertisement is bounded by ref count (not pack size) — safe to buffer.
-	bareDir := s.State.storage.absRepoPath(who.org, who.project, who.repo)
+	bareDir, done, err := materializeAt(c.Context(), s, who.org, who.project, who.repo)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open repo: %v", err)
+	}
+	defer done()
 	refs, err := advertiseRefs(c.Context(), bareDir, service, gitProtocol(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "advertise refs: %v", err)
@@ -172,11 +177,18 @@ func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("unexpected content-type for " + svcUploadPack)
 	}
 	body := packRequestBody(c)
-	bareDir := s.State.storage.absRepoPath(who.org, who.project, who.repo)
+	bareDir, done, err := materializeAt(c.Context(), s, who.org, who.project, who.repo)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open repo: %v", err)
+	}
 	stream, err := startPackRPC(c.Context(), s.Log, bareDir, svcUploadPack, gitProtocol(c), body)
 	if err != nil {
+		done()
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
+	// Not deferred: the pack outlives this handler. hold ties the reader to the
+	// stream's Close, which is the only event that means the clone is finished.
+	stream.hold(done)
 	c.SetHeader("Content-Type", "application/x-"+svcUploadPack+"-result")
 	setGitNoCache(c)
 	return c.SendStream(stream)
@@ -199,7 +211,16 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 	if ct := c.Header("Content-Type"); ct != "application/x-"+svcReceivePack+"-request" {
 		return zip.ErrBadRequest("unexpected content-type for " + svcReceivePack)
 	}
-	bareDir := s.State.storage.absRepoPath(org, project, name)
+	// A push must land on the repo's REAL history, so a released repo is fetched
+	// back before the ref policy reads a single tip. Judging a push against an
+	// empty directory would call every branch a create and let it through.
+	bareDir, done, err := materializeAt(c.Context(), s, org, project, name)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open repo: %v", err)
+	}
+	// Deferred, unlike the clone above: receive-pack runs synchronously — the
+	// pack is applied and the side effects fire before this handler returns.
+	defer done()
 
 	// THE REF POLICY, applied before a single object is indexed. Refusing BEFORE
 	// receive-pack runs also means a refused push costs no disk: the pack is
@@ -396,6 +417,25 @@ func fireBranchBuilds(s *cloud.Service[state], ctx context.Context, org, project
 func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project, name, branch, before, after, pusher string) {
 	org, project, name = strings.Clone(org), strings.Clone(project), strings.Clone(name)
 	branch, before, pusher = strings.Clone(branch), strings.Clone(before), strings.Clone(pusher)
+	// A LANDED LOCAL WRITE ENDS THE COPY. The repo now holds a commit its origin
+	// does not, so the origin can no longer reproduce it and reclaim.go must stop
+	// treating it as releasable — this is the one place a local ref advance is
+	// announced, so it is the one place that can say so.
+	//
+	// It is here rather than at the four write doors because the tenth door is
+	// the hazard: a writer added later announces itself through this function or
+	// it fires no build, and a repo whose pushes fire no build is a defect
+	// somebody notices. A repo that quietly lost a commit to a refetch is not.
+	//
+	// Measured, on the test that found this: a push landed on a released-and-
+	// refetched repo, the reader let go, reclaim released it again, and the next
+	// clone answered with the UPSTREAM's tip — the pushed commit gone, 200 OK.
+	s.State.cache.diverged(org, project, name)
+	if store, err := storeFor(s, org); err != nil {
+		s.Log.Warn("git: open store to end the copy", "org", org, "repo", name, "err", err)
+	} else if err := store.SetOrigin(ctx, org, project, name, ""); err != nil && !errors.Is(err, errNotFound) {
+		s.Log.Warn("git: end the copy", "org", org, "repo", name, "err", err)
+	}
 	if builds, err := cloud.OnGitPush(ctx, cloud.GitPushEvent{
 		Org: org, Project: project, Repo: name,
 		Ref: "refs/heads/" + branch, Commit: after, CloneURL: cloneURL(s, org, project, name),
