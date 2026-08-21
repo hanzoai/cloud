@@ -1,7 +1,7 @@
 ---
 name: billing_invoices
 version: "8.0.0"
-description: "Read billing invoices: List your org's billing invoices, Read one invoice, Download one invoice as a PDF attachment."
+description: "Read billing invoices: Lists the caller's invoices, newest first, with the count beside them., Read one invoice, Download one invoice as a PDF."
 ---
 
 # Lux · BILLING · invoices
@@ -14,9 +14,9 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/billing/invoices` — List your org's billing invoices
+- `GET https://api.lux.network/v1/billing/invoices` — Lists the caller's invoices, newest first, with the count beside them.
 - `GET https://api.lux.network/v1/billing/invoices/{id}` — Read one invoice
-- `GET https://api.lux.network/v1/billing/invoices/{id}/pdf` — Download one invoice as a PDF attachment
+- `GET https://api.lux.network/v1/billing/invoices/{id}/pdf` — Download one invoice as a PDF
 
 ## Parameters
 
@@ -26,8 +26,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/billing/invoices` → JSON object.
-- `/v1/billing/invoices/{id}` → `InvoiceOut` object with fields: `amountDueCents`, `amountPaidCents`, `createdAt`, `currency`, `customerEmail`, `id`, `lines`, `number`, `paymentRef`, `status`, `subtotalCents`, `userId`.
+- `/v1/billing/invoices` → `Invoices` object with fields: `count`, `invoices`.
+- `/v1/billing/invoices/{id}` → `Invoice` object with fields: `amountDueCents`, `amountPaidCents`, `createdAt`, `currency`, `customerEmail`, `id`, `lines`, `number`, `paymentRef`, `status`, `subtotalCents`, `userId`.
 - `/v1/billing/invoices/{id}/pdf` → JSON object.
 
 ## Example

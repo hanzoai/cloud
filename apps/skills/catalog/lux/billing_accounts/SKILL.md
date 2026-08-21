@@ -1,7 +1,7 @@
 ---
 name: billing_accounts
 version: "8.0.0"
-description: "Read billing accounts: The billing account you are signed in to, Who is on a billing account."
+description: "Read billing accounts: Answers the caller's billing accounts: the org itself, its currency, when it was opened, and the caller's own standing in it., Answers one billing account's roster.."
 ---
 
 # Lux · BILLING · accounts
@@ -14,19 +14,19 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/billing/accounts` — The billing account you are signed in to
-- `GET https://api.lux.network/v1/billing/accounts/{id}/members` — Who is on a billing account
+- `GET https://api.lux.network/v1/billing/accounts` — Answers the caller's billing accounts: the org itself, its currency, when it was opened, and the caller's own standing in it.
+- `GET https://api.lux.network/v1/billing/accounts/{id}/members` — Answers one billing account's roster.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string |  |
+| `id` | path | yes | string | ID is the billing account id, which for this store is the org's own id. |
 
 ## Response
 
-- `/v1/billing/accounts` → JSON object.
-- `/v1/billing/accounts/{id}/members` → JSON object.
+- `/v1/billing/accounts` → JSON array of `BillingAccount`.
+- `/v1/billing/accounts/{id}/members` → JSON array of `Holder`.
 
 ## Example
 

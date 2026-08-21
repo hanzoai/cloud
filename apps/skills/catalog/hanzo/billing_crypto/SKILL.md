@@ -1,7 +1,7 @@
 ---
 name: billing_crypto
 version: "8.0.0"
-description: "Read billing crypto: Follow one crypto deposit to settlement, Which chains and tokens a crypto top-up can use."
+description: "Read billing crypto: Reads one of the caller's own deposit intents back — pending, confirming, or succeeded., Answers which chains and tokens the crypto rail accepts — what an asset picker renders.."
 ---
 
 # Hanzo · BILLING · crypto
@@ -14,19 +14,19 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/billing/crypto/deposit/{id}` — Follow one crypto deposit to settlement
-- `GET https://api.hanzo.ai/v1/billing/crypto/options` — Which chains and tokens a crypto top-up can use
+- `GET https://api.hanzo.ai/v1/billing/crypto/deposit/{id}` — Reads one of the caller's own deposit intents back — pending, confirming, or succeeded.
+- `GET https://api.hanzo.ai/v1/billing/crypto/options` — Answers which chains and tokens the crypto rail accepts — what an asset picker renders.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string |  |
+| `id` | path | yes | string | ID is the deposit intent id. |
 
 ## Response
 
-- `/v1/billing/crypto/deposit/{id}` → JSON object.
-- `/v1/billing/crypto/options` → JSON object.
+- `/v1/billing/crypto/deposit/{id}` → `CryptoDeposit` object with fields: `addressTag`, `chain`, `depositAddress`, `expiresAt`, `id`, `status`, `token`.
+- `/v1/billing/crypto/options` → `CryptoOptions` object with fields: `chains`, `tokens`.
 
 ## Example
 

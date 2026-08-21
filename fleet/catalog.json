@@ -319,11 +319,6 @@
    "read": true
   },
   {
-   "id": "get_auto_pieces",
-   "doc": "Pieces is the retired-name alias of the connector catalogue. It serves exactly\nwhat GET /v1/auto/connectors serves, under the name this surface used\nbefore \"piece\" (the ActivePieces term) became \"connector\", and stays valid for\nclients pinned to the old path. Prefer /connectors.",
-   "read": true
-  },
-  {
    "id": "get_auto_runs",
    "doc": "Returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page.",
    "read": true

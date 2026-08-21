@@ -1,12 +1,12 @@
 ---
-name: auto_pieces
+name: commerce_deposits
 version: "8.0.0"
-description: "Read auto pieces: Pieces is the retired-name alias of the connector catalogue.."
+description: "Read commerce deposits: Read the crypto deposit watcher's runtime state, asset by asset."
 ---
 
-# Hanzo · AUTO · pieces
+# Hanzo · COMMERCE · deposits
 
-Read-only Hanzo capability derived from the `auto` OpenAPI product. Base URL `https://api.hanzo.ai`.
+Read-only Hanzo capability derived from the `commerce` OpenAPI product. Base URL `https://api.hanzo.ai`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/auto/pieces` — Pieces is the retired-name alias of the connector catalogue.
+- `GET https://api.hanzo.ai/v1/commerce/deposits` — Read the crypto deposit watcher's runtime state, asset by asset
 
 ## Response
 
-- `/v1/auto/pieces` → `Catalog` object with fields: `connectorCount`, `connectors`.
+- `/v1/commerce/deposits` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.hanzo.ai/v1/auto/pieces" \
+curl -sS "https://api.hanzo.ai/v1/commerce/deposits" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

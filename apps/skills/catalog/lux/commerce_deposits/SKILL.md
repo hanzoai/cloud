@@ -1,12 +1,12 @@
 ---
-name: auto_pieces
+name: commerce_deposits
 version: "8.0.0"
-description: "Read auto pieces: Pieces is the retired-name alias of the connector catalogue.."
+description: "Read commerce deposits: Read the crypto deposit watcher's runtime state, asset by asset."
 ---
 
-# Lux · AUTO · pieces
+# Lux · COMMERCE · deposits
 
-Read-only Lux capability derived from the `auto` OpenAPI product. Base URL `https://api.lux.network`.
+Read-only Lux capability derived from the `commerce` OpenAPI product. Base URL `https://api.lux.network`.
 
 ## Authentication
 
@@ -14,16 +14,16 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/auto/pieces` — Pieces is the retired-name alias of the connector catalogue.
+- `GET https://api.lux.network/v1/commerce/deposits` — Read the crypto deposit watcher's runtime state, asset by asset
 
 ## Response
 
-- `/v1/auto/pieces` → `Catalog` object with fields: `connectorCount`, `connectors`.
+- `/v1/commerce/deposits` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/v1/auto/pieces" \
+curl -sS "https://api.lux.network/v1/commerce/deposits" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
