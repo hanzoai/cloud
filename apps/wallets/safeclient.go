@@ -40,6 +40,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
 // safeHTTPTimeout bounds each product-API call. Deploy/propose fold in a
@@ -290,7 +292,11 @@ func (c *safeClient) do(ctx context.Context, method, path, org string, reqBody, 
 	respBody, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("safe %s %s: status %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(respBody)))
+		// The body is the upstream's, and this error is relayed to the caller by
+		// custodyHTTPError's default arm. A refusal routinely quotes the credential
+		// it refused, so scrub at the producer — every consumer of this error is
+		// then covered, including the ones not yet written.
+		return fmt.Errorf("safe %s %s: status %d: %s", method, path, resp.StatusCode, cloud.ScrubText(strings.TrimSpace(string(respBody))))
 	}
 	if out == nil {
 		return nil
