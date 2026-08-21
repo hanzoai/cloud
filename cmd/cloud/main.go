@@ -127,7 +127,7 @@ func doorConfig() zip.Config {
 		// faster than any sweep runs, and a bound restored a minute later is not a
 		// bound — that is how this pod came to hold every child it had, stop
 		// answering its own liveness probe, and get killed.
-		Warm:           manifest.Warm,
+		Warm:           manifest.Warm(),
 		ReadBufferSize: edge.ReadBufferSize(),
 		BodyLimit:      edge.BodyLimit(),
 		// Which hops are ours, so the framework's ONE answer at the seam is the

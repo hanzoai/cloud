@@ -291,6 +291,23 @@ type gitPackStream struct {
 
 func (g *gitPackStream) Read(p []byte) (int, error) { return g.stdout.Read(p) }
 
+// hold makes fn run when the stream closes, after the pack slot goes back.
+//
+// A handler that streams cannot DEFER the release of anything the stream needs:
+// SendStream hands the reader to the server and returns, so the deferred call
+// runs before the first byte is written. Anything whose lifetime is the pack's —
+// the cache reader that keeps a bare directory from being reclaimed mid-clone —
+// attaches here instead, where Close is the one event that means "done".
+func (g *gitPackStream) hold(fn func()) {
+	prev := g.release
+	g.release = func() {
+		if prev != nil {
+			prev()
+		}
+		fn()
+	}
+}
+
 func (g *gitPackStream) Close() error {
 	// The client is done (EOF) or gone (disconnect). On disconnect git may be
 	// blocked writing to a full stdout pipe, so close the read end (EPIPE) AND

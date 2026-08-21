@@ -139,6 +139,16 @@ func (o ops) mirror(ctx context.Context, in *mirrorReq) (*repoView, error) {
 	if err := o.s.State.storage.mirrorInto(ctx, t.org, project, name, src, gitCred{}); err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "mirror fetch: %v", err)
 	}
+	// The fetch just proved these bytes can be fetched again, so record where
+	// from. That is what admits the repo to the bound in reclaim.go: until a
+	// source has actually answered, the copy on disk is the only one there is.
+	// src carries no userinfo (mirrorSource strips it), so this writes a URL and
+	// never a credential.
+	if err := store.SetOrigin(ctx, t.org, project, name, src); err != nil {
+		// Best-effort, and the failure direction is safe: no origin means pinned,
+		// which costs disk rather than data.
+		o.s.Log.Warn("git mirror: record origin", "org", t.org, "repo", name, "err", err)
+	}
 	// Meter the mirrored bytes the same way a push is metered (the ONE storage
 	// bound). Best-effort — a metering miss must not fail a landed mirror.
 	r.SizeBytes = recordUsage(o.s, context.WithoutCancel(ctx), t.org, project, name)

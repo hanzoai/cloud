@@ -79,6 +79,7 @@ type state struct {
 	gitHost string     // the HTTPS git host (e.g. "git.hanzo.ai") named by the clone URLs a page prints
 	ssh     *sshServer // Git SSH transport listener
 	keys    *keyStore  // SSH public-key registry (global fingerprint index)
+	cache   *cache     // the bound on materialized bare repos (reclaim.go)
 }
 
 // storeFor resolves the caller's org-scoped repo-metadata store, opening the
@@ -225,6 +226,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		sshHost: gitSSHHost(deps.Domain),
 		gitHost: defaultSSHHost(deps.Domain),
 		keys:    keys,
+		cache:   newCache(),
 	}}
 	mounted.Store(s)
 

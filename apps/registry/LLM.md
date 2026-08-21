@@ -2,7 +2,7 @@
 
 Hanzo Registry's data planes are running products, not code in cloud: the OCI
 registry at **oci.hanzo.ai** (github.com/hanzoai/registry — CNCF distribution,
-S3-backed, Hanzo IAM token auth; alias registry.hanzo.ai) and the npm registry
+S3-backed, Hanzo IAM token auth) and the npm registry
 at **pkg.hanzo.ai** (hanzoai/pkg — verdaccio on S3, uplinked to npmjs; the
 hanzoai/git forge's /v1/packages ecosystems share the host). This app is the
 typed MANAGEMENT surface over both: what exists, who may pull it — cloud adds

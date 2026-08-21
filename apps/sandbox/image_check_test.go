@@ -18,7 +18,7 @@ func TestCheckImageRefusesAnotherOrgsNamespaceOnOurRegistry(t *testing.T) {
 		// THE HOLE. Our pull secret is fleet-wide, so without this the request
 		// fetches another tenant's private image and nothing in it is forged.
 		{"an org may NOT name another org's images on our registry", "acme", "oci.hanzo.ai/globex/private:v1", true},
-		{"the deprecated alias is still our registry", "acme", "registry.hanzo.ai/globex/private:v1", true},
+		{"a host that is not ours spends no credential of ours", "acme", "registry.hanzo.ai/globex/private:v1", false},
 		{"host match is case-insensitive", "acme", "OCI.HANZO.AI/globex/private:v1", true},
 	} {
 		t.Run(c.name, func(t *testing.T) {

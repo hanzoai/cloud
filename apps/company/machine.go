@@ -329,10 +329,11 @@ func guardKYCVerified(f *Formation) error {
 }
 
 // guardPaid is THE payment gate: documents cannot be generated until the one-time
-// $999 formation fee is settled.
+// formation fee is settled. The AMOUNT lives in the quote (fees.go), not in this
+// sentence — a figure written into an error drifts the day the price moves.
 func guardPaid(f *Formation) error {
 	if !f.Paid {
-		return fmt.Errorf("the $999 formation fee has not been paid")
+		return fmt.Errorf("the $%s formation fee has not been paid", dollars(feeCents()))
 	}
 	return nil
 }

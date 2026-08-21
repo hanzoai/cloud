@@ -67,7 +67,7 @@
 # build into ghcr.io (GH_PAT) before building so they resolve. REFRESH on a
 # toolchain bump: crane/regctl copy the new upstream into
 # ghcr.io/hanzoai/mirror/<name>:<tag> and repoint the digest below. Canonical
-# long-term home is registry.hanzo.ai/hanzoai/mirror/* — repoint once the runners
+# long-term home is oci.hanzo.ai/hanzoai/mirror/* — repoint once the runners
 # carry its IAM pull credentials (follow-up).
 
 FROM ghcr.io/hanzoai/mirror/golang:1.26.5-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS build

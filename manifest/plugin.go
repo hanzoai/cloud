@@ -16,6 +16,7 @@ package manifest
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -223,20 +224,70 @@ const idleAfter = 15 * time.Minute
 // per-child distribution is flat: 33 children, mean 167MiB, largest 251MiB. No
 // single subsystem dominates, so how many are up IS the bill.
 //
-// THIRTY-SIX, AND THE BINDING NUMBER IS THE REQUEST, NOT THE LIMIT. The container
-// requests 6Gi and is limited to 11Gi, and the kubelet scores eviction candidacy
-// against the REQUEST — so a pod comfortably inside its limit is still first in
-// line once it exceeds what it reserved, which is exactly how this one was evicted
-// for node memory and took the API down with it. 36 x 167MiB is ~5.9GiB plus a
-// ~200MiB host: at the request, not past it. An earlier 48 was sized against the
-// limit and allowed ~7.8GiB, 30% over the reservation.
+// THE BINDING NUMBER IS THE REQUEST, NOT THE LIMIT, and it is now READ rather
+// than assumed. The kubelet scores eviction candidacy against the REQUEST, so a
+// pod comfortably inside its limit is still first in line once it exceeds what it
+// reserved — which is exactly how this one was evicted for node memory and took
+// the API down with it. A process cannot see its own request (the cgroup carries
+// the limit), so the Deployment projects it through the downward API and this
+// reads it: one number, stated where it is decided, with the ceiling derived from
+// it. It was a hand-sized 36 against an assumed 6Gi, which meant raising the
+// reservation bought capacity the host would not use and lowering it left the host
+// budgeting against memory the pod no longer had, silently, in the direction that
+// gets it evicted.
 //
-// It sits just above the observed working set of 33, and that narrowness is the
-// real finding rather than a tuning choice: this pod's reservation barely covers
-// its own catalog. The levers are the REQUEST or the per-child GOMEMLIMIT, not
-// this number — lowering it below the working set would not save memory, it would
-// thrash, evicting something about to be asked for again.
-const Warm = 36
+// The floor is the observed working set, because a ceiling below it does not save
+// memory — it thrashes, evicting a child about to be asked for again — and the cap
+// is the app count, past which there is nothing left to hold.
+func Warm() int {
+	return warmFor(os.Getenv(memoryRequestEnv))
+}
+
+const (
+	// memoryRequestEnv carries the container's memory REQUEST in MiB, projected by
+	// the Deployment (resourceFieldRef requests.memory, divisor 1Mi). Unset is the
+	// unmanaged case — a developer's box, a test — and yields the reservation the
+	// count was hand-sized against, so behaviour off a cluster is what it was.
+	memoryRequestEnv = "CLOUD_MEMORY_REQUEST_MIB"
+	// perChildMiB is the measured mean resident size of one plugin child: 33
+	// children at 167MiB, flat, no subsystem dominating.
+	perChildMiB = 167
+	// hostMiB is what the host itself holds, off the children's budget.
+	hostMiB = 200
+	// defaultRequestMiB is the reservation in the deployment this was measured in,
+	// and therefore what an unmanaged process assumes.
+	defaultRequestMiB = 6 * 1024
+	// workingSet is the count observed live in the deployment the per-child figure
+	// was measured in. It is NOT a floor on the derivation: at a reservation that
+	// cannot hold it, holding it anyway is how a pod is OOM-killed, and a host that
+	// thrashes is strictly better than one that dies. It is what the shipped
+	// reservation is checked AGAINST (cmd/cloud/warm_test.go), which is the right
+	// place for it — whether the pod is big enough for its catalog is a question
+	// about the pod, not about this arithmetic.
+	workingSet = 33
+)
+
+// warmFor is Warm over a value the caller already holds, so the derivation is
+// testable without an environment. A malformed or absent value falls back to the
+// measured reservation rather than to zero: a ceiling of zero would hold no
+// children at all, which is an outage, and this must never be the thing that
+// causes one.
+func warmFor(requestMiB string) int {
+	mib := defaultRequestMiB
+	if n, err := strconv.Atoi(strings.TrimSpace(requestMiB)); err == nil && n > 0 {
+		mib = n
+	}
+	n := (mib - hostMiB) / perChildMiB
+	if n < 1 {
+		// A host that may hold no child at all serves nothing. One is the floor,
+		// and a reservation this small is the operator's to fix.
+		return 1
+	}
+	if n > len(Apps) {
+		return len(Apps)
+	}
+	return n
+}
 
 func (a App) resolve() zip.Plugin {
 	env := "CLOUD_" + strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))

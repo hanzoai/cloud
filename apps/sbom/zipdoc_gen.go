@@ -33,6 +33,6 @@ func init() {
 			"SbomIngested.componentCount": "ComponentCount is how many components the CycloneDX document yielded and this\ncall persisted.",
 			"SbomIngested.imageDigest":    "ImageDigest is the content-addressed digest the components were keyed under.",
 		},
-		Example: json.RawMessage(`{"imageDigest":"sha256:abc","imageRef":"registry.hanzo.ai/hanzo/cloud:v1","format":"cyclonedx","document":{"components":[]}}`),
+		Example: json.RawMessage(`{"imageDigest":"sha256:abc","imageRef":"oci.hanzo.ai/hanzo/cloud:v1","format":"cyclonedx","document":{"components":[]}}`),
 	})
 }
