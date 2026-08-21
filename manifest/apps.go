@@ -172,13 +172,12 @@ var Apps = []App{
 	// run is handed through — all three of which are agents' — so there is no store
 	// boundary to split on and nothing left to give /v1/coding a root of its own.
 	//
-	// /v1/agent is the conversation surface, and it is still a second root because
-	// hanzoai/agent registers those four routes at that literal path. Moving it is
-	// an upstream release: the handlers are unexported, hz.Mount takes the concrete
-	// *zip.App, and POST /v1/agents is already the typed create — so the fold needs
-	// both a prefix hz.Mount honours and an address for the round that the
-	// collection root is not.
-	{Name: "agents", Prefixes: []string{"/v1/agent", "/v1/agents"}},
+	// The conversation surface is /v1/agents/chat, under this root rather than
+	// beside it. It was a second root for as long as hanzoai/agent registered its
+	// four routes at one literal path; v1.0.6 takes the address from the composer
+	// (hz.MountAt), and the round answers at a sub-path because POST /v1/agents is
+	// already the typed create. One name, one root (HIP-1210).
+	{Name: "agents", Prefixes: []string{"/v1/agents"}},
 	{Name: "link", Prefixes: []string{"/v1/link"}, Stage: Beta},
 	{Name: "wallets", Prefixes: []string{"/v1/wallets"}, Stage: Beta},
 	{Name: "x402", Prefixes: []string{"/v1/x402"}, Stage: Beta},
