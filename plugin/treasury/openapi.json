@@ -20,7 +20,7 @@
       "name": "admin"
     },
     {
-      "name": "finance"
+      "name": "treasury"
     }
   ],
   "paths": {
@@ -215,13 +215,37 @@
         "x-tool": true
       }
     },
-    "/v1/finance/accounts": {
+    "/v1/treasury": {
       "get": {
-        "operationId": "get_finance_accounts",
+        "operationId": "get_treasury",
+        "summary": "Returns the reserve fund's health and the current revenue-share policy for any validated caller.",
+        "description": "Returns the reserve fund's health and the current revenue-share\npolicy for any validated caller. It is a TRANSPARENCY view — a partner or\nauthor can see that the pool backing their payouts is solvent — and NOT per-org\nmoney, which is the customer's own commerce balance at /v1/billing/balance. The\npolicy is read-only here; only a SuperAdmin sets it.",
+        "tags": [
+          "treasury"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreasuryReport"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/treasury/accounts": {
+      "get": {
+        "operationId": "get_treasury_accounts",
         "summary": "Returns the ledger accounts the caller may see, with their balances.",
         "description": "Returns the ledger accounts the caller may see, with their\nbalances. It is tenant-isolated SERVER-SIDE: an ordinary caller sees ONLY\naccounts under its own \"org:\u003ctenant\u003e:\" prefix, never house accounts and never\nanother tenant's. A SuperAdmin may widen with ?scope=house (the reserve,\nrevenue and payout house accounts) or ?org=\u003ctenant\u003e — the only way to cross the\ntenant boundary, and only for platform sudo. The answer is honestly empty until\na tenant has ledger postings.",
         "tags": [
-          "finance"
+          "treasury"
         ],
         "parameters": [
           {
@@ -249,30 +273,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/accountsOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/finance/treasury": {
-      "get": {
-        "operationId": "get_finance_treasury",
-        "summary": "Returns the reserve fund's health and the current revenue-share policy for any validated caller.",
-        "description": "Returns the reserve fund's health and the current revenue-share\npolicy for any validated caller. It is a TRANSPARENCY view — a partner or\nauthor can see that the pool backing their payouts is solvent — and NOT per-org\nmoney, which is the customer's own commerce balance at /v1/billing/balance. The\npolicy is read-only here; only a SuperAdmin sets it.",
-        "tags": [
-          "finance"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TreasuryReport"
                 }
               }
             },
