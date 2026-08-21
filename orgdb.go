@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	// cek is the ONE opener: cek derives this database's key from the process
@@ -106,6 +107,20 @@ type OrgStore[T io.Closer] struct {
 	byNS     map[namespace.Namespace]T
 	durables map[namespace.Namespace]*org.Durable  // parallel to byNS, populated only when dur != nil
 	inflight map[namespace.Namespace]*openState[T] // durable opens in progress, deduped by namespace (M1)
+	// used is when each open store was last handed to a caller — the input to the
+	// idle deadline reclaim evicts on. Held by mu, cleared with byNS.
+	used map[namespace.Namespace]time.Time
+	// maxOpen is the TARGET size of the open set; 0 disables reclaim entirely,
+	// which is what a caller that genuinely wants every entity resident sets.
+	// idleAfter is how long a store must go untouched before it may be released:
+	// For hands out a bare handle, so anything more recent than this may still be
+	// in a caller's hands. Together they are the whole policy.
+	maxOpen   int
+	idleAfter time.Duration
+	// evictions counts stores released by reclaim, so a test can tell "the bound
+	// held because nothing needed evicting" from "the bound held because eviction
+	// works" — two very different green runs.
+	evictions atomic.Int64
 	// closed is set by CloseAll and never cleared, which is what makes closing
 	// TERMINAL rather than a reset. Every caller of CloseAll is a Shutdown path,
 	// and a request still in flight during a rollout reaches For() after it: with
@@ -161,13 +176,139 @@ func NewOrgStore[T io.Closer](b Base, subsystem string, open func(*sql.DB) (T, e
 		byNS:      map[namespace.Namespace]T{},
 		durables:  map[namespace.Namespace]*org.Durable{},
 		inflight:  map[namespace.Namespace]*openState[T]{},
+		used:      map[namespace.Namespace]time.Time{},
+		maxOpen:   MaxOpenPerStore,
+		idleAfter: StoreIdleAfter,
 	}
 }
+
+// MaxOpenPerStore bounds how many per-entity SQLite handles ONE OrgStore keeps
+// open at a time. It is a CEILING on unbounded growth, not a tuning knob: a
+// deployment serving fewer entities than this never reaches it and never evicts.
+//
+// It exists because the cache had no upper bound at all. Every namespace ever
+// asked for kept its handle — and its file descriptor, its page cache and, on the
+// durable plane, its lease — for the life of the process, so a host's memory was
+// a function of how many tenants had ever touched it rather than of how many were
+// active. That is the opposite of the property the durable plane is built for: an
+// org's state is re-derivable from the object store, which is exactly what makes
+// a pod disposable, and holding every org open forever spends that property.
+//
+// It is PER STORE and a binary runs one per subsystem, so the process-wide worst
+// case is this times the number of subsystems that keep per-entity files. Sized
+// so that is comfortable rather than tight — the value here is that the number is
+// FINITE, and the eviction below is what has to be correct.
+const MaxOpenPerStore = 256
+
+// StoreIdleAfter is how long a per-entity store must go untouched before reclaim
+// may release it. It is the SAFETY half of the bound above, not a tuning knob:
+// For returns a bare handle that its caller uses after the call returns, so a
+// store touched more recently than this may still be in someone's hands and
+// closing it is a use-after-close on a live database.
+//
+// Five minutes is chosen to be far longer than any request that holds one of
+// these handles, so a store past it is one nobody is inside — the same reasoning
+// (and the same shape) as the plugin reaper's own idle bound.
+const StoreIdleAfter = 5 * time.Minute
 
 // For returns the store the namespace names, opening and migrating it on first
 // use and caching it thereafter. Isolation is PHYSICAL: a distinct namespace
 // resolves to a distinct file, so a query in one can never reach another's rows.
 func (c *OrgStore[T]) For(ns namespace.Namespace) (T, error) { return c.forNS(ns) }
+
+// touch records that ns was just used. Held by c.mu.
+func (c *OrgStore[T]) touch(ns namespace.Namespace) { c.used[ns] = time.Now() }
+
+// reclaim releases stores that have gone IDLE, oldest first, while the open set
+// is over maxOpen. It runs after every For, where in the ordinary case it is a
+// length check and a return.
+//
+// AN EVICTION IS A DRAIN OF ONE ORG, NOT A CLOSED FILE HANDLE. It takes exactly
+// the path CloseAll takes — the Durable's own Close, which ships the final state
+// fenced at the lease round and releases ownership — because a handle closed out
+// from under the fence leaves an org owned by a replica that is no longer serving
+// it, and the next writer waits for a lease nobody will release.
+//
+// IDLE TIME IS THE CRITERION, AND RANK IS NOT. For returns a bare handle and the
+// caller uses it after the call returns, so evicting the least recently USED
+// store closes a database out from under whoever is holding it: under load a
+// store touched a millisecond ago is still the coldest of N, and a rank-ordered
+// eviction picks it. That is not a theoretical race — it was measured on the
+// first draft of this function, which lost 21 acknowledged writes across a 40-org
+// run and answered `sql: database is closed` to four live writers. A store
+// touched within idleAfter is therefore NEVER a candidate, however many others
+// arrive: no request holds a handle for minutes, so a store past that deadline is
+// one nobody is inside.
+//
+// IT WILL EXCEED THE BOUND RATHER THAN TAKE A LIVE STORE, and that direction is
+// chosen. If nothing is idle enough, the open set stays over maxOpen and says so
+// — memory grows, which is visible and recoverable, where a database closed under
+// a writer loses a tenant's data, which is neither. maxOpen is a target that
+// idleAfter enforces, not a ceiling the process may violate correctness to hold.
+//
+// THE SHIP RACES A RE-OPEN, AND THE FENCE ANSWERS IT. The victim leaves byNS
+// before its state ships, so a request arriving for that org in the interval
+// opens it again and claims a strictly HIGHER round; the evicting ship then loses
+// its conditional PUT and is refused rather than applied, which is the correct
+// outcome and the reason eviction routes through the fence instead of around it.
+// No acknowledged write is at stake either way — ship-before-ack has already
+// shipped every write a caller was told succeeded.
+//
+// A namespace with an open in flight is never chosen, so eviction cannot race the
+// open it would evict. The victim is picked by a scan rather than by a linked
+// list: the set is bounded and a scan happens only when the bound is already
+// exceeded, so the list's bookkeeping would cost more than it saves.
+func (c *OrgStore[T]) reclaim() {
+	for {
+		c.mu.Lock()
+		if c.closed || c.maxOpen <= 0 || len(c.byNS) <= c.maxOpen {
+			c.mu.Unlock()
+			return
+		}
+		cutoff := time.Now().Add(-c.idleAfter)
+		var victim namespace.Namespace
+		var oldest time.Time
+		found := false
+		for ns := range c.byNS {
+			if _, busy := c.inflight[ns]; busy {
+				continue
+			}
+			u := c.used[ns]
+			if u.After(cutoff) { // in use recently enough that a caller may hold it
+				continue
+			}
+			if !found || u.Before(oldest) {
+				victim, oldest, found = ns, u, true
+			}
+		}
+		if !found {
+			// Over the bound with nothing idle: every open store is live. Holding
+			// them is the safe answer, and the operator is the one who can act on it.
+			if c.log != nil {
+				c.log.Warn("org stores over the open bound and all in use — holding them rather than closing a live database",
+					"subsystem", c.subsystem, "open", len(c.byNS), "bound", c.maxOpen, "idle_after", c.idleAfter)
+			}
+			c.mu.Unlock()
+			return
+		}
+		st, d := c.byNS[victim], c.durables[victim]
+		delete(c.byNS, victim)
+		delete(c.durables, victim)
+		delete(c.used, victim)
+		c.mu.Unlock()
+
+		if d != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
+			_ = d.Close(ctx) // final fenced ship + lease release
+			cancel()
+		}
+		_ = st.Close()
+		c.evictions.Add(1)
+		if c.log != nil {
+			c.log.Debug("org store evicted", "subsystem", c.subsystem, "namespace", victim)
+		}
+	}
+}
 
 // Has reports whether the namespace ALREADY has a store for this subsystem on
 // disk, without opening or creating anything.
@@ -214,6 +355,10 @@ func exists(path string) bool {
 // enumeration resolve to the ONE handle — never a second open of the same file
 // (which the at-rest cek layer does not support concurrently).
 func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
+	// One reclaim site, after the open resolves and every lock this function takes
+	// is released (the local-only path unlocks via its own defer, which LIFO puts
+	// ahead of this one). On a cache hit inside the bound it is a length check.
+	defer c.reclaim()
 	var zero T
 	path, err := namespace.Path(c.dataDir, ns, c.subsystem)
 	if err != nil {
@@ -232,6 +377,7 @@ func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 		// only does real work when the store is unowned AND newly elected (rare).
 		d := c.durables[ns]
 		if d == nil || !d.PendingPromotion() {
+			c.touch(ns)
 			c.mu.Unlock()
 			return st, nil
 		}
@@ -253,6 +399,7 @@ func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 		if d2 != nil { // a usable store (promoted writer, or the kept read-only one)
 			c.byNS[ns] = st2
 			c.durables[ns] = d2
+			c.touch(ns)
 		}
 		c.mu.Unlock()
 		close(inf.done)
@@ -278,6 +425,7 @@ func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 			return zero, err
 		}
 		c.byNS[ns] = st
+		c.touch(ns)
 		return st, nil
 	}
 	// Durable: run the open (object-store hydrate + cek) with c.mu RELEASED so a
@@ -300,6 +448,7 @@ func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 	if inf.err == nil {
 		c.byNS[ns] = inf.st
 		c.durables[ns] = inf.d
+		c.touch(ns)
 	}
 	c.mu.Unlock()
 	close(inf.done)
@@ -530,5 +679,6 @@ func (c *OrgStore[T]) CloseAll() error {
 	c.byNS = map[namespace.Namespace]T{}
 	c.durables = map[namespace.Namespace]*org.Durable{}
 	c.inflight = map[namespace.Namespace]*openState[T]{}
+	c.used = map[namespace.Namespace]time.Time{}
 	return first
 }
