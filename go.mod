@@ -621,7 +621,6 @@ require (
 	github.com/volcengine/volc-sdk-golang v1.0.241 // indirect
 	github.com/volcengine/volcengine-go-sdk v1.0.141 // indirect
 	github.com/wangbin/jiebago v0.3.2 // indirect
-	github.com/workweixin/weworkapi_golang v0.0.0-20200831071321-c1fdfd3d6e7d // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
@@ -686,7 +685,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.5
-	github.com/hanzoai/ai v1.833.106
+	github.com/hanzoai/ai v1.833.107
 	github.com/hanzoai/authz v1.10.31
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.15
