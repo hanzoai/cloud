@@ -22,7 +22,7 @@ import (
 // → site-build pipeline — instead of a batch job copying approved shots into the
 // site, the publish EDGE materializes the asset's S3 URL into the org's Hanzo
 // Commerce store Listing, the SAME display layer karma.style already reads at runtime
-// (site/commerce.js: GET /v1/store/:store/listing → headerImage.url).
+// (site/commerce.js: GET /v1/commerce/store/:store/listing → headerImage.url).
 //
 // Decomplected exactly like the social Distributor (publish.go/channels.go):
 //   - Storefront is the EDGE (Hanzo Commerce) — the ONLY place commerce is touched.
@@ -163,7 +163,7 @@ func (s commerceStorefront) Publish(ctx context.Context, org string, req Storefr
 			"alt":  req.Caption,
 		},
 	})
-	path := "/v1/store/" + url.PathEscape(storeID) + "/listing/" + url.PathEscape(req.Design)
+	path := "/v1/commerce/store/" + url.PathEscape(storeID) + "/listing/" + url.PathEscape(req.Design)
 	status, _, err := s.do(ctx, http.MethodPut, path, org, token, body)
 	if err != nil {
 		return StorefrontResult{}, err
@@ -203,11 +203,11 @@ func (s commerceStorefront) ProductExists(ctx context.Context, org, handle strin
 	}
 }
 
-// currentStore resolves the org's default store id via GET /v1/store/current (the same
+// currentStore resolves the org’s default store id via GET /v1/commerce/store/current (the same
 // endpoint the admin dashboard uses). The org is pinned by the X-Org-Id header behind
 // the admin service token, so the resolved store is always the caller's own.
 func (s commerceStorefront) currentStore(ctx context.Context, org, token string) (string, error) {
-	status, raw, err := s.do(ctx, http.MethodGet, "/v1/store/current", org, token, nil)
+	status, raw, err := s.do(ctx, http.MethodGet, "/v1/commerce/store/current", org, token, nil)
 	if err != nil {
 		return "", err
 	}

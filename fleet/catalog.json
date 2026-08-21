@@ -578,6 +578,11 @@
    "read": true
   },
   {
+   "id": "get_commerce_health",
+   "doc": "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated: a probe that needs a credential is a probe that\nreports the credential.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
    "id": "issueInvoice",
    "doc": "Issues a draft invoice: moves it to OPEN, assigns its number, and makes it\ncollectible.\n\nOnly a draft can be issued. An invoice already open, paid or void is refused\nwith the state machine's own reason rather than being silently re-issued, which\nwould mint a second number for one debt.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
