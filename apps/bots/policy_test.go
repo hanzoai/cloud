@@ -20,7 +20,7 @@
 // tests (node-invoke-system-run-approval*.test.ts). They are the specification
 // for the approval match, and they are carried over case for case.
 
-package bot
+package bots
 
 import (
 	"strings"

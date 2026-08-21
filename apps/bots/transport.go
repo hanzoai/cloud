@@ -17,7 +17,7 @@
 //
 // The package doc lives once, in node.go.
 
-package bot
+package bots
 
 import (
 	"bufio"
@@ -35,7 +35,7 @@ import (
 
 const (
 	// urlEnv is the runtime base — the in-cluster service the control plane calls
-	// server-side AND the target the /v1/bot/* ops face relays to. ONE knob: a
+	// server-side AND the target the /v1/bots/* ops face relays to. ONE knob: a
 	// second would let the two disagree about which runtime is "the" runtime.
 	urlEnv     = "BOT_GATEWAY_URL"
 	defaultURL = "http://bot-gateway.hanzo.svc"
