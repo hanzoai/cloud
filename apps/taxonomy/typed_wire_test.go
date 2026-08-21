@@ -187,7 +187,7 @@ func TestSeedingIsFirstBootOnly(t *testing.T) {
 	if n != 186 {
 		t.Fatalf("first seed wrote %d taxa, want 186", n)
 	}
-	if _, err := store.DeleteTaxon(t.Context(), platformOrg, "overview"); err != nil {
+	if _, err := store.DeleteTaxon(t.Context(), hanzo, "overview"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	again, err := seed(t.Context(), store)
@@ -197,7 +197,7 @@ func TestSeedingIsFirstBootOnly(t *testing.T) {
 	if again != 0 {
 		t.Fatalf("the seed rewrote %d taxa into a populated store", again)
 	}
-	taxa, err := store.Taxa(t.Context(), platformOrg, "")
+	taxa, err := store.Taxa(t.Context(), hanzo, "")
 	if err != nil {
 		t.Fatalf("taxa: %v", err)
 	}
@@ -757,8 +757,8 @@ func TestSuperWritesThePlatform(t *testing.T) {
 			got = e
 		}
 	}
-	if got.Owner != platformOrg {
-		t.Fatalf("a SuperAdmin's write is owned by %q, want the platform org %q", got.Owner, platformOrg)
+	if got.Owner != hanzo {
+		t.Fatalf("a SuperAdmin's write is owned by %q, want the platform org %q", got.Owner, hanzo)
 	}
 	// Every tenant sees it, because it is platform state.
 	for _, who := range []map[string]string{adminA, adminB, memberA, anon} {
