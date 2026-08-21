@@ -78,9 +78,17 @@ var severityOf = map[DriftKind]DriftSeverity{
 // DriftFlag is a single drift finding: its kind, severity, and a human-readable
 // reason (apps-drift.ts `DriftFlag`).
 type DriftFlag struct {
-	Kind     DriftKind     `json:"kind"`
+	// Kind is which finding this is, one of stale, un-rolled, floating-declared,
+	// floating-running, no-release or zero-assets. It is what code matches on, and
+	// the kinds are independent — one row can carry several at once.
+	Kind DriftKind `json:"kind"`
+	// Severity is this ONE finding's weight — yellow for stale and un-rolled, red
+	// for the other four. It is a constant of the kind (severityOf), never a
+	// judgement about the row, so the same kind always weighs the same.
 	Severity DriftSeverity `json:"severity"`
-	Message  string        `json:"message"`
+	// Message is the finding in words, naming the tags that produced it ("running
+	// v1.2.3 has not rolled to declared v1.2.4"). For display: match on Kind.
+	Message string `json:"message"`
 }
 
 // Verdict is the drift verdict for one observed service row: the ordered flags
@@ -94,8 +102,15 @@ type DriftFlag struct {
 // own doc comment already used for it. The JSON field is still `drift`: the wire is
 // untouched.
 type Verdict struct {
+	// Severity is the roll-up over Flags — red if any flag is red, else yellow if
+	// any is yellow, else ok. It is the column a board sorts and filters on, and
+	// "ok" is exactly what no flags means.
 	Severity DriftSeverity `json:"severity"`
-	Flags    []DriftFlag   `json:"flags"`
+	// Flags are the findings behind the severity, in detection order:
+	// floating-declared, floating-running, stale, un-rolled, then the
+	// release-artifact ones. Always present — `[]` for a row that runs what it
+	// declares, never null.
+	Flags []DriftFlag `json:"flags"`
 }
 
 // Observed is the minimal set of already-observed tag fields the drift derivation
