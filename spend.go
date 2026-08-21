@@ -448,9 +448,17 @@ func Reachable(path string) bool {
 // shell resolves before it knows which org it is buying for answered at a bare
 // /v1/orgs, and folding it under the capability that serves it brought it inside a
 // tree this list already had.
+//
+// The SuperAdmin plan and catalog CMS is inside /v1/commerce/ for the same reason,
+// and it got there the hard way. It was exempt under a "/v1/plans/" entry; the plan
+// capability then took /v1/plan, that entry followed it, and the CMS rows — still at
+// /v1/plans/{entries,seed} — were left outside every tree here, one flag flip away
+// from a 402 on the surface an operator prices the catalog from. The rows now answer
+// under commerce's own root, which this list already had, so the exemption is a
+// property of where they live rather than a second entry to keep in step.
 var reachableTrees = []string{
 	"/v1/billing/",      // the whole money surface: subscribe, top up, AND the inbound provider webhooks.
-	"/v1/commerce/",     // the co-resident commerce plane the checkout and tenant reads drive.
+	"/v1/commerce/",     // the checkout, the tenant reads, AND the SuperAdmin plan + catalog CMS.
 	"/v1/iam/",          // IAM login / OAuth token exchange / .well-known OIDC discovery.
 	"/v1/account/",      // keys, csrf, appearance, avatar, embed and the org create + switch.
 	"/v1/admin/",        // platform sudo — including the cockpit that holds this gate's kill switch.
