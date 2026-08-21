@@ -207,9 +207,9 @@ func TestBillingFollowsTheOwnerNotTheTree(t *testing.T) {
 func TestOwnerOfPrefersTheMoreSpecificApp(t *testing.T) {
 	// leaderboard folded out of usage's tree (/v1/leaderboard); the deeper-row
 	// pair that remains is lsp-under-nothing vs code — so the specificity claim
-	// is held on entitlements' org subtree, which still nests by design.
-	if got := manifest.OwnerOf("/v1/entitlements/orgs/acme"); got != "entitlements" {
-		t.Errorf("OwnerOf(/v1/entitlements/orgs/acme) = %q, want entitlements", got)
+	// is held on entitlement's org subtree, which still nests by design.
+	if got := manifest.OwnerOf("/v1/entitlement/orgs/acme"); got != "entitlement" {
+		t.Errorf("OwnerOf(/v1/entitlement/orgs/acme) = %q, want entitlement", got)
 	}
 	if got := manifest.OwnerOf("/v1/usage"); got != "usage" {
 		t.Errorf("OwnerOf(/v1/usage) = %q, want usage", got)

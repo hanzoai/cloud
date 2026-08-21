@@ -1,0 +1,81 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package prefs is your own settings — theme, density, pinned nav — following you across every Hanzo app.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "pref"
+    }
+  ],
+  "paths": {
+    "/v1/pref": {
+      "get": {
+        "operationId": "get_pref",
+        "summary": "Returns the signed-in caller's OWN preference document — the theme, density and pinned nav that follow them across every Hanzo surface.",
+        "description": "Returns the signed-in caller's OWN preference document — the theme,\ndensity and pinned nav that follow them across every Hanzo surface. There is no\npath to another user's preferences: not for an org admin, not for a platform\nSuperAdmin, because the subject is built from the validated credential and is the\nmandatory predicate on the read. A caller who has never saved anything gets an\nempty document at 200, never a 404, so the user menu always renders.",
+        "tags": [
+          "pref"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/prefsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "patch": {
+        "operationId": "patch_pref",
+        "summary": "Save the preference keys your surface owns, leaving every other key alone",
+        "description": "Merges a JSON object key-wise into the signed-in caller's OWN preference document and answers with the whole document after the merge, so a surface saves `theme` without having to send back the `density` another surface owns. The merge is SHALLOW and the key space is open: an unnamed key is left untouched, a named key is replaced whole, and a key sent with a `null` value is DELETED. The subject is the `\u003cowner\u003e/\u003cname\u003e` identity built from the validated credential and is the mandatory predicate on the write, so there is no path to another user's preferences — not for an org admin, not for a platform SuperAdmin. Fails closed: no validated principal is 403; an empty body or a literal `null` is 400; and a patch or a resulting document over 16 KiB or 128 keys is 413.",
+        "tags": [
+          "pref"
+        ],
+        "x-public": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "prefsView": {
+        "properties": {
+          "prefs": {
+            "description": "Prefs is the caller's preference document: an opaque JSON object whose keys\nthe surfaces own, returned verbatim. `{}` when nothing has been saved."
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when the document was last written, unix seconds. Absent when\nnothing has been saved.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

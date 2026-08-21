@@ -1,0 +1,370 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package referrals is referral ATTRIBUTION: who referred whom, and whether that referee ever became a real customer.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "referral"
+    }
+  ],
+  "paths": {
+    "/v1/admin/referral/bonuses": {
+      "get": {
+        "operationId": "get_admin_referral_bonuses",
+        "summary": "Returns every referral edge in the directory with a fleet summary.",
+        "description": "Returns every referral edge in the directory with a fleet summary.\n\nSuperAdmin only, fail-closed. This is the ATTRIBUTION directory — who referred\nwhom and whether that referee became a customer. It carries no amounts because\nthis package issues none. The cross-tenant referral ANALYTICS board (top\nreferrers, conversion) is a different surface, GET /v1/admin/affiliate/referrals,\nowned by the affiliates subsystem over the shared attribution spine.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many referrals to return, as a decimal string in the `?limit=`\nquery. Absent, unparseable or non-positive means 500; over 1000 is clamped to\n1000. It is a string rather than a number because the parse that has always\nserved this route trims surrounding whitespace, and one parse rule is better\nthan two.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/adminBonusesEnvelope"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/admin/referral/sweep": {
+      "post": {
+        "operationId": "post_admin_referral_sweep",
+        "summary": "Qualify-checks every pending referral and advances the ones that now qualify.",
+        "description": "Qualify-checks every pending referral and advances the ones that now qualify.\n\nSuperAdmin only, fail-closed. This is the cron path, and the ONLY path that\nadvances a referral: a referee QUALIFIES once they have made metered spend — the\nhonest signal that they actually used the product rather than merely signing up.\n\nQualifying moves NO money. It records that an attribution became a real customer;\nwhat is owed for that is an affiliate payable in commerce, settled by wire or to a\nconnected wallet. One pass is bounded, so a large backlog drains over several runs\ninstead of wedging one request, and the latch makes the transition at-most-once\nunder a concurrent sweep.\n\nIt reads nothing from the caller — the counters it returns are the whole result.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sweepEnvelope"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/referral": {
+      "get": {
+        "operationId": "get_referral",
+        "summary": "Returns the caller's referral code, share link and the referrals they have made.",
+        "description": "Returns the caller's referral code, share link and the referrals they have made.\n\nThe code is a stable, deterministic function of the org, so the link in this\nresponse is the same one every time. Each row carries the referee and the status\nof that attribution.\n\nIT IS A PURE READ. It advances no referral, grants nothing and deposits nothing\n— a GET reports state, it never changes it. Qualification is the admin sweep's\njob (POST /v1/admin/referral/sweep). The one row this handler can write is the\ncaller's OWN code-directory entry (EnsureCode), which materialises a value\nderiveCode already computes deterministically from the org id so the code has an\nO(1) reverse lookup; it carries no money, no referral state and no other tenant.",
+        "tags": [
+          "referral"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/myReferrals"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/referral/claim": {
+      "post": {
+        "operationId": "post_referral_claim",
+        "summary": "Records that the caller's org signed up through a referral code.",
+        "description": "Records that the caller's org signed up through a referral code.\n\nThe REFEREE is the validated caller, never a client field, and the referrer is\nresolved from the code — so a caller can only ever attach THEMSELVES to someone\nelse's code. Referring yourself is 400 and an unknown code is 404.\n\nIt is idempotent and first-touch: an org can be referred once, ever. A repeat\ncall returns the referral already on file with created=false and 200, where the\nfirst call answers 201.\n\nRecording a referral grants nothing, and neither does anything downstream of it:\nthe edge later advances to qualified when the referee makes metered spend\n(POST /v1/admin/referral/sweep), and that is the end of it. No credit is ever\nissued from this package.",
+        "tags": [
+          "referral"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "code": "H4NZ0ABC"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/claimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/claimView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "adminBonusDirectory": {
+        "properties": {
+          "referrals": {
+            "description": "Referrals is every referral in the directory, both orgs exposed.",
+            "items": {
+              "$ref": "#/components/schemas/adminReferralView"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/adminSummary",
+            "description": "Summary is the fleet tally across those referrals."
+          }
+        },
+        "type": "object"
+      },
+      "adminBonusesEnvelope": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/adminBonusDirectory",
+            "description": "Data is the directory itself."
+          },
+          "msg": {
+            "description": "Msg is empty on success; the console surfaces it when status is not \"ok\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "adminReferralView": {
+        "properties": {
+          "code": {
+            "description": "Code is the referral code the referral was recorded against.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the referral was recorded, as a Unix timestamp.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the referral's handle.",
+            "type": "string"
+          },
+          "qualifiedAt": {
+            "description": "QualifiedAt is when the referee first made metered spend, as a Unix\ntimestamp; 0 while still pending.",
+            "type": "integer"
+          },
+          "refereeOrg": {
+            "description": "RefereeOrg is the org that signed up with it.",
+            "type": "string"
+          },
+          "referrerOrg": {
+            "description": "ReferrerOrg is the org whose code was used.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the referral's lifecycle state: \"signup\" or \"qualified\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "adminSummary": {
+        "properties": {
+          "qualified": {
+            "description": "Qualified is how many referees have made metered spend.",
+            "type": "integer"
+          },
+          "signup": {
+            "description": "Signup is how many are recorded but not yet qualified.",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is every referral in the directory.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "claimRequest": {
+        "properties": {
+          "code": {
+            "description": "Code is the referrer's referral code, as it appeared in their ?ref= link.\nCase and surrounding whitespace do not matter.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "claimView": {
+        "properties": {
+          "code": {
+            "description": "Code is the referral code the referral was recorded against.",
+            "type": "string"
+          },
+          "created": {
+            "description": "Created is true when this call recorded the referral and false when it found\none already recorded for this referee — the idempotent replay.",
+            "type": "boolean"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when the referral was first recorded, as a Unix timestamp.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the referral's handle.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the referral's lifecycle state: \"signup\" until the referee\nmakes metered spend, then \"qualified\", then \"credited\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "myReferralView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the referral was recorded, as a Unix timestamp.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the referral's handle.",
+            "type": "string"
+          },
+          "qualifiedAt": {
+            "description": "QualifiedAt is when the referee first made metered spend, as a Unix\ntimestamp; 0 while the referral is still pending.",
+            "type": "integer"
+          },
+          "referee": {
+            "description": "Referee is the org that signed up with my code.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the referral's lifecycle state: \"signup\" until the referee makes\nmetered spend, then \"qualified\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "myReferrals": {
+        "properties": {
+          "code": {
+            "description": "Code is the org's STABLE referral code — a deterministic function of the org\nid, so it never changes and never has to be stored to be reproduced.",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/statusCounts",
+            "description": "Counts tallies this org's referrals by status."
+          },
+          "link": {
+            "description": "Link is the shareable signup link carrying the code, on the brand's own host.",
+            "type": "string"
+          },
+          "referrals": {
+            "description": "Referrals is one row per org that signed up with this code.",
+            "items": {
+              "$ref": "#/components/schemas/myReferralView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "statusCounts": {
+        "properties": {
+          "qualified": {
+            "description": "Qualified is how many referees have made metered spend.",
+            "type": "integer"
+          },
+          "signup": {
+            "description": "Signup is how many referees have signed up but not yet spent.",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total is every referral this org has made.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "sweepEnvelope": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/sweepResult",
+            "description": "Data is the sweep's counters."
+          },
+          "msg": {
+            "description": "Msg is empty on success; the console surfaces it when status is not \"ok\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" on success.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sweepResult": {
+        "properties": {
+          "qualified": {
+            "description": "Qualified is how many of those referrals qualified on this pass.",
+            "type": "integer"
+          },
+          "swept": {
+            "description": "Swept is how many pending referrals were checked.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

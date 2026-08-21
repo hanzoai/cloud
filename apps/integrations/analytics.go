@@ -12,7 +12,7 @@ package integrations
 
 func init() {
 	// Optimizely — experimentation. A Personal Access Token is a bearer credential,
-	// verified against /v2/projects. Ties to the /v1/experiments surface.
+	// verified against /v2/projects. Ties to the /v1/experiment surface.
 	register(&Provider{
 		ID: "optimizely", Name: "Optimizely",
 		Description: "Experimentation and feature flags. Connect with a Personal Access Token.",

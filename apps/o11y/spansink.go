@@ -250,7 +250,7 @@ func genAIAttributes(org string, s event.SpanEvent) (map[string]string, bool) {
 	fillAttr(attrs, llmobstypes.UserID, s.DistinctID)
 
 	// THE TENANT, STAMPED LAST AND UNCONDITIONALLY. This one key is the whole tenant
-	// boundary of every /v1/evals read, so it is never taken from the wire: a
+	// boundary of every /v1/eval read, so it is never taken from the wire: a
 	// client-supplied value would let one org write rows another org reads. org is the
 	// server-resolved analytics tenant and it overwrites whatever the properties held.
 	attrs[llmobstypes.GenAIHanzoOrgID] = org

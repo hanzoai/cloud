@@ -11,18 +11,18 @@ import (
 // test case, not a blob store.
 func TestRed_ContentCapped(t *testing.T) {
 	app, _ := mountApp(t)
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets", "acme", map[string]any{"name": "d"}); code != http.StatusCreated {
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets", "acme", map[string]any{"name": "d"}); code != http.StatusCreated {
 		t.Fatalf("seed dataset: %d", code)
 	}
 	// A 2 MiB input is rejected (raw JSON string over the 64 KiB cap).
 	big := `"` + strings.Repeat("A", 2*1024*1024) + `"`
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/d/items", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets/d/items", "acme",
 		map[string]any{"input": rawMsg(big)}); code != http.StatusBadRequest {
 		t.Fatalf("2MiB item input want 400 (capped), got %d", code)
 	}
 	// Oversize metadata is likewise rejected.
 	huge := map[string]any{"blob": strings.Repeat("B", 128*1024)}
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets", "acme",
 		map[string]any{"name": "d2", "metadata": huge}); code != http.StatusBadRequest {
 		t.Fatalf("oversize metadata want 400, got %d", code)
 	}
@@ -38,13 +38,13 @@ func TestRed_ForgedHeaderCannotCrossTenant(t *testing.T) {
 	app, _ := mountApp(t)
 
 	// victim writes a score (validated principal via the helper).
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/scores", "victim",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/scores", "victim",
 		map[string]any{"name": "quality", "value": 0.99}); code != http.StatusCreated {
 		t.Fatalf("victim score: %d", code)
 	}
 
 	// (1) Bearer-less / opaque-key attacker: X-Org-Id forged, NO X-User-Id → 403.
-	req := newReq(http.MethodGet, "/v1/evals/scores", nil)
+	req := newReq(http.MethodGet, "/v1/eval/scores", nil)
 	req.Header.Set("X-Org-Id", "victim")     // forged, restored on the no-principal path
 	req.Header.Set("X-Project-Id", "victim") // client sub-scope
 	if code, _ := send(t, app, req); code != http.StatusForbidden {
@@ -53,7 +53,7 @@ func TestRed_ForgedHeaderCannotCrossTenant(t *testing.T) {
 
 	// (2) Validated attacker in their OWN org, also setting X-Project-Id: victim →
 	// scopes by the validated org (attacker), sees none of victim's scores.
-	req = newReq(http.MethodGet, "/v1/evals/scores", nil)
+	req = newReq(http.MethodGet, "/v1/eval/scores", nil)
 	req.Header.Set("X-User-Id", "u_attacker") // validated principal
 	req.Header.Set("X-Org-Id", "attacker")
 	req.Header.Set("X-Project-Id", "victim")
@@ -71,18 +71,18 @@ func TestRed_ForgedHeaderCannotCrossTenant(t *testing.T) {
 // name (the config is authoritative for the type), nor push a non-finite value.
 func TestRed_ScoreTypeCannotBeCoerced(t *testing.T) {
 	app, _ := mountApp(t)
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/rubrics", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/rubrics", "o",
 		map[string]any{"name": "quality", "dataType": "NUMERIC", "minValue": 0, "maxValue": 1}); code != http.StatusCreated {
 		t.Fatalf("config: %d", code)
 	}
 	// Claiming dataType CATEGORICAL for a NUMERIC-configured name is ignored — the
 	// config wins, so a numeric value is REQUIRED (stringValue alone → 400).
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/scores", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/scores", "o",
 		map[string]any{"name": "quality", "dataType": "CATEGORICAL", "stringValue": "great"}); code != http.StatusBadRequest {
 		t.Fatalf("type-coercion attempt want 400, got %d", code)
 	}
 	// A finite in-range numeric still works (proves the guard didn't over-block).
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/scores", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/scores", "o",
 		map[string]any{"name": "quality", "value": 0.5}); code != http.StatusCreated {
 		t.Fatalf("valid numeric want 201, got %d", code)
 	}
@@ -94,16 +94,16 @@ func TestRed_ScoreTypeCannotBeCoerced(t *testing.T) {
 // (judge name), never persisted verbatim.
 func TestRed_RunNameAndJudgeNameGuarded(t *testing.T) {
 	app, _ := mountApp(t)
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets", "o", map[string]any{"name": "qa"}); code != http.StatusCreated {
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets", "o", map[string]any{"name": "qa"}); code != http.StatusCreated {
 		t.Fatalf("seed dataset: %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets/qa/items", "o",
+	if code, _ := do(t, app, http.MethodPost, "/v1/eval/datasets/qa/items", "o",
 		map[string]any{"input": "x", "expectedOutput": "x"}); code != http.StatusCreated {
 		t.Fatalf("seed item: %d", code)
 	}
 	// A traversal-looking runName is rejected at the boundary (validated principal
 	// present, so the request reaches the runName guard).
-	req := newReqJSON(http.MethodPost, "/v1/evals/runs", map[string]any{
+	req := newReqJSON(http.MethodPost, "/v1/eval/runs", map[string]any{
 		"dataset": "qa", "model": "m", "runName": "../../etc/passwd",
 	})
 	req.Header.Set("X-User-Id", "u_o")

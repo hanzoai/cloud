@@ -7,7 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud/apps/ads"
 	"github.com/hanzoai/cloud/apps/campaign"
-	"github.com/hanzoai/cloud/apps/experiments"
+	"github.com/hanzoai/cloud/apps/experiment"
 	"github.com/hanzoai/cloud/apps/principal"
 )
 
@@ -49,14 +49,14 @@ func init() {
 	// errors → "" → Content[0]).
 	campaign.SetExperiment(
 		func(ctx context.Context, org, experimentID, subject string) (string, error) {
-			a, err := experiments.Assign(ctx, org, principal.DefaultProject, experimentID, subject, nil)
+			a, err := experiment.Assign(ctx, org, principal.DefaultProject, experimentID, subject, nil)
 			if err != nil {
 				return "", err
 			}
 			return a.Variant, nil
 		},
 		func(ctx context.Context, org, experimentID string, start, end time.Time) (json.RawMessage, error) {
-			an, err := experiments.Analyze(ctx, org, principal.DefaultProject, experimentID, start, end, 0.05)
+			an, err := experiment.Analyze(ctx, org, principal.DefaultProject, experimentID, start, end, 0.05)
 			if err != nil {
 				return nil, err
 			}

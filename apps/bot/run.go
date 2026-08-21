@@ -225,7 +225,7 @@ func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
 
 	// UNIFIED PAYWALL (server-side enforcement). To gate this group behind the
 	// caller's plan, prepend the middleware to the group:
-	//   g := app.Group("/v1/bot", entitlements.RequireProduct(deps.Commerce, "bot"))
+	//   g := app.Group("/v1/bot", entitlement.RequireProduct(deps.Commerce, "bot"))
 	// DEFERRED — DO NOT ENABLE YET: the "bot" product is ABSENT from @hanzo/plans
 	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
 	// once the catalog licenses "bot" to a tier. See clients/entitlements.
