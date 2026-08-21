@@ -3,6 +3,8 @@
 package kms
 
 import (
+	"encoding/json"
+
 	"github.com/zap-proto/zip"
 )
 
@@ -11,13 +13,35 @@ func init() {
 		Description: "Removes one secret. The trailing wildcard is the sub-path + name.",
 	})
 	zip.Describe("GET /v1/kms/config", zip.Doc{
-		Description: "Serves the KMS console SPA's runtime config (the OIDC issuer the\nconsole logs in against + the KMS API base). Kept under the /v1/kms namespace\n(not /v1/admin) so a gateway that admin-gates the /v1/admin/* prefix cannot\nblock the console's legitimate public config fetch. No secrets, so it is public.",
+		Description: "Returns the runtime configuration for the KMS console.\n\nWhat the console needs before anyone has signed in: the brand, the OIDC issuer\nit authenticates against, the API base for this subsystem and the path of the\nlogin exchange.\n\nPublic on purpose, and it holds nothing sensitive — it is deliberately kept\nunder this subsystem's own namespace rather than under an admin prefix, so a\ngateway that admin-gates the admin routes cannot break the console's\nlegitimate pre-login fetch.",
+		Fields: map[string]string{
+			"kmsConfig.apiBase":   "APIBase is this subsystem's own prefix, `/v1/kms`.",
+			"kmsConfig.brand":     "Brand is the deployment's brand, so the console renders as the right\nproduct.",
+			"kmsConfig.issuer":    "Issuer is the OIDC issuer the console authenticates against.",
+			"kmsConfig.loginPath": "LoginPath is the credential exchange's address.",
+		},
 	})
 	zip.Describe("GET /v1/kms/health", zip.Doc{
-		Description: "Is a REAL probe: 200 only when the store is open AND a master key is\nconfigured; 503 + the honest reason in health-only mode. Not JWT-gated —\nliveness must be probe-able by the platform without a token.",
+		Description: "Reports whether this broker can actually serve secrets.\n\nA real readiness probe, not a liveness stub: 200 only when the store is open\nAND a master key is configured, with `signing` reporting whether signing keys\nare set up too. Anything less answers 503 with `ready:false` and the reason —\nno in-process store, or no master key — which are exactly the two states in\nwhich the secret operations refuse.\n\nNot token-gated, because the platform must be able to probe it without a\ncredential. It reports the broker's configuration state only; no secret, no\nkey material and no tenant name appears in it.",
+		Fields: map[string]string{
+			"kmsHealth.error":   "Error is the honest reason readiness is false: no in-process KMS client,\nor no master key. Absent when ready.",
+			"kmsHealth.ready":   "Ready is whether a secret operation would actually succeed right now.\nThese are exactly the two states in which the secret operations refuse.",
+			"kmsHealth.service": "Service names the subsystem answering, `kms`.",
+			"kmsHealth.signing": "Signing reports whether signing keys are configured. Absent when there is\nno in-process client to ask.",
+			"kmsHealth.status":  "Status is `ok` or `degraded`, the one-word form of Ready.",
+		},
 	})
 	zip.Describe("GET /v1/kms/secrets", zip.Doc{
-		Description: "Returns the metadata (no ciphertext) of the org's secrets at a\npath/env. ?path= narrows to a subpath; ?env= selects the environment.",
+		Description: "Lists the secrets your org holds, without their values.\n\nReturns the METADATA of the caller's own secrets: each one's name, path,\nenvironment and sealing scheme. No value and no ciphertext is included — this\noperation exists to enumerate what is held, and reading a value is a separate,\nper-secret call.\n\nScoped to the caller's own org and nothing else, structurally: there is no org\nin the path, the store root is derived from the validated org claim, and a\ncaller therefore has no way to name another tenant's namespace. `path` narrows\nto a subpath and `env` selects the environment; both are also accepted under\nthe operator's spellings, `secretPath` and `environment`. An omitted `env`\nmeans every environment and an omitted `path` means the whole org, because a\ndefault here reported a populated store as empty.\n\nAdmission is fail-closed and in order: a validated member, an org that is a\nDNS-1123 label, and a store holding a master key — 403, 400 and 503\nrespectively, all decided before any record is touched.",
+		Fields: map[string]string{
+			"SecretMeta.env":     "Env is the environment the secret belongs to. It is part of the storage\nkey, so the same name in two environments is two secrets.",
+			"SecretMeta.name":    "Name is the secret's name within its path and environment.",
+			"SecretMeta.path":    "Path is the subpath the secret is stored under, beneath the org root.",
+			"SecretMeta.scheme":  "Scheme names how the value is sealed at rest, so a caller can tell a\nmigrated record from a current one without opening it.",
+			"kmsSecrets.names":   "Names is the same listing reduced to bare names, which is the shape the\nKMS operator reads. Both are emitted so either consumer keeps working.",
+			"kmsSecrets.secrets": "Secrets are the descriptors: name, path, environment and sealing scheme.\nNo value and no ciphertext appears here.",
+			"kmsSecrets.total":   "Total is how many descriptors this listing carries.",
+		},
 	})
 	zip.Describe("GET /v1/kms/secrets/+", zip.Doc{
 		Description: "Reads one secret value. The trailing wildcard is the sub-path + name\nunder the org; ?env= selects the environment. Returns the opened plaintext.",
@@ -35,9 +59,27 @@ func init() {
 		Description: "Sign returns a signature over the submitted payload, produced by the key the ref\nnames. The KEY ITSELF NEVER LEAVES this process — that is the whole point of the\nop: a caller that needs something signed sends the payload rather than fetching\nthe key, so signing material has one custodian and no copies.\n\nThe value field carries the payload on the way in and the signature on the way\nout; it is never a key. The same ref rule as the read applies, so a tenant's key\nsigns only for a call acting for that tenant.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
 	zip.Describe("POST /v1/kms/auth/login", zip.Doc{
-		Description: "Exchanges the caller's clientId/clientSecret for an owner-scoped IAM JWT.\nFail-closed: no IAM issuer configured → 503; malformed input → 400; a bad\ncredential → 401; an IAM outage → 502. It NEVER logs or echoes the secret, and\nits error bodies carry no IAM internals (no credential-validity oracle beyond\nwhat IAM's own endpoint already exposes).",
+		Description: "Exchanges a machine credential for an IAM bearer token.\n\nTakes a tenant's machine credential — a client id and client secret — and\nreturns an owner-scoped IAM access token with its lifetime, which is the\nbearer the caller then carries on the org-scoped secret operations.\n\nIt is deliberately public and unauthenticated, because it IS the credential\nexchange and runs before any principal exists. That makes it the one route in\nthis subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather\nthan on any caller-supplied header, and body-capped at the same door.\n\nThe submitted secret is never logged and never echoed, and failures collapse\nto one clean status with no upstream detail: 401 when the credential does not\nauthenticate, 502 when the identity provider is unreachable, 503 when no\nissuer is configured. That is on purpose — a richer error would be a validity\noracle for guessed credentials.",
+		Fields: map[string]string{
+			"kmsLogin.clientId":     "ClientID is the machine identity's id, as IAM issued it.",
+			"kmsLogin.clientSecret": "ClientSecret is that identity's secret. It is never logged, never echoed,\nand never carried in an error.",
+			"kmsToken.accessToken":  "AccessToken is IAM's own JWT, verbatim. Its `owner` claim scopes it to\nexactly one org, which is what every secret operation then reads.",
+			"kmsToken.expiresIn":    "ExpiresIn is the token's lifetime in seconds, as IAM reported it.",
+			"kmsToken.tokenType":    "TokenType is `Bearer`.",
+		},
+		Example: json.RawMessage(`{"clientId":"kms-operator","clientSecret":"…"}`),
 	})
 	zip.Describe("POST /v1/kms/secrets", zip.Doc{
-		Description: "Seals + upserts a secret. Body: {path?, name, env?, value}. The value\nis sealed under a fresh per-secret DEK (master-key-wrapped) before storage —\nplaintext never touches disk.",
+		Description: "Stores or replaces one secret in your org.\n\nUpserts one secret under the caller's own org. The value is sealed before it\nis written — a fresh per-secret data key, itself wrapped by the master key —\nso plaintext never reaches disk. The receipt confirms the name and environment\nthat were written and does not echo the value.\n\n`env` is REQUIRED on a write and has no default, which is the rule most easily\ngot wrong here: reads and deletes still fall back to the default environment\nfor older callers, but a write must not, because the environment is part of\nthe storage key. A silently defaulted write lands in a bucket the readers that\nresolve project, environment and path never look in, and the stale value keeps\nbeing served — so the write fails loudly instead.\n\n`name` is required, `path` is an optional subpath beneath the org root, and\nthe org is taken from the validated claim rather than the body.\n\nRequires ADMIN authority over the org — a member reads, an admin writes. A\nmachine credential holds no membership and so is never an org admin: it can\nread the secrets it was issued for and cannot replace one. Fail-closed\nadmission, in order: admin of the org, well-formed org, master key present —\n403, 400 and 503, all decided before any record is touched.",
+		Fields: map[string]string{
+			"kmsPut.env":       "Env is the environment to write under. REQUIRED, with no default: it is\npart of the storage key, so a silently defaulted write lands in a bucket\nthe readers that resolve project, environment and path never look in, and\nthe stale value keeps being served.",
+			"kmsPut.name":      "Name is the secret's name. Required.",
+			"kmsPut.path":      "Path is an optional subpath beneath the org root, e.g. \"/ci\".",
+			"kmsPut.value":     "Value is the secret itself. It is sealed under a fresh per-secret data key\nbefore storage, so plaintext never reaches disk, and it is never echoed\nback, logged, or carried in an error.",
+			"kmsStored.env":    "Env is the environment the secret was written under.",
+			"kmsStored.name":   "Name is the secret's name.",
+			"kmsStored.stored": "Stored is true; a write confirms by not failing.",
+		},
+		Example: json.RawMessage(`{"path":"/ci","name":"deploy-token","env":"prod","value":"s3cr3t"}`),
 	})
 }
