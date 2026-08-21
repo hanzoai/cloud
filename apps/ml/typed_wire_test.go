@@ -28,23 +28,10 @@ import (
 // each with the WIRE fact that keeps it raw. A typed op is a route PLUS a registry
 // entry — the one value the OpenAPI operation, the MCP tool, the CLI command and
 // the SDK method all come from — so an operation missing from that registry is
-// invisible to all four. These four are missing on purpose. The address is
+// invisible to all four. These three are missing on purpose. The address is
 // written the way the DOCUMENT writes it, which is the identity every projection
 // keys on.
 var untypedByDesign = map[string]string{
-	// The create. cloud.DenyResource renders the pre-create balance gate's
-	// refusal as the fleet's nested {"error":{"code","message"}} contract, written
-	// IN BAND with c.JSON — the same body the edge gate sends, which is the point of
-	// having one contract. A typed op's only refusal channel is a returned error,
-	// and zip renders that as the flat {"status","code","error"} HTTPError
-	// (zip@v1.18.6 ctx.go:201) — so typing it changes the 402 body every
-	// balance-aware client already parses. Moving the gate into middleware to keep
-	// the in-band write does not help either: it would run BEFORE the body decode,
-	// so an unfunded org sending an invalid name would get 402 where it gets 400
-	// today. Distinct from multi-status (#78): the gap is a non-2xx with a DOMAIN
-	// body, not a second success code.
-	"POST /v1/ml/models": denyWire,
-
 	// An RFC 7386 JSON merge patch, handed to the Kubernetes API as the RAW request
 	// bytes (k8stypes.MergePatchType, c.Body()). A typed In must decode and
 	// re-encode it, and re-encoding a merge patch changes what it MEANS: through
@@ -63,10 +50,6 @@ var untypedByDesign = map[string]string{
 	// The real probe.
 	"GET /v1/ml/health": healthWire,
 }
-
-const denyWire = "the pre-create balance gate answers 402/503 IN BAND with the fleet's nested " +
-	"{\"error\":{\"code\",\"message\"}} contract (cloud.DenyResource); a typed op can only refuse by " +
-	"returning an error, which zip renders as the flat {\"status\",\"code\",\"error\"} envelope."
 
 const healthWire = "a REAL probe: 503 carries the degraded REPORT as its body " +
 	"(status/k8s/error/crds), which is the whole point of it. A typed op reaches a non-2xx only by " +

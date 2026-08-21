@@ -50,7 +50,6 @@ package ml
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -212,13 +211,7 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 
 	// Models (kserve InferenceService).
 	zip.Get(gml, "/models", o.listModels)
-	// UNTYPED BY DESIGN — the pre-create billing gate. cloud.DenyResource writes
-	// the fleet's nested {"error":{"code","message"}} 402/503 contract IN BAND on
-	// the response; a typed op's only refusal channel is a returned error, which
-	// zip renders as the flat {"status","code","error"} HTTPError. Typing it would
-	// change the 402 body every funded-balance client already parses. Same for the
-	// two below. See typed_wire_test.go.
-	gml.Post("/models", create(s, modelKind))
+	zip.Post(gml, "/models", o.createModel, zip.WithStatus(http.StatusCreated))
 	zip.Get(gml, "/models/:name", o.getModel)
 	// UNTYPED BY DESIGN — an opaque RFC 7386 merge patch, relayed VERBATIM to the
 	// Kubernetes API. A typed In would re-encode it, and re-encoding a merge patch
@@ -327,80 +320,6 @@ func init() {
 // routes whose wire a typed op cannot state: create (the in-band billing denial)
 // and patch (the verbatim merge patch), plus the predict proxy and the real
 // health probe below.
-
-func create(s *cloud.Service[state], k resourceKind) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if err := ready(s); err != nil {
-			return err
-		}
-		ns, org, project, err := tenant(c)
-		if err != nil {
-			return err
-		}
-		var req struct {
-			Name   string            `json:"name"`
-			Spec   json.RawMessage   `json:"spec"`
-			Labels map[string]string `json:"labels"`
-		}
-		if err := json.Unmarshal(c.Body(), &req); err != nil {
-			return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
-		}
-		name := strings.ToLower(strings.TrimSpace(req.Name))
-		if !nameRE.MatchString(name) {
-			return zip.ErrBadRequest("'name' must be a DNS-1123 label: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
-		}
-		if len(req.Spec) == 0 {
-			return zip.ErrBadRequest("'spec' is required (the " + k.kind + " spec)")
-		}
-		var spec map[string]any
-		if err := json.Unmarshal(req.Spec, &spec); err != nil {
-			return zip.Errorf(http.StatusBadRequest, "invalid 'spec': %v", err)
-		}
-
-		// Pre-create balance gate (fail-closed, per-org). Refuse BEFORE the tenant
-		// namespace or CR is created so an unfunded org cannot run free GPU
-		// compute; an unreachable commerce refuses 503 (default fail-closed).
-		// Scoped to THIS caller's org (the same slug that maps to the tenant
-		// namespace, derived by #66's identity sanitizer from a validated JWT),
-		// so billing can never target another tenant. fee is reused by the
-		// post-success debit; fee==0 or unconfigured billing makes this a no-op.
-		fee := cloud.ResourceFeeCents(computeFeeEnvPrefix, k.kind)
-		_, projectValidated := principal.ValidatedProject(c)
-		if err := s.State.bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, k.kind, fee); err != nil {
-			return cloud.DenyResource(c, err)
-		}
-
-		if err := ensureNamespace(s, c.Context(), ns, org, project); err != nil {
-			return zip.Errorf(http.StatusBadGateway, "ensure tenant namespace: %v", err)
-		}
-		obj := &unstructured.Unstructured{Object: map[string]any{
-			"apiVersion": k.apiVersion,
-			"kind":       k.kind,
-			"metadata": map[string]any{
-				"name":      name,
-				"namespace": ns,
-				"labels":    labelsFor(org, project, req.Labels),
-			},
-			"spec": spec,
-		}}
-		out, err := s.State.dyn.Resource(k.gvr).Namespace(ns).Create(c.Context(), obj, metav1.CreateOptions{})
-		if err != nil {
-			switch {
-			case apierrors.IsAlreadyExists(err):
-				return zip.ErrConflict(k.kind + " already exists")
-			case apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
-				return zip.Errorf(http.StatusUnprocessableEntity, "%s rejected by kubernetes: %v", k.kind, err)
-			default:
-				return k8sErr(s, k, "create", err)
-			}
-		}
-		// Resource created — debit the caller's org ledger for the compute
-		// submission (per-org, env-attributed, async best-effort). Ongoing
-		// GPU-hour cost reuses s.State.bill.Meter from a future runtime usage watcher.
-		s.State.bill.Meter(principal.Ledger(c), project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
-		return c.JSON(http.StatusCreated, view(out, true))
-	}
-}
 
 func patch(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {

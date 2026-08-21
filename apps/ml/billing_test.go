@@ -66,7 +66,14 @@ func newBilledMLService(t *testing.T, commerceURL string) *cloud.Service[state] 
 func postModel(t *testing.T, s *cloud.Service[state], org string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/ml/models", create(s, modelKind))
+	// What Serve installs for the whole binary, narrowed to what this op needs:
+	// the request on the context (Bridge) and the money wire's own envelope for a
+	// refusal the op RETURNS (DenyEnvelope). No package's own harness runs Serve,
+	// so a create tested without them would refuse in zip's shape and this test
+	// would be asserting the wrong body.
+	app.Use(cloud.Bridge())
+	app.Use(cloud.DenyEnvelope())
+	zip.Post(app, "/v1/ml/models", ops{s: s}.createModel, zip.WithStatus(http.StatusCreated))
 	body := `{"name":"model1","spec":{"predictor":{"model":{"modelFormat":{"name":"sklearn"}}}}}`
 	req, _ := http.NewRequest("POST", "/v1/ml/models", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
