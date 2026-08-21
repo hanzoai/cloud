@@ -38,10 +38,15 @@ import (
 )
 
 // tool is the name the fleet's door publishes the coding op under. A model
-// never sees `post_v1_coding`: the door renames a derived operation id to the
+// never sees `post_agents_coding`: the door renames a derived operation id to the
 // verb phrase it already contains (fleet/verbs.go), and THIS is the string a
-// tools/call carries. Production serves exactly this name today.
-const tool = "create_coding"
+// tools/call carries.
+//
+// It was `create_coding` while the run answered at /v1/coding. The address folded
+// under the app that runs it and the name followed, because the name IS the path:
+// a fold moves the tool a model calls as surely as it moves the URL, and that is
+// the half a router test cannot see.
+const tool = "create_agent_coding"
 
 // agentsChild brings up the agents app's coding surface on its own socket, the
 // way cloud.Serve brings up a plugin binary — and it registers the door by

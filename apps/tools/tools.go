@@ -40,8 +40,8 @@ import (
 //     unaffected: it is already described through the typed ops that share it,
 //     and Fold merges the typed schema over this one.
 func init() {
-	openapi.Register("/v1/plugins/build", "POST", buildRequest{}, buildOut{})
-	openapi.Describe("/v1/plugins/build", http.MethodPost,
+	openapi.Register("/v1/tools/plugins/build", "POST", buildRequest{}, buildOut{})
+	openapi.Describe("/v1/tools/plugins/build", http.MethodPost,
 		"Build a plugin for your org from TypeScript, or from an API spec a model writes it from",
 		"Builds one plugin for the caller's org and answers 201 with the bundle's size, whether a "+
 			"model wrote the source, and the plugin as stored. Post `source` to build TypeScript "+
@@ -62,7 +62,8 @@ func init() {
 			"a caller who pasted one finds out instead of shipping it — register it as a connector "+
 			"instead.\n\n"+
 			"Requires a validated principal; 403 without one. The plugin is stored under that "+
-			"principal's org and is what `/v1/plugins/authored` lists — never `/v1/plugins`, which "+
+			"principal's org and is what `/v1/tools/plugins/authored` lists — never "+
+			"`/v1/tools/plugins`, which "+
 			"is this deployment's mounted-subsystem inventory. Source over 512 KiB or a spec over "+
 			"256 KiB is refused. Posting a `spec` to a deployment with no AI client configured is "+
 			"503, and a generation that fails upstream is 502.")
@@ -167,12 +168,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 // routes declares the tool plane on ONE group, /v1.
 //
-// This subsystem spans four top-level nouns — tools, skills, mcp and plugins —
-// so there is no single prefix to hang a group on, and a group per noun could not
-// carry the collection ROOTS anyway (Group(p).Get("") yields "p/"). One /v1 group
-// spells each path exactly as the wire spells it, and it is also the OpTarget the
-// typed ops are declared on, so zip composes each op's path from the same prefix
-// the router does and cmd/zipdoc resolves it the same way.
+// Every path below is under /v1/tools, and the group is still /v1 rather than
+// /v1/tools because the plane's COLLECTION ROOT is /v1/tools itself: joining a
+// /v1/tools group with an empty leaf yields /v1/tools/, an address this API has
+// never served. One /v1 group spells each path exactly as the wire spells it,
+// and it is also the OpTarget the typed ops are declared on, so zip composes each
+// op's path from the same prefix the router does and cmd/zipdoc resolves it the
+// same way.
 //
 // cloud.Bridge is NOT installed here: Serve installs it once for the whole binary
 // (serve.go), after the identity boundary that makes the org trustworthy and
@@ -203,26 +205,28 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 	// The separately-listed registries (see registries.go): skills and mcp are
 	// Source views of the SAME registry; plugins is the mounted-subsystem
-	// inventory, which is a different thing entirely.
-	zip.Get(v1, "/skills", o.listSkills)
-	zip.Post(v1, "/skills", o.putSkill, zip.WithStatus(http.StatusCreated))
-	zip.Get(v1, "/skills/authored", o.listAuthoredSkills)
-	zip.Delete(v1, "/skills/:id", o.deleteSkill)
-	zip.Get(v1, "/plugins", o.listPlugins)
+	// inventory, which is a different thing entirely. All three are views of this
+	// plane, so all three hang under it — the rows they read are tools' own.
+	zip.Get(v1, "/tools/skills", o.listSkills)
+	zip.Post(v1, "/tools/skills", o.putSkill, zip.WithStatus(http.StatusCreated))
+	zip.Get(v1, "/tools/skills/authored", o.listAuthoredSkills)
+	zip.Delete(v1, "/tools/skills/:id", o.deleteSkill)
+	zip.Get(v1, "/tools/plugins", o.listPlugins)
 
-	// The builder (pluginbuild.go). /v1/plugins lists what this deployment
+	// The builder (pluginbuild.go). /v1/tools/plugins lists what this deployment
 	// mounted; /authored is what THIS ORG built, which is a different set with a
 	// different lifecycle, so it is a subpath rather than a mixed collection.
-	v1.Post("/plugins/build", cloud.Handle(s, buildPlugin))
-	zip.Get(v1, "/plugins/authored", o.listAuthoredPlugins)
-	zip.Delete(v1, "/plugins/authored/:id", o.deleteAuthoredPlugin)
+	v1.Post("/tools/plugins/build", cloud.Handle(s, buildPlugin))
+	zip.Get(v1, "/tools/plugins/authored", o.listAuthoredPlugins)
+	zip.Delete(v1, "/tools/plugins/authored/:id", o.deleteAuthoredPlugin)
 
 	// The external MCP server registry: a server is a record an org creates, not a
-	// tool the registry enumerates. /v1/mcp itself belongs to the fleet's ONE agent
-	// door (the host serves it), so this owns the deeper /v1/mcp/servers alone.
-	zip.Get(v1, "/mcp/servers", o.listServers)
-	zip.Post(v1, "/mcp/servers", o.createServer, zip.WithStatus(http.StatusCreated))
-	zip.Delete(v1, "/mcp/servers/:id", o.deleteServer)
+	// tool the registry enumerates. /v1/mcp is the HOST's agent door, wire-fixed
+	// for every MCP client (HIP-0139 §3.2), so this plane vacates that root
+	// entirely and keeps its servers where its rows are.
+	zip.Get(v1, "/tools/mcp/servers", o.listServers)
+	zip.Post(v1, "/tools/mcp/servers", o.createServer, zip.WithStatus(http.StatusCreated))
+	zip.Delete(v1, "/tools/mcp/servers/:id", o.deleteServer)
 }
 
 // Shutdown closes the stores. Idempotent.

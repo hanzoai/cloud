@@ -310,28 +310,38 @@ func TestRefuse_ANamelessToolIsNotProjectable(t *testing.T) {
 	}
 }
 
-// TestRank_TheCodingRunIsAProduct pins the coding run into a product bucket.
+// TestRank_AFoldedAddressKeepsItsBucket pins the two ops whose address moved.
 //
-// It ranked in the TAIL for a reason worth keeping written down: `productStems`
-// carried "code" — code intelligence at /v1/code, which is ask/context/index —
-// and the sandbox run at /v1/coding is a different product that was simply never
-// listed. "coding" does not match the stem "code", so rank() sent it to the tail.
+// The coding run ranked in the TAIL once, for a reason worth keeping written
+// down: `productStems` carried "code" — code intelligence at /v1/code, which is
+// ask/context/index — and the run answered at /v1/coding, a different product
+// that was simply never listed. "coding" does not match the stem "code", so
+// rank() sent it to the tail.
 //
 // The tail is not merely last. subsystemTool (grouped.go) skips prose for exactly
 // that bucket, so the op reached the model as a bare name with no sentence, and
 // any client that truncates its tool list drops the tail first. One missing stem,
 // two symptoms: unranked and undescribed.
-func TestRank_TheCodingRunIsAProduct(t *testing.T) {
+//
+// Both addresses have since folded, and a fold is where that defect recurs: rank
+// reads the PATH, so an op that moves takes whatever bucket its new first segment
+// names. The run is at /v1/agents/coding and ranks with agents; lsp left
+// /v1/code/lsp, where it had been ranking on code's stem, and needed one of its
+// own or it would have fallen exactly as the run once did.
+func TestRank_AFoldedAddressKeepsItsBucket(t *testing.T) {
 	tail := len(productStems)
-	for _, name := range []string{"post_coding", "post_v1_coding", "post_coding_start"} {
+	for _, name := range []string{"post_agents_coding", "post_lsp_hover", "post_lsp_locate"} {
 		if got := rank(name); got == tail {
-			t.Errorf("rank(%q) = %d, the tail bucket — the coding run sorts last and loses its prose", name, got)
+			t.Errorf("rank(%q) = %d, the tail bucket — the op sorts last and loses its prose", name, got)
 		}
 	}
-	// It is its own product, not a spelling of code intelligence: both rank, and
-	// folding one into the other would let a stem match a name it does not name.
-	if rank("post_coding") == rank("post_code_ask") {
-		t.Error("the coding run and code intelligence share a bucket — they are two products")
+	// Neither is a spelling of code intelligence: folding one into the other would
+	// let a stem match a name it does not name.
+	if rank("post_agents_coding") == rank("post_code_ask") {
+		t.Error("the coding run and code intelligence share a bucket — a run is not a search")
+	}
+	if rank("post_lsp_hover") == rank("post_code_ask") {
+		t.Error("lsp and code intelligence share a bucket — they are two reads, at two roots")
 	}
 }
 
