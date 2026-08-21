@@ -192,12 +192,12 @@ func newIdentityValidator(issuer, jwksURL string, ttl time.Duration) *identityVa
 // (object/token_jwt.go tokenAudience) and owner == <org> (object/token_oauth.go
 // GetClientCredentialsToken sets owner = app.Organization).
 //
-// Validation no longer consults the audience at all (trust is signature + issuer +
-// expiry), so a machine token clears validate() like any other. This suffix survives
-// for the OPPOSITE reason: to RECOGNISE a machine principal (isKMSMachinePrincipal) so
-// SanitizeIdentity can DENY it SuperAdmin even when it carries owner==adminOrg — a
-// client_credentials machine identity must never wield platform-admin. The match is
-// bound to the token's OWN owner claim (<owner>-platform-kms), so it certifies "the
+// Validation does not consult the audience, and neither does anything else: a
+// machine is one because IAM signs `type: application`, and Sudo refuses every
+// machine, so a client_credentials identity cannot wield platform-admin whatever
+// its token is addressed to. This suffix survives only as the NAME the provisioner
+// gives such an application. The match is bound to the token's OWN owner claim
+// (<owner>-platform-kms), so it certifies "the
 // KMS sync identity for its own org" and grants nothing wider.
 const kmsMachineAudSuffix = "-platform-kms"
 
@@ -214,8 +214,7 @@ func kmsMachineAudience(owner string) string {
 // KMSMachineClientID is the clientId an org's dedicated PaaS-KMS sync
 // application carries — which is also, by the contract above, the audience its
 // tokens are stamped with. Exported for the provisioner (clients/platform), so
-// "<org>-platform-kms" is derived in exactly one place: here, where the
-// recognition side (isKMSMachinePrincipal) reads it back.
+// "<org>-platform-kms" is derived in exactly one place: here.
 func KMSMachineClientID(org string) string { return kmsMachineAudience(org) }
 
 // homeOrg returns the USER's own organization — the tenant whose ledger pays and
@@ -271,8 +270,8 @@ func KMSMachineClientID(org string) string { return kmsMachineAudience(org) }
 // own organization, and obtaining the token at all requires that app's client
 // secret. There is no user to mis-attribute. Omitting this branch would fail closed
 // on the KMS sync identity, whose org-scoped data access runs through this same
-// boundary (see isKMSMachinePrincipal, which gates ONLY the admin grant precisely so
-// that access keeps working).
+// boundary — the kind denies the admin grant and nothing else, so that access
+// keeps working).
 func (c *idClaims) homeOrg() string {
 	if c.subjectOrg != "" {
 		return c.subjectOrg // API key: resolved from the subject
