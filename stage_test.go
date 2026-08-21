@@ -23,6 +23,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -59,13 +60,9 @@ func staged(names ...string) *zip.App {
 		app.Use(cloud.Stage(name))
 	}
 	served := func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"served": c.Path()}) }
-	app.Get("/v1/ads/campaigns", served)
-	app.Get("/v1/iam/keys", served)
+	app.Get("/v1/graph/nodes", served) // graph is the one staged (alpha) capability
+	app.Get("/v1/iam/keys", served)    // ga, serves without a flag
 	app.Get("/v1/health", served)
-	// A nesting pair, shallow and deep, owned by two apps — see
-	// TestTheRefusalYieldsToTheDeeperOwner.
-	app.Get("/v1/admin/authors", served)
-	app.Get("/v1/admin/leaderboard", served)
 	return app
 }
 
@@ -96,9 +93,9 @@ func fetch(t *testing.T, app *zip.App, path string, hdr map[string]string) (int,
 // nobody registered — which is the whole point of answering 404 rather than 403.
 func TestBetaWithoutTheFlagIsNotThere(t *testing.T) {
 	serveFlags(t, map[string][]string{"acme": {"crm"}}) // acme holds a DIFFERENT flag
-	app := staged("ads")
+	app := staged("graph")
 
-	code, body := fetch(t, app, "/v1/ads/campaigns", member)
+	code, body := fetch(t, app, "/v1/graph/nodes", member)
 	if code != http.StatusNotFound {
 		t.Fatalf("GET /v1/ads/campaigns = %d %s, want 404 — a beta capability answered an org that does not hold it", code, body)
 	}
@@ -116,16 +113,16 @@ func TestBetaWithoutTheFlagIsNotThere(t *testing.T) {
 // The org that holds the flag reaches the app. Without this the refusal is just
 // a way to turn a product off.
 func TestTheFlagLetsTheOrgIn(t *testing.T) {
-	serveFlags(t, map[string][]string{"acme": {"ads"}})
-	app := staged("ads")
+	serveFlags(t, map[string][]string{"acme": {"graph"}})
+	app := staged("graph")
 
-	if code, body := fetch(t, app, "/v1/ads/campaigns", member); code != http.StatusOK {
-		t.Fatalf("GET /v1/ads/campaigns = %d %s, want 200 — the org holds `ads` and was refused anyway", code, body)
+	if code, body := fetch(t, app, "/v1/graph/nodes", member); code != http.StatusOK {
+		t.Fatalf("GET /v1/ads/campaigns = %d %s, want 200 — the org holds `graph` and was refused anyway", code, body)
 	}
 	// Another org's flag is not this org's. The org is read off the validated
 	// principal and carried as the CALLER, so there is no argument to confuse.
 	other := map[string]string{"X-User-Id": "initech/ceo@initech.test", "X-Org-Id": "initech"}
-	if code, _ := fetch(t, app, "/v1/ads/campaigns", other); code != http.StatusNotFound {
+	if code, _ := fetch(t, app, "/v1/graph/nodes", other); code != http.StatusNotFound {
 		t.Errorf("GET /v1/ads/campaigns as initech = %d, want 404 — one org's flag admitted another", code)
 	}
 }
@@ -135,9 +132,9 @@ func TestTheFlagLetsTheOrgIn(t *testing.T) {
 // failure this refusal exists to prevent.
 func TestFlagsUnreachableRefuses(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // nothing is listening in it
-	app := staged("ads")
+	app := staged("graph")
 
-	if code, body := fetch(t, app, "/v1/ads/campaigns", member); code != http.StatusNotFound {
+	if code, body := fetch(t, app, "/v1/graph/nodes", member); code != http.StatusNotFound {
 		t.Fatalf("GET /v1/ads/campaigns with no flags peer = %d %s, want 404", code, body)
 	}
 }
@@ -145,12 +142,12 @@ func TestFlagsUnreachableRefuses(t *testing.T) {
 // No validated principal is 404, not 401: a stranger is owed no confirmation
 // that the address is real.
 func TestNoPrincipalIsNotThereEither(t *testing.T) {
-	serveFlags(t, map[string][]string{"acme": {"ads"}})
-	app := staged("ads")
+	serveFlags(t, map[string][]string{"acme": {"graph"}})
+	app := staged("graph")
 
 	// The org header alone, with nothing that validated it — the shape a forged
 	// client header arrives in.
-	if code, _ := fetch(t, app, "/v1/ads/campaigns", map[string]string{"X-Org-Id": "acme"}); code != http.StatusNotFound {
+	if code, _ := fetch(t, app, "/v1/graph/nodes", map[string]string{"X-Org-Id": "acme"}); code != http.StatusNotFound {
 		t.Errorf("GET /v1/ads/campaigns unvalidated = %d, want 404", code)
 	}
 }
@@ -164,13 +161,13 @@ func TestGAInstallsNoRefusal(t *testing.T) {
 	if h := cloud.Stage("nosuchapp"); h != nil {
 		t.Error("a name with no row produced a handler")
 	}
-	if h := cloud.Stage("ads"); h == nil {
-		t.Fatal("a beta row produced no handler — the capability is open to everyone")
+	if h := cloud.Stage("graph"); h == nil {
+		t.Fatal("a staged row produced no handler — the capability is open to everyone")
 	}
 
 	// And it is live: with no flags peer anywhere, ga still serves.
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	app := staged("iam", "ads")
+	app := staged("iam", "graph")
 	if code, body := fetch(t, app, "/v1/iam/keys", member); code != http.StatusOK {
 		t.Errorf("GET /v1/iam/keys = %d %s, want 200 — a ga capability was made to depend on flags", code, body)
 	}
@@ -181,7 +178,7 @@ func TestGAInstallsNoRefusal(t *testing.T) {
 // neighbours would take the fleet down one prefix at a time.
 func TestTheRefusalStaysOnItsOwnPrefixes(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // flags is unreachable: a refusal would be loud
-	app := staged("ads")
+	app := staged("graph")
 
 	for _, path := range []string{"/v1/health", "/v1/iam/keys"} {
 		if code, body := fetch(t, app, path, member); code != http.StatusOK {
@@ -190,28 +187,21 @@ func TestTheRefusalStaysOnItsOwnPrefixes(t *testing.T) {
 	}
 }
 
-// PREFIXES NEST, and the deeper claim is a different capability. /v1/admin is
-// admin's and /v1/admin/authors is authors's, and the host routes by
-// specificity — so a refusal owed by one must not answer for the other.
-//
-// A byte-prefix compare gets this wrong in both directions, which is why the
-// decision is manifest.OwnerOf: the router's own rule, asked rather than
-// restated. Under a byte compare, beta authors would refuse every /v1/admin
-// path — a shipped operator surface answering 404 to everybody.
-//
-// The pair used to be risk and label, where the case was found, then bots and
-// bot. Label, reference and dataset have come home to their own names
-// (HIP-0139 §7.1) and bot and bots became one capability (§2.4), so this asks
-// the same question of a pair that still nests and is still split across two
-// stages: admin is ga, authors under it is beta.
+// PREFIXES NEST, and a stage refusal must key on the deeper owner, not a byte
+// prefix. The middleware asks manifest.OwnerOf — the router's own rule — so a
+// staged capability under a ga prefix refuses only its own leaf and never the
+// operator surface above it. No two live capabilities span two stages today
+// (every one is ga but graph, which nests under nothing), so the rule is
+// asserted where it lives rather than through a fixture that cannot exist.
 func TestTheRefusalYieldsToTheDeeperOwner(t *testing.T) {
-	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // flags unreachable: authors refuses everything it owns
-	app := staged("authors")
-
-	if code, _ := fetch(t, app, "/v1/admin/authors", member); code != http.StatusNotFound {
-		t.Errorf("GET /v1/admin/authors = %d, want 404 — authors did not answer for its own surface", code)
+	// graph owns /v1/graph and nothing shallower; admin owns /v1/admin, which
+	// no other capability may answer for. A byte-prefix compare would let a
+	// staged /v1/g* capability refuse /v1/graph AND anything sharing the bytes;
+	// OwnerOf does not.
+	if got := manifest.OwnerOf("/v1/graph/nodes"); got != "graph" {
+		t.Errorf("OwnerOf(/v1/graph/nodes) = %q, want graph", got)
 	}
-	if code, body := fetch(t, app, "/v1/admin/leaderboard", member); code != http.StatusOK {
-		t.Errorf("GET /v1/admin/leaderboard = %d %s, want 200 — authors answered for leaderboard's capability", code, body)
+	if got := manifest.OwnerOf("/v1/admin/authors"); got == "graph" {
+		t.Errorf("OwnerOf(/v1/admin/authors) = %q — a staged capability must not own another's prefix", got)
 	}
 }
