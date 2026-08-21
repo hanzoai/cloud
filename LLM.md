@@ -41,8 +41,11 @@ source for the generated per-language SDKs.
   `apps/apps.go:Wire()` composition root was deleted with the mega build, 22f4fc64)
 - `deps.go` / `cloud.Deps` — process-wide handles · `apps/<name>/` — every subsystem
 - `openapi/` — the document pipeline: the spec is a projection of the live router,
-  and `openapi.yaml` at the root is a GOLDEN of it (written by `make openapi`,
-  verified by `make test` — not a second source). Four facts a route table cannot
+  woven into `private.yaml` (everything the fleet serves) and projected to
+  `openapi.yaml` beside it (the CUSTOMER contract, which is what `GET
+  /v1/openapi.json` answers with and what every SDK is cut from). Both are
+  GOLDENS (written by `make openapi`, verified by `make test` — not a second
+  source). Four facts a route table cannot
   hold are DECLARED beside the routes instead, each with its own seam and all four
   rendering only on an operation the router already carries: bodies (`Register`),
   prose (`Describe`), audience (`x-public`, DERIVED from the address: every /v1
@@ -61,7 +64,7 @@ source for the generated per-language SDKs.
   capability's operations; every /v1 answer carries RFC 8288 `Link:` headers
   (`self`, `describedby` → /v1/openapi.json, `index` → /v1). All of it is
   projected from the woven document and filtered by the SAME `x-public` audience
-  rule public.yaml is, so a beta capability is absent from the root and 404s one
+  rule openapi.yaml is, so a beta capability is absent from the root and 404s one
   segment down — one fact, not two. **They are MIDDLEWARE on the front door, not
   routes**: ai's row is the bare `/v1` remainder and zip mounts a prefix as
   `All(prefix)` too, so a host route at `/v1` is two definitions claiming one
@@ -1256,8 +1259,8 @@ one before it.
   judged only inside the products that app publishes, because every app binary
   links cloud's core and therefore carries other subsystems' declarations.
   **1491 of 1491 operations carry prose; 0 orphans.**
-- **`openapi.yaml` is a GOLDEN, woven from the per-app subsets.** `make openapi`
-  writes it (through the weave,
+- **Both documents are GOLDENS, woven from the per-app subsets.** `make openapi`
+  writes them (through the weave,
   `-weave`); `make test`, and therefore CI, verifies it with the same weave and no
   flag (`TestFleetIsTheWeaveOfItsApps`, openapi/weave_test.go). Same code path both ways — there is no second
   generator to disagree with, and no way to change a route without either
@@ -1265,13 +1268,24 @@ one before it.
   because JSON is what the document IS (the same value served at
   `/v1/openapi.json`); YAML is a rendering, and `encoding/json` orders object
   keys so the bytes are stable run to run.
-- **TWO PROJECTIONS OF THAT ONE DOCUMENT, AND THE SPLIT IS DECLARED**
-  (openapi/public.go). `openapi.yaml` is the INTERNAL document — everything the
-  fleet serves, admin included, and what our own clients are cut from.
-  `public.yaml` beside it is the PUBLIC contract: the customer surface, derived
-  per operation. Both are written by ONE run of the weave (`-weave` writes the
-  second beside whatever path it names), so they can never describe two
-  different commits.
+- **TWO DOCUMENTS, AND THE NAME SAYS WHICH IS WHICH** (openapi/public.go).
+  `openapi.yaml` is the PUBLIC contract: the customer surface, derived per
+  operation, and what `GET /v1/openapi.json` answers with. `private.yaml` beside
+  it is the INTERNAL document — everything the fleet serves, admin family and
+  staged capabilities included, which an operator reads and which the routing
+  gates (`cmd/reach`, the catalogue address gate) measure. Both are written by
+  ONE run of the weave (`-weave` names the woven document and the projection is
+  written beside it), so they can never describe two different commits.
+  - **The public one holds the NAME, because the name is what gets read.**
+    `openapi.yaml` is what a developer types, what an SDK generator defaults to
+    and what a spec-reading tool finds first, so a generator that has never heard
+    of the audience rule still obeys it. They were the other way round, and the
+    cost was exactly that: hanzoai/openapi's `publish.py` projects cloud's
+    `openapi.yaml` into every published SDK and filters by path, never by stage,
+    so every alpha capability reached every generated client while
+    openapi/public.go said it could not.
+    `TestAlphaAndAdminReachOnlyThePrivateDocument` (openapi/weave_test.go) gates
+    the property in both directions.
   - **The audience is DERIVED, not declared** (openapi/public.go `audience`).
     An operation is public when its address is under `/v1/`, its product — the
     first segment after `/v1/`, the same axis the tag is read off — is not the
@@ -1281,10 +1295,9 @@ one before it.
     inference operations, which held every other product out of every generated
     client while the clients quietly read the internal document instead; the
     rule says what the customer surface IS, from the address, so a product is
-    public the day it answers and the operator's family never is. The full
-    document is served unauthenticated at `/v1/openapi.json` regardless, so the
-    split is audience — what the SDKs, the CLI, the MCP door and the docs
-    present — never secrecy.
+    public the day it answers and the operator's family never is. The split is
+    audience — what the SDKs, the CLI, the MCP door and the docs present — never
+    secrecy: the internal document is committed in the open beside it.
   - **Stamped once, at the END of `Spec`** — after `Fold` (which replaces a
     structural operation with the typed one) and after `Project` (which replaces a
     door with the registry behind it), both of which would discard a mark written
@@ -1295,12 +1308,13 @@ one before it.
     so a child can dispatch it) AND `x-public`, so `/v1/admin/*` is neither an SDK
     method nor a tool a model is shown.
   - **The ratchet, split correctly.** `openapi/floor.json` keeps guarding the
-    INTERNAL document and only it; the committed `public.yaml` is its own
-    ratchet, and the drift gate (`mk/fleet.mk check`, porcelain-scoped to it)
-    catches a shrink and a leak alike.
+    INTERNAL document and only it (now `private.yaml`); the committed
+    `openapi.yaml` is its own ratchet, and the drift gate (`mk/fleet.mk check`,
+    porcelain-scoped to both) catches a shrink and a leak alike.
 - **SDK repos PULL; cloud does not push.** A stale spec does not stop at cloud —
   it ships wrong clients to four package registries. The repos read
-  `openapi.yaml`, regenerate, and release on their own cadence.
+  `openapi.yaml` — the customer contract, which is why that name is the one it
+  carries — regenerate, and release on their own cadence.
   `make -f mk/fleet.mk openapi OUT=<path>` writes the same pair somewhere else
   for a consumer that wants them dropped into its own checkout — the same
   document written by the same run, one value in two places rather than two
@@ -1323,19 +1337,19 @@ staged set as a golden, so a promotion is a diff rather than a number that moved
   (`manifest/openapi_test.go` is `package manifest` and imports `openapi`, so
   the edge would close a cycle). `manifest.StageOf` is the lookup both callers
   of `Subsets` pass in.
-- **`public.yaml` is ga-only.** `audience` (openapi/public.go) gained the term,
+- **The public contract is ga-only.** `audience` (openapi/public.go) gained the term,
   so the rule stays one rule in one place, and `stamp` runs a SECOND time at the
   end of `Weave` — over the finished composition, the first point at which every
-  term of the rule is known. Measured here: `openapi.yaml` unchanged at 1816
-  paths / 2473 operations, 465 of them now carrying `x-stage`; `public.yaml`
-  1671 → 1335 paths, 2284 → 1850 operations.
+  term of the rule is known. Measured when the term landed: the internal document
+  unchanged at 1816 paths / 2473 operations, 465 of them now carrying `x-stage`;
+  the public one 1671 → 1335 paths, 2284 → 1850 operations.
 - **`openapi/floor.json` is unchanged and still guards the INTERNAL document.**
   Nothing left that document; a beta capability is reached by flag, not hidden.
 - **The agent door followed, and it had to be MOVED to.**
   `plugin/gen-fleet-catalog` filters `x-tool AND x-public` — but it read
   `x-public` off the SUBSETS, where the stage is not yet known, so 355 beta
   operations stayed in the door while the same operations were absent from every
-  generated SDK. It now reads the audience off `public.yaml`, which IS the
+  generated SDK. It now reads the audience off `openapi.yaml`, which IS the
   published contract; the roster and the prose still come from each app's own
   subset, because those are the app's own facts and the audience is the fleet's.
   42 subsystem tools and 355 operations left the catalog; no ga app moved.
@@ -2037,10 +2051,10 @@ gates the whole surface as an EXACT set — live router == `app.Commands()` == t
 subsets published NOTHING before it.** esign was 0 of 13 and social 0 of 13 — 26
 operations carrying prose and not one SHAPE, so every generated SDK offered "upload
 a PDF for signature" and "publish this post" with nowhere to put the PDF or the
-post. Both are `beta`, which is why this was the cheap moment: `public.yaml` and
+post. Both are `beta`, which is why this was the cheap moment: the public contract and
 `fleet/catalog.json` exclude a beta capability (HIP-0139 §8, and
 `plugin/gen-fleet-catalog`'s own header explains why it reads the audience from
-public.yaml rather than from the subset), so nothing regenerated and no client
+the public contract rather than from the subset), so nothing regenerated and no client
 moved — the ids and shapes were fixed BEFORE ga exposes them. Now: esign 23 schemas
 / 107 properties / 5 request bodies, social 11 / 43 / 4, both **0 bare properties**,
 both `untypedByDesign` EMPTY. world was already 5 of 6 and stays there.

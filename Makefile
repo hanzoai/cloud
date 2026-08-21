@@ -147,7 +147,7 @@ deploy-ui: ## Build the monochrome ArgoCD dashboard bundle into apps/deploy/webu
 
 skills: ## Regenerate the agent-skills catalogue into apps/skills/catalog (go:embed source) from this repo's own specs.
 	# THE SOURCE IS plugin/<app>/openapi.json — each app's own binary describing its
-	# own live router, the same input the fleet catalogue and openapi.yaml are built
+	# own live router, the same input the fleet catalogue and both documents are built
 	# from. So a skill names a route this fleet serves, and the chain from Go doc
 	# comment to published skill has one link per step and no hand-written copy:
 	#
@@ -428,7 +428,7 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 # the convenience, never the contract — CI runs the real gate (hanzo.yml,
 # app-contract), and nothing in the docs points here as the default.
 test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only — CI runs `test`.
-	@echo ">> test-fast: NOT checking spec drift (openapi.yaml + plugin/*/openapi.json)."
+	@echo ">> test-fast: NOT checking spec drift (openapi.yaml, private.yaml + plugin/*/openapi.json)."
 	@echo ">>            a route added without regenerating will pass here and fail CI."
 	@echo ">>            the real gate:  make -f mk/fleet.mk check"
 	$(MAKE) closure-check
@@ -446,18 +446,20 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 #      projects its own router into plugin/<app>/openapi.json (mk/fleet.mk — one lean
 #      binary per app, no fused build and no mega link). It no longer writes an MCP
 #      catalogue beside it: the door asks the subsystems (package fleet).
-#   3. the weave composes those subsets into openapi.yaml (openapi/weave.go),
+#   3. the weave composes those subsets into private.yaml (openapi/weave.go),
 #      refusing when two apps claim one path or one schema name. There is no
-#      monolith left to read: the woven document IS the published spec.
-#   4. the same run projects that document twice and writes public.yaml beside it
-#      (openapi/public.go): the PUBLIC contract, which is the operations that
-#      DECLARED themselves part of it and nothing else. Default-deny — an
-#      operation that says nothing is internal, so a product cannot reach a
-#      published SDK by anyone forgetting. openapi.yaml stays the internal
-#      document, admin included, and is what our own clients are cut from.
+#      monolith left to read: the woven document IS everything the fleet serves,
+#      admin family and staged capabilities included, and is what an operator
+#      reads and what the routing gates measure.
+#   4. the same run projects that document and writes openapi.yaml beside it
+#      (openapi/public.go): the PUBLIC contract, the customer surface and nothing
+#      else. It holds the NAME because the name is what gets read — a generator
+#      that has never heard of the audience rule still obeys it by reaching for
+#      the file everyone reaches for. GET /v1/openapi.json answers with these
+#      same bytes.
 #
-# openapi.yaml is a golden file: written here, and verified two different ways —
-# and the difference between them is the whole lesson.
+# Both are golden files: written here, and verified two different ways — and the
+# difference between them is the whole lesson.
 #
 # The WEAVE (weave, run by `make test`) proves the subsets COMPOSE: no two
 # apps claiming one path, no two claiming one schema name. It compares the subsets

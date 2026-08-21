@@ -6,7 +6,7 @@
 // exist: an earlier catalogue was hand-kept per app and drifted — one subsystem
 // declared 12 tools while it served 365 — because nothing regenerated it from
 // the thing it described. These subsets are regenerated from source by
-// `make -f mk/fleet.mk check` and held against openapi.yaml by the weave, so a
+// `make -f mk/fleet.mk check` and held against the woven document by the weave, so a
 // catalogue derived from them is red in CI the moment it disagrees.
 //
 // It carries operation ids and prose, and no schemas. The door publishes one
@@ -14,15 +14,16 @@
 // for the one it picked — that fetch reaches the owning subsystem, which is one
 // process rather than a hundred.
 //
-// THE AUDIENCE COMES FROM public.yaml AND NOT FROM THE SUBSET, and the two are
+// THE AUDIENCE COMES FROM openapi.yaml AND NOT FROM THE SUBSET, and the two are
 // not the same answer. A subset's x-public is what the app's own binary could
 // derive about itself, and one term of that rule is a fleet fact the app cannot
 // see: its STAGE (HIP-0139 §8, stamped by the weave). Read off the subsets, a
 // beta capability's 355 operations stayed in the door — offered to every model
 // while the same operations were absent from every generated SDK, which is
-// exactly the split the paragraph below says does not exist. public.yaml IS the
-// public contract, so reading it is not a second copy of the rule; it is the
-// only copy, asked where it has been fully applied.
+// exactly the split the paragraph below says does not exist. openapi.yaml IS the
+// public contract — the weave writes the customer projection there and everything
+// the fleet serves to private.yaml — so reading it is not a second copy of the
+// rule; it is the only copy, asked where it has been fully applied.
 package main
 
 import (
@@ -151,19 +152,19 @@ func main() {
 	fmt.Printf("%s: %d subsystems, %d operations\n", dst, len(out), n)
 }
 
-// contract is every operationId in the published contract, read off public.yaml.
+// contract is every operationId in the published contract, read off openapi.yaml.
 //
 // An id is a fleet-wide key — openapi.uniqueOperationIDs refuses a document where
 // two addresses share one — so membership is all this needs and the address does
 // not have to be matched a second time. `make -f mk/fleet.mk documents` writes
-// public.yaml immediately before running this, from the same subsets, so the two
+// openapi.yaml immediately before running this, from the same subsets, so the two
 // always describe one commit.
 //
-// A missing or empty public.yaml is a REFUSAL. Treating it as "nothing is public"
+// A missing or empty openapi.yaml is a REFUSAL. Treating it as "nothing is public"
 // would silently write a catalog with no tools in it, and the door would answer
 // tools/list with an empty fleet — 200 OK, and wrong in the way nobody files.
 func contract(root string) (map[string]bool, error) {
-	path := filepath.Join(root, "public.yaml")
+	path := filepath.Join(root, "openapi.yaml")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w — run `make -f mk/fleet.mk openapi` first", path, err)

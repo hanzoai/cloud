@@ -1,4 +1,8 @@
-# Addresses openapi.yaml publishes that the deployed api does NOT route.
+# Addresses private.yaml publishes that the deployed api does NOT route.
+#
+# The INTERNAL document, because routing is not an audience question: an operator
+# address that 404s is as dark as a customer one, and probing the customer
+# contract alone would stop asking about the whole /v1/admin family.
 #
 # THIS FILE MAY ONLY SHRINK. openapi/reach.py probes every GET and HEAD the
 # document publishes — literal AND parameterised, filling each {param} with a
