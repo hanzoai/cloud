@@ -220,3 +220,37 @@ func keysOf[V any](m map[string]V) []string {
 	}
 	return out
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the two gates
+// above cannot see. They prove the ADDRESS and the SHAPES reach the document;
+// neither says anything about whether the shapes' FIELDS mean anything to a
+// reader, and those come from a different place — a doc comment on each field,
+// which zipdoc lifts one at a time.
+//
+// It matters here because `url` is a security boundary and not a parameter. The
+// value is dialled from INSIDE the cluster, so which URLs are accepted is the
+// whole contract of this route, and a caller who cannot see that in the document
+// finds it out from a refusal instead.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	t.Setenv("WEBSEARCH_API_KEY", "test-service-key")
+	doc, err := openapi.Spec(mount(t), openapi.Info{Title: "crawl", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("crawl publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/crawl describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+}
