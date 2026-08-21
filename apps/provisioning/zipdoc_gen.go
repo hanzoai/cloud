@@ -267,4 +267,123 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"embeddings"}`),
 	})
+	zip.Describe("POST /v1/provisioning/datastore", zip.Doc{
+		Description: "Launches your org's OWN Hanzo Datastore instance and answers\nwith its `datastore://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
+		Fields: map[string]string{
+			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
+			"provisionRequest.name":            "Name is the org-unique slug for the new resource, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.",
+			"provisionResult.connectionString": "ConnectionString is the ready-to-use DSN, credential included. RETURNED\nHERE ONCE: no read beside this one carries it, so a caller that does not\nkeep it must provision again.",
+			"provisionResult.database":         "Database is the logical database, collection, index or bucket this resource\nresolves to on its backend. It is derived from Name under an org-namespacing\nhash, so it is not Name and two orgs cannot land on one.",
+			"provisionResult.host":             "Host is the address that routes to this resource — a dedicated instance's\nown in-cluster Service, or the public gateway for a shared one. Never the\ninternal admin address of a shared backend.",
+			"provisionResult.id":               "ID is the resource's server-minted handle, \"rs_\"-prefixed. The caller does\nnot choose it, and it is what every read and the delete address.",
+			"provisionResult.kind":             "Kind is the product provisioned: sql, vector, datastore, kv, search, s3 or\ndocdb. It is the route that was called, not a body field.",
+			"provisionResult.name":             "Name is the org-unique slug the caller asked for, lower-cased. Every\nphysical name on the backend derives from it.",
+			"provisionResult.password":         "Password is the minted credential, in plaintext, for the kinds that have\none. RETURNED HERE ONCE — where KMS is configured it is sealed there and\nonly a reference is persisted; where it is not, it is stored nowhere at all.\nIt is never held in plaintext on either side.",
+			"provisionResult.port":             "Port is the port a client connects to on Host.",
+			"provisionResult.status":           "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator. A shared-backend create is \"ready\" here;\na dedicated one answers 201 still launching, and reaches ready only when a\nlater read reconciles it against the operator's live CR — never fabricated.",
+			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
+		},
+	})
+	zip.Describe("POST /v1/provisioning/docdb", zip.Doc{
+		Description: "CreateDocDB launches your org's OWN document-database instance and answers with\nits `mongodb://` connection string. It speaks the MongoDB wire protocol, so\nexisting MongoDB drivers connect unchanged.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
+		Fields: map[string]string{
+			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
+			"provisionRequest.name":            "Name is the org-unique slug for the new resource, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.",
+			"provisionResult.connectionString": "ConnectionString is the ready-to-use DSN, credential included. RETURNED\nHERE ONCE: no read beside this one carries it, so a caller that does not\nkeep it must provision again.",
+			"provisionResult.database":         "Database is the logical database, collection, index or bucket this resource\nresolves to on its backend. It is derived from Name under an org-namespacing\nhash, so it is not Name and two orgs cannot land on one.",
+			"provisionResult.host":             "Host is the address that routes to this resource — a dedicated instance's\nown in-cluster Service, or the public gateway for a shared one. Never the\ninternal admin address of a shared backend.",
+			"provisionResult.id":               "ID is the resource's server-minted handle, \"rs_\"-prefixed. The caller does\nnot choose it, and it is what every read and the delete address.",
+			"provisionResult.kind":             "Kind is the product provisioned: sql, vector, datastore, kv, search, s3 or\ndocdb. It is the route that was called, not a body field.",
+			"provisionResult.name":             "Name is the org-unique slug the caller asked for, lower-cased. Every\nphysical name on the backend derives from it.",
+			"provisionResult.password":         "Password is the minted credential, in plaintext, for the kinds that have\none. RETURNED HERE ONCE — where KMS is configured it is sealed there and\nonly a reference is persisted; where it is not, it is stored nowhere at all.\nIt is never held in plaintext on either side.",
+			"provisionResult.port":             "Port is the port a client connects to on Host.",
+			"provisionResult.status":           "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator. A shared-backend create is \"ready\" here;\na dedicated one answers 201 still launching, and reaches ready only when a\nlater read reconciles it against the operator's live CR — never fabricated.",
+			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
+		},
+	})
+	zip.Describe("POST /v1/provisioning/kv", zip.Doc{
+		Description: "CreateKV launches your org's OWN key-value instance and answers with its `kv://`\nconnection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
+		Fields: map[string]string{
+			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
+			"provisionRequest.name":            "Name is the org-unique slug for the new resource, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.",
+			"provisionResult.connectionString": "ConnectionString is the ready-to-use DSN, credential included. RETURNED\nHERE ONCE: no read beside this one carries it, so a caller that does not\nkeep it must provision again.",
+			"provisionResult.database":         "Database is the logical database, collection, index or bucket this resource\nresolves to on its backend. It is derived from Name under an org-namespacing\nhash, so it is not Name and two orgs cannot land on one.",
+			"provisionResult.host":             "Host is the address that routes to this resource — a dedicated instance's\nown in-cluster Service, or the public gateway for a shared one. Never the\ninternal admin address of a shared backend.",
+			"provisionResult.id":               "ID is the resource's server-minted handle, \"rs_\"-prefixed. The caller does\nnot choose it, and it is what every read and the delete address.",
+			"provisionResult.kind":             "Kind is the product provisioned: sql, vector, datastore, kv, search, s3 or\ndocdb. It is the route that was called, not a body field.",
+			"provisionResult.name":             "Name is the org-unique slug the caller asked for, lower-cased. Every\nphysical name on the backend derives from it.",
+			"provisionResult.password":         "Password is the minted credential, in plaintext, for the kinds that have\none. RETURNED HERE ONCE — where KMS is configured it is sealed there and\nonly a reference is persisted; where it is not, it is stored nowhere at all.\nIt is never held in plaintext on either side.",
+			"provisionResult.port":             "Port is the port a client connects to on Host.",
+			"provisionResult.status":           "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator. A shared-backend create is \"ready\" here;\na dedicated one answers 201 still launching, and reaches ready only when a\nlater read reconciles it against the operator's live CR — never fabricated.",
+			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
+		},
+	})
+	zip.Describe("POST /v1/provisioning/s3", zip.Doc{
+		Description: "Creates an S3-compatible bucket inside the already-running shared\nobject store and answers with the endpoint that reaches it.",
+		Fields: map[string]string{
+			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
+			"provisionRequest.name":            "Name is the org-unique slug for the new resource, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.",
+			"provisionResult.connectionString": "ConnectionString is the ready-to-use DSN, credential included. RETURNED\nHERE ONCE: no read beside this one carries it, so a caller that does not\nkeep it must provision again.",
+			"provisionResult.database":         "Database is the logical database, collection, index or bucket this resource\nresolves to on its backend. It is derived from Name under an org-namespacing\nhash, so it is not Name and two orgs cannot land on one.",
+			"provisionResult.host":             "Host is the address that routes to this resource — a dedicated instance's\nown in-cluster Service, or the public gateway for a shared one. Never the\ninternal admin address of a shared backend.",
+			"provisionResult.id":               "ID is the resource's server-minted handle, \"rs_\"-prefixed. The caller does\nnot choose it, and it is what every read and the delete address.",
+			"provisionResult.kind":             "Kind is the product provisioned: sql, vector, datastore, kv, search, s3 or\ndocdb. It is the route that was called, not a body field.",
+			"provisionResult.name":             "Name is the org-unique slug the caller asked for, lower-cased. Every\nphysical name on the backend derives from it.",
+			"provisionResult.password":         "Password is the minted credential, in plaintext, for the kinds that have\none. RETURNED HERE ONCE — where KMS is configured it is sealed there and\nonly a reference is persisted; where it is not, it is stored nowhere at all.\nIt is never held in plaintext on either side.",
+			"provisionResult.port":             "Port is the port a client connects to on Host.",
+			"provisionResult.status":           "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator. A shared-backend create is \"ready\" here;\na dedicated one answers 201 still launching, and reaches ready only when a\nlater read reconciles it against the operator's live CR — never fabricated.",
+			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
+		},
+	})
+	zip.Describe("POST /v1/provisioning/search", zip.Doc{
+		Description: "Creates a search index inside the already-running shared search\nbackend and answers with the endpoint that reaches it.",
+		Fields: map[string]string{
+			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
+			"provisionRequest.name":            "Name is the org-unique slug for the new resource, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.",
+			"provisionResult.connectionString": "ConnectionString is the ready-to-use DSN, credential included. RETURNED\nHERE ONCE: no read beside this one carries it, so a caller that does not\nkeep it must provision again.",
+			"provisionResult.database":         "Database is the logical database, collection, index or bucket this resource\nresolves to on its backend. It is derived from Name under an org-namespacing\nhash, so it is not Name and two orgs cannot land on one.",
+			"provisionResult.host":             "Host is the address that routes to this resource — a dedicated instance's\nown in-cluster Service, or the public gateway for a shared one. Never the\ninternal admin address of a shared backend.",
+			"provisionResult.id":               "ID is the resource's server-minted handle, \"rs_\"-prefixed. The caller does\nnot choose it, and it is what every read and the delete address.",
+			"provisionResult.kind":             "Kind is the product provisioned: sql, vector, datastore, kv, search, s3 or\ndocdb. It is the route that was called, not a body field.",
+			"provisionResult.name":             "Name is the org-unique slug the caller asked for, lower-cased. Every\nphysical name on the backend derives from it.",
+			"provisionResult.password":         "Password is the minted credential, in plaintext, for the kinds that have\none. RETURNED HERE ONCE — where KMS is configured it is sealed there and\nonly a reference is persisted; where it is not, it is stored nowhere at all.\nIt is never held in plaintext on either side.",
+			"provisionResult.port":             "Port is the port a client connects to on Host.",
+			"provisionResult.status":           "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator. A shared-backend create is \"ready\" here;\na dedicated one answers 201 still launching, and reaches ready only when a\nlater read reconciles it against the operator's live CR — never fabricated.",
+			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
+		},
+	})
+	zip.Describe("POST /v1/provisioning/sql", zip.Doc{
+		Description: "CreateSQL launches your org's OWN PostgreSQL instance and answers with its\n`postgres://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster, where there is no orchestrator to launch one, this fails\nclosed with 503 rather than handing back a shared one.",
+		Fields: map[string]string{
+			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
+			"provisionRequest.name":            "Name is the org-unique slug for the new resource, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.",
+			"provisionResult.connectionString": "ConnectionString is the ready-to-use DSN, credential included. RETURNED\nHERE ONCE: no read beside this one carries it, so a caller that does not\nkeep it must provision again.",
+			"provisionResult.database":         "Database is the logical database, collection, index or bucket this resource\nresolves to on its backend. It is derived from Name under an org-namespacing\nhash, so it is not Name and two orgs cannot land on one.",
+			"provisionResult.host":             "Host is the address that routes to this resource — a dedicated instance's\nown in-cluster Service, or the public gateway for a shared one. Never the\ninternal admin address of a shared backend.",
+			"provisionResult.id":               "ID is the resource's server-minted handle, \"rs_\"-prefixed. The caller does\nnot choose it, and it is what every read and the delete address.",
+			"provisionResult.kind":             "Kind is the product provisioned: sql, vector, datastore, kv, search, s3 or\ndocdb. It is the route that was called, not a body field.",
+			"provisionResult.name":             "Name is the org-unique slug the caller asked for, lower-cased. Every\nphysical name on the backend derives from it.",
+			"provisionResult.password":         "Password is the minted credential, in plaintext, for the kinds that have\none. RETURNED HERE ONCE — where KMS is configured it is sealed there and\nonly a reference is persisted; where it is not, it is stored nowhere at all.\nIt is never held in plaintext on either side.",
+			"provisionResult.port":             "Port is the port a client connects to on Host.",
+			"provisionResult.status":           "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator. A shared-backend create is \"ready\" here;\na dedicated one answers 201 still launching, and reaches ready only when a\nlater read reconciles it against the operator's live CR — never fabricated.",
+			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
+		},
+	})
+	zip.Describe("POST /v1/provisioning/vector", zip.Doc{
+		Description: "Creates a vector collection inside the already-running shared\nvector backend and answers with the endpoint that reaches it.",
+		Fields: map[string]string{
+			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
+			"provisionRequest.name":            "Name is the org-unique slug for the new resource, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.",
+			"provisionResult.connectionString": "ConnectionString is the ready-to-use DSN, credential included. RETURNED\nHERE ONCE: no read beside this one carries it, so a caller that does not\nkeep it must provision again.",
+			"provisionResult.database":         "Database is the logical database, collection, index or bucket this resource\nresolves to on its backend. It is derived from Name under an org-namespacing\nhash, so it is not Name and two orgs cannot land on one.",
+			"provisionResult.host":             "Host is the address that routes to this resource — a dedicated instance's\nown in-cluster Service, or the public gateway for a shared one. Never the\ninternal admin address of a shared backend.",
+			"provisionResult.id":               "ID is the resource's server-minted handle, \"rs_\"-prefixed. The caller does\nnot choose it, and it is what every read and the delete address.",
+			"provisionResult.kind":             "Kind is the product provisioned: sql, vector, datastore, kv, search, s3 or\ndocdb. It is the route that was called, not a body field.",
+			"provisionResult.name":             "Name is the org-unique slug the caller asked for, lower-cased. Every\nphysical name on the backend derives from it.",
+			"provisionResult.password":         "Password is the minted credential, in plaintext, for the kinds that have\none. RETURNED HERE ONCE — where KMS is configured it is sealed there and\nonly a reference is persisted; where it is not, it is stored nowhere at all.\nIt is never held in plaintext on either side.",
+			"provisionResult.port":             "Port is the port a client connects to on Host.",
+			"provisionResult.status":           "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator. A shared-backend create is \"ready\" here;\na dedicated one answers 201 still launching, and reaches ready only when a\nlater read reconciles it against the operator's live CR — never fabricated.",
+			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
+		},
+	})
 }
