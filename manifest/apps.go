@@ -161,14 +161,19 @@ var Apps = []App{
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
 	{Name: "prompts", Prefixes: []string{"/v1/prompts"}},
-	// /v1/coding is the coding engine's app-facing door, and it is on THIS row
-	// rather than a row of its own because the engine is in this process and
-	// cannot be anywhere else: it needs the live session store the run streams
-	// into, the durable tasks engine, and the in-memory mailbox a routed run is
-	// handed through — all three of which are agents'. A separate app would put a
-	// socket between the run and its own mailbox. A second address on one app is
-	// the ordinary shape here (tasks answers /tasks and /v1/tasks).
-	{Name: "agents", Prefixes: []string{"/v1/agent", "/v1/agents", "/v1/coding"}},
+	// The coding door answers at /v1/agents/coding. A coding run IS an agent run:
+	// the engine is in this process because it needs the live session store the
+	// run streams into, the durable tasks engine and the in-memory mailbox a routed
+	// run is handed through — all three of which are agents' — so there is no store
+	// boundary to split on and nothing left to give /v1/coding a root of its own.
+	//
+	// /v1/agent is the conversation surface, and it is still a second root because
+	// hanzoai/agent registers those four routes at that literal path. Moving it is
+	// an upstream release: the handlers are unexported, hz.Mount takes the concrete
+	// *zip.App, and POST /v1/agents is already the typed create — so the fold needs
+	// both a prefix hz.Mount honours and an address for the round that the
+	// collection root is not.
+	{Name: "agents", Prefixes: []string{"/v1/agent", "/v1/agents"}},
 	{Name: "link", Prefixes: []string{"/v1/links"}, Stage: Beta},
 	{Name: "wallets", Prefixes: []string{"/v1/wallets"}, Stage: Beta},
 	{Name: "x402", Prefixes: []string{"/v1/x402"}, Stage: Beta},
@@ -317,16 +322,15 @@ var Apps = []App{
 	{Name: "visor", Prefixes: []string{"/v1/visor"}},
 	{Name: "captable", Prefixes: []string{"/v1/captable"}, Stage: Beta},
 	{Name: "code", Prefixes: []string{"/v1/code"}},
-	// lsp lives UNDER code, at /v1/code/lsp, because they are two reads of one
-	// repository: code is the static index, lsp the live language server that
-	// resolves through dependencies. One home for code intelligence means one
-	// place to look for it, in the document and in the MCP tool list alike.
-	//
-	// The nesting is not a routing hazard, it is how routing works: nested static
-	// prefixes resolve by SPECIFICITY, so /v1/code/lsp beats code's /v1/code and
-	// both beat ai's bare "/v1" — the same relation storage's /v1/s3/buckets has
-	// to provisioning's /v1/s3. Adjacency in this list is documentation.
-	{Name: "lsp", Prefixes: []string{"/v1/code/lsp"}},
+	// lsp answers at its OWN root. code and lsp are two reads of one repository
+	// — code is the static index, lsp the live language server that resolves
+	// through dependencies — and that makes them SIBLINGS, each at the address
+	// its own name spells (HIP-0139 §3.1). lsp is a §2.5 word, so it needs no
+	// argument to be one. It used to sit under /v1/code, which read as one home
+	// for code intelligence and was an address answered by an app not named in
+	// it; the two are cross-referenced instead, which is what a reader actually
+	// follows. Adjacency in this list is documentation.
+	{Name: "lsp", Prefixes: []string{"/v1/lsp"}},
 	// zt held "/v1/edge/nodes" — a top-level name for something that was never a
 	// product. Four unrelated things wore "edge": the on-device inference runtime
 	// (hanzoai/edge, a binary a customer runs on their own machine, so it has no cloud
@@ -368,7 +372,12 @@ var Apps = []App{
 	{Name: "channels", Prefixes: []string{"/v1/channels"}},
 	{Name: "gateway", Prefixes: []string{"/v1/gateway"}},
 	{Name: "entitlements", Prefixes: []string{"/v1/entitlements", "/v1/orgs/:org/entitlements"}},
-	{Name: "exec", Prefixes: []string{"/v1/download", "/v1/exec", "/v1/files", "/v1/upload"}},
+	// The three file addresses used to be roots of their own — /v1/upload,
+	// /v1/download, /v1/files — because that is the shape the LibreChat code
+	// interpreter's clients compose. They compose them off a CONFIGURABLE base,
+	// so the fold costs a base-URL change and no wire change: a session's files
+	// are the session's, and the session is exec's.
+	{Name: "exec", Prefixes: []string{"/v1/exec"}},
 	{Name: "sandboxes", Prefixes: []string{"/v1/sandboxes"}},
 	{Name: "websearch", Prefixes: []string{"/v1/websearch", "/v1/scrape"}},
 	{Name: "crawl", Prefixes: []string{"/v1/crawl"}},
@@ -430,7 +439,12 @@ var Apps = []App{
 	// the host forwards the caller's OWN tools/list to EVERY subsystem, so each one
 	// answers for this caller out of its own registry and its own rows, and being
 	// asked per caller is no longer a privilege one app holds.
-	{Name: "tools", Prefixes: []string{"/v1/mcp/servers", "/v1/plugins", "/v1/skills", "/v1/tools"}},
+	// Its three views — skills, plugins and the org's external MCP servers — used
+	// to be roots of their own. Each is the SAME registry narrowed, over rows this
+	// app opens and no other does, so each folded under the plane rather than
+	// splitting off an app that would share a store. The last fold vacates the
+	// /v1/mcp root entirely: that address is the host's agent door.
+	{Name: "tools", Prefixes: []string{"/v1/tools"}},
 	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}, Stage: Beta},
 	{Name: "referrals", Prefixes: []string{"/v1/admin/referrals/bonuses", "/v1/admin/referrals/sweep", "/v1/referrals"}, Stage: Beta},
 	{Name: "guide", Prefixes: []string{"/v1/guide"}, Stage: Beta},

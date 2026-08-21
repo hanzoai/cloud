@@ -303,7 +303,7 @@ doors are registered in `plugin/`.
 There is now exactly ONE door, in `plugin/agents/coding.go`:
 
 ```go
-zip.Post[plane.CodingStartIn, plane.CodingStarted](cloud.ZipApp(app), "/v1/coding", httpCodingStart)
+zip.Post[plane.CodingStartIn, plane.CodingStarted](cloud.ZipApp(app), "/v1/agents/coding", httpCodingStart)
 ```
 
 A typed op is four surfaces at once, so that single registration IS the REST

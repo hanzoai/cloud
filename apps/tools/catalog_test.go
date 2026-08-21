@@ -435,7 +435,7 @@ func TestEnablingAListingIsTheSameRegistration(t *testing.T) {
 		entry("com.stripe/mcp", "payments", remote("https://mcp.stripe.com"), nil),
 		entry("io.github.alice/weather", "weather", nil, stdio("@alice/weather")),
 	)
-	r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme", map[string]any{"listing": "com.stripe_mcp"})
+	r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme", map[string]any{"listing": "com.stripe_mcp"})
 	if r.Code != 201 {
 		t.Fatalf("enable: %d (%s)", r.Code, r.Body)
 	}
@@ -456,11 +456,11 @@ func TestEnablingAListingIsTheSameRegistration(t *testing.T) {
 
 	// Twice is once: a retried enable revises the same row rather than adding a
 	// near-duplicate whose tools would collide with the first's.
-	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	if r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"listing": "com.stripe_mcp"}); r.Code != 201 {
 		t.Fatalf("re-enable: %d (%s)", r.Code, r.Body)
 	}
-	list := do(t, app, http.MethodGet, "/v1/mcp/servers", "acme", nil)
+	list := do(t, app, http.MethodGet, "/v1/tools/mcp/servers", "acme", nil)
 	var out struct {
 		Servers []MCPServer `json:"servers"`
 	}
@@ -473,7 +473,7 @@ func TestEnablingAListingIsTheSameRegistration(t *testing.T) {
 
 	// A listing with nothing to reach is refused with the reason, not enabled into
 	// a server that cannot answer.
-	r = do(t, app, http.MethodPost, "/v1/mcp/servers", "acme", map[string]any{"listing": "io.github.alice_weather"})
+	r = do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme", map[string]any{"listing": "io.github.alice_weather"})
 	if r.Code != 422 {
 		t.Fatalf("enabling a package-only listing want 422, got %d (%s)", r.Code, r.Body)
 	}
@@ -482,7 +482,7 @@ func TestEnablingAListingIsTheSameRegistration(t *testing.T) {
 	}
 
 	// Naming both a url and a listing is asking for two servers.
-	r = do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	r = do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"listing": "com.stripe_mcp", "url": "https://elsewhere.example/mcp", "name": "x"})
 	if r.Code != 400 {
 		t.Fatalf("url AND listing want 400, got %d (%s)", r.Code, r.Body)
@@ -493,7 +493,7 @@ func TestEnablingAListingIsTheSameRegistration(t *testing.T) {
 // the catalog arriving beside it.
 func TestTypedRegistrationStillWorks(t *testing.T) {
 	app := newApp(t, nil)
-	r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"name": "mine", "url": "https://mcp.example.com/rpc"})
 	if r.Code != 201 {
 		t.Fatalf("register: %d (%s)", r.Code, r.Body)
@@ -550,7 +550,7 @@ func TestAFailedSealNeverCostsAnExistingServer(t *testing.T) {
 
 	// A FRESH registration whose secret cannot be sealed leaves nothing behind: a
 	// row claiming a credential that is not there would dispatch unauthenticated.
-	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	if r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "sk-live"}); r.Code != 500 {
 		t.Fatalf("a failed seal want 500, got %d (%s)", r.Code, r.Body)
 	}
@@ -560,12 +560,12 @@ func TestAFailedSealNeverCostsAnExistingServer(t *testing.T) {
 
 	// Now enable it for real, then re-enable with a secret that cannot be sealed.
 	mounted.State.kms = nil
-	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	if r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"listing": "com.stripe_mcp"}); r.Code != 201 {
 		t.Fatalf("enable: %d (%s)", r.Code, r.Body)
 	}
 	mounted.State.kms = brokenKMS{}
-	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	if r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "sk-live"}); r.Code != 500 {
 		t.Fatalf("a failed re-seal want 500, got %d (%s)", r.Code, r.Body)
 	}
@@ -586,7 +586,7 @@ func serverCount(t *testing.T, app *zip.App, org string) int {
 	var out struct {
 		Servers []MCPServer `json:"servers"`
 	}
-	r := do(t, app, http.MethodGet, "/v1/mcp/servers", org, nil)
+	r := do(t, app, http.MethodGet, "/v1/tools/mcp/servers", org, nil)
 	if err := json.Unmarshal(r.Body, &out); err != nil {
 		t.Fatalf("list servers: %v (%s)", err, r.Body)
 	}
@@ -660,12 +660,12 @@ func TestSyncSkipsANameItCannotAddress(t *testing.T) {
 // skips the server, and its tools vanish from the org's plane in silence.
 func TestAFailedSealLeavesNoRowClaimingACredential(t *testing.T) {
 	app := shelf(t, entry("com.stripe/mcp", "payments", remote("https://mcp.stripe.com"), nil))
-	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	if r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"listing": "com.stripe_mcp"}); r.Code != 201 {
 		t.Fatalf("enable: %d (%s)", r.Code, r.Body)
 	}
 	mounted.State.kms = brokenKMS{}
-	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	if r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "sk-live"}); r.Code != 500 {
 		t.Fatalf("a failed re-seal want 500, got %d (%s)", r.Code, r.Body)
 	}
@@ -684,14 +684,14 @@ func TestDeregisteringDestroysTheCredential(t *testing.T) {
 	app := shelf(t, entry("com.stripe/mcp", "payments", remote("https://mcp.stripe.com"), nil))
 	kms := recordingKMS{}
 	mounted.State.kms = kms
-	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	if r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "sk-live"}); r.Code != 201 {
 		t.Fatalf("enable: %d (%s)", r.Code, r.Body)
 	}
 	if string(kms[authRef("acme", "stripe-com")]) != "sk-live" {
 		t.Fatalf("the credential was not sealed: %v", kms)
 	}
-	if r := do(t, app, http.MethodDelete, "/v1/mcp/servers/stripe-com", "acme", nil); r.Code != 204 {
+	if r := do(t, app, http.MethodDelete, "/v1/tools/mcp/servers/stripe-com", "acme", nil); r.Code != 204 {
 		t.Fatalf("deregister: %d (%s)", r.Code, r.Body)
 	}
 	if v := kms[authRef("acme", "stripe-com")]; len(v) != 0 {
@@ -705,13 +705,13 @@ func TestDeregisteringDestroysTheCredential(t *testing.T) {
 func TestABadHeaderNameIsRefusedAtRegistration(t *testing.T) {
 	app := newApp(t, nil)
 	for _, bad := range []string{"Auth orization", "X-Api-Key:", "X\nInjected"} {
-		r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+		r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 			map[string]any{"name": "x", "url": "https://mcp.example.com/rpc", "authHeader": bad})
 		if r.Code != 400 {
 			t.Fatalf("authHeader %q want 400, got %d (%s)", bad, r.Code, r.Body)
 		}
 	}
-	if r := do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+	if r := do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 		map[string]any{"name": "x", "url": "https://mcp.example.com/rpc", "authHeader": "X-Api-Key"}); r.Code != 201 {
 		t.Fatalf("a real header name must be accepted, got %d (%s)", r.Code, r.Body)
 	}
@@ -776,7 +776,7 @@ func TestConcurrentEnablesAreOneServer(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			codes[i] = do(t, app, http.MethodPost, "/v1/mcp/servers", "acme",
+			codes[i] = do(t, app, http.MethodPost, "/v1/tools/mcp/servers", "acme",
 				map[string]any{"listing": "com.stripe_mcp"}).Code
 		}(i)
 	}

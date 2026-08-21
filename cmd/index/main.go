@@ -1,4 +1,4 @@
-// Command index fills the code index that /v1/code and /v1/code/lsp read from.
+// Command index fills the code index that /v1/code and /v1/lsp read from.
 //
 // THE INDEX IS A PUSH: cloud never clones. /v1/code/index takes a repo label and
 // the files themselves, which is what makes one index able to hold repositories

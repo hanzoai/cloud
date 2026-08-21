@@ -11,9 +11,9 @@
 //
 //	POST /v1/exec            lease the session's sandbox → write the program →
 //	                         run it → report what it printed and what it wrote
-//	POST /v1/upload          write into the session's sandbox
-//	GET  /v1/download/{sid}/{id}  read one file back out
-//	GET  /v1/files/{sid}     list what the session holds
+//	POST /v1/exec/upload     write into the session's sandbox
+//	GET  /v1/exec/download/{sid}/{id}  read one file back out
+//	GET  /v1/exec/files/{sid}     list what the session holds
 //
 // Nothing here ends a lease. apps/sandbox's reaper does, on the two clocks it
 // already keeps — the ttl the lease was taken for, and an hour of nobody touching
@@ -180,7 +180,7 @@ type CodeRun struct {
 // said so. Answering with `storage_session_id` keeps the reply on the agents shape.
 type CodeFile struct {
 	// ID is the file's path RELATIVE to its session's artifact directory, which is
-	// also how it is fetched: GET /v1/download/{session}/{id}.
+	// also how it is fetched: GET /v1/exec/download/{session}/{id}.
 	ID string `json:"id"`
 	// Name is the display name. On an ANSWER it carries the `{session}/{id}`
 	// identifier whole, because the client matches on that prefix.
@@ -214,11 +214,11 @@ type CodeResult struct {
 	Stderr string `json:"stderr"`
 	// Files are what this run CREATED OR CHANGED, decided by mtime against a marker
 	// taken before the program started — so it is the run's output, not a listing of
-	// the directory. Fetch each from GET /v1/download/{session}/{id}.
+	// the directory. Fetch each from GET /v1/exec/download/{session}/{id}.
 	Files []CodeFile `json:"files,omitempty"`
 }
 
-// listing is one row of GET /v1/files/{sid}. The client matches on `name` having
+// listing is one row of GET /v1/exec/files/{sid}. The client matches on `name` having
 // the `{session}/{id}` identifier as a PREFIX, so `name` carries that identifier
 // whole rather than the bare filename.
 type listing struct {
@@ -226,7 +226,7 @@ type listing struct {
 	LastModified string `json:"lastModified"`
 }
 
-// uploaded is the answer POST /v1/upload owes. `message` is checked for the literal
+// uploaded is the answer POST /v1/exec/upload owes. `message` is checked for the literal
 // "success" before any other field is read (crud.js), so it is not decoration.
 type uploaded struct {
 	Message   string         `json:"message"`
@@ -258,11 +258,11 @@ type uploadedFile struct {
 // Runs are stateful through `session_id`. Omit it and the run gets a fresh sandbox
 // whose id comes back on the answer; pass that id again and the next run sees the
 // same filesystem, so a program can write a file one call and read it the next.
-// `files` names bytes already uploaded to a session (POST /v1/upload), copied in
+// `files` names bytes already uploaded to a session (POST /v1/exec/upload), copied in
 // before the program starts. `files` on the ANSWER is what the program created or
 // changed, by comparison against a marker taken at start — so it is the run's real
 // output, not a listing of the directory — and each is fetched from
-// GET /v1/download/{session}/{name}.
+// GET /v1/exec/download/{session}/{name}.
 //
 // The tenant is the caller's, never the body's, at every door. A typed op is also
 // an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no
@@ -751,34 +751,27 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Post[CodeRun, CodeResult](reg, Path, run,
 		zip.WithSummary("Run a code snippet in a sandboxed interpreter"))
 	app.Post(Path+"/programmatic", programmatic)
-	app.Post("/v1/upload", upload)
-	app.Get("/v1/download/*", download)
-	app.Get("/v1/files/:sid", files)
+	app.Post(Path+"/upload", upload)
+	app.Get(Path+"/download/*", download)
+	app.Get(Path+"/files/:sid", files)
 
 	luxlog.Default().New("subsystem", "exec").Info("code interpreter mounted over sandboxes",
 		"peer", peer, "brandOrg", brandOrg, "langs", len(langs))
 	return nil
 }
 
-// prefixes are the /v1 segments this subsystem owns.
+// owned answers whether a path is this subsystem's, and it is now the ONE
+// address plus its subtree.
 //
-// It is still a list that mirrors the router, and a list that mirrors the router
-// will eventually diverge from it. What changed is the CONSEQUENCE of that
-// divergence: a path this list misses no longer reaches a handler that will act —
-// tenantOf refuses a context with no admission marker on it — so a stale entry here
-// is now a 403 on a route that should have worked, and never a route that works
-// without a credential. Fail-closed on drift instead of fail-open.
+// It used to be a list of four roots that mirrored the router, and a list that
+// mirrors the router eventually diverges from it. The fold removed the list
+// rather than the drift risk: every route is under Path, so there is nothing to
+// keep in step and no spelling to miss. What is left is the prefix relation
+// itself, which the router computes the same way.
 //
 // p must already be cloud.RoutePath-normalized.
-var prefixes = []string{Path, "/v1/upload", "/v1/download", "/v1/files"}
-
 func owned(p string) bool {
-	for _, pre := range prefixes {
-		if p == pre || strings.HasPrefix(p, pre+"/") {
-			return true
-		}
-	}
-	return false
+	return p == Path || strings.HasPrefix(p, Path+"/")
 }
 
 // Prose for the four untyped routes, declared beside the wire facts that keep them
@@ -793,24 +786,24 @@ func init() {
 			"continuation token, and resumes when the client posts results back. Serving it "+
 			"means implementing suspension and resumption, so it refuses in the open rather "+
 			"than answering with a shape the caller's parser cannot read.")
-	openapi.Describe("/v1/upload", http.MethodPost,
+	openapi.Describe(Path+"/upload", http.MethodPost,
 		"Upload a file into an execution session",
 		"Takes a multipart upload and writes the file into the session's sandbox, so a "+
 			"later run can read it. Answers the session id and the identifier the file is "+
 			"addressed by; `session_id` in the form joins an existing session instead of "+
 			"opening one.\n\nThe body is multipart/form-data, which is why this is not a "+
 			"typed operation: every non-empty typed body is decoded as JSON.")
-	openapi.Describe("/v1/download/*", http.MethodGet,
+	openapi.Describe(Path+"/download/*", http.MethodGet,
 		"Download a file from a session",
 		"Fetches one file's BYTES from a session, addressed as {session_id}/{fileId} — a "+
 			"plot, a generated CSV, whatever a run wrote. The content type is derived from the "+
 			"name and defaults to application/octet-stream.\n\nThis is the one address whose "+
 			"success body is not JSON, which is why it is not a typed operation: a typed "+
 			"operation always marshals a Go value.")
-	openapi.Describe("/v1/files/:sid", http.MethodGet,
+	openapi.Describe(Path+"/files/:sid", http.MethodGet,
 		"List the files in an execution session",
 		"Lists what a session's sandbox holds — the uploads a run can read and the "+
-			"artifacts it produced — each then fetched from /v1/download.\n\nIt answers a BARE "+
+			"artifacts it produced — each then fetched from /v1/exec/download.\n\nIt answers a BARE "+
 			"JSON ARRAY of {name, lastModified}, where `name` is the same {session_id}/{fileId} "+
 			"identifier download takes, because that is what the client matches on. An object "+
 			"wrapper would be a wire change, which is why this is not a typed operation.")

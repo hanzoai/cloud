@@ -216,7 +216,7 @@ func uploadFile(t *testing.T, app *zip.App, session, name, content string) *http
 	}
 	_, _ = fw.Write([]byte(content))
 	_ = w.Close()
-	return call(t, app, http.MethodPost, "/v1/upload", w.FormDataContentType(), &body)
+	return call(t, app, http.MethodPost, Path+"/upload", w.FormDataContentType(), &body)
 }
 
 // TestUploadAnswersTheShapeTheClientChecks. crud.js reads `message` FIRST and
@@ -264,7 +264,7 @@ func TestDownloadIsTwoSegmentsAndAnswersBytes(t *testing.T) {
 	app := mount(t)
 	res := decode[CodeResult](t, post(t, app, Path, CodeRun{Lang: "py", Code: "savefig"}))
 
-	resp := call(t, app, http.MethodGet, "/v1/download/"+res.SessionID+"/"+res.Files[0].ID, "", nil)
+	resp := call(t, app, http.MethodGet, Path+"/download/"+res.SessionID+"/"+res.Files[0].ID, "", nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -275,7 +275,7 @@ func TestDownloadIsTwoSegmentsAndAnswersBytes(t *testing.T) {
 		t.Errorf("Content-Type = %q, want it derived from the name", ct)
 	}
 	// A one-segment path is not this contract and must not be guessed at.
-	if r := call(t, app, http.MethodGet, "/v1/download/"+res.Files[0].ID, "", nil); r.StatusCode != http.StatusBadRequest {
+	if r := call(t, app, http.MethodGet, Path+"/download/"+res.Files[0].ID, "", nil); r.StatusCode != http.StatusBadRequest {
 		t.Errorf("one-segment download = %d, want 400", r.StatusCode)
 	}
 }
@@ -290,7 +290,7 @@ func TestFilesAnswersABareArrayKeyedByTheDownloadIdentifier(t *testing.T) {
 	app := mount(t)
 	up := decode[uploaded](t, uploadFile(t, app, "", "data.csv", "x"))
 
-	resp := call(t, app, http.MethodGet, "/v1/files/"+up.SessionID, "", nil)
+	resp := call(t, app, http.MethodGet, Path+"/files/"+up.SessionID, "", nil)
 	raw, _ := io.ReadAll(resp.Body)
 	if !strings.HasPrefix(strings.TrimSpace(string(raw)), "[") {
 		t.Fatalf("body = %s, want a BARE JSON array", raw)
@@ -316,7 +316,7 @@ func TestUnsetKeyFailsClosed(t *testing.T) {
 	servePeer(t)
 	app := mount(t)
 	t.Setenv("CODE_EXEC_API_KEY", "")
-	for _, p := range []string{Path, "/v1/upload", "/v1/download/s/f", "/v1/files/s"} {
+	for _, p := range []string{Path, Path+"/upload", Path+"/download/s/f", Path+"/files/s"} {
 		resp := call(t, app, http.MethodGet, p, "", nil)
 		if resp.StatusCode != http.StatusServiceUnavailable {
 			t.Errorf("%s with no key = %d, want 503", p, resp.StatusCode)
@@ -332,7 +332,7 @@ func TestWrongKeyIsRejectedOnEveryPath(t *testing.T) {
 	p := servePeer(t)
 	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "ran", "", 0, nil }
 	app := mount(t)
-	for _, path := range []string{Path, "/v1/upload", "/v1/download/s/f", "/v1/files/s"} {
+	for _, path := range []string{Path, Path+"/upload", Path+"/download/s/f", Path+"/files/s"} {
 		rq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai"+path,
 			strings.NewReader(`{"lang":"py","code":"x=1"}`))
 		rq.Header.Set("X-API-Key", "wrong")
@@ -440,7 +440,7 @@ func TestNestedArtifactsAreListed(t *testing.T) {
 		t.Fatalf("the run reported %v, want both the nested and the top-level artifact", reported)
 	}
 
-	resp := call(t, app, http.MethodGet, "/v1/files/"+res.SessionID, "", nil)
+	resp := call(t, app, http.MethodGet, Path+"/files/"+res.SessionID, "", nil)
 	raw, _ := io.ReadAll(resp.Body)
 	var rows []listing
 	if err := json.Unmarshal(raw, &rows); err != nil {
