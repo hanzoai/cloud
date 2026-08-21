@@ -509,7 +509,8 @@ type stepView struct {
 	ID string `json:"id"`
 	// Section is the phase (section id) this step groups under.
 	Section string `json:"section,omitempty"`
-	Title   string `json:"title"`
+	// Title is the one-line quest as a person reads it in the checklist.
+	Title string `json:"title"`
 	// Detail is the prose/juncture — what the Guide asks or explains here.
 	Detail string `json:"detail,omitempty"`
 	// Dependencies are step ids that must be done/skipped before this step is
@@ -519,13 +520,17 @@ type stepView struct {
 	Enabled *bool `json:"enabled,omitempty"`
 	// Signal names the machine detector that auto-marks this step done.
 	Signal string `json:"signal,omitempty"`
-	// Tool is the MCP tool the Business AI runs for "do it for me"; Args are its
-	// default arguments, Draft an optional AI prompt whose output fills the
-	// DraftInto arg (default "brief").
-	Tool      string         `json:"tool,omitempty"`
-	Args      map[string]any `json:"args,omitempty"`
-	Draft     string         `json:"draft,omitempty"`
-	DraftInto string         `json:"draftInto,omitempty"`
+	// Tool is the MCP tool the Business AI runs for "do it for me". A step naming
+	// none can only be completed by a person.
+	Tool string `json:"tool,omitempty"`
+	// Args are the tool's default arguments, merged under whatever the caller
+	// passes at run time.
+	Args map[string]any `json:"args,omitempty"`
+	// Draft, when set, is the prompt the embedded AI answers first; its output is
+	// folded into one of Args before the tool runs.
+	Draft string `json:"draft,omitempty"`
+	// DraftInto names the argument the drafted text lands in. Empty means "brief".
+	DraftInto string `json:"draftInto,omitempty"`
 
 	// State is the step's per-org lifecycle state: todo|in_progress|done|skipped.
 	State State `json:"state"`
@@ -539,20 +544,43 @@ type stepView struct {
 	BlockedBy []string `json:"blockedBy,omitempty"`
 }
 
+// progressView is how far through the journey an org is.
 type progressView struct {
-	Done    int    `json:"done"`
-	Total   int    `json:"total"`
-	Percent int    `json:"percent"`
-	Next    string `json:"next"`
+	// Done counts steps that are FINISHED — done and skipped alike, since a step
+	// the org deliberately passed over is not still owed. It therefore rises when
+	// somebody skips, which is the intended reading of a checklist.
+	Done int `json:"done"`
+	// Total is how many steps this org's journey holds — the ENABLED steps of the
+	// playbook, so it shrinks when an operator disables one and does not match the
+	// authored step count.
+	Total int `json:"total"`
+	// Percent is done/total as a whole number 0-100, rounded, so a caller renders
+	// a bar without recomputing it. Total zero reads as 0.
+	Percent int `json:"percent"`
+	// Next is the id of the step to do next: the first available, unfinished step
+	// in authoring order. Empty when the journey is complete, and also empty when
+	// every remaining step is blocked by a dependency.
+	Next string `json:"next"`
 }
 
+// overviewView is the whole checklist for the caller's org in one read.
 type overviewView struct {
-	Version  string       `json:"version"`
-	Title    string       `json:"title,omitempty"`
-	Custom   bool         `json:"custom"`
+	// Version identifies the playbook this journey came from, so a caller can tell
+	// that the checklist itself changed under them.
+	Version string `json:"version"`
+	// Title is the playbook's name as it heads the checklist.
+	Title string `json:"title,omitempty"`
+	// Custom is true when the org replaced the shared playbook with one of its own
+	// — the difference between "everyone's checklist" and "the one you authored".
+	Custom bool `json:"custom"`
+	// Progress is how far through the journey the org is.
 	Progress progressView `json:"progress"`
-	Steps    []stepView   `json:"steps"`
-	Funnel   *Funnel      `json:"funnel,omitempty"`
+	// Steps are every enabled step with the org's own state folded in, in
+	// authoring order.
+	Steps []stepView `json:"steps"`
+	// Funnel is the org's analytics lens, present only where the read asked for it
+	// — absent means it was not requested, never that the org has no traffic.
+	Funnel *Funnel `json:"funnel,omitempty"`
 }
 
 func buildOverview(cur Curriculum, custom bool, rows map[string]StateRow) overviewView {
@@ -632,8 +660,21 @@ func (o ops) analytics(ctx context.Context, _ *noInput) (*analyticsView, error) 
 // the classified stage, and the org's own key metrics. Its shape is the contract the
 // Guide and the later recommendation-corpus filter consume.
 type profileResponse struct {
-	Stage      Stage          `json:"stage"`
-	Signals    SignalSet      `json:"signals"`
+	// Stage is how far the business itself has got — formed, launched, activated or
+	// scaling — decided purely from the signals below, and by what the org has
+	// ACHIEVED rather than what it has configured. It reads the STRONGEST evidence
+	// present, so money of record makes an org scaling even if an earlier rung's
+	// signal was never observed. It is unrelated to checklist progress.
+	Stage Stage `json:"stage"`
+	// Signals is what was observed of the org right now, one boolean per probe.
+	// A probe that could not be run reports FALSE, not absent — the shape is stable
+	// so a caller never has to tell a missing key from a negative answer, and the
+	// cost is that "not observed" and "not there" look alike here. Keys are the
+	// probe names, including the `module:<name>` and `connected:<provider>`
+	// families.
+	Signals SignalSet `json:"signals"`
+	// KeyMetrics are the org's OWN numbers behind those signals — never another
+	// org's, and never a platform aggregate.
 	KeyMetrics profileMetrics `json:"keyMetrics"`
 }
 

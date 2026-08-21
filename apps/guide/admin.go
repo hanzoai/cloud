@@ -287,11 +287,19 @@ func mergeItemPatch[T any](item T, patch []byte) (T, error) {
 // blueprintCounts is how many items the blueprint carries in each collection —
 // the summary the authoring cockpit shows without walking the document.
 type blueprintCounts struct {
+	// Principles is how many spine archetypes the playbook carries (64 in the
+	// shipped corpus).
 	Principles int `json:"principles"`
-	Sections   int `json:"sections"`
-	Steps      int `json:"steps"`
+	// Sections is how many phases the journey has.
+	Sections int `json:"sections"`
+	// Steps is how many checklist items the playbook holds, DISABLED ONES INCLUDED
+	// — this counts the authored document, not the journey an org runs, so it is
+	// normally larger than the `total` on a progress view.
+	Steps int `json:"steps"`
+	// Strategies is how many tactics the corpus holds, again counting disabled ones.
 	Strategies int `json:"strategies"`
-	Templates  int `json:"templates"`
+	// Templates is how many reusable prompts the playbook carries.
+	Templates int `json:"templates"`
 }
 
 // blueprintView is the admin plane's envelope: the full blueprint (with every

@@ -23,16 +23,38 @@ const (
 
 // BankTxnRow is a persisted bank_txn as the read API surfaces it.
 type BankTxnRow struct {
-	Connector      string    `json:"connector"`
-	ExternalID     string    `json:"externalId"`
-	PostedAt       string    `json:"postedAt"`
-	AmountCents    int64     `json:"amountCents"`
-	Currency       string    `json:"currency"`
-	Direction      Direction `json:"direction"`
-	Description    string    `json:"description,omitempty"`
-	Merchant       string    `json:"merchant,omitempty"`
-	MatchedVoucher string    `json:"matchedVoucher,omitempty"`
-	Status         string    `json:"status"`
+	// Connector names the feed this row arrived on — which bank or processor
+	// connection it was synced from. With externalId it is the row's identity, so
+	// re-syncing the same statement never books a second copy.
+	Connector string `json:"connector"`
+	// ExternalID is the bank's OWN id for the line, carried verbatim. It is unique
+	// only within its connector.
+	ExternalID string `json:"externalId"`
+	// PostedAt is the bank's posting date for the line, not when we synced it.
+	PostedAt string `json:"postedAt"`
+	// AmountCents is the size of the movement in whole cents, always POSITIVE —
+	// direction carries the sign, so a caller must read both to know which way money
+	// went.
+	AmountCents int64 `json:"amountCents"`
+	// Currency is the ISO code the bank reported the line in.
+	Currency string `json:"currency"`
+	// Direction is which way the money moved: an inflow into the account or an
+	// outflow from it, from the org's point of view.
+	Direction Direction `json:"direction"`
+	// Description is the statement memo as the bank wrote it.
+	Description string `json:"description,omitempty"`
+	// Merchant is the counterparty the feed identified, where it did.
+	Merchant string `json:"merchant,omitempty"`
+	// MatchedVoucher names the ledger voucher this line was reconciled against —
+	// the bill it paid, or the settlement it cleared. Absent when nothing matched,
+	// which for an inflow is what raises a question.
+	MatchedVoucher string `json:"matchedVoucher,omitempty"`
+	// Status is where the line got to: posted (an outflow booked straight to an
+	// expense), settled (an outflow that paid down a scanned bill), reconciled (an
+	// inflow that cleared a pending settlement), transfer (a move between the org's
+	// own accounts, recorded but with no effect on the books), or unmatched (an
+	// inflow nobody could place, which is waiting on a human answer).
+	Status string `json:"status"`
 }
 
 // bankTxnStatus returns the recorded status of a bank_txn (found=false if never seen). It
@@ -116,11 +138,19 @@ func scanBankTxns(rows *sql.Rows) ([]BankTxnRow, error) {
 // (anomalies.go) via [BankQuestion.toQuestion] so the one /v1/books/questions
 // surface can present anomaly and bank questions through a single type.
 type BankQuestion struct {
-	Connector  string `json:"connector"`
+	// Connector names the feed the unplaceable line arrived on. With externalId it
+	// identifies both the question and the bank line it is about, so re-syncing the
+	// same deposit never asks twice.
+	Connector string `json:"connector"`
+	// ExternalID is the bank's own id for the line in question.
 	ExternalID string `json:"externalId"`
-	Prompt     string `json:"prompt"`
-	Status     string `json:"status"`
-	CreatedAt  string `json:"createdAt"`
+	// Prompt is the question put to the founder in plain language — what this money
+	// was, since the books cannot place it on their own.
+	Prompt string `json:"prompt"`
+	// Status is whether the question is still open or has been answered.
+	Status string `json:"status"`
+	// CreatedAt is when the question was raised.
+	CreatedAt string `json:"createdAt"`
 }
 
 // raiseQuestion records a clarifying question for an unmatched inflow, idempotently under

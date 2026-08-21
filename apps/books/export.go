@@ -15,14 +15,26 @@ import (
 // FinancialPackage is the export bundle over a [From, To] period. GLLimit rows of the most
 // recent GL detail are included as the audit trail behind the statements.
 type FinancialPackage struct {
-	Org          string       `json:"org"`
-	From         string       `json:"from,omitempty"`
-	To           string       `json:"to,omitempty"`
-	GeneratedAt  string       `json:"generatedAt"`
+	// Org is the organisation whose books these are — the validated caller's own,
+	// stamped so a downloaded bundle still says whose it is.
+	Org string `json:"org"`
+	// From opens the reporting period. Absent means from the beginning of the ledger.
+	From string `json:"from,omitempty"`
+	// To closes it. Absent means up to now.
+	To string `json:"to,omitempty"`
+	// GeneratedAt is when the bundle was assembled — the moment the statements were
+	// struck, which is what makes two exports of the same period comparable.
+	GeneratedAt string `json:"generatedAt"`
+	// TrialBalance is the proof the ledger balances over the period.
 	TrialBalance TrialBalance `json:"trialBalance"`
-	PnL          PnL          `json:"pnl"`
+	// PnL is the income statement for the period, on an accrual basis.
+	PnL PnL `json:"pnl"`
+	// BalanceSheet is struck as of the period END, not the start.
 	BalanceSheet BalanceSheet `json:"balanceSheet"`
-	GL           []GLRow      `json:"gl"`
+	// GL is the newest slice of ledger detail, as the audit trail behind the
+	// statements. It is CAPPED, so on a busy ledger it is a sample rather than the
+	// full support for the figures above.
+	GL []GLRow `json:"gl"`
 }
 
 // financialPackage assembles the package for one org's ledger over (from, to]. The balance

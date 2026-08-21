@@ -43,10 +43,21 @@ const (
 // Account is one line of the chart: a stable number (the posting key), a human name, its
 // fundamental type, and — for AR/AP — its party subledger class.
 type Account struct {
-	Number string      `json:"number"`
-	Name   string      `json:"name"`
-	Type   AccountType `json:"type"`
-	Party  PartyType   `json:"party,omitempty"`
+	// Number is the posting key every voucher leg, rule and report references —
+	// stable, and the reason the chart is a fixed value rather than a table anybody
+	// can edit. It looks numeric and is a string: "1000" sorts and compares as text.
+	Number string `json:"number"`
+	// Name is the account's human name, for a statement's line label.
+	Name string `json:"name"`
+	// Type is the account's fundamental class, which is also its NORMAL balance
+	// side: asset and expense are debit-normal, liability, income and equity
+	// credit-normal.
+	Type AccountType `json:"type"`
+	// Party marks the account as carrying a SUBLEDGER — receivable is money owed to
+	// us, payable money we owe — so a leg posted here also writes a payment-ledger
+	// row against a counterparty. Absent means no subledger: a bank, wallet, revenue
+	// or cost account tracks no counterparty at all.
+	Party PartyType `json:"party,omitempty"`
 }
 
 // Account numbers — the ONE set of posting keys the rule map and reports reference.
