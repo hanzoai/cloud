@@ -49,6 +49,18 @@ type agentDeps struct {
 // (if a Draft prompt is present) and leaves the step in progress — it NEVER fakes a
 // done for work it did not actually perform.
 func runAgent(ctx context.Context, d agentDeps, org, payer string, step JourneyStep, emit func(event)) (State, error) {
+	// Every event below reaches the caller verbatim — as a JSON field on the
+	// answer, and as an SSE frame on the streaming arm. Two of the emits carry an
+	// error an UPSTREAM wrote, and a provider that refuses a call routinely quotes
+	// the credential back ("Invalid API key: sk-…"). Scrub at the one boundary all
+	// of them cross rather than at each emit, so an emit added later cannot
+	// reintroduce the leak by being written the obvious way.
+	relay := emit
+	emit = func(e event) {
+		e.Error = cloud.ScrubText(e.Error)
+		relay(e)
+	}
+
 	emit(event{Type: "plan", Step: step.ID, Text: planText(step)})
 
 	// 1. Draft content with the embedded AI, if the step asks for it.
