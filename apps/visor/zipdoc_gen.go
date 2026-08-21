@@ -9,14 +9,14 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/clusters/:clusterId/pools/:poolId", zip.Doc{
+	zip.Describe("DELETE /v1/visor/clusters/:clusterId/pools/:poolId", zip.Doc{
 		Description: "Removes a node pool from one of the caller org's clusters. The owner\nscopes the delete to the caller's tenant; provider+clusterId drive the\nprovider-side removal. Answers 204.",
 		Fields: map[string]string{
 			"poolRef.clusterId": "ClusterID and PoolID address the pool, from the URL path.",
 			"poolRef.provider":  "Provider is the cloud the cluster lives on, from ?provider=. Required.",
 		},
 	})
-	zip.Describe("DELETE /v1/clusters/:id", zip.Doc{
+	zip.Describe("DELETE /v1/visor/clusters/:id", zip.Doc{
 		Description: "Removes a BYO cluster from the caller org's fleet. It only ever\ntouches BYO clusters — a managed cluster's nodes are removed through the node-pool\nroutes — and answers 404 when the name is not in this org's fleet.",
 		Fields: map[string]string{
 			"clusterDetached.detached": "Detached is the lower-cased fleet name that was removed.",
@@ -24,31 +24,31 @@ func init() {
 		},
 		Response: json.RawMessage(`{"detached":"lab"}`),
 	})
-	zip.Describe("DELETE /v1/compute/bots/:id", zip.Doc{
+	zip.Describe("DELETE /v1/visor/compute/bots/:id", zip.Doc{
 		Description: "Tears down both halves of a bot: it unbinds the agent (best-effort — a\nbot with no binding still deletes), then terminates the machine. Answers 204.",
 		Fields: map[string]string{
 			"botRef.id": "ID is the bot machine's id — the same id the machines surface addresses it\nby. Scoped to the caller's org upstream, so another tenant's id is 404.",
 		},
 	})
-	zip.Describe("DELETE /v1/k8s/clusters/:id", zip.Doc{
+	zip.Describe("DELETE /v1/visor/k8s/clusters/:id", zip.Doc{
 		Description: "Destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like\ncreate. Visor scopes the delete to the org (refuses a foreign id), so this can\nonly ever remove the caller org's own cluster.",
 		Fields: map[string]string{
 			"k8sClusterRef.id": "ID is the provider's DOKS cluster id. Visor scopes the lookup to the caller's\norg, so another tenant's id resolves to not-found rather than their cluster.",
 		},
 	})
-	zip.Describe("DELETE /v1/machines/:id", zip.Doc{
+	zip.Describe("DELETE /v1/visor/machines/:id", zip.Doc{
 		Description: "Terminates one of the caller org's machines. Visor takes the\nmachine identity as owner+name, and the owner is the validated principal, so a\ncaller can only ever terminate its own tenant's machine. Answers 204.",
 		Fields: map[string]string{
 			"machineRef.id": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
 		},
 	})
-	zip.Describe("DELETE /v1/machines/:id/agent", zip.Doc{
+	zip.Describe("DELETE /v1/visor/machines/:id/agent", zip.Doc{
 		Description: "Detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204.",
 		Fields: map[string]string{
 			"machineRef.id": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
 		},
 	})
-	zip.Describe("GET /v1/clusters", zip.Doc{
+	zip.Describe("GET /v1/visor/clusters", zip.Doc{
 		Description: "Returns the caller org's clusters from both sources: the managed\nclusters projected from Visor's node pools, and the BYO clusters attached to the\ncaller's project. A Visor outage costs the managed half only — the BYO half\nstill lists, because a page that 502s on an optional provider is worse than a\npage that shows what it can.",
 		Fields: map[string]string{
 			"clusterList.clusters": "Clusters is the merged fleet — kind \"managed\" for Visor-provisioned, \"byo\"\nfor an attached kubeconfig.",
@@ -59,21 +59,21 @@ func init() {
 		},
 		Response: json.RawMessage(`{"clusters":[{"doksClusterId":"cl-1","name":"prod","status":"running","nodePools":[{"poolId":"p-1","name":"gpu","size":"gpu-h100x8-640gb","count":2}],"nodeSize":"gpu-h100x8-640gb","nodeCount":2,"kind":"managed"}]}`),
 	})
-	zip.Describe("GET /v1/compute/bots", zip.Doc{
+	zip.Describe("GET /v1/visor/compute/bots", zip.Doc{
 		Description: "Returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1. A bindings read that fails only costs the reconciled status: a bot\nstill lists without it.",
 		Fields: map[string]string{
 			"botList.bots": "Bots is one row per kind=bot machine, each joined with its agent binding\nwhen it has one.",
 		},
 		Response: json.RawMessage(`{"bots":[{"id":"drop-a","name":"bot-a","status":"running","agent":"bot-a","binding":{"machineId":"drop-a","agentName":"bot-a","status":"running"}}]}`),
 	})
-	zip.Describe("GET /v1/compute/bots/:id", zip.Doc{
+	zip.Describe("GET /v1/visor/compute/bots/:id", zip.Doc{
 		Description: "Returns one of the caller org's bot machines with its agent binding.\n\nA machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent\nbinding — either signal is authoritative, so a bot resolves even before its\ncloud-init has stamped every tag. A machine that is neither is 404: this route\nanswers for bots, not for machines.",
 		Fields: map[string]string{
 			"botRef.id": "ID is the bot machine's id — the same id the machines surface addresses it\nby. Scoped to the caller's org upstream, so another tenant's id is 404.",
 		},
 		Response: json.RawMessage(`{"id":"drop-a","name":"bot-a","status":"running","agent":"bot-a","binding":{"machineId":"drop-a","agentName":"bot-a","status":"running"}}`),
 	})
-	zip.Describe("GET /v1/fleet", zip.Doc{
+	zip.Describe("GET /v1/visor/fleet", zip.Doc{
 		Description: "Returns every compute unit the caller's org has, from every source, each\ncarrying its latest utilization: agent run-targets, the BYO machines that dialed\nin, attached BYO clusters and Visor-provisioned machines.\n\nA unit with a live snapshot of its own keeps it; the rest are overlaid from the\nutilization series, and only when the sample agrees about the SOURCE — two planes\ncould mint the same unit id, and a board must never show one machine's load on\nanother's row. BYO GPU units also carry their gpu-jobs queue depth. Every source\nis folded in independently: a broken one costs its own rows and nothing else.",
 		Fields: map[string]string{
 			"fleetBoard.units":  "Units is the union across sources — agent run-targets, BYO workers, BYO\nclusters and Visor machines — each row naming the source it came from.",
@@ -81,7 +81,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"units":[{"source":"byo","unit":"spark","kind":"worker","label":"spark","host":"spark","status":"online","spec":{"os":"linux","arch":"arm64","cpus":20,"gpus":1,"gpuModel":"NVIDIA GB10"},"metrics":{"gpuUtil":0.42,"at":"2026-07-27T09:00:00Z"},"sessions":0,"running":1,"queued":2}]}`),
 	})
-	zip.Describe("GET /v1/fleet/jobs", zip.Doc{
+	zip.Describe("GET /v1/visor/fleet/jobs", zip.Doc{
 		Description: "Returns the caller org's gpu-jobs render queue, each row tagged with\nthe GPU it targets (empty = the shared any-GPU lane) and the node claiming it,\noptionally narrowed to one GPU's queue and/or one status.\n\nA job whose worker died — STARTED with an elapsed lease and not yet reclaimed —\nreads \"stalled\", not \"running\". Fail-soft: an unavailable tasks engine yields an\nempty queue rather than an error.",
 		Fields: map[string]string{
 			"gpuJob.status":    "queued|running|completed|failed|canceled",
@@ -91,7 +91,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"jobs":[{"id":"job-1","runId":"job-1","type":"studio.render","status":"running","gpu":"spark","worker":"spark","label":"hero","attempt":1}]}`),
 	})
-	zip.Describe("GET /v1/fleet/samples", zip.Doc{
+	zip.Describe("GET /v1/visor/fleet/samples", zip.Doc{
 		Description: "Returns the caller org's utilization series, oldest first.\n\nA rejected narrower is a 400 carrying its own reason (the vocabulary is ours and\nsafe to echo); a warehouse failure is logged and answered 503 \"unavailable\",\nbecause a chart that silently reads \"no load\" when the truth is \"we cannot tell\"\nis worse than one that says so. An ABSENT warehouse is different again: it returns\nan empty series, which renders honestly as \"no samples yet\".",
 		Fields: map[string]string{
 			"sampleList.samples": "Samples are the readings, OLDEST first — the order a chart plots.",
@@ -101,13 +101,13 @@ func init() {
 		},
 		Response: json.RawMessage(`{"samples":[{"source":"byo","unit":"spark","kind":"worker","host":"spark","at":"2026-07-27T09:00:00Z","gpuUtil":0.42,"gpus":1,"gpuModel":"GB10"}]}`),
 	})
-	zip.Describe("GET /v1/fleet/workers", zip.Doc{
+	zip.Describe("GET /v1/visor/fleet/workers", zip.Doc{
 		Description: "Returns the caller org's BYO machines — the ones that dialed in\nvia `hanzo link` — with everything each host reported about itself. The Machines\nand GPUs pages fold the same data into their normalized shapes; this is the\ncanonical raw list a fleet view (or the CLI's `status`) reads.",
 		Fields: map[string]string{
 			"byoGPU.arch":                "native target, e.g. \"gfx1151\"",
 			"byoGPU.memoryTotal":         "VRAM (or unified pool), e.g. \"122880 MiB\"",
 			"byoGPU.unified":             "unified CPU/GPU memory pool (APU / SoC)",
-			"byoWorker.arch":             "Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the\nregistration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in\nBYTES — the same fields a code-linked run-target carries, so the /v1/fleet\nboard renders a linked node's arch + cores + RAM like any other unit.",
+			"byoWorker.arch":             "Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the\nregistration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in\nBYTES — the same fields a code-linked run-target carries, so the /v1/visor/fleet\nboard renders a linked node's arch + cores + RAM like any other unit.",
 			"byoWorker.capabilities":     "Capabilities the worker advertises (\"studio.render\", \"engine.serve\"); Engine\nis present when it runs a hanzo-engine model server. Both additive + omitempty.",
 			"byoWorker.location":         "\"on-prem\" (BYO has no cloud region)",
 			"byoWorker.provider":         "always \"byo\"",
@@ -119,7 +119,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"workers":[{"id":"spark","hostname":"spark","provider":"byo","location":"on-prem","status":"online","gpus":[{"name":"NVIDIA GB10","memoryTotal":"122880 MiB"}],"arch":"arm64","cpus":20}]}`),
 	})
-	zip.Describe("GET /v1/gpus", zip.Doc{
+	zip.Describe("GET /v1/visor/gpus", zip.Doc{
 		Description: "Returns one row per physical accelerator the caller's org has, derived\nfrom its real GPU machines (the size slug says how many cards a node holds) and\nfrom the accelerators BYO workers report through nvidia-smi.\n\nLive telemetry is absent on Visor rows because Visor's machine object carries\nnone — an honest omission the console renders as \"—\", never a fabricated 0.",
 		Fields: map[string]string{
 			"gpuList.gpus":     "GPUs is every accelerator the org has, from Visor GPU droplets and from BYO\nworkers alike.",
@@ -127,14 +127,14 @@ func init() {
 		},
 		Response: json.RawMessage(`{"gpus":[{"id":"gpu-1#0","name":"gpu-1","model":"H100","region":"nyc2","status":"running","machine":"gpu-1","provider":"digitalocean"}]}`),
 	})
-	zip.Describe("GET /v1/gpus/alerts", zip.Doc{
+	zip.Describe("GET /v1/visor/gpus/alerts", zip.Doc{
 		Description: "Is an HONEST empty surface: Visor exposes no GPU alert inventory, so\nthis returns [] rather than fabricating alerts. It stays a real, tenant-gated\nroute so the console's alerts fetch resolves (200 [], not a 404) — an honest\n\"no alerts\", the same discipline the rest of the surface follows.",
 		Fields: map[string]string{
 			"gpuAlertList.alerts": "Alerts is always empty, and typed as a raw list because Visor exposes no\nalert inventory for this surface to shape: there is nothing to describe\nuntil there is something to return.",
 		},
 		Response: json.RawMessage(`{"alerts":[]}`),
 	})
-	zip.Describe("GET /v1/k8s/clusters", zip.Doc{
+	zip.Describe("GET /v1/visor/k8s/clusters", zip.Doc{
 		Description: "Lists the org's DOKS clusters (Visor, house account) folded with\nthe org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor\noutage is logged and skipped so a down optional provider never hides the BYO list.",
 		Fields: map[string]string{
 			"clusterList.clusters": "Clusters is the merged fleet — kind \"managed\" for Visor-provisioned, \"byo\"\nfor an attached kubeconfig.",
@@ -145,7 +145,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"clusters":[{"doksClusterId":"cl-1","doClusterId":"cl-1","name":"prod","region":"nyc3","status":"running","nodePools":[],"nodeCount":0,"kind":"managed"}]}`),
 	})
-	zip.Describe("GET /v1/k8s/clusters/:id", zip.Doc{
+	zip.Describe("GET /v1/visor/k8s/clusters/:id", zip.Doc{
 		Description: "Returns one cluster's detail: node pools + worker nodes. Visor scopes\nthe lookup to the org (a foreign or missing id resolves to not-found), so a tenant\ncan never read another tenant's cluster by guessing an id.",
 		Fields: map[string]string{
 			"clusterView.kind": "Fleet fields (additive): \"managed\" (Visor-provisioned) vs \"byo\" (attached\nkubeconfig), and the live GPU inventory a BYO cluster reports.",
@@ -153,43 +153,43 @@ func init() {
 		},
 		Response: json.RawMessage(`{"doksClusterId":"cl-1","name":"prod","region":"nyc3","status":"running","nodePools":[{"poolId":"p-1","name":"gpu","size":"gpu-h100x8-640gb","count":1}],"nodeSize":"gpu-h100x8-640gb","nodeCount":1,"kind":"managed","nodes":[{"id":"node-1","name":"node-1","status":"active"}]}`),
 	})
-	zip.Describe("GET /v1/k8s/nodes", zip.Doc{
+	zip.Describe("GET /v1/visor/k8s/nodes", zip.Doc{
 		Description: "Returns every DOKS worker node in the org's clusters as a machine —\nthe SAME set the fleet folds in (managedMachines), exposed directly under the k8s\nnoun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.",
 		Fields: map[string]string{
 			"nodeList.nodes": "Nodes is one row per worker node, in the SAME machineView shape the machines\nsurface emits — a node IS a machine.",
 		},
 		Response: json.RawMessage(`{"nodes":[{"id":"node-1","name":"node-1","region":"nyc3","type":"s-4vcpu-8gb","status":"active","vcpu":4}]}`),
 	})
-	zip.Describe("GET /v1/machines", zip.Doc{
+	zip.Describe("GET /v1/visor/machines", zip.Doc{
 		Description: "Returns every machine the caller's org has — Visor's registry, the\nlive DigitalOcean droplets and the DOKS worker nodes (deduped into one union),\nplus the BYO machines that dialed in via `hanzo link` (provider \"byo\").\n\nA source Visor cannot answer for is logged and skipped, never an error: one\nwedged upstream must not hide the machines the other sources can see.",
 		Fields: map[string]string{
 			"machineList.machines": "Machines is every machine the org has: Visor-provisioned and BYO together.",
 		},
 		Response: json.RawMessage(`{"machines":[{"id":"web-1","name":"Web 1","region":"sfo3","type":"s-2vcpu-4gb","status":"running","provider":"digitalocean","publicIp":"1.2.3.4","vcpu":2,"mem":"4 GB"}]}`),
 	})
-	zip.Describe("GET /v1/machines/:id", zip.Doc{
+	zip.Describe("GET /v1/visor/machines/:id", zip.Doc{
 		Description: "Returns one of the caller org's machines by its org-scoped name.\nVisor keys the lookup by owner/name, so an id belonging to another tenant\nresolves to not-found rather than another org's machine.",
 		Fields: map[string]string{
 			"machineRef.id": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
 		},
 		Response: json.RawMessage(`{"id":"web-1","name":"Web 1","region":"sfo3","type":"s-2vcpu-4gb","status":"running","publicIp":"1.2.3.4","vcpu":2}`),
 	})
-	zip.Describe("GET /v1/machines/:id/agent", zip.Doc{
+	zip.Describe("GET /v1/visor/machines/:id/agent", zip.Doc{
 		Description: "Returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
 		Fields: map[string]string{
 			"machineRef.id": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
 		},
 		Response: json.RawMessage(`{"machineId":"drop-a","agentName":"bot-a","status":"running","botVersion":"1.4.0"}`),
 	})
-	zip.Describe("GET /v1/machines/agents", zip.Doc{
+	zip.Describe("GET /v1/visor/machines/agents", zip.Doc{
 		Description: "Returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
 		Fields: map[string]string{
 			"bindingList.agentBindings": "AgentBindings is one row per bound machine, emitted verbatim as vm reports\nit.",
 		},
 		Response: json.RawMessage(`{"agentBindings":[{"machineId":"drop-a","agentName":"bot-a","status":"running","publicIp":"1.2.3.4"}]}`),
 	})
-	zip.Describe("POST /v1/clusters", zip.Doc{
-		Description: "Attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane.",
+	zip.Describe("POST /v1/visor/clusters", zip.Doc{
+		Description: "Attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/visor/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane.",
 		Fields: map[string]string{
 			"clusterAttach.default":    "Default marks this the org's default cluster for scheduling.",
 			"clusterAttach.kubeconfig": "Kubeconfig is the cluster's kubeconfig, verbatim. Required — a body without\none is not an attach.",
@@ -200,7 +200,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"lab","kubeconfig":"apiVersion: v1\nkind: Config\n...","provider":"on-prem","default":false}`),
 		Response: json.RawMessage(`{"name":"lab","region":"on-prem","status":"attached","nodePools":[],"nodeCount":3,"kind":"byo","nvidiaGpu":2}`),
 	})
-	zip.Describe("POST /v1/clusters/:clusterId/pools", zip.Doc{
+	zip.Describe("POST /v1/visor/clusters/:clusterId/pools", zip.Doc{
 		Description: "Adds a node pool to one of the caller org's clusters and answers 201\nwith the created pool. Only the CreateNodePoolSpec fields are forwarded;\nowner/provider/clusterId ride in the query exactly as Visor expects them.",
 		Fields: map[string]string{
 			"poolCreate.autoScale": "AutoScale turns the provider's cluster autoscaler on for this pool.",
@@ -214,7 +214,7 @@ func init() {
 		Example:  json.RawMessage(`{"provider":"digitalocean","name":"gpu","size":"gpu-h100x8-640gb","count":2,"autoScale":false}`),
 		Response: json.RawMessage(`{"poolId":"p-1","name":"gpu","size":"gpu-h100x8-640gb","count":2}`),
 	})
-	zip.Describe("POST /v1/clusters/:clusterId/pools/:poolId/scale", zip.Doc{
+	zip.Describe("POST /v1/visor/clusters/:clusterId/pools/:poolId/scale", zip.Doc{
 		Description: "Resizes a node pool to an absolute node count and returns the pool as\nVisor reports it after the change.",
 		Fields: map[string]string{
 			"poolScale.clusterId": "ClusterID and PoolID address the pool, from the URL path.",
@@ -224,7 +224,7 @@ func init() {
 		Example:  json.RawMessage(`{"provider":"digitalocean","count":4}`),
 		Response: json.RawMessage(`{"poolId":"p-1","name":"gpu","size":"gpu-h100x8-640gb","count":4}`),
 	})
-	zip.Describe("POST /v1/fleet/jobs/:id/cancel", zip.Doc{
+	zip.Describe("POST /v1/visor/fleet/jobs/:id/cancel", zip.Doc{
 		Description: "Cancels a queued or running render in the caller's org. The engine\ncancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in\nanother tenant's shard is 404, exactly like one that never existed. An\nalready-finished job is 409.",
 		Fields: map[string]string{
 			"jobCancel.id":         "ID is the job (activity) id, from the URL path.",
@@ -236,7 +236,7 @@ func init() {
 		Example:  json.RawMessage(`{"reason":"superseded"}`),
 		Response: json.RawMessage(`{"canceled":"job-1","run":"job-1"}`),
 	})
-	zip.Describe("POST /v1/fleet/samples", zip.Doc{
+	zip.Describe("POST /v1/visor/fleet/samples", zip.Doc{
 		Description: "Records a BYO worker's live GPU utilization into the SAME series the\nfleet board overlays. The org is the validated principal and source/kind are fixed\nserver-side, so a worker names only its own metrics — never another tenant or\nanother source. Answers 202: the warehouse write is DETACHED (its own bounded\ncontext, never in the response path), so a slow or absent warehouse cannot stall a\nheartbeat.",
 		Fields: map[string]string{
 			"sampleAccepted.recorded": "Recorded is always true: the response is an acknowledgement, and the\nwarehouse write is detached, so it reports acceptance, not durability.",
@@ -249,7 +249,7 @@ func init() {
 		Example:  json.RawMessage(`{"unit":"spark","host":"spark","gpuUtil":0.42,"gpus":1,"gpuModel":"GB10","memUsed":100,"memFree":200}`),
 		Response: json.RawMessage(`{"recorded":true}`),
 	})
-	zip.Describe("POST /v1/k8s/clusters", zip.Doc{
+	zip.Describe("POST /v1/visor/k8s/clusters", zip.Doc{
 		Description: "Provisions a DOKS cluster for the caller's org and answers 201.\nADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because\nprovisioning spends real infrastructure on the house account. The request is\nvalidated at this boundary, then Visor owns provisioning and the hanzo-org\nownership tag.",
 		Fields: map[string]string{
 			"clusterView.kind":         "Fleet fields (additive): \"managed\" (Visor-provisioned) vs \"byo\" (attached\nkubeconfig), and the live GPU inventory a BYO cluster reports.",
@@ -260,7 +260,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"prod","region":"nyc3","nodePool":{"name":"gpu","size":"gpu-h100x8-640gb","count":2}}`),
 		Response: json.RawMessage(`{"doksClusterId":"cl-1","doClusterId":"cl-1","name":"prod","region":"nyc3","status":"provisioning","nodePools":[],"nodeCount":0,"kind":"managed"}`),
 	})
-	zip.Describe("PUT /v1/machines/:id/agent", zip.Doc{
+	zip.Describe("PUT /v1/visor/machines/:id/agent", zip.Doc{
 		Description: "Binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",
 		Fields: map[string]string{
 			"bindAgentReq.agentName":  "AgentName is the cloud Agent (/v1/agents) the machine will run. Required.",

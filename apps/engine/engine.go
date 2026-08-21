@@ -23,7 +23,7 @@
 // host's device inventory (the real GPUs under the runtime), and a
 // reachability lens. Each op is proven against a live hanzo-server backend
 // (live_test.go re-proves the loop on demand). Cluster/job/Ray/pipeline
-// intent stays refused — those live on the cluster plane (/v1/clusters,
+// intent stays refused — those live on the cluster plane (/v1/visor/clusters,
 // /v1/ml) where they are real — and the ledger is a measured gate
 // (typed_wire_test.go intentRefused), not a comment.
 //
