@@ -17,51 +17,20 @@
   ],
   "tags": [
     {
+      "name": "admin"
+    },
+    {
       "name": "search"
     }
   ],
   "paths": {
-    "/v1/search": {
-      "post": {
-        "operationId": "search",
-        "summary": "Hybrid search over the org's own corpora",
-        "description": "Is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg.",
-        "tags": [
-          "search"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Request"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/search/indexes": {
+    "/v1/admin/search/indexes": {
       "get": {
-        "operationId": "get_search_indexes",
+        "operationId": "get_admin_search_indexes",
         "summary": "Lists the search indexes with their document counts and timestamps.",
         "description": "Lists the search indexes with their document counts and timestamps.\n\nIt reads the in-cluster Meilisearch service and reshapes its /stats and\n/indexes replies into the rows the console's Search panel renders. The read is\ndegrade-friendly by design: an unreachable Meilisearch answers 200 with an\nEMPTY list, so the panel shows an honest empty state instead of an error.\ncreatedAt falls back to now and lastIndexedAt to null when the index list is\nunavailable.",
         "tags": [
-          "search"
+          "admin"
         ],
         "parameters": [
           {
@@ -86,17 +55,16 @@
             "description": "ok"
           }
         },
-        "x-public": true,
         "x-tool": true
       }
     },
-    "/v1/search/stats": {
+    "/v1/admin/search/stats": {
       "get": {
-        "operationId": "get_search_stats",
+        "operationId": "get_admin_search_stats",
         "summary": "Totals the documents across every search index.",
         "description": "Totals the documents across every search index.\n\ntotalDocuments is summed from Meilisearch's own per-index counts. The other\nthree fields are structurally zero rather than estimated: Meilisearch keeps no\nquery-history counters, so searches, sessions and the per-day series are not\nderivable from the index and this surface reports the honest zero instead of a\nfabricated number. An unreachable Meilisearch answers 200 with all zeros.",
         "tags": [
-          "search"
+          "admin"
         ],
         "parameters": [
           {
@@ -115,6 +83,39 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/searchStats"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    },
+    "/v1/search": {
+      "post": {
+        "operationId": "search",
+        "summary": "Hybrid search over the org's own corpora",
+        "description": "Is the typed op behind POST /v1/search. It does exactly two things the\nin-process entry point must not do: resolve the tenant from the validated\nprincipal, and refuse when there is none. Everything else is ForOrg.",
+        "tags": [
+          "search"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
                 }
               }
             },

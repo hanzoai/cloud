@@ -64,10 +64,23 @@ var httpClient = &http.Client{Timeout: 15 * time.Second}
 type inventory struct{ cfg config }
 
 // mountInventory registers the two upstream reads. Called from Mount.
+//
+// THEY ARE AT THE OPERATOR'S DEPTH, and they used to sit at /v1/search/indexes
+// and /v1/search/stats, which made one prefix mean two unrelated things: the
+// tenant's fused query over its OWN corpora, and an operator's inventory of ONE
+// shared backend deployment. A caller reading /v1/search/indexes has every reason
+// to expect "the corpora my search covers" and gets the index list of a
+// Meilisearch that answers only part of one leg.
+//
+// /v1/admin is the operator family — openapi.Product drops it from the public
+// contract by ADDRESS, so the split needs no flag — and apps/provisioning already
+// put its shared-backend reads at /v1/admin/provisioning/vector/* for exactly this
+// reason. Two literal segments also stop squatting where a per-corpus search would
+// address, which is what kept /v1/search from being one door with one meaning.
 func mountInventory(z *zip.App) {
 	o := inventory{cfg: loadConfig()}
-	zip.Get(z, "/v1/search/indexes", o.searchIndexes)
-	zip.Get(z, "/v1/search/stats", o.searchStats)
+	zip.Get(z, "/v1/admin/search/indexes", o.searchIndexes)
+	zip.Get(z, "/v1/admin/search/stats", o.searchStats)
 }
 
 // keyedIn is the input of both reads: no body, no path or query parameter — just
@@ -106,7 +119,7 @@ func bearer(h string) string {
 	return h
 }
 
-// searchIndexList is the GET /v1/search/indexes envelope.
+// searchIndexList is the GET /v1/admin/search/indexes envelope.
 type searchIndexList struct {
 	// Indexes is one row per Meilisearch index, sorted by name. Empty — never
 	// absent — when the search service cannot be reached.

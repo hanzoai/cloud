@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 676,
+  "skill_count": 675,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -264,6 +264,13 @@
       "path": "admin_roles/SKILL.md",
       "service": "admin",
       "sha256": "cafb623eef82aa1935893e3bfea86bc136e1e45cfd72dd2495d2d769f948105c"
+    },
+    {
+      "description": "Read admin search: Lists the search indexes with their document counts and timestamps., Totals the documents across every search index..",
+      "name": "admin_search",
+      "path": "admin_search/SKILL.md",
+      "service": "admin",
+      "sha256": "8b4b92c3820ae6b7e4aeb526c69be62a4756ba9f17cf876169aefe6751db11e2"
     },
     {
       "description": "Read admin services: Reads the launch board: every hosted service in the registry with its LIVE waitlist mode, evaluated through the flag engine..",
@@ -4282,20 +4289,6 @@
       "path": "sbom_sbom/SKILL.md",
       "service": "sbom",
       "sha256": "acb22c1d09d3c20af13c437ed235aff9b2d418394e154c37fdb5c5f399176248"
-    },
-    {
-      "description": "Read search indexes: Lists the search indexes with their document counts and timestamps..",
-      "name": "search_indexes",
-      "path": "search_indexes/SKILL.md",
-      "service": "search",
-      "sha256": "56aa0807e165e1d54951f23864f825c330a09564e54be343d2d1bcb75a8afd33"
-    },
-    {
-      "description": "Read search stats: Totals the documents across every search index..",
-      "name": "search_stats",
-      "path": "search_stats/SKILL.md",
-      "service": "search",
-      "sha256": "29d547276f731c01a54cab440bd26ed99c77cd97293116105875341abc859c0e"
     },
     {
       "description": "Read security findings: Is the org's findings — rule, severity, path, line, masked preview and fingerprint — newest first, across scans or within one., Returns a single finding: which rule fired, where (path and line), the masked preview and the SHA-256 fingerprint of the secret ",
