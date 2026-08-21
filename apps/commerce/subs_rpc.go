@@ -65,6 +65,12 @@ func planeSubs(ctx context.Context, in *plane.SubsIn) (*plane.Subs, error) {
 			slug = s.PlanId
 		}
 		rows = append(rows, plane.Sub{
+			// Commerce's OWN figure, through its own exported function. A reader
+			// that recomputed it would need a second copy of the interval
+			// normalization and the seat count, which is how one surface came to
+			// read a ten-seat plan as one seat.
+			MRRCents: billingapi.SubscriptionMRRCents(s),
+			PlanName: strings.TrimSpace(s.Plan.Name),
 			ID:       s.Id(),
 			UserID:   s.UserId,
 			PlanID:   s.PlanId,
