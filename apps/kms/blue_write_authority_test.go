@@ -26,6 +26,8 @@ import (
 	"testing"
 
 	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/authz"
 )
 
 // mutate performs a write or a delete as the bearer of token and reports the status.
@@ -67,7 +69,12 @@ func TestBlueWriteRequiresOrgAdmin(t *testing.T) {
 		mayWrite bool
 	}{
 		{"member of the org", isoTok{owner: paasOrgA}, false},
-		{"machine (client_credentials, as the login broker mints)", isoTok{owner: paasOrgA, machine: true, azp: "hanzo-platform"}, false},
+		// typ is what IAM signs a client_credentials token with, and cloud reads the
+		// CLAIM now rather than inferring a machine from an empty membership set
+		// (auth_identity.go appPrincipal). Without it this is a token missing its
+		// memberships: it resolves no org, is refused before any authority question
+		// is asked, and the case asserts nothing about machines.
+		{"machine (client_credentials, as the login broker mints)", isoTok{owner: paasOrgA, machine: true, azp: "hanzo-platform", typ: authz.Program}, false},
 		{"admin of the org", isoTok{owner: paasOrgA, isAdmin: true}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
