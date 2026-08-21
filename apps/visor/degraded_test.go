@@ -47,7 +47,7 @@ func downVisor(t *testing.T) *zip.App {
 // TestClusterListReportsDegradedSource pins that a Visor outage is REPORTED, on
 // both cluster surfaces, rather than folded into an empty success.
 func TestClusterListReportsDegradedSource(t *testing.T) {
-	for _, path := range []string{"/v1/k8s/clusters", "/v1/clusters"} {
+	for _, path := range []string{"/v1/visor/k8s/clusters", "/v1/visor/clusters"} {
 		t.Run(path, func(t *testing.T) {
 			app := downVisor(t)
 			status, body := reqK8s(t, app, http.MethodGet, path, "acme", false, nil)
@@ -90,7 +90,7 @@ func TestClusterListReportsDegradedSource(t *testing.T) {
 // consumer sees exactly the bytes it saw before.
 func TestHealthyClusterListIsUnchanged(t *testing.T) {
 	app := mountK8s(t, &k8sFake{})
-	status, body := reqK8s(t, app, http.MethodGet, "/v1/k8s/clusters", "acme", false, nil)
+	status, body := reqK8s(t, app, http.MethodGet, "/v1/visor/k8s/clusters", "acme", false, nil)
 	if status != http.StatusOK {
 		t.Fatalf("status = %d; want 200: %s", status, body)
 	}

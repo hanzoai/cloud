@@ -141,17 +141,17 @@ func reqK8s(t *testing.T, app *zip.App, method, path, org string, admin bool, bo
 	return resp.StatusCode, b
 }
 
-// GET /v1/k8s/clusters is org-scoped: cloud forwards the validated org, and maps
+// GET /v1/visor/k8s/clusters is org-scoped: cloud forwards the validated org, and maps
 // Visor clusters to the managed clusterView. No org → 403 (never reaches Visor).
 func TestK8sClustersListTenantScoped(t *testing.T) {
 	f := &k8sFake{}
 	app := mountK8s(t, f)
 
-	if code, _ := reqK8s(t, app, http.MethodGet, "/v1/k8s/clusters", "", false, nil); code != http.StatusForbidden {
+	if code, _ := reqK8s(t, app, http.MethodGet, "/v1/visor/k8s/clusters", "", false, nil); code != http.StatusForbidden {
 		t.Fatalf("no-org list want 403, got %d", code)
 	}
 
-	code, body := reqK8s(t, app, http.MethodGet, "/v1/k8s/clusters", "acme", false, nil)
+	code, body := reqK8s(t, app, http.MethodGet, "/v1/visor/k8s/clusters", "acme", false, nil)
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d (%s)", code, body)
 	}
@@ -173,13 +173,13 @@ func TestK8sClustersListTenantScoped(t *testing.T) {
 	}
 }
 
-// GET /v1/k8s/clusters/:id returns detail: node pools (poolId mapped from Visor's
+// GET /v1/visor/k8s/clusters/:id returns detail: node pools (poolId mapped from Visor's
 // id) with the derived node count, and the worker nodes as machineViews.
 func TestK8sClusterDetail(t *testing.T) {
 	f := &k8sFake{}
 	app := mountK8s(t, f)
 
-	code, body := reqK8s(t, app, http.MethodGet, "/v1/k8s/clusters/cl-1", "acme", false, nil)
+	code, body := reqK8s(t, app, http.MethodGet, "/v1/visor/k8s/clusters/cl-1", "acme", false, nil)
 	if code != http.StatusOK {
 		t.Fatalf("detail want 200, got %d (%s)", code, body)
 	}
@@ -198,15 +198,15 @@ func TestK8sClusterDetail(t *testing.T) {
 	}
 }
 
-// GET /v1/k8s/nodes returns every worker node as a machineView, org-scoped.
+// GET /v1/visor/k8s/nodes returns every worker node as a machineView, org-scoped.
 func TestK8sNodesTenantScoped(t *testing.T) {
 	f := &k8sFake{}
 	app := mountK8s(t, f)
 
-	if code, _ := reqK8s(t, app, http.MethodGet, "/v1/k8s/nodes", "", false, nil); code != http.StatusForbidden {
+	if code, _ := reqK8s(t, app, http.MethodGet, "/v1/visor/k8s/nodes", "", false, nil); code != http.StatusForbidden {
 		t.Fatalf("no-org nodes want 403, got %d", code)
 	}
-	code, body := reqK8s(t, app, http.MethodGet, "/v1/k8s/nodes", "acme", false, nil)
+	code, body := reqK8s(t, app, http.MethodGet, "/v1/visor/k8s/nodes", "acme", false, nil)
 	if code != http.StatusOK {
 		t.Fatalf("nodes want 200, got %d (%s)", code, body)
 	}
@@ -248,7 +248,7 @@ func TestK8sNodesRefusesTheOldEnvelope(t *testing.T) {
 		t.Fatalf("Mount: %v", err)
 	}
 
-	code, body := reqK8s(t, app, http.MethodGet, "/v1/k8s/nodes", "acme", false, nil)
+	code, body := reqK8s(t, app, http.MethodGet, "/v1/visor/k8s/nodes", "acme", false, nil)
 	if code == http.StatusOK {
 		t.Fatalf("an enveloped answer was served as success: %d %s", code, body)
 	}
@@ -257,7 +257,7 @@ func TestK8sNodesRefusesTheOldEnvelope(t *testing.T) {
 	}
 }
 
-// POST /v1/k8s/clusters is ADMIN-GATED: a non-admin is refused BEFORE the request
+// POST /v1/visor/k8s/clusters is ADMIN-GATED: a non-admin is refused BEFORE the request
 // reaches Visor; an admin with a valid body provisions and gets 201; a bad body is a
 // 400 at the cloud boundary.
 func TestK8sCreateClusterAdminGated(t *testing.T) {
@@ -267,18 +267,18 @@ func TestK8sCreateClusterAdminGated(t *testing.T) {
 		"nodePool": map[string]any{"size": "s-4vcpu-8gb", "count": 2}}
 
 	// No validated principal → 403.
-	if code, _ := reqK8s(t, app, http.MethodPost, "/v1/k8s/clusters", "", false, valid); code != http.StatusForbidden {
+	if code, _ := reqK8s(t, app, http.MethodPost, "/v1/visor/k8s/clusters", "", false, valid); code != http.StatusForbidden {
 		t.Fatalf("no-org create want 403, got %d", code)
 	}
 	// Validated but NON-admin → 403, and the mutation never reached Visor.
-	if code, _ := reqK8s(t, app, http.MethodPost, "/v1/k8s/clusters", "acme", false, valid); code != http.StatusForbidden {
+	if code, _ := reqK8s(t, app, http.MethodPost, "/v1/visor/k8s/clusters", "acme", false, valid); code != http.StatusForbidden {
 		t.Fatalf("non-admin create want 403, got %d", code)
 	}
 	if f.createdBody != nil {
 		t.Fatalf("non-admin create must NOT reach Visor, but body was received: %+v", f.createdBody)
 	}
 	// Admin + valid body → 201, forwarded to Visor with the spec intact.
-	code, body := reqK8s(t, app, http.MethodPost, "/v1/k8s/clusters", "acme", true, valid)
+	code, body := reqK8s(t, app, http.MethodPost, "/v1/visor/k8s/clusters", "acme", true, valid)
 	if code != http.StatusCreated {
 		t.Fatalf("admin create want 201, got %d (%s)", code, body)
 	}
@@ -293,27 +293,27 @@ func TestK8sCreateClusterAdminGated(t *testing.T) {
 		t.Fatalf("created cluster view mismatch: %+v", mv)
 	}
 	// Admin + invalid body (no node pool size) → 400 at the boundary.
-	if code, _ := reqK8s(t, app, http.MethodPost, "/v1/k8s/clusters", "acme", true,
+	if code, _ := reqK8s(t, app, http.MethodPost, "/v1/visor/k8s/clusters", "acme", true,
 		map[string]any{"name": "x", "region": "sfo3"}); code != http.StatusBadRequest {
 		t.Fatalf("admin create without pool size want 400, got %d", code)
 	}
 }
 
-// DELETE /v1/k8s/clusters/:id is ADMIN-GATED, like create.
+// DELETE /v1/visor/k8s/clusters/:id is ADMIN-GATED, like create.
 func TestK8sDeleteClusterAdminGated(t *testing.T) {
 	f := &k8sFake{}
 	app := mountK8s(t, f)
 
-	if code, _ := reqK8s(t, app, http.MethodDelete, "/v1/k8s/clusters/cl-1", "", false, nil); code != http.StatusForbidden {
+	if code, _ := reqK8s(t, app, http.MethodDelete, "/v1/visor/k8s/clusters/cl-1", "", false, nil); code != http.StatusForbidden {
 		t.Fatalf("no-org delete want 403, got %d", code)
 	}
-	if code, _ := reqK8s(t, app, http.MethodDelete, "/v1/k8s/clusters/cl-1", "acme", false, nil); code != http.StatusForbidden {
+	if code, _ := reqK8s(t, app, http.MethodDelete, "/v1/visor/k8s/clusters/cl-1", "acme", false, nil); code != http.StatusForbidden {
 		t.Fatalf("non-admin delete want 403, got %d", code)
 	}
 	if f.deletedID != "" {
 		t.Fatalf("non-admin delete must NOT reach Visor, but id %q was deleted", f.deletedID)
 	}
-	if code, _ := reqK8s(t, app, http.MethodDelete, "/v1/k8s/clusters/cl-1", "acme", true, nil); code != http.StatusNoContent {
+	if code, _ := reqK8s(t, app, http.MethodDelete, "/v1/visor/k8s/clusters/cl-1", "acme", true, nil); code != http.StatusNoContent {
 		t.Fatalf("admin delete want 204, got %d", code)
 	}
 	if f.deletedID != "cl-1" {

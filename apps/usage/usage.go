@@ -33,7 +33,7 @@
 //     is the account-usage global view, unified here from apps/link.
 //
 // The console Usage view composes THIS with the existing org-scoped inventory
-// endpoints (/v1/machines, /v1/gpus, /v1/agents, provisioning lists) for the
+// endpoints (/v1/visor/machines, /v1/visor/gpus, /v1/agents, provisioning lists) for the
 // per-kind counts — one screen, one categorized cost lens.
 //
 // TENANT ISOLATION (the bar). The org is the VALIDATED IAM owner claim (principal.Org
