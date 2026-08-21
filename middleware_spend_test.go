@@ -167,7 +167,11 @@ func TestBillable(t *testing.T) {
 
 		// The non-LLM auth-not-balance gap — the same predicate, not a second one.
 		{"POST", "/v1/ml/train", true, "provisioned compute"},
-		{"POST", "/v1/s3/bucket", true, "object storage data plane"},
+		// The address storage actually serves. It read /v1/s3/bucket, singular,
+		// which reaches no app: it was billable only because provisioning's row
+		// claimed the bare /v1/s3 with no route behind it, so a routing claim
+		// nothing served was widening the metered tree over a neighbour's root.
+		{"POST", "/v1/s3/buckets", true, "object storage data plane"},
 		{"POST", "/v1/agents/run", true, "per-run agent fee"},
 		{"POST", "/v1/security/scan", true, "scan fee"},
 

@@ -35,7 +35,7 @@ var frozen = []string{
 	"sbom", "team", "meet", "settings", "prefs", "notify",
 	"channels", "gateway", "entitlements", "exec", "sandboxes", "websearch", "crawl", "seo",
 	"index", "catalog", "taxonomy", "world", "web3", "bot", "authors",
-	"bots", "audit", "affiliates", "esign", "product", "search", "evals",
+	"bots", "audit", "affiliates", "esign", "search", "evals",
 	"benchmark", "research", "experiments", "books", "treasury", "admin",
 	"admission", "tasks", "tel", "automations", "flow", "engine", "registry", "tools", "marketplace", "referrals",
 	// `agent` is GONE from this sequence on purpose: it was a second app beside
@@ -43,6 +43,12 @@ var frozen = []string{
 	// `s`. Its surface (/v1/agent and its presets/conversations) is mounted by
 	// agents now, so there is one app, one plugin and one name. This edit is the
 	// deliberate one this freeze exists to demand.
+	//
+	// `product` is gone for the neighbouring reason: it held no store, so it was
+	// not a capability but a proxy sitting on two other capabilities' roots. Its
+	// four reads went to the apps that own those roots — the Meilisearch pair to
+	// search, the Qdrant pair to provisioning's operator surface — and the app,
+	// its plugin and its row went with them.
 	"guide", "company", "compliance", "legal", "ask",
 	// ai precedes zen — a DECISION, not drift: both claim "/v1", equal patterns
 	// resolve by mount order, and the /v1 remainder (the OpenAI-compatible

@@ -1,8 +1,8 @@
 // Package explorer is chain data: your block indexers and how far each has caught
 // up, plus the on-chain price feeds.
 //
-// It serves them at /v1/indexers and /v1/oracles — read from the Lux chain-data
-// plane, principal-gated, and never fabricated.
+// It serves them at /v1/explorer/indexers and /v1/explorer/oracles — read from
+// the Lux chain-data plane, principal-gated, and never fabricated.
 //
 // The two upstreams are luxfi/indexer (the per-network block/event indexer,
 // explorer REST at /v1/explorer/*) and luxfi/graph (the GraphQL query layer that
@@ -20,8 +20,8 @@
 //
 // Surface (every route gated by the validated principal; HIP-0026):
 //
-//	GET /v1/indexers   the deployment's chain indexer(s) + status  -> {indexers:[indexerView]}
-//	GET /v1/oracles    on-chain price/data oracles (graph feeds)    -> {oracles:[oracleView]}
+//	GET /v1/explorer/indexers  the chain indexer(s) + status -> {indexers:[indexerView]}
+//	GET /v1/explorer/oracles   on-chain price feeds (graph)  -> {oracles:[oracleView]}
 //
 // Indexers maps to the indexer's per-network indexing status (chain, network, height,
 // health); Oracles maps to luxfi/graph's O-Chain PriceFeed registry — the two chain-
@@ -90,8 +90,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// projection (document, MCP tool, CLI command, SDK method) keys on.
 	o := ops{s: s}
 	zapp := cloud.ZipApp(app)
-	zip.Get(zapp, "/v1/indexers", o.listIndexers)
-	zip.Get(zapp, "/v1/oracles", o.listOracles)
+	zip.Get(zapp, "/v1/explorer/indexers", o.listIndexers)
+	zip.Get(zapp, "/v1/explorer/oracles", o.listOracles)
 }
 
 // ops is the receiver the chain-data ops hang off. A method value is the only

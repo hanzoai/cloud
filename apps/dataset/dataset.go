@@ -50,7 +50,7 @@
 // flight — which is exactly what a plane holding the record of what a model
 // trained on must do, and exactly what a process pinned to one replica for its
 // in-memory forests cannot promise. Its surface is five leaves under
-// /v1/risk/datasets that no other app claims; zip refuses two owners for one
+// /v1/dataset that no other app claims; zip refuses two owners for one
 // prefix at compose time, so that is checked rather than agreed.
 //
 // WHAT IS PER PROCESS, SAID PLAINLY. Every read, every declaration and every
@@ -225,14 +225,14 @@ func (p *plane) ready(ctx context.Context) error {
 func mount(p *plane, app cloud.Router) error {
 	// cloud.ZipApp recovers the typed-op registry, which the Router interface does
 	// not carry, and the ops register at ABSOLUTE paths on it. That is what keeps
-	// the published address exactly `/v1/risk/datasets` — a group root composes to
-	// `/v1/risk/datasets/`, and a trailing slash in the document is a trailing slash
+	// the published address exactly `/v1/dataset` — a group root composes to
+	// `/v1/dataset/`, and a trailing slash in the document is a trailing slash
 	// in every generated SDK.
 	//
 	// cloud.Bridge is the composer's install — once at the root of every program —
 	// so this package installs only its own envelope. app.Use lands that ONCE PER
 	// DECLARED PREFIX — the scope reads manifest.Apps for that — so it covers
-	// /v1/risk/datasets and nowhere else; grouping at /v1/risk for a shorter leaf
+	// /v1/dataset and nowhere else; grouping at /v1/risk for a shorter leaf
 	// would spread it across a subtree this app does not own — that stem is the
 	// decision plane's — which is the escape the scope exists to refuse.
 	z := cloud.ZipApp(app)
@@ -246,35 +246,35 @@ func mount(p *plane, app cloud.Router) error {
 	app.Use(cloud.DenyEnvelope())
 	o := ops{p: p}
 
-	zip.Post(z, "/v1/risk/datasets", o.create,
+	zip.Post(z, "/v1/dataset", o.create,
 		zip.WithOperationID("riskCreateDataset"),
 		zip.WithSummary("Declare the next version of a dataset"),
-		zip.WithTags("risk"))
-	zip.Get(z, "/v1/risk/datasets", o.list,
+		zip.WithTags("dataset"))
+	zip.Get(z, "/v1/dataset", o.list,
 		zip.WithOperationID("riskDatasets"),
 		zip.WithSummary("List this org's datasets"),
-		zip.WithTags("risk"))
-	zip.Get(z, "/v1/risk/datasets/:name", o.describe,
+		zip.WithTags("dataset"))
+	zip.Get(z, "/v1/dataset/:name", o.describe,
 		zip.WithOperationID("riskDataset"),
 		zip.WithSummary("Describe every version of one dataset"),
-		zip.WithTags("risk"))
-	zip.Delete(z, "/v1/risk/datasets/:name", o.dispose,
+		zip.WithTags("dataset"))
+	zip.Delete(z, "/v1/dataset/:name", o.dispose,
 		zip.WithOperationID("riskDeleteDataset"),
 		zip.WithSummary("Dispose of one dataset and every version of it"),
-		zip.WithTags("risk"))
-	zip.Post(z, "/v1/risk/datasets/:name/materialize", o.materialize,
+		zip.WithTags("dataset"))
+	zip.Post(z, "/v1/dataset/:name/materialize", o.materialize,
 		zip.WithOperationID("riskMaterializeDataset"),
 		zip.WithSummary("Materialise the declared version into immutable rows"),
 		zip.WithStatus(202),
-		zip.WithTags("risk"))
-	zip.Get(z, "/v1/risk/datasets/:name/lineage", o.lineage,
+		zip.WithTags("dataset"))
+	zip.Get(z, "/v1/dataset/:name/lineage", o.lineage,
 		zip.WithOperationID("riskDatasetLineage"),
 		zip.WithSummary("Show where a version's rows came from, and whether that can still be demonstrated"),
-		zip.WithTags("risk"))
-	zip.Get(z, "/v1/risk/datasets/:name/export", o.export,
+		zip.WithTags("dataset"))
+	zip.Get(z, "/v1/dataset/:name/export", o.export,
 		zip.WithOperationID("riskExportDataset"),
 		zip.WithSummary("Read a version's rows back, one page at a time"),
-		zip.WithTags("risk"))
+		zip.WithTags("dataset"))
 	return nil
 }
 
