@@ -770,10 +770,13 @@ func init() {
 		Description: "Itemises what a formation costs before anyone commits to it.\n\nIt answers what is due now and what recurs, as separate figures, and marks the\nstate's filing fee as money we collect and remit rather than keep. A caller can\ntherefore show a payer the whole bill — which is the point of quoting at all,\nand was impossible while the fee was one number in an error string.\n\nA jurisdiction whose filing fee this deployment has not been told REFUSES,\nnaming the setting that fixes it. Quoting our half as though it were the total\nis the one answer that would be worse than no answer.",
 		Fields: map[string]string{
 			"Charge.amountCents":     "AmountCents is what this line costs.",
+			"Charge.asOf":            "AsOf is when a pass-through amount was last checked against its source.",
 			"Charge.code":            "Code names the line so a caller can branch on it without reading prose.",
 			"Charge.label":           "Label is what the payer sees on the invoice.",
 			"Charge.passThrough":     "PassThrough marks money we collect and remit rather than keep — the state's\nfee is not our revenue, and a quote that hides that is a quote that reads\nas a bigger margin than it is.",
 			"Charge.recurring":       "Recurring marks a line that repeats. An agent of record is billed every\nyear for as long as the entity stands, and a payer agreeing to a one-time\ntotal is not agreeing to that.",
+			"Charge.source":          "Source names who publishes this amount, for a line we merely pass through.\nEmpty for a price of ours, which needs no external authority.",
+			"Charge.stale":           "Stale reports that AsOf is older than the review window — the figure may\nhave moved and nobody has looked. It does not block; it tells.",
 			"Tariff.currency":        "Currency is the ISO code every amount on this quote is denominated in.",
 			"Tariff.dueNowCents":     "DueNowCents is what is charged to begin: every non-recurring line.",
 			"Tariff.jurisdiction":    "Jurisdiction is the state of formation the filing fee belongs to.",
