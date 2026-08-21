@@ -58,22 +58,6 @@ func init() {
 			"cap deliberately, so a deck's size ceiling is the edge's rather than the "+
 			"cap meant for small structured records. An empty body is 400; a data room "+
 			"that will not take the bytes is 502.")
-	openapi.Register("/v1/company/payment", "POST", nil, formationView{})
-	openapi.Describe("/v1/company/payment", "POST",
-		"Charge the one-time formation fee and mark the formation paid",
-		"Bills the caller's own org the one-time Hanzo Company formation fee — $999 "+
-			"unless the deployment sets another — and answers with the formation record "+
-			"carrying its paid flag and the charge reference. Takes no body: the org is "+
-			"the validated tenant and the amount is the platform's, never the caller's to "+
-			"assert.\n\n"+
-			"IDEMPOTENT on the formation rather than on the request: an already-paid "+
-			"formation answers 200 with the same record and is not charged again, so a "+
-			"retry or a double-clicked button costs nothing. Available only at the "+
-			"`payment` stage (409 anywhere else) and only for an org that has begun a "+
-			"formation (404 otherwise).\n\n"+
-			"A refused charge answers the fleet-wide billing contract, not a formation "+
-			"error — 402 when the org cannot pay, 503 when metering is unavailable — "+
-			"which is exactly why this route is not a typed op.")
 }
 
 // company.go mounts the /v1/company surface and wires the state machine to its
@@ -225,12 +209,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	zip.Post(g, "/kyc", o.startKYC)
 	zip.Post(g, "/kyc/refresh", o.kycRefresh)
 	zip.Post(g, "/kyc/decision", o.kycDecision)
-	// UNTYPED: a billing denial answers the fleet-wide 402/503 contract
-	// (cloud.DenyResource — {"error":{"code","message"}}), a body zip's error type
-	// cannot express. Typing it would silently reshape that error for every
-	// metered client, so it stays a raw handler until zip errors can carry a body.
-	// Pinned by TestPaymentDenialWire, so that reason is a wire, not a comment.
-	g.Post("/payment", cloud.Handle(s, pay))
+	zip.Post(g, "/payment", o.pay)
 	zip.Post(g, "/documents", o.generateDocuments)
 	zip.Post(g, "/esign", o.requestEsign)
 	zip.Post(g, "/esign/complete", o.completeEsign)
@@ -673,39 +652,48 @@ func (o ops) kycDecision(ctx context.Context, in *decisionIn) (*formationView, e
 
 // ---- payment (the $999 gate) ----
 
-// pay charges the one-time formation fee. It is the one action on this surface
-// that is NOT a typed op: a denial answers the fleet-wide billing contract
-// (cloud.DenyResource — 402 insufficient_balance / spend_cap_exceeded, 503
-// balance_unavailable, each a {"error":{"code","message"}} body), and zip's error
-// type renders a flat {status,code,error}. Typing it would reshape that error for
-// every metered client, so it stays a raw handler — see routes().
+// pay charges the caller's own org the one-time Hanzo Company formation fee.
+//
+// It is $999 unless the deployment sets another, and the answer is the formation
+// record carrying its paid flag and the charge reference. It takes no body: the org is the validated tenant and the amount is the
+// platform's, never the caller's to assert.
+//
+// IDEMPOTENT on the formation rather than on the request: an already-paid
+// formation answers 200 with the same record and is not charged again, so a
+// retry or a double-clicked button costs nothing. Available only at the
+// `payment` stage (409 anywhere else) and only for an org that has begun a
+// formation (404 otherwise).
+//
+// A denial answers the fleet-wide billing contract — 402 insufficient_balance,
+// 402 spend_cap_exceeded, 503 balance_unavailable — carried by cloud.Denied,
+// which is the money wire's own {"error":{"code","message"}} body rather than a
+// second vocabulary invented for this surface.
 //
 // The gate is the LAST thing it does, after the stage check and the paid
 // short-circuit, so a caller the machine is about to refuse is never charged.
 // That ordering is why the gate cannot lift into middleware, where it would run
 // first. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.
-func pay(s *cloud.Service[state], c *zip.Ctx) error {
-	ctx := c.Context()
-	f, org, err := load(ctx, s)
+func (o ops) pay(ctx context.Context, _ *noInput) (*formationView, error) {
+	f, org, err := load(ctx, o.s)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := requireStage(f, StagePayment); err != nil {
-		return err
+		return nil, err
 	}
 	if f.Paid {
-		return c.JSON(http.StatusOK, view(f)) // idempotent — already paid
+		return view(f), nil // idempotent — already paid
 	}
-	ref, err := s.State.prov.charge.Charge(ctx, org, feeCents(), "Hanzo Company formation fee")
+	ref, err := o.s.State.prov.charge.Charge(ctx, org, feeCents(), "Hanzo Company formation fee")
 	if err != nil {
 		// Map the metering error to the canonical 402/503 billing contract.
-		return cloud.DenyResource(c, err)
+		return nil, cloud.Denied(err)
 	}
 	f.Paid, f.PaymentRef = true, ref
-	if err := save(ctx, s, f); err != nil {
-		return err
+	if err := save(ctx, o.s, f); err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, view(f))
+	return view(f), nil
 }
 
 // ---- documents (generate → data room + state filing) ----
@@ -1101,8 +1089,8 @@ type deckOut struct {
 	DocumentID string `json:"documentId"`
 }
 
-// fundraiseDeck shares a pitch deck in the org's data room. It is the second
-// action on this surface that is NOT a typed op: the deck is the raw request
+// fundraiseDeck shares a pitch deck in the org's data room. It is the ONE action
+// on this surface that is not a typed op: the deck is the raw request
 // BODY (any content type, named by ?name=), not a JSON document, so a typed In
 // would declare a request shape the route does not take — see routes(). Its byte
 // request and this response ARE declared, through openapi.Register (see init).

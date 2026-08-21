@@ -30642,6 +30642,27 @@ components:
             stripped.
           type: string
       type: object
+    mlCreate:
+      properties:
+        labels:
+          additionalProperties:
+            type: string
+          description: |-
+            Labels are extra labels to set on the object, merged UNDER the tenancy
+            labels this plane derives from the validated principal — so a label naming
+            another org's scope cannot displace the real one.
+          type: object
+        name:
+          description: |-
+            Name is the resource's name: a DNS-1123 label
+            (^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$), lowercased and trimmed. It is the
+            name the resource answers to for the life of the caller's org.
+          type: string
+        spec:
+          description: |-
+            Spec is the resource's own spec, passed to Kubernetes unchanged. Required —
+            an empty spec is 400 rather than an empty resource.
+      type: object
     mlResource:
       properties:
         createdAt:
@@ -76904,24 +76925,41 @@ paths:
   /v1/company/payment:
     post:
       description: |-
-        Bills the caller's own org the one-time Hanzo Company formation fee — $999 unless the deployment sets another — and answers with the formation record carrying its paid flag and the charge reference. Takes no body: the org is the validated tenant and the amount is the platform's, never the caller's to assert.
+        Charges the caller's own org the one-time Hanzo Company formation fee.
 
-        IDEMPOTENT on the formation rather than on the request: an already-paid formation answers 200 with the same record and is not charged again, so a retry or a double-clicked button costs nothing. Available only at the `payment` stage (409 anywhere else) and only for an org that has begun a formation (404 otherwise).
+        It is $999 unless the deployment sets another, and the answer is the formation
+        record carrying its paid flag and the charge reference. It takes no body: the org is the validated tenant and the amount is the
+        platform's, never the caller's to assert.
 
-        A refused charge answers the fleet-wide billing contract, not a formation error — 402 when the org cannot pay, 503 when metering is unavailable — which is exactly why this route is not a typed op.
+        IDEMPOTENT on the formation rather than on the request: an already-paid
+        formation answers 200 with the same record and is not charged again, so a
+        retry or a double-clicked button costs nothing. Available only at the
+        `payment` stage (409 anywhere else) and only for an org that has begun a
+        formation (404 otherwise).
+
+        A denial answers the fleet-wide billing contract — 402 insufficient_balance,
+        402 spend_cap_exceeded, 503 balance_unavailable — carried by cloud.Denied,
+        which is the money wire's own {"error":{"code","message"}} body rather than a
+        second vocabulary invented for this surface.
+
+        The gate is the LAST thing it does, after the stage check and the paid
+        short-circuit, so a caller the machine is about to refuse is never charged.
+        That ordering is why the gate cannot lift into middleware, where it would run
+        first. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.
       operationId: post_company_payment
       responses:
-        2XX:
+        "200":
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/formationView'
-          description: Success
-      summary: Charge the one-time formation fee and mark the formation paid
+          description: ok
+      summary: Charges the caller's own org the one-time Hanzo Company formation fee.
       tags:
       - company
       x-app: company
       x-public: true
+      x-tool: true
   /v1/company/register:
     get:
       description: |-
@@ -98278,17 +98316,42 @@ paths:
       x-tool: true
     post:
       description: |-
-        Deploys a model into the caller's own tenant namespace and answers the created resource, 201. The spec is the kserve InferenceService spec, relayed as given, so anything kserve serves is deployable here without this layer knowing what it is.
+        Deploys one inference model for the caller's org, and answers 201
+        with the model as Kubernetes admitted it.
 
-        THE BALANCE GATE RUNS FIRST, before a namespace or a resource exists, so an unfunded org cannot start GPU compute and then be billed for it. It fails CLOSED: a commerce that cannot be reached refuses rather than admits. The refusal carries the fleet's nested error body — the 402 shape a funded-balance client already parses — which is precisely why this route is not a typed op. On success the submission fee is debited from the caller org's own ledger, asynchronously and best-effort; ongoing GPU-hour cost is metered elsewhere.
-
-        The tenant namespace is derived from the VALIDATED org and project — never from a field — and the mapping is injective in both, so two tenants can never land in one namespace. An unvalidated caller is refused before any of that. The name must be a DNS-1123 label; a name already taken in the tenant's namespace is a 409.
+        The `spec` is a kserve InferenceService spec, passed through unchanged — this
+        plane owns the tenancy, the billing and the namespace, and kserve owns what a
+        model IS. An unfunded org is refused BEFORE anything is created, so nobody runs
+        free GPU compute and nobody is charged for a resource that was never made.
       operationId: post_ml_models
-      summary: Deploy an inference model
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: sentiment
+              spec:
+                predictor:
+                  model:
+                    modelFormat:
+                      name: sklearn
+                    storageUri: s3://models/sentiment
+            schema:
+              $ref: '#/components/schemas/mlCreate'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlResource'
+          description: created
+      summary: Deploys one inference model for the caller's org, and answers 201 with
+        the model as Kubernetes admitted it.
       tags:
       - ml
       x-app: ml
       x-public: true
+      x-tool: true
   /v1/ml/models/{name}:
     delete:
       description: |-
