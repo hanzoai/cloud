@@ -1062,9 +1062,11 @@ document pipeline" below.)
   need the MIRROR primitive (the host reads the child's own
   `/.well-known/openapi.json` across the wire at compose time, which is not
   built). `ai`/`o11y`/`tasks`/`licensing` are in THIS process but behind a
-  FOREIGN router (beego, gorilla/mux, net/http mux) with **zero** typed zip ops
-  between them, so Graft has nothing to carry until those repos type their own
-  surface — and the moment they do, it lands here with no change to cloud.
+  FOREIGN router (gorilla/mux, net/http mux) with **zero** typed zip ops between
+  them, so Graft has nothing to carry until those repos type their own surface —
+  and the moment they do, it lands here with no change to cloud. `ai` has LEFT
+  that list: it is a `*zip.App` now (`ai/app.go:73 func App`), so Graft applies
+  today and only the typing is outstanding.
 - **Opaque does not always mean UNKNOWABLE, and `tasks` is the case that shows
   the difference.** Its whole product is `/v1/tasks` (a 307 to `/v1/tasks/`) plus
   one `/v1/tasks/*` relay, so it publishes 10 operations and describes none —
@@ -2414,8 +2416,9 @@ command, no typed SDK method. It was 38 operations. Two things it taught:
   the published parameter cannot agree), upstream status relayed through
   `c.Bytes(res.StatusCode, …)`, upstream Content-Type frequently not JSON, and no
   `All[In, Out]` registrar to hang seven ops on. Two are not even cloud's to type:
-  `plugin/ai` is `github.com/hanzoai/ai`'s beego `ControllerRegister` behind
-  `zip.AdaptNetHTTP`, `plugin/licensing` is `github.com/hanzoai/licensing`'s
+  `plugin/ai` is `github.com/hanzoai/ai` behind `zip.AdaptNetHTTP` — which is
+  now a CHOICE rather than a constraint, since ai exposes a `*zip.App`;
+  `plugin/licensing` is `github.com/hanzoai/licensing`'s
   `http.Handler` behind the same. Each refusal is now written AT its registration
   (apps/dns/dns.go, apps/bot/relay.go, apps/ai/ai.go) rather than only here.
 - **`plugin/ai` is the largest hole in the fleet document, and it is upstream's.**
@@ -2428,11 +2431,13 @@ command, no typed SDK method. It was 38 operations. Two things it taught:
   out.** Until it existed, typing an op inside a wildcard-mounted child bought
   nothing here, because `AdaptNetHTTP` erased the registry on arrival; the ops
   would have been typed and cloud would still have printed `{wildcard1}`. Graft
-  takes a `*zip.App`, so the order is: hanzoai/ai converts its beego
-  `ControllerRegister` to zip and types its ops (measured: **0** typed zip ops
-  today, 84 paths / 90 method-ops in `routers/*.go`), cloud swaps the
-  `AdaptNetHTTP` for a `Graft`, and every one lands in the document, the SDKs,
-  the MCP list and the CLI at once. Same for `o11y`, `tasks` and `licensing`.
+  takes a `*zip.App`, and **ai already is one** — the beego half of this is
+  DONE (measured: 0 beego imports, `zip.App`/`zip.Ctx`/`zip.New` throughout, 18
+  untyped registrations over 168 route patterns, and still **0** typed zip ops).
+  So the swap is available now and buys the ADDRESSES immediately — ai's real
+  paths in place of seven `{wildcard1}` operations — while schemas still wait on
+  ai typing its ops. Two steps, and only the second is upstream's. Same shape for
+  `o11y`, `tasks` and `licensing`, which have not made the first step.
   Note ai's inference paths are a COMPATIBILITY surface whose shape we do not
   own — transcribe from the external contract and pin with golden fixtures, do
   not design them.
