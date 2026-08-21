@@ -368,3 +368,62 @@ func TestALiteralAddressBeatsTheTemplateItFits(t *testing.T) {
 		t.Error("a path the contract does not serve resolved to an address")
 	}
 }
+
+// An address answers what it accepts when ASKED the way HTTP has a method for
+// asking — RFC 9110 §9.3.7 — and not only as a header on a GET that may not be
+// allowed there in the first place.
+//
+// The three facts that make this a door rather than a decoration: it answers 204
+// with no body, because Allow IS the answer; it answers for a MEMBER template as
+// well as a literal, because that is where a client most needs to ask; and it
+// YIELDS on an address the contract does not carry, so a capability that grows
+// its own OPTIONS keeps it and an unclaimed path still 404s.
+func TestOptionsAnswersWhatAnAddressAccepts(t *testing.T) {
+	app := indexed(t)
+
+	for _, tc := range []struct {
+		path  string
+		allow string
+		code  int
+	}{
+		{path: "/v1/agents", allow: "GET", code: http.StatusNoContent},
+		{path: "/v1/agents/a1", allow: "GET", code: http.StatusNoContent},
+		{path: "/v1/kms/secrets/db", allow: "PUT", code: http.StatusNoContent},
+		// Beta: a capability the index will not name does not advertise its
+		// methods here either. One rule, asked in both places — so this address
+		// is NOT the index's to answer and falls through.
+		{path: "/v1/labs/things", allow: "", code: http.StatusNotFound},
+	} {
+		resp, body := served(t, app, http.MethodOptions, tc.path)
+		if resp.StatusCode != tc.code {
+			t.Errorf("OPTIONS %s: status = %d, want %d", tc.path, resp.StatusCode, tc.code)
+		}
+		if got := resp.Header.Get("Allow"); got != tc.allow {
+			t.Errorf("OPTIONS %s: Allow = %q, want %q", tc.path, got, tc.allow)
+		}
+		if tc.code == http.StatusNoContent && body != "" {
+			t.Errorf("OPTIONS %s: answered a body (%q); Allow is the answer", tc.path, body)
+		}
+	}
+}
+
+// A CORS PREFLIGHT IS A DIFFERENT QUESTION AND IS NOT THIS DOOR'S. It is defined
+// by carrying Access-Control-Request-Method (Fetch, CORS preflight request), and
+// cloud's edge middleware owns and short-circuits exactly those. Answering one
+// here would be a second CORS authority — the defect middleware_edge.go's own
+// comment exists to prevent — so the split is on the header that defines it.
+func TestAPreflightIsNotThisDoor(t *testing.T) {
+	app := indexed(t)
+	req := httptest.NewRequest(http.MethodOptions, "/v1/agents", nil)
+	req.Header.Set("Origin", "https://example.test")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("preflight: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent && resp.Header.Get("Allow") != "" {
+		t.Fatalf("a preflight was answered by the contract door (Allow=%q); the edge owns it",
+			resp.Header.Get("Allow"))
+	}
+}
