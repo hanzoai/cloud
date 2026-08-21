@@ -40,6 +40,19 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"sentiment"}`),
 	})
+	zip.Describe("POST /v1/ml/models", zip.Doc{
+		Description: "Deploys one inference model for the caller's org, and answers 201\nwith the model as Kubernetes admitted it.\n\nThe `spec` is a kserve InferenceService spec, passed through unchanged — this\nplane owns the tenancy, the billing and the namespace, and kserve owns what a\nmodel IS. An unfunded org is refused BEFORE anything is created, so nobody runs\nfree GPU compute and nobody is charged for a resource that was never made.",
+		Fields: map[string]string{
+			"mlCreate.labels":      "Labels are extra labels to set on the object, merged UNDER the tenancy\nlabels this plane derives from the validated principal — so a label naming\nanother org's scope cannot displace the real one.",
+			"mlCreate.name":        "Name is the resource's name: a DNS-1123 label\n(^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$), lowercased and trimmed. It is the\nname the resource answers to for the life of the caller's org.",
+			"mlCreate.spec":        "Spec is the resource's own spec, passed to Kubernetes unchanged. Required —\nan empty spec is 400 rather than an empty resource.",
+			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
+			"mlResource.name":      "Name is the object's metadata.name, unique within the caller's namespace.",
+			"mlResource.spec":      "Spec is the resource spec, verbatim as Kubernetes stores it. Present on a\nsingle-object read, absent from a list.",
+			"mlResource.status":    "Status is the live status kserve owns, verbatim. Absent until kserve has\nwritten one.",
+		},
+		Example: json.RawMessage(`{"name":"sentiment","spec":{"predictor":{"model":{"modelFormat":{"name":"sklearn"},"storageUri":"s3://models/sentiment"}}}}`),
+	})
 	zip.Describe("POST /v1/ml/models/:name/predict", zip.Doc{
 		Description: "Proxies the request body to the model's kserve v2 data plane. The v2\nmodel name defaults to the InferenceService name (kserve's single-model\nconvention) and may be overridden with ?model=. The predictor's status + body\nare returned verbatim so a model-side error surfaces honestly.",
 	})

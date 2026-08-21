@@ -552,24 +552,25 @@
     "/v1/company/payment": {
       "post": {
         "operationId": "post_company_payment",
-        "summary": "Charge the one-time formation fee and mark the formation paid",
-        "description": "Bills the caller's own org the one-time Hanzo Company formation fee — $999 unless the deployment sets another — and answers with the formation record carrying its paid flag and the charge reference. Takes no body: the org is the validated tenant and the amount is the platform's, never the caller's to assert.\n\nIDEMPOTENT on the formation rather than on the request: an already-paid formation answers 200 with the same record and is not charged again, so a retry or a double-clicked button costs nothing. Available only at the `payment` stage (409 anywhere else) and only for an org that has begun a formation (404 otherwise).\n\nA refused charge answers the fleet-wide billing contract, not a formation error — 402 when the org cannot pay, 503 when metering is unavailable — which is exactly why this route is not a typed op.",
+        "summary": "Charges the caller's own org the one-time Hanzo Company formation fee.",
+        "description": "Charges the caller's own org the one-time Hanzo Company formation fee.\n\nIt is $999 unless the deployment sets another, and the answer is the formation\nrecord carrying its paid flag and the charge reference. It takes no body: the org is the validated tenant and the amount is the\nplatform's, never the caller's to assert.\n\nIDEMPOTENT on the formation rather than on the request: an already-paid\nformation answers 200 with the same record and is not charged again, so a\nretry or a double-clicked button costs nothing. Available only at the\n`payment` stage (409 anywhere else) and only for an org that has begun a\nformation (404 otherwise).\n\nA denial answers the fleet-wide billing contract — 402 insufficient_balance,\n402 spend_cap_exceeded, 503 balance_unavailable — carried by cloud.Denied,\nwhich is the money wire's own {\"error\":{\"code\",\"message\"}} body rather than a\nsecond vocabulary invented for this surface.\n\nThe gate is the LAST thing it does, after the stage check and the paid\nshort-circuit, so a caller the machine is about to refuse is never charged.\nThat ordering is why the gate cannot lift into middleware, where it would run\nfirst. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.",
         "tags": [
           "company"
         ],
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/formationView"
                 }
               }
-            }
+            },
+            "description": "ok"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/company/register": {
