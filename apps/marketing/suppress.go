@@ -228,6 +228,9 @@ func unsubURL(ctx context.Context, s *cloud.Service[state], org, channel, addres
 
 // SuppressionList is a page of opt-outs, newest first.
 type SuppressionList struct {
+	// Data is the page: every (channel, address) this org's send gate refuses,
+	// newest opt-out first. Absence from it is not permission to mail someone —
+	// it only means no opt-out was recorded on that channel.
 	Data []Suppression `json:"data"`
 }
 
@@ -248,9 +251,18 @@ type UnsubscribeInput struct {
 
 // Unsubscribed confirms a one-click opt-out.
 type Unsubscribed struct {
-	Unsubscribed bool   `json:"unsubscribed"`
-	Address      string `json:"address"`
-	Channel      string `json:"channel"`
+	// Unsubscribed is always true here: the opt-out is idempotent, so a second
+	// click on the same link confirms the same thing rather than reporting
+	// nothing changed. A refused token never reaches this shape — it is a 403.
+	Unsubscribed bool `json:"unsubscribed"`
+	// Address is the recipient now opted out, normalized (lower-cased, trimmed)
+	// to the form the send gate matches on — so it can differ in case from the
+	// address the link carried.
+	Address string `json:"address"`
+	// Channel is the ONE surface opted out of: email, sms, social, meta, google
+	// or tiktok. The other channels are untouched, and so is this address in
+	// every other org.
+	Channel string `json:"channel"`
 }
 
 // listSuppressions returns the org's opt-out list, newest first — everyone the

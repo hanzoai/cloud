@@ -328,34 +328,105 @@ func requireCSRFOnWrites() zip.Handler {
 // able to tell which source answered from the shape of the answer.
 
 type todoProject struct {
-	ID          string `json:"id"`
-	Org         string `json:"org"`
-	Key         string `json:"key"`
-	Name        string `json:"name"`
+	// ID is the board's opaque handle, and it is NOT how you address it — Key is.
+	// Its shape says which source answered: a forge board's is the repository's
+	// full name ("hanzoai/cloud"), an index board's a minted "prj_" id.
+	ID string `json:"id"`
+	// Org is the IAM org the board belongs to, taken from the validated principal
+	// and never from the request. Every board a caller can see is in it.
+	Org string `json:"org"`
+	// Key addresses the board everywhere else — /v1/todo/projects/<key>/issues —
+	// and prefixes every issue identifier on it. An index board's key is 2-8
+	// uppercase alphanumerics starting with a letter ("ENG", "OPS2") and is matched
+	// case-insensitively; a forge board's is the repository name as the forge
+	// spells it.
+	Key string `json:"key"`
+	// Name is the board's display name. For a forge board it is the repository
+	// name, so it equals Key; an index board carries its own.
+	Name string `json:"name"`
+	// Description is whatever an index board was created with. Absent on a forge
+	// board: this projection takes the repository's name and nothing else about the
+	// repository.
 	Description string `json:"description,omitempty"`
-	CreatedAt   int64  `json:"createdAt"`
-	UpdatedAt   int64  `json:"updatedAt"`
+	// CreatedAt is when the board was created, in unix seconds. 0 on a forge board
+	// for the same reason Description is absent.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when the board record last changed, in unix seconds — the BOARD,
+	// not the work on it, so filing an issue does not move it. 0 on a forge board.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 type issueView struct {
-	ID          string   `json:"id"`
-	Identifier  string   `json:"identifier"` // KEY-<number>, the human handle
-	ProjectKey  string   `json:"projectKey"`
-	Number      int      `json:"number"`
-	Kind        string   `json:"kind"`             // issue | pr | epic
-	Source      string   `json:"source"`           // team | git | crm | helpdesk | cms | agent
-	Repo        string   `json:"repo,omitempty"`   // git repo binding
-	ExtRef      string   `json:"extRef,omitempty"` // external anchor
-	Title       string   `json:"title"`
-	Description string   `json:"description,omitempty"`
-	Status      string   `json:"status"`
-	Priority    string   `json:"priority"`
-	Assignee    string   `json:"assignee,omitempty"`
-	Labels      []string `json:"labels"`
-	StartAt     int64    `json:"startAt,omitempty"` // unix seconds; absent = unscheduled
-	DueAt       int64    `json:"dueAt,omitempty"`   // unix seconds; absent = no due date
-	CreatedAt   int64    `json:"createdAt"`
-	UpdatedAt   int64    `json:"updatedAt"`
+	// ID is the work item's opaque handle, and it is NOT how you address it —
+	// ProjectKey plus Number is. Its shape says which source answered: a forge
+	// issue's is the forge's own numeric id in decimal, an index row's a minted
+	// "issue_" id.
+	ID string `json:"id"`
+	// Identifier is the human handle, "<key>#<number>" — the board and the number
+	// on it, joined. ONE spelling whichever source answered, because a list where
+	// forge rows read cli#1 and index rows read OPS-3 is two products in one list.
+	Identifier string `json:"identifier"`
+	// ProjectKey is the board this item is on: the repository name for a forge
+	// issue, the index board's key otherwise. With Number it is the item's address
+	// in every other route.
+	ProjectKey string `json:"projectKey"`
+	// Number is the item's number ON ITS BOARD, from 1 and monotonic there — the
+	// forge's own issue number for a forge row, allocated inside the create
+	// transaction for an index row so it cannot race. Unique per board, never
+	// across the org.
+	Number int `json:"number"`
+	// Kind is what the item IS: issue, pr or epic. Set once at create and never
+	// changed, so a row does not migrate between surfaces. Deliberately not "task"
+	// — that word is the async plane (contract.go).
+	Kind string `json:"kind"`
+	// Source is which surface OPENED it: team, git, crm, helpdesk, cms or agent.
+	// Also set once. It is the ORIGIN, not the subject — source=helpdesk is an
+	// engineering issue opened from a support escalation, not a support ticket.
+	Source string `json:"source"`
+	// Repo is the git repository the item is bound to, so a repository's Issues and
+	// PRs tabs are filters over this one table. Absent when the item is not
+	// repo-bound.
+	Repo string `json:"repo,omitempty"`
+	// ExtRef anchors the item to something outside the todo — a mirrored issue
+	// ("github:owner/repo#123"), a pushed PR branch, or a record on another plane.
+	// It is the idempotency key the mirror upsert matches on. Absent when the item
+	// has no external origin.
+	ExtRef string `json:"extRef,omitempty"`
+	// Title is the item's one-line summary.
+	Title string `json:"title"`
+	// Description is the body, markdown as its author wrote it. Absent when empty.
+	Description string `json:"description,omitempty"`
+	// Status is the board column: backlog, todo, in_progress, done or canceled, and
+	// nothing else. On a forge row it is read off a LABEL, so relabelling in the
+	// forge web UI moves the card here and vice versa — and a CLOSED forge issue
+	// reads done whatever its labels say. Never empty: "backlog" when nothing names
+	// a column.
+	Status string `json:"status"`
+	// Priority is urgent, high, medium, low or none. Also a label on a forge row.
+	// Never empty: "none" when nothing names one, so callers compare a value rather
+	// than test for absence.
+	Priority string `json:"priority"`
+	// Assignee is who holds the work — an IAM username, or the login of the FIRST
+	// assignee when a forge issue has several. Absent when nobody holds it, which
+	// is exactly the state a claim needs.
+	Assignee string `json:"assignee,omitempty"`
+	// Labels are the item's remaining tags, with the status and priority labels
+	// lifted OUT — a column that stayed here would render twice, once as the card's
+	// column and once as a chip on the card. Always present; empty is [].
+	Labels []string `json:"labels"`
+	// StartAt is when the work starts, in unix seconds; absent means unscheduled.
+	// A forge row takes it from when the issue was opened, but only once the issue
+	// has a due date — an interval needs both ends.
+	StartAt int64 `json:"startAt,omitempty"`
+	// DueAt is when the work is due, in unix seconds; absent means no due date. A
+	// forge row takes it from its MILESTONE's due date, since a forge issue has no
+	// deadline of its own. Never before StartAt, and never past 2200-01-01.
+	DueAt int64 `json:"dueAt,omitempty"`
+	// CreatedAt is when the item was opened, in unix seconds. 0 when the source
+	// gave no parseable timestamp.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is when it last changed, in unix seconds.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // ---- helpers ----

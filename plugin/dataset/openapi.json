@@ -317,10 +317,11 @@
       "riskDataset": {
         "properties": {
           "at": {
-            "description": "At is when this version last changed state, and By who.",
+            "description": "At is when this version last changed state, RFC 3339 UTC.",
             "type": "string"
           },
           "by": {
+            "description": "By is who moved it there: the validated user, or the org itself when the\ncaller is a machine with no user behind it.",
             "type": "string"
           },
           "counts": {
@@ -332,7 +333,7 @@
             "type": "string"
           },
           "name": {
-            "description": "Name and Version identify the version.",
+            "description": "Name identifies the dataset across all of its versions.",
             "type": "string"
           },
           "oversize": {
@@ -364,6 +365,7 @@
             "type": "boolean"
           },
           "version": {
+            "description": "Version is which version this is, from 1 and monotone within the dataset.\nA number is never reused — not even after a disposal, where the next declare\ncontinues the count — so \"signups v3\" means one thing forever, which is what\nmakes a model's citation of it checkable.",
             "type": "integer"
           }
         },
@@ -372,13 +374,15 @@
       "riskDatasetDisposal": {
         "properties": {
           "dataset": {
+            "description": "Dataset is the dataset that was disposed of. The NAME survives: declaring it\nagain continues the version count rather than starting over at 1.",
             "type": "string"
           },
           "rows": {
+            "description": "Rows is how many rows they held between them, as the REGISTER recorded them\nwhen each was materialised — not a count of what the drop deleted, which is\ngone by the time this answers.",
             "type": "integer"
           },
           "versions": {
-            "description": "Versions is how many versions went, and Rows how many rows they held between\nthem, as the register recorded them.",
+            "description": "Versions is how many versions went.",
             "type": "integer"
           }
         },
@@ -407,7 +411,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "Kind and Subject name whose row this is.",
+            "description": "Kind is the subject kind: person, session or account.",
             "type": "string"
           },
           "point": {
@@ -422,6 +426,7 @@
             "type": "string"
           },
           "subject": {
+            "description": "Subject is the identity within that kind — whose row this is. Every row of\none subject is in ONE split, decided by that subject's earliest instant, so\na subject is never on both sides of a cut.",
             "type": "string"
           }
         },
@@ -430,6 +435,7 @@
       "riskDatasetRows": {
         "properties": {
           "dataset": {
+            "description": "Dataset is the dataset the page was read from.",
             "type": "string"
           },
           "digest": {
@@ -444,10 +450,11 @@
             "type": "array"
           },
           "limit": {
+            "description": "Limit is the page size actually served: the one asked for, clamped to the\nplane's own bound of 5000. Fewer rows than Limit means the version ended.",
             "type": "integer"
           },
           "offset": {
-            "description": "Offset and Limit are the page actually served, which may be smaller than the\none asked for.",
+            "description": "Offset is where this page starts in the version's own row order, which is by\nrow id and therefore stable forever.",
             "type": "integer"
           },
           "rows": {
@@ -458,6 +465,7 @@
             "type": "array"
           },
           "version": {
+            "description": "Version is which published version it was read from — the one asked for, or\nthe newest published one when the request named none.",
             "type": "integer"
           }
         },
@@ -480,7 +488,7 @@
             "type": "array"
           },
           "from": {
-            "description": "From and To bound the event window, half-open, RFC 3339. The window may not\nbe longer than the source's own retention: past that, its older half is\nalready gone and the dataset would silently be shorter than it says.",
+            "description": "From is where the event window opens, RFC 3339, INCLUSIVE. The window may\nnot be longer than the source's own retention: past that, its older half is\nalready gone and the dataset would silently be shorter than it says.",
             "type": "string"
           },
           "horizon": {
@@ -504,6 +512,7 @@
             "type": "string"
           },
           "to": {
+            "description": "To is where the window ends, EXCLUSIVE, so two datasets meeting at one\ninstant share no row. A materialisation reads less than this — the end is\npulled back by Horizon, and the lineage reports the window it actually read.",
             "type": "string"
           }
         },
@@ -512,12 +521,14 @@
       "riskDatasetVersions": {
         "properties": {
           "items": {
+            "description": "Items is every version of it, newest first — including the disposed ones,\nwhose record outlives their rows. Never null.",
             "items": {
               "$ref": "#/components/schemas/riskDataset"
             },
             "type": "array"
           },
           "name": {
+            "description": "Name is the dataset these versions belong to, as the register holds it.",
             "type": "string"
           }
         },
@@ -526,6 +537,7 @@
       "riskLineage": {
         "properties": {
           "dataset": {
+            "description": "Dataset is the dataset traced.",
             "type": "string"
           },
           "digest": {
@@ -533,7 +545,7 @@
             "type": "string"
           },
           "from": {
-            "description": "From and To are the window actually read — To is the window's end pulled\nback by the maturity horizon, which is usually earlier than the spec's.",
+            "description": "From is where the window actually read opens, RFC 3339. Same as the spec's.",
             "type": "string"
           },
           "holds": {
@@ -545,10 +557,11 @@
             "type": "integer"
           },
           "refusal": {
+            "description": "Refusal says which way it failed — the window expired, or the source now\nholds a different count. Absent when Reproducible is true.",
             "type": "string"
           },
           "reproducible": {
-            "description": "Reproducible is true when the source still holds what this version was built\nfrom. Refusal says why not, when it is false.",
+            "description": "Reproducible is true when the source still holds what this version was built\nfrom — measured by asking it again, not recalled. False is ordinary: the\nsource is fed by a rollup that runs behind the events, so \"it holds more\nnow\" is the common case and it means re-running the spec would not produce\nthis version.",
             "type": "boolean"
           },
           "retention": {
@@ -556,7 +569,7 @@
             "type": "string"
           },
           "rows": {
-            "description": "Rows and Subjects are what the source held for that window at\nmaterialisation time.",
+            "description": "Rows is how many rows the source held for that window at materialisation\ntime. Holds is the same question asked now, and the difference between them\nis the whole of the reproducibility claim.",
             "type": "integer"
           },
           "share": {
@@ -568,12 +581,15 @@
             "type": "string"
           },
           "subjects": {
+            "description": "Subjects is how many distinct subjects those rows belonged to. It is the\nreal sample size — the row count flatters it whenever a subject is active.",
             "type": "integer"
           },
           "to": {
+            "description": "To is where it ends: the spec's own end pulled BACK by the maturity horizon,\nso it is usually earlier than the spec says. This is the window a\nreproduction has to ask for — asking the spec's would not return these rows.",
             "type": "string"
           },
           "version": {
+            "description": "Version is the version traced — the one asked for, or the newest published\none when the request named none.",
             "type": "integer"
           }
         },
@@ -586,10 +602,11 @@
             "type": "integer"
           },
           "productive": {
-            "description": "Productive and Unproductive are the two judged classes, so the imbalance is\nvisible before anyone trains on it.",
+            "description": "Productive is how many judged rows carry the one disposition.",
             "type": "integer"
           },
           "rows": {
+            "description": "Rows is how many rows the version holds across every split. It is the size\nof the version, not of the source window — the horizon, the cuts and the row\ncap all bind before this number.",
             "type": "integer"
           },
           "subjects": {
@@ -597,15 +614,19 @@
             "type": "integer"
           },
           "test": {
+            "description": "Test is how many fall after the second cut — the LATEST slice, and the only\none a score is honest about, since the split is temporal.",
             "type": "integer"
           },
           "train": {
+            "description": "Train is how many rows fall before the first cut — the EARLIEST slice of the\nwindow, which is what a model is fitted on.",
             "type": "integer"
           },
           "unproductive": {
+            "description": "Unproductive is how many carry the other. With Productive it accounts for\nJudged, so the class imbalance is visible before anyone trains on it; both\nstay 0 while Judged is 0.",
             "type": "integer"
           },
           "val": {
+            "description": "Val is how many fall between the two cuts, held out for tuning.",
             "type": "integer"
           }
         },

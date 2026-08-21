@@ -102,84 +102,150 @@ const (
 
 // o11yGlobal is the whole fleet o11y board payload.
 type o11yGlobal struct {
-	Range       string          `json:"range"`
-	Start       string          `json:"start"`
-	End         string          `json:"end"`
-	Totals      o11yTotals      `json:"totals"`
-	Series      []o11ySeries    `json:"series"`
-	LogSeries   []o11yLogPoint  `json:"logSeries"`
-	TopOrgs     []o11yOrgStat   `json:"topOrgs"`
-	TopModels   []o11yModelStat `json:"topModels"`
-	TopServices []o11ySvcStat   `json:"topServices"`
-	LLM         o11yLLM         `json:"llm"`
+	// Range is the window every figure below covers: 24h, 7d or 30d. It is the
+	// NORMALIZED value — an unrecognized ?range reads as 30d and says so here.
+	Range string `json:"range"`
+	// Start is the window's lower bound, RFC 3339 UTC, derived from Range.
+	Start string `json:"start"`
+	// End is the moment of this read, RFC 3339 UTC.
+	End string `json:"end"`
+	// Totals is the KPI band: the usage half, the trace half and log volume.
+	Totals o11yTotals `json:"totals"`
+	// Series is usage bucketed over the window, oldest first. A bucket with no
+	// traffic has no point — the series is not padded to a fixed length.
+	Series []o11ySeries `json:"series"`
+	// LogSeries is log volume over the SAME buckets as Series, so the two line up.
+	LogSeries []o11yLogPoint `json:"logSeries"`
+	// TopOrgs is the ten busiest tenants by request count.
+	TopOrgs []o11yOrgStat `json:"topOrgs"`
+	// TopModels is the ten busiest models by request count.
+	TopModels []o11yModelStat `json:"topModels"`
+	// TopServices is the twelve busiest services by trace count.
+	TopServices []o11ySvcStat `json:"topServices"`
+	// LLM is the generation rollup over gen_ai spans. Its money is US DOLLARS,
+	// unlike Totals above — the two come from different planes and each keeps its
+	// plane's unit.
+	LLM o11yLLM `json:"llm"`
 }
 
 // o11yTotals is the fleet KPI band. LLM half from cloud_usage; RED half from traces;
 // volume from logs. Every field is a real aggregate or an honest zero.
 type o11yTotals struct {
-	// LLM usage (hanzo.cloud_usage), all orgs.
-	Requests         int64 `json:"requests"`
-	Tokens           int64 `json:"tokens"`
-	PromptTokens     int64 `json:"promptTokens"`
+	// Requests is how many LLM calls the fleet served in the window, across every
+	// tenant, errored ones included. From the billing ledger.
+	Requests int64 `json:"requests"`
+	// Tokens is prompt plus completion tokens across those calls.
+	Tokens int64 `json:"tokens"`
+	// PromptTokens is the input half of Tokens.
+	PromptTokens int64 `json:"promptTokens"`
+	// CompletionTokens is the generated half of Tokens.
 	CompletionTokens int64 `json:"completionTokens"`
-	CostCents        int64 `json:"costCents"`
-	Errors           int64 `json:"errors"`
-	Orgs             int64 `json:"orgs"`
-	Models           int64 `json:"models"`
-	// Traces (event.span), all services.
-	TraceCount     int64   `json:"traceCount"`
-	LatencyP50Ms   float64 `json:"latencyP50Ms"`
-	LatencyP95Ms   float64 `json:"latencyP95Ms"`
+	// CostCents is what those calls cost, in US CENTS. The trace and gen_ai
+	// figures elsewhere on this board are not in cents; this one is.
+	CostCents int64 `json:"costCents"`
+	// Errors is how many of Requests the ledger marked failed.
+	Errors int64 `json:"errors"`
+	// Orgs is how many DISTINCT tenants appear in the window — the fleet's active
+	// tenant count, not a count of calls.
+	Orgs int64 `json:"orgs"`
+	// Models is how many distinct models were called.
+	Models int64 `json:"models"`
+	// TraceCount is how many spans the fleet emitted in the window, across every
+	// service. It counts TRACED REQUESTS, so it is a much larger number than
+	// Requests above and is not a superset of it: one is the trace plane, the other
+	// the billing ledger.
+	TraceCount int64 `json:"traceCount"`
+	// LatencyP50Ms is the median request duration in milliseconds, over spans
+	// rather than over ledger rows — so it covers every traced request, not only
+	// the LLM ones counted above.
+	LatencyP50Ms float64 `json:"latencyP50Ms"`
+	// LatencyP95Ms is the 95th percentile of the same durations.
+	LatencyP95Ms float64 `json:"latencyP95Ms"`
+	// LatencyP99Ms is the 99th percentile — the tail worth paging on.
 	LatencyP99Ms   float64 `json:"latencyP99Ms"`
 	TraceErrorRate float64 `json:"traceErrorRate"` // percent (0..100)
-	Services       int64   `json:"services"`
-	// Logs (event.log), fleet volume over the window.
+	// Services is how many distinct services emitted a span in the window.
+	Services int64 `json:"services"`
+	// LogVolume is how many log lines the fleet emitted in the window. Volume only
+	// — nothing here says how many of them were errors.
 	LogVolume int64 `json:"logVolume"`
 }
 
 // o11ySeries is one usage time bucket (fleet-wide).
 type o11ySeries struct {
-	Ts        string `json:"ts"`
-	Requests  int64  `json:"requests"`
-	Tokens    int64  `json:"tokens"`
-	CostCents int64  `json:"costCents"`
-	Errors    int64  `json:"errors"`
+	// Ts is the bucket's start, RFC 3339 UTC. The width follows the range — an
+	// hour at 24h, six hours at 7d, a day at 30d — so it is not a fixed unit.
+	Ts string `json:"ts"`
+	// Requests is the calls served in that bucket.
+	Requests int64 `json:"requests"`
+	// Tokens is the tokens they consumed.
+	Tokens int64 `json:"tokens"`
+	// CostCents is what they cost, in US cents.
+	CostCents int64 `json:"costCents"`
+	// Errors is how many of them failed.
+	Errors int64 `json:"errors"`
 }
 
 // o11yLogPoint is one log-volume time bucket (fleet-wide).
 type o11yLogPoint struct {
-	Ts    string `json:"ts"`
-	Count int64  `json:"count"`
+	// Ts is the bucket's start, RFC 3339 UTC, on the same buckets as the usage
+	// series so the two can be read together.
+	Ts string `json:"ts"`
+	// Count is the log lines emitted in that bucket, fleet-wide.
+	Count int64 `json:"count"`
 }
 
 // o11yOrgStat is one row of the top-orgs-by-usage leaderboard.
 type o11yOrgStat struct {
-	Org       string `json:"org"`
-	Requests  int64  `json:"requests"`
-	Tokens    int64  `json:"tokens"`
-	CostCents int64  `json:"costCents"`
+	// Org is the tenant slug.
+	Org string `json:"org"`
+	// Requests is how many calls that tenant made. The board ranks on this, so the
+	// top rows are the busiest tenants and not necessarily the costliest.
+	Requests int64 `json:"requests"`
+	// Tokens is what those calls consumed.
+	Tokens int64 `json:"tokens"`
+	// CostCents is what they cost, in US cents.
+	CostCents int64 `json:"costCents"`
 }
 
 // o11yModelStat is one row of the top-models leaderboard.
 type o11yModelStat struct {
-	Model     string `json:"model"`
-	Requests  int64  `json:"requests"`
-	Tokens    int64  `json:"tokens"`
-	CostCents int64  `json:"costCents"`
+	// Model is the model id the ledger recorded. Unattributed rows carry no model
+	// and are left out rather than ranked as a nameless one.
+	Model string `json:"model"`
+	// Requests is how many calls went to it. The board ranks on this.
+	Requests int64 `json:"requests"`
+	// Tokens is what those calls consumed.
+	Tokens int64 `json:"tokens"`
+	// CostCents is what they cost, in US cents.
+	CostCents int64 `json:"costCents"`
 }
 
 // o11ySvcStat is one row of the top-services (by trace volume) leaderboard.
 type o11ySvcStat struct {
-	Service      string  `json:"service"`
-	Requests     int64   `json:"requests"`
-	ErrorRate    float64 `json:"errorRate"` // percent (0..100)
+	// Service is the emitting service's name, from the span's own service column.
+	// The whole cloud binary reports under ONE such name however many subsystems
+	// it mounts, which is what the per-subsystem board next door exists to split
+	// apart.
+	Service string `json:"service"`
+	// Requests is how many spans it emitted in the window. The board ranks on
+	// this.
+	Requests  int64   `json:"requests"`
+	ErrorRate float64 `json:"errorRate"` // percent (0..100)
+	// LatencyP95Ms is that service's 95th-percentile span duration in
+	// milliseconds.
 	LatencyP95Ms float64 `json:"latencyP95Ms"`
 }
 
 // o11yLLM is the fleet-wide LLM generation rollup over gen_ai spans.
 type o11yLLM struct {
-	Generations int64   `json:"generations"`
-	CostUsd     float64 `json:"costUsd"`
+	// Generations is how many LLM calls the fleet made in the window — one per
+	// gen_ai span. It counts the same activity the usage totals do, from the trace
+	// plane instead of the billing ledger, so the two need not match exactly.
+	Generations int64 `json:"generations"`
+	// CostUsd is their summed cost in US DOLLARS, not cents: the span attribute's
+	// native unit, carried through unconverted.
+	CostUsd float64 `json:"costUsd"`
 }
 
 // o11y is the fleet-wide observability board: LLM usage (requests, tokens, cost,
@@ -265,9 +331,15 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 
 // o11yOut is the GET /v1/admin/o11y envelope.
 type o11yOut struct {
-	Status string      `json:"status"`
-	Msg    string      `json:"msg"`
-	Data   *o11yGlobal `json:"data"`
+	// Status is "ok" or "error", at HTTP 200 either way.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error", empty otherwise.
+	Msg string `json:"msg"`
+	// Data is the board. A warehouse that is not connected, or a table that is
+	// missing, yields the ZERO board rather than a failure — so zeros here mean
+	// either a quiet fleet or a blind one, and this envelope cannot tell you
+	// which.
+	Data *o11yGlobal `json:"data"`
 }
 
 // ── pure SQL builders (static SQL + one positional time bound; unit-tested) ──

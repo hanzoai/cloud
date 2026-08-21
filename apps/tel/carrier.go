@@ -47,14 +47,31 @@ type NumberQuery struct {
 
 // Number is a phone number as this platform holds it.
 type Number struct {
-	ID       string   `json:"id"`
-	E164     string   `json:"e164"`
-	Country  string   `json:"country"`
-	Type     string   `json:"type"`
-	Org      string   `json:"org,omitempty"`
-	Capable  []string `json:"capable,omitempty"` // voice | sms | mms | fax
-	Monthly  int64    `json:"monthly,omitempty"` // minor units, as the carrier quoted it
-	Currency string   `json:"currency,omitempty"`
+	// ID is the carrier's handle for the number, and the id every route here
+	// addresses it by. It is not the number itself — see E164.
+	ID string `json:"id"`
+	// E164 is the number in E.164: a leading + and digits only, no spaces or dashes.
+	// That is what a carrier accepts and what a search result must be bought by.
+	E164 string `json:"e164"`
+	// Country is the ISO 3166-1 alpha-2 code the number is issued under. Numbering is
+	// national, so this is what makes a search answerable at all.
+	Country string `json:"country"`
+	// Type is what kind of number it is: "local", "national", "tollfree" or "mobile".
+	// It decides both price and what a carrier will let it originate.
+	Type string `json:"type"`
+	// Org is the tenant holding the number. A search result carries none — nobody
+	// holds it yet — which is how an available number is told from a held one.
+	Org string `json:"org,omitempty"`
+	// Capable is what the number can carry: any of "voice", "sms", "mms", "fax". A
+	// number missing "sms" cannot send one no matter what this platform does.
+	Capable []string `json:"capable,omitempty"`
+	// Monthly is the recurring rental in the MINOR unit of Currency (cents for USD),
+	// exactly as the carrier quoted it. It is a price, not a charge: nothing is billed
+	// by this field.
+	Monthly int64 `json:"monthly,omitempty"`
+	// Currency is the ISO 4217 code Monthly is denominated in. Without it the number
+	// beside it means nothing, so the two are always read together.
+	Currency string `json:"currency,omitempty"`
 }
 
 // CallRequest is one outbound call. Agent, when set, hands the call to a Hanzo
@@ -69,12 +86,21 @@ type CallRequest struct {
 
 // Call is a call as this platform holds it.
 type Call struct {
-	ID     string `json:"id"`
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Status string `json:"status"` // queued | ringing | answered | completed | failed
-	Org    string `json:"org,omitempty"`
-	Agent  string `json:"agent,omitempty"`
+	// ID is the carrier's handle for the call — what a hangup or a lookup names.
+	ID string `json:"id"`
+	// From is the calling number in E.164. It must be one this org holds: a carrier
+	// refuses an origination from a number nobody proved they own.
+	From string `json:"from"`
+	// To is the called number in E.164.
+	To string `json:"to"`
+	// Status is where the call is: "queued", "ringing", "answered", "completed" or
+	// "failed". Only the last two are terminal.
+	Status string `json:"status"`
+	// Org is the tenant the call was placed for or received by.
+	Org string `json:"org,omitempty"`
+	// Agent names the Hanzo assistant handling the call. Set means the call was
+	// answered by that assistant rather than connected to a person.
+	Agent string `json:"agent,omitempty"`
 }
 
 // SMSRequest is one outbound message.
@@ -90,12 +116,20 @@ type SMSRequest struct {
 // SMS is a message as this platform holds it -- text, or media, or both;
 // the carriers call the media case MMS and route it over the same number.
 type SMS struct {
-	ID     string `json:"id"`
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Text   string `json:"text"`
-	Status string `json:"status"` // queued | sent | delivered | failed
-	Org    string `json:"org,omitempty"`
+	// ID is the carrier's handle for the message.
+	ID string `json:"id"`
+	// From is the sending number in E.164, and must be one this org holds.
+	From string `json:"from"`
+	// To is the receiving number in E.164.
+	To string `json:"to"`
+	// Text is the message body. Empty is legal when the message carried only media.
+	Text string `json:"text"`
+	// Status is where the message is: "queued", "sent", "delivered" or "failed".
+	// "sent" means the carrier took it; "delivered" means the handset got it, and
+	// not every carrier or destination reports that.
+	Status string `json:"status"`
+	// Org is the tenant the message was sent for or received by.
+	Org string `json:"org,omitempty"`
 }
 
 // ErrNoCarrier is returned when the surface is mounted without one configured.

@@ -109,22 +109,61 @@ type Request struct {
 // from a hit only one leg saw, nor tell a healthy leg from one quietly returning
 // nothing.
 type Match struct {
-	Backend string  `json:"backend"`
-	Rank    int     `json:"rank"`
-	Score   float64 `json:"score"`
+	// Backend is the leg that contributed this match: "index" (lexical) or
+	// "vector" (semantic). It is the same name that leg reports itself under in
+	// Response.Backends, so a hit can be traced to a status.
+	Backend string `json:"backend"`
+	// Rank is this document's 1-based position in THAT leg's own result list,
+	// before fusion — 1 is the leg's best hit. It is the only input to the fused
+	// score: RRF adds 1/(60+rank) per leg, which is why a document two legs ranked
+	// second beats one a single leg ranked first.
+	Rank int `json:"rank"`
+	// Score is the leg's NATIVE score, on that leg's own scale, reported for
+	// explanation and never used in ranking — the scales are incomparable (a cosine
+	// similarity against a term-match count), which is why fusion works on ranks.
+	// The vector leg reports Qdrant's cosine similarity; the lexical leg exposes no
+	// per-row score and reports 0, meaning "unscored", not "scored zero".
+	Score float64 `json:"score"`
 }
 
 // Hit is one fused hit. Score is the FUSED score (see fuse.go); each backend's
 // native score stays in Matched, because the two are different things and
 // flattening them loses the ability to explain a ranking.
 type Hit struct {
-	ID      string  `json:"id"`
-	Corpus  string  `json:"corpus"`
-	DocType string  `json:"doctype,omitempty"`
-	Title   string  `json:"title,omitempty"`
-	URL     string  `json:"url,omitempty"`
-	Project string  `json:"project,omitempty"`
-	Score   float64 `json:"score"`
+	// ID is the document's identity inside its corpus — the KB document name from
+	// the semantic leg, or a lexical row's own name/id/_id (falling back to
+	// "row-<n>" when the row carries none). It is unique with DocType, not alone:
+	// the pair is the key the two legs are fused on.
+	ID string `json:"id"`
+	// Corpus is which store the document lives in. Both legs read the org's
+	// knowledge base, so it is "kb" on every hit today; it is provenance for the
+	// day a third corpus is fused, not a field to branch on.
+	Corpus string `json:"corpus"`
+	// DocType is the knowledge doctype: kb-page, kb-memory or kb-source from the
+	// semantic leg, and a lexical row's own doctype/type field otherwise. Absent
+	// when the row carried neither.
+	DocType string `json:"doctype,omitempty"`
+	// Title is the document's display title — the indexed title from the semantic
+	// leg, the row's title (falling back to its name) from the lexical one. Absent
+	// when the document has none.
+	Title string `json:"title,omitempty"`
+	// URL is where the document can be opened, carried from the indexed payload —
+	// the link back to the app a connector ingested it from. Absent for anything
+	// written in the product, which has no external address.
+	URL string `json:"url,omitempty"`
+	// Project is the project scope the document was indexed under. Absent for a
+	// document saved with none; Request.Project filters the semantic leg on it.
+	Project string `json:"project,omitempty"`
+	// Score is the FUSED score, not a relevance or a similarity: Reciprocal Rank
+	// Fusion sums 1/(60+rank) over each leg that returned the document, so it is
+	// bounded by roughly 1/61 per leg (about 0.033 for a document both legs put
+	// first) and hits are ordered by it, descending. Being built from ranks, it is
+	// comparable only WITHIN one response — never across queries, and never against
+	// a backend's own score, which stays in Matched.
+	Score float64 `json:"score"`
+	// Matched is one entry per leg that returned this document, with that leg's
+	// rank and native score. Two entries mean both legs agreed, which is exactly
+	// why the hit outranks one a single leg found. Never empty on a returned hit.
 	Matched []Match `json:"matched"`
 }
 
@@ -132,11 +171,26 @@ type Hit struct {
 // response, including the ones that were skipped, so a client never has to infer
 // from absence.
 type BackendStatus struct {
-	Name   string `json:"name"`
+	// Name is which leg this reports: "index", the lexical store, or "vector", the
+	// semantic one. Match.Backend uses the same two names.
+	Name string `json:"name"`
+	// Status is one of ok, degraded, disabled, skipped — four distinct operational
+	// facts that are never collapsed. It ran and answered; it is configured and
+	// FAILED (Error says how, and only this one is a fault); this deployment never
+	// provisioned it; or the request's mode excluded it.
 	Status string `json:"status"`
-	Hits   int    `json:"hits"`
-	TookMS int64  `json:"took_ms"`
-	Error  string `json:"error,omitempty"`
+	// Hits is how many results this leg returned, counted BEFORE fusion, so it is
+	// not the number that survived into Response.Hits — fusion merges what both
+	// legs found and the caller's limit and offset then page it. 0 for a leg that
+	// did not run.
+	Hits int `json:"hits"`
+	// TookMS is how long this leg took, in milliseconds, timed around its own call
+	// and excluding fusion. 0 for a leg that was skipped or is disabled, since
+	// nothing was called.
+	TookMS int64 `json:"took_ms"`
+	// Error is the failure text from a leg whose status is degraded — the reason a
+	// configured backend could not answer. Absent otherwise.
+	Error string `json:"error,omitempty"`
 }
 
 // Response is the ONE result shape.
@@ -152,7 +206,10 @@ type Response struct {
 	Hits []Hit `json:"hits"`
 	// Backends is the per-leg report. Always populated.
 	Backends []BackendStatus `json:"backends"`
-	TookMS   int64           `json:"took_ms"`
+	// TookMS is the whole query's wall time in milliseconds — every leg it
+	// consulted, plus fusion and paging. Each leg's own share is in
+	// Backends[].TookMS; the legs run in sequence, so this is at least their sum.
+	TookMS int64 `json:"took_ms"`
 }
 
 // Mount wires the surface. Every route is a typed op, so it projects to OpenAPI,

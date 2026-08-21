@@ -443,22 +443,22 @@ func nsForEnv(env string) string {
 // the derived drift verdict. It is the Go analogue of the platform's `AppView`
 // (apps-api.ts) so console renders the same shape the Dokploy board did.
 type AppView struct {
-	ID          string   `json:"id"`   // <org>/<app>/<env>, e.g. hanzoai/iam/main
-	Org         string   `json:"org"`  // image namespace, e.g. hanzoai
-	App         string   `json:"app"`  // service / CR name, e.g. iam
-	Env         string   `json:"env"`  // main|test|dev
-	Repo        string   `json:"repo"` // owner/repo, e.g. hanzoai/iam
-	Registry    string   `json:"registry"`
-	Role        string   `json:"role"` // operator spec.role (sql|kv|generic|ingress|…) or "" — the one declared class field
-	DeclaredTag string   `json:"declaredTag"`
-	RunningTag  string   `json:"runningTag"`
-	LatestTag   string   `json:"latestTag"`
-	Health      string   `json:"health"` // green|yellow|red|"" (unknown)
-	Phase       string   `json:"phase"`  // operator status.phase (Running/…)
-	Cluster     string   `json:"cluster"`
-	Namespace   string   `json:"namespace"`
-	Endpoints   []string `json:"endpoints"`
-	Drift       Verdict  `json:"drift"`
+	ID          string   `json:"id"`          // <org>/<app>/<env>, e.g. hanzoai/iam/main
+	Org         string   `json:"org"`         // image namespace, e.g. hanzoai
+	App         string   `json:"app"`         // service / CR name, e.g. iam
+	Env         string   `json:"env"`         // main|test|dev
+	Repo        string   `json:"repo"`        // owner/repo, e.g. hanzoai/iam
+	Registry    string   `json:"registry"`    // spec.image.repository verbatim (ghcr.io/hanzoai/iam); Org and Repo are read off it
+	Role        string   `json:"role"`        // operator spec.role (sql|kv|generic|ingress|…) or "" — the one declared class field
+	DeclaredTag string   `json:"declaredTag"` // spec.image.tag — the tag the CR SAYS to run; anything but vX.Y.Z is red drift
+	RunningTag  string   `json:"runningTag"`  // the tag the live Deployment actually runs; "" when unreadable — unknown, not a guess
+	LatestTag   string   `json:"latestTag"`   // newest released tag; "" until the GH release reader lands, so "stale" cannot fire yet
+	Health      string   `json:"health"`      // green|yellow|red|"" (unknown)
+	Phase       string   `json:"phase"`       // operator status.phase (Running/…)
+	Cluster     string   `json:"cluster"`     // always "hanzo-k8s"; cross-cluster federation is a follow-up phase
+	Namespace   string   `json:"namespace"`   // namespace the row was scanned from: a platform one (hanzo, hanzo-testnet, …) or a tenant-<org>
+	Endpoints   []string `json:"endpoints"`   // status.endpoints the operator published for this service; empty until it reconciles
+	Drift       Verdict  `json:"drift"`       // declared vs running vs latest as flags, plus their rolled-up severity
 }
 
 // fleetQuery narrows the drift board. Every field rides the query string, which is

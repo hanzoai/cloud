@@ -83,61 +83,117 @@ const (
 
 // aiMetrics is the whole AI-metrics board payload.
 type aiMetrics struct {
-	Range     string         `json:"range"`
-	Start     string         `json:"start"`
-	End       string         `json:"end"`
-	O11yAI    aimO11yAI      `json:"o11yAi"`
-	Usage     aimUsage       `json:"usage"`
-	Evals     aimEvals       `json:"evals"`
-	TopModels []aimModelStat `json:"topModels"` // cloud_usage per-model (populated today)
+	// Range is the window every figure below covers: 24h, 7d or 30d. It is the
+	// NORMALIZED value — an unrecognized ?range reads as 30d and says so here.
+	Range string `json:"range"`
+	// Start is the window's lower bound, RFC 3339 UTC, derived from Range.
+	Start string `json:"start"`
+	// End is the moment of this read, RFC 3339 UTC. The window is always right up
+	// to now; there is no lag to allow for.
+	End string `json:"end"`
+	// O11yAI is the generation rollup over gen_ai spans. Its money is US DOLLARS,
+	// unlike Usage below — the two halves of this board come from different planes
+	// and each keeps its plane's unit.
+	O11yAI aimO11yAI `json:"o11yAi"`
+	// Usage is the fleet LLM-usage band from the ledger the gateway writes. Its
+	// money is US CENTS.
+	Usage aimUsage `json:"usage"`
+	// Evals is the eval plane's band: the trace half and the score half.
+	Evals aimEvals `json:"evals"`
+	// TopModels is the twelve busiest models by request count, from the billing
+	// ledger. Money in these rows is US cents.
+	TopModels []aimModelStat `json:"topModels"`
 	// TopActors is per-PRINCIPAL spend from the same ledger — whose bill it is,
 	// which the per-model board cannot answer.
-	TopActors    []aimActorStat   `json:"topActors"`
-	O11yAIModels []aimLfModelStat `json:"o11yAiModels"` // gen_ai spans per-model
-	ScoreNames   []aimScoreStat   `json:"scoreNames"`   // eval_scores per score-name
-	EvalRuns     []aimRunStat     `json:"evalRuns"`     // recent eval runs (progress)
-	ScoreSeries  []aimScorePoint  `json:"scoreSeries"`  // avg eval score over time (progress trend)
+	TopActors []aimActorStat `json:"topActors"`
+	// O11yAIModels is the twelve busiest models by GENERATION count, from gen_ai
+	// spans. It answers the same question as TopModels from the other plane, and its
+	// money is US dollars.
+	O11yAIModels []aimLfModelStat `json:"o11yAiModels"`
+	// ScoreNames is the twelve busiest scorers, each with its own distribution.
+	ScoreNames []aimScoreStat `json:"scoreNames"`
+	// EvalRuns is the twelve most RECENT eval runs, newest first — recency, not
+	// quality.
+	EvalRuns []aimRunStat `json:"evalRuns"`
+	// ScoreSeries is the average eval score bucketed over the window, oldest first.
+	// This series IS the training/eval progress signal on this board.
+	ScoreSeries []aimScorePoint `json:"scoreSeries"`
 }
 
 // aimO11yAI is the fleet-wide LLM generation rollup over gen_ai spans.
 // Cost is USD (the _o11y.gen_ai.total_cost attribute's native unit); latency is
 // milliseconds (span duration is nanoseconds; rendered /1e6).
 type aimO11yAI struct {
-	Generations  int64   `json:"generations"`
-	CostUsd      float64 `json:"costUsd"`
+	// Generations is how many LLM calls the fleet made in the window — one per
+	// gen_ai span.
+	Generations int64 `json:"generations"`
+	// CostUsd is their summed cost in US DOLLARS, not cents: it is the span
+	// attribute's native unit and is carried through unconverted.
+	CostUsd float64 `json:"costUsd"`
+	// LatencyMsAvg is the mean generation duration in milliseconds, over spans that
+	// recorded a duration at all.
 	LatencyMsAvg float64 `json:"latencyMsAvg"`
+	// LatencyMsP95 is the 95th-percentile generation duration in milliseconds — the
+	// tail a user actually feels.
 	LatencyMsP95 float64 `json:"latencyMsP95"`
 }
 
 // aimUsage is the fleet LLM-usage KPI band from the live cloud_usage ledger.
 type aimUsage struct {
-	Requests         int64 `json:"requests"`
-	Tokens           int64 `json:"tokens"`
-	PromptTokens     int64 `json:"promptTokens"`
+	// Requests is how many calls the ledger recorded in the window, errored ones
+	// included.
+	Requests int64 `json:"requests"`
+	// Tokens is prompt plus completion across them.
+	Tokens int64 `json:"tokens"`
+	// PromptTokens is the input half of Tokens.
+	PromptTokens int64 `json:"promptTokens"`
+	// CompletionTokens is the generated half of Tokens.
 	CompletionTokens int64 `json:"completionTokens"`
-	CostCents        int64 `json:"costCents"`
-	Models           int64 `json:"models"`
+	// CostCents is what those calls cost, in US CENTS — this half of the board is
+	// the billing ledger, so it is cents while the gen_ai half is dollars.
+	CostCents int64 `json:"costCents"`
+	// Models is how many DISTINCT models were called, not a count of calls.
+	Models int64 `json:"models"`
 }
 
 // aimEvals is the fleet eval KPI band: the trace half (eval_traces) and the score
 // half (eval_scores). LatencyMsAvg is the mean model-under-test call window.
 type aimEvals struct {
-	Runs         int64   `json:"runs"`
-	Traces       int64   `json:"traces"`
-	Datasets     int64   `json:"datasets"`
-	Models       int64   `json:"models"`
+	// Runs is how many DISTINCT eval runs left traces in the window.
+	Runs int64 `json:"runs"`
+	// Traces is how many eval traces were recorded — one per model-under-test call.
+	Traces int64 `json:"traces"`
+	// Datasets is how many distinct datasets those traces ran against.
+	Datasets int64 `json:"datasets"`
+	// Models is how many distinct models were under test.
+	Models int64 `json:"models"`
+	// LatencyMsAvg is the mean model-under-test call duration in milliseconds,
+	// averaged only over traces whose end time is after their start — an unfinished
+	// trace does not drag it down.
 	LatencyMsAvg float64 `json:"latencyMsAvg"`
-	Scores       int64   `json:"scores"`
-	ScoreNames   int64   `json:"scoreNames"`
-	AvgScore     float64 `json:"avgScore"`
+	// Scores is how many individual score values were recorded, across every
+	// scorer.
+	Scores int64 `json:"scores"`
+	// ScoreNames is how many distinct scorers produced them.
+	ScoreNames int64 `json:"scoreNames"`
+	// AvgScore is the unweighted mean of every score value in the window,
+	// regardless of scorer, to 4dp. Because the scorers are pooled it also moves
+	// when the MIX of scorers changes, so read it as a trend and the per-scorer
+	// rows for the level.
+	AvgScore float64 `json:"avgScore"`
 }
 
 // aimModelStat is one row of the per-model usage leaderboard (cloud_usage).
 type aimModelStat struct {
-	Model     string `json:"model"`
-	Requests  int64  `json:"requests"`
-	Tokens    int64  `json:"tokens"`
-	CostCents int64  `json:"costCents"`
+	// Model is the model id the ledger recorded. Unattributed rows carry no model
+	// and are left out rather than ranked as a nameless one.
+	Model string `json:"model"`
+	// Requests is how many calls went to it. The board ranks on this.
+	Requests int64 `json:"requests"`
+	// Tokens is what those calls consumed.
+	Tokens int64 `json:"tokens"`
+	// CostCents is what they cost, in US cents.
+	CostCents int64 `json:"costCents"`
 }
 
 // aimActorStat is one row of the per-actor spend leaderboard (cloud_usage) — the
@@ -163,35 +219,63 @@ type aimActorStat struct {
 
 // aimLfModelStat is one row of the per-model gen_ai-span leaderboard.
 type aimLfModelStat struct {
-	Model       string  `json:"model"`
-	Generations int64   `json:"generations"`
-	CostUsd     float64 `json:"costUsd"`
+	// Model is the model the span reported answering as, falling back to the model
+	// it was asked for when the response named none.
+	Model string `json:"model"`
+	// Generations is how many gen_ai spans named it. The board ranks on this.
+	Generations int64 `json:"generations"`
+	// CostUsd is their summed cost in US DOLLARS — the span attribute's unit, not
+	// the cents the ledger leaderboard beside this uses.
+	CostUsd float64 `json:"costUsd"`
 }
 
 // aimScoreStat is one row of the per-score-name eval leaderboard (eval_scores).
 type aimScoreStat struct {
-	Name     string  `json:"name"`
-	Count    int64   `json:"count"`
+	// Name is the scorer's name. Its scale is the scorer's own — there is no fleet
+	// convention that these are 0..1 — so compare a name against itself over time,
+	// never one name against another.
+	Name string `json:"name"`
+	// Count is how many values this scorer produced in the window. The board ranks
+	// on this, so a busy scorer leads whether or not it scores well.
+	Count int64 `json:"count"`
+	// AvgValue is their mean, to 4dp.
 	AvgValue float64 `json:"avgValue"`
+	// MinValue is the lowest single value this scorer recorded in the window.
 	MinValue float64 `json:"minValue"`
+	// MaxValue is the highest. With Min it bounds the spread the mean hides.
 	MaxValue float64 `json:"maxValue"`
 }
 
 // aimRunStat is one recent eval run: its dataset, how many scores it recorded, its
 // mean score, and when it last ran — the run-level eval-progress row.
 type aimRunStat struct {
-	RunName  string  `json:"runName"`
-	Dataset  string  `json:"dataset"`
-	Scores   int64   `json:"scores"`
+	// RunName is the eval run's name, as the run recorded it. Unnamed runs are left
+	// out.
+	RunName string `json:"runName"`
+	// Dataset is one dataset the run scored against — an arbitrary one of them if
+	// the run spanned several, since a run is named per row here and a dataset is
+	// not.
+	Dataset string `json:"dataset"`
+	// Scores is how many score values the run recorded in the window.
+	Scores int64 `json:"scores"`
+	// AvgValue is their mean, to 4dp, pooled across the run's scorers.
 	AvgValue float64 `json:"avgValue"`
-	LastTs   string  `json:"lastTs"`
+	// LastTs is when the run last recorded a score, RFC 3339 UTC. The board is
+	// ordered by it, so these rows are the most RECENT runs, not the best ones.
+	LastTs string `json:"lastTs"`
 }
 
 // aimScorePoint is one bucket of the avg-eval-score-over-time trend.
 type aimScorePoint struct {
-	Ts       string  `json:"ts"`
+	// Ts is the bucket's start, RFC 3339 UTC. The bucket width follows the range —
+	// an hour at 24h, six hours at 7d, a day at 30d — so it is not a fixed unit.
+	Ts string `json:"ts"`
+	// AvgValue is the mean of every score in that bucket, to 4dp. This series IS
+	// the eval-progress signal.
 	AvgValue float64 `json:"avgValue"`
-	Count    int64   `json:"count"`
+	// Count is how many scores the mean was taken over — the weight behind the
+	// point, and what tells a real dip from a thin bucket.
+	Count int64 `json:"count"`
 }
 
 // aimetrics is the fleet AI board: LLM generations over gen_ai spans (count, cost,
@@ -281,9 +365,14 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 
 // aimetricsOut is the GET /v1/admin/aimetrics envelope.
 type aimetricsOut struct {
-	Status string     `json:"status"`
-	Msg    string     `json:"msg"`
-	Data   *aiMetrics `json:"data"`
+	// Status is "ok" or "error", at HTTP 200 either way.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error", empty otherwise.
+	Msg string `json:"msg"`
+	// Data is the board. A warehouse that is not connected, or a table that is
+	// missing, yields the ZERO board rather than a failure — so zeros here mean
+	// either an idle fleet or a blind one, and this envelope cannot tell you which.
+	Data *aiMetrics `json:"data"`
 }
 
 // ── pure SQL builders (static SQL + one positional time bound; unit-tested) ──

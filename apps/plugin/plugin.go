@@ -97,15 +97,23 @@ func Routes(z *zip.App, o *ops) {
 // rather than merged, because during a rollout the hosts disagree BY DESIGN and
 // a merged view hides exactly the state an operator is watching for.
 type Host struct {
-	// Host is the pod's stable id, and Addr where it was reached. Self is true
-	// for the host that answered the request.
+	// Host is the pod's stable id — the downward-API name for this host, the
+	// membership id for a peer. Result names the same id when a change is
+	// applied, so the board and a rollout join on it.
 	Host string `json:"host"`
+	// Addr is the host:port this row was read over, from the live membership.
+	// Empty on a host-scoped read, which consults no membership at all.
 	Addr string `json:"addr,omitempty"`
-	Self bool   `json:"self,omitempty"`
+	// Self is true on the one row the answering host produced from its own
+	// process instead of over the network. Every other row cost a hop.
+	Self bool `json:"self,omitempty"`
 	// Err is set when a peer could not be reached. Its plugins are then
 	// unknown, which is NOT the same as none, so the list stays empty and the
 	// drift below refuses to conclude anything from it.
-	Err     string       `json:"error,omitempty"`
+	Err string `json:"error,omitempty"`
+	// Plugins is every plugin this host has loaded, running or not, ordered by
+	// name so two hosts diff cleanly. It carries nothing when Err is set, where
+	// that means unknown rather than none.
 	Plugins []zip.Status `json:"plugins"`
 }
 
@@ -113,12 +121,29 @@ type Host struct {
 // distinct digest seen running; more than one means a rollout is incomplete or
 // stuck, which is the single question this whole view exists to answer.
 type Drift struct {
-	Name     string   `json:"name"`
+	// Name is the app as the manifest declares it — the same string the host
+	// reports a plugin under and the same one the reload, enable and disable
+	// routes take in their path.
+	Name string `json:"name"`
+	// Versions is every distinct artifact SHA-256 seen RUNNING, sorted. Only a
+	// plugin installed from a URL carries a digest, so an empty list means
+	// nothing running is digest-pinned, not that the fleet agrees.
 	Versions []string `json:"versions,omitempty"`
-	Running  int      `json:"running"`
-	Down     int      `json:"down"`
-	Disabled int      `json:"disabled"`
-	Drifted  bool     `json:"drifted"`
+	// Running counts the hosts serving it. A host that could not be reached is
+	// counted nowhere — unknown is not down — so these three counts need not add
+	// up to the fleet size.
+	Running int `json:"running"`
+	// Down counts the hosts where it is loaded and not serving without anyone
+	// having asked for that: the child exited on its own, or a swap left nothing
+	// listening.
+	Down int `json:"down"`
+	// Disabled counts the hosts where it was stopped deliberately. Down and
+	// Disabled both answer 503 to a caller, which is exactly why they are counted
+	// apart: one is an outage and one is a maintenance window.
+	Disabled int `json:"disabled"`
+	// Drifted is true when more than one digest is running at once, meaning the
+	// rollout is incomplete or stuck. It is the one bit this view exists for.
+	Drifted bool `json:"drifted"`
 }
 
 // ListIn is the GET /v1/admin/plugins query.
@@ -131,11 +156,21 @@ type ListIn struct {
 
 // ListOut is the fleet board.
 type ListOut struct {
-	Status string  `json:"status"`
-	Msg    string  `json:"msg"`
-	Data   []Host  `json:"data"`
-	Drift  []Drift `json:"drift,omitempty"`
-	Total  *int    `json:"total,omitempty"`
+	// Status is "ok". This read refuses with an HTTP status rather than an error
+	// envelope, so it takes no other value — an unreachable peer is a row in Data
+	// carrying its own error, not a failed read.
+	Status string `json:"status"`
+	// Msg is the envelope's operator note. This read has none to make, so it is
+	// always empty; the mutations are where it says something.
+	Msg string `json:"msg"`
+	// Data is one row per host, sorted by host id so two reads a minute apart
+	// line up line for line. A host-scoped read answers with this host's row alone.
+	Data []Host `json:"data"`
+	// Drift folds Data into one row per plugin. Absent on a host-scoped read,
+	// where one host has nothing to disagree with.
+	Drift []Drift `json:"drift,omitempty"`
+	// Total counts the HOSTS in Data, not the plugins on them.
+	Total *int `json:"total,omitempty"`
 }
 
 // ReloadIn names an artifact to run. Exactly one of Version or URL+Sum, or
@@ -148,10 +183,12 @@ type ReloadIn struct {
 	// origin's binaries.json index — the same index CI publishes, so there is
 	// no second table mapping versions to digests.
 	Version string `json:"version"`
-	// URL is the artifact directly, for an origin with no index. Sum is its hex
-	// SHA-256 and is REQUIRED with it: zip refuses an unverified download, and
-	// so does this.
+	// URL is the artifact directly, for an origin with no index.
 	URL string `json:"url"`
+	// Sum is that artifact's hex SHA-256 and is REQUIRED with URL: zip verifies
+	// the download against it before the file is made executable, and refuses an
+	// unverified one — so does this, one layer earlier. It is also the cache key,
+	// which is why re-pinning a digest this host has already run costs no network.
 	Sum string `json:"sum"`
 	// Scope "host" applies here only. Default "fleet" rolls it out one host at
 	// a time, halting on the first host that fails to come up.
@@ -160,19 +197,38 @@ type ReloadIn struct {
 
 // Result is one host's outcome for one action.
 type Result struct {
-	Host    string `json:"host"`
-	OK      bool   `json:"ok"`
+	// Host is the pod the outcome belongs to, the same id the fleet board reports.
+	Host string `json:"host"`
+	// OK false is the halt. A fleet rollout stops at the first host that fails, so
+	// at most one row carries it and the hosts after it are missing entirely
+	// rather than reported as skipped.
+	OK bool `json:"ok"`
+	// Version is the artifact SHA-256 this host was moved to; on an ok row it is
+	// what the host now runs. Empty for enable, disable and a bare restart, none
+	// of which change the artifact.
 	Version string `json:"version,omitempty"`
-	Msg     string `json:"msg,omitempty"`
+	// Msg is why the change failed here, verbatim from the host that refused it.
+	// Empty when OK.
+	Msg string `json:"msg,omitempty"`
 }
 
 // ActionOut is the envelope every mutation answers with. Data is per host and
 // in the order applied, so a halted rollout reads as the prefix that succeeded
 // followed by the one that did not.
 type ActionOut struct {
-	Status string   `json:"status"`
-	Msg    string   `json:"msg"`
-	Data   []Result `json:"data"`
+	// Status is "ok" or "error". A halted rollout answers HTTP 200 with "error",
+	// because part of the fleet HAS changed and a transport failure would throw
+	// that away; so does a deployment refusing to mutate without an audit store,
+	// where nothing changed at all. Data tells the two apart.
+	Status string `json:"status"`
+	// Msg names the outcome the way an operator would: "billing -> 9f2c…" for a
+	// pin, "billing enabled", "billing disabled", "billing reloaded", or
+	// "billing halted at cloud-1: <reason>" when a host refused.
+	Msg string `json:"msg"`
+	// Data is one row per host TOUCHED, in the order applied. Hosts the rollout
+	// never reached are absent, so these rows are exactly the hosts whose state
+	// may have moved.
+	Data []Result `json:"data"`
 }
 
 // NameIn addresses one plugin by name, for the operations that take nothing else.
