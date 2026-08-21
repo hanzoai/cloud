@@ -65815,6 +65815,49 @@ paths:
       x-app: auto
       x-public: true
       x-tool: true
+  /v1/auto/connectors/{id}/run:
+    post:
+      description: |-
+        Run executes one connector action in-process and answers the outcome. The
+        caller's resolved credential travels in `auth`, delivered to the action
+        verbatim — the runtime resolves no credential itself. An action that ran and
+        failed (or an action name the connector does not have) answers ok:false with
+        the failure message, not an HTTP error; an unknown connector is 404 and a
+        missing action 422.
+      operationId: post_auto_connectors_by_id_run
+      parameters:
+      - description: ID is the connector to run, from the path.
+        example: notion
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              action: create_page
+              auth: secret-token
+              id: notion
+              props:
+                title: Hello
+            schema:
+              $ref: '#/components/schemas/runIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/runResp'
+          description: ok
+      summary: Run executes one connector action in-process and answers the outcome.
+      tags:
+      - auto
+      x-app: auto
+      x-public: true
+      x-tool: true
   /v1/auto/flows:
     get:
       description: |-

@@ -102,7 +102,7 @@ func (rt *Runtime) Compile(name string, bundledJS []byte) (*Connector, error) {
 
 // Run executes c's action with the given auth+props and returns the action's
 // result (JSON-shaped Go values). It is the single-connector execution the KB
-// long-tail sync and the /v1/automations/connectors/:id/run surface call.
+// long-tail sync and the /v1/auto/connectors/:id/run surface call.
 func (rt *Runtime) Run(ctx context.Context, c *Connector, in RunInput) (any, error) {
 	if c == nil {
 		return nil, errors.New("connectorruntime: nil connector")
