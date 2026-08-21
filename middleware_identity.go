@@ -109,6 +109,27 @@ var cookieTokenNames = []string{"__Host-hanzo_iam_token", "hanzo_iam_token", "ia
 // fact to compare", never as a brand.
 const HeaderUserBrand = "X-User-Brand"
 
+// HeaderUserIsApp marks a validated principal that is an APPLICATION acting as
+// itself — an organization's own machine identity, minted by the client_credentials
+// grant.
+//
+// It is a KIND, not a role, and it is the fact only this boundary can state: the
+// token proves it by SHAPE (appPrincipal), which is gone by the time anything
+// downstream sees a header. It carries an organization the credential cannot choose
+// — IAM mints an app token no membership set, so the org-switch below admits
+// nothing and the effective org is always the application's own owner.
+//
+// It grants nothing on its own. An app holds NEITHER admin scope, deliberately:
+// authz.Claims.OrgAdmin refuses every machine by construction, because an app is
+// issued for a purpose and not handed an org's self-service surface. A door whose
+// act IS a purpose reads this to admit an org's own machine credential and bound it
+// to that org — which is how a build carries the organization it publishes for
+// instead of a shared secret that names none.
+//
+// Stripped on ingress with every other authority header and re-injected here from
+// validated claims alone, so it is never a value a caller chose.
+const HeaderUserIsApp = "X-User-IsApp"
+
 // authorityHeaders are the identity/authority headers the gateway writes and the
 // ONLY ones a downstream may trust. The sanitizer deletes every one on ingress
 // so nothing a client sent survives as identity, then re-injects from a
@@ -180,13 +201,14 @@ var subScopeHeaders = []string{authz.HeaderProject, authz.HeaderApp, authz.Heade
 //
 // Two deliberate adjustments, each a fact about this binary rather than a copy:
 //
-//   - X-User-Brand is cloud's own (which brand's IAM vouched for the principal), so
-//     authz does not name it and this adds it.
+//   - X-User-Brand and X-User-IsApp are cloud's own (which brand's IAM vouched for
+//     the principal, and whether the principal is an application acting as itself),
+//     so authz does not name them and this adds them.
 //   - X-Request-Id is EXCLUDED. Alone among these it is a correlation id the caller
 //     legitimately supplies and the edge propagates verbatim; deleting it would break
 //     the trace support follows, and it authorizes nothing.
 var stripped = func() []string {
-	out := []string{HeaderUserBrand}
+	out := []string{HeaderUserBrand, HeaderUserIsApp, zip.HeaderActedBy}
 	for _, h := range append(append([]string{}, authz.Headers...), authz.Retired...) {
 		if h != authz.HeaderRequestID {
 			out = append(out, h)
@@ -454,6 +476,14 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 			// so a client_credentials identity is granted neither admin scope.
 			if orgAdmin(claims, effOrg) {
 				req.Header.Set(authz.HeaderUserOrgAdmin, "true")
+			}
+			// The credential's KIND, beside its role, because they answer different
+			// questions and only this boundary can answer the first: an application
+			// acting as itself is proved by the token's SHAPE (appPrincipal), which no
+			// header downstream still carries. Written only where an org RESOLVED, so
+			// the fact never arrives without the org it is about.
+			if effOrg != "" && appPrincipal(claims) {
+				req.Header.Set(HeaderUserIsApp, "true")
 			}
 			sanitizeSubScopes(c, effOrg, claims.renderProject(), cliApp, claims.renderBillingAccount())
 			// The boundary's own attestation, parked where no client can reach it

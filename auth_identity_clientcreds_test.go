@@ -64,6 +64,33 @@ func TestMachineTokenWithNoOrgsIsNotOrgless(t *testing.T) {
 	}
 }
 
+// appPrincipal is the same recognition, narrowed twice, and each narrowing is the
+// predicate standing on its own rather than leaning on a caller's ordering. homeOrg
+// checks subjectOrg before it asks this, so within homeOrg the first clause is
+// invisible; the boundary asks it directly, and there it is the whole rule.
+func TestAppPrincipalNarrowings(t *testing.T) {
+	exp := time.Now().Add(time.Hour)
+
+	t.Run("an API key is a person's credential, never an application", func(t *testing.T) {
+		c := machineClaims("hanzo-kms", "hanzo", exp)
+		c.subjectOrg = "hanzo" // resolved from an sk- key's own IAM user row
+		if appPrincipal(&c) {
+			t.Fatal("a key read as an application — every member of the org inherits the machine identity's reach")
+		}
+	})
+
+	t.Run("an application is a machine first", func(t *testing.T) {
+		c := machineClaims("hanzo-kms", "admin", exp)
+		c.Orgs = []authz.Membership{{Org: authz.AdminOrg, Role: authz.Admin}}
+		if !c.PlatformSudo() {
+			t.Fatal("precondition: a membership set makes these claims a person, and this one an operator")
+		}
+		if appPrincipal(&c) {
+			t.Fatal("one principal was both platform sudo and an application — the two kinds must never coincide")
+		}
+	})
+}
+
 // A HUMAN with no membership set still resolves nothing. This is the rule the machine
 // branches must never reach: a human's org follows their token, and a token that
 // proves no membership proves no org.

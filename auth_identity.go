@@ -277,7 +277,7 @@ func (c *idClaims) homeOrg() string {
 	if c.subjectOrg != "" {
 		return c.subjectOrg // API key: resolved from the subject
 	}
-	if isKMSMachinePrincipal(c) || isClientCredentialsPrincipal(c) {
+	if appPrincipal(c) {
 		return c.Owner // machine JWT: the app IS the principal
 	}
 	// Everything else is the estate rule: the first entry of the signed membership
@@ -285,6 +285,41 @@ func (c *idClaims) homeOrg() string {
 	// only cloud has, because only cloud authenticated the credential that carries
 	// them.
 	return c.Claims.Home()
+}
+
+// appPrincipal reports whether these claims belong to an APPLICATION acting as
+// itself — a client_credentials token, whose organization is the application's own
+// (`owner`, set by IAM when the app was created) and is not selectable: IAM mints
+// such a token no membership set, so SanitizeIdentity's org-switch admits nothing
+// and the effective org is always that owner.
+//
+// It is the fact homeOrg's machine branch already turns on, named ONCE so the
+// boundary can also STATE it (HeaderUserIsApp). Two readings of one fact is the
+// condition this file exists to end.
+//
+// It is a KIND, not a role, and it grants nothing by itself. An application holds
+// neither admin scope — authz.Claims.OrgAdmin refuses every machine by
+// construction, because an app is issued for a purpose and is not handed an org's
+// self-service surface, and PlatformSudo requires a membership set no app has. What
+// it does carry is one org it cannot choose, which is what a door whose act IS a
+// purpose needs to bound that act.
+//
+// An sk- API KEY is deliberately NOT one, even though authz reads it as a machine
+// for want of an `orgs` claim. A key resolves to a PERSON'S row — that is what
+// subjectOrg records — so its authority is that person's, and reading it as an
+// application would hand every member of an org whatever the org's own machine
+// identity may do.
+// An application is a MACHINE first, asked through the predicate authz publishes,
+// and only then one acting as itself. That ordering is what keeps this kind and
+// platform sudo mutually exclusive by construction rather than by coincidence:
+// PlatformSudo refuses every machine, so nothing can be both. Recognising the shape
+// alone would leave the two merely unlikely to coincide, which is a property that
+// holds until some issuer mints a token nobody anticipated.
+func appPrincipal(c *idClaims) bool {
+	if c == nil || c.subjectOrg != "" || !c.Machine() {
+		return false
+	}
+	return isKMSMachinePrincipal(c) || isClientCredentialsPrincipal(c)
 }
 
 // isClientCredentialsPrincipal reports whether a validated token was minted by the
