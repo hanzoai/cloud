@@ -286,3 +286,90 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 		}
 	}
 }
+
+// proseless is the CLOSED list of published properties that carry NO description,
+// and it names a SEAM rather than anyone's diligence.
+//
+// All eight belong to the three bodies declared with openapi.Register (the init in
+// cloudflare.go). Register derives a schema by REFLECTION from the Go type, and Go
+// drops comments at compile time — zipdoc, the pass that lifts field prose, walks
+// zip's TYPED registrations and can never reach a type that arrives this way. Every
+// one of these fields carries a doc comment in the source beside the struct the
+// handler binds; reflection simply cannot see it. The alternative was a hand-written
+// schema beside the struct, which is the drift Register exists to prevent.
+//
+// The three routes cannot be typed ops for reasons relay_wire_test.go states above:
+// D1 forwards the query body verbatim, the Worker upload's `script` field and the
+// `:script` path segment are two different things, and a Pages deploy IGNORES a body
+// it cannot parse where a typed op would answer 400.
+//
+// Exact in BOTH directions. A bare property anywhere else is a typed op's, which
+// zipdoc can describe, and goes red. An entry here that starts publishing prose goes
+// red too — that is the day zip learns to lift comments through Register, and this
+// ledger shrinks instead of outliving the gap.
+var proseless = map[string]bool{
+	"D1Query.params":                     true,
+	"D1Query.sql":                        true,
+	"PagesDeploy.branch":                 true,
+	"WorkerScriptPut.bindings":           true,
+	"WorkerScriptPut.compatibilityDate":  true,
+	"WorkerScriptPut.compatibilityFlags": true,
+	"WorkerScriptPut.mainModule":         true,
+	"WorkerScriptPut.script":             true,
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
+// gates cannot see. Typing a route documents its ADDRESS and its SHAPE; the shape's
+// FIELDS come from a doc comment on each one, which zipdoc lifts per field.
+//
+// On this plane the Pages create body was the whole gap: three levels of nested
+// config in which `env_vars`, `kv_namespaces`, `d1_databases` and `r2_buckets` are
+// maps KEYED BY BINDING NAME — the name the deployed code reads the resource as — so
+// the key carries half the meaning and no field could say so. `type` deciding
+// whether a variable is stored in the clear, and a compatibility DATE pinning
+// runtime behaviour rather than naming a version, are the other two a caller cannot
+// guess.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	app := harness(t, map[string]string{"acme": "tok"}, &capture{}, nil)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "cloudflare", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("cloudflare publishes no schemas at all — the gate would pass vacuously")
+	}
+	published, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+
+	var bare, stale []string
+	seen := map[string]bool{}
+	for _, path := range published {
+		seen[path] = true
+		if !proseless[path] {
+			bare = append(bare, path)
+		}
+	}
+	for path := range proseless {
+		if !seen[path] {
+			stale = append(stale, path)
+		}
+	}
+
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/cloudflare describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
+			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
+			"delete the entr(ies).", strings.Join(stale, ", "))
+	}
+}
