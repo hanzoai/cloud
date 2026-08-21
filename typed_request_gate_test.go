@@ -30,7 +30,8 @@ import (
 // One is a URL-borne value on a BODY-carrying route, which zip cannot name on an
 // In without also accepting it in the body — a wire that route has never had.
 var allowedRequestUses = map[string]string{
-	"apps/auto/billing.go": "gate + meter — a durable run is a priced act, and the money gate needs " +
+	"apps/flow/billing.go": "gate + meter — a workflow run executes a component graph that bills a " +
+		"model provider, so it is gated before it runs and debited after, and the money gate needs " +
 		"strictly more of the validated principal than the org: the PAYER (principal.Payer, which is " +
 		"the org's pool or the person's wallet — account.Payer decides, and in the shared signup org " +
 		"they differ), the validated project sub-scope (principal.ValidatedProject: the project AND " +
@@ -38,10 +39,6 @@ var allowedRequestUses = map[string]string{
 		"is the org and none can be an In field — a caller that could name its own payer would bill " +
 		"another org. Two call sites, one per half of the pair, and both fail closed off the HTTP " +
 		"path, where there is no principal and so nobody to charge.",
-	"apps/flow/billing.go": "gate + meter — identical to apps/auto/billing.go above, for the same " +
-		"reason: a workflow run executes a component graph that bills a model provider, so it is gated " +
-		"before it runs and debited after. Same three facts the org cannot supply (payer, validated " +
-		"project, request id + client IP), same two call sites, same fail-closed silence off HTTP.",
 	"apps/commerce/risk.go": "screen.op / seen — the fraud screen in front of the typed mint op, and an " +
 		"identity gate reading strictly more than the org. The AMOUNT comes off the decoded In and the " +
 		"SETTLEMENT off the returned receipt, both deliberately not read from the wire (see screen.op), " +
@@ -64,7 +61,7 @@ var allowedRequestUses = map[string]string{
 		"attributed with. None of those are the org and none can be an In field — a caller that could " +
 		"name its own ledger would bill another org. ONE function, which every op asks; it fails closed " +
 		"off the HTTP path, where there is no principal and so no tenant to act for.",
-	"apps/lsp/lsp.go": "the money gate in front of a query, for the same reason as apps/auto/billing.go " +
+	"apps/lsp/lsp.go": "the money gate in front of a query, for the same reason as apps/flow/billing.go " +
 		"above: answering one may have to CHECK OUT the repository and index it, so standing is " +
 		"required before the work starts rather than after. The gate needs strictly more of the " +
 		"validated principal than the org — the payer (principal.Ledger, which is the org's pool or " +
@@ -155,6 +152,14 @@ var allowedRequestUses = map[string]string{
 		"request. Fails closed off the HTTP path: no request means the unbilled, default-project answer, " +
 		"and principal.Acting has already refused before any op reaches it.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
+	"apps/seo/typed.go": "who — an identity gate reading strictly more than the org, and the two facts " +
+		"it reads are not the same fact. cloud.Request says a request EXISTS; principal.ValidatedFrom " +
+		"says the identity middleware minted the caller from a verified credential rather than the " +
+		"caller writing X-Org-Id on a bearer-less request themselves. A surface that checks only the " +
+		"first admits a forged header, and this one spends money at a vendor per call. ONE function, " +
+		"which every op asks; it fails closed OFF the HTTP path too, where there is no request at all " +
+		"— the CLI projection invokes an op with nothing to read, and the honest answer there is that " +
+		"there is no principal, not that there is a default one.",
 	"apps/admin/core/fanin.go": "Delegate — a read that FORWARDS the caller's own identity, and the one " +
 		"place the fleet overview lifts it off the request. The value it needs is the principal WHOLE, not " +
 		"the org: the overview answers for every tenant, so each per-tenant read re-points the operator's " +
@@ -487,14 +492,6 @@ var allowedRequestUses = map[string]string{
 		"ONE file, so all five ops share one seam; the tenant-only read (orgOf, right beside them) goes " +
 		"through principal.OrgFrom and never through the request. Both fail closed off the HTTP path: no " +
 		"request, no subject, and no response to mark.",
-	"apps/venue/venue.go": "writer — the org-admin gate every cloud-account MUTATION keeps, and the " +
-		"request the fold then rides on. Linking, syncing or unlinking a customer's cloud account requires " +
-		"admin of the caller's OWN org (X-User-IsOrgAdmin), and the fold that follows needs four more facts " +
-		"principal.OrgFrom does not carry: the project the discovered clusters are recorded in and whether " +
-		"that project was validated, the ledger the new folds are billed to, and the request id and client " +
-		"IP the meter attributes them by. ONE function, so the three writes share one seam; the tenant " +
-		"itself is read with principal.OrgFrom (tenant, right beside it) and the two READS never reach the " +
-		"request at all. Fails closed off the HTTP path: no request, no attested admin, no mutation.",
 	"apps/world/news.go": "scopeOf — world is scoped to (org, PROJECT) and every store statement carries " +
 		"both. The project is a server-minted claim (X-Project-Id) that principal.OrgFrom does not carry, " +
 		"and it is a TENANT key, so it must not become an In field a caller supplies for itself. The " +

@@ -34,7 +34,8 @@
         "description": "Answers one turn of a conversation with four things: the model's `reply`, the `actions` the server executed on the caller's behalf, the `ops` the client must apply itself, and the `conversationId` the turn was recorded under.\n\nThe split between actions and ops is the rule most easily got wrong. A tool call is executed HERE only when the chosen preset is server-executing AND the tool resolves in the caller's own scope; every other call is handed back as an op for the client to apply to its own graph or UI. A tool that fails still comes back as an action, carrying its error rather than failing the round.\n\n`preset` selects the system prompt and the tool set (`capability` is a legacy alias for it); an unknown one is refused. `conversationId` continues an existing thread, and its absence starts one. A validated principal with a non-empty org is required — the org is the sole authority for both persistence and tool scope, and is NEVER read from the body.\n\nA completion refused for the caller's own reason — 402 insufficient balance, 429, 403 — is relayed with its own status and body verbatim, so the real billing message reaches the client instead of an opaque gateway error. Only a genuine upstream fault becomes a 502.",
         "tags": [
           "agent"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agent/conversations": {
@@ -44,7 +45,8 @@
         "description": "Returns a summary of every agent conversation in the caller's org — id, derived title, and when it was last appended to — for populating a thread list.\n\nScoped to the caller's org and nothing else, and that isolation is structural rather than a filter: conversations are persisted in a store opened PER ORG, so there is no query in which another tenant's threads could appear. A validated principal with a non-empty org is required; 403 without one.",
         "tags": [
           "agent"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agent/conversations/{id}": {
@@ -64,7 +66,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agent/presets": {
@@ -74,7 +77,8 @@
         "description": "Returns the preset catalog: each entry's id, its description and whether it is server-executing — the flag that decides if a preset's tool calls run here or come back for the client to apply. The ids are what POST /v1/agent accepts in `preset`.\n\nThe catalog is compiled into the build, identical for every caller, and this is the one read in the group that needs no principal.",
         "tags": [
           "agent"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agents": {
@@ -97,6 +101,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -133,6 +138,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -156,6 +162,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -190,6 +197,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -235,6 +243,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -270,6 +279,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -315,6 +325,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -387,6 +398,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -423,6 +435,7 @@
             "description": "created"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -433,7 +446,8 @@
         "description": "Holds the connection open as text/event-stream and pushes a frame each time the org's registry moves: an `event: session` frame carrying the same session shape the list and detail reads answer with (a registration, an update, or a login-manager revoke tearing a session down), and an `event: event` frame carrying one appended turn. Optional ?root=\u003csession id\u003e narrows the feed to a single subagent tree.\n\nRequires a validated principal carrying an org; 403 without one. Org-scoped fail-closed: the bus filters on tenant before it fans out, so a subscriber only ever receives its own org's updates, and ?root= narrows that further but can never widen it.\n\nDelivery is best-effort and the GET reads remain the source of truth. A subscriber that falls more than 256 frames behind is DROPPED — its channel is closed and the stream ends — so one stuck dashboard can never back-pressure a session write; the client reconnects and re-reads the session endpoints to resynchronise. A `: ping` comment every 25 seconds holds the connection open through proxies and is how a departed client is noticed.",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agents/sessions/{id}": {
@@ -468,6 +482,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -515,6 +530,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -560,6 +576,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -580,7 +597,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agents/sessions/{id}/message": {
@@ -600,7 +618,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agents/sessions/{id}/pause": {
@@ -620,7 +639,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agents/sessions/{id}/resume": {
@@ -640,7 +660,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agents/sessions/{id}/stop": {
@@ -660,7 +681,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agents/sessions/{id}/tree": {
@@ -695,6 +717,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -718,6 +741,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "post": {
@@ -754,6 +778,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -789,6 +814,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -822,6 +848,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -869,6 +896,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -904,6 +932,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -939,6 +968,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1001,6 +1031,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1029,6 +1060,7 @@
             "description": "no content"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "get": {
@@ -1062,6 +1094,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       },
       "patch": {
@@ -1109,6 +1142,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1129,7 +1163,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/agents/{ref}/runs": {
@@ -1174,6 +1209,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -1207,6 +1243,7 @@
             "description": "accepted"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     }

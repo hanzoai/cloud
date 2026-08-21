@@ -109,11 +109,11 @@ func TestRunStartBookkeepingIdempotent(t *testing.T) {
 	}
 }
 
-// listRunsHTTP exercises the real GET /v1/automations/runs endpoint (org-gated) and
+// listRunsHTTP exercises the real GET /v1/auto/runs endpoint (org-gated) and
 // returns the rows — proving a run "shows up in listRuns", not just in the store.
 func listRunsHTTP(t *testing.T, app *zip.App, org string) []FlowRun {
 	t.Helper()
-	r := req(t, app, http.MethodGet, "/v1/automations/runs", org, nil)
+	r := req(t, app, http.MethodGet, "/v1/auto/runs", org, nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("listRuns want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -178,7 +178,7 @@ func TestFlowStepCapRejected(t *testing.T) {
 	}
 	// And over HTTP the create is an honest 422.
 	app := newApp(t)
-	r := req(t, app, http.MethodPost, "/v1/automations/flows", "acme", map[string]any{"displayName": "big", "trigger": over})
+	r := req(t, app, http.MethodPost, "/v1/auto/flows", "acme", map[string]any{"displayName": "big", "trigger": over})
 	if r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("oversized flow create want 422, got %d (%s)", r.Code, r.Body)
 	}
@@ -205,7 +205,7 @@ func TestResumePayloadBounded(t *testing.T) {
 		t.Fatalf("seed run: %v", err)
 	}
 	body := `{"note":"` + strings.Repeat("x", maxResumePayload+1) + `"}`
-	r := reqRaw(t, app, "/v1/automations/runs/r1/resume", "acme", body)
+	r := reqRaw(t, app, "/v1/auto/runs/r1/resume", "acme", body)
 	if r.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized resume want 413, got %d (%s)", r.Code, r.Body)
 	}
@@ -262,7 +262,7 @@ func TestToolCallAuditOutcome(t *testing.T) {
 func TestUpdateFlowPublishedVersionValidated(t *testing.T) {
 	app := newApp(t)
 	mk := func() populatedFlow {
-		r := req(t, app, http.MethodPost, "/v1/automations/flows", "acme", map[string]any{
+		r := req(t, app, http.MethodPost, "/v1/auto/flows", "acme", map[string]any{
 			"displayName": "F", "trigger": map[string]any{"name": "trigger", "type": TriggerTypePiece, "strategy": string(StrategyManual)},
 		})
 		var pf populatedFlow
@@ -273,15 +273,15 @@ func TestUpdateFlowPublishedVersionValidated(t *testing.T) {
 	b := mk()
 
 	// Valid: a's own version → 200.
-	if r := req(t, app, http.MethodPatch, "/v1/automations/flows/"+a.ID, "acme", map[string]any{"publishedVersionId": a.Version.ID}); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodPatch, "/v1/auto/flows/"+a.ID, "acme", map[string]any{"publishedVersionId": a.Version.ID}); r.Code != http.StatusOK {
 		t.Fatalf("valid publishedVersionId want 200, got %d (%s)", r.Code, r.Body)
 	}
 	// Bogus id → 422.
-	if r := req(t, app, http.MethodPatch, "/v1/automations/flows/"+a.ID, "acme", map[string]any{"publishedVersionId": "ver_bogus"}); r.Code != http.StatusUnprocessableEntity {
+	if r := req(t, app, http.MethodPatch, "/v1/auto/flows/"+a.ID, "acme", map[string]any{"publishedVersionId": "ver_bogus"}); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("bogus publishedVersionId want 422, got %d", r.Code)
 	}
 	// A version that belongs to ANOTHER flow (same org) → 422.
-	if r := req(t, app, http.MethodPatch, "/v1/automations/flows/"+a.ID, "acme", map[string]any{"publishedVersionId": b.Version.ID}); r.Code != http.StatusUnprocessableEntity {
+	if r := req(t, app, http.MethodPatch, "/v1/auto/flows/"+a.ID, "acme", map[string]any{"publishedVersionId": b.Version.ID}); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("cross-flow publishedVersionId want 422, got %d", r.Code)
 	}
 }

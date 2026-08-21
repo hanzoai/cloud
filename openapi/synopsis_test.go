@@ -90,37 +90,19 @@ func TestSynopsisIsEmptyForAnAppFromAnotherModule(t *testing.T) {
 	}
 }
 
-// A product is described by the app that SERVES it, in that app's own words,
-// carried on the subset the app wrote. The tag LIST stays a function of the
-// document's operations — every product is named — so a consumer enumerating
-// products loses nothing because nobody wrote a sentence.
-//
-// A tag is a path prefix; an app is a mount; the two are only sometimes one word.
-// Keying this by app name alone left every product whose prefix differs from its
-// app undescribed — 59 of 150 tags, ~50 of them served by one app that had already
-// written the sentence (kb ← knowledge, scrape ← websearch, machines ← visor).
-//
-// Everything else here is a way of saying NOTHING, because each alternative would
-// publish a guess a consumer cannot tell from a fact:
-//
-//   - two apps serve the product → no description (never a coin flip),
-//   - the sole owner has no package doc → no description,
-//   - the part carries the FLEET's identity → it has said nothing about itself,
-//     and stamping that would hand every undescribed product the same sentence.
-//
-// Nothing is ever derived from the product's own name.
-func TestWeaveDescribesAProductInTheWordsOfTheAppThatServesIt(t *testing.T) {
-	// Each app at its OWN address under the shared prefix — which is how a product
-	// comes to have two owners at all: /v1/finance/invoices is billing's and
-	// /v1/finance/ledger is treasury's, no address contested.
-	part := func(app, says string, products ...string) Part {
+// A tag is the app that serves the operation, so the woven document carries one
+// tag per app that published anything, described in that app's own words — a
+// shared address prefix is a fact about the ADDRESS (openapi/misfiled.go reads
+// it), never a second tag.
+func TestWeaveDescribesACapabilityInItsOwnWords(t *testing.T) {
+	part := func(app, says string, prefixes ...string) Part {
 		p := Part{App: app, Doc: &Document{
 			Info:  Info{Title: fleetInfo.Title, Description: says, Version: fleetInfo.Version},
 			Paths: map[string]PathItem{},
 		}}
-		for _, prod := range products {
-			p.Doc.Paths["/v1/"+prod+"/"+app] = PathItem{
-				"get": {OperationID: "get_" + app + "_" + prod, Tags: []string{prod}},
+		for _, prefix := range prefixes {
+			p.Doc.Paths["/v1/"+prefix+"/"+app] = PathItem{
+				"get": {OperationID: "get_" + app + "_" + prefix, Tags: []string{prefix}},
 			}
 		}
 		return p
@@ -133,7 +115,6 @@ func TestWeaveDescribesAProductInTheWordsOfTheAppThatServesIt(t *testing.T) {
 		part("treasury", "Package treasury moves money.", "treasury", "finance"),
 		part("metrics", "", "logs"),
 		part("security", fleetInfo.Description, "security"),
-		// admin the APP is named for the tag; plugins also serves the prefix.
 		part("admin", "Package admin is the operator console.", "admin"),
 		part("plugins", "Package plugin lists what is mounted.", "admin", "plugins"),
 	})
@@ -141,22 +122,28 @@ func TestWeaveDescribesAProductInTheWordsOfTheAppThatServesIt(t *testing.T) {
 		t.Fatalf("weave: %v", err)
 	}
 	want := map[string]string{
-		"kms":      "Package kms is the key plane.",            // app and prefix are one word
-		"kb":       "Package knowledge is the knowledge base.", // inherited from its sole owner
-		"finance":  "",                                         // two owners — silence
-		"logs":     "",                                         // sole owner has no package doc
-		"security": "",                                         // said nothing about itself
-		"admin":    "Package admin is the operator console.",   // the app it is NAMED for still wins
-		"plugins":  "Package plugin lists what is mounted.",
-		"billing":  "Package billing meters and invoices.",
-		"treasury": "Package treasury moves money.",
+		"kms":       "Package kms is the key plane.",
+		"knowledge": "Package knowledge is the knowledge base.", // the app, not the kb prefix it answers at
+		"billing":   "Package billing meters and invoices.",     // one tag however many prefixes
+		"treasury":  "Package treasury moves money.",
+		"metrics":   "", // no package doc
+		"security":  "", // said nothing about itself
+		"admin":     "Package admin is the operator console.",
+		"plugins":   "Package plugin lists what is mounted.",
 	}
 	if len(doc.Tags) != len(want) {
-		t.Fatalf("tags = %+v, want one per product — an app that is not a prefix (knowledge, metrics) is not a tag", doc.Tags)
+		t.Fatalf("tags = %+v, want one per app that published an operation", doc.Tags)
 	}
 	for _, tag := range doc.Tags {
 		if tag.Description != want[tag.Name] {
 			t.Errorf("tag %q description = %q, want %q", tag.Name, tag.Description, want[tag.Name])
+		}
+	}
+	for path, item := range doc.Paths {
+		for _, op := range item {
+			if len(op.Tags) != 1 || op.Tags[0] != op.App {
+				t.Errorf("%s tags = %v, want exactly [%s]", path, op.Tags, op.App)
+			}
 		}
 	}
 }

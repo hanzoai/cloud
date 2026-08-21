@@ -98,166 +98,6 @@ func obj(t *testing.T, raw []byte) map[string]any {
 	return m
 }
 
-// TestTypedOpsDriveTheEmbeddedBus walks the produce→store→consume loop through
-// the door and asserts at each step that what came back is the plane's own
-// answer — sequences, dedup, pending counts — in the org's OWN view, with the
-// physical namespace never leaking.
-func TestTypedOpsDriveTheEmbeddedBus(t *testing.T) {
-	app := mountWire(t)
-	const org = "org_wire"
-
-	code, raw := doJSON(t, app, http.MethodPost, "/v1/pubsub/jetstream/streams", org, map[string]any{
-		"name": "ORDERS", "subjects": []string{"orders.>"},
-	})
-	if code != http.StatusCreated {
-		t.Fatalf("create stream = %d, want 201: %s", code, raw)
-	}
-	st := obj(t, raw)
-	if st["name"] != "ORDERS" {
-		t.Errorf("stream name = %v, want ORDERS", st["name"])
-	}
-	if subs, _ := st["subjects"].([]any); len(subs) != 1 || subs[0] != "orders.>" {
-		t.Errorf("subjects = %v, want the caller's own view [orders.>]", st["subjects"])
-	}
-	if s := string(raw); strings.Contains(s, "t-"+org) || strings.Contains(s, "pub."+org) {
-		t.Errorf("physical namespace leaked into the record: %s", s)
-	}
-
-	t.Run("publish is durable when captured, dedups by Nats-Msg-Id, else goes core", func(t *testing.T) {
-		code, raw := doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", org, map[string]any{
-			"subject": "orders.created", "data": `{"id":"o_1"}`,
-		})
-		if code != http.StatusOK {
-			t.Fatalf("publish = %d: %s", code, raw)
-		}
-		ack := obj(t, raw)
-		if ack["ok"] != true || ack["stream"] != "ORDERS" || ack["seq"] != float64(1) {
-			t.Errorf("ack = %v, want ok on ORDERS seq 1", ack)
-		}
-
-		dedup := map[string]any{"subject": "orders.created", "data": `{"id":"o_2"}`,
-			"headers": map[string]string{"Nats-Msg-Id": "o_2"}}
-		_, raw = doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", org, dedup)
-		if ack := obj(t, raw); ack["duplicate"] == true {
-			t.Fatalf("first o_2 marked duplicate: %v", ack)
-		}
-		_, raw = doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", org, dedup)
-		if ack := obj(t, raw); ack["duplicate"] != true {
-			t.Errorf("repeated Nats-Msg-Id not deduplicated: %v", ack)
-		}
-
-		// Nothing captures audit.>: the message goes out core and the receipt
-		// honestly names no stream.
-		code, raw = doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", org, map[string]any{
-			"subject": "audit.login", "data": "x",
-		})
-		if code != http.StatusOK {
-			t.Fatalf("core publish = %d: %s", code, raw)
-		}
-		if ack := obj(t, raw); ack["ok"] != true || ack["stream"] != nil {
-			t.Errorf("core ack = %v, want ok with no stream", ack)
-		}
-
-		// A wildcard is not a publish target.
-		if code, _ := doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", org, map[string]any{
-			"subject": "orders.*", "data": "x"}); code != http.StatusBadRequest {
-			t.Errorf("publish to wildcard = %d, want 400", code)
-		}
-	})
-
-	t.Run("a consumer is a cursor and fetch drains it", func(t *testing.T) {
-		code, raw := doJSON(t, app, http.MethodPost, "/v1/pubsub/jetstream/streams/ORDERS/consumers", org,
-			map[string]any{"name": "worker", "filter": "orders.created"})
-		if code != http.StatusCreated {
-			t.Fatalf("create consumer = %d: %s", code, raw)
-		}
-		c := obj(t, raw)
-		if c["name"] != "worker" || c["stream"] != "ORDERS" || c["filter"] != "orders.created" {
-			t.Errorf("consumer record = %v, want worker on ORDERS filtered to the org's own view", c)
-		}
-		if c["pending"] != float64(2) {
-			t.Errorf("pending = %v, want the 2 stored messages", c["pending"])
-		}
-
-		code, raw = doJSON(t, app, http.MethodPost, "/v1/pubsub/jetstream/streams/ORDERS/consumers/worker/next", org,
-			map[string]any{"batch": 10, "waitMs": 300})
-		if code != http.StatusOK {
-			t.Fatalf("next = %d: %s", code, raw)
-		}
-		page := obj(t, raw)
-		msgs, _ := page["data"].([]any)
-		if len(msgs) != 2 {
-			t.Fatalf("fetched %d messages, want 2: %s", len(msgs), raw)
-		}
-		first := msgs[0].(map[string]any)
-		if first["subject"] != "orders.created" || first["data"] != `{"id":"o_1"}` || first["seq"] != float64(1) {
-			t.Errorf("first fetched = %v, want o_1 at seq 1 in the org's own subject view", first)
-		}
-
-		// The batch was acked on delivery: a second fetch finds nothing, as an
-		// empty page rather than an error.
-		_, raw = doJSON(t, app, http.MethodPost, "/v1/pubsub/jetstream/streams/ORDERS/consumers/worker/next", org,
-			map[string]any{"waitMs": 200})
-		if page := obj(t, raw); len(page["data"].([]any)) != 0 {
-			t.Errorf("second fetch = %v, want empty (at-most-once hand-off)", page["data"])
-		}
-
-		code, raw = send(t, app, http.MethodGet, "/v1/pubsub/jetstream/streams/ORDERS/consumers", org, "", "")
-		if code != http.StatusOK {
-			t.Fatalf("list consumers = %d: %s", code, raw)
-		}
-		if page := obj(t, raw); len(page["data"].([]any)) != 1 {
-			t.Errorf("consumers = %v, want one", page["data"])
-		}
-
-		if code, _ := send(t, app, http.MethodDelete, "/v1/pubsub/jetstream/streams/ORDERS/consumers/worker", org, "", ""); code != http.StatusNoContent {
-			t.Errorf("delete consumer = %d, want 204", code)
-		}
-		if code, _ := send(t, app, http.MethodDelete, "/v1/pubsub/jetstream/streams/ORDERS/consumers/worker", org, "", ""); code != http.StatusNotFound {
-			t.Errorf("second delete = %d, want 404", code)
-		}
-	})
-
-	t.Run("stream reads, update and delete carry the plane's own state", func(t *testing.T) {
-		code, raw := send(t, app, http.MethodGet, "/v1/pubsub/jetstream/streams/ORDERS", org, "", "")
-		if code != http.StatusOK {
-			t.Fatalf("get stream = %d: %s", code, raw)
-		}
-		if st := obj(t, raw); st["messages"] != float64(2) {
-			t.Errorf("messages = %v, want the 2 stored", st["messages"])
-		}
-
-		code, raw = send(t, app, http.MethodGet, "/v1/pubsub/jetstream/streams", org, "", "")
-		if code != http.StatusOK {
-			t.Fatalf("list = %d: %s", code, raw)
-		}
-		if page := obj(t, raw); len(page["data"].([]any)) != 1 {
-			t.Errorf("streams = %v, want one", page["data"])
-		}
-
-		code, raw = doJSON(t, app, http.MethodPut, "/v1/pubsub/jetstream/streams/ORDERS", org, map[string]any{
-			"subjects": []string{"orders.>", "refunds.>"}, "maxMsgs": 1000,
-		})
-		if code != http.StatusOK {
-			t.Fatalf("update = %d: %s", code, raw)
-		}
-		up := obj(t, raw)
-		if subs, _ := up["subjects"].([]any); len(subs) != 2 {
-			t.Errorf("updated subjects = %v, want two", up["subjects"])
-		}
-		if up["maxMsgs"] != float64(1000) || up["storage"] != "file" {
-			t.Errorf("updated = %v, want maxMsgs 1000 with storage kept", up)
-		}
-
-		if code, _ := send(t, app, http.MethodDelete, "/v1/pubsub/jetstream/streams/ORDERS", org, "", ""); code != http.StatusNoContent {
-			t.Errorf("delete stream = %d, want 204", code)
-		}
-		if code, _ := send(t, app, http.MethodGet, "/v1/pubsub/jetstream/streams/ORDERS", org, "", ""); code != http.StatusNotFound {
-			t.Errorf("get after delete = %d, want 404", code)
-		}
-	})
-}
-
 // TestRequestReplyAnswersOverTheBus proves the synchronous half against a LIVE
 // responder subscribed on the NATS port — the two doors meeting on one bus —
 // and pins the honest refusals: 404 with nobody listening, 408 with a
@@ -364,20 +204,15 @@ func TestKVRoundTrip(t *testing.T) {
 	}
 }
 
-// TestPubsubTenancyIsNeverACallerField pins the one rule a typed op can
-// silently break: the org comes from the VALIDATED principal cloud.Bridge
-// parks, never from an In field. One org's names never resolve to another's
-// resources; the same name held by two orgs is two disjoint resources; and an
-// unvalidated caller is refused on every op.
+// Tenancy is a fact about the PRINCIPAL, never a field the caller can send.
+//
+// The property was proved twice here, once over streams and once over KV.
+// Streams moved to mq, which proves it there; KV proves it whole on its own —
+// the same addresses answer 404 for another org, and the same NAMES remain that
+// org's to claim.
 func TestPubsubTenancyIsNeverACallerField(t *testing.T) {
 	app := mountWire(t)
 
-	code, raw := doJSON(t, app, http.MethodPost, "/v1/pubsub/jetstream/streams", "acme", map[string]any{
-		"name": "SECRET", "subjects": []string{"deals.>"},
-	})
-	if code != http.StatusCreated {
-		t.Fatalf("seed stream = %d: %s", code, raw)
-	}
 	if code, raw := doJSON(t, app, http.MethodPost, "/v1/pubsub/kv/VAULT", "acme", nil); code != http.StatusCreated {
 		t.Fatalf("seed bucket = %d: %s", code, raw)
 	}
@@ -385,81 +220,38 @@ func TestPubsubTenancyIsNeverACallerField(t *testing.T) {
 		t.Fatal("seed key")
 	}
 
-	// Another org: the same addresses answer 404, and the same NAMES are its
-	// own disjoint namespace to claim. Writes carry a valid body so the 404 is
-	// tenancy's, not a bind refusal's.
+	// Another org: the same addresses answer 404. Writes carry a valid body so
+	// the 404 is tenancy's, not a bind refusal's.
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/v1/pubsub/jetstream/streams/SECRET"},
-		{http.MethodPut, "/v1/pubsub/jetstream/streams/SECRET"},
-		{http.MethodDelete, "/v1/pubsub/jetstream/streams/SECRET"},
-		{http.MethodGet, "/v1/pubsub/jetstream/streams/SECRET/consumers"},
-		{http.MethodPost, "/v1/pubsub/jetstream/streams/SECRET/consumers"},
 		{http.MethodGet, "/v1/pubsub/kv/VAULT/pin"},
 		{http.MethodGet, "/v1/pubsub/kv/VAULT/pin/history"},
 		{http.MethodDelete, "/v1/pubsub/kv/VAULT"},
 	} {
 		var body any
 		if tc.method == http.MethodPost || tc.method == http.MethodPut {
-			body = map[string]any{"name": "x", "subjects": []string{"x.>"}, "value": "x"}
+			body = map[string]any{"value": "x"}
 		}
 		if code, _ := doJSON(t, app, tc.method, tc.path, "other", body); code != http.StatusNotFound {
 			t.Errorf("cross-org %s %s = %d, want 404", tc.method, tc.path, code)
 		}
 	}
-	code, raw = send(t, app, http.MethodGet, "/v1/pubsub/jetstream/streams", "other", "", "")
-	if code != http.StatusOK {
-		t.Fatalf("cross-org list = %d", code)
-	}
-	if page := obj(t, raw); len(page["data"].([]any)) != 0 {
-		t.Errorf("another org's listing = %v, want empty", page["data"])
-	}
-	if code, _ := doJSON(t, app, http.MethodPost, "/v1/pubsub/jetstream/streams", "other", map[string]any{
-		"name": "SECRET", "subjects": []string{"deals.>"}}); code != http.StatusCreated {
-		t.Errorf("the same name in another org = %d, want its own 201", code)
-	}
 
-	// acme's messages land in acme's stream only, even under identical
-	// logical subjects.
-	if code, _ := doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", "acme", map[string]any{
-		"subject": "deals.won", "data": "x"}); code != http.StatusOK {
-		t.Fatal("acme publish")
-	}
-	_, raw = send(t, app, http.MethodGet, "/v1/pubsub/jetstream/streams/SECRET", "other", "", "")
-	if st := obj(t, raw); st["messages"] != float64(0) {
-		t.Errorf("other org's SECRET holds %v messages, want 0", st["messages"])
+	// And the same name is another org's to claim, not a collision.
+	if code, _ := doJSON(t, app, http.MethodPost, "/v1/pubsub/kv/VAULT", "other", nil); code != http.StatusCreated {
+		t.Errorf("the same bucket name in another org = %d, want its own 201", code)
 	}
 
 	// No principal: every op is a 403, before any bus work.
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodPost, "/v1/pubsub/publish"},
 		{http.MethodPost, "/v1/pubsub/request"},
-		{http.MethodGet, "/v1/pubsub/jetstream/streams"},
-		{http.MethodPost, "/v1/pubsub/jetstream/streams"},
-		{http.MethodGet, "/v1/pubsub/jetstream/streams/SECRET"},
-		{http.MethodPut, "/v1/pubsub/jetstream/streams/SECRET"},
-		{http.MethodDelete, "/v1/pubsub/jetstream/streams/SECRET"},
-		{http.MethodGet, "/v1/pubsub/jetstream/streams/SECRET/consumers"},
-		{http.MethodPost, "/v1/pubsub/jetstream/streams/SECRET/consumers"},
-		{http.MethodGet, "/v1/pubsub/jetstream/streams/SECRET/consumers/w"},
-		{http.MethodDelete, "/v1/pubsub/jetstream/streams/SECRET/consumers/w"},
-		{http.MethodPost, "/v1/pubsub/jetstream/streams/SECRET/consumers/w/next"},
 		{http.MethodPost, "/v1/pubsub/kv/VAULT"},
-		{http.MethodDelete, "/v1/pubsub/kv/VAULT"},
 		{http.MethodGet, "/v1/pubsub/kv/VAULT/pin"},
 		{http.MethodPut, "/v1/pubsub/kv/VAULT/pin"},
-		{http.MethodDelete, "/v1/pubsub/kv/VAULT/pin"},
-		{http.MethodGet, "/v1/pubsub/kv/VAULT/pin/history"},
+		{http.MethodDelete, "/v1/pubsub/kv/VAULT"},
 	} {
-		if code, _ := send(t, app, tc.method, tc.path, "", "", ""); code != http.StatusForbidden {
-			t.Errorf("%s %s with no principal = %d, want 403", tc.method, tc.path, code)
-		}
-	}
-
-	// Subject escapes are refused before they reach the bus.
-	for _, subject := range []string{"", "..", "a b", "a.", ".a"} {
-		if code, _ := doJSON(t, app, http.MethodPost, "/v1/pubsub/publish", "acme", map[string]any{
-			"subject": subject, "data": "x"}); code != http.StatusBadRequest {
-			t.Errorf("publish subject %q = %d, want 400", subject, code)
+		if code, _ := send(t, app, tc.method, tc.path, "", "application/json", "{}"); code != http.StatusForbidden {
+			t.Errorf("no-principal %s %s = %d, want 403", tc.method, tc.path, code)
 		}
 	}
 }
@@ -509,8 +301,8 @@ func TestEveryPubsubRouteIsTypedAndDescribed(t *testing.T) {
 	if len(served) == 0 {
 		t.Fatal("the router serves no pubsub routes")
 	}
-	if len(typed) != 18 {
-		t.Errorf("typed ops = %d, want the 18 the door declares", len(typed))
+	if len(typed) != 8 {
+		t.Errorf("typed ops = %d, want the 8 the door declares", len(typed))
 	}
 	var bad []string
 	for key := range served {

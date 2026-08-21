@@ -15,7 +15,8 @@ source for the generated per-language SDKs.
 - AI/agents flagship lib is separate: Python `hanzo` (`hanzoai/python-sdk`),
   Node `@hanzo/ai` (`hanzo-js/ai`). Completeness: Python > Rust > C++ > Go.
 - DRY: one impl, one place; discovery repos link OUT, never duplicate impl.
-- Full spec: `~/work/hanzo/SDK-ARCHITECTURE.md`.
+- The driver and the matrix: `hanzoai/openapi` (`generate.py`, `sdks.yaml`,
+  its `README.md` and `LLM.md`); the standard is HIP-0040.
 
 ## Brand rules (hard)
 - Hanzo is a full AI cloud, NOT a proxy — never "LLM gateway", never position vs
@@ -44,8 +45,9 @@ source for the generated per-language SDKs.
   verified by `make test` — not a second source). Four facts a route table cannot
   hold are DECLARED beside the routes instead, each with its own seam and all four
   rendering only on an operation the router already carries: bodies (`Register`),
-  prose (`Describe`), audience (`Public` → `x-public`, default-deny), and the
-  credential (`security.go`). The credential is ONE `bearer` scheme with a
+  prose (`Describe`), audience (`x-public`, DERIVED from the address: every /v1
+  operation except the operator's `admin` product, relay doors and `compat`
+  spellings — openapi/public.go), and the credential (`security.go`). The credential is ONE `bearer` scheme with a
   document-level requirement every operation inherits — default-REQUIRE — and
   `Open(path, method)` is the per-operation override that renders `security: []`.
   Adding the scheme is what makes generated SDKs send a token at all: a document
@@ -74,8 +76,8 @@ whole identity surface to the IAM service) would make a count a lie by omission,
 so its row says opaque — same rule as "Catch-alls are opaque, by construction".
 
 Count by path SEGMENT, never string prefix: the product is the segment after
-`/v1/` (`openapi.Product`), so a `/v1/cloud*` grep also swallows `/v1/cloudflare`
-and reports this 5-route plane as 29. Two products, one string prefix.
+`/v1/` (`openapi.Product`), so a `/v1/cloud*` grep would also swallow `/v1/cloudflare`. Two products, one
+string prefix.
 
 | Route | Noun | Owner | Tier |
 | --- | --- | --- | --- |
@@ -91,7 +93,6 @@ and reports this 5-route plane as 29. Two products, one string prefix.
 | `/v1/compute/bots` | A bot MACHINE (kind=bot + agent binding) | `apps/visor` — NOT `apps/bots` | Shipped — 5 ops |
 | `/v1/tasks` | Durable engine | `apps/tasks` | Shipped — 11 ops |
 | `/v1/machines` `/v1/gpus` `/v1/fleet` `/v1/clusters` `/v1/k8s` `/v1/compute` | Compute: provisioned + BYO machines, GPUs, k8s clusters | `apps/visor` (+ `apps/fleet` registry) | Shipped — 33 ops |
-| `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `apps/venue` | Shipped — 5 ops |
 | `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `apps/blueprint` | Shipped — 3 ops |
 | `/v1/templates` | Starter kits: ONE entry per template, shapes as variants | `apps/templates` | Shipped — 2 ops |
 | `/v1/iam` | Identity: users, orgs, roles | `apps/iam` | Shipped — GRAFTED (155 paths / 182 ops / 94 typed with schema; see below) |
@@ -102,11 +103,10 @@ pairs each with the package that REGISTERS it. Pairing `/v1/compute/bots` with
 `apps/bots` is the merge "Bot is three values" (below) exists to forbid.
 
 Custody invariants: secrets sealed in KMS, never in SQLite rows; verify before
-store. Two scopes, two paths, one rule — the path is built from the VALIDATED
-principal, never a client field:
+store. One path, one rule — the path is built from the VALIDATED principal,
+never a client field:
 
     /orgs/{org}/users/{user}/connectors/{provider}/{label}   per-user (integrations)
-    /orgs/{org}/cloud/{provider}/{label}                     per-org  (venue)
 
 Refresh is single-flight with rotation resealing; the CLI does local browser
 PKCE and posts the bundle to `POST /v1/connectors/:provider/credential`; cloud
@@ -115,26 +115,6 @@ owns device-code flows.
 Transport invariants: typed actions (`command|url|select|approval`), no raw
 string sniffing; pairing codes 8 chars, 1h TTL, max 3 pending per account,
 owner bootstrap on first approval.
-
-### Folding a cloud account's k8s clusters into the fleet — the ONE way
-
-An org's own DigitalOcean/AWS/GCP clusters reach the fleet by exactly three
-calls. There is no second cluster registry and no import path that skips them:
-
-1. **Link** — `POST /v1/cloud/{provider}/accounts` (body carries the credential;
-   `label` defaults to `default`). Verifies the credential LIVE, seals it in the
-   org's KMS namespace, discovers the account's clusters and folds them.
-2. **Re-sync** — `POST /v1/cloud/{provider}/accounts/{label}/sync` re-discovers
-   and re-folds that one account. This is the ONLY refresh verb; it is
-   idempotent and acts on the fleet shard recorded at link time.
-3. **Read** — `GET /v1/clusters`. Discovered clusters appear here beside managed
-   (visor-provisioned) and BYO (hand-pasted kubeconfig) ones and run work
-   identically. `DELETE /v1/cloud/{provider}/accounts/{label}` detaches them and
-   forgets the credential.
-
-Discovery ends at `fleet.Register` — exactly where `visor.attachCluster` ends —
-which is what makes "discovered" and "attached" the same kind of cluster
-afterwards. Do not add a cluster store; extend the fold.
 
 **`visor` is an agent name, not a query surface.** `apps/visor` OWNS the
 compute plane, but it serves it at the nouns above (`/v1/machines`,
@@ -1193,48 +1173,36 @@ one before it.
 - **TWO PROJECTIONS OF THAT ONE DOCUMENT, AND THE SPLIT IS DECLARED**
   (openapi/public.go). `openapi.yaml` is the INTERNAL document — everything the
   fleet serves, admin included, and what our own clients are cut from.
-  `public.yaml` beside it is the PUBLIC contract: the operations that DECLARED
-  themselves part of it, and nothing else. Both are written by ONE run of the
-  weave (`-weave` writes the second beside whatever path it names), so they can
-  never describe two different commits.
-  - **`openapi.Public(path, method)` is the seam, and it is DEFAULT-DENY.**
-    `Register` declares an operation's bodies, `Describe` declares its prose,
-    `Public` declares its AUDIENCE — same law, same init, same inability to
-    invent an address. Silence means INTERNAL, so a product cannot reach a
-    published SDK by anyone forgetting; a whole product ships publicly only when
-    somebody writes the line. There is **no prefix list in the emitter**, and
-    that is the point: a prefix list is a second copy of the routing table, which
-    is how a case-sensitive path list let `/V1/EXEC` walk past a credential guard
-    and how a manifest prefix row disagreed with what an app served until
-    `/v1/tags` 404'd in production. `Publish` reads ONE per-operation fact and
-    knows nothing about paths, products, prefixes or case.
-  - **Keyed by the DOCUMENT's address, not the fiber pattern**, because the
-    largest public product has no fiber pattern here: hanzoai/ai reaches its whole
-    surface through one `All("/v1/*")`, so `/v1/models` exists only as an address
-    in the document its door hands over. Declarations are normalised through the
-    same `translate` the document is built with, so `:id` and `{id}` are one key.
+  `public.yaml` beside it is the PUBLIC contract: the customer surface, derived
+  per operation. Both are written by ONE run of the weave (`-weave` writes the
+  second beside whatever path it names), so they can never describe two
+  different commits.
+  - **The audience is DERIVED, not declared** (openapi/public.go `audience`).
+    An operation is public when its address is under `/v1/`, its product — the
+    first segment after `/v1/`, the same axis the tag is read off — is not the
+    operator's `admin`, it is not a `{wildcardN}` relay door, and it is not
+    tagged `compat`. Nothing else decides it: no whitelist, no prefix list in
+    the emitter, no per-app flag. It used to be a hand-kept whitelist of eighteen
+    inference operations, which held every other product out of every generated
+    client while the clients quietly read the internal document instead; the
+    rule says what the customer surface IS, from the address, so a product is
+    public the day it answers and the operator's family never is. The full
+    document is served unauthenticated at `/v1/openapi.json` regardless, so the
+    split is audience — what the SDKs, the CLI, the MCP door and the docs
+    present — never secrecy.
   - **Stamped once, at the END of `Spec`** — after `Fold` (which replaces a
     structural operation with the typed one) and after `Project` (which replaces a
     door with the registry behind it), both of which would discard a mark written
     earlier. It rides as `x-public`, an extension rather than a tag, because the
     tag axis already means PRODUCT and `compat` had to be filtered back out of it.
-  - **v1 is INFERENCE: 18 operations, 10 products** (apps/ai/public.go) — the
-    model catalog (`/v1/models`, `/v1/models/providers`) plus every model call:
-    chat/completions, completions, responses, messages (+count_tokens),
-    embeddings, rerank, images, videos (async create + poll + fetch) and the five
-    audio verbs. Against 1782 internal paths. The junk a route table carries and a
-    product surface does not — `/v1/openapi.json`, `/v1/event.js`, `/health`,
-    `/v1/commands` — is gone for FREE: nothing excludes it, it was never included.
+  - **The MCP door offers the public contract and nothing beside it**:
+    plugin/gen-fleet-catalog keeps an operation only when it is `x-tool` (typed,
+    so a child can dispatch it) AND `x-public`, so `/v1/admin/*` is neither an SDK
+    method nor a tool a model is shown.
   - **The ratchet, split correctly.** `openapi/floor.json` keeps guarding the
-    INTERNAL document and only it; measuring the public projection would either
-    wedge CI on a shrink that is not a shrink, or re-base the floor to eighteen
-    paths and let every internal product vanish unnoticed.
-    `TestTheFloorGuardsTheInternalDocument` asserts both halves — the floor
-    accepts the internal document and REFUSES the public one. The public surface
-    needs no counting scheme of its own: it is small enough to compare WHOLE, so
-    the committed `public.yaml` is the ratchet, and the drift gate
-    (`mk/fleet.mk check`, porcelain-scoped to it) catches a shrink and a LEAK
-    alike.
+    INTERNAL document and only it; the committed `public.yaml` is its own
+    ratchet, and the drift gate (`mk/fleet.mk check`, porcelain-scoped to it)
+    catches a shrink and a leak alike.
 - **SDK repos PULL; cloud does not push.** A stale spec does not stop at cloud —
   it ships wrong clients to four package registries. The repos read
   `openapi.yaml`, regenerate, and release on their own cadence.
@@ -1893,11 +1861,11 @@ holes closed the way the analytics pass closed its: 26 referrals properties and
 12 zero-trust ones were about to reach openapi.yaml, every SDK and every MCP
 inputSchema bare.
 
-**The six-plugin pass (usage, venue, world, agent, bot, help): 19 typed, 8
-refused, and all 27 published NOTHING before it.** Same work list rule — every
+**The five-plugin pass (usage, world, agent, bot, help): 14 typed, 8
+refused, and all 22 published NOTHING before it.** Same work list rule — every
 operation in `plugin/<name>/openapi.json` carrying neither `description` nor
-`summary`. `usage` 5/5, `venue` 5/5, `help` 4/4, `world` 4 of 5, `bot` 1 of 4,
-`agent` 0 of 4. Four things it taught that the earlier passes did not:
+`summary`. `usage` 5/5, `help` 4/4, `world` 4 of 5, `bot` 1 of 4,
+`agent` 0 of 4. Three things it taught that the earlier passes did not:
 
 1. **The `sizedIn` trick cannot survive a SYNTAX error, and that bounds the whole
    "record it, judge it later" pattern.** captable's answer to a route that
@@ -1908,19 +1876,11 @@ operation in `plugin/<name>/openapi.json` carrying neither `description` nor
    `json.Unmarshal` runs `checkValid` over the whole document before it invokes
    any custom Unmarshaler, so zip's `op.invoke` 400s before the input is ever
    built. Measured, not argued: `apps/help/typed_wire_test.go`'s
-   `TestSyntacticallyInvalidJSONIs400Early` and `apps/venue`'s
-   `TestSyntaxErrorIs400BeforeTheAdminGate`. The delta is real and tiny — a caller
+   `TestSyntacticallyInvalidJSONIs400Early`. The delta is real and tiny — a caller
    sending garbage bytes to a help center that does not exist now sees 400 instead
    of 404 — and it is the same one captable's writes.go already took. Do not claim
    the pattern preserves malformed-body ordering; it preserves the other two.
-2. **A body-TOLERANT route CAN be typed, by decoding leniently rather than
-   declining to decode.** `POST /v1/cloud/{provider}/accounts/{label}/sync` has
-   never read its body; zip decodes one anyway. `venueAccountRef.UnmarshalJSON`
-   decodes what parses and drops the error, so a stray payload stays the no-op it
-   was (`TestSyncStaysBodyTolerant`). That narrows hard-won fact #4 — the
-   *unconditional 400* is what blocks apps/tools' JSON-RPC door, not
-   body-tolerance itself.
-3. **Path params must stay `json:`-visible even when the document does not need
+2. **Path params must stay `json:`-visible even when the document does not need
    them.** zip v1.18.11's `hasRequestBody` correctly publishes no requestBody for
    an input whose every field is a path param — but the MCP projection calls
    `op.invoke` with the args as the BODY and a nil path map (mcp.go), so
@@ -1928,12 +1888,7 @@ operation in `plugin/<name>/openapi.json` carrying neither `description` nor
    fleet's existing shape (`ID string \`json:"id"\`` with a comment saying the URL
    is the authority) is right, and bindURL binding path LAST is what keeps it
    safe.
-4. **Two more mount-scope defects of the apps/plan shape, and one build-contract
-   hole.** `plugin/venue/main.go` declared no `Prefixes`, so the standalone
-   binary's scope owned only the `/v1/<name>` default — and venue is named
-   "venue" and serves **/v1/cloud**, so it owned NOTHING it registers; fixed with
-   `manifest.PrefixesFor("venue")`, which matters now because `cloud.Bridge` is
-   what parks the org a typed op reads. Separately, `apps/bot` had **no
+3. **A build-contract hole.** `apps/bot` had **no
    Makefile** at all, so `make -C apps/bot describe` could not run and that app's
    subset could never be regenerated by the per-app chain — despite mk/plugin.mk's
    own comment claiming "an app cannot have a main and no Makefile". `bot`'s is
@@ -3526,7 +3481,7 @@ what went wrong.
 
 | Header | Predicate | Means |
 |---|---|---|
-| `X-User-IsAdmin` | `authz.Claims.PlatformSudo` | a HUMAN who is a MEMBER of the reserved `admin` org, **at any position** in `orgs` |
+| `X-User-IsAdmin` | `authz.Claims.Sudo` | a HUMAN who is a MEMBER of the reserved `admin` org, **at any position** in `orgs` |
 | `X-User-IsOrgAdmin` | `authz.Claims.OrgAdmin(effOrg)` | admin/owner role in the org the request ACTS in. Never platform authority |
 
 Narrowed in `auth_identity.go` by the one denial only cloud can make — the per-org
@@ -3556,7 +3511,7 @@ Honoring it widens nothing: IAM already guards the grant as platform authority o
 the write side (`memberships.mayGrant` refuses a membership into a reserved org
 unless the caller is already a SuperAdmin, because it "seeds admin-org (SuperAdmin)
 tenancy"). A grant the issuer treats as sudo must not be inert at the resource
-server. `TestPlatformSudoIsMembershipNotPosition` pins it with z's real membership
+server. `TestSudoIsMembershipNotPosition` pins it with z's real membership
 set; its negative cases (admin of every brand org but no reserved membership, a
 look-alike `"Admin"`, an empty set) pass under both predicates, which is how the
 change is shown to grant nothing new.
@@ -5018,9 +4973,10 @@ ends up running on two keys with nothing saying so.
 speak over a 0600 unix socket, but they prove different things and only one of them
 proves identity:
 
-    plane    answer() calls parseIdent(call.Cap) — it PARSES the capability.
-             Nothing verifies it. Any co-located app can call
-             Dial("commerce").For("another-tenant") and be believed.
+    plane    the caller is nine HEADERS (zip.CallerOf reads X-Org-Id, X-User-Id,
+             X-User-IsAdmin, …; zip caller.go). Nothing signs them and nothing
+             verifies them: the callee believes the sender, so any co-located app
+             can state For("another-tenant") and be believed.
     credz    peerPID (SO_PEERCRED, same uid) AND a launch token that opens only
              under the secret the launcher minted — so the app name is the one
              the LAUNCHER stamped, never one the caller chose.
@@ -5028,14 +4984,36 @@ proves identity:
 That difference is load-bearing: it is how each child gets ITS scoped bundle and not
 a sibling's. So the socket is the boundary for "one of our own processes", and it is
 NOT a boundary between our own processes — which is fine for a bug-free fleet and is
-worth knowing before treating a plane capability as an authorization decision. Tenancy
-is enforced where a request principal is resolved, at the edge, from a validated
-token; a method that re-checks the capability's org against a ref (as kms does)
+worth knowing before treating a forwarded identity as an authorization decision.
+Tenancy is enforced where a request principal is resolved, at the edge, from a
+validated token; a method that re-checks the stated org against a ref (as kms does)
 catches an app asking for one tenant while acting for another, which is a BUG worth
 failing on rather than an attack being repelled.
 
-Making the plane verify would need a verifier every app holds, and only the broker
-holds the launch secret today. Do not bolt on a weaker check and call it one.
+**This box used to describe `parseIdent(call.Cap)` — a capability the plane parsed
+and nothing verified — and BOTH SYMBOLS ARE GONE** (`grep -rn 'parseIdent|call\.Cap'
+over the tree: zero). They belonged to the hand-written `rpc.go`/`dial.go`/
+`payloads.go` this file records as deleted a few paragraphs up. The conclusion
+survived the mechanism, which is exactly why nobody noticed: an unverified parsed
+capability and an unverified forwarded header are one trust story. But an agent sent
+to fix `parseIdent` finds nothing to fix, so the CURRENT carrier is named above.
+
+**ZAP capabilities exist, and none of this uses them.** `luxfi/zap@v1.2.7/dexsession`
+is a Cap'n-Proto-shaped capability system — `QuoteCap`/`IntentCap`/`SettlementCap`/
+`AdminCap` derived by ASKING the session, backed by an unforgeable-token grant table,
+over a surface that is value-free by construction so `adminWithdraw` cannot be named
+at all. It is written, it is next door, and **cloud imports `dexsession` nowhere**.
+Do not read "we run ZAP" as "we hold capabilities": the plane's transport is ZAP and
+its authority model is a forwarded string.
+
+Adopting them is a change to zip's spawn contract, not a refactor here, and the
+blocker is distribution: a verifier every app holds, where today only the broker
+holds the launch secret. Two structural defenses carry the interval and both are
+load-bearing rather than incidental — `TestNoPlaneInputCanNameAnOrg` walks every
+input type by reflection so cross-tenant ADDRESSING is unrepresentable rather than
+merely refused, and kms re-checks the stated org against its ref. The reachable
+attack is therefore a compromised co-resident app, not a crafted argument. Do not
+bolt on a weaker check and call it a capability.
 
 ## /v1/world — one product, one owner, and the two wires the document cannot carry
 

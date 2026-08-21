@@ -80,6 +80,7 @@
             "description": "ok"
           }
         },
+        "x-public": true,
         "x-tool": true
       }
     },
@@ -90,7 +91,8 @@
         "description": "Answers 501. This address belongs to a DIFFERENT protocol from /v1/exec: the server suspends a program on each tool call, returns the pending calls with a continuation token, and resumes when the client posts results back. Serving it means implementing suspension and resumption, so it refuses in the open rather than answering with a shape the caller's parser cannot read.",
         "tags": [
           "exec"
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/files/{sid}": {
@@ -110,7 +112,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-public": true
       }
     },
     "/v1/upload": {
@@ -120,7 +123,8 @@
         "description": "Takes a multipart upload and writes the file into the session's sandbox, so a later run can read it. Answers the session id and the identifier the file is addressed by; `session_id` in the form joins an existing session instead of opening one.\n\nThe body is multipart/form-data, which is why this is not a typed operation: every non-empty typed body is decoded as JSON.",
         "tags": [
           "upload"
-        ]
+        ],
+        "x-public": true
       }
     }
   },

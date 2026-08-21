@@ -110,11 +110,21 @@ func strategyMatches(st Strategy, stage Stage, signals SignalSet) bool {
 
 // strategyView is the corpus projection returned to a caller.
 type strategyView struct {
-	ID       string   `json:"id"`
-	Category string   `json:"category"`
-	Workload string   `json:"workload,omitempty"`
-	Action   string   `json:"action"`
-	Tags     []string `json:"tags,omitempty"`
+	// ID is the tactic's stable slug in the corpus.
+	ID string `json:"id"`
+	// Category is the growth discipline the tactic belongs to — the axis
+	// `?category=` narrows on.
+	Category string `json:"category"`
+	// Workload is how much effort running the tactic costs, so a corpus can be cut
+	// to what the org has the hands for.
+	Workload string `json:"workload,omitempty"`
+	// Action is the tactic itself: the thing to go and do.
+	Action string `json:"action"`
+	// Tags are the PRECONDITIONS this tactic already satisfied to appear in the
+	// answer — `stage:<name>` and `has:<capability>` predicates over the org's
+	// observed profile. They are carried back so a caller can show why a tactic
+	// surfaced, not so it can filter again.
+	Tags []string `json:"tags,omitempty"`
 }
 
 // strategiesQuery narrows the corpus. Every field is optional and binds from the
