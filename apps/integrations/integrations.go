@@ -121,7 +121,7 @@ type ExchangeResult struct {
 const apiKeyKind = "apikey"
 
 const (
-	// userScope marks a Provider on the per-user /v1/connectors plane. User-scoped
+	// userScope marks a Provider on the per-user /v1/integrations/connectors plane. User-scoped
 	// providers are invisible on /v1/integrations; their rows are keyed
 	// (org,user,provider,label) and their secrets live under userPath.
 	userScope = "user"
@@ -242,7 +242,7 @@ type Provider struct {
 	Verify func(ctx context.Context, in VerifyInput) (*ExchangeResult, error)
 
 	// Scope selects the custody plane: "" = org-scoped /v1/integrations (default);
-	// userScope = per-user /v1/connectors (rows keyed (org,user,provider,label),
+	// userScope = per-user /v1/integrations/connectors (rows keyed (org,user,provider,label),
 	// KMS under /orgs/{org}/users/{user}/connectors/...). The planes are disjoint:
 	// a user-scoped provider 404s on the org surface and vice versa; Mount asserts
 	// scope coherence at boot.
@@ -355,7 +355,7 @@ type connectionView struct {
 }
 
 // listOut is the provider catalog: every ORG-plane provider, sorted by id, each
-// annotated with this org's connection. User-plane providers (/v1/connectors) are
+// annotated with this org's connection. User-plane providers (/v1/integrations/connectors) are
 // not in it.
 type listOut struct {
 	// Providers is the whole catalog. Never null; [] when nothing is registered.
@@ -456,7 +456,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	providers := snapshotRegistry()
 	// Fail LOUD at boot on an incoherent provider — the plane split is structural,
 	// not discipline-based. A user-scoped provider must declare NO org-plane
-	// OAuth/config surface (nothing on /v1/connectors calls them) and at least one
+	// OAuth/config surface (nothing on /v1/integrations/connectors calls them) and at least one
 	// user intake method; an org provider must declare its config surface, and its
 	// RedirectPath must be the path the generic callback dispatcher actually
 	// serves — otherwise its OAuth callback would 404 silently. One route, one truth.
@@ -980,6 +980,13 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// caller asks this package to read GitLab, the way the GitHub routes above
 	// already work, rather than asking for the credential.
 	zip.Get(zapp, "/v1/integrations/gitlab/projects", o.gitlabProjects)
+	// Per-USER connector plane (/v1/integrations/connectors — connectors.go).
+	// BEFORE the /:provider wildcards, for the reason gitlab/projects is: the
+	// bare GET /v1/integrations/:provider below matches one segment, and a
+	// wildcard registered ahead of a literal answers it — this plane's list read
+	// would arrive as provider="connectors" and 404 as an unknown provider. It
+	// was a top-level /v1/connectors when it had no wildcard to sit behind.
+	connectorRoutes(app, zapp, o)
 	zip.Get(zapp, "/v1/integrations/:provider", o.get)
 	zip.Post(zapp, "/v1/integrations/:provider/connect", o.connect)
 	// PUBLIC, state-authed, RAW (302). RedirectPath == this path for every provider
@@ -989,9 +996,6 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	zip.Post(zapp, "/v1/integrations/:provider/disconnect", o.disconnect)
 	// apikey connectors: re-verify a stored credential live (`hanzo connector verify`).
 	zip.Post(zapp, "/v1/integrations/:provider/verify", o.verifyConn)
-	// Per-USER connector plane (/v1/connectors — connectors.go). Own prefix, so no
-	// shadowing interplay with the /:provider wildcards above.
-	connectorRoutes(app, zapp, o)
 }
 
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
@@ -1021,7 +1025,7 @@ func snapshotRegistry() map[string]*Provider {
 // list returns every registered integration provider together with THIS org's
 // connection status for it — the catalog the console's Integrations page renders.
 // Org-authed: a caller with no validated principal is 403, because the status is
-// per-org and there is no org-less answer. User-plane providers (the /v1/connectors
+// per-org and there is no org-less answer. User-plane providers (the /v1/integrations/connectors
 // surface) are omitted; the two planes are disjoint.
 //
 // Response: {"providers":[{"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":true,"connection":{"account":"Acme","externalId":"T0231","scopes":["chat:write"],"connectedAt":"2026-07-01T10:00:00Z"}}]}

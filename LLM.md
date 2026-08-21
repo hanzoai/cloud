@@ -81,7 +81,7 @@ string prefix.
 
 | Route | Noun | Owner | Tier |
 | --- | --- | --- | --- |
-| `/v1/connectors` | Custody: per-user BYO external accounts | `apps/integrations` (both planes; user scope) | Shipped — 8 ops |
+| `/v1/integrations/connectors` | Custody: per-user BYO external accounts | `apps/integrations` (both planes; user scope) | Shipped — 8 ops |
 | `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `apps/channels` | Shipped — 8 ops |
 | `/v1/sync` | Data: bidirectional sync engine | `apps/sync` | Shipped — 7 ops |
 | `/v1/automations` | Workflows: flows/runs, goja piece runtime | `apps/automations` | Shipped — 20 ops |
@@ -109,7 +109,7 @@ never a client field:
     /orgs/{org}/users/{user}/connectors/{provider}/{label}   per-user (integrations)
 
 Refresh is single-flight with rotation resealing; the CLI does local browser
-PKCE and posts the bundle to `POST /v1/connectors/:provider/credential`; cloud
+PKCE and posts the bundle to `POST /v1/integrations/connectors/:provider/credential`; cloud
 owns device-code flows.
 
 Transport invariants: typed actions (`command|url|select|approval`), no raw
@@ -1609,8 +1609,8 @@ zip is getting multi-status `responses`, and these convert when it lands.
    somebody happened to look at. `apps/company` alone carries 6 (every one of its
    `noInput` POSTs: `documents`, `esign`, `genesis`, `kyc`, `kyc/refresh`,
    `skip`), which is the largest single share and was invisible until the check
-   existed. The integrations six are `POST /v1/connectors/{id}/refresh`,
-   `…/connectors/{provider}/device/{flow}/poll`,
+   existed. The integrations six are `POST /v1/integrations/connectors/{id}/refresh`,
+   `…/integrations/connectors/{provider}/device/{flow}/poll`,
    `…/github/repos/{repo}/pages/builds`, `…/integrations/{provider}/disconnect`
    and `…/{provider}/verify` each publish a required body whose only properties
    ARE their path params, and `…/integrations/telegram/connect` publishes a

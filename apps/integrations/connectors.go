@@ -1,18 +1,20 @@
-// connectors.go is the per-USER connector plane — /v1/connectors, the sibling
-// of the org-scoped /v1/integrations surface. Same package, same registry, same
-// store file, same KMS client; only the custody key differs (org,user,provider,
-// label → userPath).
+// connectors.go is the per-USER connector plane — /v1/integrations/connectors,
+// under the org-scoped /v1/integrations surface. Same package, same registry,
+// same store file, same KMS client; only the custody key differs
+// (org,user,provider,label → userPath). Two AUDIENCES of one capability over one
+// integrations.db, so they share one name: this plane answered at a top-level
+// /v1/connectors until the address took the owner's name (HIP-0139 §3).
 //
 // Surface (registered by connectorRoutes, called last from routes()):
 //
-//	GET    /v1/connectors                                  this user's connectors     -> {connectors:[...]}
-//	GET    /v1/connectors/providers                        user-scoped provider cards -> {providers:[...]}
-//	GET    /v1/connectors/:id/token                        custodied access token     -> {token,...}
-//	POST   /v1/connectors/:provider/device                 begin device sign-in       -> {flow,userCode,...}
-//	POST   /v1/connectors/:provider/device/:flow/poll      poll device sign-in        -> {status,...}
-//	POST   /v1/connectors/:provider/credential             token / oauth-bundle intake-> {connected,connector}
-//	POST   /v1/connectors/:id/refresh                      force a token rotation     -> {refreshed,connector}
-//	DELETE /v1/connectors/:id                              forget + delete secrets    -> {disconnected:true}
+//	GET    /v1/integrations/connectors                                  this user's connectors     -> {connectors:[...]}
+//	GET    /v1/integrations/connectors/providers                        user-scoped provider cards -> {providers:[...]}
+//	GET    /v1/integrations/connectors/:id/token                        custodied access token     -> {token,...}
+//	POST   /v1/integrations/connectors/:provider/device                 begin device sign-in       -> {flow,userCode,...}
+//	POST   /v1/integrations/connectors/:provider/device/:flow/poll      poll device sign-in        -> {status,...}
+//	POST   /v1/integrations/connectors/:provider/credential             token / oauth-bundle intake-> {connected,connector}
+//	POST   /v1/integrations/connectors/:id/refresh                      force a token rotation     -> {refreshed,connector}
+//	DELETE /v1/integrations/connectors/:id                              forget + delete secrets    -> {disconnected:true}
 //
 // TENANTING. Every read/write is bound org=? AND user=? — the (org,user) pair
 // from caller() IS the row key, so another user's connector id is simply "no
@@ -46,20 +48,19 @@ func connectorRoutes(app cloud.Router, zapp *zip.App, o ops) {
 	// the request context, so the channel has to run ahead of them.
 	//
 	// routes() already installs both through the scope, and the scope gates by
-	// path across EVERY prefix the manifest declares for this subsystem —
-	// /v1/connectors among them — so this subtree is covered by that one install.
-	// The Group("/v1/connectors") that used to stand here was a second install on
-	// a node with no routes beneath it (the ops register on zapp at absolute
-	// paths), which is what zip refuses to compose.
+	// path across the prefix the manifest declares for this subsystem, which this
+	// subtree is now beneath — so that one install covers it. A Group here was a
+	// second install on a node with no routes under it (the ops register on zapp
+	// at absolute paths), which is what zip refuses to compose.
 
-	zip.Get(zapp, "/v1/connectors", o.connectors)
-	zip.Get(zapp, "/v1/connectors/providers", o.connectorProviders)
-	zip.Get(zapp, "/v1/connectors/:id/token", o.tokenConn)
-	zip.Post(zapp, "/v1/connectors/:provider/device", o.startDevice)
-	zip.Post(zapp, "/v1/connectors/:provider/device/:flow/poll", o.pollDevice)
-	zip.Post(zapp, "/v1/connectors/:provider/credential", o.credential)
-	zip.Post(zapp, "/v1/connectors/:id/refresh", o.refreshConn)
-	zip.Delete(zapp, "/v1/connectors/:id", o.dropConn)
+	zip.Get(zapp, "/v1/integrations/connectors", o.connectors)
+	zip.Get(zapp, "/v1/integrations/connectors/providers", o.connectorProviders)
+	zip.Get(zapp, "/v1/integrations/connectors/:id/token", o.tokenConn)
+	zip.Post(zapp, "/v1/integrations/connectors/:provider/device", o.startDevice)
+	zip.Post(zapp, "/v1/integrations/connectors/:provider/device/:flow/poll", o.pollDevice)
+	zip.Post(zapp, "/v1/integrations/connectors/:provider/credential", o.credential)
+	zip.Post(zapp, "/v1/integrations/connectors/:id/refresh", o.refreshConn)
+	zip.Delete(zapp, "/v1/integrations/connectors/:id", o.dropConn)
 }
 
 // ── inputs ─────────────────────────────────────────────────────────────────────

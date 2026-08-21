@@ -12,7 +12,7 @@ func TestOptin_UserFlowSelfOnly(t *testing.T) {
 	app := mountApp(t)
 
 	// Default: private, but settable.
-	code, body := doGet(t, app, "/v1/usage/leaderboard/optin", principalHeaders("acme", "alice"))
+	code, body := doGet(t, app, "/v1/leaderboard/optin", principalHeaders("acme", "alice"))
 	if code != http.StatusOK {
 		t.Fatalf("code=%d", code)
 	}
@@ -25,20 +25,20 @@ func TestOptin_UserFlowSelfOnly(t *testing.T) {
 	}
 
 	// Opt in with a handle.
-	code, body = doJSON(t, app, http.MethodPut, "/v1/usage/leaderboard/optin", principalHeaders("acme", "alice"), userOptinReq{Listed: true, Handle: "AliceZ"})
+	code, body = doJSON(t, app, http.MethodPut, "/v1/leaderboard/optin", principalHeaders("acme", "alice"), userOptinReq{Listed: true, Handle: "AliceZ"})
 	if code != http.StatusOK {
 		t.Fatalf("put code=%d body=%s", code, body)
 	}
 
 	// Reflected on GET.
-	_, body = doGet(t, app, "/v1/usage/leaderboard/optin", principalHeaders("acme", "alice"))
+	_, body = doGet(t, app, "/v1/leaderboard/optin", principalHeaders("acme", "alice"))
 	_ = json.Unmarshal(body, &v)
 	if !v.User.Listed || v.User.Handle != "AliceZ" {
 		t.Fatalf("after opt-in: %+v", v.User)
 	}
 
 	// The write is keyed on the caller: bob (same org) is unaffected + still private.
-	_, body = doGet(t, app, "/v1/usage/leaderboard/optin", principalHeaders("acme", "bob"))
+	_, body = doGet(t, app, "/v1/leaderboard/optin", principalHeaders("acme", "bob"))
 	_ = json.Unmarshal(body, &v)
 	if v.User.Listed {
 		t.Fatal("alice's opt-in must not list bob")
@@ -50,13 +50,13 @@ func TestOptin_OrgRequiresAdmin(t *testing.T) {
 	installFakeDS(t, nil)
 	app := mountApp(t)
 
-	code, _ := doJSON(t, app, http.MethodPut, "/v1/usage/leaderboard/optin/org", principalHeaders("acme", "alice"), orgOptinReq{Listed: true, Display: "Acme"})
+	code, _ := doJSON(t, app, http.MethodPut, "/v1/leaderboard/optin/org", principalHeaders("acme", "alice"), orgOptinReq{Listed: true, Display: "Acme"})
 	if code != http.StatusForbidden {
 		t.Fatalf("non-admin org opt-in must be 403, got %d", code)
 	}
 
 	h := withHeader(principalHeaders("acme", "alice"), "X-User-IsOrgAdmin", "true")
-	code, body := doJSON(t, app, http.MethodPut, "/v1/usage/leaderboard/optin/org", h, orgOptinReq{Listed: true, Display: "Acme"})
+	code, body := doJSON(t, app, http.MethodPut, "/v1/leaderboard/optin/org", h, orgOptinReq{Listed: true, Display: "Acme"})
 	if code != http.StatusOK {
 		t.Fatalf("org admin opt-in must be 200, got %d body=%s", code, body)
 	}
@@ -71,7 +71,7 @@ func TestOptin_OrgRequiresAdmin(t *testing.T) {
 func TestOptin_BadHandleRejected(t *testing.T) {
 	installFakeDS(t, nil)
 	app := mountApp(t)
-	code, _ := doJSON(t, app, http.MethodPut, "/v1/usage/leaderboard/optin", principalHeaders("acme", "alice"), userOptinReq{Listed: true, Handle: "bad<script>"})
+	code, _ := doJSON(t, app, http.MethodPut, "/v1/leaderboard/optin", principalHeaders("acme", "alice"), userOptinReq{Listed: true, Handle: "bad<script>"})
 	if code != http.StatusBadRequest {
 		t.Fatalf("bad handle must be 400, got %d", code)
 	}
