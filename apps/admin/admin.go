@@ -254,6 +254,7 @@ func (o ops) orgs(ctx context.Context, in *orgsIn) (*orgsOut, error) {
 	// eighty-one; a directory that costs O(orgs) round-trips gets slower every signup.
 	// A tenant with no rows in the window is absent from the map and reads a true zero.
 	ledger, _ := foldLedgerByOrg(ctx, ledgerScope{Since: computeSince(usageRange)})
+	members := foldUsersByOrg(o.s, ctx, cr)
 	money := core.Delegate(ctx)
 
 	// FAN OUT, for the reason the overview already does: each row costs two independent
@@ -278,7 +279,7 @@ func (o ops) orgs(ctx context.Context, in *orgsIn) (*orgsOut, error) {
 			rows[i] = orgRow{
 				Org:          row.Name,
 				Display:      core.Display(row.DisplayName, row.Name),
-				Users:        orgUserCount(o.s, ctx, cr, row.Name),
+				Users:        members[row.Name],
 				Products:     0, // workload registry feed pending (platform apps table)
 				SpendCents:   used.CostCents,
 				CreditsCents: credits,
@@ -565,6 +566,7 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 		// ONE delegation for the whole fan-out (core.Delegate) — building it per
 		// goroutine would have every one of them reading the same request.
 		money := core.Delegate(ctx)
+		members := foldUsersByOrg(o.s, ctx, cr)
 		const maxParallelOrgReads = 12
 		var (
 			mu  sync.Mutex
@@ -577,7 +579,7 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				uc := orgUserCount(o.s, ctx, cr, org)
+				uc := members[org]
 				_, cr2, mErr := core.OrgMoney(o.s, money, org)
 				mu.Lock()
 				defer mu.Unlock()
@@ -664,9 +666,6 @@ func syncNow(ctx context.Context, _ *core.None) (*syncOut, error) {
 
 // ── aggregation helpers ──────────────────────────────────────────────────────
 
-// orgUserCount returns the member count for one org from the IAM list total.
-// Best-effort: an error yields 0 rather than failing the whole row.
-
 // pageOrgs narrows the directory to one page. An out-of-range page is an empty
 // page, not an error: a client that walks past the end gets a clean stop.
 func pageOrgs(all []iam.Org, in *orgsIn) []iam.Org {
@@ -690,16 +689,40 @@ func pageOrgs(all []iam.Org, in *orgsIn) []iam.Org {
 	return all[start:end]
 }
 
-func orgUserCount(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds, org string) int {
-	q := url.Values{}
-	q.Set("owner", org)
-	q.Set("p", "1")
-	q.Set("pageSize", "1")
-	res, err := s.State.IAM.Users(ctx, cr, q)
-	if err != nil {
-		return 0
+// foldUsersByOrg counts the members of every org in ONE read, keyed by org.
+//
+// A count per tenant is a round trip whose entire answer is one integer, and the
+// directory needs one for every row it renders. Paging bounds how many rows that is;
+// this removes the question. The fleet is 1,311 members across 683 orgs, so the fold
+// costs two reads whatever the page size — and it grows with PEOPLE rather than with
+// tenants, which is the number a signup adds.
+//
+// Best-effort, as the per-org count was: a read that fails leaves those orgs out of the
+// map, and an absent org reads a true zero rather than failing the directory. IAM
+// authorizes the list as the caller, so a non-super caller counts only what they can
+// already see.
+func foldUsersByOrg(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) map[string]int {
+	const page = 1000
+	counts := map[string]int{}
+	for p := 1; ; p++ {
+		q := url.Values{}
+		q.Set("p", strconv.Itoa(p))
+		q.Set("pageSize", strconv.Itoa(page))
+		res, err := s.State.IAM.Users(ctx, cr, q)
+		if err != nil {
+			return counts
+		}
+		var users []iam.User
+		if err := json.Unmarshal(res.Rows, &users); err != nil {
+			return counts
+		}
+		for _, u := range users {
+			counts[u.Owner]++
+		}
+		if len(users) < page || p*page >= res.Total {
+			return counts
+		}
 	}
-	return res.Total
 }
 
 // ── config resolution ────────────────────────────────────────────────────────
