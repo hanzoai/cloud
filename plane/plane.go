@@ -709,11 +709,16 @@ type AllowanceIn struct {
 // Limit 0 means the subject's plan does not bound them; Used and Spent are then 0
 // and false, and Resets is meaningless — there is no period to end.
 type Allowance struct {
-	Plan   string `json:"plan,omitempty"` // the tier the limit came from
-	Limit  int64  `json:"limit"`          // calls the plan allows per period; 0 = unbounded
-	Used   int64  `json:"used"`
-	Spent  bool   `json:"spent"`  // the subject is at the limit
-	Resets int64  `json:"resets"` // unix seconds; when the count starts again
+	Plan  string `json:"plan,omitempty"` // the tier the limit came from
+	Limit int64  `json:"limit"`          // calls the plan allows per period; 0 = unbounded
+	// Used is how many zero-priced calls this subject has been SERVED in the period
+	// ending at Resets — the UTC calendar day. Only a served call counts, so an
+	// admission check, a refusal, or a vendor that never answered leaves it where it
+	// stood. It stops AT Limit rather than climbing past it, so Limit-Used is what
+	// remains and never goes negative.
+	Used   int64 `json:"used"`
+	Spent  bool  `json:"spent"`  // the subject is at the limit
+	Resets int64 `json:"resets"` // unix seconds; when the count starts again
 }
 
 // Balance is what is left to spend.
@@ -2373,14 +2378,32 @@ type LeaseIn struct {
 // by dialing it, and a peer that could learn a pod name would be a peer that could
 // try.
 type Leased struct {
-	ID    string `json:"id"`
+	// ID names this computer for every later call — run, read, write, stop and end
+	// all take it, and a LeaseIn carrying it resumes THIS sandbox instead of leasing
+	// a second one. Minted here; a caller cannot choose it, and a resumed lease that
+	// had expired comes back under a new one.
+	ID string `json:"id"`
+	// Class is what was actually leased, from the closed set LeaseIn.Class names:
+	// exec | dev | desktop | android. A request that named none leased an `exec`,
+	// so this is where a caller learns which kind of computer it is holding, and it
+	// is what Workdir below follows from.
 	Class string `json:"class"`
 	// Runtime is the boundary this sandbox GOT, which need not be the one asked
 	// for — carried for the same reason Workdir is, that it is a fact only the
 	// owner knows and a caller assuming it would be holding a second copy. Empty
 	// is the node's default runtime, and a real answer.
 	Runtime string `json:"runtime,omitempty"`
-	Status  string `json:"status"`
+	// Status is where the pod stands, from the store's three: pending | running |
+	// error. A lease that ANSWERS has already waited for the pod, so this reads
+	// `running` — a start that failed is a 503 and no sandbox at all. Read it
+	// anyway: exec refuses a sandbox that is not running, so anything else here is
+	// the reason the next call will not work.
+	Status string `json:"status"`
+	// Workdir is the absolute directory this sandbox keeps files in, and what a
+	// relative path in a later read, write or run resolves against — /work for dev,
+	// desktop and android (the project volume's mount point), /mnt/data for exec
+	// (the artifact directory the code tool tells the model to write to). A path
+	// that climbs above it is refused rather than rewritten.
 	Workdir string `json:"workdir"`
 }
 
@@ -2433,9 +2456,22 @@ type RunIn struct {
 // call succeeded and the program failed, and a caller has to be able to tell those
 // apart.
 type Ran struct {
-	ExitCode int    `json:"exitCode"`
-	Stdout   string `json:"stdout"`
-	Stderr   string `json:"stderr"`
+	// ExitCode is the PROGRAM's own status — 0 succeeded, anything else is what it
+	// returned, and a Command runs under `sh -c` so its shell's conventions apply.
+	// A command that never reached an exit does not arrive here at all: a timeout
+	// or a stop cancels the channel, and that is an error on the call rather than a
+	// code of ours invented to fill this field.
+	ExitCode int `json:"exitCode"`
+	// Stdout is what the program wrote to standard output, collected whole rather
+	// than streamed — to watch it arrive instead, name a RunIn.Session and read that
+	// session's feed. Capped at 1 MiB, past which it ends in "[truncated at 1MiB]".
+	// Every string named in RunIn.Blind is replaced by "[redacted]" before it gets
+	// here, and before it reaches the session.
+	Stdout string `json:"stdout"`
+	// Stderr is standard error, kept apart from Stdout so a caller reading a
+	// program's OUTPUT is not reading its diagnostics as data. Same 1 MiB cap, same
+	// redaction. A program that failed usually says why here and nowhere else.
+	Stderr string `json:"stderr"`
 }
 
 // PathIn names one path inside a sandbox. An empty Path means the sandbox's own
@@ -2453,9 +2489,20 @@ type PathIn struct {
 // both, because one command answers both and a caller that had to stat first would
 // pay two round trips to learn what the first one already knew.
 type Blob struct {
-	Path    string   `json:"path"`
-	Dir     bool     `json:"dir,omitempty"`
-	Data    []byte   `json:"data,omitempty"`
+	// Path is the RESOLVED absolute path that was read — the caller's relative path
+	// joined onto the sandbox's working directory (Leased.Workdir), so it names the
+	// same file for a reader who does not know the class.
+	Path string `json:"path"`
+	// Dir says which of the two answers this is: true and the path is a directory,
+	// so read Entries; false and it is a file, so read Data. Nothing else
+	// distinguishes them — an empty file and an empty directory look alike here.
+	Dir bool `json:"dir,omitempty"`
+	// Data is the file's bytes, verbatim, base64 on the wire. Empty for a directory
+	// and for an empty file alike; Dir is what tells those apart.
+	Data []byte `json:"data,omitempty"`
+	// Entries is a directory's contents as bare NAMES, not paths — one level, no
+	// recursion, dotfiles included, "." and ".." excluded (`ls -1A`). Empty for a
+	// file, and for an empty directory.
 	Entries []string `json:"entries,omitempty"`
 }
 
@@ -2474,14 +2521,23 @@ type WriteIn struct {
 // because a caller's path is relative far more often than not, and echoing back
 // what it asked for would tell it nothing it did not already know.
 type Wrote struct {
-	Path  string `json:"path"`
-	Bytes int    `json:"bytes"`
+	// Path is where the bytes actually landed: the caller's path resolved against
+	// the sandbox's working directory (Leased.Workdir), which is what a later read
+	// or a shell line inside the sandbox has to name.
+	Path string `json:"path"`
+	// Bytes is how many bytes the file now holds. A write REPLACES the file, so this
+	// is its whole length and not an amount appended, and 0 is a legitimate answer:
+	// a WriteIn with no Data truncates the file to nothing.
+	Bytes int `json:"bytes"`
 }
 
 // StopIn interrupts what a sandbox is running. It names the SANDBOX and not a
 // command, because whoever is watching a run holds the sandbox's id and never the
 // process id of whatever is inside it.
 type StopIn struct {
+	// ID is the sandbox to interrupt, from an earlier lease. Every command running
+	// in it stops; the lease itself survives, so the checkout and the half-written
+	// files are still there to read. Use EndIn to give the computer back.
 	ID string `json:"id"`
 }
 
@@ -2492,6 +2548,8 @@ type StopIn struct {
 // "already over" versus "not yours", and the second is a 404 from the ordinary
 // org lookup rather than a zero here.
 type Stopped struct {
+	// Stopped counts the commands that were still running and were interrupted.
+	// Zero says the sandbox was idle, not that the stop failed — see above.
 	Stopped int `json:"stopped"`
 }
 
@@ -2791,7 +2849,13 @@ type CodingStartIn struct {
 	// actually posts. So a run reports into a Slack thread without the engine
 	// ever holding the token that could post anywhere else in that workspace.
 	ReplyChannel string `json:"replyChannel,omitempty"`
-	ReplyThread  string `json:"replyThread,omitempty"`
+	// ReplyThread narrows that address to one THREAD inside the channel: on Slack
+	// it is the parent message's ts, the same value a reply carries as thread_ts.
+	// Empty puts the run's status line at the top level of the channel instead.
+	//
+	// The channel is what decides whether a run narrates at all, so this on its own
+	// addresses nothing — a thread with no ReplyChannel is a run nobody hears.
+	ReplyThread string `json:"replyThread,omitempty"`
 }
 
 // CodingStarted is the ACCEPTED run's handle. A coding run takes minutes, so the

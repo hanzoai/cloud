@@ -45,11 +45,14 @@ type riskDatasetSpec struct {
 	// surface. They are stored in the plane's own order, never the order given, so
 	// two requests naming the same dims produce identical rows.
 	Dims []string `json:"dims,omitempty"`
-	// From and To bound the event window, half-open, RFC 3339. The window may not
-	// be longer than the source's own retention: past that, its older half is
+	// From is where the event window opens, RFC 3339, INCLUSIVE. The window may
+	// not be longer than the source's own retention: past that, its older half is
 	// already gone and the dataset would silently be shorter than it says.
 	From string `json:"from"`
-	To   string `json:"to"`
+	// To is where the window ends, EXCLUSIVE, so two datasets meeting at one
+	// instant share no row. A materialisation reads less than this — the end is
+	// pulled back by Horizon, and the lineage reports the window it actually read.
+	To string `json:"to"`
 	// Horizon is how many days a row must have aged before it may be admitted. It
 	// is what keeps a fact that was not yet knowable at scoring time out of a
 	// training set: a chargeback lands 30 to 120 days after the transaction it
@@ -130,11 +133,17 @@ type riskExportIn struct {
 // model names the dataset AND the version AND the digest, or it has not said what
 // it was fitted on.
 type riskDataset struct {
-	// Name and Version identify the version.
-	Name    string `json:"name"`
-	Version int    `json:"version"`
-	// At is when this version last changed state, and By who.
+	// Name identifies the dataset across all of its versions.
+	Name string `json:"name"`
+	// Version is which version this is, from 1 and monotone within the dataset.
+	// A number is never reused — not even after a disposal, where the next declare
+	// continues the count — so "signups v3" means one thing forever, which is what
+	// makes a model's citation of it checkable.
+	Version int `json:"version"`
+	// At is when this version last changed state, RFC 3339 UTC.
 	At string `json:"at"`
+	// By is who moved it there: the validated user, or the org itself when the
+	// caller is a machine with no user behind it.
 	By string `json:"by"`
 	// Status is declared, materializing, ready or refused. Only `ready` has bytes,
 	// and `ready` is terminal: a published version is never rewritten.
@@ -174,10 +183,18 @@ type riskDataset struct {
 
 // riskSplitCounts is how a version's rows fall, and how much of it is judged.
 type riskSplitCounts struct {
-	Rows  int `json:"rows"`
+	// Rows is how many rows the version holds across every split. It is the size
+	// of the version, not of the source window — the horizon, the cuts and the row
+	// cap all bind before this number.
+	Rows int `json:"rows"`
+	// Train is how many rows fall before the first cut — the EARLIEST slice of the
+	// window, which is what a model is fitted on.
 	Train int `json:"train"`
-	Val   int `json:"val"`
-	Test  int `json:"test"`
+	// Val is how many fall between the two cuts, held out for tuning.
+	Val int `json:"val"`
+	// Test is how many fall after the second cut — the LATEST slice, and the only
+	// one a score is honest about, since the split is temporal.
+	Test int `json:"test"`
 	// Subjects is how many distinct subjects the rows belong to. Every row of one
 	// subject is in ONE split, so this is the real sample size — the row count
 	// flatters it whenever a subject is active.
@@ -186,9 +203,11 @@ type riskSplitCounts struct {
 	// writes one, and reporting it plainly is what lets a model plane refuse to
 	// rank rather than name a winner it cannot justify.
 	Judged int `json:"judged"`
-	// Productive and Unproductive are the two judged classes, so the imbalance is
-	// visible before anyone trains on it.
-	Productive   int `json:"productive"`
+	// Productive is how many judged rows carry the one disposition.
+	Productive int `json:"productive"`
+	// Unproductive is how many carry the other. With Productive it accounts for
+	// Judged, so the class imbalance is visible before anyone trains on it; both
+	// stay 0 while Judged is 0.
 	Unproductive int `json:"unproductive"`
 }
 
@@ -203,7 +222,10 @@ type riskDatasetList struct {
 // history is returned because the point of a version is that the old ones are
 // still there: a model fitted last quarter cites one of them.
 type riskDatasetVersions struct {
-	Name  string        `json:"name"`
+	// Name is the dataset these versions belong to, as the register holds it.
+	Name string `json:"name"`
+	// Items is every version of it, newest first — including the disposed ones,
+	// whose record outlives their rows. Never null.
 	Items []riskDataset `json:"items"`
 }
 
@@ -213,17 +235,25 @@ type riskDatasetVersions struct {
 // fact about the plane rather than a failure, and hiding it would make every
 // lineage claim unfalsifiable.
 type riskLineage struct {
+	// Dataset is the dataset traced.
 	Dataset string `json:"dataset"`
-	Version int    `json:"version"`
+	// Version is the version traced — the one asked for, or the newest published
+	// one when the request named none.
+	Version int `json:"version"`
 	// Source is the plane the rows were derived from.
 	Source string `json:"source"`
-	// From and To are the window actually read — To is the window's end pulled
-	// back by the maturity horizon, which is usually earlier than the spec's.
+	// From is where the window actually read opens, RFC 3339. Same as the spec's.
 	From string `json:"from"`
-	To   string `json:"to"`
-	// Rows and Subjects are what the source held for that window at
-	// materialisation time.
-	Rows     int `json:"rows"`
+	// To is where it ends: the spec's own end pulled BACK by the maturity horizon,
+	// so it is usually earlier than the spec says. This is the window a
+	// reproduction has to ask for — asking the spec's would not return these rows.
+	To string `json:"to"`
+	// Rows is how many rows the source held for that window at materialisation
+	// time. Holds is the same question asked now, and the difference between them
+	// is the whole of the reproducibility claim.
+	Rows int `json:"rows"`
+	// Subjects is how many distinct subjects those rows belonged to. It is the
+	// real sample size — the row count flatters it whenever a subject is active.
 	Subjects int `json:"subjects"`
 	// Share is the fraction of subjects admitted, in thousandths.
 	Share int `json:"share"`
@@ -242,9 +272,14 @@ type riskLineage struct {
 	// self-contained.
 	Digest string `json:"digest"`
 	// Reproducible is true when the source still holds what this version was built
-	// from. Refusal says why not, when it is false.
-	Reproducible bool   `json:"reproducible"`
-	Refusal      string `json:"refusal,omitempty"`
+	// from — measured by asking it again, not recalled. False is ordinary: the
+	// source is fed by a rollup that runs behind the events, so "it holds more
+	// now" is the common case and it means re-running the spec would not produce
+	// this version.
+	Reproducible bool `json:"reproducible"`
+	// Refusal says which way it failed — the window expired, or the source now
+	// holds a different count. Absent when Reproducible is true.
+	Refusal string `json:"refusal,omitempty"`
 }
 
 // riskDatasetRow is one row of a published version.
@@ -255,8 +290,11 @@ type riskDatasetRow struct {
 	ID string `json:"id"`
 	// Split is train, val or test.
 	Split string `json:"split"`
-	// Kind and Subject name whose row this is.
-	Kind    string `json:"kind"`
+	// Kind is the subject kind: person, session or account.
+	Kind string `json:"kind"`
+	// Subject is the identity within that kind — whose row this is. Every row of
+	// one subject is in ONE split, decided by that subject's earliest instant, so
+	// a subject is never on both sides of a cut.
 	Subject string `json:"subject"`
 	// At is the row's instant.
 	At string `json:"at"`
@@ -266,17 +304,22 @@ type riskDatasetRow struct {
 
 // riskDatasetRows is one page of a version's rows.
 type riskDatasetRows struct {
+	// Dataset is the dataset the page was read from.
 	Dataset string `json:"dataset"`
-	Version int    `json:"version"`
+	// Version is which published version it was read from — the one asked for, or
+	// the newest published one when the request named none.
+	Version int `json:"version"`
 	// Digest is the version's fingerprint. An exported page that did not carry it
 	// would be bytes with no way to say which dataset they are.
 	Digest string `json:"digest"`
 	// Dims names what each coordinate of Point means, in Point's own order.
 	Dims []string `json:"dims"`
-	// Offset and Limit are the page actually served, which may be smaller than the
-	// one asked for.
+	// Offset is where this page starts in the version's own row order, which is by
+	// row id and therefore stable forever.
 	Offset int `json:"offset"`
-	Limit  int `json:"limit"`
+	// Limit is the page size actually served: the one asked for, clamped to the
+	// plane's own bound of 5000. Fewer rows than Limit means the version ended.
+	Limit int `json:"limit"`
 	// Rows is the page. Never null.
 	Rows []riskDatasetRow `json:"rows"`
 }
@@ -284,11 +327,15 @@ type riskDatasetRows struct {
 // riskDatasetDisposal is what a disposal removed. A retention action answers with what it
 // destroyed, because "204 No Content" is a poor reply to "prove you deleted it".
 type riskDatasetDisposal struct {
+	// Dataset is the dataset that was disposed of. The NAME survives: declaring it
+	// again continues the version count rather than starting over at 1.
 	Dataset string `json:"dataset"`
-	// Versions is how many versions went, and Rows how many rows they held between
-	// them, as the register recorded them.
+	// Versions is how many versions went.
 	Versions int `json:"versions"`
-	Rows     int `json:"rows"`
+	// Rows is how many rows they held between them, as the REGISTER recorded them
+	// when each was materialised — not a count of what the drop deleted, which is
+	// gone by the time this answers.
+	Rows int `json:"rows"`
 }
 
 // ── the ops ──────────────────────────────────────────────────────────────────

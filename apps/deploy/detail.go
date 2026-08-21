@@ -28,9 +28,16 @@ import (
 // active/assigned windows). Nil slices marshal to `null`, the exact shape the SPA
 // reads.
 type argoSyncWindows struct {
-	ActiveWindows   []any `json:"activeWindows"`
+	// ActiveWindows are the sync windows in force right now. Always null: this
+	// platform declares none, so nothing is ever in force.
+	ActiveWindows []any `json:"activeWindows"`
+	// AssignedWindows are the windows configured for this application at all,
+	// whether or not currently in force. Always null, for the same reason.
 	AssignedWindows []any `json:"assignedWindows"`
-	CanSync         bool  `json:"canSync"`
+	// CanSync is whether a sync would be permitted at this moment. Always true —
+	// with no windows there is nothing to deny it. A caller must not read this as
+	// "a sync will succeed"; it only means no window is blocking one.
+	CanSync bool `json:"canSync"`
 }
 
 // GetDeploySyncWindows returns one application's argocd
@@ -67,11 +74,23 @@ func (o ops) syncWindows(ctx context.Context, in *appRef) (*argoSyncWindows, err
 // argoRevisionMetadata is v1alpha1 RevisionMetadata (models.ts RevisionMetadata) —
 // date is required (models.Time); author/tags/message/signatureInfo are optional.
 type argoRevisionMetadata struct {
-	Author        string   `json:"author,omitempty"`
-	Date          string   `json:"date"`
-	Tags          []string `json:"tags,omitempty"`
-	Message       string   `json:"message,omitempty"`
-	SignatureInfo string   `json:"signatureInfo,omitempty"`
+	// Author is the commit author. Always absent: an App CR pins an IMAGE, so this
+	// process has no commit to read one from and will not invent one.
+	Author string `json:"author,omitempty"`
+	// Date is when the App CR was created, RFC 3339 UTC — the only real timestamp
+	// there is here. It is NOT the date of the revision asked for.
+	Date string `json:"date"`
+	// Tags are the git tags pointing at the revision. Always absent, for the same
+	// reason as Author.
+	Tags []string `json:"tags,omitempty"`
+	// Message is the revision asked for, echoed back — not a commit message. The
+	// empty revision and "HEAD" resolve to the image tag the CR declares
+	// (spec.image.tag), and anything longer than 256 characters is truncated to it.
+	Message string `json:"message,omitempty"`
+	// SignatureInfo is the GPG verification result for the revision. Always absent:
+	// nothing here verifies a signature, and an empty field says so rather than
+	// implying an unsigned commit.
+	SignatureInfo string `json:"signatureInfo,omitempty"`
 }
 
 // maxRevisionLen bounds the reflected revision so an over-long path segment cannot

@@ -140,6 +140,8 @@ type searchInput struct {
 }
 
 type numberList struct {
+	// Data is the numbers, and which numbers depends on the route: a search answers
+	// what the carrier has available, a list answers what this org already holds.
 	Data []Number `json:"data"`
 }
 
@@ -179,6 +181,8 @@ func (o ops) listNumbers(ctx context.Context, _ *noInput) (*numberList, error) {
 }
 
 type buyInput struct {
+	// E164 is the number to buy, in E.164 (a leading + and digits), exactly as the
+	// search returned it. This is the number itself, not the id from a search result.
 	E164 string `json:"e164"`
 }
 
@@ -232,16 +236,24 @@ func (o ops) releaseNumber(ctx context.Context, in *idInput) (*noInput, error) {
 }
 
 type callList struct {
+	// Data is this org's own calls, newest first — what this platform placed or
+	// received on its behalf, which is our record rather than the carrier's.
 	Data []Call `json:"data"`
 }
 
 type callInput struct {
-	From  string `json:"from"`
-	To    string `json:"to"`
+	// From is the number to call FROM, in E.164. It must be one this org holds.
+	From string `json:"from"`
+	// To is the number to call, in E.164.
+	To string `json:"to"`
+	// Agent hands the answered call to a Hanzo assistant by name instead of
+	// connecting it to a person. Empty places an ordinary call.
 	Agent string `json:"agent,omitempty"`
 	// Record is a per-call flag rather than a product. Where a recording lands and
 	// how long it is kept is the org's retention policy, not this call's.
-	Record  bool   `json:"record,omitempty"`
+	Record bool `json:"record,omitempty"`
+	// Webhook is a URL the carrier posts this call's events to as it progresses.
+	// Empty means the call's outcome is only visible by reading it back.
 	Webhook string `json:"webhook,omitempty"`
 }
 
@@ -318,13 +330,21 @@ func (o ops) hangup(ctx context.Context, in *idInput) (*noInput, error) {
 }
 
 type messageList struct {
+	// Data is this org's own messages, newest first — from our store rather than the
+	// carrier's, so it is the set an audit or a bill has to agree with.
 	Data []SMS `json:"data"`
 }
 
 type messageInput struct {
-	From  string   `json:"from"`
-	To    string   `json:"to"`
-	Text  string   `json:"text"`
+	// From is the number to send FROM, in E.164. It must be one this org holds and it
+	// must be sms-capable.
+	From string `json:"from"`
+	// To is the number to send to, in E.164.
+	To string `json:"to"`
+	// Text is the message body. It may be empty when Media carries the message.
+	Text string `json:"text"`
+	// Media are URLs to attach. A message with any is an MMS to the carrier — the
+	// distinction is the carrier's to make, not something the caller declares.
 	Media []string `json:"media,omitempty"`
 }
 
@@ -385,8 +405,12 @@ func (o ops) sendMessage(ctx context.Context, in *messageInput) (*SMS, error) {
 }
 
 type summary struct {
-	Numbers  int `json:"numbers"`
-	Calls    int `json:"calls"`
+	// Numbers is how many numbers this org holds right now.
+	Numbers int `json:"numbers"`
+	// Calls is how many calls this org has placed or received, over its whole
+	// history — a running total, not a window.
+	Calls int `json:"calls"`
+	// Messages is the same running total for messages.
 	Messages int `json:"messages"`
 }
 

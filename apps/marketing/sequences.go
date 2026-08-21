@@ -55,8 +55,13 @@ type Sequence struct {
 	// Status is the lifecycle: draft, active or archived. Empty means draft, and
 	// ONLY an active sequence accepts enrollments.
 	Status string `json:"status"`
-	// CreatedAt and UpdatedAt are unix seconds, both server-assigned.
+	// CreatedAt is unix seconds when the sequence was registered, server-assigned
+	// and never rewritten.
 	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is unix seconds of the last status flip, server-assigned, and the
+	// key the sequence list is ordered by (newest first). Adding a step or
+	// enrolling a contact does NOT touch it — only draft/active/archived does —
+	// so it tracks activation rather than activity.
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
@@ -101,9 +106,14 @@ type Enrollment struct {
 	// NextRunAt is the unix time the current step comes due; 0 once the walk has
 	// ended. It IS the schedule — durable in SQLite, so it survives restarts.
 	NextRunAt int64 `json:"nextRunAt"`
-	// EnrolledAt and UpdatedAt are unix seconds.
+	// EnrolledAt is unix seconds when the contact joined the walk, and orders the
+	// enrollment list (newest first).
 	EnrolledAt int64 `json:"enrolledAt"`
-	UpdatedAt  int64 `json:"updatedAt"`
+	// UpdatedAt is unix seconds of the last move: the drip engine writes it each
+	// time it advances the walk a step, completes it or cancels it. Together with
+	// Status it says when the walk last did anything, which is how a stalled
+	// enrollment is told from a finished one.
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 func (s *Store) migrateSequences() error {
@@ -491,6 +501,8 @@ type SequenceList struct {
 
 // SequenceView is one sequence together with its ordered steps.
 type SequenceView struct {
+	// Sequence is the definition itself — the same record create and the list
+	// return. Its status is the one that decides whether enroll is accepted.
 	Sequence Sequence `json:"sequence"`
 	// Steps are in send order (idx ascending); empty for a sequence with no
 	// messages yet, which enrolls fine and completes immediately.
@@ -522,6 +534,10 @@ type StepInput struct {
 
 // StepList is a sequence's steps in send order.
 type StepList struct {
+	// Data is every step of the sequence, idx ascending — the order they send
+	// in. It is not paged: a sequence's steps are a handful, and a partial list
+	// would misstate the drip. An empty array for a sequence with no messages
+	// yet, which enrolls fine and completes immediately.
 	Data []Step `json:"data"`
 }
 
@@ -535,6 +551,9 @@ type EnrollmentQuery struct {
 
 // EnrollmentList is a page of enrollments, most recently enrolled first.
 type EnrollmentList struct {
+	// Data is the page: every contact walking this ONE sequence, in any state —
+	// active, completed and canceled walks all appear, since the history of who
+	// was reached is the point. An empty array when nobody has been enrolled.
 	Data []Enrollment `json:"data"`
 }
 

@@ -111,11 +111,16 @@ type Redemption struct {
 	Code       string `json:"code"`
 	Org        string `json:"-"`
 	Instrument string `json:"-"`
-	// Plan and Seats are what was redeemed against. Both are DERIVED server-side
-	// — Plan from the org's live paid subscription, Seats from claimSeats — and
-	// neither is ever read from the request.
-	Plan  string `json:"plan"`
-	Seats int    `json:"seats"`
+	// Plan is the tier redeemed against: pro, max or team. It is DERIVED from the
+	// org's live ACTIVE/TRIALING subscription, never read from the request, so it
+	// is what the org actually holds rather than what it claimed.
+	Plan string `json:"plan"`
+	// Seats is the seat count the claim was priced at, and it is ALWAYS 1. No
+	// server-side authority on this surface answers "how many seats", and the
+	// caller's own number is exactly the input that once inflated these claims,
+	// so a redemption records the single-seat floor and an admin resolves the
+	// real count against subscription data at grant time.
+	Seats int `json:"seats"`
 	// DiscountCents is the month-one discount this redemption CLAIMS, in USD
 	// cents. It is a recorded figure, NOT a balance: nothing was credited and no
 	// wallet moved. An admin granting against this claim is what would make it
@@ -127,18 +132,35 @@ type Redemption struct {
 
 // Quote is a pure eligibility + math result (no side effects).
 type Quote struct {
-	// Code, Plan and Seats echo what was quoted.
-	Code  string `json:"code"`
-	Plan  string `json:"plan"`
-	Seats int    `json:"seats"`
+	// Code is the promo that was priced, as stored.
+	Code string `json:"code"`
+	// Plan is the tier priced, lower-cased and trimmed: pro, max or team.
+	// Unlike a redemption's plan this one comes from the REQUEST — quoting has no
+	// side effects, so it will happily price a plan the caller does not hold.
+	Plan string `json:"plan"`
+	// Seats is the seat count priced; a request of 0 or less was read as 1. It
+	// only bites on team, the one per-seat plan — pro and max are single-seat and
+	// ignore it.
+	Seats int `json:"seats"`
 	// Eligible says whether a redeem would be accepted right now; Reason says
 	// why not when it would not.
-	Eligible bool   `json:"eligible"`
-	Reason   string `json:"reason,omitempty"`
-	// ListCents is the undiscounted month price, ChargeCents what would be
-	// charged, DiscountCents the difference — all in USD cents.
-	ListCents     int64 `json:"listCents"`
-	ChargeCents   int64 `json:"chargeCents"`
+	Eligible bool `json:"eligible"`
+	// Reason is why Eligible is false, drawn from: "promo redemption is closed"
+	// (the subsystem is off, which is how it ships), "promo redemption cap
+	// reached", "promo is not active", "plan is free or unknown; nothing to
+	// discount", "promo does not cover plan <plan>". Absent when Eligible is true.
+	Reason string `json:"reason,omitempty"`
+	// ListCents is the undiscounted month price in USD cents: PER SEAT on team,
+	// the whole month on pro and max, 0 for a plan with no list price.
+	ListCents int64 `json:"listCents"`
+	// ChargeCents is what month one costs after the discount, in USD cents,
+	// totalled over the seats quoted. On team that is a multiple of the seat
+	// count, so it is not ListCents minus DiscountCents.
+	ChargeCents int64 `json:"chargeCents"`
+	// DiscountCents is what the promo takes off month one, in USD cents. The
+	// promo rate reaches at most TeamSeatCap seats; seats past the cap bill at
+	// full list and add nothing here. It is arithmetic only — quoting credits
+	// nothing, counts nothing and reserves nothing.
 	DiscountCents int64 `json:"discountCents"`
 	// Remaining is how many redemptions are left under the fleet-wide cap.
 	Remaining int `json:"remaining"`
@@ -473,15 +495,24 @@ type QuoteQuery struct {
 
 // PromoStatus is one promo with its live redemption counters.
 type PromoStatus struct {
+	// Promo is the offer itself. It is fleet-wide, identical for every org — only
+	// the two counters beside it move.
 	Promo Promo `json:"promo"`
 	// Redeemed is how many orgs have taken it, Remaining how many are left under
 	// the fleet-wide cap.
-	Redeemed  int `json:"redeemed"`
+	Redeemed int `json:"redeemed"`
+	// Remaining is MaxRedemptions minus Redeemed, floored at 0. At 0 the next
+	// redeem is declined, and a quote reports ineligible rather than pricing an
+	// offer that cannot be taken.
 	Remaining int `json:"remaining"`
 }
 
 // PromoList is every promo the deployment offers.
 type PromoList struct {
+	// Data is every promo in the deployment, oldest first, each with its live
+	// counters. The list is fleet-wide rather than per-org. It is normally EMPTY:
+	// nothing seeds a promo, and the migration purges the one that once shipped
+	// by accident.
 	Data []PromoStatus `json:"data"`
 }
 
@@ -503,11 +534,17 @@ type RedeemInput struct {
 
 // RedeemResult is a completed redemption and the month-one math behind it.
 type RedeemResult struct {
+	// Redemption is the row that was recorded — the org's claim on this promo,
+	// with the server-derived plan and seat count. On a replay it is the ORIGINAL
+	// row, so its redeemedAt is when the org first took the promo, not now.
 	Redemption Redemption `json:"redemption"`
 	// ChargeCents is what month one costs after the discount, DiscountCents the
 	// discount that produced it. Both are quoted figures against the org's
 	// derived plan — NOTHING WAS CREDITED and no wallet moved.
-	ChargeCents   int64 `json:"chargeCents"`
+	ChargeCents int64 `json:"chargeCents"`
+	// DiscountCents is the discount claimed for month one, in USD cents, at the
+	// single-seat floor. It is the same figure recorded on the Redemption, and it
+	// is evidence an admin may later grant against — not a balance.
 	DiscountCents int64 `json:"discountCents"`
 	// AlreadyRedeemed is true when this org had already taken the promo and the
 	// call was an idempotent replay.

@@ -60,14 +60,33 @@ var terminalComputeEvents = []string{
 // spend over the window, and the most recent event. The console folds these into
 // the org → app → project tree.
 type computeLeaf struct {
-	Org        string `json:"org"`
-	App        string `json:"app"`
-	Project    string `json:"project"`
-	Kind       string `json:"kind"`
-	Machines   int64  `json:"machines"`
-	Active     int64  `json:"active"`
-	SpendCents int64  `json:"spendCents"`
-	LastTs     string `json:"lastTs"`
+	// Org is the tenant these workloads belong to.
+	Org string `json:"org"`
+	// App is the application within that tenant, as the emitter recorded it.
+	App string `json:"app"`
+	// Project is the project within that app. With Org and App and Kind it forms
+	// the group this row folds — the console's org to app to project tree is these
+	// four columns.
+	Project string `json:"project"`
+	// Kind is the workload class: bot, machine, cluster, nodepool, container,
+	// function and whatever else the emitter writes. An OPEN set, lowercased, not
+	// an enum — a bot is a machine running the agent, a machine is raw compute —
+	// so match it as a string and expect values this list does not have.
+	Kind string `json:"kind"`
+	// Machines is how many DISTINCT machines of that kind ran in the window,
+	// counted by machine id. Not a count of events.
+	Machines int64 `json:"machines"`
+	// Active is how many of them are still running — the ones whose LATEST
+	// lifecycle event is not a terminal one (stop, destroy, terminate, delete,
+	// off, shutdown, expire and their past tenses). Decided in the warehouse over
+	// every machine, not over a page.
+	Active int64 `json:"active"`
+	// SpendCents is what the group billed over the window, in US cents, summed
+	// from the per-event prices.
+	SpendCents int64 `json:"spendCents"`
+	// LastTs is the most recent event in the group, RFC 3339 UTC. For a group with
+	// no active machines it is when the last one stopped.
+	LastTs string `json:"lastTs"`
 }
 
 // compute rolls the fleet's compute usage up to one row per (org, app, project, kind):
@@ -126,10 +145,19 @@ type computeIn struct {
 // computeOut is the GET /v1/admin/compute envelope. total == len(data): the roll-up is
 // one row per group, unpaginated.
 type computeOut struct {
-	Status string        `json:"status"`
-	Msg    string        `json:"msg"`
-	Data   []computeLeaf `json:"data"`
-	Total  *int          `json:"total,omitempty"`
+	// Status is "ok" or "error", at HTTP 200 either way.
+	Status string `json:"status"`
+	// Msg is the failure reason when Status is "error" — the warehouse rejected
+	// the query. A warehouse that is not connected, or a usage table not
+	// provisioned yet, is a SUCCESS carrying an empty list instead.
+	Msg string `json:"msg"`
+	// Data is one row per group, biggest spender first. Null when Status is
+	// "error"; empty when there is genuinely nothing, or when the warehouse is
+	// unavailable.
+	Data []computeLeaf `json:"data"`
+	// Total is len(data): the roll-up is one row per group, unpaginated. Absent
+	// when the read failed.
+	Total *int `json:"total,omitempty"`
 }
 
 // buildComputeQuery assembles the two-level roll-up (pure, so it is unit-tested).

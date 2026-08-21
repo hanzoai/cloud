@@ -17,8 +17,16 @@ import (
 // SeriesPoint is one bucketed point (count OR cents, per the series). T is the bucket
 // key (RFC3339 date / "2006-01" month).
 type SeriesPoint struct {
-	T     string `json:"t"`
-	Value int64  `json:"value"`
+	// T is the bucket key, and its shape says which interval the series was built at:
+	// "2006-01-02" for a day, the ISO week's Monday in the same form for a week,
+	// "2006-01" for a month. Buckets are enumerated end to end over the window, so the
+	// axis is continuous and successive points are one interval apart.
+	T string `json:"t"`
+	// Value is the bucket's total, in the unit its own series carries: CENTS for spend,
+	// revenue and usage; a COUNT for signups, active customers, cumulative customers and
+	// churn. A bucket nothing landed in is an honest 0, not a gap — the axis was
+	// enumerated first and every bucket exists whether or not anything filled it.
+	Value int64 `json:"value"`
 }
 
 // TxnPoint is one dated usage event (a commerce `withdraw`, in cents).

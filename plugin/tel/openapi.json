@@ -345,22 +345,27 @@
       "Call": {
         "properties": {
           "agent": {
+            "description": "Agent names the Hanzo assistant handling the call. Set means the call was\nanswered by that assistant rather than connected to a person.",
             "type": "string"
           },
           "from": {
+            "description": "From is the calling number in E.164. It must be one this org holds: a carrier\nrefuses an origination from a number nobody proved they own.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the carrier's handle for the call — what a hangup or a lookup names.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant the call was placed for or received by.",
             "type": "string"
           },
           "status": {
-            "description": "queued | ringing | answered | completed | failed",
+            "description": "Status is where the call is: \"queued\", \"ringing\", \"answered\", \"completed\" or\n\"failed\". Only the last two are terminal.",
             "type": "string"
           },
           "to": {
+            "description": "To is the called number in E.164.",
             "type": "string"
           }
         },
@@ -369,32 +374,38 @@
       "Number": {
         "properties": {
           "capable": {
-            "description": "voice | sms | mms | fax",
+            "description": "Capable is what the number can carry: any of \"voice\", \"sms\", \"mms\", \"fax\". A\nnumber missing \"sms\" cannot send one no matter what this platform does.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "country": {
+            "description": "Country is the ISO 3166-1 alpha-2 code the number is issued under. Numbering is\nnational, so this is what makes a search answerable at all.",
             "type": "string"
           },
           "currency": {
+            "description": "Currency is the ISO 4217 code Monthly is denominated in. Without it the number\nbeside it means nothing, so the two are always read together.",
             "type": "string"
           },
           "e164": {
+            "description": "E164 is the number in E.164: a leading + and digits only, no spaces or dashes.\nThat is what a carrier accepts and what a search result must be bought by.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the carrier's handle for the number, and the id every route here\naddresses it by. It is not the number itself — see E164.",
             "type": "string"
           },
           "monthly": {
-            "description": "minor units, as the carrier quoted it",
+            "description": "Monthly is the recurring rental in the MINOR unit of Currency (cents for USD),\nexactly as the carrier quoted it. It is a price, not a charge: nothing is billed\nby this field.",
             "type": "integer"
           },
           "org": {
+            "description": "Org is the tenant holding the number. A search result carries none — nobody\nholds it yet — which is how an available number is told from a held one.",
             "type": "string"
           },
           "type": {
+            "description": "Type is what kind of number it is: \"local\", \"national\", \"tollfree\" or \"mobile\".\nIt decides both price and what a carrier will let it originate.",
             "type": "string"
           }
         },
@@ -403,22 +414,27 @@
       "SMS": {
         "properties": {
           "from": {
+            "description": "From is the sending number in E.164, and must be one this org holds.",
             "type": "string"
           },
           "id": {
+            "description": "ID is the carrier's handle for the message.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the tenant the message was sent for or received by.",
             "type": "string"
           },
           "status": {
-            "description": "queued | sent | delivered | failed",
+            "description": "Status is where the message is: \"queued\", \"sent\", \"delivered\" or \"failed\".\n\"sent\" means the carrier took it; \"delivered\" means the handset got it, and\nnot every carrier or destination reports that.",
             "type": "string"
           },
           "text": {
+            "description": "Text is the message body. Empty is legal when the message carried only media.",
             "type": "string"
           },
           "to": {
+            "description": "To is the receiving number in E.164.",
             "type": "string"
           }
         },
@@ -427,6 +443,7 @@
       "buyInput": {
         "properties": {
           "e164": {
+            "description": "E164 is the number to buy, in E.164 (a leading + and digits), exactly as the\nsearch returned it. This is the number itself, not the id from a search result.",
             "type": "string"
           }
         },
@@ -435,9 +452,11 @@
       "callInput": {
         "properties": {
           "agent": {
+            "description": "Agent hands the answered call to a Hanzo assistant by name instead of\nconnecting it to a person. Empty places an ordinary call.",
             "type": "string"
           },
           "from": {
+            "description": "From is the number to call FROM, in E.164. It must be one this org holds.",
             "type": "string"
           },
           "record": {
@@ -445,9 +464,11 @@
             "type": "boolean"
           },
           "to": {
+            "description": "To is the number to call, in E.164.",
             "type": "string"
           },
           "webhook": {
+            "description": "Webhook is a URL the carrier posts this call's events to as it progresses.\nEmpty means the call's outcome is only visible by reading it back.",
             "type": "string"
           }
         },
@@ -456,6 +477,7 @@
       "callList": {
         "properties": {
           "data": {
+            "description": "Data is this org's own calls, newest first — what this platform placed or\nreceived on its behalf, which is our record rather than the carrier's.",
             "items": {
               "$ref": "#/components/schemas/Call"
             },
@@ -467,18 +489,22 @@
       "messageInput": {
         "properties": {
           "from": {
+            "description": "From is the number to send FROM, in E.164. It must be one this org holds and it\nmust be sms-capable.",
             "type": "string"
           },
           "media": {
+            "description": "Media are URLs to attach. A message with any is an MMS to the carrier — the\ndistinction is the carrier's to make, not something the caller declares.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "text": {
+            "description": "Text is the message body. It may be empty when Media carries the message.",
             "type": "string"
           },
           "to": {
+            "description": "To is the number to send to, in E.164.",
             "type": "string"
           }
         },
@@ -487,6 +513,7 @@
       "messageList": {
         "properties": {
           "data": {
+            "description": "Data is this org's own messages, newest first — from our store rather than the\ncarrier's, so it is the set an audit or a bill has to agree with.",
             "items": {
               "$ref": "#/components/schemas/SMS"
             },
@@ -502,6 +529,7 @@
       "numberList": {
         "properties": {
           "data": {
+            "description": "Data is the numbers, and which numbers depends on the route: a search answers\nwhat the carrier has available, a list answers what this org already holds.",
             "items": {
               "$ref": "#/components/schemas/Number"
             },
@@ -513,12 +541,15 @@
       "summary": {
         "properties": {
           "calls": {
+            "description": "Calls is how many calls this org has placed or received, over its whole\nhistory — a running total, not a window.",
             "type": "integer"
           },
           "messages": {
+            "description": "Messages is the same running total for messages.",
             "type": "integer"
           },
           "numbers": {
+            "description": "Numbers is how many numbers this org holds right now.",
             "type": "integer"
           }
         },

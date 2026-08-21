@@ -40,42 +40,99 @@ const gitOpsHistoryMax = 10
 
 // GitOpsDeploy is one revision Hanzo CD actually applied.
 type GitOpsDeploy struct {
-	ID         int64  `json:"id"`
-	Revision   string `json:"revision"`
-	StartedAt  string `json:"startedAt,omitempty"`
+	// ID is CD's own sequence number for this deploy (status.history[].id). It
+	// increases with every applied revision, so the largest id in `history` is the
+	// most recent deploy — which is the first entry, since the list is reversed.
+	ID int64 `json:"id"`
+	// Revision is the git commit this deploy applied, as CD recorded it.
+	Revision string `json:"revision"`
+	// StartedAt is when CD began applying the revision (deployStartedAt), RFC 3339.
+	// Absent when CD recorded none.
+	StartedAt string `json:"startedAt,omitempty"`
+	// DeployedAt is when the apply finished, RFC 3339. Absent when CD recorded none.
 	DeployedAt string `json:"deployedAt,omitempty"`
-	Automated  bool   `json:"automated"`
+	// Automated is whether CD started this deploy itself, from its own polling of
+	// the tracked git ref (initiatedBy.automated), rather than someone asking for it.
+	Automated bool `json:"automated"`
 }
 
 // GitOpsOperation is the LAST sync operation and how it ended — the honest answer
 // to "did the most recent attempt succeed", which the sync verdict alone does not
 // give (an Application is "Synced" to whatever revision it managed to apply).
 type GitOpsOperation struct {
-	Phase      string `json:"phase"`
-	Message    string `json:"message,omitempty"`
-	StartedAt  string `json:"startedAt,omitempty"`
+	// Phase is how the last sync operation ended, in CD's own vocabulary: Running,
+	// Succeeded or Failed. It is never empty — an Application whose phase is empty
+	// has no operation at all and omits this whole object.
+	Phase string `json:"phase"`
+	// Message is CD's account of the phase — "successfully synced (all tasks run)"
+	// for a Succeeded operation, the reason it stopped for a Failed one.
+	Message string `json:"message,omitempty"`
+	// StartedAt is when the operation began, RFC 3339.
+	StartedAt string `json:"startedAt,omitempty"`
+	// FinishedAt is when it ended, RFC 3339. Absent while the phase is Running.
 	FinishedAt string `json:"finishedAt,omitempty"`
-	Revision   string `json:"revision,omitempty"`
+	// Revision is the commit this operation ATTEMPTED (operationState.syncResult).
+	// It differs from the Application's own revision exactly when the attempt did
+	// not land: revision is the last commit CD got applied, this is the last one it
+	// tried.
+	Revision string `json:"revision,omitempty"`
 }
 
 // GitOpsApp is one CD Application: what it tracks, what it has applied, and how
 // that went.
 type GitOpsApp struct {
-	Name           string           `json:"name"`
-	Namespace      string           `json:"namespace"`
-	Project        string           `json:"project,omitempty"`
-	RepoURL        string           `json:"repoURL,omitempty"`
-	Path           string           `json:"path,omitempty"`
-	TargetRevision string           `json:"targetRevision,omitempty"`
-	Revision       string           `json:"revision,omitempty"` // the commit last applied
-	Sync           string           `json:"sync"`               // Synced|OutOfSync|Unknown
-	Health         string           `json:"health"`             // Healthy|Degraded|Progressing|…
-	ReconciledAt   string           `json:"reconciledAt,omitempty"`
-	Automated      bool             `json:"automated"`
-	SelfHeal       bool             `json:"selfHeal"`
-	Resources      int              `json:"resources"`
-	Operation      *GitOpsOperation `json:"operation,omitempty"`
-	History        []GitOpsDeploy   `json:"history"`
+	// Name is what CD calls this tracked source, not the workload it deploys —
+	// the Application CR's own metadata.name. The fleet ApplicationSet mints these
+	// as <namespace>-<app>.
+	Name string `json:"name"`
+	// Namespace is where the Application OBJECT lives: CD's own controller
+	// namespace, which is the same one for every row here. It is NOT the
+	// destination the workloads land in — this endpoint lists cluster-wide and
+	// never reads spec.destination.
+	Namespace string `json:"namespace"`
+	// Project is the AppProject fence the sync is admitted under: which repos this
+	// Application may pull from and which destinations it may write to. Empty when
+	// the CR declares none.
+	Project string `json:"project,omitempty"`
+	// RepoURL is the git repository CD polls for this Application's desired state.
+	RepoURL string `json:"repoURL,omitempty"`
+	// Path is the directory inside that repository CD renders, relative to its root.
+	Path string `json:"path,omitempty"`
+	// TargetRevision is the git ref CD TRACKS — usually a branch such as "main".
+	// It is what CD aims at; Revision is what it has reached.
+	TargetRevision string `json:"targetRevision,omitempty"`
+	// Revision is the commit CD last APPLIED (status.sync.revision). Empty means it
+	// has applied none — never read that as the head of TargetRevision.
+	Revision string `json:"revision,omitempty"`
+	// Sync is CD's verdict on git versus cluster, verbatim: Synced, OutOfSync or
+	// Unknown. It is about the applied REVISION, so an Application can be Synced to
+	// a commit that is several behind the branch it tracks.
+	Sync string `json:"sync"`
+	// Health is CD's verdict on the objects it manages, verbatim: Healthy,
+	// Progressing, Degraded, Suspended, Missing or Unknown.
+	Health string `json:"health"`
+	// ReconciledAt is when CD last COMPARED this Application against git, RFC 3339.
+	// It moves on every comparison, including ones that applied nothing.
+	ReconciledAt string `json:"reconciledAt,omitempty"`
+	// Automated is whether CD applies new commits without being asked. It reads the
+	// PRESENCE of spec.syncPolicy.automated, which is a block rather than a
+	// boolean; false means drift is reported and nothing moves.
+	Automated bool `json:"automated"`
+	// SelfHeal is whether CD also reverts changes made directly in the cluster
+	// (syncPolicy.automated.selfHeal). Meaningless unless Automated.
+	SelfHeal bool `json:"selfHeal"`
+	// Resources is how MANY objects CD manages for this Application
+	// (len(status.resources)) — a count, not the objects. Zero for an Application
+	// CD has not reconciled.
+	Resources int `json:"resources"`
+	// Operation is the last sync attempt and how it ended. Absent when CD has run
+	// none, which is the honest gap between "never tried" and "tried and failed".
+	Operation *GitOpsOperation `json:"operation,omitempty"`
+	// History is the recent deploy log, NEWEST FIRST and capped at ten. CD appends
+	// oldest-first and bounds the list itself; the reversal happens here so a
+	// caller never has to know the storage order to show what shipped last. Empty
+	// (never null) for an Application that has deployed nothing.
+	History []GitOpsDeploy `json:"history"`
 }
 
 // GitOpsPlane is the reply. `installed` is false — with an empty list and a
@@ -84,8 +141,17 @@ type GitOpsApp struct {
 // here" instead of rendering an error it cannot act on. A genuine transport or
 // RBAC failure still errors (k8sErr).
 type GitOpsPlane struct {
-	Installed    bool        `json:"installed"`
-	Reason       string      `json:"reason,omitempty"`
+	// Installed is whether this cluster serves the CD Application CRD at all. False
+	// is a fact about the cluster, not a failure of the request: the caller says
+	// "no CD plane here" rather than rendering an error it cannot act on.
+	Installed bool `json:"installed"`
+	// Reason says why the plane is absent, in words a caller can show. Empty when
+	// Installed.
+	Reason string `json:"reason,omitempty"`
+	// Applications is every CD Application in the cluster, ordered by namespace
+	// then name. Empty (never null) when the plane is not installed, and equally
+	// empty when it is installed and tracks nothing — Installed is what separates
+	// those two.
 	Applications []GitOpsApp `json:"applications"`
 }
 

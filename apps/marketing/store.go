@@ -151,14 +151,23 @@ type Campaign struct {
 	Status string `json:"status"`
 	// Objective is the free-text goal ("signups"), capped at 1024 bytes.
 	Objective string `json:"objective"`
-	// Budget and Spend are minor units (USD cents), clamped to >= 0.
+	// Budget is what the campaign is allowed to cost, in USD cents. A negative
+	// value is clamped to 0; nothing enforces the ceiling here.
 	Budget int64 `json:"budget"`
-	Spend  int64 `json:"spend"`
+	// Spend is what the campaign has cost so far, in USD cents, clamped to >= 0.
+	// The CALLER owns it: no send, ad buy or invoice moves it, so it changes only
+	// when create or update carries a new value. It is summed across the org's
+	// campaigns into GET /v1/marketing/summary.
+	Spend int64 `json:"spend"`
 	// ScheduledAt is the unix send time; 0 means unscheduled. Setting it on a
 	// campaign with no explicit status makes that status "scheduled".
 	ScheduledAt int64 `json:"scheduledAt"`
-	// CreatedAt and UpdatedAt are unix seconds, both server-assigned.
+	// CreatedAt is unix seconds when the campaign was registered. Server-assigned
+	// and never rewritten — an update leaves it as it was.
 	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is unix seconds of the last write. Server-assigned on create and
+	// on every update or schedule change, and the campaign list is ordered by it,
+	// newest first.
 	UpdatedAt int64 `json:"updatedAt"`
 }
 

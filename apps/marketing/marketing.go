@@ -345,12 +345,19 @@ type ScheduleInput struct {
 
 // Summary is the org's campaign roll-up — the marketing overview cards.
 type Summary struct {
-	// Campaigns is how many campaigns the org has, Active how many are running.
+	// Campaigns is how many campaigns the org has, counted in every lifecycle
+	// state including draft and completed.
 	Campaigns int `json:"campaigns"`
-	Active    int `json:"active"`
-	// Budget and Spend are the summed campaign budget and spend, in cents.
+	// Active is how many of them sit in the "active" state exactly. A scheduled
+	// or paused campaign counts in Campaigns and not here, so Active is never a
+	// share of anything but the whole.
+	Active int `json:"active"`
+	// Budget is every campaign's budget summed, in USD cents.
 	Budget int64 `json:"budget"`
-	Spend  int64 `json:"spend"`
+	// Spend is every campaign's spend summed, in USD cents. It adds up figures
+	// callers wrote on the campaigns themselves — this app meters no delivery
+	// against a budget — so it is a reported total, not an observed one.
+	Spend int64 `json:"spend"`
 }
 
 // createCampaign registers a campaign in the caller's org. Name is required;

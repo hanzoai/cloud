@@ -93,12 +93,24 @@ func (p iamProjects) Exists(ctx context.Context, org, name string) (bool, error)
 // (org,name) key that scopes apps and matches the :project route param; Name is
 // the human display; CreatedAt is derived from IAM's RFC3339 CreatedTime.
 type projectView struct {
-	Org          string `json:"org"`
-	Slug         string `json:"slug"`
-	Name         string `json:"name"`
-	Description  string `json:"description,omitempty"`
-	Applications int    `json:"applications"`
-	CreatedAt    int64  `json:"createdAt"`
+	// Org is the project's IAM owner, and the tenant every app under it deploys
+	// into. It comes from the validated identity, never from the request.
+	Org string `json:"org"`
+	// Slug is the project's IAM name — half of the (org,name) identity, the
+	// `:project` path segment, and the scope key an app is filed under. It is the
+	// project's address; Name is not.
+	Slug string `json:"slug"`
+	// Name is IAM's display name, falling back to the slug when the project has
+	// none, so this is never empty.
+	Name string `json:"name"`
+	// Description is IAM's free text about the project. Nothing derives from it.
+	Description string `json:"description,omitempty"`
+	// Applications is how many platform apps this org has under the project,
+	// counted per request. It is the one fact IAM cannot answer about a project.
+	Applications int `json:"applications"`
+	// CreatedAt is IAM's creation time as unix seconds. 0 when IAM's timestamp is
+	// absent or unparseable — never a fabricated time.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 func toProjectView(p *model.Project, apps int) projectView {
