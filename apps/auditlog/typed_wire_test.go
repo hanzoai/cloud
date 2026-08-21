@@ -174,3 +174,37 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
+// gate cannot see. Typing a route documents its ADDRESS and its SHAPE; the shape's
+// FIELDS come from a different place — a doc comment on each one, which zipdoc
+// lifts one at a time.
+//
+// The whole product here is one row type, so every field of it is the product.
+// `seq` is a gapless total order and a missing number is a missing record;
+// `hash`/`prevHash` are what a reader recomputes to prove nothing was edited;
+// `result` is a closed vocabulary in which a deny is evidence rather than an error;
+// `org` is the tenant acted IN while `home` — present only when they differ — is
+// what makes a row an impersonation. None of that is legible from the names.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(mountApp(t, newStore(t)), openapi.Info{Title: "audit", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("audit publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/auditlog describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+}

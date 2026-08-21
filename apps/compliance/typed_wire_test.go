@@ -219,3 +219,39 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
+// gate cannot see. Typing a route documents its ADDRESS and its SHAPE; the shape's
+// FIELDS come from a different place — a doc comment on each one, which zipdoc
+// lifts one at a time.
+//
+// On this surface a bare field is a privacy question. A Subject's `name` and
+// `email` are the ONLY PII this plane holds — everything downstream points at the
+// opaque id — and `org` is the party doing the verifying, not the party being
+// verified, which is the distinction a caller has to get right before they send us
+// anyone's identity documents. The audit Wire rows the trail answers with carry the
+// other half: `hash`/`prevHash` are the tamper-evidence chain, and `isAdmin` is the
+// validated SuperAdmin bit rather than a client's claim to be one.
+//
+// Presence is all a gate can check. A description restating the field's name is
+// worse than none, and only a reader catches that.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	app, _ := mount(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "compliance", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("compliance publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if len(bare) > 0 {
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto "+
+			"the first of them alone — then run: make -C apps/compliance describe",
+			len(bare), strings.Join(bare, ", "))
+	}
+}
