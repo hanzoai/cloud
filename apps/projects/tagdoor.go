@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
@@ -28,19 +29,6 @@ import (
 // (ResolveKey), else by the request HOST (ResolveHost) for an org-level key — so
 // hanzo.ai and hanzo.chat inject different pixels under one org. Public + pk--keyed like
 // /v1/event(.js); NON-SECRET ids only; FAIL-SAFE to an empty set so a page never breaks.
-
-// browserTags names the platforms with a client-side pixel track.js can inject, and the
-// injector `type` it dispatches on. A platform absent here forwards server-side only.
-var browserTags = map[string]string{
-	"ga4":        "ga",
-	"google-ads": "gads",
-	"linkedin":   "linkedin",
-	"meta":       "meta",
-	"pinterest":  "pinterest",
-	"reddit":     "reddit",
-	"tiktok":     "tiktok",
-	"x":          "x",
-}
 
 type browserTagOut struct {
 	Platform string `json:"platform"`
@@ -85,7 +73,7 @@ func buildTags(tags map[string]string) []browserTagOut {
 	sort.Strings(platforms)
 	out := make([]browserTagOut, 0, len(platforms))
 	for _, platform := range platforms {
-		typ, ok := browserTags[platform]
+		typ, ok := event.BrowserTags[platform]
 		if !ok {
 			continue
 		}
