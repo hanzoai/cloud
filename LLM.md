@@ -5374,6 +5374,45 @@ another's ledger. The specs are `describe.configure({mode:'serial'})` — not by
 preference, but because they all move the same balance and the suite is otherwise
 `fullyParallel`.
 
+## The allowance leg — a spent plan falls through to credit
+
+`Stand` is the money ladder: an active licence admits, otherwise the prepaid
+ledger decides, and Unpaid requires BOTH authorities to have answered no. It
+admitted a subscriber UNCONDITIONALLY, so the usage windows a plan publishes —
+that the rollup reports and the account page renders — bound nothing on the
+request path.
+
+`StandWithin(ctx, lic, allow, w)` adds the leg. The policy it encodes: a plan
+INCLUDES usage and prepaid credit is money bought separately, so a subscriber who
+has spent their included usage does not stop — they fall through to the credit
+leg and pay as they go, and are refused only when they have neither. Allowance
+first, then credit.
+
+**It can only ever REMOVE an admission, so every uncertainty admits.** An absent
+reader, a plan declaring no windows, a ledger that did not answer: all
+`AllowanceUnknown`, all still `Subscribed`. Refusing a paying customer because a
+counter was unreadable is a worse failure than serving one request past a bound,
+and this ladder already takes that side everywhere — "a balance that cannot be
+read is unknown, never zero".
+
+**The unpaid clause had to widen or the leg would have been decorative.** A spent
+allowance counts as the subscription answering no, because it IS the subscription
+answering — the plan includes usage and that usage is gone. Left as
+`lic == LicenceNone`, such a caller fell through to `Unknown`, and **Unknown
+ADMITS** — so the windows would have been enforced only against callers with no
+subscription at all, which is nobody.
+
+`Stand` is now `StandWithin` with the leg unknown, so every existing seam behaves
+byte-identically. A test pins that equivalence across every licence x ledger
+combination; another pins each branch of the new leg. `AllowanceChecker` is
+OPTIONAL and resolved by type assertion the way `PlanChecker` is — a commerce
+that cannot answer simply does not implement it.
+
+Counting lives in commerce (`api/billing/windows.go`): four calendar-aligned
+windows over the `api-usage` ledger rows, one query, and `plan.LevelWindows`
+scales them by price level. See commerce/LLM.md "One way to price a UNIT".
+
+
 ## Encryption at rest: one key per database, derived
 
 `github.com/hanzoai/cek` is the whole of it, and cloud owns none of it:
