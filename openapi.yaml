@@ -93651,6 +93651,203 @@ paths:
       x-app: knowledge
       x-public: true
       x-tool: true
+  /v1/kv/{bucket}:
+    delete:
+      description: |-
+        Removes one bucket of the caller's org — every key and every
+        revision with it — and answers 204 with no body. 404 when the org has no
+        bucket of that name.
+      operationId: delete_kv_by_bucket
+      parameters:
+      - description: Bucket is the bucket's name, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Removes one bucket of the caller's org — every key and every revision
+        with it — and answers 204 with no body.
+      tags:
+      - pubsub
+      x-app: pubsub
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Creates a KV bucket and returns it. A bucket is keyed state on
+        the same durable plane as the streams: each key holds up to History
+        revisions, entries can expire by TTL, and watchers on the NATS port see every
+        write. 409 when the org already has a bucket of that name.
+      operationId: post_kv_by_bucket
+      parameters:
+      - description: |-
+          Bucket is the bucket's name within the org, from the path: 1–64 of
+          [A-Za-z0-9_], no dash.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              history: 5
+              ttl: 3600
+            schema:
+              $ref: '#/components/schemas/bucketWrite'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bucketRecord'
+          description: created
+      summary: Creates a KV bucket and returns it.
+      tags:
+      - pubsub
+      x-app: pubsub
+      x-public: true
+      x-tool: true
+  /v1/kv/{bucket}/{key}:
+    delete:
+      description: |-
+        Delete removes one key — a delete marker in the key's history, so watchers
+        see it and Get answers 404 — and answers 204 with no body. 404 when the
+        bucket does not exist.
+      operationId: delete_kv_by_bucket_by_key
+      parameters:
+      - description: Bucket is the bucket, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - description: Key is the key, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Delete removes one key — a delete marker in the key's history, so watchers
+        see it and Get answers 404 — and answers 204 with no body.
+      tags:
+      - pubsub
+      x-app: pubsub
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Get returns one key's current value and revision. 404 when the bucket does
+        not exist, the key was never written, or its latest revision is a delete.
+      operationId: get_kv_by_bucket_by_key
+      parameters:
+      - description: Bucket is the bucket, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - description: Key is the key, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kvEntry'
+          description: ok
+      summary: Get returns one key's current value and revision.
+      tags:
+      - pubsub
+      x-app: pubsub
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Put sets one key to one value and returns the revision the write created.
+        Writes are versioned: each put is a new revision and the bucket retains up to
+        its History of them per key.
+      operationId: put_kv_by_bucket_by_key
+      parameters:
+      - description: Bucket is the bucket, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - description: Key is the key, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              value: '{"theme":"dark"}'
+            schema:
+              $ref: '#/components/schemas/kvWrite'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kvAck'
+          description: ok
+      summary: Put sets one key to one value and returns the revision the write created.
+      tags:
+      - pubsub
+      x-app: pubsub
+      x-public: true
+      x-tool: true
+  /v1/kv/{bucket}/{key}/history:
+    get:
+      description: |-
+        History returns one key's retained revisions, oldest first — every put and
+        every delete marker up to the bucket's History depth. 404 when the bucket
+        does not exist or the key was never written.
+      operationId: get_kv_by_bucket_by_key_history
+      parameters:
+      - description: Bucket is the bucket, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - description: Key is the key, from the path.
+        in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kvPage'
+          description: ok
+      summary: History returns one key's retained revisions, oldest first — every
+        put and every delete marker up to the bucket's History depth.
+      tags:
+      - pubsub
+      x-app: pubsub
+      x-public: true
+      x-tool: true
   /v1/label:
     get:
       description: |-
@@ -114717,203 +114914,6 @@ paths:
       tags:
       - provisioning
       x-app: provisioning
-      x-public: true
-      x-tool: true
-  /v1/pubsub/kv/{bucket}:
-    delete:
-      description: |-
-        Removes one bucket of the caller's org — every key and every
-        revision with it — and answers 204 with no body. 404 when the org has no
-        bucket of that name.
-      operationId: delete_pubsub_kv_by_bucket
-      parameters:
-      - description: Bucket is the bucket's name, from the path.
-        in: path
-        name: bucket
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one bucket of the caller's org — every key and every revision
-        with it — and answers 204 with no body.
-      tags:
-      - pubsub
-      x-app: pubsub
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Creates a KV bucket and returns it. A bucket is keyed state on
-        the same durable plane as the streams: each key holds up to History
-        revisions, entries can expire by TTL, and watchers on the NATS port see every
-        write. 409 when the org already has a bucket of that name.
-      operationId: post_pubsub_kv_by_bucket
-      parameters:
-      - description: |-
-          Bucket is the bucket's name within the org, from the path: 1–64 of
-          [A-Za-z0-9_], no dash.
-        in: path
-        name: bucket
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              history: 5
-              ttl: 3600
-            schema:
-              $ref: '#/components/schemas/bucketWrite'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/bucketRecord'
-          description: created
-      summary: Creates a KV bucket and returns it.
-      tags:
-      - pubsub
-      x-app: pubsub
-      x-public: true
-      x-tool: true
-  /v1/pubsub/kv/{bucket}/{key}:
-    delete:
-      description: |-
-        Delete removes one key — a delete marker in the key's history, so watchers
-        see it and Get answers 404 — and answers 204 with no body. 404 when the
-        bucket does not exist.
-      operationId: delete_pubsub_kv_by_bucket_by_key
-      parameters:
-      - description: Bucket is the bucket, from the path.
-        in: path
-        name: bucket
-        required: true
-        schema:
-          type: string
-      - description: Key is the key, from the path.
-        in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Delete removes one key — a delete marker in the key's history, so watchers
-        see it and Get answers 404 — and answers 204 with no body.
-      tags:
-      - pubsub
-      x-app: pubsub
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Get returns one key's current value and revision. 404 when the bucket does
-        not exist, the key was never written, or its latest revision is a delete.
-      operationId: get_pubsub_kv_by_bucket_by_key
-      parameters:
-      - description: Bucket is the bucket, from the path.
-        in: path
-        name: bucket
-        required: true
-        schema:
-          type: string
-      - description: Key is the key, from the path.
-        in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/kvEntry'
-          description: ok
-      summary: Get returns one key's current value and revision.
-      tags:
-      - pubsub
-      x-app: pubsub
-      x-public: true
-      x-tool: true
-    put:
-      description: |-
-        Put sets one key to one value and returns the revision the write created.
-        Writes are versioned: each put is a new revision and the bucket retains up to
-        its History of them per key.
-      operationId: put_pubsub_kv_by_bucket_by_key
-      parameters:
-      - description: Bucket is the bucket, from the path.
-        in: path
-        name: bucket
-        required: true
-        schema:
-          type: string
-      - description: Key is the key, from the path.
-        in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              value: '{"theme":"dark"}'
-            schema:
-              $ref: '#/components/schemas/kvWrite'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/kvAck'
-          description: ok
-      summary: Put sets one key to one value and returns the revision the write created.
-      tags:
-      - pubsub
-      x-app: pubsub
-      x-public: true
-      x-tool: true
-  /v1/pubsub/kv/{bucket}/{key}/history:
-    get:
-      description: |-
-        History returns one key's retained revisions, oldest first — every put and
-        every delete marker up to the bucket's History depth. 404 when the bucket
-        does not exist or the key was never written.
-      operationId: get_pubsub_kv_by_bucket_by_key_history
-      parameters:
-      - description: Bucket is the bucket, from the path.
-        in: path
-        name: bucket
-        required: true
-        schema:
-          type: string
-      - description: Key is the key, from the path.
-        in: path
-        name: key
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/kvPage'
-          description: ok
-      summary: History returns one key's retained revisions, oldest first — every
-        put and every delete marker up to the bucket's History depth.
-      tags:
-      - pubsub
-      x-app: pubsub
       x-public: true
       x-tool: true
   /v1/pubsub/publish:
