@@ -514,10 +514,18 @@ func (o ops) createWallet(ctx context.Context, in *createWalletIn) (*Wallet, err
 		Chain:     strings.TrimSpace(in.Chain),
 		CreatedAt: time.Now().Unix(),
 	}
+	// A keygen on the ring — and, for a Safe, a contract deployed with real gas.
+	// Authorized before it starts, so a caller who cannot cover it spends nothing.
+	ch, err := o.afford(ctx, kind, keygen)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
 	address, err := cust.Provision(ctx, w) // sets w.KeyRef
 	if err != nil {
 		return nil, custodyHTTPError(err)
 	}
+	o.charge(ch, keygen)
 	w.Address = address
 	if err := s.State.store.createWallet(ctx, w); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "create wallet: %v", err)
@@ -644,10 +652,17 @@ func (o ops) sign(ctx context.Context, in *signIn) (*signature, error) {
 	if err != nil {
 		return nil, custodyHTTPError(err)
 	}
+	// A threshold round on the ring. KindKMS signs in-process and is free.
+	ch, err := o.afford(ctx, w.Custody, signing)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
 	sig, err := cust.Sign(ctx, w, digest)
 	if err != nil {
 		return nil, custodyHTTPError(err)
 	}
+	o.charge(ch, signing)
 	emitAudit(s, ctx, org, actor(ctx), "wallets.wallet.sign", w.ID,
 		map[string]any{"digest": "0x" + hex.EncodeToString(digest)})
 	return &signature{
@@ -688,6 +703,13 @@ func (o ops) proposeTransaction(ctx context.Context, in *safeTxIn) (*safeProposa
 	if !ok {
 		return nil, zip.ErrBadRequest("wallet custody " + string(w.Custody) + " does not support safe transactions")
 	}
+	// A proposal is its OWN threshold round — the ring signs the EIP-712 hash — so
+	// it is a second charge and not part of the signing one.
+	ch, err := o.afford(ctx, w.Custody, propose)
+	if err != nil {
+		return nil, cloud.Denied(err)
+	}
+	defer ch.Release()
 	res, err := proposer.ProposeTx(ctx, w, SafeTx{
 		To: strings.TrimSpace(in.To), Value: strings.TrimSpace(in.Value),
 		Data: strings.TrimSpace(in.Data), ChainID: in.ChainID, Nonce: in.Nonce,
@@ -695,6 +717,7 @@ func (o ops) proposeTransaction(ctx context.Context, in *safeTxIn) (*safeProposa
 	if err != nil {
 		return nil, custodyHTTPError(err)
 	}
+	o.charge(ch, propose)
 	emitAudit(s, ctx, org, actor(ctx), "wallets.wallet.safe_tx", w.ID,
 		map[string]any{"to": in.To, "chainId": in.ChainID, "safeTxHash": res.SafeTxHash})
 	return &safeProposal{
