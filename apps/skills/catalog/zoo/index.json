@@ -4235,18 +4235,18 @@
       "sha256": "9dda71a0e8b10f406d6e2167ab6abaf88c950e8d2f4b021c34830f2ebbf824fb"
     },
     {
-      "description": "Read s3 buckets: List your org's buckets, Browse one level of a bucket, Get a URL to download one object directly.",
+      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Get a URL to download one object directly.",
       "name": "s3_buckets",
       "path": "s3_buckets/SKILL.md",
       "service": "s3",
-      "sha256": "d40d42833038aafc13f53f3823a8cde0bfecf24700174f2a8d617738d0d526fa"
+      "sha256": "4b0370d1270571829bdb46047d4a8fb3bc496880db8f34f78b71c44fef33f091"
     },
     {
-      "description": "Read s3 health: Whether object storage is usable here.",
+      "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
       "name": "s3_health",
       "path": "s3_health/SKILL.md",
       "service": "s3",
-      "sha256": "68f34ec6be5701a7e764c5202a4b2d7b3bb9cbcf63a87e44d9f8651972f61bee"
+      "sha256": "429d2b73349128ff65c13615494ec8f688306ebbe0a89fbd0db722c302c58625"
     },
     {
       "description": "Read sandbox fs: Read a file, or list a directory.",
