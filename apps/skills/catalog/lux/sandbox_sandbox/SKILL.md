@@ -1,7 +1,7 @@
 ---
 name: sandbox_sandbox
 version: "8.0.0"
-description: "Read sandbox sandbox: The sandboxes this org holds, One sandbox."
+description: "Read sandbox sandbox: Lists the caller org's sandboxes, newest first., Returns one sandbox: its class, project, image, the runtime it was given, its status and when its lease ends.."
 ---
 
 # Lux · SANDBOX · sandbox
@@ -14,19 +14,21 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/sandbox` — The sandboxes this org holds
-- `GET https://api.lux.network/v1/sandbox/{id}` — One sandbox
+- `GET https://api.lux.network/v1/sandbox` — Lists the caller org's sandboxes, newest first.
+- `GET https://api.lux.network/v1/sandbox/{id}` — Returns one sandbox: its class, project, image, the runtime it was given, its status and when its lease ends.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string |  |
+| `id` | path | yes | string | ID is the sandbox to address, from the path. |
+| `project` | query | no | string |  |
+| `status` | query | no | string |  |
 
 ## Response
 
-- `/v1/sandbox` → JSON object.
-- `/v1/sandbox/{id}` → JSON object.
+- `/v1/sandbox` → `sandboxList` object with fields: `sandboxes`.
+- `/v1/sandbox/{id}` → `Sandbox` object with fields: `class`, `createdAt`, `error`, `expiresAt`, `id`, `image`, `kind`, `lastUsedAt`, `org`, `project`, `runtime`, `status`.
 
 ## Example
 

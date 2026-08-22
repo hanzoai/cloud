@@ -76,7 +76,6 @@ func watch(s *Service, c *zip.Ctx) error {
 // connection failed. A check here would be a second opinion about what is
 // running inside a pod, formed from a label rather than from the pod.
 func screen(g zip.Router, s *Service) {
-	g.Post("/:id/screen/ticket", cloud.Handle(s, open("screen")))
 	g.Get("/:id/screen", cloud.Handle(s, serve(desktop)))
 	g.Get("/:id/screen/ws", cloud.Handle(s, watch))
 }
