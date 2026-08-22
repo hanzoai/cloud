@@ -78,12 +78,14 @@ func TestAnUndecidedFaultLeaksNothing(t *testing.T) {
 // empty card. The client gets a stable, actionable sentence.
 func TestAnUndecidedFaultStillSaysSomethingUseful(t *testing.T) {
 	_, body := getThing(t, errors.New("kms.New: legacy ZapDB migration: boom"))
+	// A refusal is an RFC 9457 problem document: the sentence is `detail`, and
+	// `status` repeats the code so a reader holding only the body still has it.
 	var seen struct {
 		Status int    `json:"status"`
-		Msg    string `json:"error"`
+		Msg    string `json:"detail"`
 	}
 	if err := json.Unmarshal([]byte(body), &seen); err != nil {
-		t.Fatalf("body is not the {status,code,error} envelope: %s", body)
+		t.Fatalf("body is not a problem document: %s", body)
 	}
 	if strings.TrimSpace(seen.Msg) == "" {
 		t.Fatalf("a redacted 500 must still say something: %s", body)
