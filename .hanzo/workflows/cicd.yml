@@ -248,11 +248,10 @@ jobs:
           #
           # SIX, BECAUSE THREE DID NOT OUTLAST THE BURST. The CDN does not drop a
           # single packet and recover; it refuses for a stretch, and three tries
-          # nine seconds apart fitted inside one. Measured on 2026-08-21: reviews
-          # passed until 19:38 and failed from 19:56 on that same credential,
-          # while the deploy leg of those same runs — asking the same store a
-          # minute later — succeeded throughout. The window is what differed, so
-          # the window is what moves: 5s, 10s, 15s, 20s, 25s.
+          # nine seconds apart fit inside one. The same credential, asked a minute
+          # later, is answered — so what separates a refusal from an absence here
+          # is the WINDOW and not the identity, and the window is what moves:
+          # 5s, 10s, 15s, 20s, 25s, spanning seventy-five seconds.
           again() {
             local attempt=1 out=
             while :; do
