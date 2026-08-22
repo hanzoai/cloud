@@ -83,6 +83,18 @@ var linkTarget = regexp.MustCompile(`<[^>]*>`)
 func TestPlaneWireIsZAPNotJSON(t *testing.T) {
 	front, back := t.TempDir(), t.TempDir()
 
+	// 9653 is a FIXED port and a developer's machine is shared with whatever else
+	// is running on it — a cloud listening there is the ordinary case and says
+	// nothing about the peer this test starts. So ask BEFORE the peer exists:
+	// only an answer that appears afterwards can be its door. Without this the
+	// check reads "port 9653 is free on this host", which is true in CI and false
+	// on any machine already running the thing under test.
+	heldBefore := false
+	if c, derr := net.DialTimeout("tcp", "127.0.0.1:9653", 200*time.Millisecond); derr == nil {
+		_ = c.Close()
+		heldBefore = true
+	}
+
 	// The peer binds in `back`.
 	t.Setenv("ZIP_RUNTIME_DIR", back)
 	plane.Unbind()
@@ -177,7 +189,10 @@ func TestPlaneWireIsZAPNotJSON(t *testing.T) {
 	if fi, serr := os.Stat(peerSock); serr != nil || fi.Mode()&os.ModeSocket == 0 {
 		t.Errorf("the peer's address is not a unix socket file: %v", serr)
 	}
-	if c, derr := net.DialTimeout("tcp", "127.0.0.1:9653", 200*time.Millisecond); derr == nil {
+	if heldBefore {
+		t.Log("tcp/9653 already answered before this peer started, so it belongs to " +
+			"something else on this machine and the no-TCP-door claim is not testable here")
+	} else if c, derr := net.DialTimeout("tcp", "127.0.0.1:9653", 200*time.Millisecond); derr == nil {
 		_ = c.Close()
 		t.Errorf("something answered on tcp/9653; this peer must have no TCP listener")
 	}
