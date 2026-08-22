@@ -56,6 +56,29 @@ func (r *relay) transcripts() (out, in string) {
 	return r.out.String(), r.in.String()
 }
 
+// await is transcripts once BOTH directions have been recorded.
+//
+// The capture is not finished when the caller's call returns. Each direction is
+// copied by a relay goroutine into io.MultiWriter(conn, sink), and MultiWriter
+// writes to the CONNECTION FIRST — so the reply can reach the caller, satisfy it
+// and let List return while the last chunk is still on its way to the sink. Read
+// once and the transcript is empty on a call that plainly succeeded, which is how
+// this failed under a whole-repo run while its own log showed the request served.
+//
+// Waiting does not weaken the claim: a call that really crossed nothing still
+// fails here, two seconds later, with the same words.
+func (r *relay) await(t *testing.T) (out, in string) {
+	t.Helper()
+	for range 200 {
+		if out, in = r.transcripts(); out != "" && in != "" {
+			return out, in
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the relay captured nothing; no bytes crossed the socket")
+	return "", ""
+}
+
 // sink adapts one transcript to io.Writer for io.MultiWriter.
 type sink struct {
 	r *relay
@@ -147,10 +170,7 @@ func TestPlaneWireIsZAPNotJSON(t *testing.T) {
 		t.Fatalf("the relayed call returned %+v", rows)
 	}
 
-	req, resp := r.transcripts()
-	if req == "" || resp == "" {
-		t.Fatal("the relay captured nothing; no bytes crossed the socket")
-	}
+	req, resp := r.await(t)
 	t.Logf("request  %d bytes:\n%s", len(req), dump(req))
 	t.Logf("response %d bytes:\n%s", len(resp), dump(resp))
 
