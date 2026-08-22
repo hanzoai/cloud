@@ -611,8 +611,8 @@
     "/v1/agents/sessions/{id}/events": {
       "post": {
         "operationId": "post_agents_sessions_by_id_events",
-        "summary": "Append one turn to a session's ordered log.",
-        "description": "Records a message, tool-call, spawn, log, status or control turn against the session and answers 201 with the stored event, including the monotonic `seq` the store assigned — the cursor every reader pages from. The same turn is fanned out live to every stream subscriber watching that session's tree.\n\nRequires a validated principal carrying an org, and the session must already exist IN THAT ORG: an id belonging to another tenant is a 404 exactly like one that does not exist, so the log can never be written across a tenant boundary. `actor` defaults to the calling principal when the body names none. `kind` must be one of the six above, and `payload` must be valid JSON of at most 64 KiB.\n\nThe payload is scanned for credentials BEFORE it is stored, and a hit REFUSES the write with 422 rather than redacting it: {status, code: \"secret_in_transcript\", error, findings:[…]}, each finding naming the rule, severity, line, a masked preview and a SHA-256 fingerprint the author can match against the value they rotate. The detected value itself appears nowhere in that body, because it was never stored. That in-band findings array is the reason this operation cannot be typed.",
+        "summary": "Records one turn of a session's transcript and answers 201 with it.",
+        "description": "Records one turn of a session's transcript and answers 201 with it.\n\nTHE TURN IS SCANNED BEFORE IT IS STORED. The same engine the code-security\nsurface runs reads the payload at this boundary, and a credential in it refuses\nthe append with 422 rather than redacting it — a redacted transcript is one\nthat still had the secret in it once, and this way the author learns which\nvalue to rotate. The refusal carries every finding: the rule, the severity, the\nline, a MASKED preview and the fingerprint. The secret is never in the answer.",
         "tags": [
           "agents"
         ],
@@ -621,19 +621,43 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the session to append to, from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/eventIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/eventView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/agents/sessions/{id}/message": {
       "post": {
         "operationId": "post_agents_sessions_by_id_message",
-        "summary": "Send text into a running session.",
-        "description": "Records `message` as a durable control event carrying the caller's text and answers 200 with {command, event, forwarded} — this is how a dashboard steers an agent mid-run. It is the one command with a required body: a `message` (up to 16 KiB) or a `payload`, and 400 with neither. The credential scan that guards an appended turn covers `payload` here; `message` is bounded but not scanned. \n\nRequires a validated principal carrying an org, and the session must exist IN THAT ORG — a foreign id is a 404, so no tenant can steer another's agents. A FINISHED session (done or error) refuses every command with 409: a run that has ended cannot be steered.\n\nTHE COMMAND IS AN INTENT, NOT A STATE CHANGE. Nothing here writes the session's status. A 200 means the command was durably recorded and delivered, never that the agent has actually paused, resumed or stopped; the status becomes paused, done or error only when the surface running the agent reports it back through a session update. That surface learns of the command in one of two ways: a task-backed session (one carrying a workflow id, with a tasks backend wired) has it forwarded to the durable-execution engine, and `forwarded` says so; everything else is record-only, and the running surface — a locally started `hanzo code` session, for one — drains it by polling the session's control endpoint. Today that is every session: the only controller wired forwards nothing, so `forwarded` is false and polling is how a command arrives. If a forward is attempted and fails, the answer is 502 stating that the command was recorded but not forwarded: the intent is never lost.",
+        "summary": "Sends a steering message to a running session — the door a human or another agent interrupts through.",
+        "description": "Sends a steering message to a running session — the door a\nhuman or another agent interrupts through. It requires a `message` or a\n`payload`; the other three commands do not.",
         "tags": [
           "agents"
         ],
@@ -642,19 +666,43 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the session to steer, from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/controlIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/controlResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/agents/sessions/{id}/pause": {
       "post": {
         "operationId": "post_agents_sessions_by_id_pause",
-        "summary": "Ask a running session to pause.",
-        "description": "Records `pause` as a durable control event on the session and answers 200 with {command, event, forwarded} — the stored event carries the `seq` that orders it against every other turn. \n\nRequires a validated principal carrying an org, and the session must exist IN THAT ORG — a foreign id is a 404, so no tenant can steer another's agents. A FINISHED session (done or error) refuses every command with 409: a run that has ended cannot be steered.\n\nTHE COMMAND IS AN INTENT, NOT A STATE CHANGE. Nothing here writes the session's status. A 200 means the command was durably recorded and delivered, never that the agent has actually paused, resumed or stopped; the status becomes paused, done or error only when the surface running the agent reports it back through a session update. That surface learns of the command in one of two ways: a task-backed session (one carrying a workflow id, with a tasks backend wired) has it forwarded to the durable-execution engine, and `forwarded` says so; everything else is record-only, and the running surface — a locally started `hanzo code` session, for one — drains it by polling the session's control endpoint. Today that is every session: the only controller wired forwards nothing, so `forwarded` is false and polling is how a command arrives. If a forward is attempted and fails, the answer is 502 stating that the command was recorded but not forwarded: the intent is never lost.",
+        "summary": "Asks a running session to pause.",
+        "description": "Asks a running session to pause. Recorded durably, and forwarded\nto the durable-execution engine when the session is task-backed.",
         "tags": [
           "agents"
         ],
@@ -663,19 +711,43 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the session to steer, from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/controlIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/controlResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/agents/sessions/{id}/resume": {
       "post": {
         "operationId": "post_agents_sessions_by_id_resume",
-        "summary": "Ask a paused session to carry on.",
-        "description": "Records `resume` as a durable control event on the session and answers 200 with {command, event, forwarded}. The session is NOT required to be paused first: the only status this refuses is a finished one, because the live status is the running surface's to report rather than this endpoint's to enforce. \n\nRequires a validated principal carrying an org, and the session must exist IN THAT ORG — a foreign id is a 404, so no tenant can steer another's agents. A FINISHED session (done or error) refuses every command with 409: a run that has ended cannot be steered.\n\nTHE COMMAND IS AN INTENT, NOT A STATE CHANGE. Nothing here writes the session's status. A 200 means the command was durably recorded and delivered, never that the agent has actually paused, resumed or stopped; the status becomes paused, done or error only when the surface running the agent reports it back through a session update. That surface learns of the command in one of two ways: a task-backed session (one carrying a workflow id, with a tasks backend wired) has it forwarded to the durable-execution engine, and `forwarded` says so; everything else is record-only, and the running surface — a locally started `hanzo code` session, for one — drains it by polling the session's control endpoint. Today that is every session: the only controller wired forwards nothing, so `forwarded` is false and polling is how a command arrives. If a forward is attempted and fails, the answer is 502 stating that the command was recorded but not forwarded: the intent is never lost.",
+        "summary": "Asks a paused session to continue, on the same terms as a pause.",
+        "description": "Asks a paused session to continue, on the same terms as a pause.",
         "tags": [
           "agents"
         ],
@@ -684,19 +756,43 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the session to steer, from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/controlIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/controlResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/agents/sessions/{id}/stop": {
       "post": {
         "operationId": "post_agents_sessions_by_id_stop",
-        "summary": "Ask a session to stop for good.",
-        "description": "Records `stop` as a durable control event on the session and answers 200 with {command, event, forwarded}. Stop is the one command that CANCELS a task-backed session's durable workflow instead of signalling it — pause, resume and message are cooperative signals the workflow decides how to act on, while this tears it down, with the request's `message` recorded as the cancellation reason (a default stands in when none is given). \n\nRequires a validated principal carrying an org, and the session must exist IN THAT ORG — a foreign id is a 404, so no tenant can steer another's agents. A FINISHED session (done or error) refuses every command with 409: a run that has ended cannot be steered.\n\nTHE COMMAND IS AN INTENT, NOT A STATE CHANGE. Nothing here writes the session's status. A 200 means the command was durably recorded and delivered, never that the agent has actually paused, resumed or stopped; the status becomes paused, done or error only when the surface running the agent reports it back through a session update. That surface learns of the command in one of two ways: a task-backed session (one carrying a workflow id, with a tasks backend wired) has it forwarded to the durable-execution engine, and `forwarded` says so; everything else is record-only, and the running surface — a locally started `hanzo code` session, for one — drains it by polling the session's control endpoint. Today that is every session: the only controller wired forwards nothing, so `forwarded` is false and polling is how a command arrives. If a forward is attempted and fails, the answer is 502 stating that the command was recorded but not forwarded: the intent is never lost.",
+        "summary": "Ends a running session.",
+        "description": "Ends a running session. `message` is recorded as the cancellation\nreason, which is what a later reader of the transcript sees.\n\nSTOPPING IS NOT DELETING: the session, its transcript and anything it produced\nstay readable. A session that has already finished is 409 rather than a second\nstop.",
         "tags": [
           "agents"
         ],
@@ -705,12 +801,36 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the session to steer, from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/controlIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/controlResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/agents/sessions/{id}/tree": {
@@ -1823,6 +1943,39 @@
         },
         "type": "object"
       },
+      "controlIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the session to steer, from the path.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is free text for the running agent, up to 16 KiB. On a stop it is\nrecorded as the cancellation reason.",
+            "type": "string"
+          },
+          "payload": {
+            "description": "Payload is a structured argument for the command: any valid JSON up to\n64 KiB, scanned for credentials before it is stored (a hit refuses the\ncommand with 422 and the findings). A task-backed session receives it as\nthe forwarded signal's argument."
+          }
+        },
+        "type": "object"
+      },
+      "controlResult": {
+        "properties": {
+          "command": {
+            "description": "Command is the verb that was recorded: pause, resume, stop or message.",
+            "type": "string"
+          },
+          "event": {
+            "$ref": "#/components/schemas/eventView",
+            "description": "Event is the durable control event the command became. The intent is\nrecorded whether or not it reached an engine, which is what makes a\nstream-consuming surface able to act on it."
+          },
+          "forwarded": {
+            "description": "Forwarded is whether the command also reached the durable-execution engine.\nFALSE IS NOT A FAILURE: a session with no workflow link, or a deployment\nwith no tasks backend, is record-only by design. A forward that was\nattempted and failed is a 502, never a false here.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "createAgentIn": {
         "properties": {
           "computeRef": {
@@ -1863,6 +2016,26 @@
               "type": "string"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "eventIn": {
+        "properties": {
+          "actor": {
+            "description": "Actor is who produced the turn. Empty takes the validated caller, which is\nwhat an agent writing its own transcript wants; naming one is for a surface\nrecording on somebody else's behalf.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the session to append to, from the path.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what this turn IS: message, tool-call, spawn, log, status or\ncontrol. Anything else is refused — the vocabulary is closed so a reader\ncan branch on it.",
+            "type": "string"
+          },
+          "payload": {
+            "description": "Payload is the turn's own body, any valid JSON up to 64 KiB. It is SCANNED\nfor credentials before it is stored, and a hit refuses the whole append with\n422 and the findings — this plane never redacts a secret into a transcript\nit then keeps."
           }
         },
         "type": "object"
