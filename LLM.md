@@ -3014,6 +3014,29 @@ a nested artifact was reported in the reply and then missing from
 `/v1/exec/files/{sid}` — the client's `name.startsWith(...)` found nothing and read it
 as expired. One `find` answers both now.
 
+**A REFUSAL AND AN UNWRITTEN OP ARE DIFFERENT FACTS, and one ledger cannot hold
+both.** `apps/captable` is the case that forced the distinction: eleven writes
+are raw, `untypedByDesign` was empty, and a reader of that one list would
+conclude the package was at its floor. It is not — `writes.go` already carries
+the mechanism (`write`: the relay's 413, the assembled body, the bundle route,
+`goja.BundleErr` for a non-2xx) and three ops already use it. So captable keeps
+TWO ledgers and its gate sums THREE terms:
+
+    untypedByDesign  a WIRE this stack cannot describe — nothing to do until an
+                     upstream capability lands, and the entry names which
+    typingOwed       work that is OWED — the mechanism exists, the blocker is
+                     named, the entry is deleted when the op is written
+
+What each owed op needs is the BUNDLE ROUTE'S OWN accepted fields, and that is
+why they are listed rather than written: the names live in
+`github.com/hanzoai/captable` (`goja/src/routes/*`), not here. `schema.go`'s DDL
+gives snake_case COLUMNS, which are not the JSON the routes take, and the
+`openapi.Describe` prose gives semantics without naming a field. **DO NOT GUESS
+THEM.** `goja.Body` assembles only the fields declared, so a name that does not
+match silently drops its value — a share issuance missing a price is accepted as
+a smaller write rather than refused. Wrong equity data nothing reports is worse
+than an untyped route, which is merely invisible.
+
 **Collisions, and the resolution.** Source does not collide; two artifacts do —
 the regenerated `openapi.yaml` golden and `go.sum`. Both resolve the same way:
 **rebase onto main, then regenerate** (`make -f mk/fleet.mk check`). The
