@@ -210,8 +210,8 @@
     "/v1/billing/alerts/{id}": {
       "delete": {
         "operationId": "delete_billing_alerts_by_id",
-        "summary": "Remove one spend cap",
-        "description": "Deletes a budget the caller's org owns and answers 204.\n\nRemoving a cap REMOVES A CEILING, so it takes the same bar as setting one: a validated org admin, the platform SuperAdmin, or the trusted in-process service token. A member who could delete the org's cap would have unbounded spend.\n\nA cap this org does not own is NOT FOUND rather than refused — the same answer whether the id is unknown or belongs to another customer — so an id cannot be probed for existence by trying to delete it.",
+        "summary": "Removes one of the caller's spend caps and answers 204.",
+        "description": "Removes one of the caller's spend caps and answers 204.\n\nRemoving a cap RAISES what the org may spend, so it takes the same authority\nsetting one does. The caps that remain still bind: this drops one, never the\nwhole policy.",
         "tags": [
           "billing"
         ],
@@ -220,12 +220,19 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the cap to remove, from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       },
       "patch": {
         "operationId": "patch_billing_alerts_by_id",
@@ -731,8 +738,8 @@
     "/v1/billing/methods/{id}": {
       "delete": {
         "operationId": "delete_billing_methods_by_id",
-        "summary": "Remove one saved card or account",
-        "description": "Detaches the method at the processor and drops the row.\n\nA method the caller does not own is NOT FOUND rather than refused — the same answer whether the id names nothing or names somebody else's card — so an id cannot be probed for existence.\n\nA platform operator or the trusted in-process service token may act on any subject inside the org; everyone else may only remove their own.",
+        "summary": "Removes one card or account the caller has saved.",
+        "description": "Removes one card or account the caller has saved.\n\nIt detaches only the CALLER'S own — the wallet this request bills from,\nresolved server-side — so an id belonging to another customer of the same org\nis not something this operation can reach. A platform or service caller\ndetaches on the subject's behalf, and that authority is decided HERE, where the\ncredential is, and travels as a value: authority decided twice is authority\nthat eventually disagrees with itself.\n\nThe card is vaulted at the processor, so what goes is our token for it.",
         "tags": [
           "billing"
         ],
@@ -741,12 +748,26 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the saved method to detach, from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Detachment"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/billing/mode": {
@@ -844,8 +865,8 @@
     "/v1/billing/portal/methods/{id}": {
       "delete": {
         "operationId": "delete_billing_portal_methods_by_id",
-        "summary": "Remove one saved card or account",
-        "description": "Detaches the method at the processor and drops the row.\n\nA method the caller does not own is NOT FOUND rather than refused — the same answer whether the id names nothing or names somebody else's card — so an id cannot be probed for existence.\n\nA platform operator or the trusted in-process service token may act on any subject inside the org; everyone else may only remove their own.",
+        "summary": "DetachPortalMethod is DetachMethod at the address a hosted checkout addresses it by.",
+        "description": "DetachPortalMethod is DetachMethod at the address a hosted checkout addresses\nit by. One set of rows, two spellings: a card detached at either is gone from\nboth, because there is one store behind them.",
         "tags": [
           "billing"
         ],
@@ -854,23 +875,50 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the saved method to detach, from the path.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Detachment"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/billing/recharge/run-all": {
       "post": {
         "operationId": "post_billing_recharge_run-all",
-        "summary": "Recharge every org that has fallen below its threshold",
-        "description": "Sweeps every organization and, for those with auto-recharge on whose available balance has dropped below their own threshold, charges the default card and credits the balance.\n\nIt charges cards across EVERY tenant, so it is platform authority only — never an org owner, who could otherwise sweep-charge saved cards estate-wide. Its caller is a schedule, not a person.\n\n`orgs` is the population considered, not the row count: that difference is how a reader tells 'nobody was below threshold' from 'the sweep never ran'. One org's failure is reported in its own row and does not stop the rest.",
+        "summary": "Sweeps every org's auto-recharge and answers what it did.",
+        "description": "Sweeps every org's auto-recharge and answers what it did.\n\nPLATFORM AUTHORITY ONLY. It charges saved cards across every tenant, so an org\nowner reaching it could sweep-charge the estate; a caller without it is\nrefused before anything is charged.\n\nThe answer explains a sweep that charged nobody as readily as one that\ncharged: it names how many orgs were considered and how many needed charging,\nwith a row each.",
         "tags": [
           "billing"
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recharge"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/billing/settings": {
@@ -1047,23 +1095,89 @@
     "/v1/billing/topup": {
       "post": {
         "operationId": "post_billing_topup",
-        "summary": "Add funds with a card already on file",
-        "description": "Charges a saved card and credits the caller's prepaid wallet.\n\nThe method must belong to the caller: one that does not is NOT FOUND rather than refused, so an id cannot be probed for existence. A saved row whose card is no longer chargeable is 422 — add the card again — which is a different thing to do than a decline (402) or a bad amount (400).\n\nRetries behave exactly as they do for a token top-up: same key, same replay, same exactly-once at the processor.",
+        "summary": "Charges a card the caller already saved and credits the balance.",
+        "description": "Charges a card the caller already saved and credits the\nbalance. Same receipt and the same retry safety as the token door; the only\ndifference is which card, so a caller topping up from a saved method never\nre-enters one.",
         "tags": [
           "billing"
         ],
-        "x-public": true
+        "parameters": [
+          {
+            "name": "X-Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/topupIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Charged"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/billing/topup/token": {
       "post": {
         "operationId": "post_billing_topup_token",
-        "summary": "Add funds with a single-use card token",
-        "description": "Charges a card token from the browser's payment SDK and credits the caller's prepaid wallet — the cold-customer path, where nothing has to be saved first.\n\nThe wallet credited is the CALLER'S OWN, resolved from their signed identity. It is never a value in the request: a client-set selector is how a customer once topped up one account while their usage drew from another.\n\n`X-Idempotency-Key` makes a retry safe. With one, a repeat replays the first result; without one, the same amount from the same subject inside a short window does too. The key reaches the processor as well as our own guard, so the charge is exactly-once at the gateway even if our guard store is down.\n\nThe amount is bounded server-side. A decline is 402 and nothing is credited.",
+        "summary": "Charges a single-use card token and credits the caller's balance.",
+        "description": "Charges a single-use card token and credits the caller's\nbalance.\n\nThe token comes from the payment form and is vaulted as part of the charge, so\nno card number reaches this service and none is stored here. The receipt names\nthe ledger entry, the new balance, and the PROCESSOR's own reference — which is\nthe only field that proves money moved at the gateway rather than only in our\nledger.\n\nRetry-safe on X-Idempotency-Key: the same key settles one charge and returns\nthe first receipt.",
         "tags": [
           "billing"
         ],
-        "x-public": true
+        "parameters": [
+          {
+            "name": "X-Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/topupIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Charged"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/billing/transactions": {
@@ -1496,6 +1610,31 @@
         },
         "type": "object"
       },
+      "Charged": {
+        "properties": {
+          "balanceCents": {
+            "description": "BalanceCents is the subject's balance AFTER the charge settled, in cents, so\na caller does not have to re-read to show the new number.",
+            "type": "integer"
+          },
+          "processorRef": {
+            "description": "ProcessorRef is the payment processor's own reference. It is the only field\nthat proves money moved at the GATEWAY rather than merely in our ledger,\nwhich is why it is answered and not only logged. Absent where the processor\nreturned none.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is how the charge ended. Read it rather than inferring success from\nthe HTTP status: the call succeeded whenever this field is present, and what\nthe PROCESSOR did is what this says.",
+            "type": "string"
+          },
+          "test": {
+            "description": "Test states which bucket was credited — sandbox money or real money — so no\nreader has to guess whether a receipt is real. Sandbox and live funds are\nphysically separate ledgers, and a reader that conflates them restates the\ncompany's revenue.",
+            "type": "boolean"
+          },
+          "transactionId": {
+            "description": "TransactionID is the ledger entry this charge created. It is the handle a\nlater read or a refund names, and it is minted by the ledger rather than by\nthe caller.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Collected": {
         "properties": {
           "balanceUsedCents": {
@@ -1651,6 +1790,19 @@
               "type": "string"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Detachment": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is whether the method was actually removed. False with no error\nmeans it was already gone, which is a successful detach rather than a\nfailure — a retry must not be an error.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the method that was detached, echoed so a caller batching several can\ntell the answers apart.",
+            "type": "string"
           }
         },
         "type": "object"
@@ -1914,6 +2066,52 @@
           },
           "userId": {
             "description": "UserID identifies the customer being billed, within the caller's own org.\nRequired — an invoice with no addressee is not an invoice.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Recharge": {
+        "properties": {
+          "charged": {
+            "description": "Charged is how many of them were actually charged. It is at most Orgs, and\nthe difference is orgs whose balance was already above their threshold.",
+            "type": "integer"
+          },
+          "orgs": {
+            "description": "Orgs is how many orgs the sweep considered — every org with auto-recharge\narmed, whether or not it needed charging.",
+            "type": "integer"
+          },
+          "results": {
+            "description": "Results is one row per org considered, so a sweep that charged nobody is\nstill explainable. Never null.",
+            "items": {
+              "$ref": "#/components/schemas/Recharged"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Recharged": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "balanceCents": {
+            "type": "integer"
+          },
+          "charged": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "orgName": {
+            "type": "string"
+          },
+          "transactionId": {
+            "type": "string"
+          },
+          "userId": {
             "type": "string"
           }
         },
@@ -2357,6 +2555,27 @@
             "type": "string"
           },
           "id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "topupIn": {
+        "properties": {
+          "amountCents": {
+            "description": "AmountCents is how much to charge, in cents of Currency. Required.",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Currency is the ISO-4217 code to charge in. Empty takes the deployment's\nown default.",
+            "type": "string"
+          },
+          "paymentMethodId": {
+            "description": "MethodID names a card the subject already saved, for the saved-card door.",
+            "type": "string"
+          },
+          "sourceId": {
+            "description": "SourceID is a single-use card token from the payment form, for the token\ndoor. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
             "type": "string"
           }
         },

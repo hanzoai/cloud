@@ -20,8 +20,6 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
@@ -31,11 +29,19 @@ import (
 // mountMethods registers the saved-card family at both of its addresses. Called
 // from routes.
 func mountMethods(app cloud.Router, o ops) {
+	// The two READS and the SAVE are byte relays — they answer the document
+	// commerce rendered, verbatim — so they stay raw and declare their prose
+	// beside the routes (init, below). The DETACH answers a value, so it is a
+	// typed op; it is registered TWICE explicitly rather than from the loop
+	// because cmd/zipdoc refuses a computed path, and a route it cannot place is
+	// prose silently dropped from the document and the MCP tool.
 	for _, at := range []string{"/v1/billing/methods", "/v1/billing/portal/methods"} {
 		app.Get(at, cloud.Handle(o.s, listMethods))
 		app.Post(at, cloud.Handle(o.s, saveMethod))
-		app.Delete(at+"/:id", cloud.Handle(o.s, detachMethod))
 	}
+	zapp := cloud.ZipApp(app)
+	zip.Delete(zapp, "/v1/billing/methods/:id", o.detachMethod)
+	zip.Delete(zapp, "/v1/billing/portal/methods/:id", o.detachPortalMethod)
 }
 
 // The family is RAW at both addresses because its answer is a rendered document
@@ -124,28 +130,6 @@ func saveMethod(s *cloud.Service[state], c *zip.Ctx) error {
 		status = http.StatusCreated
 	}
 	return document(c, status, out.Body)
-}
-
-// detachMethod removes one saved method.
-//
-// Privileged is decided HERE, where the credential is, and travels as a value:
-// authority decided twice is authority that eventually disagrees with itself.
-func detachMethod(s *cloud.Service[state], c *zip.Ctx) error {
-	org, subject, err := payerOf(c)
-	if err != nil {
-		return err
-	}
-	out, aerr := ask(c.Context(), org, "detach method", func(ctx context.Context) (*plane.Detachment, error) {
-		return commercepeer.BillingMethodDetach(ctx, &plane.MethodRef{
-			ID:         c.Param("id"),
-			Subject:    subject,
-			Privileged: principal.IsSuperAdmin(c) || account.IsServiceToken(c),
-		})
-	})
-	if aerr != nil {
-		return aerr
-	}
-	return c.JSON(http.StatusOK, out)
 }
 
 // callerEmail is the caller's OWN address, off the identity the edge minted.
