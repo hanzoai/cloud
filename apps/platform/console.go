@@ -47,7 +47,7 @@ import (
 // The four row types are named `<thing>Row` rather than `<thing>View`, which is
 // what they were called while they were invisible to the document. Publishing them
 // puts them in the FLEET's schema namespace, which is flat and single-valued: one
-// name, one shape, wherever two apps meet (openapi.Weave). `pipelineView` is
+// name, one shape, wherever two apps meet (openapi.Compose). `pipelineView` is
 // already published by apps/world (a news pipeline) and `buildView` by apps/agents
 // (a provenance build), and neither is this. The name that was not yet published is
 // the one that yields — the same rule apps/templates followed when its Template

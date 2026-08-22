@@ -7,7 +7,7 @@ package cloud
 // the app a derivative, exactly backwards); they are generated from the app's OWN
 // live router by the SAME openapi.FleetSpec the whole fleet is generated from,
 // over an app with only that subsystem mounted.
-// Compose upward, never carve downward — see openapi/weave.go for the other half.
+// Compose upward, never carve downward — see openapi/compose.go for the other half.
 //
 // ONE projection, from ONE mount of ONE registry: openapi.json, what the app's
 // addresses are.
@@ -18,7 +18,7 @@ package cloud
 // other makes neither true, because nothing in that coupling forces either back
 // to the registry. The tool catalogue is not generated any more; the host asks
 // the child for it (package fleet), so a tool list cannot be stale because there
-// is no tool list. This document survives only because the fleet weave needs the
+// is no tool list. This document survives only because the fleet compose needs the
 // app's SOURCE synopsis, which no running process can hand back.
 //
 // It lives on Serve because Serve is the single entry every app binary shares:
@@ -44,7 +44,7 @@ const describeArg = "describe"
 
 // SpecFile is the artifact a describe run writes into the app's own plugin/<app>
 // directory. Named here because the host EMBEDS it (plugin/embed.go) and the
-// weave READS it — one name, so a rename cannot leave a reader looking for a file
+// compose READS it — one name, so a rename cannot leave a reader looking for a file
 // no writer produces.
 const SpecFile = "openapi.json"
 
@@ -96,7 +96,7 @@ func SpecConfig() (*Config, func(), error) {
 //
 // JSON, because JSON is what it IS — the same bytes served at /v1/openapi.json
 // and dropped into hanzoai/openapi. Encoding to YAML would put a yaml library in
-// the graph of every app binary to write a file only the weave reads. Indented so
+// the graph of every app binary to write a file only the compose reads. Indented so
 // a subset reviews as a diff.
 //
 // It is rendered whole before the file is touched, so a projection failure leaves
@@ -121,7 +121,7 @@ func Describe(dir string, app *zip.App) error {
 	// and the subtraction has to live at the one producer instead. It asks the
 	// same routing table the host reads, so a dropped address is the fleet's
 	// answer, not a judgment call — and the owner's own subset still carries the
-	// operation, which is what the weave requires: one address, one app. The dir
+	// operation, which is what the compose requires: one address, one app. The dir
 	// names the app because the describe contract writes into plugin/<app>.
 	self := filepath.Base(filepath.Clean(dir))
 	for path := range doc.Paths {
@@ -159,7 +159,7 @@ func Describe(dir string, app *zip.App) error {
 	// stays exactly that: an app whose package has no doc comment publishes the
 	// fleet's sentence, unchanged, rather than a sentence invented for it here.
 	//
-	// This is the ONE place the synopsis is computed. The weave reads it back off
+	// This is the ONE place the synopsis is computed. The compose reads it back off
 	// the subsets to describe the product tags, so the mapping from app to prose
 	// exists once and travels with the artifact.
 	if s := openapi.Synopsis(dir); s != "" {
@@ -216,7 +216,7 @@ func Describe(dir string, app *zip.App) error {
 // this is the fleet's document, and a STAGED subsystem (config.go's
 // a deployment does not name) is linked but inert until it does. Describing
 // one here would publish routes api.hanzo.ai does not serve, and would make the
-// woven document disagree with the fully-mounted golden — which is the equality
+// composed document disagree with the fully-mounted golden — which is the equality
 // the composition proof rests on.
 func describe(specs []Plugin, dir string) error {
 	cfg, done, err := SpecConfig()

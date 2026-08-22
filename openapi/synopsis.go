@@ -10,7 +10,7 @@ package openapi
 // only version of "one source" that survives contact with 112 apps.
 //
 // It is computed ONCE, when the app describes itself, and lands in that app's own
-// subset as info.description (describe.go). The weave then reads the tag prose off
+// subset as info.description (describe.go). The compose then reads the tag prose off
 // the subsets it is already reading — it does not look anything up a second time.
 // One producer, one consumer, no second copy of the mapping to fall out of step.
 

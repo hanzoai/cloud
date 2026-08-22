@@ -1,8 +1,8 @@
 // Command reach answers: does the DEPLOYED api answer every address this
 // document publishes?
 //
-// The document is a build-time weave of each app's own projection of its own
-// router (plugin/embed.go). `check` proves that weave equals the source.
+// The document is a build-time compose of each app's own projection of its own
+// router (plugin/embed.go). `check` proves that compose equals the source.
 // Neither proves the thing a caller actually needs: that the address is
 // reachable in production. Three things break that and nothing else checks any
 // of them —
@@ -45,8 +45,26 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/internal/shorten"
+	"github.com/hanzoai/cloud/manifest"
 	"gopkg.in/yaml.v3"
 )
+
+// staged reports whether path belongs to a capability the fleet has not taken to
+// ga, in which case a 404 from an anonymous prober is the CONTRACT rather than a
+// miss.
+//
+// cloud.Stage answers a staged capability with zip's ordinary not-found, chosen
+// deliberately over 403 so the refusal is not an existence oracle — and asserted
+// byte-for-byte against an unrouted path. So no response can tell the two apart;
+// that is the point of it. The only thing that can is the manifest, which is why
+// this asks there rather than trying to read the difference off the wire.
+//
+// Without this, `research` and `admission` answering exactly as designed read as
+// five unrouted addresses and failed the release.
+func staged(path string) bool {
+	owner := manifest.OwnerOf(path)
+	return owner != "" && manifest.StageOf(owner) != ""
+}
 
 const timeout = 20 * time.Second
 
@@ -215,6 +233,9 @@ func main() {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			if staged(o.published) {
+				return // its 404 is the stage gate, not a miss
+			}
 			code, body, server := probe(client, base, o.method, o.probe)
 			if isDark(o.published, code, body) {
 				if server == "" {

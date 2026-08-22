@@ -3014,6 +3014,29 @@ a nested artifact was reported in the reply and then missing from
 `/v1/exec/files/{sid}` — the client's `name.startsWith(...)` found nothing and read it
 as expired. One `find` answers both now.
 
+**A REFUSAL AND AN UNWRITTEN OP ARE DIFFERENT FACTS, and one ledger cannot hold
+both.** `apps/captable` is the case that forced the distinction: eleven writes
+are raw, `untypedByDesign` was empty, and a reader of that one list would
+conclude the package was at its floor. It is not — `writes.go` already carries
+the mechanism (`write`: the relay's 413, the assembled body, the bundle route,
+`goja.BundleErr` for a non-2xx) and three ops already use it. So captable keeps
+TWO ledgers and its gate sums THREE terms:
+
+    untypedByDesign  a WIRE this stack cannot describe — nothing to do until an
+                     upstream capability lands, and the entry names which
+    typingOwed       work that is OWED — the mechanism exists, the blocker is
+                     named, the entry is deleted when the op is written
+
+What each owed op needs is the BUNDLE ROUTE'S OWN accepted fields, and that is
+why they are listed rather than written: the names live in
+`github.com/hanzoai/captable` (`goja/src/routes/*`), not here. `schema.go`'s DDL
+gives snake_case COLUMNS, which are not the JSON the routes take, and the
+`openapi.Describe` prose gives semantics without naming a field. **DO NOT GUESS
+THEM.** `goja.Body` assembles only the fields declared, so a name that does not
+match silently drops its value — a share issuance missing a price is accepted as
+a smaller write rather than refused. Wrong equity data nothing reports is worse
+than an untyped route, which is merely invisible.
+
 **Collisions, and the resolution.** Source does not collide; two artifacts do —
 the regenerated `openapi.yaml` golden and `go.sum`. Both resolve the same way:
 **rebase onto main, then regenerate** (`make -f mk/fleet.mk check`). The
@@ -3898,6 +3921,22 @@ semantic is identical — fail closed once armed, allow before.
   fiber's greedy `*` on the two `/objects/*` ops, where the registry publishes the
   path verbatim while the router renders `{wildcardN}` and Fold refuses the whole
   document. Empty subsystems on the door: 13 → 12; catalogue 1452 → 1459.
+  **`apps/sandbox` followed, 6 of 19 → 13 of 19**, and its shape is worth copying:
+  the AGENT'S DOOR (`/v1/sandbox/{lease,run,read,write,stop,end}`) was typed first
+  and the RESOURCE surface beside it was raw, so seven addresses a caller can read
+  in the document could be reached by no projection but REST. They are not
+  duplicates and must not be folded — the door is verb-shaped and holds a LEASE,
+  the resource surface is noun-shaped and addresses a sandbox by id — and both
+  call the same api.go core, so neither can drift about what a sandbox IS. The six
+  that stay raw are three FAMILIES: the file plane answers text/plain and takes
+  raw bytes (its typed twins are the door's read/write), the two interactive pages
+  answer text/html, and the two sockets are protocol upgrades. The TICKETS that
+  authorize those doors are typed, which is the half that pays: an agent mints a
+  grant and hands it to a human, and the page and the socket stay the browser's.
+  It also cost 31 bare properties — the `Sandbox` and `ExecResult` STORE types,
+  written as stores and published as documents, the crm/team lesson again — so
+  `exitCode` now says on the wire that a non-zero one is a SUCCESSFUL call
+  carrying a failed command.
   Two things it cost, both the documented traps: `g.With(...)` does not exist on
   `cloud.Router` (With is on the App — `zapp.With(mw).Group(prefix)`, the shape
   apps/company uses, and it WRAPS leaves so the ungated probe at the same prefix

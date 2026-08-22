@@ -543,7 +543,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // liveness is the probe's answer. Service precedes Status because the raw
 // handler this op replaced marshalled a map, whose keys render sorted — keeping
 // that order keeps the body byte-identical for every probe already parsing it.
-// The name is fleet-unique on purpose: the weave refuses one schema name with
+// The name is fleet-unique on purpose: the compose refuses one schema name with
 // two shapes, and the health names were already taken by sibling subsystems.
 type liveness struct {
 	// Service names the answering subsystem; it is always commerce.
