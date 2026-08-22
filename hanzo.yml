@@ -25,7 +25,7 @@
 # Dockerfile pulls (console-embed, agent-skills) are published by THEIR OWN repos.
 #
 # So CI's job here is the TEST GATE — and the gate is now what the whole release
-# hangs off. The `test:` block below is car 0 of the train: every later job
+# hangs off. The `test:` block below is the first job: every later job
 # (image, rollout, reach, fanout, receipt) declares `needs:` on it, which is the
 # edge that did not exist when the drift gate below was red on main through 87
 # commits and 6 releases. A gate with no edge to the thing it stops is a
@@ -63,7 +63,7 @@
 #
 # So what remains is a decision about WHERE the plugin build runs, not a missing
 # secret: ci's `bucket:` lane (on the runner, needs the key) or this door (in the
-# cluster, holds the key already, and takes the build off the release train's
+# cluster, holds the key already, and takes the build off the release pipeline's
 # critical path — which is the point of a light host in the first place).
 #
 # ---- written while both were open; kept for the reasoning, not the verdict ----
@@ -94,7 +94,7 @@
 #      those names are in KMS for NO ORG. The lane fails CLOSED on that, so
 #      declaring it would publish nothing and turn every TAG build of this repo
 #      red — and rollout, reach, fanout and receipt all declare needs: on the gate
-#      below. That is the release train stopped in exchange for nothing, which is
+#      below. That is the release pipeline stopped in exchange for nothing, which is
 #      exactly the state ci's `site:` lane shipped in. The answer being built next
 #      door is to stop needing the credential: publish through an authenticated
 #      cloud endpoint on the IAM bearer the KMS step already mints, so CI names no
@@ -174,7 +174,7 @@ test:
       # produced documents that were IDENTICAL — only the witness had moved.
       #
       # So the whole surface was held by a signal that was right about staleness
-      # and silent about consequence, and the release train was red for a day for
+      # and silent about consequence, and the release pipeline was red for a day for
       # documents that had not changed. app-contract regenerates all 123 from
       # source in the same job and fails on any real diff, so nothing is lost by
       # letting this one report instead of refuse.
@@ -272,7 +272,7 @@ test:
     # three steps above it now cost about 1m26s together and each of them can fail on
     # its own evidence without a build. So the order here is cost, ascending: every
     # question that can be answered without compiling is asked before the one that
-    # compiles everything, and the release train learns in ninety seconds what it used
+    # compiles everything, and the release pipeline learns in ninety seconds what it used
     # to learn in twenty-three minutes.
     #
     # Nothing above depends on vet having run. They were ordered the other way because
@@ -309,8 +309,8 @@ test:
     # leaf (zip + s3; 2 cloud packages, never the root), so it drags in nothing,
     # and the host measured 392 packages with it linked — inside the ~395 the
     # paragraph above names. The gate was red on main for a day for a graph that
-    # never grew, and because every later car declares `needs:` on this one, that
-    # is the whole release train stopped by its own approximation.
+    # never grew, and because every later job declares `needs:` on this one, that
+    # is the whole release pipeline stopped by its own approximation.
     #
     # So the exception is NAMED with its reason — the discipline go-unit's -skip
     # list already follows — and the property it approximates is measured
