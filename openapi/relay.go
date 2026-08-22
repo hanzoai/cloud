@@ -53,8 +53,8 @@ import (
 //   - an operation outside the door's own prefix. hanzoai/iam publishing
 //     /v1/billing/x through /v1/iam/* is not a document defect to be smoothed —
 //     it is a routing bug in iam, and the door is where it becomes visible.
-//   - a name collision on the way in, through the SAME noun gate the weave uses
-//     (nouns, weave.go): one schema name, one shape, whether the two claimants are
+//   - a name collision on the way in, through the SAME noun gate the compose uses
+//     (nouns, compose.go): one schema name, one shape, whether the two claimants are
 //     two apps or an app and the registry behind its door.
 //   - a duplicate declaration for one prefix. Two relays at one door is two
 //     answers to one question.
@@ -63,7 +63,7 @@ import (
 // an address the relay also claims, because that is what the matcher does — a
 // specific route registered before a wildcard is the one that answers (apps/o11y
 // mounts /v1/o11y/scope in front of the o11y door for exactly this reason). The
-// fleet-level half of that same rule is in [Weave].
+// fleet-level half of that same rule is in [Compose].
 
 // Relay is a door and the registry behind it.
 //
@@ -205,7 +205,7 @@ func Table(source, prefix string, patterns func() map[string][]string, prose fun
 
 // relayInfo is the identity a sub-document is built under and is never published:
 // [Project] takes the operations and the schemas, never the info block. The
-// composed document has ONE identity and it comes from fleet.go — see [Weave],
+// composed document has ONE identity and it comes from fleet.go — see [Compose],
 // which states the same rule for the same reason.
 var relayInfo = Info{Title: "relay", Version: "v1"}
 
@@ -367,7 +367,7 @@ func Project(doc *Document, rs []Relay) error {
 
 	n.into(doc)
 	// Tags are recomputed from the operations rather than appended to, for the
-	// reason [Weave] states: the tag list is a function of the document's
+	// reason [Compose] states: the tag list is a function of the document's
 	// operations, so a door that was one product's wildcard and is now twenty
 	// products' worth of routes carries exactly the twenty.
 	retag(doc)

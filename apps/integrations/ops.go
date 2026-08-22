@@ -165,14 +165,14 @@ func (r providerRef) id() string { return strings.TrimSpace(r.Provider) }
 // githubRepoRef addresses one GitHub repository by the :repo path segment.
 //
 // The name carries "github" because the OpenAPI schema namespace is FLAT across
-// the fleet — zip keys a schema on the bare Go type name, and openapi.Weave
+// the fleet — zip keys a schema on the bare Go type name, and openapi.Compose
 // refuses two apps that mean different things by one name. apps/git already
 // publishes a `repoRef` keyed by `name` (a repo hosted BY us); this one is keyed
 // by `repo` (a repo GitHub grants our App). Same word, two shapes, so the type
 // that is about GitHub says so — the same way githubReposOut and githubPagesView
 // already do in this package. The collision was latent while every op taking this
 // input was bodyless (GET/DELETE emit no request schema); the first one with a
-// body — POST …/pages/builds — made the weave refuse.
+// body — POST …/pages/builds — made the compose refuse.
 type githubRepoRef struct {
 	// Repo is the repository's short name within the org's installation, with no
 	// owner prefix (the owner is server-derived from the grant). A trailing ".git"

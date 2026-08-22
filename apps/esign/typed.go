@@ -406,7 +406,7 @@ func (in *esignRejectIn) UnmarshalJSON(b []byte) error {
 // shape ({signed: bool}, for POST /v1/company/esign/complete). The name is free
 // today only because this input's fields are all path segments, so it publishes no
 // body and never enters the flat fleet schema namespace — and that is exactly the
-// landmine: the day this op gains one body field, openapi.Weave would refuse the
+// landmine: the day this op gains one body field, openapi.Compose would refuse the
 // whole package for a clash that looks like it came from company. Failure mode #5
 // in its cheap form: the app whose schema is not yet published is the one that
 // moves, and it moves before the collision, not after.

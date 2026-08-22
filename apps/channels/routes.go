@@ -316,7 +316,7 @@ func nonNil(v []string) []string {
 //
 // The name is QUALIFIED with the product because the schema namespace is FLAT
 // across the whole fleet: apps/content already publishes a `channelList` for its
-// SOCIAL channels, and openapi.Weave refuses one name with two shapes ("every
+// SOCIAL channels, and openapi.Compose refuses one name with two shapes ("every
 // generated SDK would bind whichever it read last"). These are chat transports,
 // so that is what the type is called; the wire key stays `channels`.
 type chatChannels struct {

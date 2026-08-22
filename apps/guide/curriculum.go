@@ -50,7 +50,7 @@ import (
 // The qualifier is load-bearing, not decoration: the type NAME is the schema name in
 // the published document, and that document is ONE flat namespace shared by every app
 // in the fleet. Plain `Step` is already claimed there by apps/marketing (a step of a
-// drip sequence — a different shape entirely), and openapi.Weave refuses one name with
+// drip sequence — a different shape entirely), and openapi.Compose refuses one name with
 // two shapes because a generated SDK would bind whichever it read last. Do not
 // "simplify" this back to Step; that is the collision, not a tidier name. The wire is
 // unaffected either way — the JSON keys live on the fields.

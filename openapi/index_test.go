@@ -4,8 +4,8 @@ package openapi
 // it shows a caller exactly the surface a caller may call, and it never answers
 // at an address a capability answers at.
 //
-// Every case is built by WEAVING parts, because both properties are functions of
-// facts only the weave puts on an operation — the tag that names its capability,
+// Every case is built by COMPOSING parts, because both properties are functions of
+// facts only the compose puts on an operation — the tag that names its capability,
 // the stage that decides who is shown it, and the audience mark [stamp] writes.
 // Constructing a Document by hand would test a shape the fleet never produces.
 
@@ -21,7 +21,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// op is one operation as a part carries it before the weave sees it.
+// op is one operation as a part carries it before the compose sees it.
 func op(id, summary string) *Operation {
 	return &Operation{OperationID: id, Summary: summary}
 }
@@ -30,8 +30,8 @@ func op(id, summary string) *Operation {
 // index: a plain capability, one that answers its OWN root, one that is beta,
 // and the operator's product.
 //
-// PARTS, not a woven document, because the stage arrives with the part — an app
-// cannot know its own (see [Part]) — so a test that wove first and served the
+// PARTS, not a composed document, because the stage arrives with the part — an app
+// cannot know its own (see [Part]) — so a test that composed first and served the
 // result would hand every capability the same stage and prove nothing about the
 // one term of the rule that keeps a beta capability hidden.
 func parts() []Part {
@@ -69,7 +69,7 @@ func parts() []Part {
 // fleet is [parts] as the host composes them.
 func fleet(t *testing.T) *Document {
 	t.Helper()
-	d, err := Weave(parts())
+	d, err := Compose(parts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func served(t *testing.T, app *zip.App, method, path string) (*http.Response, st
 
 // indexed builds an app with the index composed ahead of one capability that
 // answers its own root, exactly as the front door composes it ahead of the mounts
-// — and over the same [Subsets] shape, so the weave it does is the fleet's.
+// — and over the same [Subsets] shape, so the compose it does is the fleet's.
 func indexed(t *testing.T) *zip.App {
 	t.Helper()
 	app := newApp()
@@ -306,7 +306,7 @@ func TestBothDoorsAreInTheDocument(t *testing.T) {
 }
 
 // A /v1 answer says what its address accepts and what sits above it. Both are
-// read off the woven contract, so neither can name an address the fleet does
+// read off the composed contract, so neither can name an address the fleet does
 // not serve — a link to a 404 is worse than no link.
 func TestAnAnswerSaysWhatItAcceptsAndWhatIsAboveIt(t *testing.T) {
 	app := indexed(t)

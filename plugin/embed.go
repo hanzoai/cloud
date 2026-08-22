@@ -3,7 +3,7 @@
 //
 // It is a function of the plugin's own router, so it is known when the plugin is
 // BUILT: `<app> describe plugin/<app>` writes openapi.json from one mount of one
-// router (describe.go). This package embeds those files, and the host weaves them
+// router (describe.go). This package embeds those files, and the host composes them
 // into the fleet document it serves at /v1/openapi.json.
 //
 // It exists as its own leaf package for one reason: go:embed cannot reach outside
@@ -29,7 +29,7 @@
 // catalogue could not: the fleet's document carries each subsystem's PROSE, and
 // that prose is lifted from the app's SOURCE at describe time
 // (openapi.Synopsis) — a running child has no comment to read and would answer
-// with its deployment's brand blurb instead, which the weave would then publish
+// with its deployment's brand blurb instead, which the compose would then publish
 // as the description of every product tag. Making the synopsis a declared value
 // is what the other half of this file is waiting on.
 package plugin
@@ -37,7 +37,7 @@ package plugin
 import "embed"
 
 // specs holds every app's openapi.json — the same committed files the drift gate
-// regenerates from source and the weave composes into the fleet's documents
+// regenerates from source and the compose composes into the fleet's documents
 // (mk/fleet.mk check). Embedding them is what lets the host describe the
 // whole fleet without starting any of it: the alternative is reading the live
 // router, and the light host's live router is 113 proxy prefixes.

@@ -12,7 +12,7 @@ package openapi
 //
 // # It is a PROJECTION, never a second source
 //
-// Every value here is read off the woven document the host already serves at
+// Every value here is read off the composed document the host already serves at
 // [Path]: the capability is the operation's own tag (HIP-0139 §4, which is
 // x-app), its sentence is that tag's description (openapi/synopsis.go lifted it
 // from the package doc), its stage is x-stage and whether it is shown at all is
@@ -112,10 +112,10 @@ type Index struct {
 	Links       map[string]Link `json:"_links"`
 }
 
-// Discover projects a woven document into the hypermedia index: the root, and
+// Discover projects a composed document into the hypermedia index: the root, and
 // one index per capability keyed by its name.
 //
-// The surface is the PUBLIC one — an operation carries the audience the weave
+// The surface is the PUBLIC one — an operation carries the audience the compose
 // stamped on it, so the operator's admin product, the relay doors, the legacy
 // spellings and every capability that is not yet ga are absent from both halves
 // at once. That is the same rule openapi.yaml is projected by and it is asked
@@ -224,12 +224,12 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 // about requests the mounts would otherwise answer.
 //
 // The index is rendered ONCE, on the first request that needs it, from the same
-// subsets the document is woven from. The weave decodes bytes already in this
+// subsets the document is composed from. The compose decodes bytes already in this
 // binary — no subsystem starts and no socket opens — and measured on this tree
 // (1,771 paths, 2026-08-20) it costs 56ms, paid by one request per process.
 //
-// The woven Document is DROPPED once the answers are bytes, which is why this
-// weaves rather than sharing [serve]'s. Sharing would mean one of them holding
+// The composed Document is DROPPED once the answers are bytes, which is why this
+// composes rather than sharing [serve]'s. Sharing would mean one of them holding
 // the whole decoded document alive for the life of the process, and this host is
 // the one that has been evicted for the memory it holds.
 func MountIndex(app *zip.App, subsets func() ([]Part, error)) {
@@ -256,7 +256,7 @@ func MountIndex(app *zip.App, subsets func() ([]Part, error)) {
 	})
 
 	app.Use(zip.H(func(c *zip.Ctx) error {
-		// A deployment that cannot weave its own document still answers the
+		// A deployment that cannot compose its own document still answers the
 		// request the caller actually made. It answers without the links it could
 		// not derive, which is why everything below reads through a nil receiver.
 		r, _ := render()
@@ -390,7 +390,7 @@ func leaf(path string) string {
 	return rest
 }
 
-// rendered is what one weave of the fleet document leaves behind: the bodies of
+// rendered is what one compose of the fleet document leaves behind: the bodies of
 // the two index doors, and what the contract says about every other address.
 //
 // The document itself is dropped — see [MountIndex] — and this is deliberately
