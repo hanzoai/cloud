@@ -3898,6 +3898,22 @@ semantic is identical — fail closed once armed, allow before.
   fiber's greedy `*` on the two `/objects/*` ops, where the registry publishes the
   path verbatim while the router renders `{wildcardN}` and Fold refuses the whole
   document. Empty subsystems on the door: 13 → 12; catalogue 1452 → 1459.
+  **`apps/sandbox` followed, 6 of 19 → 13 of 19**, and its shape is worth copying:
+  the AGENT'S DOOR (`/v1/sandbox/{lease,run,read,write,stop,end}`) was typed first
+  and the RESOURCE surface beside it was raw, so seven addresses a caller can read
+  in the document could be reached by no projection but REST. They are not
+  duplicates and must not be folded — the door is verb-shaped and holds a LEASE,
+  the resource surface is noun-shaped and addresses a sandbox by id — and both
+  call the same api.go core, so neither can drift about what a sandbox IS. The six
+  that stay raw are three FAMILIES: the file plane answers text/plain and takes
+  raw bytes (its typed twins are the door's read/write), the two interactive pages
+  answer text/html, and the two sockets are protocol upgrades. The TICKETS that
+  authorize those doors are typed, which is the half that pays: an agent mints a
+  grant and hands it to a human, and the page and the socket stay the browser's.
+  It also cost 31 bare properties — the `Sandbox` and `ExecResult` STORE types,
+  written as stores and published as documents, the crm/team lesson again — so
+  `exitCode` now says on the wire that a non-zero one is a SUCCESSFUL call
+  carrying a failed command.
   Two things it cost, both the documented traps: `g.With(...)` does not exist on
   `cloud.Router` (With is on the App — `zapp.With(mw).Group(prefix)`, the shape
   apps/company uses, and it WRAPS leaves so the ungated probe at the same prefix
