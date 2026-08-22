@@ -39,7 +39,7 @@ func mountStatement(app cloud.Router, o ops) {
 // The name carries a View suffix because the bare noun is already a published
 // schema on this app: usage_accounts.go answers /v1/billing/usage/accounts with
 // a per-provider usage breakdown it calls `accounts`. Two shapes under one
-// schema name is what openapi.Weave refuses, and the incumbent is the one that
+// schema name is what openapi.Compose refuses, and the incumbent is the one that
 // is already published, so this is the one that moves.
 type accountsView []plane.BillingAccount
 

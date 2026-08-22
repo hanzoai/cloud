@@ -413,6 +413,18 @@
    "doc": "Collects an issued invoice: credit grants first, then prepaid balance, then the\ncard on file — the same waterfall the dunning workflow runs.\n\nA DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the\ninvoice still open, because a declined collection is a normal business outcome\nthat must remain retryable — and because sealing it as a failure would wedge\ndunning behind a replayed decline. Only a successful collection is sealed, so a\nretry of a paid invoice replays the receipt instead of charging again.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
   {
+   "id": "delete_billing_alerts_by_id",
+   "doc": "Removes one of the caller's spend caps and answers 204.\n\nRemoving a cap RAISES what the org may spend, so it takes the same authority\nsetting one does. The caps that remain still bind: this drops one, never the\nwhole policy."
+  },
+  {
+   "id": "delete_billing_methods_by_id",
+   "doc": "Removes one card or account the caller has saved.\n\nIt detaches only the CALLER'S own — the wallet this request bills from,\nresolved server-side — so an id belonging to another customer of the same org\nis not something this operation can reach. A platform or service caller\ndetaches on the subject's behalf, and that authority is decided HERE, where the\ncredential is, and travels as a value: authority decided twice is authority\nthat eventually disagrees with itself.\n\nThe card is vaulted at the processor, so what goes is our token for it."
+  },
+  {
+   "id": "delete_billing_portal_methods_by_id",
+   "doc": "DetachPortalMethod is DetachMethod at the address a hosted checkout addresses\nit by. One set of rows, two spellings: a card detached at either is gone from\nboth, because there is one store behind them."
+  },
+  {
    "id": "getInvoice",
    "doc": "Reads one invoice out of the caller's org.\n\nThe org scopes the read by construction — the store is namespaced to it — so an\nid belonging to another tenant is not found rather than found and then filtered.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
    "read": true
@@ -531,6 +543,18 @@
   {
    "id": "post_billing_mode",
    "doc": "Moves this org between sandbox money and real money.\n\nIt decides whether a charge hits a real card, so it is the one posture change\nthat is not self-service: the platform bar, never an org owner, because an org\nthat could put itself in test mode could take priced work for free.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
+  },
+  {
+   "id": "post_billing_recharge_run-all",
+   "doc": "Sweeps every org's auto-recharge and answers what it did.\n\nPLATFORM AUTHORITY ONLY. It charges saved cards across every tenant, so an org\nowner reaching it could sweep-charge the estate; a caller without it is\nrefused before anything is charged.\n\nThe answer explains a sweep that charged nobody as readily as one that\ncharged: it names how many orgs were considered and how many needed charging,\nwith a row each."
+  },
+  {
+   "id": "post_billing_topup",
+   "doc": "Charges a card the caller already saved and credits the\nbalance. Same receipt and the same retry safety as the token door; the only\ndifference is which card, so a caller topping up from a saved method never\nre-enters one."
+  },
+  {
+   "id": "post_billing_topup_token",
+   "doc": "Charges a single-use card token and credits the caller's\nbalance.\n\nThe token comes from the payment form and is vaulted as part of the charge, so\nno card number reaches this service and none is stored here. The receipt names\nthe ledger entry, the new balance, and the PROCESSOR's own reference — which is\nthe only field that proves money moved at the gateway rather than only in our\nledger.\n\nRetry-safe on X-Idempotency-Key: the same key settles one charge and returns\nthe first receipt."
   },
   {
    "id": "raiseInvoice",
@@ -6016,12 +6040,42 @@
  ],
  "sandbox": [
   {
+   "id": "delete_sandbox_by_id",
+   "doc": "Ends a sandbox and releases the compute behind it. Answers 204.\n\nENDING IS NOT STOPPING. This releases the resource: the pod goes and anything\nonly inside it goes with it. To end what a sandbox is RUNNING while keeping\nthe sandbox — the checkout, the logs, the half-written file — the verb is\nPOST /v1/sandbox/stop.\n\n`?purge=1` additionally removes the record, so the sandbox stops being listed\nat all rather than being listed as ended."
+  },
+  {
    "id": "end_sandbox",
    "doc": "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too."
   },
   {
+   "id": "get_sandbox",
+   "doc": "Lists the caller org's sandboxes, newest first.\n\n`?project=` and `?status=` narrow it. Only the caller's org's: the store is\nkeyed on the validated org, so another tenant's sandbox is not something this\noperation can return.",
+   "read": true
+  },
+  {
+   "id": "get_sandbox_by_id",
+   "doc": "Returns one sandbox: its class, project, image, the runtime it was\ngiven, its status and when its lease ends.\n\nAn id the caller's org does not hold is the same 404 an unknown id gives — the\nstore is keyed on the org, so a cross-tenant id simply is not there.",
+   "read": true
+  },
+  {
    "id": "lease_sandbox",
    "doc": "Leases the caller's sandbox, or returns the one it named if that\nlease is still running.\n\nWhat comes back is a real computer: a pod under a runtime boundary with a\ntoolchain already in it, its own filesystem, and a lease that ends it. Every\nother op here acts on the one this returns."
+  },
+  {
+   "id": "post_sandbox",
+   "doc": "Leases a sandbox — a real computer — for the caller's org.\n\nThe class decides what it is for and therefore its image, working directory\nand isolation. A dev or desktop sandbox is SINGLE-ATTACH per project, so\nasking twice for one project resumes the one that exists rather than paying\nfor a second; an exec sandbox carries no project and is bounded per org\ninstead, refused 429 past the ceiling because the caller's correct response is\nto wait.\n\nAnswers 201 with the sandbox as leased, which names the runtime it GOT — not\nthe one that was asked for."
+  },
+  {
+   "id": "post_sandbox_by_id_exec",
+   "doc": "Runs one command in a sandbox the caller holds and answers with\nits exit code, stdout and stderr.\n\nSend `argv` — an argument vector cannot be word-split by accident — or\n`command` for a shell line, which is the only input here that ever reaches a\nshell. A non-zero exit is a SUCCESSFUL call carrying a failed command: the\nstatus is 200 and the exit code is in the answer, because \"the command failed\"\nand \"the call failed\" are different facts."
+  },
+  {
+   "id": "post_sandbox_by_id_screen_ticket",
+   "doc": "Mints a short-lived grant to open the screen of a desktop\nsandbox. Same properties as the terminal ticket, for the other door."
+  },
+  {
+   "id": "post_sandbox_by_id_terminal_ticket",
+   "doc": "Mints a short-lived grant to open a terminal on a sandbox.\n\nThe ticket travels in the query string of the URL it answers with, because a\nbrowser cannot set an Authorization header on a WebSocket handshake. It is\nsingle-purpose and short-lived for exactly that reason. A sandbox that is not\nrunning is 409 rather than a ticket that cannot be used."
   },
   {
    "id": "read_sandbox_file",

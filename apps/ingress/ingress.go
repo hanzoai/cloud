@@ -251,12 +251,12 @@ type objRef struct {
 }
 
 // A typed op's Go type name IS its schema name, and the fleet's schema namespace
-// is FLAT — openapi.Weave refuses one name with two shapes across apps, because a
+// is FLAT — openapi.Compose refuses one name with two shapes across apps, because a
 // generated SDK would bind whichever it read last. So the values below carry the
 // product the namespace cannot: the obvious "serviceList" is already apps/admin's
-// launch board, and the weave refused this package until these were qualified. The
+// launch board, and the compose refused this package until these were qualified. The
 // domain nouns (Route, Service, Middleware, Backend, TLSConfig) stay unqualified
-// — they are ingress's published nouns and unique today, and the weave is the
+// — they are ingress's published nouns and unique today, and the compose is the
 // gate if that ever stops being true.
 
 // ingressRoutes is every route the caller's org has configured.

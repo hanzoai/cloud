@@ -13,7 +13,7 @@ import (
 // each other by TEST:
 //
 //	each app binary's own subset   `<app> openapi`, one file per app
-//	the woven fleet document       Weave() over those subsets — private.yaml
+//	the composed fleet document       Compose() over those subsets — private.yaml
 //	its public projection          Publish() over that — openapi.yaml
 //	the live endpoint              GET /v1/openapi.json, the public projection
 //
@@ -26,7 +26,7 @@ import (
 //
 // An info block that differed between them would make two documents OF THE SAME
 // API compare unequal for a reason that has nothing to do with the API — which
-// would break the composition proof (weave_test.go) over a title string. So the
+// would break the composition proof (compose_test.go) over a title string. So the
 // identity is a value, defined once and read by all four, not a literal copied
 // into each caller.
 //
@@ -41,7 +41,7 @@ import (
 //
 // There is no unified cloud binary; there is a light host that mounts no
 // subsystem and 116 app binaries that each project their OWN router when they are
-// BUILT. What the host serves is the weave of those projections ([MountFleet]),
+// BUILT. What the host serves is the compose of those projections ([MountFleet]),
 // so nothing in production reads a live router, and the artifact is only as fresh
 // as the last `make -f mk/fleet.mk describe`. It shipped stale — one binary answered
 // a renamed billing route under its new name while still publishing the old one,
@@ -89,7 +89,7 @@ var (
 // one identity above.
 //
 // Every producer of a published spec calls this — the monolith's golden, each
-// app binary's subset, and the weave's output. Spec stays exported for the
+// app binary's subset, and the compose's output. Spec stays exported for the
 // callers that want a document of their own (the live endpoint names the
 // deployment's brand), but nothing that writes an artifact should be choosing
 // its own title.
@@ -103,7 +103,7 @@ func FleetSpec(app *zip.App) (*Document, error) {
 //
 // read answers with one app's subset bytes. WHERE those bytes come from is the
 // caller's, because there are two callers and ONE set of files: the drift gate
-// reads the working tree it is about to compare against (openapi/weave_test.go),
+// reads the working tree it is about to compare against (openapi/compose_test.go),
 // and the light host reads what it embedded from that same tree at build time
 // (plugin.Spec). Neither is a second source — check regenerates the files
 // both read, from source, and fails on any diff.
@@ -124,15 +124,15 @@ func FleetSpec(app *zip.App) (*Document, error) {
 // "generated" was an assumption about a committed file, and a file can be edited.
 // One was: /v1/billing/methods was hand-written into commerce's subset by copying
 // the /v1/billing/portal/methods block, operationId and prose together, so two
-// paths claimed get_v1_billing_portal_methods and the fleet could not be woven at
-// all. [Weave] did catch it — but a collision INSIDE one part reaches Weave as a
+// paths claimed get_v1_billing_portal_methods and the fleet could not be composed at
+// all. [Compose] did catch it — but a collision INSIDE one part reaches Compose as a
 // collision between two paths with no app attached, so the report named the two
 // addresses and left which of 123 subsets to a search. Here the answer is the
 // loop variable.
 //
 // It is the same check, not a second one: uniqueOperationIDs is the single
 // statement of the rule, asked once per part here and once over the whole
-// composition there, because a part being injective and the weave being injective
+// composition there, because a part being injective and the compose being injective
 // are different facts and neither implies the other.
 func Subsets(apps []string, read func(app string) []byte, stage func(app string) string) ([]Part, error) {
 	out := make([]Part, 0, len(apps))
@@ -179,11 +179,11 @@ func core() (Part, error) {
 	return Part{App: "openapi", Doc: doc}, nil
 }
 
-// Fleet is THE published Hanzo Cloud API document: the weave of every app's own
+// Fleet is THE published Hanzo Cloud API document: the compose of every app's own
 // subset plus core.
 //
 // ONE definition, called by both things that must agree about it — the gate that
-// WRITES openapi.yaml (openapi/weave_test.go) and the host that SERVES it
+// WRITES openapi.yaml (openapi/compose_test.go) and the host that SERVES it
 // (MountFleet). That is what makes "the served document is the committed
 // artifact" true by construction rather than by two pieces of code happening to
 // agree; a drift between them is not expressible.
@@ -195,11 +195,11 @@ func Fleet(subsets []Part) (*Document, error) {
 	parts := make([]Part, 0, len(subsets)+1)
 	parts = append(parts, subsets...)
 	parts = append(parts, c)
-	return Weave(parts)
+	return Compose(parts)
 }
 
 // MountFleet serves the fleet's PUBLIC CONTRACT at Path: the composition of what
-// this deployment's plugins serve, woven from the subsets their binaries
+// this deployment's plugins serve, composed from the subsets their binaries
 // projected when they were built, and then projected to the customer surface
 // ([Publish]).
 //
@@ -220,7 +220,7 @@ func Fleet(subsets []Part) (*Document, error) {
 //
 // So the host answers from the build-time projection instead. It is the same
 // question every other projection answers ("what does the fleet serve") sourced
-// from the only place the host can honestly read it. The weave runs ONCE, on the
+// from the only place the host can honestly read it. The compose runs ONCE, on the
 // first request, off bytes already in the binary: no subsystem starts, no socket
 // opens, and a deployment that never gets asked never pays.
 //
@@ -231,10 +231,10 @@ func MountFleet(app *zip.App, subsets func() ([]Part, error)) {
 		if err != nil {
 			return nil, err
 		}
-		woven, err := Fleet(parts)
+		composed, err := Fleet(parts)
 		if err != nil {
 			return nil, err
 		}
-		return Publish(woven)
+		return Publish(composed)
 	})
 }

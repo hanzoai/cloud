@@ -2292,6 +2292,40 @@ components:
             have moved and nobody has looked. It does not block; it tells.
           type: boolean
       type: object
+    Charged:
+      properties:
+        balanceCents:
+          description: |-
+            BalanceCents is the subject's balance AFTER the charge settled, in cents, so
+            a caller does not have to re-read to show the new number.
+          type: integer
+        processorRef:
+          description: |-
+            ProcessorRef is the payment processor's own reference. It is the only field
+            that proves money moved at the GATEWAY rather than merely in our ledger,
+            which is why it is answered and not only logged. Absent where the processor
+            returned none.
+          type: string
+        status:
+          description: |-
+            Status is how the charge ended. Read it rather than inferring success from
+            the HTTP status: the call succeeded whenever this field is present, and what
+            the PROCESSOR did is what this says.
+          type: string
+        test:
+          description: |-
+            Test states which bucket was credited — sandbox money or real money — so no
+            reader has to guess whether a receipt is real. Sandbox and live funds are
+            physically separate ledgers, and a reader that conflates them restates the
+            company's revenue.
+          type: boolean
+        transactionId:
+          description: |-
+            TransactionID is the ledger entry this charge created. It is the handle a
+            later read or a refund names, and it is minted by the ledger rather than by
+            the caller.
+          type: string
+      type: object
     Citation:
       properties:
         endLine:
@@ -3605,6 +3639,20 @@ components:
             type: string
           type: array
       type: object
+    Detachment:
+      properties:
+        deleted:
+          description: |-
+            Deleted is whether the method was actually removed. False with no error
+            means it was already gone, which is a successful detach rather than a
+            failure — a retry must not be an error.
+          type: boolean
+        id:
+          description: |-
+            ID is the method that was detached, echoed so a caller batching several can
+            tell the answers apart.
+          type: string
+      type: object
     Diagnostic:
       properties:
         code:
@@ -4259,6 +4307,26 @@ components:
         stack:
           type: string
         type:
+          type: string
+      type: object
+    ExecResult:
+      properties:
+        exitCode:
+          description: |-
+            ExitCode is the command's own exit status. A non-zero one is a SUCCESSFUL
+            call carrying a failed command — the HTTP status stays 200, because "the
+            command failed" and "the call failed" are different facts and a caller has
+            to be able to tell them apart.
+          type: integer
+        stderr:
+          description: |-
+            Stderr is everything it wrote to standard error. It is populated on a
+            successful run too — plenty of tools report progress there — so it is not a
+            signal that anything went wrong; ExitCode is.
+          type: string
+        stdout:
+          description: Stdout is everything the command wrote to standard output,
+            as text.
           type: string
       type: object
     Experiment:
@@ -8922,6 +8990,43 @@ components:
             wire's PAYMENT-RESPONSE `transaction` falls back to ID when this is empty.
           type: string
       type: object
+    Recharge:
+      properties:
+        charged:
+          description: |-
+            Charged is how many of them were actually charged. It is at most Orgs, and
+            the difference is orgs whose balance was already above their threshold.
+          type: integer
+        orgs:
+          description: |-
+            Orgs is how many orgs the sweep considered — every org with auto-recharge
+            armed, whether or not it needed charging.
+          type: integer
+        results:
+          description: |-
+            Results is one row per org considered, so a sweep that charged nobody is
+            still explainable. Never null.
+          items:
+            $ref: '#/components/schemas/Recharged'
+          type: array
+      type: object
+    Recharged:
+      properties:
+        amountCents:
+          type: integer
+        balanceCents:
+          type: integer
+        charged:
+          type: boolean
+        error:
+          type: string
+        orgName:
+          type: string
+        transactionId:
+          type: string
+        userId:
+          type: string
+      type: object
     Record:
       properties:
         name:
@@ -10537,6 +10642,94 @@ components:
             revenue, entirely separate from MRR — adding the two double-counts nothing but
             invents a figure the business does not have.
           type: integer
+      type: object
+    Sandbox:
+      properties:
+        class:
+          description: |-
+            Class is what the sandbox is FOR, and it decides the image, the working
+            directory and the isolation: "exec" for a code-interpreter call (workdir
+            /mnt/data, no project, bounded per org), "dev" for a workspace bound to a
+            project (workdir /work, single-attach), "desktop" for one with a screen.
+          type: string
+        createdAt:
+          description: CreatedAt is when the lease was first taken, Unix seconds.
+          type: integer
+        error:
+          description: |-
+            Error is why the sandbox could not come up, in plain words. Present only
+            with status "error", and it is the field to read rather than inferring a
+            cause from the absence of a pod.
+          type: string
+        expiresAt:
+          description: |-
+            ExpiresAt is when the lease ends, Unix seconds. Past it the reaper may take
+            the sandbox at any time; it is a deadline, not a guarantee of survival until
+            then, since an idle sandbox goes sooner.
+          type: integer
+        id:
+          description: |-
+            ID is the sandbox's server-minted handle and what every operation addresses
+            it by. The caller does not choose it.
+          type: string
+        image:
+          description: |-
+            Image is the container image this sandbox is actually running — the one the
+            class chose, or an override the policy admitted. It is what ran, not what
+            was asked for.
+          type: string
+        kind:
+          description: |-
+            Kind is the resource family this row belongs to. Always "sandbox" here; it
+            exists because the store this shares is keyed across kinds.
+          type: string
+        lastUsedAt:
+          description: |-
+            LastUsedAt is when the sandbox last did work, Unix seconds. The reaper reads
+            it: a sandbox idle past the idle window is reclaimed even inside its TTL,
+            because an idle lease is capacity nobody is using.
+          type: integer
+        org:
+          description: |-
+            Org is the org that holds the lease — the validated caller's, never a value
+            a request supplied. It is also the store's key, so a sandbox is not merely
+            filtered out of another org's answers; it is unreachable from them.
+          type: string
+        project:
+          description: |-
+            Project is the project this sandbox is bound to. A dev or desktop sandbox
+            has one and is SINGLE-ATTACH under it, so asking twice resumes rather than
+            leasing a second; an exec sandbox has none.
+          type: string
+        runtime:
+          description: |-
+            Runtime is the isolation boundary this sandbox GOT, which is not always the
+            one it asked for: a caller states a preference and runtimeFor answers with
+            what the sandbox can actually have. Reported so a person comparing two
+            runtimes is comparing the runtimes they got rather than the ones they typed
+            — the difference between those two is the whole reason to record it.
+
+            Empty means the node's default runtime, which is a real answer and not a
+            missing one.
+
+            This is not a copy that can go stale. runtimeClassName is IMMUTABLE on a
+            pod, a sandbox's pod is created once and never recreated (restartPolicy
+            Never, no pool), and its name is never reused — so for as long as the pod
+            this row names exists, it is running this runtime. The alternative, asking
+            the apiserver on every read, buys nothing and costs a round trip per row.
+          type: string
+        status:
+          description: |-
+            Status is where the sandbox is in its life: "pending" while the pod is
+            coming up, "running" once it can take work, "error" when it cannot. Only a
+            running sandbox takes an exec or mints an interactive ticket.
+          type: string
+        volume:
+          description: |-
+            Volume is the persistent volume attached to the sandbox, when it has one. A
+            dev sandbox keeps its work across leases through it; an exec sandbox has
+            none and loses everything outside /mnt/data when the lease ends.
+          type: string
       type: object
     SbomHealth:
       properties:
@@ -23314,6 +23507,35 @@ components:
             several sessions down one connection.
           type: string
       type: object
+    execRequest:
+      properties:
+        argv:
+          description: |-
+            Argv is the command as an argument vector, which is the honest form: it
+            cannot be word-split by accident. Send this OR Command, not both.
+          items:
+            type: string
+          type: array
+        command:
+          description: |-
+            Command is a shell line, for a caller that holds one. It is a convenience
+            over Argv and is the only input that ever reaches a shell.
+          type: string
+        dir:
+          description: |-
+            Dir is the working directory to run in. Empty runs in the class's own
+            workdir — /mnt/data for exec, /work for dev.
+          type: string
+        id:
+          description: ID is the sandbox to run in, from the path.
+          type: string
+        stdin:
+          description: Stdin is fed to the command on its standard input.
+          type: string
+        timeoutSec:
+          description: TimeoutSec bounds the run in seconds. Zero takes the default.
+          type: integer
+      type: object
     experimentList:
       properties:
         data:
@@ -29575,6 +29797,37 @@ components:
           description: |-
             ReferredCount is how many orgs that affiliate directly referred — a count
             only, never which orgs.
+          type: integer
+      type: object
+    leaseIn:
+      properties:
+        class:
+          description: |-
+            Class is what the sandbox is FOR: "exec" for a code-interpreter call,
+            "dev" for a workspace bound to a project, "desktop" for one with a screen.
+            It decides the image, the working directory and the isolation.
+          type: string
+        image:
+          description: |-
+            Image overrides the image the class would pick. Honoured only for a caller
+            the policy admits, and the sandbox that comes back names the image it GOT.
+          type: string
+        project:
+          description: |-
+            Project binds the sandbox to one of the org's projects. Required for a dev
+            or desktop class, which are single-attach per project; an exec sandbox
+            carries none.
+          type: string
+        runtime:
+          description: |-
+            Runtime asks for an isolation: runc, gvisor, kata-clh or kata-fc. It is a
+            REQUEST, not a guarantee — the sandbox that comes back carries the runtime
+            it was actually given, which is the field to read.
+          type: string
+        ttlSec:
+          description: |-
+            TTLSec is how long the lease runs before the reaper may take it, in
+            seconds. Zero takes the class's own default.
           type: integer
       type: object
     legalFiling:
@@ -50639,6 +50892,15 @@ components:
             the chart groups by, and the key the board joins a unit's latest reading on.
           type: string
       type: object
+    sandboxList:
+      properties:
+        sandboxes:
+          description: Sandboxes are the caller org's sandboxes matching the filter.
+            Never null.
+          items:
+            $ref: '#/components/schemas/Sandbox'
+          type: array
+      type: object
     scan:
       properties:
         content:
@@ -53672,6 +53934,26 @@ components:
             answered.
           type: integer
       type: object
+    ticketGrant:
+      properties:
+        expiresIn:
+          description: ExpiresIn is how long the ticket is good for, in seconds.
+          type: integer
+        ticket:
+          description: |-
+            Ticket is the grant itself. It is single-purpose and short-lived, and it
+            travels in a query string because a WebSocket handshake carries no
+            Authorization header a browser can set.
+          type: string
+        url:
+          description: |-
+            URL is the PATH to open, ticket included — not an absolute URL. Which host
+            this address wears in public is the edge's answer and not this process's, so
+            an absolute URL would be a guess; the client already knows the host it is
+            talking to. It names the PAGE, which is what a caller embeds — the page
+            finds its own socket, and a caller that wants the raw socket adds `/ws`.
+          type: string
+      type: object
     todoProject:
       properties:
         createdAt:
@@ -53748,6 +54030,27 @@ components:
             Result is the tool's own output, verbatim — its shape is the tool's, not
             this plane's.
           type: object
+      type: object
+    topupIn:
+      properties:
+        amountCents:
+          description: AmountCents is how much to charge, in cents of Currency. Required.
+          type: integer
+        currency:
+          description: |-
+            Currency is the ISO-4217 code to charge in. Empty takes the deployment's
+            own default.
+          type: string
+        paymentMethodId:
+          description: MethodID names a card the subject already saved, for the saved-card
+            door.
+          type: string
+        sourceId:
+          description: |-
+            SourceID is a single-use card token from the payment form, for the token
+            door. It is vaulted as part of the charge, so a caller never holds card
+            numbers and this service never sees one.
+          type: string
       type: object
     totalView:
       properties:
@@ -67637,23 +67940,28 @@ paths:
   /v1/billing/alerts/{id}:
     delete:
       description: |-
-        Deletes a budget the caller's org owns and answers 204.
+        Removes one of the caller's spend caps and answers 204.
 
-        Removing a cap REMOVES A CEILING, so it takes the same bar as setting one: a validated org admin, the platform SuperAdmin, or the trusted in-process service token. A member who could delete the org's cap would have unbounded spend.
-
-        A cap this org does not own is NOT FOUND rather than refused — the same answer whether the id is unknown or belongs to another customer — so an id cannot be probed for existence by trying to delete it.
+        Removing a cap RAISES what the org may spend, so it takes the same authority
+        setting one does. The caps that remain still bind: this drops one, never the
+        whole policy.
       operationId: delete_billing_alerts_by_id
       parameters:
-      - in: path
+      - description: ID is the cap to remove, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Remove one spend cap
+      responses:
+        "204":
+          description: no content
+      summary: Removes one of the caller's spend caps and answers 204.
       tags:
       - billing
       x-app: billing
       x-public: true
+      x-tool: true
     patch:
       description: |-
         Changes one spend cap: raise or lower the ceiling, flip enforcement, retune
@@ -68254,23 +68562,37 @@ paths:
   /v1/billing/methods/{id}:
     delete:
       description: |-
-        Detaches the method at the processor and drops the row.
+        Removes one card or account the caller has saved.
 
-        A method the caller does not own is NOT FOUND rather than refused — the same answer whether the id names nothing or names somebody else's card — so an id cannot be probed for existence.
+        It detaches only the CALLER'S own — the wallet this request bills from,
+        resolved server-side — so an id belonging to another customer of the same org
+        is not something this operation can reach. A platform or service caller
+        detaches on the subject's behalf, and that authority is decided HERE, where the
+        credential is, and travels as a value: authority decided twice is authority
+        that eventually disagrees with itself.
 
-        A platform operator or the trusted in-process service token may act on any subject inside the org; everyone else may only remove their own.
+        The card is vaulted at the processor, so what goes is our token for it.
       operationId: delete_billing_methods_by_id
       parameters:
-      - in: path
+      - description: ID is the saved method to detach, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Remove one saved card or account
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Detachment'
+          description: ok
+      summary: Removes one card or account the caller has saved.
       tags:
       - billing
       x-app: billing
       x-public: true
+      x-tool: true
   /v1/billing/mode:
     post:
       description: |-
@@ -68380,37 +68702,57 @@ paths:
   /v1/billing/portal/methods/{id}:
     delete:
       description: |-
-        Detaches the method at the processor and drops the row.
-
-        A method the caller does not own is NOT FOUND rather than refused — the same answer whether the id names nothing or names somebody else's card — so an id cannot be probed for existence.
-
-        A platform operator or the trusted in-process service token may act on any subject inside the org; everyone else may only remove their own.
+        DetachPortalMethod is DetachMethod at the address a hosted checkout addresses
+        it by. One set of rows, two spellings: a card detached at either is gone from
+        both, because there is one store behind them.
       operationId: delete_billing_portal_methods_by_id
       parameters:
-      - in: path
+      - description: ID is the saved method to detach, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Remove one saved card or account
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Detachment'
+          description: ok
+      summary: DetachPortalMethod is DetachMethod at the address a hosted checkout
+        addresses it by.
       tags:
       - billing
       x-app: billing
       x-public: true
+      x-tool: true
   /v1/billing/recharge/run-all:
     post:
       description: |-
-        Sweeps every organization and, for those with auto-recharge on whose available balance has dropped below their own threshold, charges the default card and credits the balance.
+        Sweeps every org's auto-recharge and answers what it did.
 
-        It charges cards across EVERY tenant, so it is platform authority only — never an org owner, who could otherwise sweep-charge saved cards estate-wide. Its caller is a schedule, not a person.
+        PLATFORM AUTHORITY ONLY. It charges saved cards across every tenant, so an org
+        owner reaching it could sweep-charge the estate; a caller without it is
+        refused before anything is charged.
 
-        `orgs` is the population considered, not the row count: that difference is how a reader tells 'nobody was below threshold' from 'the sweep never ran'. One org's failure is reported in its own row and does not stop the rest.
+        The answer explains a sweep that charged nobody as readily as one that
+        charged: it names how many orgs were considered and how many needed charging,
+        with a row each.
       operationId: post_billing_recharge_run-all
-      summary: Recharge every org that has fallen below its threshold
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recharge'
+          description: ok
+      summary: Sweeps every org's auto-recharge and answers what it did.
       tags:
       - billing
       x-app: billing
       x-public: true
+      x-tool: true
   /v1/billing/settings:
     get:
       description: |-
@@ -68588,33 +68930,76 @@ paths:
   /v1/billing/topup:
     post:
       description: |-
-        Charges a saved card and credits the caller's prepaid wallet.
-
-        The method must belong to the caller: one that does not is NOT FOUND rather than refused, so an id cannot be probed for existence. A saved row whose card is no longer chargeable is 422 — add the card again — which is a different thing to do than a decline (402) or a bad amount (400).
-
-        Retries behave exactly as they do for a token top-up: same key, same replay, same exactly-once at the processor.
+        Charges a card the caller already saved and credits the
+        balance. Same receipt and the same retry safety as the token door; the only
+        difference is which card, so a caller topping up from a saved method never
+        re-enters one.
       operationId: post_billing_topup
-      summary: Add funds with a card already on file
+      parameters:
+      - in: header
+        name: X-Idempotency-Key
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/topupIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Charged'
+          description: ok
+      summary: Charges a card the caller already saved and credits the balance.
       tags:
       - billing
       x-app: billing
       x-public: true
+      x-tool: true
   /v1/billing/topup/token:
     post:
       description: |-
-        Charges a card token from the browser's payment SDK and credits the caller's prepaid wallet — the cold-customer path, where nothing has to be saved first.
+        Charges a single-use card token and credits the caller's
+        balance.
 
-        The wallet credited is the CALLER'S OWN, resolved from their signed identity. It is never a value in the request: a client-set selector is how a customer once topped up one account while their usage drew from another.
+        The token comes from the payment form and is vaulted as part of the charge, so
+        no card number reaches this service and none is stored here. The receipt names
+        the ledger entry, the new balance, and the PROCESSOR's own reference — which is
+        the only field that proves money moved at the gateway rather than only in our
+        ledger.
 
-        `X-Idempotency-Key` makes a retry safe. With one, a repeat replays the first result; without one, the same amount from the same subject inside a short window does too. The key reaches the processor as well as our own guard, so the charge is exactly-once at the gateway even if our guard store is down.
-
-        The amount is bounded server-side. A decline is 402 and nothing is credited.
+        Retry-safe on X-Idempotency-Key: the same key settles one charge and returns
+        the first receipt.
       operationId: post_billing_topup_token
-      summary: Add funds with a single-use card token
+      parameters:
+      - in: header
+        name: X-Idempotency-Key
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/topupIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Charged'
+          description: ok
+      summary: Charges a single-use card token and credits the caller's balance.
       tags:
       - billing
       x-app: billing
       x-public: true
+      x-tool: true
   /v1/billing/transactions:
     get:
       description: |-
@@ -111916,7 +112301,7 @@ paths:
       description: |-
         Serves the OpenAPI document for the routes this process actually answers — generated from the live router at request time, not from a checked-in file that can disagree with it.
 
-        On an app it is that app's own surface; on the fleet's front door it is the woven document for every mounted app. Unauthenticated by design: a client has to be able to read the contract before it holds a credential, and the document grants nothing.
+        On an app it is that app's own surface; on the fleet's front door it is the composed document for every mounted app. Unauthenticated by design: a client has to be able to read the contract before it holds a credential, and the document grants nothing.
 
         Rendered once and served as bytes thereafter, so the route table's immutability is what makes a repeat request a memcpy rather than a re-encode of a megabyte document.
       operationId: get_openapi.json
@@ -117882,78 +118267,171 @@ paths:
   /v1/sandbox:
     get:
       description: |-
-        Lists the caller org's sandboxes, newest first. `project` and `status` narrow it, and both are read from the QUERY STRING.
+        Lists the caller org's sandboxes, newest first.
 
-        It answers from the org's own store rather than from the cluster, so a sandbox whose pod has since died still appears, carrying the status it was last known to have. That is deliberate: a lease you are being charged for should not vanish from the list because the thing behind it fell over.
+        `?project=` and `?status=` narrow it. Only the caller's org's: the store is
+        keyed on the validated org, so another tenant's sandbox is not something this
+        operation can return.
       operationId: get_sandbox
-      summary: The sandboxes this org holds
+      parameters:
+      - in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sandboxList'
+          description: ok
+      summary: Lists the caller org's sandboxes, newest first.
       tags:
       - sandbox
       x-app: sandbox
       x-public: true
+      x-tool: true
     post:
       description: |-
-        Creates a sandbox and returns it. `class` is one of `exec`, `dev`, `desktop` or `android`; `dev` and `desktop` are attached to a `project`, which is required for them and names the volume the work persists on. `ttlSec` bounds the lease, and `image` overrides the class default.
+        Leases a sandbox — a real computer — for the caller's org.
 
-        This is the ONLY path that creates cluster objects. The isolation boundary is the pod's runtime class, one field, so what a sandbox is confined by is a deployment decision rather than anything this operation negotiates.
+        The class decides what it is for and therefore its image, working directory
+        and isolation. A dev or desktop sandbox is SINGLE-ATTACH per project, so
+        asking twice for one project resumes the one that exists rather than paying
+        for a second; an exec sandbox carries no project and is bounded per org
+        instead, refused 429 past the ceiling because the caller's correct response is
+        to wait.
+
+        Answers 201 with the sandbox as leased, which names the runtime it GOT — not
+        the one that was asked for.
       operationId: post_sandbox
-      summary: Lease a sandbox
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/leaseIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+          description: created
+      summary: Leases a sandbox — a real computer — for the caller's org.
       tags:
       - sandbox
       x-app: sandbox
       x-public: true
+      x-tool: true
   /v1/sandbox/{id}:
     delete:
       description: |-
-        Stops the sandbox's pod and drops the lease. The VOLUME survives by default, so a `dev` or `desktop` sandbox can be leased again over the same project and find its checkout where it left it.
+        Ends a sandbox and releases the compute behind it. Answers 204.
 
-        `purge=1` deletes the volume too. It is opt-in because it is the one part of this that cannot be undone.
+        ENDING IS NOT STOPPING. This releases the resource: the pod goes and anything
+        only inside it goes with it. To end what a sandbox is RUNNING while keeping
+        the sandbox — the checkout, the logs, the half-written file — the verb is
+        POST /v1/sandbox/stop.
+
+        `?purge=1` additionally removes the record, so the sandbox stops being listed
+        at all rather than being listed as ended.
       operationId: delete_sandbox_by_id
       parameters:
-      - in: path
+      - description: ID is the sandbox to end, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: End a sandbox
+      - in: query
+        name: purge
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Ends a sandbox and releases the compute behind it.
       tags:
       - sandbox
       x-app: sandbox
       x-public: true
+      x-tool: true
     get:
-      description: Returns one of the caller org's sandboxes. An id belonging to another
-        org answers 404 and not 403 — a 403 would confirm the id exists, and whether
-        a given sandbox exists is itself a cross-tenant fact.
+      description: |-
+        Returns one sandbox: its class, project, image, the runtime it was
+        given, its status and when its lease ends.
+
+        An id the caller's org does not hold is the same 404 an unknown id gives — the
+        store is keyed on the org, so a cross-tenant id simply is not there.
       operationId: get_sandbox_by_id
       parameters:
-      - in: path
+      - description: ID is the sandbox to address, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: One sandbox
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+          description: ok
+      summary: 'Returns one sandbox: its class, project, image, the runtime it was
+        given, its status and when its lease ends.'
       tags:
       - sandbox
       x-app: sandbox
       x-public: true
+      x-tool: true
   /v1/sandbox/{id}/exec:
     post:
       description: |-
-        Runs a command inside the sandbox and returns its exit code, stdout and stderr. A non-zero exit is a SUCCESSFUL call carrying a failed program — the HTTP status stays 200, because "the tests failed" and "the sandbox is broken" are different facts.
+        Runs one command in a sandbox the caller holds and answers with
+        its exit code, stdout and stderr.
 
-        NOTHING RUNS IN cloud. The command is streamed to the Kubernetes exec subresource of the sandbox's pod, which runs under the gVisor runtime class. The sandbox is addressed by pod NAME through the apiserver, never by address.
+        Send `argv` — an argument vector cannot be word-split by accident — or
+        `command` for a shell line, which is the only input here that ever reaches a
+        shell. A non-zero exit is a SUCCESSFUL call carrying a failed command: the
+        status is 200 and the exit code is in the answer, because "the command failed"
+        and "the call failed" are different facts.
       operationId: post_sandbox_by_id_exec
       parameters:
-      - in: path
+      - description: ID is the sandbox to run in, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Run a command in a sandbox
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/execRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecResult'
+          description: ok
+      summary: Runs one command in a sandbox the caller holds and answers with its
+        exit code, stdout and stderr.
       tags:
       - sandbox
       x-app: sandbox
       x-public: true
+      x-tool: true
   /v1/sandbox/{id}/fs:
     get:
       description: Reads one file from the sandbox's project directory as text, or
@@ -118009,23 +118487,29 @@ paths:
   /v1/sandbox/{id}/screen/ticket:
     post:
       description: |-
-        Mints a SINGLE-USE ticket for this sandbox's DISPLAY and returns `{ticket, expiresIn, url}`, where url is the desktop PAGE with the ticket already on it. The same ticket as the terminal's, minted for a different door.
-
-        A ticket says which org and which sandbox, and the terminal and the screen are two views of one machine: a caller who may type in a sandbox may look at it. What the door decides is the URL handed back, which is the only part that differs.
-
-        Mint one per screen, and mint a fresh one to reconnect.
+        Mints a short-lived grant to open the screen of a desktop
+        sandbox. Same properties as the terminal ticket, for the other door.
       operationId: post_sandbox_by_id_screen_ticket
       parameters:
-      - in: path
+      - description: ID is the sandbox to address, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Open a screen
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ticketGrant'
+          description: created
+      summary: Mints a short-lived grant to open the screen of a desktop sandbox.
       tags:
       - sandbox
       x-app: sandbox
       x-public: true
+      x-tool: true
   /v1/sandbox/{id}/screen/ws:
     get:
       description: |-
@@ -118071,23 +118555,33 @@ paths:
   /v1/sandbox/{id}/terminal/ticket:
     post:
       description: |-
-        Mints a SINGLE-USE ticket for one interactive terminal in this sandbox and returns `{ticket, expiresIn, url}`, where url is the terminal PAGE with the ticket already on it.
+        Mints a short-lived grant to open a terminal on a sandbox.
 
-        It exists because a browser carries no Authorization header into a WebSocket or an iframe, so a terminal cannot be authenticated the way every other route here is. The ticket is a credential MINTED for that one terminal: bound to this org and this sandbox, valid for thirty seconds, and gone the first time it is presented. A long-lived bearer in a query string would instead be written into every access log on the path.
-
-        Mint one per terminal, and mint a fresh one to reconnect.
+        The ticket travels in the query string of the URL it answers with, because a
+        browser cannot set an Authorization header on a WebSocket handshake. It is
+        single-purpose and short-lived for exactly that reason. A sandbox that is not
+        running is 409 rather than a ticket that cannot be used.
       operationId: post_sandbox_by_id_terminal_ticket
       parameters:
-      - in: path
+      - description: ID is the sandbox to address, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      summary: Open a terminal
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ticketGrant'
+          description: created
+      summary: Mints a short-lived grant to open a terminal on a sandbox.
       tags:
       - sandbox
       x-app: sandbox
       x-public: true
+      x-tool: true
   /v1/sandbox/{id}/terminal/ws:
     get:
       description: |-

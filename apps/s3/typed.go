@@ -81,7 +81,7 @@ func (o ops) client() (*s3.Client, error) {
 // s3Health is the probe's ONE shape, answered under both of its statuses.
 //
 // QUALIFIED, because a typed op's Go type name IS its schema name across the whole
-// fleet and openapi.Weave refuses one name meaning two things. "healthReport" is
+// fleet and openapi.Compose refuses one name meaning two things. "healthReport" is
 // already apps/event's, with a different shape — and it was free until this file
 // typed the probe, which is what entering the namespace costs. The unpublished
 // name is the one that yields.

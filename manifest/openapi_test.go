@@ -2,7 +2,7 @@ package manifest
 
 // The gates under the fleet's ONE spec door, GET /v1/openapi.json.
 //
-// It is the host's — cmd/cloud's spec(), serving the weave of every plugin's
+// It is the host's — cmd/cloud's spec(), serving the compose of every plugin's
 // build-time subset — for the same reason POST /v1/mcp is (mcp_test.go): the
 // answer is about the WHOLE fleet, and a plugin cannot see past itself. What is
 // pinned here is the routing half of that claim, asked of the router rather than

@@ -134,9 +134,17 @@ const maxTTL = 86400
 // ExecResult is what running a command produced. A non-zero ExitCode is data,
 // not an error: the call succeeded and the program failed.
 type ExecResult struct {
-	ExitCode int    `json:"exitCode"`
-	Stdout   string `json:"stdout"`
-	Stderr   string `json:"stderr"`
+	// ExitCode is the command's own exit status. A non-zero one is a SUCCESSFUL
+	// call carrying a failed command — the HTTP status stays 200, because "the
+	// command failed" and "the call failed" are different facts and a caller has
+	// to be able to tell them apart.
+	ExitCode int `json:"exitCode"`
+	// Stdout is everything the command wrote to standard output, as text.
+	Stdout string `json:"stdout"`
+	// Stderr is everything it wrote to standard error. It is populated on a
+	// successful run too — plenty of tools report progress there — so it is not a
+	// signal that anything went wrong; ExitCode is.
+	Stderr string `json:"stderr"`
 }
 
 // streamer is the exec channel, behind an interface for exactly one reason: the
