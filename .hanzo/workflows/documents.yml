@@ -25,7 +25,7 @@
 # All three are properties of WHERE it runs, not of what it does — so the fix is a
 # runner, and the sweep itself is unchanged. It is the same target, at the same
 # concurrency knobs, that the gate already runs green here in about six minutes
-# warm; a lane that regenerated differently from the lane that judges would be the
+# warm; a run that regenerated differently from the run that judges would be the
 # two-spellings-of-one-sweep bug the Makefile was already refactored to end.
 #
 # DISPATCH ONLY, and that is the second half of the same idea. A gate allowed to
@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Named, not inherited. This lane is dispatched, and a dispatch can name
+          # Named, not inherited. This workflow is dispatched, and a dispatch can name
           # any ref; the documents are only meaningful against the branch they are
           # committed to, and the push below targets main unconditionally.
           ref: main
@@ -132,7 +132,7 @@ jobs:
           # forge denies takes the whole sweep down. It did: every module the
           # forge does not serve resolved to no source, and `describe` stopped at
           # `could not import github.com/hanzoai/types (invalid package name)`
-          # across 296 packages -- so the lane that REPAIRS the drift gate could
+          # across 296 packages -- so the workflow that REPAIRS the drift gate could
           # not run, while the gate went on refusing every release for the drift.
           #
           # The script asks the forge, repo by repo, what it will actually serve,
@@ -206,13 +206,13 @@ jobs:
           if git diff --cached --quiet; then
             # TWO DIFFERENT FACTS, and only one of them is "nothing was wrong".
             # `describe` regenerates the whole fleet on its way past, including the
-            # ~120 apps/*/zipdoc_gen.go this lane deliberately does not commit. So a
+            # ~120 apps/*/zipdoc_gen.go this workflow deliberately does not commit. So a
             # gate that is red for a reason OUTSIDE the generated set leaves the
             # porcelain full and the staged set empty, and saying "nothing to
             # commit" there tells an operator who dispatched this to repair
             # something that it was already fine. It is not; it is untouched.
             if [ -n "$MOVED" ]; then
-              echo "::warning::nothing in the GENERATED set moved, but $(printf '%s\n' "$MOVED" | wc -l | tr -d ' ') other path(s) did — listed above. This lane commits only the generated set, so whatever left those is NOT repaired here."
+              echo "::warning::nothing in the GENERATED set moved, but $(printf '%s\n' "$MOVED" | wc -l | tr -d ' ') other path(s) did — listed above. This workflow commits only the generated set, so whatever left those is NOT repaired here."
               exit 0
             fi
             echo "every document already matches the source it is generated from — nothing to commit"
@@ -220,7 +220,7 @@ jobs:
           fi
           git -c user.name=hanzo-dev -c user.email=dev@hanzo.ai commit \
             -m 'regenerate the fleet documents from source' \
-            -m 'Written by the Documents lane on hanzo-build-linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
+            -m 'Written by the Documents workflow on hanzo-build-linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
 
           # The push is FAST-FORWARD, and that is the compare-and-swap. If main
           # moved while the sweep ran, these documents were generated from a tree
@@ -260,7 +260,7 @@ jobs:
 
           # A LOST SWAP IS RE-DERIVED, NOT FORCED. Fast-forward only is right: documents
           # generated from a tree that is no longer the branch describe nothing anyone can
-          # check. But REFUSING outright means the lane cannot land at all on a branch that
+          # check. But REFUSING outright means the workflow cannot land at all on a branch that
           # moves every few minutes, which is an ordinary busy day here -- and then the
           # drift gate goes on refusing every release for documents that nothing is able to
           # regenerate. Measured: the sweep completed, wrote 15 files, and was rejected at
@@ -275,7 +275,7 @@ jobs:
           attempt=1
           until push_documents; do
             if [ "$attempt" -ge 3 ]; then
-              echo "::error::main moved under the sweep on ${attempt} consecutive attempts — the documents regenerate but never land. Dispatch this lane again when main is quieter."
+              echo "::error::main moved under the sweep on ${attempt} consecutive attempts — the documents regenerate but never land. Dispatch this workflow again when main is quieter."
               exit 1
             fi
             attempt=$(( attempt + 1 ))
@@ -290,7 +290,7 @@ jobs:
             fi
             git -c user.name=hanzo-dev -c user.email=dev@hanzo.ai commit \
               -m 'regenerate the fleet documents from source' \
-              -m 'Written by the Documents lane on hanzo-build-linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
+              -m 'Written by the Documents workflow on hanzo-build-linux-amd64 — the platform the drift gate judges them on, with the RAM-backed scratch the codec requires and a checkout nothing else is editing.'
           done
           echo "pushed $(git rev-parse --short HEAD) to main"
 
@@ -299,7 +299,7 @@ jobs:
           # nothing until somebody else happened to push. Dispatch the run directly.
           #
           # A WARNING RATHER THAN A FAILURE: the documents are already committed
-          # and correct at this point, and reporting the whole lane red would say
+          # and correct at this point, and reporting the whole run red would say
           # the regeneration did not happen. What is missing is a run, and the
           # line below says exactly how to start one.
           code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
