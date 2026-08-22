@@ -264,10 +264,18 @@ func TestEveryAnswerCarriesItsLinksAndClobbersNone(t *testing.T) {
 		}
 	}
 
-	// Outside the contract's namespace there is nothing to point at.
+	// Outside the contract's namespace there is nothing to DESCRIBE. self is a
+	// different claim and an unconditional one — /healthz is an address, and
+	// saying so costs nothing and points at nothing that could 404. What must not
+	// appear here are the relations that name the contract.
 	app.Get("/healthz", func(c *zip.Ctx) error { return c.String(http.StatusOK, "ok") })
-	if resp, _ := served(t, app, http.MethodGet, "/healthz"); len(resp.Header.Values("Link")) != 0 {
-		t.Errorf("GET /healthz carries %v — the links are the /v1 contract's", resp.Header.Values("Link"))
+	resp, _ = served(t, app, http.MethodGet, "/healthz")
+	for _, l := range resp.Header.Values("Link") {
+		for _, rel := range []string{"describedby", "index", "up", "collection"} {
+			if strings.Contains(l, `rel="`+rel+`"`) {
+				t.Errorf("GET /healthz carries %q — the contract's links are the /v1 namespace's", l)
+			}
+		}
 	}
 }
 
