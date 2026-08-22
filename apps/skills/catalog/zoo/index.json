@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 669,
+  "skill_count": 670,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Zoo surface..",
@@ -761,6 +761,13 @@
       "path": "auto_runs/SKILL.md",
       "service": "auto",
       "sha256": "0e4db622b15de6bde188a5a18ff2b40d1449370a206276c0ae43a8853c50f69e"
+    },
+    {
+      "description": "Read base bases: Lists every Base the caller can reach, one per org their token carries., Describes ONE org's Base — whether its store exists, and what it occupies..",
+      "name": "base_bases",
+      "path": "base_bases/SKILL.md",
+      "service": "base",
+      "sha256": "94c89d6410ff6ed11bb614de00c83906e1e1aa6efafb1e4f4389edd4972656fa"
     },
     {
       "description": "Read base health: Reports that the base subsystem is serving..",

@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 669,
+  "skill_count": 670,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
@@ -761,6 +761,13 @@
       "path": "auto_runs/SKILL.md",
       "service": "auto",
       "sha256": "d61bdf07aaad9525630050f2dbdc0d1c2a6a400ff73254effc250be9b0a8ea26"
+    },
+    {
+      "description": "Read base bases: Lists every Base the caller can reach, one per org their token carries., Describes ONE org's Base — whether its store exists, and what it occupies..",
+      "name": "base_bases",
+      "path": "base_bases/SKILL.md",
+      "service": "base",
+      "sha256": "fe24eb9a64eb20700eb77dbce34d365aa4723c3c0198f26bc48cc1dd5a97ca1d"
     },
     {
       "description": "Read base health: Reports that the base subsystem is serving..",
