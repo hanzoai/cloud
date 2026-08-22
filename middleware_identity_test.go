@@ -91,6 +91,9 @@ type captured struct {
 	org, user string
 	admin     bool
 	orgAdmin  bool
+	// orgs is the membership set the edge minted — what a surface may OFFER,
+	// as distinct from `org`, the one org this request acts in.
+	orgs string
 }
 
 // newIdentityApp wires SanitizeIdentity (adminOrg="admin") in front of a probe
@@ -105,6 +108,7 @@ func newIdentityApp(t *testing.T, v *identityValidator) (*zip.App, *captured) {
 		got.user = c.User()
 		got.admin = c.IsAdmin()
 		got.orgAdmin = c.IsOrgAdmin()
+		got.orgs = c.Header(HeaderUserOrgs)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
 	})
 	return app, got

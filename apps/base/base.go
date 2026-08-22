@@ -178,6 +178,28 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// as clients/plan + clients/pricing).
 	zip.Get(zapp, "/v1/base/health", health)
 
+	// A typed op receives only a context, so the validated identity has to be
+	// parked there — and it is parked by the bridge, ahead of the leaves. It is
+	// installed here rather than relied on from Serve because this package's own
+	// tests do not run Serve, which is how an op that works in production reads
+	// no identity under test (or the reverse, which is worse).
+	app.Use(cloud.Bridge())
+
+	// Which Bases the caller can reach — ahead of the embed gate for the same
+	// reason /health is, and at a literal path so it wins the address against the
+	// /v1/base/* wildcard below (most-specific-first). Behind that wildcard this
+	// address reaches ONE org's engine, which has no route for it and answers
+	// not-found; the workspace read that as an account with no Bases in it.
+	//
+	// Registering it here also keeps it in the DOCUMENT: describe projects the
+	// live router, so a route behind a feature gate is absent from the SDKs, the
+	// CLI and the tool list — which is why the hosting lane below publishes as
+	// nothing at all. The ops read the mounted subsystem at request time, so with
+	// no embed they answer honestly rather than needing the gate to exist.
+	ops := baseOps{}
+	zip.Get(zapp, "/v1/base/bases", ops.list)
+	zip.Get(zapp, "/v1/base/bases/:org", ops.read)
+
 	// There is no second door. /v1/collections used to reverse-proxy this same
 	// concept to a separate Base deployment, and its stated reason for existing was
 	// the cross-instance `tenants` registry that deployment held — one row per Base,
@@ -241,6 +263,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// So the org still comes from the validated principal, for both, because there
 	// is one handler and one prefix.
 	p := newPool(root, deps)
+
+	// Which Bases the caller can reach, at a literal path so it wins the address
+	// against the wildcard below (most-specific-first, the same rule /health
+	// relies on). It has to be here rather than beside /health, because the
+	// listing describes the pool's own stores and the pool exists only with the
+	// embed on — a deployment hosting no Bases has no listing to give.
+	//
+	// Behind the wildcard this address would reach ONE org's engine, which has no
+	// route for it and answers not-found; the workspace read that as an account
 	app.All("/v1/base/*", func(c *zip.Ctx) error { return serveOrg(p, log, c) })
 
 	mounted = &subsystem{pool: p, platform: platformApp}
