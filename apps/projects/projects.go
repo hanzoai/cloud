@@ -604,6 +604,20 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// about what comes back.
 	app.Get("/v1/projects/:slug/shot", cloud.Handle(s, shotOf))
 
+	// Starring is PUT/DELETE rather than POST/POST because it is a STATE, not an
+	// event: "this project is starred for me" is either true or it is not, and
+	// saying it twice must mean the same as saying it once. Both handlers are
+	// idempotent, so a double-clicked button and a retried request land on the
+	// state the caller asked for rather than an error.
+	//
+	// These two lines were lost in a rebase, and nothing said so: stars.go
+	// shipped, `o.star` and `o.unstar` compiled — Go does not mind a method
+	// nobody calls — and the store, the migration and the tests all went live
+	// behind a route that did not exist. The 404 was the only symptom, and only
+	// if you went looking for it.
+	zip.Put(r, "/v1/projects/:slug/star", o.star)
+	zip.Delete(r, "/v1/projects/:slug/star", o.unstar)
+
 	zip.Post(r, "/v1/projects/:slug/purge", o.purge)
 
 	// The deployment lifecycle, in the order it runs: open one and take the scoped
