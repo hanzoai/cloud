@@ -3037,6 +3037,37 @@ match silently drops its value — a share issuance missing a price is accepted 
 a smaller write rather than refused. Wrong equity data nothing reports is worse
 than an untyped route, which is merely invisible.
 
+**THE SECOND INSTANCE IS `apps/dataroom`, and it is the one that shows what the
+split is FOR.** Its refusals were written at their registrations and nowhere else,
+so they could not fail — and they had already drifted: the record said SEVEN raw
+addresses while the binary served EIGHT. The one that arrived unclassified is
+`GET /v1/dataroom/trust/center/{slug}/file/{item}`, which came with the trust
+plane after that count was taken. A comment cannot notice a ninth.
+
+Split into the three terms, the package reads honestly for the first time —
+**19 typed + 6 cannot + 2 owed = 27 served**, and the gate requires that sum:
+
+  - CANNOT (6): the raw-byte upload (`POST /documents` — the body IS the file),
+    three byte STREAMS off object storage (the admin download, the public
+    trust-centre artifact, the viewer's), and the two viewer POSTs, which
+    `decodeBody` refuses with **413 on the raw length before anything is parsed**
+    against a PACKAGE-LOCAL `maxBody` far below zip's global BodyLimit — the same
+    body-cap class apps/channels, apps/prefs and apps/esign each record.
+  - OWED (2): `GET /health` is a bare 200 with a constant body — no second status,
+    no error branch — and stays raw only because it must answer BEFORE the bundle
+    loads, which is a fact about WHERE it is registered, not about its wire; the
+    absolute-on-the-app form apps/world, pricing, plan, prefs and share already
+    use registers at the same point and types cleanly. `GET /view/{linkId}` reads
+    NO body, so the 413 cap that blocks its two POST siblings does not apply, and
+    its tenancy is not a blocker either — the handler resolves the org from the
+    link index rather than from a principal, and a typed op can call the same
+    index. What it needs is an Out for the viewer payload, which the bundle owns.
+
+Read the prose that stood here before — "10 typed, 7 refused", every refusal
+sound — and the package looks finished. It was neither: the count was wrong and
+two of the eight were simply unwritten. **A single ledger cannot say "not yet",
+so a package with debt in it reads as a package at its floor.**
+
 **Collisions, and the resolution.** Source does not collide; two artifacts do —
 the regenerated `openapi.yaml` golden and `go.sum`. Both resolve the same way:
 **rebase onto main, then regenerate** (`make -f mk/fleet.mk check`). The
