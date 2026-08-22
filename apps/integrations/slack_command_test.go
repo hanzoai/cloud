@@ -23,7 +23,7 @@ import (
 // distinction the rules turn on — GET against everything else.
 //
 // A fixture rather than the fleet's own projection, because these tests are
-// about the RULES. Weaving 119 subsets to ask whether an abbreviation resolves
+// about the RULES. Composing 119 subsets to ask whether an abbreviation resolves
 // would pin the rules to whatever the fleet happens to publish today, so a route
 // added in another app could turn a prefix ambiguous and redden a test that has
 // nothing to do with it.
@@ -161,13 +161,13 @@ func TestResolve_NoRegistryIsProse(t *testing.T) {
 // `/_/` plane's first segment to an empty service, and a quoted empty token then
 // addressed POST /_/commerce/tenants — a shape no hand-written fixture contains.
 //
-// It skips rather than fails when the document will not weave. That failure is
-// real and it is openapi/weave_test.go's to report; repeating it here would say
+// It skips rather than fails when the document will not compose. That failure is
+// real and it is openapi/compose_test.go's to report; repeating it here would say
 // nothing new and would redden this package for another app's duplicate id.
 func TestNames_TheFleetHasNoBackDoor(t *testing.T) {
 	cmds, err := commandRegistry()
 	if err != nil {
-		t.Skipf("the fleet document does not weave on this tree (openapi/weave_test.go owns that): %v", err)
+		t.Skipf("the fleet document does not compose on this tree (openapi/compose_test.go owns that): %v", err)
 	}
 	if len(cmds) < 100 {
 		t.Fatalf("the fleet projected %d commands; that is not the fleet", len(cmds))

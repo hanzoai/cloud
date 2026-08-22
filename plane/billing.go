@@ -281,7 +281,7 @@ type HoldersIn struct {
 // The name carries its product because the schema namespace is FLAT across the
 // whole fleet and the bare noun is already taken: apps/books publishes an
 // Account of its own — a chart-of-accounts line, a different thing entirely —
-// and one name with two shapes is what openapi.Weave refuses, since a generated
+// and one name with two shapes is what openapi.Compose refuses, since a generated
 // SDK would bind whichever it read last. The already-published side keeps the
 // name; this one, arriving later, qualifies.
 type BillingAccount struct {

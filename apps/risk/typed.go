@@ -15,7 +15,7 @@ package risk
 // one is a cross-tenant read the caller asserted for itself.
 //
 // EVERY SCHEMA NAME IS PREFIXED. A typed op's Go type name IS its schema name and
-// the fleet's schema namespace is FLAT — the weave refuses one name with two
+// the fleet's schema namespace is FLAT — the compose refuses one name with two
 // shapes across apps, because a generated SDK binds whichever it read last. So
 // there is no `ref`, no `state`, no `report` here; there is `riskRunRef`,
 // `riskModelState`, `riskSearchReport`.

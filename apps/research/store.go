@@ -1089,9 +1089,9 @@ type KindTotal struct {
 //
 // The name carries its own product because the SCHEMA namespace is FLAT: zip keys a
 // component schema on the Go type's bare name (typeName drops the package), so the
-// fleet weave refuses two apps that mean different things by one name. It was
+// fleet compose refuses two apps that mean different things by one name. It was
 // `Totals`, and apps/admin publishes a `Totals` of its own about volumes and
-// clusters — the weave named the collision the moment this type became an op's Out.
+// clusters — the compose named the collision the moment this type became an op's Out.
 type ResearchTotals struct {
 	// Project echoes the project the aggregate was narrowed to. Absent means the
 	// figures below span the whole org.

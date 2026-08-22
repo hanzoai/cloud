@@ -11,7 +11,7 @@ package openapi_test
 // list — three projections that never ask about stages and do not have to,
 // because each reads x-public.
 //
-// They are asserted through Weave over parts rather than over the fleet's real
+// They are asserted through Compose over parts rather than over the fleet's real
 // subsets, for the reason fleet_test.go states: a test on a document that is
 // already correct cannot show what happens when an input changes.
 
@@ -35,9 +35,9 @@ func part(app, stage string) openapi.Part {
 	}}
 }
 
-func woven(t *testing.T, parts ...openapi.Part) *openapi.Document {
+func composed(t *testing.T, parts ...openapi.Part) *openapi.Document {
 	t.Helper()
-	d, err := openapi.Weave(parts)
+	d, err := openapi.Compose(parts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,11 +45,11 @@ func woven(t *testing.T, parts ...openapi.Part) *openapi.Document {
 }
 
 // The stage reaches the operation, from the part, and ga says nothing at all.
-func TestWeaveStampsTheStage(t *testing.T) {
-	d := woven(t, part("ad", manifest.Beta), part("iam", ""))
+func TestComposeStampsTheStage(t *testing.T) {
+	d := composed(t, part("ad", manifest.Beta), part("iam", ""))
 
 	if got := d.Paths["/v1/ad"]["get"].Stage; got != manifest.Beta {
-		t.Errorf("x-stage = %q, want %q — the weave is where an operation learns whose app it is", got, manifest.Beta)
+		t.Errorf("x-stage = %q, want %q — the compose is where an operation learns whose app it is", got, manifest.Beta)
 	}
 	if got := d.Paths["/v1/iam"]["get"].Stage; got != "" {
 		t.Errorf("x-stage = %q on a ga operation, want absent — ga is the absence of the word", got)
@@ -68,7 +68,7 @@ func TestWeaveStampsTheStage(t *testing.T) {
 
 // A beta capability is in the internal document and in no client.
 func TestBetaIsNotPublic(t *testing.T) {
-	d := woven(t, part("ad", manifest.Beta), part("iam", ""))
+	d := composed(t, part("ad", manifest.Beta), part("iam", ""))
 
 	if !d.Paths["/v1/iam"]["get"].Public {
 		t.Fatal("a ga operation under /v1 is not public — the rule broke on something other than the stage")
@@ -100,7 +100,7 @@ func TestBetaIsNotPublic(t *testing.T) {
 // yet ready for the customers who asked for it is a different product fact from
 // one that is, and both are refused the same way.
 func TestAlphaIsNotPublicEither(t *testing.T) {
-	d := woven(t, part("world", manifest.Alpha), part("iam", ""))
+	d := composed(t, part("world", manifest.Alpha), part("iam", ""))
 	if d.Paths["/v1/world"]["get"].Public {
 		t.Error("an alpha operation is public")
 	}
@@ -109,7 +109,7 @@ func TestAlphaIsNotPublicEither(t *testing.T) {
 // Promotion is one edit to the row and nothing else: the same parts at ga
 // publish.
 func TestPromotionIsTheOnlyDifference(t *testing.T) {
-	d := woven(t, part("ad", ""))
+	d := composed(t, part("ad", ""))
 	if !d.Paths["/v1/ad"]["get"].Public {
 		t.Error("the same operation at ga is not public — something besides the stage is deciding")
 	}

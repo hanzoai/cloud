@@ -97,10 +97,10 @@ type Posting struct {
 
 // The three types below carry their own product in their names because the
 // published SCHEMA namespace is FLAT: zip keys a component schema on the Go
-// type's bare name (typeName drops the package), so the fleet weave refuses two
+// type's bare name (typeName drops the package), so the fleet compose refuses two
 // apps that mean different things by one name. They were Entry, Report and
 // Policy, and apps/catalog, apps/admin and apps/gateway each publish one of
-// those about something else entirely — the weave named every collision the
+// those about something else entirely — the compose named every collision the
 // moment these became a typed op's Out. The json tags are untouched: the wire
 // never knew the Go name.
 

@@ -133,7 +133,7 @@ func Open(path, method string) {
 // declared they need none.
 //
 // Every producer of a published document calls it — [Spec] for an app's own
-// surface and its committed subset, [Weave] for the fleet, [Publish] for the
+// surface and its committed subset, [Compose] for the fleet, [Publish] for the
 // public projection — so the credential cannot be a fact one document carries and
 // another forgets. It is idempotent, which is what lets the composed documents
 // call it over operations their parts already stamped.

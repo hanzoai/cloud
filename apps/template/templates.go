@@ -35,7 +35,7 @@
 //
 // The value is StarterKit, not Template: the OpenAPI schema namespace is FLAT
 // across the whole fleet and apps/guide already publishes a `Template` (a Guide
-// playbook prompt/snippet, {id,title,body,enabled}). openapi.Weave refuses one name
+// playbook prompt/snippet, {id,title,body,enabled}). openapi.Compose refuses one name
 // with two shapes — every generated SDK would bind whichever it read last — so the
 // name that was not yet published is the one that yields, qualified by the value's
 // own vocabulary ("Template is one starter kit", below) rather than by a place.

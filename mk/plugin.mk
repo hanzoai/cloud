@@ -138,6 +138,6 @@ describe: build ## Emit this app's own OpenAPI subset into plugin/<app>/.
 	done
 
 # Binaries only. plugin/<app>/openapi.json is a committed artifact, like the
-# fleet's woven documents — `clean` removes what a build wrote, not what it publishes.
+# fleet's composed documents — `clean` removes what a build wrote, not what it publishes.
 clean: ## Remove this app's built binary.
 	@rm -f $(foreach a,$(APPS),$(BIN)/$(a))

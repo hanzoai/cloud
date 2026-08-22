@@ -116,7 +116,7 @@ func (o ops) health(ctx context.Context, _ *noInput) (*legalHealth, error) {
 	return &legalHealth{Status: "ok", Templates: len(Builtins())}, nil
 }
 
-// The fleet's schema namespace is FLAT — openapi.Weave refuses one name meaning two
+// The fleet's schema namespace is FLAT — openapi.Compose refuses one name meaning two
 // things — and three of legal's domain types share a name with an already-published
 // one: apps/guide has a "Template", apps/company a "Filing" and a "Signer". These
 // three are DEFINED types over them, not second shapes: the fields and their json

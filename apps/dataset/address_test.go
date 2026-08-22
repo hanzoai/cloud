@@ -5,7 +5,7 @@ package dataset
 // EVERY ROUTE A CAPABILITY SERVES IS UNDER /v1/<its own name> (HIP-0139 §3.1). A
 // second top-level address is a second capability or a misfiled route, never an
 // alias, and the fleet ratchet that measures it (openapi/misfiled.txt) reads the
-// woven document — so it can only speak after every app has been described. This
+// composed document — so it can only speak after every app has been described. This
 // gate asks the same question one plane earlier, of this plane's own projection,
 // where the answer is cheap and names the route that moved.
 //
@@ -54,7 +54,7 @@ const product = "risk"
 
 // published is the document this plane projects of itself — the same call
 // describe.go makes to write plugin/datasets/openapi.json, which is the file the
-// fleet spec is woven from. So these assertions are about the published artifact
+// fleet spec is composed from. So these assertions are about the published artifact
 // and not about a list of strings somebody kept in step with it.
 func published(t *testing.T) *openapi.Document {
 	t.Helper()
@@ -139,10 +139,10 @@ func TestTheOperationIDsCarryTheProduct(t *testing.T) {
 }
 
 // TestEverySchemaNameCarriesTheProduct. The fleet's schema namespace is FLAT —
-// openapi.Weave refuses one name with two shapes across apps — so a schema left
+// openapi.Compose refuses one name with two shapes across apps — so a schema left
 // prefixed for the product this plane no longer belongs to is a generated type
 // named `MlDataset` returned by a `Risk` method, and the next app that reaches for
-// the obvious name collides with it and cannot weave at all.
+// the obvious name collides with it and cannot compose at all.
 func TestEverySchemaNameCarriesTheProduct(t *testing.T) {
 	doc := published(t)
 	if doc.Components == nil || len(doc.Components.Schemas) == 0 {

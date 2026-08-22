@@ -39,7 +39,7 @@ package projects
 // status, same body, same code every metered Hanzo client already reads.
 //
 // SCHEMA NAMES ARE PACKAGE-QUALIFIED (projectsProject, not Project). The
-// published document has ONE namespace for schemas and openapi/weave.go refuses
+// published document has ONE namespace for schemas and openapi/compose.go refuses
 // one name with two shapes: `projectView` was already claimed by apps/platform
 // and `deployment` by apps/o11y, both with different fields. Qualifying is what
 // keeps two products' nouns from colliding in a single spec.
