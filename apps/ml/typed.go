@@ -66,7 +66,7 @@ func tenantFrom(ctx context.Context) (ns, org, project string, err error) {
 // ── the shapes the ops take and give ─────────────────────────────────────────
 //
 // A typed op's Go type name IS its schema name, and the fleet's schema namespace
-// is FLAT — openapi.Weave refuses one name with two shapes across apps, because a
+// is FLAT — openapi.Compose refuses one name with two shapes across apps, because a
 // generated SDK would bind whichever it read last. So every name below carries
 // the product the namespace cannot: the obvious "resource", "resourceList" and
 // "ref" are exactly the names another app will reach for next.

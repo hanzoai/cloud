@@ -44,7 +44,7 @@ import (
 //
 // The card type is DestinationStatus, not Status, and the config-input type is
 // DestinationField, not Field: the OpenAPI schema namespace is FLAT across the
-// whole fleet, `Status` is already apps/plugins', and openapi.Weave refuses one
+// whole fleet, `Status` is already apps/plugins', and openapi.Compose refuses one
 // name with two shapes because every generated SDK would bind whichever it read
 // last. Typing is what makes a package enter that namespace, so the qualification
 // is part of this conversion and not cosmetic.

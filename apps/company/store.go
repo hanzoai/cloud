@@ -119,7 +119,7 @@ func (s *Store) Put(ctx context.Context, f *Formation) error {
 // It is NOT called Summary. Schema names are flat across the fleet document, and
 // apps/marketing already publishes a Summary that means campaign counters — one
 // name, two shapes, which every generated SDK would bind to whichever it read
-// last. openapi.Weave refuses that composition, and it refused this one the
+// last. openapi.Compose refuses that composition, and it refused this one the
 // moment the register became a typed op.
 type Registration struct {
 	// Org is the org whose formation this row projects.

@@ -338,7 +338,7 @@ func TestEveryPubsubRouteIsTypedAndDescribed(t *testing.T) {
 
 // TestKeyValueIsNotThisApps pins the split from this side: /v1/kv is another
 // capability's address and this binary must not answer it. A route that grew
-// back here would otherwise be invisible — the ratchet only measures the woven
+// back here would otherwise be invisible — the ratchet only measures the composed
 // document, and a duplicate mount reads there as one operation.
 func TestKeyValueIsNotThisApps(t *testing.T) {
 	app := mountWire(t)

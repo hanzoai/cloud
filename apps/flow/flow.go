@@ -163,7 +163,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // A typed op's Go type name IS its schema name and the fleet's schema namespace
 // is FLAT, so every name below carries the product prefix — apps/automations
 // already publishes Flow/flowPage/runIn for ITS workflow plane, and
-// openapi.Weave refuses one name with two shapes.
+// openapi.Compose refuses one name with two shapes.
 
 // flowNoInput is the In of an op that takes nothing off the wire. Its whole
 // input is the caller's validated principal.

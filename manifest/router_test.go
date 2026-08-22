@@ -8,7 +8,7 @@ package manifest
 // the name of the app that received it comes out.
 //
 // That is the entire point, and it is the lesson of the check this replaces.
-// openapi/weave_test.go used to look for the same defect and could not find it:
+// openapi/compose_test.go used to look for the same defect and could not find it:
 // it exempted any path already present in openapi.yaml, which is the artifact it
 // was protecting, and it reported what survived with t.Logf. Every one of the
 // paths below is in openapi.yaml, so the check printed nothing and passed while
@@ -99,8 +99,8 @@ var unreachable = []string{
 	// BILLING app — which serves both methods there, because the GET is billing's
 	// proxy to commerce's /v1/billing/portal/methods and the host claims a
 	// prefix for every method at once. So the registration was unreachable in the
-	// fleet AND a second claim on one address, which openapi.Weave refuses rather
-	// than pick a winner between: the fleet document could not be woven at all until
+	// fleet AND a second claim on one address, which openapi.Compose refuses rather
+	// than pick a winner between: the fleet document could not be composed at all until
 	// commerce dropped it. The published operation is identical from either app —
 	// same id, same tag, no declared body — so nothing moved but the ownership.
 	// iam /.well-known/{wildcard1} is no longer here, and it is the first entry this
@@ -268,7 +268,7 @@ func served(t *testing.T, app string) []string {
 
 // TestEveryServedPathReachesTheAppThatServesIt is the gate. A path an app
 // publishes and the fleet delivers elsewhere is published surface that answers
-// someone else's 404 — and it is published: openapi.yaml is woven from these same
+// someone else's 404 — and it is published: openapi.yaml is composed from these same
 // subsets, so every generated SDK in every language carries a method for it.
 func TestEveryServedPathReachesTheAppThatServesIt(t *testing.T) {
 	fleet := router(t)

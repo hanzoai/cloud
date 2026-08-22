@@ -129,7 +129,7 @@ type App struct {
 	// specification — a HIP's status says whether the text is settled.
 	//
 	// It is here, in the row, because every reader of it is downstream of the row
-	// and none of them may decide for themselves: the weave stamps x-stage from it
+	// and none of them may decide for themselves: the compose stamps x-stage from it
 	// and the public rule drops anything that is not ga, so a beta capability is in
 	// no generated client, no tool list and no public page; and the refusal
 	// installed at Serve answers 404 on its prefixes for an org that does not hold
@@ -154,7 +154,7 @@ const (
 func (a App) GA() bool { return a.Stage == "" }
 
 // Names is every app, in mount order — which is the fleet's routing order and
-// therefore the order its document is woven in, so a conflict is reported as the
+// therefore the order its document is composed in, so a conflict is reported as the
 // router would meet it.
 //
 // It exists so that "the fleet, as a list of names" is written once. Both callers

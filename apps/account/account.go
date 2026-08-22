@@ -404,7 +404,7 @@ type apiKey struct {
 // apiKeyList is the caller's own API keys. Named for what they ARE rather than
 // the shorter `keyList`, which the fleet's flat schema namespace already spends on
 // git's SSH deploy keys — one name for two shapes would bind every generated SDK to
-// whichever it read last (openapi/weave.go refuses it).
+// whichever it read last (openapi/compose.go refuses it).
 type apiKeyList struct {
 	// Keys is every key the caller holds, at most one per type.
 	Keys []apiKey `json:"keys"`

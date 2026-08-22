@@ -5,7 +5,7 @@ package label
 // EVERY ROUTE A CAPABILITY SERVES IS UNDER /v1/<its own name> (HIP-0139 §3.1). A
 // second top-level address is a second capability or a misfiled route, never an
 // alias, and the fleet ratchet that measures it (openapi/misfiled.txt) reads the
-// woven document — so it can only speak after every app has been described. This
+// composed document — so it can only speak after every app has been described. This
 // gate asks the same question one plane earlier, of this plane's own projection,
 // where the answer is cheap and names the route that moved.
 //
@@ -42,7 +42,7 @@ const product = "risk"
 // TestEveryAddressIsUnderThisCapabilitysName walks the live projection.
 //
 // It reads openapi.FleetSpec — the same function describe.go calls to write
-// plugin/label/openapi.json, which is the file the fleet spec is woven from — so it
+// plugin/label/openapi.json, which is the file the fleet spec is composed from — so it
 // asserts about the published document and not about a list of strings somebody
 // kept in step with it.
 func TestEveryAddressIsUnderThisCapabilitysName(t *testing.T) {

@@ -457,7 +457,7 @@ func mountRuntime(deps cloud.Deps) error {
 // empty Origin and its types are published under their bare Go names. o11y's are
 // ordinary words — Account, Channel, Event, Host, Service, TLSConfig — and so are
 // books', content's, analytics', plugins' and ingress'. Six names, twelve shapes,
-// one components block: a refusal at the weave (openapi/weave.go — "one name, two
+// one components block: a refusal at the compose (openapi/compose.go — "one name, two
 // shapes: every generated SDK would bind whichever it read last"), and had it not
 // been refused, an SDK binding whichever the merge read last. `make -f
 // mk/fleet.mk openapi` could not run at all, so nobody could regenerate

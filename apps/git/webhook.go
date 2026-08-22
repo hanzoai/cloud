@@ -64,7 +64,7 @@ const buildDoor = "https://platform.hanzo.ai/v1/git-webhook"
 //     ({status, msg, data}) but its data is repoView / []repoView / usageView,
 //     names zip's typed fold ALREADY publishes as components off the /v1 ops —
 //     so reflecting them here a second time would put two derivations behind one
-//     schema name, which is the collision openapi.Weave exists to refuse. One
+//     schema name, which is the collision openapi.Compose exists to refuse. One
 //     name, one shape, one generator: the envelope waits until the two seams
 //     agree on who owns a shared view type.
 //   - the pack responses and the twelve HTML pages have no declaration to make:

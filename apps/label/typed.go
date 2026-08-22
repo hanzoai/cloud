@@ -23,7 +23,7 @@ package label
 // `ml: 7 -> 14` and passed, because it only refuses a shrink.
 // addressTest walks the registry and pins it.
 //
-// EVERY SCHEMA NAME IS PREFIXED `risk`, matching the address. openapi.Weave
+// EVERY SCHEMA NAME IS PREFIXED `risk`, matching the address. openapi.Compose
 // refuses one name with two shapes across apps, because a generated SDK binds
 // whichever it read last, and `fact`, `record`, `event` and `coverage` are
 // exactly the names the next app reaches for — which is also why one event here
