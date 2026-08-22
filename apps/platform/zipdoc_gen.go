@@ -22,6 +22,75 @@ func init() {
 			"domainRef.project": "Project is the project the application lives under, from the path.",
 		},
 	})
+	zip.Describe("GET /v1/platform/apps", zip.Doc{
+		Description: "Answers what this organisation has declared, joined with what\nthe delivery plane has done about it.\n\nThe join is best-effort BY DESIGN and says so when it is missing: the\ndeclarations ARE the answer to \"what have I deployed\", so refusing the whole\nboard because the cluster is unreadable would lose the half that is readable.\nWhat must never happen is a silent null — an unreadable plane is reported as\n`cd.unavailable` carrying the reason, never as an app with no reconciliation.",
+		Fields: map[string]string{
+			"CDApp.automated":         "Automated is whether CD applies git without being asked. It is\ncd.automated in the values file, rendered by the ApplicationSet's\ntemplatePatch — false means the Application reports drift and nothing moves.",
+			"CDApp.health":            "Health is the workload's verdict: Healthy, Progressing, Degraded, Missing.",
+			"CDApp.message":           "Message is why, when Health is not Healthy.",
+			"CDApp.name":              "Name is the Application name the generator mints: <namespace>-<app>. It is\nthe join key against a Declaration.",
+			"CDApp.namespace":         "Namespace is the DESTINATION namespace as the CR declares it — where the\nworkload lands. For a fleet Application that is the org, but this is the\nOBSERVED field and not our model of it: the two can disagree, and a board\nwhose whole job is drift must be able to show that they do.",
+			"CDApp.path":              "Path is the values file CD renders against, relative to the chart source.",
+			"CDApp.phase":             "Phase is the last sync operation's phase (Running, Succeeded, Failed) and\nOperationMessage is its message. A Failed phase with a Synced verdict is\nthe shape a stuck Application takes.",
+			"CDApp.project":           "Project is the AppProject fence the sync is admitted under.",
+			"CDApp.reconciledAt":      "ReconciledAt is when CD last compared this Application.",
+			"CDApp.revision":          "Revision is the universe commit CD last applied. Empty means it has not\napplied one — never assume it means main.",
+			"CDApp.selfHeal":          "SelfHeal is whether CD also corrects drift the cluster introduced.",
+			"CDApp.sync":              "Sync is CD's verdict on git-versus-cluster: Synced, OutOfSync, or Unknown.",
+			"Declaration.application": "Application is the CD Application name the generator mints: <org>-<name>.\nIt is the join key against /v1/platform/cd.",
+			"Declaration.automated":   "Automated is cd.automated: false means the Application reports drift and\nNOTHING moves. It is off by default for a new file on purpose.",
+			"Declaration.digest":      "image.digest — wins over tag",
+			"Declaration.env":         "Env is the declared container environment, as the chart's list of\n{name,value}. It is read back so a re-declare of an identical body is a\nno-op rather than a refusal — idempotency is what makes a retry safe.",
+			"Declaration.hosts":       "ingress.hosts, both shapes flattened",
+			"Declaration.name":        "the Helm release name — the file's basename",
+			"Declaration.org":         "Org is the owner. It is ALSO the values directory and the destination\nnamespace, because those are one value under one name — see the header.",
+			"Declaration.path":        "Path is the file, relative to the repository root.",
+			"Declaration.project":     "Project is the AppProject the sync is admitted under, derived from the\ndirectory exactly as the ApplicationSet derives it. It differs from Org\nfor a reserved directory, which syncs under the platform fence.",
+			"Declaration.repository":  "image.repository",
+			"Declaration.tag":         "image.tag",
+			"declarationsQuery.org":   "Org names the organisation whose declarations to read, defaulting to the\ncaller's own. Only a SuperAdmin may name one that is not theirs; anyone\nelse naming a foreign org is refused, so this widens nothing by itself.",
+			"declareEnv.public":       "Public marks a value that may be WRITTEN INTO GIT. Absent, it is false,\nand the value is sealed into KMS and referenced.\n\n★ THE DEFAULT IS SECRET, AND THE POLARITY IS THE WHOLE DESIGN. This lane's\noutput is a commit in a repository replicated to every clone, so a\nmisclassification is not a bug to fix later — it is a credential published\nforever. A heuristic classifier fails in both directions; what decides is\nwhich direction it fails IN. Seal-by-default makes the failure mode \"an\noperator cannot read back a config value\", which is a support ticket.\nClassify-by-shape made it \"a password is in git history\", which is an\nincident with no rollback.\n\nIt is also the only rule that needs no list. PGPASSWORD, *_PW, a\nsymbol-rich password, a KUBECONFIG, a base32 MFA seed — every one of them\nslipped a shape classifier, and each miss was a different reason. There is\nno reason left when the default is to seal.",
+			"declaredResp.org":        "Org is the directory read — the caller's own, or another when a SuperAdmin\nasked to act as it.",
+		},
+	})
+	zip.Describe("GET /v1/platform/apps/:app", zip.Doc{
+		Description: "Answers ONE declaration — what git says this app is, before the\ndelivery plane has had any say in it.",
+		Fields: map[string]string{
+			"Declaration.application": "Application is the CD Application name the generator mints: <org>-<name>.\nIt is the join key against /v1/platform/cd.",
+			"Declaration.automated":   "Automated is cd.automated: false means the Application reports drift and\nNOTHING moves. It is off by default for a new file on purpose.",
+			"Declaration.digest":      "image.digest — wins over tag",
+			"Declaration.env":         "Env is the declared container environment, as the chart's list of\n{name,value}. It is read back so a re-declare of an identical body is a\nno-op rather than a refusal — idempotency is what makes a retry safe.",
+			"Declaration.hosts":       "ingress.hosts, both shapes flattened",
+			"Declaration.name":        "the Helm release name — the file's basename",
+			"Declaration.org":         "Org is the owner. It is ALSO the values directory and the destination\nnamespace, because those are one value under one name — see the header.",
+			"Declaration.path":        "Path is the file, relative to the repository root.",
+			"Declaration.project":     "Project is the AppProject the sync is admitted under, derived from the\ndirectory exactly as the ApplicationSet derives it. It differs from Org\nfor a reserved directory, which syncs under the platform fence.",
+			"Declaration.repository":  "image.repository",
+			"Declaration.tag":         "image.tag",
+			"declarationRef.app":      "App is the DNS-1123 label of the declaration. The URL is the addressing\nauthority — a path segment binds after the body and after the query — so\nthe address decides which app is read whatever else is sent.",
+			"declarationRef.org":      "Org names the organisation the declaration lives in, defaulting to the\ncaller's own and subject to the same SuperAdmin rule as the listing.",
+			"declareEnv.public":       "Public marks a value that may be WRITTEN INTO GIT. Absent, it is false,\nand the value is sealed into KMS and referenced.\n\n★ THE DEFAULT IS SECRET, AND THE POLARITY IS THE WHOLE DESIGN. This lane's\noutput is a commit in a repository replicated to every clone, so a\nmisclassification is not a bug to fix later — it is a credential published\nforever. A heuristic classifier fails in both directions; what decides is\nwhich direction it fails IN. Seal-by-default makes the failure mode \"an\noperator cannot read back a config value\", which is a support ticket.\nClassify-by-shape made it \"a password is in git history\", which is an\nincident with no rollback.\n\nIt is also the only rule that needs no list. PGPASSWORD, *_PW, a\nsymbol-rich password, a KUBECONFIG, a base32 MFA seed — every one of them\nslipped a shape classifier, and each miss was a different reason. There is\nno reason left when the default is to seal.",
+		},
+	})
+	zip.Describe("GET /v1/platform/apps/:app/cd", zip.Doc{
+		Description: "Answers ONE app's reconciliation alone — the poll a deploy\nconsole makes while it waits, without re-reading the whole inventory each time.",
+		Fields: map[string]string{
+			"CDApp.automated":    "Automated is whether CD applies git without being asked. It is\ncd.automated in the values file, rendered by the ApplicationSet's\ntemplatePatch — false means the Application reports drift and nothing moves.",
+			"CDApp.health":       "Health is the workload's verdict: Healthy, Progressing, Degraded, Missing.",
+			"CDApp.message":      "Message is why, when Health is not Healthy.",
+			"CDApp.name":         "Name is the Application name the generator mints: <namespace>-<app>. It is\nthe join key against a Declaration.",
+			"CDApp.namespace":    "Namespace is the DESTINATION namespace as the CR declares it — where the\nworkload lands. For a fleet Application that is the org, but this is the\nOBSERVED field and not our model of it: the two can disagree, and a board\nwhose whole job is drift must be able to show that they do.",
+			"CDApp.path":         "Path is the values file CD renders against, relative to the chart source.",
+			"CDApp.phase":        "Phase is the last sync operation's phase (Running, Succeeded, Failed) and\nOperationMessage is its message. A Failed phase with a Synced verdict is\nthe shape a stuck Application takes.",
+			"CDApp.project":      "Project is the AppProject fence the sync is admitted under.",
+			"CDApp.reconciledAt": "ReconciledAt is when CD last compared this Application.",
+			"CDApp.revision":     "Revision is the universe commit CD last applied. Empty means it has not\napplied one — never assume it means main.",
+			"CDApp.selfHeal":     "SelfHeal is whether CD also corrects drift the cluster introduced.",
+			"CDApp.sync":         "Sync is CD's verdict on git-versus-cluster: Synced, OutOfSync, or Unknown.",
+			"declarationRef.app": "App is the DNS-1123 label of the declaration. The URL is the addressing\nauthority — a path segment binds after the body and after the query — so\nthe address decides which app is read whatever else is sent.",
+			"declarationRef.org": "Org names the organisation the declaration lives in, defaulting to the\ncaller's own and subject to the same SuperAdmin rule as the listing.",
+		},
+	})
 	zip.Describe("GET /v1/platform/builds", zip.Doc{
 		Description: "Returns real build records for your org.\n\nIt lists the org's BuildKit build records — the git build step behind a deploy —\neach with the repo it built, the short commit, its status, when it started and\nhow long it took. These are real records or an honest empty list; a build appears\nhere because one ran, never because a page needed a row. Builds are created only\nby /deploy and the push-to-deploy hook. Requires a validated principal; 403\nwithout one.",
 		Fields: map[string]string{
@@ -33,6 +102,26 @@ func init() {
 			"buildRow.startedAt": "StartedAt is when the build was recorded, RFC3339 UTC.",
 			"buildRow.status":    "Status is the build's real state: queued, building, succeeded or failed.",
 		},
+	})
+	zip.Describe("GET /v1/platform/cd", zip.Doc{
+		Description: "Answers every Application the delivery plane holds.\n\nScoped to the namespaces the caller's own validated org owns: the ROLE opens\nthe door and the tenant boundary is applied inside, so an admin of one org\nnever observes another's.",
+		Fields: map[string]string{
+			"CDApp.automated":    "Automated is whether CD applies git without being asked. It is\ncd.automated in the values file, rendered by the ApplicationSet's\ntemplatePatch — false means the Application reports drift and nothing moves.",
+			"CDApp.health":       "Health is the workload's verdict: Healthy, Progressing, Degraded, Missing.",
+			"CDApp.message":      "Message is why, when Health is not Healthy.",
+			"CDApp.name":         "Name is the Application name the generator mints: <namespace>-<app>. It is\nthe join key against a Declaration.",
+			"CDApp.namespace":    "Namespace is the DESTINATION namespace as the CR declares it — where the\nworkload lands. For a fleet Application that is the org, but this is the\nOBSERVED field and not our model of it: the two can disagree, and a board\nwhose whole job is drift must be able to show that they do.",
+			"CDApp.path":         "Path is the values file CD renders against, relative to the chart source.",
+			"CDApp.phase":        "Phase is the last sync operation's phase (Running, Succeeded, Failed) and\nOperationMessage is its message. A Failed phase with a Synced verdict is\nthe shape a stuck Application takes.",
+			"CDApp.project":      "Project is the AppProject fence the sync is admitted under.",
+			"CDApp.reconciledAt": "ReconciledAt is when CD last compared this Application.",
+			"CDApp.revision":     "Revision is the universe commit CD last applied. Empty means it has not\napplied one — never assume it means main.",
+			"CDApp.selfHeal":     "SelfHeal is whether CD also corrects drift the cluster introduced.",
+			"CDApp.sync":         "Sync is CD's verdict on git-versus-cluster: Synced, OutOfSync, or Unknown.",
+		},
+	})
+	zip.Describe("GET /v1/platform/ci", zip.Doc{
+		Description: "Is DECLARED AND NOT IMPLEMENTED, and answers so.\n\nThe forge's Actions surface needs a Forgejo API client, and this deployment\nhas none — the only outbound forge interaction anywhere in this binary is the\ngit CLI over https with a KMS-held token (pin.go). Returning an empty list\nwould be the estate's own worst bug shape: a surface that reports success and\ndoes nothing, indistinguishable from a forge with no runs. 501 names what is\nmissing instead.",
 	})
 	zip.Describe("GET /v1/platform/environments", zip.Doc{
 		Description: "Returns your deploy targets, and what is running on each.\n\nIt returns the org's environments — the distinct deploy targets its applications\nname, `production` for anything that names none — each aggregating the apps that\ntarget it, a rolled-up status and when it last changed.\n\nAn environment is DERIVED, not stored: there is nothing to create or delete here,\nand an environment exists exactly as long as an app points at it. Requires a\nvalidated principal; 403 without one.",

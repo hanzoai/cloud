@@ -1412,6 +1412,64 @@ components:
           description: Visitors is how many distinct people they came from.
           type: integer
       type: object
+    CDApp:
+      properties:
+        automated:
+          description: |-
+            Automated is whether CD applies git without being asked. It is
+            cd.automated in the values file, rendered by the ApplicationSet's
+            templatePatch — false means the Application reports drift and nothing moves.
+          type: boolean
+        health:
+          description: 'Health is the workload''s verdict: Healthy, Progressing, Degraded,
+            Missing.'
+          type: string
+        message:
+          description: Message is why, when Health is not Healthy.
+          type: string
+        name:
+          description: |-
+            Name is the Application name the generator mints: <namespace>-<app>. It is
+            the join key against a Declaration.
+          type: string
+        namespace:
+          description: |-
+            Namespace is the DESTINATION namespace as the CR declares it — where the
+            workload lands. For a fleet Application that is the org, but this is the
+            OBSERVED field and not our model of it: the two can disagree, and a board
+            whose whole job is drift must be able to show that they do.
+          type: string
+        operationMessage:
+          type: string
+        path:
+          description: Path is the values file CD renders against, relative to the
+            chart source.
+          type: string
+        phase:
+          description: |-
+            Phase is the last sync operation's phase (Running, Succeeded, Failed) and
+            OperationMessage is its message. A Failed phase with a Synced verdict is
+            the shape a stuck Application takes.
+          type: string
+        project:
+          description: Project is the AppProject fence the sync is admitted under.
+          type: string
+        reconciledAt:
+          description: ReconciledAt is when CD last compared this Application.
+          type: string
+        revision:
+          description: |-
+            Revision is the universe commit CD last applied. Empty means it has not
+            applied one — never assume it means main.
+          type: string
+        selfHeal:
+          description: SelfHeal is whether CD also corrects drift the cluster introduced.
+          type: boolean
+        sync:
+          description: 'Sync is CD''s verdict on git-versus-cluster: Synced, OutOfSync,
+            or Unknown.'
+          type: string
+      type: object
     CalendarPost:
       properties:
         body:
@@ -2886,6 +2944,60 @@ components:
           items: {}
           type: array
         sql:
+          type: string
+      type: object
+    Declaration:
+      properties:
+        application:
+          description: |-
+            Application is the CD Application name the generator mints: <org>-<name>.
+            It is the join key against /v1/platform/cd.
+          type: string
+        automated:
+          description: |-
+            Automated is cd.automated: false means the Application reports drift and
+            NOTHING moves. It is off by default for a new file on purpose.
+          type: boolean
+        digest:
+          description: image.digest — wins over tag
+          type: string
+        env:
+          description: |-
+            Env is the declared container environment, as the chart's list of
+            {name,value}. It is read back so a re-declare of an identical body is a
+            no-op rather than a refusal — idempotency is what makes a retry safe.
+          items:
+            $ref: '#/components/schemas/declareEnv'
+          type: array
+        hosts:
+          description: ingress.hosts, both shapes flattened
+          items:
+            type: string
+          type: array
+        name:
+          description: the Helm release name — the file's basename
+          type: string
+        org:
+          description: |-
+            Org is the owner. It is ALSO the values directory and the destination
+            namespace, because those are one value under one name — see the header.
+          type: string
+        path:
+          description: Path is the file, relative to the repository root.
+          type: string
+        project:
+          description: |-
+            Project is the AppProject the sync is admitted under, derived from the
+            directory exactly as the ApplicationSet derives it. It differs from Org
+            for a reserved directory, which syncs under the platform fence.
+          type: string
+        replicas:
+          type: integer
+        repository:
+          description: image.repository
+          type: string
+        tag:
+          description: image.tag
           type: string
       type: object
     DefRow:
@@ -14880,6 +14992,13 @@ components:
           description: Summary is the one line describing what the category groups.
           type: string
       type: object
+    cdResp:
+      properties:
+        applications:
+          items:
+            $ref: '#/components/schemas/CDApp'
+          type: array
+      type: object
     centre:
       properties:
         controls:
@@ -17299,6 +17418,79 @@ components:
     deckOut:
       properties:
         documentId:
+          type: string
+      type: object
+    declareEnv:
+      properties:
+        name:
+          type: string
+        public:
+          description: |-
+            Public marks a value that may be WRITTEN INTO GIT. Absent, it is false,
+            and the value is sealed into KMS and referenced.
+
+            ★ THE DEFAULT IS SECRET, AND THE POLARITY IS THE WHOLE DESIGN. This lane's
+            output is a commit in a repository replicated to every clone, so a
+            misclassification is not a bug to fix later — it is a credential published
+            forever. A heuristic classifier fails in both directions; what decides is
+            which direction it fails IN. Seal-by-default makes the failure mode "an
+            operator cannot read back a config value", which is a support ticket.
+            Classify-by-shape made it "a password is in git history", which is an
+            incident with no rollback.
+
+            It is also the only rule that needs no list. PGPASSWORD, *_PW, a
+            symbol-rich password, a KUBECONFIG, a base32 MFA seed — every one of them
+            slipped a shape classifier, and each miss was a different reason. There is
+            no reason left when the default is to seal.
+          type: boolean
+        value:
+          type: string
+      type: object
+    declared:
+      properties:
+        application:
+          type: string
+        automated:
+          type: boolean
+        cd:
+          $ref: '#/components/schemas/CDApp'
+        digest:
+          type: string
+        env:
+          items:
+            $ref: '#/components/schemas/declareEnv'
+          type: array
+        hosts:
+          items:
+            type: string
+          type: array
+        name:
+          type: string
+        org:
+          type: string
+        path:
+          type: string
+        project:
+          type: string
+        replicas:
+          type: integer
+        repository:
+          type: string
+        tag:
+          type: string
+      type: object
+    declaredResp:
+      properties:
+        apps:
+          items:
+            $ref: '#/components/schemas/declared'
+          type: array
+        cdUnavailable:
+          $ref: '#/components/schemas/unreadable'
+        org:
+          description: |-
+            Org is the directory read — the caller's own, or another when a SuperAdmin
+            asked to act as it.
           type: string
       type: object
     definition:
@@ -48358,6 +48550,11 @@ components:
             on a test or an audit row. Only a check that can FAIL counts as verified,
             and coverage counts those one rung weaker than they claim to be.
           type: integer
+      type: object
+    unreadable:
+      properties:
+        reason:
+          type: string
       type: object
     unreconciledOut:
       properties:
@@ -101652,15 +101849,39 @@ paths:
   /v1/platform/apps:
     get:
       description: |-
-        Returns the declarations in the caller's own org directory, each joined with the Hanzo CD Application reconciling it — sync verdict, health, the universe commit last applied. `cd` is null for a declaration the delivery plane has no Application for, which is the normal state of one that exists only on a branch.
+        Answers what this organisation has declared, joined with what
+        the delivery plane has done about it.
 
-        If the delivery plane cannot be read, the declarations are still returned and `cdUnavailable` says why. An unreadable plane never renders as "nothing has been reconciled".
+        The join is best-effort BY DESIGN and says so when it is missing: the
+        declarations ARE the answer to "what have I deployed", so refusing the whole
+        board because the cluster is unreadable would lose the half that is readable.
+        What must never happen is a silent null — an unreadable plane is reported as
+        `cd.unavailable` carrying the reason, never as an app with no reconciliation.
       operationId: get_platform_apps
-      summary: What this organization has declared, and what CD did with it
+      parameters:
+      - description: |-
+          Org names the organisation whose declarations to read, defaulting to the
+          caller's own. Only a SuperAdmin may name one that is not theirs; anyone
+          else naming a foreign org is refused, so this widens nothing by itself.
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/declaredResp'
+          description: ok
+      summary: Answers what this organisation has declared, joined with what the delivery
+        plane has done about it.
       tags:
       - platform
       x-app: platform
       x-public: true
+      x-tool: true
     post:
       description: |-
         Builds a git repository into an image and writes the declaration that names it — a values file in `hanzoai/universe` under `charts/app/values/<namespace>/<name>.yaml`, which the `fleet` ApplicationSet renders as one Application. That file IS the deployment: nothing else has to be applied.
@@ -101682,39 +101903,80 @@ paths:
       x-public: true
   /v1/platform/apps/{app}:
     get:
-      description: 'The values file for one app as git declares it: image repository
-        and tag, hosts, replicas, and whether CD is automated on it. 404 when this
-        organization declares no such app.'
+      description: |-
+        Answers ONE declaration — what git says this app is, before the
+        delivery plane has had any say in it.
       operationId: get_platform_apps_by_app
       parameters:
-      - in: path
+      - description: |-
+          App is the DNS-1123 label of the declaration. The URL is the addressing
+          authority — a path segment binds after the body and after the query — so
+          the address decides which app is read whatever else is sent.
+        in: path
         name: app
         required: true
         schema:
           type: string
-      summary: One declaration
+      - description: |-
+          Org names the organisation the declaration lives in, defaulting to the
+          caller's own and subject to the same SuperAdmin rule as the listing.
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Declaration'
+          description: ok
+      summary: Answers ONE declaration — what git says this app is, before the delivery
+        plane has had any say in it.
       tags:
       - platform
       x-app: platform
       x-public: true
+      x-tool: true
   /v1/platform/apps/{app}/cd:
     get:
-      description: The Hanzo CD Application for one declaration, on its own — the
-        poll a deploy view makes while it waits, without re-reading the whole inventory.
-        404 while the declaration exists only on a branch, because the generator reads
-        main.
+      description: |-
+        Answers ONE app's reconciliation alone — the poll a deploy
+        console makes while it waits, without re-reading the whole inventory each time.
       operationId: get_platform_apps_by_app_cd
       parameters:
-      - in: path
+      - description: |-
+          App is the DNS-1123 label of the declaration. The URL is the addressing
+          authority — a path segment binds after the body and after the query — so
+          the address decides which app is read whatever else is sent.
+        in: path
         name: app
         required: true
         schema:
           type: string
-      summary: One app's reconciliation
+      - description: |-
+          Org names the organisation the declaration lives in, defaulting to the
+          caller's own and subject to the same SuperAdmin rule as the listing.
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CDApp'
+          description: ok
+      summary: Answers ONE app's reconciliation alone — the poll a deploy console
+        makes while it waits, without re-reading the whole inventory each time.
       tags:
       - platform
       x-app: platform
       x-public: true
+      x-tool: true
   /v1/platform/builds:
     get:
       description: |-
@@ -101743,15 +102005,25 @@ paths:
   /v1/platform/cd:
     get:
       description: |-
-        Every Hanzo CD Application this caller may observe, with its sync verdict, health, the universe revision last applied, and whether automation and self-heal are on. A SuperAdmin sees the fleet; an org admin sees only Applications whose destination namespace IS its own organization, and never a reserved one.
+        Answers every Application the delivery plane holds.
 
-        A cluster with no CD installed answers an empty plane. A plane that cannot be READ answers 503 and says why — the two are opposite facts and never share a shape.
+        Scoped to the namespaces the caller's own validated org owns: the ROLE opens
+        the door and the tenant boundary is applied inside, so an admin of one org
+        never observes another's.
       operationId: get_platform_cd
-      summary: The delivery plane
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cdResp'
+          description: ok
+      summary: Answers every Application the delivery plane holds.
       tags:
       - platform
       x-app: platform
       x-public: true
+      x-tool: true
   /v1/platform/ci:
     get:
       description: Answers 501. The forge's Actions runs need a Forgejo API client
