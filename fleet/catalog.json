@@ -219,6 +219,26 @@
    "doc": "Opens a live agent session in the caller's org — the row every\nsurface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its\nactivity off. A session with a parentSessionId becomes a subagent of that\nsession and inherits its root, so one flow is one tree; without one it is\nitself a root. Registering with a terminal status records a session that has\nalready finished."
   },
   {
+   "id": "post_agents_sessions_by_id_events",
+   "doc": "Records one turn of a session's transcript and answers 201 with it.\n\nTHE TURN IS SCANNED BEFORE IT IS STORED. The same engine the code-security\nsurface runs reads the payload at this boundary, and a credential in it refuses\nthe append with 422 rather than redacting it — a redacted transcript is one\nthat still had the secret in it once, and this way the author learns which\nvalue to rotate. The refusal carries every finding: the rule, the severity, the\nline, a MASKED preview and the fingerprint. The secret is never in the answer."
+  },
+  {
+   "id": "post_agents_sessions_by_id_message",
+   "doc": "Sends a steering message to a running session — the door a\nhuman or another agent interrupts through. It requires a `message` or a\n`payload`; the other three commands do not."
+  },
+  {
+   "id": "post_agents_sessions_by_id_pause",
+   "doc": "Asks a running session to pause. Recorded durably, and forwarded\nto the durable-execution engine when the session is task-backed."
+  },
+  {
+   "id": "post_agents_sessions_by_id_resume",
+   "doc": "Asks a paused session to continue, on the same terms as a pause."
+  },
+  {
+   "id": "post_agents_sessions_by_id_stop",
+   "doc": "Ends a running session. `message` is recorded as the cancellation\nreason, which is what a later reader of the transcript sees.\n\nSTOPPING IS NOT DELETING: the session, its transcript and anything it produced\nstay readable. A session that has already finished is 409 rather than a second\nstop."
+  },
+  {
    "id": "post_agents_targets",
    "doc": "Registers a machine as an agent target, or re-links one that is\nalready registered. Re-linking is idempotent and keyed on org+host+owner, so a\nmachine that reconnects refreshes its own row rather than piling up duplicates;\nit answers 200, while a first registration answers 201."
   },
