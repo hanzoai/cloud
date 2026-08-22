@@ -365,14 +365,6 @@ var meteredWithoutAMeter = map[string]bool{
 	"todo": true,
 }
 
-// packageCharges reports whether dir's non-test sources call a meter, and whether
-// EVERY positional Meter call in them passes a literal zero amount (a wired seam that
-// records nothing — apps/security shipped exactly that).
-func packageCharges(t *testing.T, dir string) (charges, allZero bool) {
-	c, z, _ := packagePrice(t, dir)
-	return c, z
-}
-
 // packagePrice is packageCharges plus the question a wired meter cannot answer on
 // its own: does it charge a NUMBER?
 //

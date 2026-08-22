@@ -193,7 +193,9 @@ func TestBuildFailureCarriesItsDiagnostics(t *testing.T) {
 	if err := json.Unmarshal(r.Body, &body); err != nil {
 		t.Fatalf("decode 422 body: %v (%s)", err, r.Body)
 	}
-	for _, k := range []string{"error", "detail", "source", "generated"} {
+	// `detail` carries the sentence and the extension members merge beside it at
+	// the top level (RFC 9457 §3.2), which is what keeps source/generated readable.
+	for _, k := range []string{"detail", "source", "generated"} {
 		if _, ok := body[k]; !ok {
 			t.Errorf("the 422 build body must carry %q; got %s", k, r.Body)
 		}
@@ -201,8 +203,8 @@ func TestBuildFailureCarriesItsDiagnostics(t *testing.T) {
 	if got, ok := body["status"].(float64); !ok || int(got) != 422 {
 		t.Errorf("the refusal envelope must survive the merge: status = %v, want 422 (%s)", body["status"], r.Body)
 	}
-	if got, _ := body["error"].(string); got != "build failed" {
-		t.Errorf("error = %q, want \"build failed\" (%s)", got, r.Body)
+	if got, _ := body["detail"].(string); got != "build failed" {
+		t.Errorf("detail = %q, want \"build failed\" (%s)", got, r.Body)
 	}
 }
 

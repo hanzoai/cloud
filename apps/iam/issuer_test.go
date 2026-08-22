@@ -34,14 +34,18 @@ func TestDiscoveryIssuesAsTheBrandItWasAskedAs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Owned by the reserved org, with its key mounted: a signing cert is trusted
+	// only under a reserved owner, and its private half comes from the deployment
+	// rather than the row. Discovery is served by a store that can actually sign.
 	cert := orm.New[model.Cert](db)
-	cert.Owner, cert.Name = "hanzo", "cert-hanzo"
+	cert.Owner, cert.Name = "admin", "cert-hanzo"
 	cert.Type, cert.CryptoAlgorithm, cert.BitSize = "x509", "RS256", 2048
-	cert.SetId("hanzo/cert-hanzo")
+	cert.SetId("admin/cert-hanzo")
 	if err := cert.CreateCtx(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	_ = db.Close()
+	mountSigningKey(t, "cert-hanzo")
 
 	t.Setenv("IAM_ISSUER", "https://hanzo.id")
 	t.Setenv("IAM_ISSUER_MAP", `{"hanzo.id":"https://hanzo.id","lux.id":"https://lux.id","zoolabs.id":"https://zoolabs.id"}`)

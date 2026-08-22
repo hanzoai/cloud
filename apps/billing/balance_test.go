@@ -166,7 +166,8 @@ func TestBalance_UnreadableIsNotZero(t *testing.T) {
 	if _, isBalance := got["available"]; isBalance {
 		t.Fatalf("an unreadable balance was rendered as a balance object: %s", body)
 	}
-	if got["error"] == nil {
+	// A refusal is an RFC 9457 problem document, so the sentence is `detail`.
+	if got["detail"] == nil {
 		t.Fatalf("want an honest error body, got: %s", body)
 	}
 }

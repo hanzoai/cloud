@@ -96,4 +96,77 @@ CREATE TABLE IF NOT EXISTS page_view (
 );
 CREATE INDEX IF NOT EXISTS ix_pv_link ON page_view(link_id);
 CREATE INDEX IF NOT EXISTS ix_pv_view ON page_view(view_id);
+
+-- === trust center ===========================================================
+-- An org's trust center: what it publishes about its own security, and the door
+-- through which an outsider asks for the part only an auditor can vouch for.
+--
+-- It adds three tables and reuses everything else. A gated artifact's BYTES are a
+-- document row above; a grant is a link row above, time-boxed and addressed to one
+-- party; and who read what, page by page, is the view and page_view rows above —
+-- so the access record is the same record the data room already keeps, and there
+-- is no second document store, no second grant and no second trail.
+
+-- The center itself. One row per tenant, id 'center', so it cannot be duplicated.
+CREATE TABLE IF NOT EXISTS trust_center (
+  id         TEXT PRIMARY KEY,
+  slug       TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  published  INTEGER NOT NULL DEFAULT 0,
+  nda        TEXT,
+  room_id    TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- One published item. Its KIND is the taxonomy a page renders by; its ATTESTER is
+-- who vouched for it; its TIER is who may read it.
+--
+-- THE LAST CHECK IS THE WHOLE SAFETY OF THIS DESIGN. Tier defaults to gated, so a
+-- kind nobody has thought of yet is private on arrival and someone has to publish
+-- it deliberately. On top of that an auditor-attested item can NEVER be public —
+-- refused by SQLite, so no path through Go can publish one, including a path
+-- written later by someone who has not read this file.
+CREATE TABLE IF NOT EXISTS trust_artifact (
+  id          TEXT PRIMARY KEY,
+  kind        TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  summary     TEXT,
+  framework   TEXT,
+  attester    TEXT NOT NULL,
+  tier        TEXT NOT NULL DEFAULT 'gated',
+  document_id TEXT,
+  body        TEXT,
+  retired     INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL,
+  CHECK (tier IN ('public','gated')),
+  CHECK (attester IN ('self','auditor')),
+  CHECK (attester <> 'auditor' OR tier = 'gated')
+);
+CREATE INDEX IF NOT EXISTS ix_ta_tier ON trust_artifact(tier, retired);
+
+-- Someone asking to read the gated tier, and what was decided. A granted request
+-- carries the link it became, so the queue and the live grants are one list.
+CREATE TABLE IF NOT EXISTS trust_request (
+  id          TEXT PRIMARY KEY,
+  email       TEXT NOT NULL,
+  party       TEXT,
+  reason      TEXT,
+  artifact_id TEXT,
+  nda         TEXT,
+  state       TEXT NOT NULL DEFAULT 'open',
+  note        TEXT,
+  link_id     TEXT,
+  expires_at  INTEGER,
+  decided_by  TEXT,
+  decided_at  INTEGER,
+  created_at  INTEGER NOT NULL,
+  CHECK (state IN ('open','granted','refused'))
+);
+CREATE INDEX IF NOT EXISTS ix_tr_state ON trust_request(state, created_at);
+-- One OPEN ask per party per target: asking twice is the same ask, and it is also
+-- what keeps an anonymous door from filling a tenant's store.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_tr_open
+  ON trust_request(email, COALESCE(artifact_id,'')) WHERE state='open';
 `
