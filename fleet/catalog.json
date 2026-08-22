@@ -374,6 +374,16 @@
  ],
  "base": [
   {
+   "id": "get_base_bases",
+   "doc": "Lists every Base the caller can reach, one per org their token carries.\n\nThe orgs come from IAM's signed membership set, so the list is exactly the\norgs the caller is a member of and cannot be widened by asking. It is the\naccount-wide view: a Base is per org, so this is one entry per org and there\nis nothing to page.\n\nA caller with no membership set — a machine credential, an API key — reaches\nno Base and receives an empty list rather than a refusal, because holding no\nmembership is an answer and not a failure.",
+   "read": true
+  },
+  {
+   "id": "get_base_bases_by_org",
+   "doc": "Describes ONE org's Base — whether its store exists, and what it occupies.\n\nThe org must be one the caller's token carries; any other is not found, so\nthis cannot be used to learn which orgs exist. That check is the same\nmembership set the listing is built from, which is why the two can never\ndisagree about what a caller may see.",
+   "read": true
+  },
+  {
    "id": "get_base_health",
    "doc": "Reports that the base subsystem is serving.\n\nIt is deliberately INDEPENDENT of whether this deployment actually embeds the\nBase engine: the route answers before the CLOUD_BASE_EMBED gate and before the\n/v1/base/* wildcard, so a liveness probe measures the process rather than an\noptional feature, and the wildcard can never shadow it. It reads no tenant, so a\nprober that sends no principal is answered rather than refused.",
    "read": true
@@ -5675,6 +5685,10 @@
    "doc": "Gives a custom hostname back, so the name is free to reuse.\n\nA claim is FIRST-COME and global, so an add-only surface was not ownership but\na leak: a customer who mistyped a domain, or claimed one they later moved\nelsewhere, could neither reuse it nor let anyone else. This is the third\nwriter that closes it. The release is scoped to (host, org, slug), so it can\nonly ever drop THIS tenant's own claim, and it is IDEMPOTENT: releasing a host\nwe do not hold is a clean 204, never a 404 that would let a caller probe which\nhosts other tenants hold. The edge cache-tag is flushed, since the host stops\nrouting here.\n\nScope: a validated principal is required (403 without one) and the site is\nresolved within that principal's org, so another tenant's slug is a 404."
   },
   {
+   "id": "delete_projects_by_slug_star",
+   "doc": "Removes the caller's own bookmark from a project, and answers whether\nit is starred afterwards.\n\nIt removes only YOUR star — the same one star wrote — so a project other\npeople have starred stays on their lists. Unstarring one you had not starred\nis not an error; it leaves it unstarred."
+  },
+  {
    "id": "get_projects",
    "doc": "Returns every project your org owns.\n\nEach row carries the slug, name, framework, visibility, status and live URL —\nthe same rows console and the builder render, because there is only one store\nbehind both. It requires a validated principal (403 without one) and is keyed\nby that principal's org, so it never contains another tenant's project.",
    "read": true
@@ -5770,6 +5784,10 @@
   {
    "id": "post_projects_sites_deploy",
    "doc": "Deploys a caller-supplied file manifest — the deploy_site\ncapability an agent calls — and answers with where it went live.\n\n`files` is a list of {path, content} pairs, the same shape the brief build\nemits, and it runs through the SAME guards: index.html required at the root,\nabsolute and traversal paths rejected, per-file and total size capped, and a\nmobile viewport meta tag injected into every HTML document that lacks one — so\na hand-built site is exactly as safe and as responsive as a generated one.\n`slug` and `name` are optional; a slug is derived from the name or minted.\n\nIt writes into the SAME org-scoped store as /v1/projects, ensuring a project\n(framework `static`) for the resolved slug and recording a deployment. The\nhosting gate runs before the upload and the debit lands once, after the site\nis live — a failed upload is never billed. Answers 503 when object storage is\nunconfigured.\n\nScope: a validated principal is required (403 without one) and the site is\npublished into THAT principal's org."
+  },
+  {
+   "id": "put_projects_by_slug_star",
+   "doc": "Bookmarks a project for the person calling, and answers whether it is\nstarred afterwards.\n\nThe star is YOURS: it is keyed by you as well as by the project, so two people\nsee two answers for the same one and starring it says nothing about anybody\nelse's list. Starring a project you have already starred leaves it starred."
   }
  ],
  "prompt": [
