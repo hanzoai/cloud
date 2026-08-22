@@ -375,12 +375,25 @@ except Exception:
         # sentences — and they have three different remedies. Naming the
         # finish_reason and the head of the text is what tells them apart, where
         # "no verdict" alone sends the next reader to re-run and hope.
+        #
+        # The HEAD ALONE IS NOT ENOUGH, and one refusal proved it: an answer of
+        # 2218 completion tokens that opened `{ "verdict": "pass"` and stopped
+        # normally. Every remedy above is consistent with that opening, so the
+        # 200 characters said only that the model had tried. What separates them
+        # is the END: an answer cut off stops mid-token, prose that ran on past
+        # the object ends in a sentence, and a well-formed object ends in `}` —
+        # which would mean the text parses and the fault is in the transport that
+        # carried it, not in the model. The length says which of those is even
+        # possible. Both ends and the size, so the next occurrence is read once
+        # rather than bisected.
         fin = (raw.get("choices") or [{}])[0].get("finish_reason")
         used = (raw.get("usage") or {}).get("completion_tokens")
-        head = " ".join(text.split())[:200]
+        flat = " ".join(text.split())
+        head, tail = flat[:200], flat[-200:] if len(flat) > 200 else ""
         print(f"::error::review: the reviewer did not answer with a JSON verdict"
-              f" (finish_reason={fin}, completion_tokens={used}) — refusing rather"
-              f" than guessing. It answered: {head!r}"); sys.exit(1)
+              f" (finish_reason={fin}, completion_tokens={used}, chars={len(text)})"
+              f" — refusing rather than guessing. It opened: {head!r}"
+              + (f" and ended: {tail!r}" if tail else "")); sys.exit(1)
     if len(found) > 1:
         print("::error::review: the answer carries more than one verdict object — refusing rather than choosing between them"); sys.exit(1)
     v = found[0]
