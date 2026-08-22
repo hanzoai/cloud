@@ -23,7 +23,7 @@ API="${REVIEW_API:-https://api.hanzo.ai}"
 # rule and both have broken this gate: `claude-sonnet-4-6` routed to do-ai, whose
 # token was revoked, and the gate answered 401 on every push for a day;
 # `fireworks/gpt-oss-120b` named a provider we do not use and an id the catalog
-# does not serve, so every review call failed and the train stopped for far
+# does not serve, so every review call failed and the release stopped for far
 # longer. The gate refused correctly both times — there was nothing on the other
 # end.
 #
@@ -49,7 +49,7 @@ API="${REVIEW_API:-https://api.hanzo.ai}"
 # below as strict JSON.
 MODEL="${REVIEW_MODEL:-enso}"
 
-# WHEN THE PREMIUM MODEL CANNOT BE PAID FOR, FALL BACK RATHER THAN STOP THE TRAIN.
+# WHEN THE PREMIUM MODEL CANNOT BE PAID FOR, FALL BACK RATHER THAN STOP THE RELEASE.
 # A 402 is not a verdict and it is not a transient — it is the gateway saying the
 # ACCOUNT cannot buy this model right now, which says nothing about the change
 # under review. Refusing on it stops every release for a billing fact, and that
