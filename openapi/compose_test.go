@@ -61,6 +61,7 @@ const (
 	privatePath = "../private.yaml"
 	publicPath  = "../openapi.yaml"
 	floorPath   = "floor.json"
+	untypedPath = "untyped.json"
 	specDir     = "../plugin"
 )
 
@@ -124,6 +125,20 @@ func TestFleetIsTheCompositionOfItsApps(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// THE TWIN RATCHET, and it is a different question: the floor asks whether the
+	// document still PUBLISHES what it did, this asks how much of it a client can
+	// CALL. A document can clear the floor while a larger share of it becomes
+	// undispatchable, because a raw route is a published operation. See
+	// openapi/untyped.go.
+	rawWas, err := openapi.ReadUntyped(untypedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawNow, err := rawWas.Shrink(openapi.Count(composed))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	got, err := render(composed)
 	if err != nil {
 		t.Fatalf("yaml: %v", err)
@@ -165,8 +180,15 @@ func TestFleetIsTheCompositionOfItsApps(t *testing.T) {
 		if err := raised.Write(floorPath); err != nil {
 			t.Fatalf("write %s: %v", floorPath, err)
 		}
-		t.Logf("wrote %s (%d paths), %s (%d paths) and %s (%d products)",
-			*composeOut, len(composed.Paths), out, len(pub.Paths), floorPath, len(raised.Products))
+		// Written from the INTERNAL document for the floor's reason: the public
+		// projection drops the admin family and every staged capability, so
+		// measuring that one would let a raw route land in /v1/admin unseen.
+		if err := rawNow.Write(untypedPath); err != nil {
+			t.Fatalf("write %s: %v", untypedPath, err)
+		}
+		t.Logf("wrote %s (%d paths), %s (%d paths), %s (%d products) and %s (%d undispatchable)",
+			*composeOut, len(composed.Paths), out, len(pub.Paths),
+			floorPath, len(raised.Products), untypedPath, rawNow.Operations)
 		return
 	}
 

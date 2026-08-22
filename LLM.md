@@ -1040,6 +1040,45 @@ document pipeline" below.)
   deletion lowers it by hand in the same commit, where a reviewer sees the number
   go down next to the reason. A MISSING floor is refused rather than treated as
   zero — losing the file must not be a way to lose the guarantee.
+- **`openapi/untyped.json` is THE TWIN RATCHET — the undispatchable remainder may
+  shrink and may not grow** (`openapi/untyped.go`). The floor holds a line under
+  what the document PUBLISHES; nothing held one under what a client can CALL, and
+  those are different facts about the same operation. A raw route IS a published
+  operation, so the document can grow — clearing the floor — while a larger share
+  of it becomes unreachable by any MCP tool, CLI command or typed SDK method, with
+  every gate green because every gate measures presence. Same shape as the floor
+  and the same file, one number per product, checked at the ONE place the woven
+  document is produced (`openapi/compose_test.go`, beside `Raise`) and measured off
+  the INTERNAL document, because the public projection drops the admin family and
+  every staged capability. **784 undispatchable across 58 products at the seed**,
+  measured rather than declared.
+  - **The direction is the one a count can enforce.** Ratcheting the TYPED count UP
+    is satisfied by adding typed routes while raw ones are added beside them —
+    which is exactly the case worth catching, so the quantity is the RAW remainder
+    falling. Lowering is automatic on a conversion; RAISING is a hand edit in the
+    same commit, where a reviewer sees the number go up next to its reason.
+  - **It does NOT replace the per-app ledgers and must not.** A count says an app
+    grew a raw route; an `untypedByDesign` entry says WHICH address and WHY, and is
+    the only half that can go red when a reason stops being true — which is how the
+    five agents session writes were found, their refusal having named its own
+    expiry condition months before zip shipped it. The two answer different
+    questions and the cheap one does not excuse the precise one.
+  - **What it adds is coverage nobody has to remember.** The ledgers are opt-in, so
+    they are silent exactly where nobody has looked: measured when this landed,
+    **14 apps had no ledger of any shape and 48 raw operations between them** — and
+    finding that took three passes, because the first grep keyed on a variable NAME
+    and the second on a PHRASE and both returned the wrong list (they called
+    `apps/deploy` ungated when it holds the most complete ledger in the tree). A
+    property that can only be measured by pattern-matching test source is not a
+    property the tree holds. This one needs no per-app cooperation and covers an app
+    written tomorrow.
+  - **A cleared product is DROPPED, not pinned at zero.** Pinning would forbid it
+    ever gaining a legitimate byte stream or signed webhook again — stricter than
+    the ratchet means, with no way to say yes. The unit test that caught this found
+    a real bug: copying the old map and merging only what the new one carries reads
+    as equivalent and holds a cleared product at its old number forever, so the app
+    that FINISHED its conversion would have been the one app the gate stopped
+    protecting. Take the minimum over the UNION, absence counting as zero.
 - **Reading the LIVE router is the only total source.** `POST /v1/kms/auth/login`
   is registered as `Group("/v1/kms/auth").Post("/login")` — no grep can find that
   path; only the assembled router knows it. And the route set is a function of
