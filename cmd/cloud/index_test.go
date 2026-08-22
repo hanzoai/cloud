@@ -38,7 +38,7 @@ func reply(t *testing.T, app *zip.App, path string) (*http.Response, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, deadline)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}
