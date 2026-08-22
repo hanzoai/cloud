@@ -40,16 +40,28 @@ import (
 // maps one to "unknown" and ALLOWS, so it stopped gating. One refusal, two
 // subsystems, opposite directions, neither of them an error anybody saw.
 //
-// This asserts admission, not the tier: the plane has no commerce behind it here,
-// so the read may still fail — but it must fail as something other than "who are
-// you", which is the only thing payer decides.
+// This asserts ADMISSION, not the tier: no commerce is co-resident here, so the
+// read still fails — with 503 "runs no commerce", which is a fact about the
+// deployment. What it must never be is a refusal of the CALLER.
+//
+// Both identity codes are named because the fix had to be made TWICE and the
+// second layer was invisible until the first was live. payer admits the caller at
+// the door and answers 401 when it does not; payingOrg resolves the tenant again
+// inside the op behind it and answers 403 "no validated org on the call". Fixing
+// only the door moved the refusal one layer down and changed nothing a caller
+// could see except the number. A test that watched for 401 alone would have
+// called that a pass.
 func TestTier_TrustedS2SReadIsServed(t *testing.T) {
 	const token = "test-commerce-service-token"
 	app := mountApp(t, "", token)
 
 	code, body := s2sCall(t, app, "/v1/billing/tier?user=hanzo", token, "hanzo")
-	if code == http.StatusUnauthorized {
-		t.Fatalf("the trusted S2S caller was refused as unauthenticated: %s", body)
+	switch code {
+	case http.StatusUnauthorized:
+		t.Fatalf("the door refused the trusted S2S caller as unauthenticated: %s", body)
+	case http.StatusForbidden:
+		t.Fatalf("the door admitted the trusted S2S caller and the op behind it "+
+			"refused them: %s", body)
 	}
 }
 
