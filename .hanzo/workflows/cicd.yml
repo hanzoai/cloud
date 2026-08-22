@@ -660,27 +660,7 @@ jobs:
     # second image for a commit that already has one). Everything else — main,
     # dispatch, and the ref-less shape — is a release. startsWith() on an absent
     # ref is false, so the missing value now means "not a tag", which is true.
-    #
-    # BREAK GLASS. `needs:` alone means "every one of these succeeded", which is
-    # right until the reviewer is refused by the thing this release repairs — the
-    # reviewer is an api.hanzo.ai caller, so an outage there stops the release that
-    # fixes it, and `image` is SKIPPED rather than failed, which is the shape that
-    # hides it. The results are named explicitly here so gate and containment still
-    # have to pass, and only the review term can be admitted by a variable.
-    #
-    # REVIEW_BREAK_GLASS is a repository variable holding the REASON. Setting it
-    # ships the next release unreviewed; clearing it re-arms the gate, with no code
-    # change either way. It already existed, carrying exactly that sentence, and was
-    # read by nothing — a control someone set believing it did something, which is
-    # worse than no control. The step below prints it, so a bypassed release says so
-    # in its own log rather than in somebody's memory.
-    if: >-
-      always()
-      && github.event_name != 'pull_request'
-      && !startsWith(github.ref, 'refs/tags/')
-      && needs.gate.result == 'success'
-      && needs.containment.result == 'success'
-      && (needs.review.result == 'success' || vars.REVIEW_BREAK_GLASS != '')
+    if: github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/')
     runs-on: [hanzo-build-linux-amd64]
     # cloud builds ~28 subsystems and has run 15m, 17m and 20m42s.
     timeout-minutes: 60
@@ -700,24 +680,6 @@ jobs:
       image: ${{ steps.ver.outputs.image }}
       path: ${{ steps.ver.outputs.path }}
     steps:
-      # A BYPASSED RELEASE SAYS SO IN ITS OWN LOG. The condition above can admit
-      # this job with review red; if that happened, the reason is printed here and
-      # written to the run summary, so "why did this ship unreviewed" is answered
-      # by the run rather than by whoever remembers setting the variable.
-      - name: say whether the review gate was bypassed
-        if: needs.review.result != 'success'
-        run: |
-          {
-            echo "## Review gate BYPASSED"
-            echo
-            echo "review concluded \`${{ needs.review.result }}\` and this release was admitted by REVIEW_BREAK_GLASS."
-            echo
-            echo "> ${{ vars.REVIEW_BREAK_GLASS }}"
-            echo
-            echo "Clear the REVIEW_BREAK_GLASS repository variable to re-arm the gate."
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "::warning::review was ${{ needs.review.result }} — shipped under REVIEW_BREAK_GLASS: ${{ vars.REVIEW_BREAK_GLASS }}"
-
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
 
