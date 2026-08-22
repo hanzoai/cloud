@@ -93,6 +93,7 @@ import (
 // leaves BillingGate inert, so an unwired deployment is never blocked.
 func Toll(m *metering.Client, commerce CommerceClient) zip.Authorizer {
 	plans, _ := commerce.(PlanChecker)
+	allow, _ := commerce.(AllowanceChecker)
 	charging := billingEnabled(m)
 	return func(ctx context.Context, op zip.Op, _ any) error {
 		if answered(ctx) {
@@ -109,7 +110,7 @@ func Toll(m *metering.Client, commerce CommerceClient) zip.Authorizer {
 		// The whole SpendGate ladder, from the one function that holds it. Dark by
 		// default: one atomic load and out, so an op pays nothing for a gate the
 		// operator has not armed.
-		if reason := standing(c, op.Method, op.Path, plans); reason != "" {
+		if reason := standing(c, op.Method, op.Path, plans, allow); reason != "" {
 			return Denied(refusal(reason))
 		}
 

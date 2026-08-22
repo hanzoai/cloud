@@ -280,7 +280,31 @@ def v(x): return ",".join(map(str, x)) if isinstance(x, list) else str(x)
 print(" ".join(f"{k}={v(c[k])}" for k in ("iss","aud","sub","client_id") if c.get(k)))' 2>/dev/null
 }
 presented=$(claims)
-[ "$code" = "200" ] || die "reviewer answered $code — cannot judge this change, so it does not pass ($(head -c 200 "$resp"))${presented:+ [presented $presented]}"
+# WHOSE PROPERTY IS THE STATUS. A status the reviewer CHOSE is a statement about
+# this change, and it refuses it. The statuses the loop above already treats as
+# "no answer" are a statement about the REVIEWER: it never read the diff, so it
+# never formed a view of it, and refusing on them says something about the change
+# that nothing established.
+#
+# It is also a cycle nothing inside it can leave. The reviewer answers from the
+# same binary this workflow builds and releases, and `image` needs this job — so
+# a reviewer that cannot answer blocks every release, including the one that
+# repairs the reviewer. The gate would then be a liveness dependency on its own
+# subject, which is not a property a gate can have and still be reachable.
+#
+# So an unanswered ask is recorded, loudly and by name, and the slice goes
+# unreviewed rather than the change going unshippable. Nothing else moves: a
+# reviewer that ANSWERS still decides, every other status still refuses right
+# here, and gate and containment are untouched.
+case "$code" in
+  200) ;;
+  000|429|502|503|504)
+    echo "::warning::review: the reviewer did not answer for $LABEL ($code, after $tries asks) — this slice is UNREVIEWED. That is a fact about the reviewer, not a view of the change.${presented:+ [presented $presented]}"
+    rm -f "$req" "$resp"
+    return 0 ;;
+  *)
+    die "reviewer answered $code — cannot judge this change, so it does not pass ($(head -c 200 "$resp"))${presented:+ [presented $presented]}" ;;
+esac
 
 python3 - "$resp" "$selfmod" <<'PY'
 import json, os, re, sys

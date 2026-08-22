@@ -1,7 +1,7 @@
 ---
 name: iam_audit-logs
 version: "8.0.0"
-description: "Read iam audit logs: Returns your organization's audit trail, newest first — who did what, when, and from where.."
+description: "Read iam audit logs: Returns your organization's audit trail, newest first — who did what, when, and from where., Returns one audit entry in full: the action, the person or key behind it, and the request it came in on.."
 ---
 
 # Zoo · IAM · audit logs
@@ -15,16 +15,20 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.zoo.ngo/v1/iam/audit-logs` — Returns your organization's audit trail, newest first — who did what, when, and from where.
+- `GET https://api.zoo.ngo/v1/iam/audit-logs/{owner}/{name}` — Returns one audit entry in full: the action, the person or key behind it, and the request it came in on.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/audit-logs` → `iam.ListOutput` object with fields: `auditLogs`, `total`.
+- `/v1/iam/audit-logs/{owner}/{name}` → `iam.AuditLog` object with fields: `action`, `clientIp`, `createdAt`, `createdTime`, `deleted`, `id`, `isTriggered`, `language`, `method`, `name`, `object`, `organization`.
 
 ## Example
 

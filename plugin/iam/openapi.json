@@ -17,9 +17,6 @@
   ],
   "tags": [
     {
-      "name": "compat"
-    },
-    {
       "name": "iam"
     }
   ],
@@ -146,255 +143,6 @@
           }
         },
         "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/iam/add-application": {
-      "post": {
-        "operationId": "post_iam_add-application",
-        "summary": "Registers an application in your organization — one product or site your people sign in to, with its own client credentials, sign-in methods and allowed redirect URIs.",
-        "description": "Registers an application in your organization — one product or site your\npeople sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs.\n\nThe older spelling of POST /v1/iam/application. A name already used in the\norganization is refused rather than overwritten.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Application"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/add-membership": {
-      "post": {
-        "operationId": "post_iam_add-membership",
-        "summary": "Lets a person or an application act in an organization.",
-        "description": "Lets a person or an application act in an organization. It is the grant\nbehind \"add someone to the team\", and it is safe to repeat — granting a\nmembership that already exists changes nothing. Granting membership IS the org's authority to give, so it takes the\nsame gate a write to that org's own registry row takes: a SuperAdmin, an admin\nof the org itself, or an org-admin-capable confidential client. One rule, one\nplace (internal/authz).",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/add-organization": {
-      "post": {
-        "operationId": "post_iam_add-organization",
-        "summary": "Creates an organization — the account everything else in your directory hangs from.",
-        "description": "Creates an organization — the account everything else in your directory\nhangs from. Users, applications, roles, projects and workspaces are all\nnamed inside one organization, so this is the first write in a new tenant.\n\nThe older spelling of POST /v1/iam/organizations. Both reach the same\ncreate, so a name already taken is refused here too.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.CreateOrganizationInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/add-project": {
-      "post": {
-        "operationId": "post_iam_add-project",
-        "summary": "Creates a project inside your organization — the scope people pick between when their work is separated by product or client rather than by team.",
-        "description": "Creates a project inside your organization — the scope people pick between\nwhen their work is separated by product or client rather than by team.\n\nThe older spelling of POST /v1/iam/projects. Creating one takes an\nadministrator of the owning organization.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Input"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/add-provider": {
-      "post": {
-        "operationId": "post_iam_add-provider",
-        "summary": "Adds an identity provider your people can sign in with, or a service your applications send through — a social or enterprise login, an email or SMS sender, a storage or payment connector.",
-        "description": "Adds an identity provider your people can sign in with, or a service your\napplications send through — a social or enterprise login, an email or SMS\nsender, a storage or payment connector.\n\nA provider is configured once here and then switched on per application, so\nseveral applications can share one set of credentials.\n\nThe older spelling of POST /v1/iam/providers.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Provider"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/add-role": {
-      "post": {
-        "operationId": "post_iam_add-role",
-        "summary": "Creates a role — a named group of people that permissions are granted to.",
-        "description": "Creates a role — a named group of people that permissions are granted to.\nGranting to a role rather than to each person is what keeps access correct\nas your team changes: add someone to the role and they inherit everything\nit can do.\n\nThe older spelling of POST /v1/iam/roles.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.roles.Input"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/add-user": {
-      "post": {
-        "operationId": "post_iam_add-user",
-        "summary": "Adds a person to your organization and, if you send a password, sets the one they will sign in with.",
-        "description": "Adds a person to your organization and, if you send a password, sets the\none they will sign in with. The password is hashed before it is stored and\nis never returned to you or to anyone else.\n\nUsernames are checked against one rule wherever an account is created —\nthis verb, password signup, a social sign-in, or SCIM — so a name accepted\nhere is a name accepted everywhere.\n\nThe older spelling of POST /v1/iam/users, and it posts the user's fields at\nthe top level rather than wrapped in {user, password}.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.userBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/add-workspace": {
-      "post": {
-        "operationId": "post_iam_add-workspace",
-        "summary": "Creates a workspace inside your organization — the scope a team works in, alongside projects rather than instead of them.",
-        "description": "Creates a workspace inside your organization — the scope a team works in,\nalongside projects rather than instead of them.\n\nThe older spelling of POST /v1/iam/workspaces. Creating one takes an\nadministrator of the owning organization.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Input"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
         "x-tool": true
       }
     },
@@ -557,152 +305,6 @@
         "x-tool": true
       }
     },
-    "/v1/iam/application": {
-      "delete": {
-        "operationId": "delete_iam_application",
-        "summary": "Removes an application.",
-        "description": "Removes an application. Anyone mid-sign-in through it is\nturned away and its client credentials stop working, so retire the integration\nbefore deleting it.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.DeleteResult"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      },
-      "get": {
-        "operationId": "get_iam_application",
-        "summary": "Returns one application: its sign-in methods, its allowed redirect URIs and the client credentials your integration authenticates with.",
-        "description": "Returns one application: its sign-in methods, its allowed\nredirect URIs and the client credentials your integration authenticates with.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Application"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      },
-      "post": {
-        "operationId": "post_iam_application",
-        "summary": "Registers an application in your organization — one product or site your people sign in to, with its own client credentials, sign-in methods and allowed redirect URIs.",
-        "description": "Registers an application in your organization — one product or site\nyour people sign in to, with its own client credentials, sign-in methods and\nallowed redirect URIs. A name already used in the organization is refused\nrather than overwritten.\n\nExported so the legacy add-application alias reuses this exact path — one\ncreate, two spellings.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Application"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Application"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      },
-      "put": {
-        "operationId": "put_iam_application",
-        "summary": "Changes an application's display, its sign-in methods and the redirect URIs it may return to — the call that makes login work from a new host.",
-        "description": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Application"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Application"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
     "/v1/iam/applications": {
       "get": {
         "operationId": "get_iam_applications",
@@ -769,24 +371,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/applications/delete": {
-      "post": {
-        "operationId": "post_iam_applications_delete",
+    "/v1/iam/applications/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_applications_by_owner_by_name",
         "summary": "Removes an application.",
         "description": "Removes an application. Anyone mid-sign-in through it is\nturned away and its client credentials stop working, so retire the integration\nbefore deleting it.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.ApplicationRef"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -801,11 +411,9 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/applications/get": {
+      },
       "get": {
-        "operationId": "get_iam_applications_get",
+        "operationId": "get_iam_applications_by_owner_by_name",
         "summary": "Returns one application: its sign-in methods, its allowed redirect URIs and the client credentials your integration authenticates with.",
         "description": "Returns one application: its sign-in methods, its allowed\nredirect URIs and the client credentials your integration authenticates with.",
         "tags": [
@@ -814,7 +422,7 @@
         "parameters": [
           {
             "name": "owner",
-            "in": "query",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string"
@@ -822,7 +430,7 @@
           },
           {
             "name": "name",
-            "in": "query",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string"
@@ -843,15 +451,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/applications/update": {
-      "post": {
-        "operationId": "post_iam_applications_update",
+      },
+      "put": {
+        "operationId": "put_iam_applications_by_owner_by_name",
         "summary": "Changes an application's display, its sign-in methods and the redirect URIs it may return to — the call that makes login work from a new host.",
         "description": "Changes an application's display, its sign-in methods and the redirect\nURIs it may return to — the call that makes login work from a new host. Which\norganization it belongs to and what it is named are fixed when it is created\nand are not editable here.\n\nExported so the legacy update-application alias reuses this exact path — one\nupdate, two spellings.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -1015,7 +639,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.auditlogs.Input"
+                "$ref": "#/components/schemas/iam.Input"
               }
             }
           },
@@ -1037,24 +661,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/audit-logs/delete": {
-      "post": {
-        "operationId": "post_iam_audit-logs_delete",
+    "/v1/iam/audit-logs/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_audit-logs_by_owner_by_name",
         "summary": "Removes an audit entry.",
         "description": "Removes an audit entry. Retention policy is normally what should expire\na trail; deleting by hand leaves a gap a reviewer will notice.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1069,26 +701,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/audit-logs/get": {
-      "post": {
-        "operationId": "post_iam_audit-logs_get",
+      },
+      "get": {
+        "operationId": "get_iam_audit-logs_by_owner_by_name",
         "summary": "Returns one audit entry in full: the action, the person or key behind it, and the request it came in on.",
         "description": "Returns one audit entry in full: the action, the person or key behind it,\nand the request it came in on.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1103,21 +741,37 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/audit-logs/update": {
-      "post": {
-        "operationId": "post_iam_audit-logs_update",
+      },
+      "put": {
+        "operationId": "put_iam_audit-logs_by_owner_by_name",
         "summary": "Corrects an audit entry.",
         "description": "Corrects an audit entry. The trail is append-only in normal operation\nand nothing in the Hanzo Cloud rewrites it — this exists for an administrator\nto correct an entry their own systems recorded wrongly.",
         "tags": [
           "iam"
         ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.auditlogs.Input"
+                "$ref": "#/components/schemas/iam.Input"
               }
             }
           },
@@ -1304,24 +958,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/certs/delete": {
-      "post": {
-        "operationId": "post_iam_certs_delete",
+    "/v1/iam/certs/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_certs_by_owner_by_name",
         "summary": "Removes a signing certificate.",
         "description": "Removes a signing certificate. Tokens signed with it can no longer be\nverified, so retire it only once nothing is still presenting them.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.certs.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1336,26 +998,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/certs/get": {
-      "post": {
-        "operationId": "post_iam_certs_get",
+      },
+      "get": {
+        "operationId": "get_iam_certs_by_owner_by_name",
         "summary": "Returns one signing certificate — its algorithm, its validity window and its public half.",
         "description": "Returns one signing certificate — its algorithm, its validity window and\nits public half. The private key is masked.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.certs.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1370,15 +1038,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/certs/update": {
-      "post": {
-        "operationId": "post_iam_certs_update",
+      },
+      "put": {
+        "operationId": "put_iam_certs_by_owner_by_name",
         "summary": "Changes a signing certificate's settings.",
         "description": "Changes a signing certificate's settings. What it is called does not\nchange, and neither does when it was added.\n\nA PUT here is a METADATA edit — display name, expiry, provider. It overlays\nonly the fields the request actually SET onto the loaded row: a field the JSON\nomits (or leaves at its zero value) keeps what the row holds, rather than\nblanking it. That is load-bearing, not a nicety. A read serves the public\nCertificate (Mask hides only PrivateKey and AccessSecret), so a client that\nreads a cert, changes one field, and writes it back sends the masked halves\nempty and every other field it did not touch at its zero value — and the old\nfull-struct overlay wrote all of those blanks back. Blanking CryptoAlgorithm\nalone drops the cert from the JWKS (oidc.Publishes turns false), so every\ntoken under its `kid` stops verifying; blanking Provider/Account/ExpireTime\nbreaks ACME renewal and expiry — all from a request that only meant to rename\nit. Absent-or-zero means \"unchanged\", so the deployment (key) and a rotation\n(cert) remain the only way key or published material changes; the metadata API\ncannot clear it.\n\nThe overlay is generic — it copies every set field, so a field nobody has added\nyet is carried without a line here — and leaves three things the request may\nnot move: the bound Model (id, createdAt, key, snapshot), the natural key\n(owner/name address the row, they do not mutate it), and the creation stamp.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -1426,40 +1110,6 @@
         "x-public": true
       }
     },
-    "/v1/iam/delete-application": {
-      "post": {
-        "operationId": "post_iam_delete-application",
-        "summary": "Deletes an application.",
-        "description": "Deletes an application. Anyone mid-sign-in through it is turned away and\nits client credentials stop working, so retire the integration first.\n\nThe older spelling of DELETE /v1/iam/application.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Application"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
     "/v1/iam/delete-membership": {
       "post": {
         "operationId": "post_iam_delete-membership",
@@ -1480,210 +1130,6 @@
           "iam"
         ],
         "x-public": true
-      }
-    },
-    "/v1/iam/delete-organization": {
-      "post": {
-        "operationId": "post_iam_delete-organization",
-        "summary": "Deletes an organization and everything named inside it — its users, applications, roles, projects and workspaces.",
-        "description": "Deletes an organization and everything named inside it — its users,\napplications, roles, projects and workspaces. There is no undo, and every\nsession issued under it stops working.\n\nThe older spelling of POST /v1/iam/organizations/delete.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.DeleteOrganizationInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/delete-project": {
-      "post": {
-        "operationId": "post_iam_delete-project",
-        "summary": "Deletes a project.",
-        "description": "Deletes a project. The people and roles in your organization are unchanged;\nwhat goes is the scope itself, so anything addressed by it must move first.\n\nThe older spelling of POST /v1/iam/projects/delete.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.projects.Ref"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/delete-provider": {
-      "post": {
-        "operationId": "post_iam_delete-provider",
-        "summary": "Removes a provider.",
-        "description": "Removes a provider. Sign-in through it stops for every application that\nused it, so detach those applications first if they have no other method.\n\nThe older spelling of POST /v1/iam/providers/delete.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Provider"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/delete-role": {
-      "post": {
-        "operationId": "post_iam_delete-role",
-        "summary": "Deletes a role.",
-        "description": "Deletes a role. Everyone in it loses the access it carried; their accounts\nand any other roles they hold are untouched.\n\nThe older spelling of POST /v1/iam/roles/delete.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.roles.Ref"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/delete-user": {
-      "post": {
-        "operationId": "post_iam_delete-user",
-        "summary": "Removes a person from your organization.",
-        "description": "Removes a person from your organization. Their sessions stop working and\nthe account is gone, not suspended — to keep the record and only stop\nsign-in, update the user instead.\n\nThe older spelling of POST /v1/iam/users/delete.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.userBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/delete-workspace": {
-      "post": {
-        "operationId": "post_iam_delete-workspace",
-        "summary": "Deletes a workspace.",
-        "description": "Deletes a workspace. The people and roles in your organization are\nunchanged; what goes is the scope itself.\n\nThe older spelling of POST /v1/iam/workspaces/delete.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Ref"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
       }
     },
     "/v1/iam/get-account": {
@@ -1749,269 +1195,6 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/get-application": {
-      "get": {
-        "operationId": "get_iam_get-application",
-        "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
-        "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-applications": {
-      "get": {
-        "operationId": "get_iam_get-applications",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-cert": {
-      "get": {
-        "operationId": "get_iam_get-cert",
-        "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
-        "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-certs": {
-      "get": {
-        "operationId": "get_iam_get-certs",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-global-users": {
-      "get": {
-        "operationId": "get_iam_get-global-users",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-invitations": {
-      "get": {
-        "operationId": "get_iam_get-invitations",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-memberships": {
-      "get": {
-        "operationId": "get_iam_get-memberships",
-        "summary": "Answers either question about who belongs where: which organizations one person can act in, or who can act in one organization.",
-        "description": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via authz.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
-        "tags": [
-          "iam"
-        ],
-        "parameters": [
-          {
-            "name": "user",
-            "in": "query",
-            "required": false,
-            "description": "User is \"\u003chomeOrg\u003e/\u003cusername\u003e\" — which organizations that identity may act in.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "org",
-            "in": "query",
-            "required": false,
-            "description": "Org is an organization — who may act in it.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Answer"
-                }
-              }
-            },
-            "description": "ok"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Answer"
-                }
-              }
-            },
-            "description": "bad request"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/iam/get-organization": {
-      "get": {
-        "operationId": "get_iam_get-organization",
-        "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
-        "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-organization-projects": {
-      "get": {
-        "operationId": "get_iam_get-organization-projects",
-        "summary": "Returns one organization's projects — what a scope switcher lists so somebody can move between them.",
-        "description": "Returns one organization's projects — what a scope switcher\nlists so somebody can move between them.\n\nYou see your own organization and no other, whatever the request asks for.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-organization-workspaces": {
-      "get": {
-        "operationId": "get_iam_get-organization-workspaces",
-        "summary": "Returns one organization's workspaces — what a scope switcher lists so somebody can move between them.",
-        "description": "Returns one organization's workspaces — what a scope\nswitcher lists so somebody can move between them.\n\nYou see your own organization and no other, whatever the request asks for.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-organizations": {
-      "get": {
-        "operationId": "get_iam_get-organizations",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-permission": {
-      "get": {
-        "operationId": "get_iam_get-permission",
-        "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
-        "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-permissions": {
-      "get": {
-        "operationId": "get_iam_get-permissions",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-provider": {
-      "get": {
-        "operationId": "get_iam_get-provider",
-        "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
-        "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-providers": {
-      "get": {
-        "operationId": "get_iam_get-providers",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-records": {
-      "get": {
-        "operationId": "get_iam_get-records",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-role": {
-      "get": {
-        "operationId": "get_iam_get-role",
-        "summary": "Reads one record — the older spelling of the single reads on the REST surface, over the same data and the same permissions.",
-        "description": "Reads one record — the older spelling of the single reads on the\nREST surface, over the same data and the same permissions.\n\nSecrets are stripped. Naming a record in another organization does not reach\nit, however the request spells it.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-roles": {
-      "get": {
-        "operationId": "get_iam_get-roles",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-user": {
-      "get": {
-        "operationId": "get_iam_get-user",
-        "summary": "Reads one person, two ways.",
-        "description": "Reads one person, two ways.\n\nName them and it is an ordinary read, with secrets stripped. Or hand it a\nSECRET API key and it answers with the person that key belongs to — how a\nservice of yours turns a credential on an incoming request into an identity.\n\nA publishable key resolves to nobody here, deliberately: it is safe to ship in\na browser precisely because it names an organization and never a person.\n\nget-user is handler-authorized (authz.handlerAuthorizedExact) because the key\nvariant carries no owner/name for the Guard to authorize; so the owner/name\nvariant reinstates the SAME read authorization the Guard applies, through the ONE\npolicy function (authz.Can) — identical behavior, a cross-tenant or non-self read\nstill refused 403 — then reuses the generic getHandler verbatim for resolution and\nredaction. No authz and no CRUD is reimplemented.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-users": {
-      "get": {
-        "operationId": "get_iam_get-users",
-        "summary": "Lists one kind of record in your organization — the older spelling of the collection reads on the REST surface, over the same data and the same permissions.",
-        "description": "Lists one kind of record in your organization — the older spelling\nof the collection reads on the REST surface, over the same data and the same\npermissions.\n\nSecrets are stripped from every row. Send both a page number and a page size to\npage, and the total comes back alongside; send neither and you get the whole\nset. You see your own organization and no other, whatever the request asks for.\n\nScoping note (intentional, fail-closed): iam's ownership model is mixed —\nusers/roles/permissions are owned by their tenant org, while organizations/\napplications/providers/certs are platform-owned (Owner \"admin\"). A SuperAdmin\n(Scope → the requested owner, empty = all) therefore lists every entity, which\nis the console-admin path. A non-super is pinned by Scope to its own org, so it\nlists its tenant-owned entities correctly and is refused the platform-owned\nlists at the Guard (owner \"\" or \"admin\" both deny) — a safe 403, never another\ntenant's rows. Non-super, membership-scoped views of the platform-owned\nentities (e.g. an org console's own app list keyed on Application.Organization)\nare a separate, additive surface, not a silent behavior of this generic lister.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
       }
     },
     "/v1/iam/invitations": {
@@ -2080,24 +1263,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/invitations/delete": {
-      "post": {
-        "operationId": "post_iam_invitations_delete",
+    "/v1/iam/invitations/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_invitations_by_owner_by_name",
         "summary": "Withdraws an invitation.",
         "description": "Withdraws an invitation. It stops being redeemable at once; anyone who\nalready joined through it keeps their account.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.invitations.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2112,26 +1303,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/invitations/get": {
-      "post": {
-        "operationId": "post_iam_invitations_get",
+      },
+      "get": {
+        "operationId": "get_iam_invitations_by_owner_by_name",
         "summary": "Returns one invitation: who it is for, what it grants on acceptance, and when it expires.",
         "description": "Returns one invitation: who it is for, what it grants on acceptance, and\nwhen it expires.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.invitations.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2146,15 +1343,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/invitations/update": {
-      "post": {
-        "operationId": "post_iam_invitations_update",
+      },
+      "put": {
+        "operationId": "put_iam_invitations_by_owner_by_name",
         "summary": "Changes an invitation's terms — the role it grants, how many may redeem it, or when it expires.",
         "description": "Changes an invitation's terms — the role it grants, how many may redeem\nit, or when it expires. What it is called does not change.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -2259,93 +1472,6 @@
         "x-tool": true
       }
     },
-    "/v1/iam/keys/delete": {
-      "post": {
-        "operationId": "post_iam_keys_delete",
-        "summary": "Revokes an API key.",
-        "description": "Revokes an API key. Anything still presenting it stops being authorized at\nonce, so roll the replacement out before you revoke.",
-        "tags": [
-          "iam"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.keys.Ref"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.DeleteResponse"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/iam/keys/get": {
-      "get": {
-        "operationId": "get_iam_keys_get",
-        "summary": "Returns one API key: what it is called, what it may reach, and when it was issued.",
-        "description": "Returns one API key: what it is called, what it may reach, and when it was\nissued.",
-        "tags": [
-          "iam"
-        ],
-        "parameters": [
-          {
-            "name": "owner",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Key"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/iam/keys/mint": {
-      "post": {
-        "operationId": "post_iam_keys_mint",
-        "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget seam.",
-        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
     "/v1/iam/keys/org": {
       "get": {
         "operationId": "get_iam_keys_org",
@@ -2368,24 +1494,112 @@
         "x-public": true
       }
     },
-    "/v1/iam/keys/revoke": {
-      "post": {
-        "operationId": "post_iam_keys_revoke",
-        "summary": "Clears the target user's key of the requested TYPE (immediate revoke).",
-        "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row.",
+    "/v1/iam/keys/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_keys_by_owner_by_name",
+        "summary": "Revokes an API key.",
+        "description": "Revokes an API key. Anything still presenting it stops being authorized at\nonce, so roll the replacement out before you revoke.",
         "tags": [
           "iam"
         ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/keys/update": {
-      "post": {
-        "operationId": "post_iam_keys_update",
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.DeleteResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_iam_keys_by_owner_by_name",
+        "summary": "Returns one API key: what it is called, what it may reach, and when it was issued.",
+        "description": "Returns one API key: what it is called, what it may reach, and when it was\nissued.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Key"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_iam_keys_by_owner_by_name",
         "summary": "Changes what a key is called or what it may reach.",
         "description": "Changes what a key is called or what it may reach. The credential\nitself is not reissued — the key in your deployment keeps working.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "description": "Owner is the tenant that holds the key; Name is unique within Owner.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -2509,9 +1723,9 @@
         "x-public": true
       }
     },
-    "/v1/iam/mfa/disable": {
-      "post": {
-        "operationId": "post_iam_mfa_disable",
+    "/v1/iam/mfa": {
+      "delete": {
+        "operationId": "delete_iam_mfa",
         "summary": "Turns a factor off, so sign-in stops asking for it.",
         "description": "Turns a factor off, so sign-in stops asking for it. Naming no factor turns\noff ALL of them — the reset path. People may do this for themselves; doing it for\nsomebody else takes an administrator, which is what makes it the way back in when a\nphone is lost.\n\nThe recovery codes go with the last factor: they are the way past a challenge, so\nkeeping them alive for an account with nothing to challenge would leave a standing\ncredential behind.",
         "tags": [
@@ -2715,14 +1929,22 @@
     "/v1/iam/organizations": {
       "get": {
         "operationId": "listOrganizations",
-        "summary": "Returns the organizations you can see, newest first.",
-        "description": "Returns the organizations you can see, newest first. Narrow it to one\nparent account, and set a limit and offset to page through the rest.\n\nREADING THE REGISTRY IS AN OPERATOR ACT, and the handler now says so itself.\n\nIt never did: the scope lived only in the Guard, which refuses a non-operator\nGET with 403 before the handler runs. That was true and sufficient for as long\nas HTTP was the only way in. It stopped being sufficient when the same typed op\nbecame reachable over the agent door, where a request arrives at the handler\nwith no middleware in front of it. A handler that reads no principal and treats\nan absent Owner selector as no filter would answer such a caller with the whole\nregistry, so the scope has to be the handler's own, not the door's.\n\nSo the fact moves to where every door reaches it. The Guard keeps its own\nrefusal — two checks of one rule is not two rules, and the outer one still\nspends nothing to refuse — but the rule no longer depends on which door was\nused. A caller who wants the organizations they can ACT in asks Search, which\nanswers everyone from their own memberships.",
+        "summary": "Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name.",
+        "description": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.\n\nTHE SCOPE IS THE HANDLER'S OWN, so it holds at every door. The Guard refuses a\nbearerless request before this runs, but the agent door carries a typed op to\nits handler with no middleware in front of it — a handler that read no\nprincipal would answer such a caller with the whole registry. Reading the\nprincipal here is what makes the answer the same one over both.",
         "tags": [
           "iam"
         ],
         "parameters": [
           {
-            "name": "owner",
+            "name": "X-Forwarded-For",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
             "in": "query",
             "required": false,
             "schema": {
@@ -2738,11 +1960,11 @@
             }
           },
           {
-            "name": "offset",
+            "name": "cursor",
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer"
+              "type": "string"
             }
           }
         ],
@@ -2828,24 +2050,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/organizations/delete": {
-      "post": {
+    "/v1/iam/organizations/{owner}/{name}": {
+      "delete": {
         "operationId": "deleteOrganization",
         "summary": "Removes an organization and everything named inside it.",
         "description": "Removes an organization and everything named inside it. There is no\nundo, and every session issued under it stops working.\n\nThe built-in admin organization cannot be deleted — losing it would leave the\naccount with no way back in.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.DeleteOrganizationInput"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2860,9 +2090,7 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/organizations/get": {
+      },
       "get": {
         "operationId": "getOrganization",
         "summary": "Returns one organization: its display, its defaults and the sign-in rules everyone in it inherits.",
@@ -2873,16 +2101,16 @@
         "parameters": [
           {
             "name": "owner",
-            "in": "query",
-            "required": false,
+            "in": "path",
+            "required": true,
             "schema": {
               "type": "string"
             }
           },
           {
             "name": "name",
-            "in": "query",
-            "required": false,
+            "in": "path",
+            "required": true,
             "schema": {
               "type": "string"
             }
@@ -2902,73 +2130,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/organizations/search": {
-      "get": {
-        "operationId": "searchOrganizations",
-        "summary": "Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name.",
-        "description": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.",
-        "tags": [
-          "iam"
-        ],
-        "parameters": [
-          {
-            "name": "X-Forwarded-For",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "q",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.SearchOrganizationsOutput"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/iam/organizations/update": {
-      "post": {
+      },
+      "put": {
         "operationId": "updateOrganization",
         "summary": "Changes an organization's display, its defaults and the sign-in rules everyone in it inherits.",
         "description": "Changes an organization's display, its defaults and the sign-in rules\neveryone in it inherits. Which organization it is does not change, and neither\ndoes when it was created.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -3124,24 +2310,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/permissions/delete": {
-      "post": {
-        "operationId": "post_iam_permissions_delete",
+    "/v1/iam/permissions/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_permissions_by_owner_by_name",
         "summary": "Revokes a permission.",
         "description": "Revokes a permission. Everyone who held access only through it loses\nthat access immediately; grants they hold by another route are untouched.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.permission.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3156,11 +2350,9 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/permissions/get": {
+      },
       "get": {
-        "operationId": "get_iam_permissions_get",
+        "operationId": "get_iam_permissions_by_owner_by_name",
         "summary": "Returns one permission: who it grants to, what it allows, and the resources it covers.",
         "description": "Returns one permission: who it grants to, what it allows, and the\nresources it covers.",
         "tags": [
@@ -3169,16 +2361,16 @@
         "parameters": [
           {
             "name": "owner",
-            "in": "query",
-            "required": false,
+            "in": "path",
+            "required": true,
             "schema": {
               "type": "string"
             }
           },
           {
             "name": "name",
-            "in": "query",
-            "required": false,
+            "in": "path",
+            "required": true,
             "schema": {
               "type": "string"
             }
@@ -3198,15 +2390,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/permissions/update": {
-      "post": {
-        "operationId": "post_iam_permissions_update",
+      },
+      "put": {
+        "operationId": "put_iam_permissions_by_owner_by_name",
         "summary": "Changes who a permission grants to, what it allows, or the resources it covers.",
         "description": "Changes who a permission grants to, what it allows, or the resources it\ncovers. Access changes as soon as the write lands. What the permission is\ncalled does not change, and neither does when it was created.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "description": "Identity — the (owner, name) natural key.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -3289,7 +2498,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Input"
+                "$ref": "#/components/schemas/iam.projects.Input"
               }
             }
           },
@@ -3311,24 +2520,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/projects/delete": {
-      "post": {
-        "operationId": "post_iam_projects_delete",
+    "/v1/iam/projects/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_projects_by_owner_by_name",
         "summary": "Removes a project.",
         "description": "Removes a project. The people and roles in your organization are\nunchanged; what goes is the scope itself, so move anything addressed by it\nfirst.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.projects.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3343,26 +2560,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/projects/get": {
-      "post": {
-        "operationId": "post_iam_projects_get",
+      },
+      "get": {
+        "operationId": "get_iam_projects_by_owner_by_name",
         "summary": "Returns one project: what it is called and how it is set up.",
         "description": "Returns one project: what it is called and how it is set up.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.projects.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3377,21 +2600,37 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/projects/update": {
-      "post": {
-        "operationId": "post_iam_projects_update",
+      },
+      "put": {
+        "operationId": "put_iam_projects_by_owner_by_name",
         "summary": "Changes a project's settings.",
         "description": "Changes a project's settings. What it is called does not change, and\nneither does when it was created.",
         "tags": [
           "iam"
         ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/iam.Input"
+                "$ref": "#/components/schemas/iam.projects.Input"
               }
             }
           },
@@ -3479,24 +2718,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/providers/delete": {
-      "post": {
+    "/v1/iam/providers/{owner}/{name}": {
+      "delete": {
         "operationId": "deleteProvider",
         "summary": "Removes a provider.",
         "description": "Removes a provider. Sign-in through it stops for every\napplication that used it, so give those applications another method first.\n\nA provider that is already gone answers \"nothing changed\" rather than an\nerror, so the call is safe to repeat.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.providerKey"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3511,26 +2758,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/providers/get": {
-      "post": {
+      },
+      "get": {
         "operationId": "getProvider",
         "summary": "Returns one provider: what it connects to and how it is configured.",
         "description": "Returns one provider: what it connects to and how it is\nconfigured. Its credentials come back masked.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.providerKey"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3545,15 +2798,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/providers/update": {
-      "post": {
+      },
+      "put": {
         "operationId": "updateProvider",
         "summary": "Changes a provider's settings or rotates the credentials it holds.",
         "description": "Changes a provider's settings or rotates the credentials it\nholds. The change takes effect on the next sign-in through it — sessions\nalready issued are unaffected.\n\nA provider that is not there answers \"nothing changed\" rather than an error, so\nthe call is safe to repeat.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -3684,17 +2953,6 @@
         "x-tool": true
       }
     },
-    "/v1/iam/resolve-key": {
-      "get": {
-        "operationId": "get_iam_resolve-key",
-        "summary": "Answers which organization a PUBLISHABLE key belongs to — what a service of yours calls to attribute a request that arrived carrying a key shipped in a browser.",
-        "description": "Answers which organization a PUBLISHABLE key belongs to —\nwhat a service of yours calls to attribute a request that arrived carrying a\nkey shipped in a browser.\n\nIt names an organization and never a person: no path through it can load or\nreturn a user, so a key you put in client code cannot become a way to learn\nwho anyone is. A key that is expired, secret rather than publishable, or\nsimply unknown all answer with the same sentence, and with a `code` saying\nwhich of those it was. Only a confidential service that already proved it may\nresolve keys at all ever reads that code — there is no anonymous caller here\nto probe for which keys exist — and telling it apart is what lets the holder\nbe told to re-mint an expired key instead of hunting a configuration error.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
     "/v1/iam/revoke-user-keys": {
       "post": {
         "operationId": "post_iam_revoke-user-keys",
@@ -3772,24 +3030,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/roles/delete": {
-      "post": {
-        "operationId": "post_iam_roles_delete",
+    "/v1/iam/roles/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_roles_by_owner_by_name",
         "summary": "Removes a role.",
         "description": "Removes a role. Everyone in it loses the access it carried; their\naccounts, and any other role they hold, are untouched.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.roles.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3804,26 +3070,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/roles/get": {
-      "post": {
-        "operationId": "post_iam_roles_get",
+      },
+      "get": {
+        "operationId": "get_iam_roles_by_owner_by_name",
         "summary": "Returns one role: who is in it, and the roles it includes.",
         "description": "Returns one role: who is in it, and the roles it includes.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.roles.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3838,15 +3110,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/roles/update": {
-      "post": {
-        "operationId": "post_iam_roles_update",
+      },
+      "put": {
+        "operationId": "put_iam_roles_by_owner_by_name",
         "summary": "Changes who is in a role, or which roles it includes.",
         "description": "Changes who is in a role, or which roles it includes. Access changes for\neveryone in it as soon as the write lands. What the role is called does not\nchange, and neither does when it was created.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -4281,7 +3569,55 @@
         "x-public": true
       }
     },
-    "/v1/iam/sessions/create": {
+    "/v1/iam/sessions": {
+      "get": {
+        "operationId": "listSessions",
+        "summary": "Returns who is currently signed in to your organization, newest first, and can be narrowed to one person or one application.",
+        "description": "Returns who is currently signed in to your organization, newest first, and\ncan be narrowed to one person or one application. It is what you read before\nsigning someone out.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "application",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.ListSessionsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
       "post": {
         "operationId": "createSession",
         "summary": "Records a sign-in.",
@@ -4315,24 +3651,40 @@
         "x-tool": true
       }
     },
-    "/v1/iam/sessions/delete": {
-      "post": {
+    "/v1/iam/sessions/{owner}/{name}/{application}": {
+      "delete": {
         "operationId": "deleteSession",
         "summary": "Signs a person out of one application — the session ends and every browser carrying it stops being authenticated.",
         "description": "Signs a person out of one application — the session ends and every\nbrowser carrying it stops being authenticated.\n\nA session that is already gone reports that nothing was deleted rather than an\nerror, so the call is safe to repeat.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.SessionRef"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "application",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4347,26 +3699,40 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/sessions/get": {
-      "post": {
+      },
+      "get": {
         "operationId": "getSession",
         "summary": "Returns one person's session in one application — when it began and which browsers or devices are still carrying it.",
         "description": "Returns one person's session in one application — when it began and which\nbrowsers or devices are still carrying it.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.SessionRef"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "application",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4381,49 +3747,39 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/sessions/list": {
-      "post": {
-        "operationId": "listSessions",
-        "summary": "Returns who is currently signed in to your organization, newest first, and can be narrowed to one person or one application.",
-        "description": "Returns who is currently signed in to your organization, newest first, and\ncan be narrowed to one person or one application. It is what you read before\nsigning someone out.",
-        "tags": [
-          "iam"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.ListSessionsIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.ListSessionsOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/iam/sessions/update": {
-      "post": {
+      },
+      "put": {
         "operationId": "updateSession",
         "summary": "Replaces the set of browsers a session covers — signing out the ones you leave off while the session itself stays live.",
         "description": "Replaces the set of browsers a session covers — signing out the ones you\nleave off while the session itself stays live. A session that does not exist is\nreported as missing rather than created.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "application",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -4558,24 +3914,43 @@
         "x-tool": true
       }
     },
-    "/v1/iam/tokens/delete": {
+    "/v1/iam/tokens/issue": {
       "post": {
+        "operationId": "post_iam_tokens_issue",
+        "summary": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target user (optional `?aud=` resource, RFC 8707), issued by the authenticated + allow-listed confidential client.",
+        "description": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target\nuser (optional `?aud=` resource, RFC 8707), issued by the authenticated +\nallow-listed confidential client. The token's subject + owner are the TARGET\nUSER's, so a resource server scopes on the validated owner claim to the user's\ntenant — indistinguishable from a token the user obtained directly. Response is\nthe camelCase `{accessToken, expiresIn}` body identity.ts consumes. Equivalent to\nthe RFC 8693 token-exchange grant, minus the subject_token proof (the console has\nthe user's id, not a token) — the reason this compat shim exists.",
+        "tags": [
+          "iam"
+        ],
+        "x-public": true
+      }
+    },
+    "/v1/iam/tokens/{owner}/{name}": {
+      "delete": {
         "operationId": "deleteToken",
         "summary": "Revokes an access token.",
         "description": "Revokes an access token. Whatever was using it stops being\nauthorized at once.\n\nA token that is already gone answers \"nothing changed\" rather than an error, so\nthe call is safe to repeat.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.tokenKey"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4590,26 +3965,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/tokens/get": {
-      "post": {
+      },
+      "get": {
         "operationId": "getToken",
         "summary": "Returns one access token: who and what it was issued to, and when it expires.",
         "description": "Returns one access token: who and what it was issued to, and when it\nexpires.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.tokenKey"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4624,26 +4005,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/tokens/issue": {
-      "post": {
-        "operationId": "post_iam_tokens_issue",
-        "summary": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target user (optional `?aud=` resource, RFC 8707), issued by the authenticated + allow-listed confidential client.",
-        "description": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target\nuser (optional `?aud=` resource, RFC 8707), issued by the authenticated +\nallow-listed confidential client. The token's subject + owner are the TARGET\nUSER's, so a resource server scopes on the validated owner claim to the user's\ntenant — indistinguishable from a token the user obtained directly. Response is\nthe camelCase `{accessToken, expiresIn}` body identity.ts consumes. Equivalent to\nthe RFC 8693 token-exchange grant, minus the subject_token proof (the console has\nthe user's id, not a token) — the reason this compat shim exists.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/tokens/update": {
-      "post": {
+      },
+      "put": {
         "operationId": "updateToken",
         "summary": "Changes an access token's scope or expiry.",
         "description": "Changes an access token's scope or expiry.\n\nA token that is not there answers \"nothing changed\" rather than an error, so\nthe call is safe to repeat.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -4682,74 +4068,6 @@
         "x-public": true
       }
     },
-    "/v1/iam/update-application": {
-      "post": {
-        "operationId": "post_iam_update-application",
-        "summary": "Updates one of your applications — its display, its sign-in methods and the redirect URIs it is allowed to return to.",
-        "description": "Updates one of your applications — its display, its sign-in methods and the\nredirect URIs it is allowed to return to. Which organization and name the\napplication has are fixed when it is created and are not editable here.\n\nA redirect URI you add becomes an allowed sign-in origin, so this is the\ncall that makes login work from a new host.\n\nThe older spelling of PUT /v1/iam/application.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Application"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/update-organization": {
-      "post": {
-        "operationId": "post_iam_update-organization",
-        "summary": "Updates your organization — its display, its default settings and the sign-in rules everyone in it inherits.",
-        "description": "Updates your organization — its display, its default settings and the\nsign-in rules everyone in it inherits.\n\nThe older spelling of POST /v1/iam/organizations/update.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.UpdateOrganizationInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
     "/v1/iam/update-preferences": {
       "post": {
         "operationId": "post_iam_update-preferences",
@@ -4759,108 +4077,6 @@
           "iam"
         ],
         "x-public": true
-      }
-    },
-    "/v1/iam/update-provider": {
-      "post": {
-        "operationId": "post_iam_update-provider",
-        "summary": "Updates a provider's settings or rotates the credentials it holds.",
-        "description": "Updates a provider's settings or rotates the credentials it holds. The\nchange takes effect on the next sign-in through it — sessions already\nissued are unaffected.\n\nThe older spelling of POST /v1/iam/providers/update.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.Provider"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/update-role": {
-      "post": {
-        "operationId": "post_iam_update-role",
-        "summary": "Updates a role's members or the roles it includes.",
-        "description": "Updates a role's members or the roles it includes. Access changes for\neveryone in it as soon as the write lands.\n\nThe older spelling of POST /v1/iam/roles/update.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.roles.Input"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
-      }
-    },
-    "/v1/iam/update-user": {
-      "post": {
-        "operationId": "post_iam_update-user",
-        "summary": "Updates one of your users' profile, roles or credentials.",
-        "description": "Updates one of your users' profile, roles or credentials. Send a password\nto reset it; leave it out and the current one stands.\n\nThe older spelling of POST /v1/iam/users/update, with the user's fields at\nthe top level rather than wrapped in {user, password}.",
-        "tags": [
-          "iam",
-          "compat"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.userBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Response"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-tool": true
       }
     },
     "/v1/iam/users": {
@@ -4876,6 +4092,15 @@
             "name": "owner",
             "in": "query",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "description": "Email narrows the page to the accounts carrying one address. Looking a\nperson up by their address is a QUERY over the collection, not an item\nread: an address is not the natural key, two rows in one org can carry\none, and a caller that gets a page SEES both — where a single-item read\nwould have to choose, and choosing is how somebody joins a team under a\ncolleague's identity.",
             "schema": {
               "type": "string"
             }
@@ -4945,24 +4170,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/users/delete": {
-      "post": {
-        "operationId": "post_iam_users_delete",
+    "/v1/iam/users/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_users_by_owner_by_name",
         "summary": "Removes a person from your organization.",
         "description": "Removes a person from your organization. Their sessions stop working\nimmediately and the account is gone rather than suspended — to keep the record\nand only stop sign-in, update the user instead.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.users.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4977,11 +4210,9 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/users/get": {
+      },
       "get": {
-        "operationId": "get_iam_users_get",
+        "operationId": "get_iam_users_by_owner_by_name",
         "summary": "Returns one person in your organization, addressed by their username or by their email address.",
         "description": "Returns one person in your organization, addressed by their username or by\ntheir email address. Passwords, API secrets and MFA material are stripped from\nthe response.\n\nAn address that names two accounts names none: the read refuses rather than\npicking one, and says so instead of reporting \"no such user\". Handing back an\narbitrary one of two rows is how somebody gets added to a team under a\ncolleague's identity.",
         "tags": [
@@ -4990,7 +4221,7 @@
         "parameters": [
           {
             "name": "owner",
-            "in": "query",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string"
@@ -4998,8 +4229,8 @@
           },
           {
             "name": "name",
-            "in": "query",
-            "required": false,
+            "in": "path",
+            "required": true,
             "schema": {
               "type": "string"
             }
@@ -5027,15 +4258,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/users/update": {
-      "post": {
-        "operationId": "post_iam_users_update",
+      },
+      "put": {
+        "operationId": "put_iam_users_by_owner_by_name",
         "summary": "Changes a person's profile, their roles, or the credentials they sign in with.",
         "description": "Changes a person's profile, their roles, or the credentials they sign\nin with. Send a password to reset it; leave it out and their current one keeps\nworking.\n\nWho they are does not change: their organization, username and the identifier\ntheir existing sessions are keyed on all survive the write, so an update never\nsigns anyone out.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -5061,6 +4308,62 @@
         },
         "x-public": true,
         "x-tool": true
+      }
+    },
+    "/v1/iam/users/{owner}/{name}/keys": {
+      "delete": {
+        "operationId": "delete_iam_users_by_owner_by_name_keys",
+        "summary": "Clears the target user's key of the requested TYPE (immediate revoke).",
+        "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
+      },
+      "post": {
+        "operationId": "post_iam_users_by_owner_by_name_keys",
+        "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget seam.",
+        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-public": true
       }
     },
     "/v1/iam/verification-codes": {
@@ -5162,24 +4465,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/webauthn-credentials/delete": {
-      "post": {
+    "/v1/iam/webauthn-credentials/{owner}/{name}": {
+      "delete": {
         "operationId": "deleteWebauthnCredential",
         "summary": "Removes a passkey or security key — what you call when a device is lost.",
         "description": "Removes a passkey or security key — what you call when\na device is lost. Make sure the person has another way to sign in first.\n\nA credential that is already gone answers \"nothing changed\" rather than an\nerror, so the call is safe to repeat.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.webauthnCredentialKey"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5194,26 +4505,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/webauthn-credentials/get": {
-      "post": {
+      },
+      "get": {
         "operationId": "getWebauthnCredential",
         "summary": "Returns one passkey or security key: whose it is, what device it lives on, and when it was registered.",
         "description": "Returns one passkey or security key: whose it is, what\ndevice it lives on, and when it was registered.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.webauthnCredentialKey"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5228,15 +4545,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/webauthn-credentials/update": {
-      "post": {
+      },
+      "put": {
         "operationId": "updateWebauthnCredential",
         "summary": "Renames a registered passkey or security key, so a person can tell their devices apart.",
         "description": "Renames a registered passkey or security key, so a\nperson can tell their devices apart.\n\nA credential that is not there answers \"nothing changed\" rather than an error,\nso the call is safe to repeat.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -5385,24 +4718,32 @@
         "x-tool": true
       }
     },
-    "/v1/iam/workspaces/delete": {
-      "post": {
-        "operationId": "post_iam_workspaces_delete",
+    "/v1/iam/workspaces/{owner}/{name}": {
+      "delete": {
+        "operationId": "delete_iam_workspaces_by_owner_by_name",
         "summary": "Removes a workspace.",
         "description": "Removes a workspace. The people and roles in your organization are\nunchanged; what goes is the scope itself.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5417,26 +4758,32 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/workspaces/get": {
-      "post": {
-        "operationId": "post_iam_workspaces_get",
+      },
+      "get": {
+        "operationId": "get_iam_workspaces_by_owner_by_name",
         "summary": "Returns one workspace: what it is called and how it is set up.",
         "description": "Returns one workspace: what it is called and how it is set up.",
         "tags": [
           "iam"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/iam.workspaces.Ref"
-              }
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5451,15 +4798,31 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/workspaces/update": {
-      "post": {
-        "operationId": "post_iam_workspaces_update",
+      },
+      "put": {
+        "operationId": "put_iam_workspaces_by_owner_by_name",
         "summary": "Changes a workspace's settings.",
         "description": "Changes a workspace's settings. What it is called does not change, and\nneither does when it was created.",
         "tags": [
           "iam"
+        ],
+        "parameters": [
+          {
+            "name": "owner",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
@@ -5896,21 +5259,6 @@
         },
         "type": "object"
       },
-      "iam.ApplicationRef": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner",
-          "name"
-        ],
-        "type": "object"
-      },
       "iam.AuditLog": {
         "properties": {
           "action": {
@@ -6335,17 +5683,6 @@
         ],
         "type": "object"
       },
-      "iam.DeleteOrganizationInput": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "iam.DeleteOrganizationOutput": {
         "properties": {
           "affected": {
@@ -6405,22 +5742,28 @@
       },
       "iam.Input": {
         "properties": {
+          "action": {
+            "type": "string"
+          },
+          "clientIp": {
+            "type": "string"
+          },
           "createdTime": {
             "type": "string"
           },
-          "description": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "isDefault": {
+          "isTriggered": {
             "type": "boolean"
           },
-          "metadata": {
+          "language": {
+            "type": "string"
+          },
+          "method": {
             "type": "string"
           },
           "name": {
+            "type": "string"
+          },
+          "object": {
             "type": "string"
           },
           "organization": {
@@ -6429,13 +5772,16 @@
           "owner": {
             "type": "string"
           },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+          "requestUri": {
+            "type": "string"
           },
-          "workspace": {
+          "response": {
+            "type": "string"
+          },
+          "statusCode": {
+            "type": "integer"
+          },
+          "user": {
             "type": "string"
           }
         },
@@ -6603,8 +5949,8 @@
       },
       "iam.ListOrganizationsOutput": {
         "properties": {
-          "count": {
-            "type": "integer"
+          "cursor": {
+            "type": "string"
           },
           "organizations": {
             "items": {
@@ -6638,23 +5984,6 @@
             "type": "array"
           }
         },
-        "type": "object"
-      },
-      "iam.ListSessionsIn": {
-        "properties": {
-          "application": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner"
-        ],
         "type": "object"
       },
       "iam.ListSessionsOut": {
@@ -7312,47 +6641,6 @@
         },
         "type": "object"
       },
-      "iam.Ref": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "iam.Response": {
-        "properties": {
-          "code": {
-            "description": "Code is a STABLE machine-readable reason, where the human `msg` is\ndeliberately generic. `msg` is prose for a person and several distinct causes\nlegitimately share one sentence; a caller that must BRANCH on the cause — or\ntell its own user which of them happened — cannot parse prose. Optional, so\nevery existing envelope is byte-identical and no SDK changes.",
-            "type": "string"
-          },
-          "data": {
-            "type": "object"
-          },
-          "data2": {
-            "type": "object"
-          },
-          "data3": {
-            "type": "object"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "sub": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "iam.Role": {
         "properties": {
           "createdAt": {
@@ -7462,20 +6750,6 @@
         },
         "type": "object"
       },
-      "iam.SearchOrganizationsOutput": {
-        "properties": {
-          "cursor": {
-            "type": "string"
-          },
-          "organizations": {
-            "items": {
-              "$ref": "#/components/schemas/iam.Organization"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
       "iam.Session": {
         "properties": {
           "application": {
@@ -7515,25 +6789,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "iam.SessionRef": {
-        "properties": {
-          "application": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner",
-          "name",
-          "application"
-        ],
         "type": "object"
       },
       "iam.SetAvatarInput": {
@@ -8792,53 +8047,6 @@
         },
         "type": "object"
       },
-      "iam.auditlogs.Input": {
-        "properties": {
-          "action": {
-            "type": "string"
-          },
-          "clientIp": {
-            "type": "string"
-          },
-          "createdTime": {
-            "type": "string"
-          },
-          "isTriggered": {
-            "type": "boolean"
-          },
-          "language": {
-            "type": "string"
-          },
-          "method": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "object": {
-            "type": "string"
-          },
-          "organization": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          },
-          "requestUri": {
-            "type": "string"
-          },
-          "response": {
-            "type": "string"
-          },
-          "statusCode": {
-            "type": "integer"
-          },
-          "user": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "iam.bulk": {
         "properties": {
           "maxOperations": {
@@ -8871,17 +8079,6 @@
           },
           "total": {
             "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "iam.certs.Ref": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
           }
         },
         "type": "object"
@@ -9010,28 +8207,6 @@
         },
         "type": "object"
       },
-      "iam.invitations.Ref": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "iam.keys.Ref": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "iam.listProvidersOut": {
         "properties": {
           "providers": {
@@ -9146,17 +8321,6 @@
         },
         "type": "object"
       },
-      "iam.permission.Ref": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "iam.person": {
         "properties": {
           "displayName": {
@@ -9194,6 +8358,44 @@
         },
         "type": "object"
       },
+      "iam.projects.Input": {
+        "properties": {
+          "createdTime": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "organization": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "iam.projects.ListOutput": {
         "properties": {
           "projects": {
@@ -9206,32 +8408,6 @@
             "type": "integer"
           }
         },
-        "type": "object"
-      },
-      "iam.projects.Ref": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "iam.providerKey": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner",
-          "name"
-        ],
         "type": "object"
       },
       "iam.providerResult": {
@@ -9382,17 +8558,6 @@
         },
         "type": "object"
       },
-      "iam.roles.Ref": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "iam.scheme": {
         "properties": {
           "description": {
@@ -9418,21 +8583,6 @@
         },
         "type": "object"
       },
-      "iam.tokenKey": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner",
-          "name"
-        ],
-        "type": "object"
-      },
       "iam.tokenMutation": {
         "properties": {
           "affected": {
@@ -9448,620 +8598,6 @@
         "properties": {
           "token": {
             "$ref": "#/components/schemas/iam.Token"
-          }
-        },
-        "type": "object"
-      },
-      "iam.userBody": {
-        "properties": {
-          "accessKey": {
-            "type": "string"
-          },
-          "accessSecret": {
-            "type": "string"
-          },
-          "accessSecretHash": {
-            "type": "string"
-          },
-          "accessToken": {
-            "type": "string"
-          },
-          "address": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "addresses": {
-            "items": {
-              "$ref": "#/components/schemas/iam.Address"
-            },
-            "type": "array"
-          },
-          "adfs": {
-            "type": "string"
-          },
-          "affiliation": {
-            "type": "string"
-          },
-          "alipay": {
-            "type": "string"
-          },
-          "amazon": {
-            "type": "string"
-          },
-          "apple": {
-            "type": "string"
-          },
-          "applicationScopes": {
-            "items": {
-              "$ref": "#/components/schemas/iam.ConsentRecord"
-            },
-            "type": "array"
-          },
-          "auth0": {
-            "type": "string"
-          },
-          "avatar": {
-            "type": "string"
-          },
-          "avatarType": {
-            "type": "string"
-          },
-          "azuread": {
-            "type": "string"
-          },
-          "azureadb2c": {
-            "type": "string"
-          },
-          "baidu": {
-            "type": "string"
-          },
-          "balance": {
-            "type": "number"
-          },
-          "balanceCredit": {
-            "type": "number"
-          },
-          "balanceCurrency": {
-            "type": "string"
-          },
-          "battlenet": {
-            "type": "string"
-          },
-          "bilibili": {
-            "type": "string"
-          },
-          "bio": {
-            "type": "string"
-          },
-          "birthday": {
-            "type": "string"
-          },
-          "bitbucket": {
-            "type": "string"
-          },
-          "box": {
-            "type": "string"
-          },
-          "cart": {
-            "items": {
-              "$ref": "#/components/schemas/iam.CartItem"
-            },
-            "type": "array"
-          },
-          "cloudfoundry": {
-            "type": "string"
-          },
-          "countryCode": {
-            "type": "string"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "createdIp": {
-            "type": "string"
-          },
-          "createdTime": {
-            "type": "string"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "custom": {
-            "type": "string"
-          },
-          "custom10": {
-            "type": "string"
-          },
-          "custom2": {
-            "type": "string"
-          },
-          "custom3": {
-            "type": "string"
-          },
-          "custom4": {
-            "type": "string"
-          },
-          "custom5": {
-            "type": "string"
-          },
-          "custom6": {
-            "type": "string"
-          },
-          "custom7": {
-            "type": "string"
-          },
-          "custom8": {
-            "type": "string"
-          },
-          "custom9": {
-            "type": "string"
-          },
-          "dailymotion": {
-            "type": "string"
-          },
-          "deezer": {
-            "type": "string"
-          },
-          "deleted": {
-            "type": "boolean"
-          },
-          "deletedTime": {
-            "type": "string"
-          },
-          "digitalocean": {
-            "type": "string"
-          },
-          "dingtalk": {
-            "type": "string"
-          },
-          "discord": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "douyin": {
-            "type": "string"
-          },
-          "dropbox": {
-            "type": "string"
-          },
-          "education": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string"
-          },
-          "emailVerified": {
-            "type": "boolean"
-          },
-          "eveonline": {
-            "type": "string"
-          },
-          "externalId": {
-            "type": "string"
-          },
-          "faceIds": {
-            "items": {
-              "$ref": "#/components/schemas/iam.FaceId"
-            },
-            "type": "array"
-          },
-          "facebook": {
-            "type": "string"
-          },
-          "firstName": {
-            "type": "string"
-          },
-          "fitbit": {
-            "type": "string"
-          },
-          "gender": {
-            "type": "string"
-          },
-          "gitea": {
-            "type": "string"
-          },
-          "gitee": {
-            "type": "string"
-          },
-          "github": {
-            "type": "string"
-          },
-          "gitlab": {
-            "type": "string"
-          },
-          "google": {
-            "type": "string"
-          },
-          "groups": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "hash": {
-            "type": "string"
-          },
-          "heroku": {
-            "type": "string"
-          },
-          "homepage": {
-            "type": "string"
-          },
-          "iam": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "idCard": {
-            "type": "string"
-          },
-          "idCardType": {
-            "type": "string"
-          },
-          "influxcloud": {
-            "type": "string"
-          },
-          "infoflow": {
-            "type": "string"
-          },
-          "instagram": {
-            "type": "string"
-          },
-          "intercom": {
-            "type": "string"
-          },
-          "invitation": {
-            "type": "string"
-          },
-          "invitationCode": {
-            "type": "string"
-          },
-          "ipWhitelist": {
-            "type": "string"
-          },
-          "isAdmin": {
-            "type": "boolean"
-          },
-          "isDefaultAvatar": {
-            "type": "boolean"
-          },
-          "isDeleted": {
-            "type": "boolean"
-          },
-          "isForbidden": {
-            "type": "boolean"
-          },
-          "isOnline": {
-            "type": "boolean"
-          },
-          "isVerified": {
-            "type": "boolean"
-          },
-          "kakao": {
-            "type": "string"
-          },
-          "karma": {
-            "type": "integer"
-          },
-          "kwai": {
-            "type": "string"
-          },
-          "language": {
-            "type": "string"
-          },
-          "lark": {
-            "type": "string"
-          },
-          "lastChangePasswordTime": {
-            "type": "string"
-          },
-          "lastName": {
-            "type": "string"
-          },
-          "lastSigninIp": {
-            "type": "string"
-          },
-          "lastSigninTime": {
-            "type": "string"
-          },
-          "lastSigninWrongTime": {
-            "type": "string"
-          },
-          "lastfm": {
-            "type": "string"
-          },
-          "ldap": {
-            "type": "string"
-          },
-          "line": {
-            "type": "string"
-          },
-          "linkedin": {
-            "type": "string"
-          },
-          "location": {
-            "type": "string"
-          },
-          "mailru": {
-            "type": "string"
-          },
-          "managedAccounts": {
-            "items": {
-              "$ref": "#/components/schemas/iam.ManagedAccount"
-            },
-            "type": "array"
-          },
-          "meetup": {
-            "type": "string"
-          },
-          "mfaAccounts": {
-            "items": {
-              "$ref": "#/components/schemas/iam.MfaAccount"
-            },
-            "type": "array"
-          },
-          "mfaEmailEnabled": {
-            "type": "boolean"
-          },
-          "mfaItems": {
-            "items": {
-              "$ref": "#/components/schemas/iam.MfaItem"
-            },
-            "type": "array"
-          },
-          "mfaPhoneEnabled": {
-            "type": "boolean"
-          },
-          "mfaPushEnabled": {
-            "type": "boolean"
-          },
-          "mfaPushProvider": {
-            "type": "string"
-          },
-          "mfaPushReceiver": {
-            "type": "string"
-          },
-          "mfaRadiusEnabled": {
-            "type": "boolean"
-          },
-          "mfaRadiusProvider": {
-            "type": "string"
-          },
-          "mfaRadiusUsername": {
-            "type": "string"
-          },
-          "mfaRememberDeadline": {
-            "type": "string"
-          },
-          "mfaRememberDigest": {
-            "type": "string"
-          },
-          "microsoftonline": {
-            "type": "string"
-          },
-          "multiFactorAuths": {
-            "items": {
-              "$ref": "#/components/schemas/iam.MfaProps"
-            },
-            "type": "array"
-          },
-          "name": {
-            "type": "string"
-          },
-          "naver": {
-            "type": "string"
-          },
-          "needUpdatePassword": {
-            "type": "boolean"
-          },
-          "nextcloud": {
-            "type": "string"
-          },
-          "okta": {
-            "type": "string"
-          },
-          "onedrive": {
-            "type": "string"
-          },
-          "originalRefreshToken": {
-            "type": "string"
-          },
-          "originalToken": {
-            "type": "string"
-          },
-          "oura": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          },
-          "password": {
-            "type": "string"
-          },
-          "passwordHash": {
-            "type": "string"
-          },
-          "passwordSalt": {
-            "type": "string"
-          },
-          "passwordType": {
-            "type": "string"
-          },
-          "patreon": {
-            "type": "string"
-          },
-          "paypal": {
-            "type": "string"
-          },
-          "permanentAvatar": {
-            "type": "string"
-          },
-          "permissions": {
-            "items": {
-              "$ref": "#/components/schemas/iam.Permission"
-            },
-            "type": "array"
-          },
-          "phone": {
-            "type": "string"
-          },
-          "preHash": {
-            "type": "string"
-          },
-          "preferredMfaType": {
-            "type": "string"
-          },
-          "properties": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "qq": {
-            "type": "string"
-          },
-          "ranking": {
-            "type": "integer"
-          },
-          "realName": {
-            "type": "string"
-          },
-          "recoveryCodes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "region": {
-            "type": "string"
-          },
-          "registerSource": {
-            "type": "string"
-          },
-          "registerType": {
-            "type": "string"
-          },
-          "roles": {
-            "items": {
-              "$ref": "#/components/schemas/iam.Role"
-            },
-            "type": "array"
-          },
-          "salesforce": {
-            "type": "string"
-          },
-          "score": {
-            "type": "integer"
-          },
-          "shopify": {
-            "type": "string"
-          },
-          "signinWrongTimes": {
-            "type": "integer"
-          },
-          "signupApplication": {
-            "type": "string"
-          },
-          "slack": {
-            "type": "string"
-          },
-          "soundcloud": {
-            "type": "string"
-          },
-          "spotify": {
-            "type": "string"
-          },
-          "steam": {
-            "type": "string"
-          },
-          "strava": {
-            "type": "string"
-          },
-          "stripe": {
-            "type": "string"
-          },
-          "tag": {
-            "type": "string"
-          },
-          "telegram": {
-            "type": "string"
-          },
-          "tiktok": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "totpSecret": {
-            "type": "string"
-          },
-          "tumblr": {
-            "type": "string"
-          },
-          "twitch": {
-            "type": "string"
-          },
-          "twitter": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          },
-          "typetalk": {
-            "type": "string"
-          },
-          "uber": {
-            "type": "string"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updatedTime": {
-            "type": "string"
-          },
-          "verificationCode": {
-            "type": "string"
-          },
-          "vk": {
-            "type": "string"
-          },
-          "webauthnCredentials": {
-            "items": {},
-            "type": "array"
-          },
-          "wechat": {
-            "type": "string"
-          },
-          "wecom": {
-            "type": "string"
-          },
-          "weibo": {
-            "type": "string"
-          },
-          "wepay": {
-            "type": "string"
-          },
-          "xero": {
-            "type": "string"
-          },
-          "yahoo": {
-            "type": "string"
-          },
-          "yammer": {
-            "type": "string"
-          },
-          "yandex": {
-            "type": "string"
-          },
-          "zoom": {
-            "type": "string"
           }
         },
         "type": "object"
@@ -10086,36 +8622,6 @@
             "type": "array"
           }
         },
-        "type": "object"
-      },
-      "iam.users.Ref": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner",
-          "name"
-        ],
-        "type": "object"
-      },
-      "iam.webauthnCredentialKey": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner",
-          "name"
-        ],
         "type": "object"
       },
       "iam.webauthnCredentialMutationResult": {
@@ -10193,17 +8699,6 @@
               "$ref": "#/components/schemas/iam.Workspace"
             },
             "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "iam.workspaces.Ref": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
           }
         },
         "type": "object"

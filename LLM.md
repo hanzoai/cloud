@@ -3886,8 +3886,24 @@ semantic is identical — fail closed once armed, allow before.
   op earns a tool. So the door publishes the untyped remainder and the child
   rejects its own published name — `noCallerTools.Call` (app.go), whose comment
   states the invariant this breaks: "the fleet's door never routes one here".
-  The correlation is exact, not statistical: `apps/s3` registers 0 typed ops
-  and all 8 of its ops are dead; `apps/projects` registers 46 and its ops answer.
+  The correlation is exact, not statistical: `apps/s3` registered 0 typed ops
+  and all 8 of its ops were dead; `apps/projects` registers 46 and its ops answer.
+  **apps/s3 is 6 of 8 now**, and what it took was re-reading its own refusals
+  rather than any new capability. It had recorded THREE blockers and two had
+  expired: the MONEY WIRE (cloud.Denied + the app-wide DenyEnvelope carry the
+  nested contract off a returned error — and it never applied here at all, because
+  the gate is `guard`, a MIDDLEWARE that runs before an op is entered) and TWO
+  STATUSES ONE OBJECT (zip v1.31.0's variadic WithStatus + StatusCoder: `/health`
+  declares 200 and 503 and the ANSWER says which). The third is real and stays —
+  fiber's greedy `*` on the two `/objects/*` ops, where the registry publishes the
+  path verbatim while the router renders `{wildcardN}` and Fold refuses the whole
+  document. Empty subsystems on the door: 13 → 12; catalogue 1452 → 1459.
+  Two things it cost, both the documented traps: `g.With(...)` does not exist on
+  `cloud.Router` (With is on the App — `zapp.With(mw).Group(prefix)`, the shape
+  apps/company uses, and it WRAPS leaves so the ungated probe at the same prefix
+  stays ungated), and `healthReport` was already `apps/event`'s with a different
+  shape, so typing the probe walked straight into the flat-namespace refusal and
+  the unpublished name yielded to `s3Health`.
   **10 apps register zero typed ops, stranding 157 advertised operations** — iam
   76, tasks 20, index 17, social 13, esign 9, storage 8, exec 5, dns 5, kms 2,
   skills 2 — and every one was confirmed by calling it, 10 of 10. **`index` and

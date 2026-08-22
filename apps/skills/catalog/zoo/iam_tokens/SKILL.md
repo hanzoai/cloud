@@ -1,7 +1,7 @@
 ---
 name: iam_tokens
 version: "8.0.0"
-description: "Read iam tokens: Returns the access tokens issued in your organization, newest first, and can be narrowed to one organization.."
+description: "Read iam tokens: Returns the access tokens issued in your organization, newest first, and can be narrowed to one organization., Returns one access token: who and what it was issued to, and when it expires.."
 ---
 
 # Zoo · IAM · tokens
@@ -15,17 +15,21 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.zoo.ngo/v1/iam/tokens` — Returns the access tokens issued in your organization, newest first, and can be narrowed to one organization.
+- `GET https://api.zoo.ngo/v1/iam/tokens/{owner}/{name}` — Returns one access token: who and what it was issued to, and when it expires.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `organization` | query | no | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/tokens` → `iam.listTokensOut` object with fields: `tokens`.
+- `/v1/iam/tokens/{owner}/{name}` → `iam.tokenResult` object with fields: `token`.
 
 ## Example
 

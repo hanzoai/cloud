@@ -83,6 +83,10 @@ type state struct {
 	host  *goja.BaseHost
 	index *linkIndex
 	blob  blobStore
+	// domain is the deployment's own public API host, which the trust centre puts
+	// in the mail that carries a grant. A grant's address has to be absolute — it
+	// is read in somebody else's mail client, not in a page of ours.
+	domain string
 }
 
 // mounted is the active service so Shutdown can release the per-tenant stores.
@@ -133,7 +137,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 
-	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "dataroom"), State: state{host: host, index: index, blob: deps.VFS}}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "dataroom"), State: state{
+		host: host, index: index, blob: deps.VFS, domain: "https://" + deps.Domain,
+	}}
 	mounted = s
 	routes(app, s)
 
@@ -200,6 +206,41 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/documents", cloud.Handle(s, uploadDocument))
 	g.Get("/documents/:id/file", cloud.Handle(s, adminDownload))
 
+	// --- trust centre ---------------------------------------------------------
+	//
+	// Three audiences under one prefix, each with its own gate (trust_typed.go).
+	// `center` is a LITERAL segment beside `artifacts` and `requests`, so the
+	// public address `/trust/center/:slug` can never be confused with a managed
+	// route — without it a centre published as "requests" would shadow the queue.
+	//
+	// The two SuperAdmin-only and the six org-scoped ops each ask their own gate,
+	// because a typed op is also an MCP tool and an internal-plane op and both
+	// invoke it with no route to hang middleware on. `sudoGate` on the platform
+	// group is the routed door's first refusal, so a non-SuperAdmin sending an
+	// unparseable body is told about authority rather than about JSON.
+	zip.Get(g, "/trust", o.readDesk)
+	zip.Put(g, "/trust", o.setCenter)
+	zip.Post(g, "/trust/artifacts", o.publish)
+	zip.Patch(g, "/trust/artifacts/:id", o.amend)
+	zip.Post(g, "/trust/requests/:id/grant", o.grant)
+	zip.Post(g, "/trust/requests/:id/refuse", o.refuse)
+	zip.Get(g, "/trust/center/:slug", o.readCenter)
+	zip.Post(g, "/trust/center/:slug/requests", o.askCenter)
+
+	// The one cross-tenant read, on its own gated group at the operator's depth.
+	// It carries its OWN Bridge: a group is a separate app and Use is scoped to the
+	// app it was called on, so the one installed above reaches nothing here — and
+	// without it the op would find no request, read no attested SuperAdmin, and
+	// refuse the very caller it is for.
+	platform := app.Group("/v1/admin/dataroom", sudoGate)
+	platform.Use(cloud.Bridge())
+	zip.Get(platform, "/trust", o.roster)
+
+	// A public item's bytes. Untyped for the same reason the two admin file routes
+	// are: the answer is a byte stream under the document's own content type, and
+	// no In/Out pair describes one.
+	g.Get("/trust/center/:slug/file/:item", cloud.Handle(s, trustFile))
+
 	// --- viewer surface (public; org resolved from the link index) -----------
 	// No principal reaches these: the visitor is whoever holds the link id, and
 	// the org is resolved from the link index, so tenantOf has nothing to read.
@@ -254,6 +295,18 @@ func init() {
 			"applies no link gate at all — the per-link password, email and download controls live "+
 			"on the viewer surface, not here. Bytes that cannot be fetched from object storage are "+
 			"502, never a truncated or empty file.")
+
+	openapi.Describe("/v1/dataroom/trust/center/:slug/file/:item", http.MethodGet,
+		"Read a public trust-centre item's bytes",
+		"Streams the file behind an item a trust centre publishes openly — a policy, a filled "+
+			"questionnaire, a knowledge-base attachment — under its recorded content type.\n\n"+
+			"No principal and no link: these are the things an org states about itself, so they are "+
+			"served to anyone who asks. The narrowing is in the lookup rather than in a check: the "+
+			"item must be public, must not be retired, and must belong to a centre its owner has "+
+			"published, so an item released only on request is NOT FOUND here rather than refused — "+
+			"the same answer an id that never existed gets, which is what stops this reporting what "+
+			"the released-on-request tier holds.\n\n"+
+			"Bytes that cannot be fetched from object storage are 502, never a truncated file.")
 
 	openapi.Describe("/v1/dataroom/view/:linkId", http.MethodGet,
 		"What a share link's visitor sees before authenticating",

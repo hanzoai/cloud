@@ -56,8 +56,12 @@ import (
 // keys/revoke, mfa/disable, mfa/preferred, oauth/device/info — and the untyped
 // count reached 98 before anything else noticed. iam v1.34.21 converted thirteen
 // addresses, so both numbers move the only way they may.
+//
+// 111 -> 92 at iam v1.34.76: the verb surface was TYPED, and retiring it removed
+// its operations. The nineteen are gone as calls, not moved — each one's noun
+// was already counted here beside it, which is what made retiring them possible.
 const (
-	typedOps = 111
+	typedOps = 92
 	// 85 + the two key doors iam v1.34.69 added at their nouns — keys/org and
 	// keys/principal, beside the resolve-key and get-user spellings they replace.
 	// They are raw handlers ON PURPOSE and the ratchet's usual remedy does not
@@ -68,9 +72,16 @@ const (
 	// would move the wire on the authentication path, which is the exact thing
 	// serving both spellings exists to avoid.
 	//
-	// It falls, hard, when the verb surface is retired: internal/compat goes with
-	// it and takes far more than two untyped operations along.
-	untypedOps = 87
+	// It fell, hard, when the verb surface was retired: 87 -> 66 at iam v1.34.76.
+	// internal/compat went with it and took twenty-one untyped operations along,
+	// which is what the line above predicted.
+	//
+	// The forty-two retired addresses are NOT in this count and must not be. They
+	// answer 410 for every method, so publishing them would be one operation per
+	// method per address — calls that mostly never existed, in a document that
+	// says what a caller CAN do. They register on zip.Undeclared: served, absent
+	// from the declaration, and skipped by openapi.Live because of it.
+	untypedOps = 66
 )
 
 // ceremony is the WebAuthn handshake, and it is NAMED rather than counted.
@@ -208,10 +219,14 @@ func TestGraftRecoveredTheNestedRegistry(t *testing.T) {
 func TestGraftedOpsAreAddressedByTheirOwnPaths(t *testing.T) {
 	_, typed := iamOps(t)
 	for _, want := range []string{
-		"GET /v1/iam/keys",             // the key entity iam owns, at iam's own address
-		"POST /v1/iam/organizations",   // native REST create
-		"GET /v1/iam/users",            // the entity CRUD
-		"POST /v1/iam/update-provider", // a legacy verb alias, named by its address
+		"GET /v1/iam/keys",           // the key entity iam owns, at iam's own address
+		"POST /v1/iam/organizations", // native REST create
+		"GET /v1/iam/users",          // the entity CRUD
+		// An ITEM, addressed by its natural key. It carries a path PARAMETER, which
+		// is the case that would break first if composing rewrote addresses.
+		// It replaced a verb alias here: the verb surface is retired (iam
+		// v1.34.76), so a sample taken from it now pins nothing.
+		"PUT /v1/iam/users/{owner}/{name}",
 	} {
 		if _, ok := typed[want]; !ok {
 			t.Errorf("%s is not a typed op in the composed document", want)

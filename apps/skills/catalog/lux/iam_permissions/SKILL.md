@@ -15,19 +15,20 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Endpoints
 
 - `GET https://api.lux.network/v1/iam/permissions` — Returns the permissions in one organization, newest first — each one a grant saying which people or roles may do what, and to which resources.
-- `GET https://api.lux.network/v1/iam/permissions/get` — Returns one permission: who it grants to, what it allows, and the resources it covers.
+- `GET https://api.lux.network/v1/iam/permissions/{owner}/{name}` — Returns one permission: who it grants to, what it allows, and the resources it covers.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | query | no | string |  |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/permissions` → `iam.permission.ListResponse` object with fields: `permissions`.
-- `/v1/iam/permissions/get` → `iam.Permission` object with fields: `actions`, `adapter`, `approveTime`, `approver`, `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `domains`, `effect`, `groups`.
+- `/v1/iam/permissions/{owner}/{name}` → `iam.Permission` object with fields: `actions`, `adapter`, `approveTime`, `approver`, `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `domains`, `effect`, `groups`.
 
 ## Example
 

@@ -14,7 +14,6 @@ package manifest
 //     registries for one concept, and the way back is one route registration.
 
 import (
-	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -159,29 +158,3 @@ func TestNoSecondMCPDoorInSource(t *testing.T) {
 // on it. What replaces the gate is a test of the live mechanism, against running
 // subsystems, which goes red when a subsystem's tools go missing or when two apps
 // claim one name: fleet/mcp_test.go.
-
-// operationIDs is every operationId an app's own subset publishes.
-func operationIDs(t *testing.T, app string) map[string]bool {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "plugin", app, "openapi.json"))
-	if err != nil {
-		t.Fatalf("%s: %v", app, err)
-	}
-	var doc struct {
-		Paths map[string]map[string]struct {
-			OperationID string `json:"operationId"`
-		} `json:"paths"`
-	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("%s/openapi.json: %v", app, err)
-	}
-	out := map[string]bool{}
-	for _, item := range doc.Paths {
-		for _, op := range item {
-			if op.OperationID != "" {
-				out[op.OperationID] = true
-			}
-		}
-	}
-	return out
-}

@@ -15,19 +15,20 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.hanzo.ai/v1/iam/applications` — Returns the applications in one organization, newest first — each product or site your people sign in to, with the sign-in methods and redirect URIs it allows.
-- `GET https://api.hanzo.ai/v1/iam/applications/get` — Returns one application: its sign-in methods, its allowed redirect URIs and the client credentials your integration authenticates with.
+- `GET https://api.hanzo.ai/v1/iam/applications/{owner}/{name}` — Returns one application: its sign-in methods, its allowed redirect URIs and the client credentials your integration authenticates with.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `name` | query | yes | string |  |
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | yes | string |  |
 
 ## Response
 
 - `/v1/iam/applications` → `iam.ApplicationListResult` object with fields: `applications`.
-- `/v1/iam/applications/get` → `iam.Application` object with fields: `affiliationUrl`, `category`, `cert`, `certObj`, `certPublicKey`, `clientCert`, `clientId`, `clientSecret`, `codeResendTimeout`, `cookieExpireInHours`, `createdAt`, `createdTime`.
+- `/v1/iam/applications/{owner}/{name}` → `iam.Application` object with fields: `affiliationUrl`, `category`, `cert`, `certObj`, `certPublicKey`, `clientCert`, `clientId`, `clientSecret`, `codeResendTimeout`, `cookieExpireInHours`, `createdAt`, `createdTime`.
 
 ## Example
 

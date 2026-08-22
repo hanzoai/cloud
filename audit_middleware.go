@@ -444,8 +444,6 @@ func scrubFreeText(s string) string { return scrub.FreeText(s) }
 // error a handler propagates.
 func ScrubText(s string) string { return scrub.Text(s) }
 
-const hexChunkMinLen = scrub.HexChunkMinLen
-
 // Route nouns/ids pass through unchanged (they are not isAPIKey-shaped).
 func scrubCredentialSegments(path string) string {
 	if !strings.ContainsAny(path, "/") {
