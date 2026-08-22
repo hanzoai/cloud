@@ -432,6 +432,12 @@ var allowedRequestUses = map[string]string{
 		"there — and a tenant key taken from an input is a cross-tenant write the caller asserted for itself. " +
 		"The caller's OWN org is read with principal.OrgFrom, never through the request. Fails closed off the " +
 		"HTTP path: no request, no attested admin, no edge config.",
+	"apps/sandbox/typed.go": "create — a lease is opened AS the caller: it forwards the caller's own " +
+		"bearer to the runtime (cloud.CallerBearer) and reads the payer and platform rights beside it " +
+		"(principal.Ledger, principal.IsSuperAdmin). None of the three is the tenant, so principal.Acting " +
+		"cannot carry them — which is exactly the proxy-that-forwards-identity case. The six ops that " +
+		"needed ONLY the tenant were a local orgFrom, a thirty-eighth copy of the wrapper this package " +
+		"exists to delete; they read principal.Acting now.",
 	"apps/sbom/sbom.go": "ingest's SuperAdmin gate. The SBOM store is GLOBAL by design (an SBOM belongs to " +
 		"an image DIGEST, not a tenant), so there is no org predicate here at all — the one identity fact this " +
 		"surface reads is X-User-IsAdmin, which the build fleet / CI carries and principal.OrgFrom does not. " +
