@@ -266,7 +266,7 @@ jobs:
           kms_login() { printf %s "$KMS_CLIENT_SECRET" | login "$KMS_CLIENT_ID"; }
           KMS_TOKEN=$(again kms_login || true)
           if [ -z "$KMS_TOKEN" ]; then
-            echo "::error::review: KMS login at ${KMS_ENDPOINT} answered $(cat "$KMS_CODE" 2>/dev/null || echo 000) — $(head -c 200 "$KMS_BODY" 2>/dev/null). The reviewer's identity cannot be read, so the change does not pass. A 4xx is the store refusing this credential — rotate review/IAM_CLIENT_* or KMS_CLIENT_*; anything else is the door not answering, and this asked six times over seventy-five seconds."
+            echo "::error::review: KMS login at ${KMS_ENDPOINT} answered $(cat "$KMS_CODE" 2>/dev/null || echo 000) — $(head -c 200 "$KMS_BODY" 2>/dev/null). The reviewer's identity cannot be read, so the change does not pass. A 4xx is the store refusing this credential — rotate review/IAM_CLIENT_* or KMS_CLIENT_*; anything else is the endpoint not answering, and this asked six times over seventy-five seconds."
             rm -f "$KMS_BODY" "$KMS_CODE"
             exit 1
           fi
@@ -1193,11 +1193,11 @@ jobs:
           # nothing about it, which is how v1.801.565 shipped green and died at
           # the first real call (duplicate /v1/health, panic at mustBuild). One
           # remainder request forces the instance build; the panic or its 503
-          # fails the run here instead of the fleet. 401/403 are fine — the door
+          # fails the run here instead of the fleet. 401/403 are fine — the endpoint
           # answered, which is all this asks.
           # The "listening" line is logged as the socket begins accepting, so a
           # probe fired the same instant can still race the bind — retry a few
-          # one-second beats, treating 2xx OR an auth refusal as proof the door
+          # one-second beats, treating 2xx OR an auth refusal as proof the endpoint
           # answered, and only failing once the process is gone or the window closes.
           built=0
           for _ in $(seq 1 15); do
@@ -1524,7 +1524,7 @@ jobs:
 
           # ONE recipe entry, not 121: the app set lives in manifest/apps.go and
           # restating it here would be a second copy of it in YAML — and 121
-          # entries would blow the door's own 16-binary bound. PLATFORMS lives in
+          # entries would blow the endpoint's own 16-binary bound. PLATFORMS lives in
           # mk/fleet.mk, so the platform list is not restated either.
           body=$(jq -nc --arg repo "$REPO" --arg sha "${{ github.sha }}" --arg tag "v${VERSION}" \
             '{repo:$repo, sha:$sha, tag:$tag, bucket:"plugins",
@@ -1668,20 +1668,20 @@ jobs:
       - name: Every published address is routed
         run: go run ./cmd/reach private.yaml https://api.hanzo.ai openapi/unreachable.txt
 
-      # THE MCP DOOR, AND WHETHER EVERY SUBSYSTEM ANSWERED IT.
+      # THE MCP ENDPOINT, AND WHETHER EVERY SUBSYSTEM ANSWERED IT.
       #
       # This step used to compare the live tool count against `jq -s length` over
       # the committed plugin/*/mcp.json. Both sides of that comparison came from
-      # the same files — the door was SERVING those bytes — so it could only ever
+      # the same files — the endpoint was SERVING those bytes — so it could only ever
       # prove the image carried the tree it was built from. It passed for months
       # while plugin/o11y/mcp.json held 12 tools and the o11y binary served 365.
       #
-      # The door composes itself by asking every subsystem now, so the release
+      # The endpoint composes itself by asking every subsystem now, so the release
       # question is a different and much better one: DID THEY ALL ANSWER. A
       # subsystem that is down, mis-rolled or wedged is named in the reply's
       # _meta, which is the one thing the old check could never see — a broken
       # deployment matched the files exactly.
-      - name: Every subsystem answered the MCP door
+      - name: Every subsystem answered the MCP endpoint
         run: |
           set -euo pipefail
           BODY=$(curl -fsS -X POST https://api.hanzo.ai/v1/mcp \
@@ -1692,10 +1692,10 @@ jobs:
           echo "MCP: ${TOOLS} tools live, ${DOWN} subsystems unavailable"
           if [ "$DOWN" != "0" ]; then
             echo "$BODY" | jq -r '.result._meta["hanzo.ai/unavailable"][] | "  \(.app): \(.error)"'
-            echo "::error::${DOWN} subsystems did not answer the fleet's agent door"
+            echo "::error::${DOWN} subsystems did not answer the fleet's MCP endpoint"
             exit 1
           fi
-          [ "$TOOLS" -gt 0 ] || { echo "::error::the MCP door serves ZERO tools"; exit 1; }
+          [ "$TOOLS" -gt 0 ] || { echo "::error::the MCP endpoint serves ZERO tools"; exit 1; }
 
   # ══ fanout ══ FAN OUT. One release, one document, every projection.
   #
