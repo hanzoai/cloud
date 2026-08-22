@@ -63,7 +63,22 @@ stub 500 '{"error":"boom"}'; check "500 refuses" 1 "cannot judge this change"
 
 echo "reviewer ANSWERS but not with a verdict -> refuses, and says what arrived"
 stub 200 '{"choices":[{"message":{"content":"I am unable to review this diff."}},{"finish_reason":"stop"}],"usage":{"completion_tokens":9}}'
-check "200 non-verdict" 1 "It answered:"
+check "200 non-verdict" 1 "It opened:"
+
+# A long answer that OPENS like a verdict is the case the head alone cannot read:
+# every remedy is consistent with those first 200 characters, and only the end
+# says which one it is. The padding is longer than the window on purpose, so the
+# reported tail can only have come from the far end of the text.
+echo "a long non-verdict -> reports BOTH ends and the size, not just the opening"
+pad=$(python3 -c "print('x'*400)")
+stub 200 "{\"choices\":[{\"message\":{\"content\":\"{ \\\"verdict\\\": \\\"pass\\\", \\\"summary\\\": \\\"$pad\\\" and then it kept talking UNTERMINATED\"}},{\"finish_reason\":\"stop\"}],\"usage\":{\"completion_tokens\":2218}}"
+check "long non-verdict names the end" 1 "and ended:"
+grep -q 'UNTERMINATED' "$WORK/out" \
+  && echo "  PASS  the tail shown is the far end of the answer" \
+  || { echo "  FAIL  the tail did not reach the end of the text"; fail=1; }
+grep -qE 'chars=[0-9]{3,}' "$WORK/out" \
+  && echo "  PASS  the size is reported" \
+  || { echo "  FAIL  no chars= in the refusal"; fail=1; }
 
 echo "reviewer NEVER ANSWERS (503) -> recorded, release continues (~150s of retries)"
 stub 503 '{"msg":"identity is unavailable"}'; check "503 unreviewed" 0 "UNREVIEWED"
