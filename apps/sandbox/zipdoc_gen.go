@@ -7,20 +7,58 @@ import (
 )
 
 func init() {
+	zip.Describe("DELETE /v1/sandbox/:id", zip.Doc{
+		Description: "Ends a sandbox and releases the compute behind it. Answers 204.\n\nENDING IS NOT STOPPING. This releases the resource: the pod goes and anything\nonly inside it goes with it. To end what a sandbox is RUNNING while keeping\nthe sandbox — the checkout, the logs, the half-written file — the verb is\nPOST /v1/sandbox/stop.\n\n`?purge=1` additionally removes the record, so the sandbox stops being listed\nat all rather than being listed as ended.",
+		Fields: map[string]string{
+			"endIn.id": "ID is the sandbox to end, from the path.",
+		},
+	})
 	zip.Describe("GET /:id/screen/ws", zip.Doc{
 		Description: "Serves one screen: RFB from the sandbox's display, as long as somebody\nis looking. The window is ignored — a browser pane's size is not the X\nserver's, and the page scales what it is given rather than asking a server\nwith no RandR to resize itself.",
 	})
 	zip.Describe("GET /:id/terminal/ws", zip.Doc{
-		Description: "Serves one terminal: a shell on a pseudo-terminal, for as long as\nsomebody is typing.",
+		Description: "open mints the ticket for one DOOR. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.\n\nTHE DOOR IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which\nsandbox, and the terminal and the screen are two views of that one machine —\na caller holding the authority to type in a sandbox holds the authority to\nlook at it. Binding the door into the token would be a second gate answering\na question the first one already closed, and a gate that decides nothing is\none somebody later has to reason about anyway. What the door decides is the\nURL a caller is handed back, which is the only part that differs.\npty serves one terminal: a shell on a pseudo-terminal, for as long as\nsomebody is typing.",
+	})
+	zip.Describe("GET /v1/sandbox", zip.Doc{
+		Description: "Lists the caller org's sandboxes, newest first.\n\n`?project=` and `?status=` narrow it. Only the caller's org's: the store is\nkeyed on the validated org, so another tenant's sandbox is not something this\noperation can return.",
+		Fields: map[string]string{
+			"Sandbox.class":         "Class is what the sandbox is FOR, and it decides the image, the working\ndirectory and the isolation: \"exec\" for a code-interpreter call (workdir\n/mnt/data, no project, bounded per org), \"dev\" for a workspace bound to a\nproject (workdir /work, single-attach), \"desktop\" for one with a screen.",
+			"Sandbox.createdAt":     "CreatedAt is when the lease was first taken, Unix seconds.",
+			"Sandbox.error":         "Error is why the sandbox could not come up, in plain words. Present only\nwith status \"error\", and it is the field to read rather than inferring a\ncause from the absence of a pod.",
+			"Sandbox.expiresAt":     "ExpiresAt is when the lease ends, Unix seconds. Past it the reaper may take\nthe sandbox at any time; it is a deadline, not a guarantee of survival until\nthen, since an idle sandbox goes sooner.",
+			"Sandbox.id":            "ID is the sandbox's server-minted handle and what every operation addresses\nit by. The caller does not choose it.",
+			"Sandbox.image":         "Image is the container image this sandbox is actually running — the one the\nclass chose, or an override the policy admitted. It is what ran, not what\nwas asked for.",
+			"Sandbox.kind":          "Kind is the resource family this row belongs to. Always \"sandbox\" here; it\nexists because the store this shares is keyed across kinds.",
+			"Sandbox.lastUsedAt":    "LastUsedAt is when the sandbox last did work, Unix seconds. The reaper reads\nit: a sandbox idle past the idle window is reclaimed even inside its TTL,\nbecause an idle lease is capacity nobody is using.",
+			"Sandbox.org":           "Org is the org that holds the lease — the validated caller's, never a value\na request supplied. It is also the store's key, so a sandbox is not merely\nfiltered out of another org's answers; it is unreachable from them.",
+			"Sandbox.project":       "Project is the project this sandbox is bound to. A dev or desktop sandbox\nhas one and is SINGLE-ATTACH under it, so asking twice resumes rather than\nleasing a second; an exec sandbox has none.",
+			"Sandbox.runtime":       "Runtime is the isolation boundary this sandbox GOT, which is not always the\none it asked for: a caller states a preference and runtimeFor answers with\nwhat the sandbox can actually have. Reported so a person comparing two\nruntimes is comparing the runtimes they got rather than the ones they typed\n— the difference between those two is the whole reason to record it.\n\nEmpty means the node's default runtime, which is a real answer and not a\nmissing one.\n\nThis is not a copy that can go stale. runtimeClassName is IMMUTABLE on a\npod, a sandbox's pod is created once and never recreated (restartPolicy\nNever, no pool), and its name is never reused — so for as long as the pod\nthis row names exists, it is running this runtime. The alternative, asking\nthe apiserver on every read, buys nothing and costs a round trip per row.",
+			"Sandbox.status":        "Status is where the sandbox is in its life: \"pending\" while the pod is\ncoming up, \"running\" once it can take work, \"error\" when it cannot. Only a\nrunning sandbox takes an exec or mints an interactive ticket.",
+			"Sandbox.volume":        "Volume is the persistent volume attached to the sandbox, when it has one. A\ndev sandbox keeps its work across leases through it; an exec sandbox has\nnone and loses everything outside /mnt/data when the lease ends.",
+			"sandboxList.sandboxes": "Sandboxes are the caller org's sandboxes matching the filter. Never null.",
+		},
+	})
+	zip.Describe("GET /v1/sandbox/:id", zip.Doc{
+		Description: "Returns one sandbox: its class, project, image, the runtime it was\ngiven, its status and when its lease ends.\n\nAn id the caller's org does not hold is the same 404 an unknown id gives — the\nstore is keyed on the org, so a cross-tenant id simply is not there.",
+		Fields: map[string]string{
+			"Sandbox.class":      "Class is what the sandbox is FOR, and it decides the image, the working\ndirectory and the isolation: \"exec\" for a code-interpreter call (workdir\n/mnt/data, no project, bounded per org), \"dev\" for a workspace bound to a\nproject (workdir /work, single-attach), \"desktop\" for one with a screen.",
+			"Sandbox.createdAt":  "CreatedAt is when the lease was first taken, Unix seconds.",
+			"Sandbox.error":      "Error is why the sandbox could not come up, in plain words. Present only\nwith status \"error\", and it is the field to read rather than inferring a\ncause from the absence of a pod.",
+			"Sandbox.expiresAt":  "ExpiresAt is when the lease ends, Unix seconds. Past it the reaper may take\nthe sandbox at any time; it is a deadline, not a guarantee of survival until\nthen, since an idle sandbox goes sooner.",
+			"Sandbox.id":         "ID is the sandbox's server-minted handle and what every operation addresses\nit by. The caller does not choose it.",
+			"Sandbox.image":      "Image is the container image this sandbox is actually running — the one the\nclass chose, or an override the policy admitted. It is what ran, not what\nwas asked for.",
+			"Sandbox.kind":       "Kind is the resource family this row belongs to. Always \"sandbox\" here; it\nexists because the store this shares is keyed across kinds.",
+			"Sandbox.lastUsedAt": "LastUsedAt is when the sandbox last did work, Unix seconds. The reaper reads\nit: a sandbox idle past the idle window is reclaimed even inside its TTL,\nbecause an idle lease is capacity nobody is using.",
+			"Sandbox.org":        "Org is the org that holds the lease — the validated caller's, never a value\na request supplied. It is also the store's key, so a sandbox is not merely\nfiltered out of another org's answers; it is unreachable from them.",
+			"Sandbox.project":    "Project is the project this sandbox is bound to. A dev or desktop sandbox\nhas one and is SINGLE-ATTACH under it, so asking twice resumes rather than\nleasing a second; an exec sandbox has none.",
+			"Sandbox.runtime":    "Runtime is the isolation boundary this sandbox GOT, which is not always the\none it asked for: a caller states a preference and runtimeFor answers with\nwhat the sandbox can actually have. Reported so a person comparing two\nruntimes is comparing the runtimes they got rather than the ones they typed\n— the difference between those two is the whole reason to record it.\n\nEmpty means the node's default runtime, which is a real answer and not a\nmissing one.\n\nThis is not a copy that can go stale. runtimeClassName is IMMUTABLE on a\npod, a sandbox's pod is created once and never recreated (restartPolicy\nNever, no pool), and its name is never reused — so for as long as the pod\nthis row names exists, it is running this runtime. The alternative, asking\nthe apiserver on every read, buys nothing and costs a round trip per row.",
+			"Sandbox.status":     "Status is where the sandbox is in its life: \"pending\" while the pod is\ncoming up, \"running\" once it can take work, \"error\" when it cannot. Only a\nrunning sandbox takes an exec or mints an interactive ticket.",
+			"Sandbox.volume":     "Volume is the persistent volume attached to the sandbox, when it has one. A\ndev sandbox keeps its work across leases through it; an exec sandbox has\nnone and loses everything outside /mnt/data when the lease ends.",
+			"sandboxRef.id":      "ID is the sandbox to address, from the path.",
+		},
 	})
 	zip.Describe("GET /v1/sandbox/:id/fs", zip.Doc{
 		Description: "Answers text, because this address always has: a file as its bytes, a\ndirectory as one entry per line. The typed Entry the core returns is what the\nplane carries; here it is rendered back to the one shape this route has served.",
-	})
-	zip.Describe("POST /:id/screen/ticket", zip.Doc{
-		Description: "Mints the ticket for one DOOR. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.\n\nTHE DOOR IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which\nsandbox, and the terminal and the screen are two views of that one machine —\na caller holding the authority to type in a sandbox holds the authority to\nlook at it. Binding the door into the token would be a second gate answering\na question the first one already closed, and a gate that decides nothing is\none somebody later has to reason about anyway. What the door decides is the\nURL a caller is handed back, which is the only part that differs.",
-	})
-	zip.Describe("POST /:id/terminal/ticket", zip.Doc{
-		Description: "Mints the ticket for one DOOR. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.\n\nTHE DOOR IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which\nsandbox, and the terminal and the screen are two views of that one machine —\na caller holding the authority to type in a sandbox holds the authority to\nlook at it. Binding the door into the token would be a second gate answering\na question the first one already closed, and a gate that decides nothing is\none somebody later has to reason about anyway. What the door decides is the\nURL a caller is handed back, which is the only part that differs.",
 	})
 	zip.Describe("POST /sandbox/end", zip.Doc{
 		Description: "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
@@ -86,6 +124,61 @@ func init() {
 			"WriteIn.path": "Path is confined the same way PathIn.Path is. Missing parent directories are\ncreated.",
 			"Wrote.bytes":  "Bytes is how many bytes the file now holds. A write REPLACES the file, so this\nis its whole length and not an amount appended, and 0 is a legitimate answer:\na WriteIn with no Data truncates the file to nothing.",
 			"Wrote.path":   "Path is where the bytes actually landed: the caller's path resolved against\nthe sandbox's working directory (Leased.Workdir), which is what a later read\nor a shell line inside the sandbox has to name.",
+		},
+	})
+	zip.Describe("POST /v1/sandbox", zip.Doc{
+		Description: "Leases a sandbox — a real computer — for the caller's org.\n\nThe class decides what it is for and therefore its image, working directory\nand isolation. A dev or desktop sandbox is SINGLE-ATTACH per project, so\nasking twice for one project resumes the one that exists rather than paying\nfor a second; an exec sandbox carries no project and is bounded per org\ninstead, refused 429 past the ceiling because the caller's correct response is\nto wait.\n\nAnswers 201 with the sandbox as leased, which names the runtime it GOT — not\nthe one that was asked for.",
+		Fields: map[string]string{
+			"Sandbox.class":      "Class is what the sandbox is FOR, and it decides the image, the working\ndirectory and the isolation: \"exec\" for a code-interpreter call (workdir\n/mnt/data, no project, bounded per org), \"dev\" for a workspace bound to a\nproject (workdir /work, single-attach), \"desktop\" for one with a screen.",
+			"Sandbox.createdAt":  "CreatedAt is when the lease was first taken, Unix seconds.",
+			"Sandbox.error":      "Error is why the sandbox could not come up, in plain words. Present only\nwith status \"error\", and it is the field to read rather than inferring a\ncause from the absence of a pod.",
+			"Sandbox.expiresAt":  "ExpiresAt is when the lease ends, Unix seconds. Past it the reaper may take\nthe sandbox at any time; it is a deadline, not a guarantee of survival until\nthen, since an idle sandbox goes sooner.",
+			"Sandbox.id":         "ID is the sandbox's server-minted handle and what every operation addresses\nit by. The caller does not choose it.",
+			"Sandbox.image":      "Image is the container image this sandbox is actually running — the one the\nclass chose, or an override the policy admitted. It is what ran, not what\nwas asked for.",
+			"Sandbox.kind":       "Kind is the resource family this row belongs to. Always \"sandbox\" here; it\nexists because the store this shares is keyed across kinds.",
+			"Sandbox.lastUsedAt": "LastUsedAt is when the sandbox last did work, Unix seconds. The reaper reads\nit: a sandbox idle past the idle window is reclaimed even inside its TTL,\nbecause an idle lease is capacity nobody is using.",
+			"Sandbox.org":        "Org is the org that holds the lease — the validated caller's, never a value\na request supplied. It is also the store's key, so a sandbox is not merely\nfiltered out of another org's answers; it is unreachable from them.",
+			"Sandbox.project":    "Project is the project this sandbox is bound to. A dev or desktop sandbox\nhas one and is SINGLE-ATTACH under it, so asking twice resumes rather than\nleasing a second; an exec sandbox has none.",
+			"Sandbox.runtime":    "Runtime is the isolation boundary this sandbox GOT, which is not always the\none it asked for: a caller states a preference and runtimeFor answers with\nwhat the sandbox can actually have. Reported so a person comparing two\nruntimes is comparing the runtimes they got rather than the ones they typed\n— the difference between those two is the whole reason to record it.\n\nEmpty means the node's default runtime, which is a real answer and not a\nmissing one.\n\nThis is not a copy that can go stale. runtimeClassName is IMMUTABLE on a\npod, a sandbox's pod is created once and never recreated (restartPolicy\nNever, no pool), and its name is never reused — so for as long as the pod\nthis row names exists, it is running this runtime. The alternative, asking\nthe apiserver on every read, buys nothing and costs a round trip per row.",
+			"Sandbox.status":     "Status is where the sandbox is in its life: \"pending\" while the pod is\ncoming up, \"running\" once it can take work, \"error\" when it cannot. Only a\nrunning sandbox takes an exec or mints an interactive ticket.",
+			"Sandbox.volume":     "Volume is the persistent volume attached to the sandbox, when it has one. A\ndev sandbox keeps its work across leases through it; an exec sandbox has\nnone and loses everything outside /mnt/data when the lease ends.",
+			"leaseIn.class":      "Class is what the sandbox is FOR: \"exec\" for a code-interpreter call,\n\"dev\" for a workspace bound to a project, \"desktop\" for one with a screen.\nIt decides the image, the working directory and the isolation.",
+			"leaseIn.image":      "Image overrides the image the class would pick. Honoured only for a caller\nthe policy admits, and the sandbox that comes back names the image it GOT.",
+			"leaseIn.project":    "Project binds the sandbox to one of the org's projects. Required for a dev\nor desktop class, which are single-attach per project; an exec sandbox\ncarries none.",
+			"leaseIn.runtime":    "Runtime asks for an isolation: runc, gvisor, kata-clh or kata-fc. It is a\nREQUEST, not a guarantee — the sandbox that comes back carries the runtime\nit was actually given, which is the field to read.",
+			"leaseIn.ttlSec":     "TTLSec is how long the lease runs before the reaper may take it, in\nseconds. Zero takes the class's own default.",
+		},
+	})
+	zip.Describe("POST /v1/sandbox/:id/exec", zip.Doc{
+		Description: "Runs one command in a sandbox the caller holds and answers with\nits exit code, stdout and stderr.\n\nSend `argv` — an argument vector cannot be word-split by accident — or\n`command` for a shell line, which is the only input here that ever reaches a\nshell. A non-zero exit is a SUCCESSFUL call carrying a failed command: the\nstatus is 200 and the exit code is in the answer, because \"the command failed\"\nand \"the call failed\" are different facts.",
+		Fields: map[string]string{
+			"ExecResult.exitCode":    "ExitCode is the command's own exit status. A non-zero one is a SUCCESSFUL\ncall carrying a failed command — the HTTP status stays 200, because \"the\ncommand failed\" and \"the call failed\" are different facts and a caller has\nto be able to tell them apart.",
+			"ExecResult.stderr":      "Stderr is everything it wrote to standard error. It is populated on a\nsuccessful run too — plenty of tools report progress there — so it is not a\nsignal that anything went wrong; ExitCode is.",
+			"ExecResult.stdout":      "Stdout is everything the command wrote to standard output, as text.",
+			"execRequest.argv":       "Argv is the command as an argument vector, which is the honest form: it\ncannot be word-split by accident. Send this OR Command, not both.",
+			"execRequest.command":    "Command is a shell line, for a caller that holds one. It is a convenience\nover Argv and is the only input that ever reaches a shell.",
+			"execRequest.dir":        "Dir is the working directory to run in. Empty runs in the class's own\nworkdir — /mnt/data for exec, /work for dev.",
+			"execRequest.id":         "ID is the sandbox to run in, from the path.",
+			"execRequest.stdin":      "Stdin is fed to the command on its standard input.",
+			"execRequest.timeoutSec": "TimeoutSec bounds the run in seconds. Zero takes the default.",
+		},
+	})
+	zip.Describe("POST /v1/sandbox/:id/screen/ticket", zip.Doc{
+		Description: "Mints a short-lived grant to open the screen of a desktop\nsandbox. Same properties as the terminal ticket, for the other door.",
+		Fields: map[string]string{
+			"sandboxRef.id":         "ID is the sandbox to address, from the path.",
+			"ticketGrant.expiresIn": "ExpiresIn is how long the ticket is good for, in seconds.",
+			"ticketGrant.ticket":    "Ticket is the grant itself. It is single-purpose and short-lived, and it\ntravels in a query string because a WebSocket handshake carries no\nAuthorization header a browser can set.",
+			"ticketGrant.url":       "URL is the PATH to open, ticket included — not an absolute URL. Which host\nthis address wears in public is the edge's answer and not this process's, so\nan absolute URL would be a guess; the client already knows the host it is\ntalking to. It names the PAGE, which is what a caller embeds — the page\nfinds its own socket, and a caller that wants the raw socket adds `/ws`.",
+		},
+	})
+	zip.Describe("POST /v1/sandbox/:id/terminal/ticket", zip.Doc{
+		Description: "Mints a short-lived grant to open a terminal on a sandbox.\n\nThe ticket travels in the query string of the URL it answers with, because a\nbrowser cannot set an Authorization header on a WebSocket handshake. It is\nsingle-purpose and short-lived for exactly that reason. A sandbox that is not\nrunning is 409 rather than a ticket that cannot be used.",
+		Fields: map[string]string{
+			"sandboxRef.id":         "ID is the sandbox to address, from the path.",
+			"ticketGrant.expiresIn": "ExpiresIn is how long the ticket is good for, in seconds.",
+			"ticketGrant.ticket":    "Ticket is the grant itself. It is single-purpose and short-lived, and it\ntravels in a query string because a WebSocket handshake carries no\nAuthorization header a browser can set.",
+			"ticketGrant.url":       "URL is the PATH to open, ticket included — not an absolute URL. Which host\nthis address wears in public is the edge's answer and not this process's, so\nan absolute URL would be a guess; the client already knows the host it is\ntalking to. It names the PAGE, which is what a caller embeds — the page\nfinds its own socket, and a caller that wants the raw socket adds `/ws`.",
 		},
 	})
 	zip.Describe("POST /v1/sandbox/end", zip.Doc{

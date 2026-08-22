@@ -24,14 +24,37 @@ var errNotFound = errors.New("sandbox: sandbox not found")
 // other than the IAM edge. The predecessor returned a pod IP in every create,
 // get and list response.
 type Sandbox struct {
-	ID      string `json:"id"`
-	Org     string `json:"org"`
-	Kind    string `json:"kind"`
-	Class   string `json:"class"`
+	// ID is the sandbox's server-minted handle and what every operation addresses
+	// it by. The caller does not choose it.
+	ID string `json:"id"`
+	// Org is the org that holds the lease — the validated caller's, never a value
+	// a request supplied. It is also the store's key, so a sandbox is not merely
+	// filtered out of another org's answers; it is unreachable from them.
+	Org string `json:"org"`
+	// Kind is the resource family this row belongs to. Always "sandbox" here; it
+	// exists because the store this shares is keyed across kinds.
+	Kind string `json:"kind"`
+	// Class is what the sandbox is FOR, and it decides the image, the working
+	// directory and the isolation: "exec" for a code-interpreter call (workdir
+	// /mnt/data, no project, bounded per org), "dev" for a workspace bound to a
+	// project (workdir /work, single-attach), "desktop" for one with a screen.
+	Class string `json:"class"`
+	// Project is the project this sandbox is bound to. A dev or desktop sandbox
+	// has one and is SINGLE-ATTACH under it, so asking twice resumes rather than
+	// leasing a second; an exec sandbox has none.
 	Project string `json:"project,omitempty"`
-	Status  string `json:"status"` // pending | running | error
-	Image   string `json:"image"`
-	Pod     string `json:"-"`
+	// Status is where the sandbox is in its life: "pending" while the pod is
+	// coming up, "running" once it can take work, "error" when it cannot. Only a
+	// running sandbox takes an exec or mints an interactive ticket.
+	Status string `json:"status"`
+	// Image is the container image this sandbox is actually running — the one the
+	// class chose, or an override the policy admitted. It is what ran, not what
+	// was asked for.
+	Image string `json:"image"`
+	// Pod is the Kubernetes pod behind the sandbox. Deliberately NOT on the wire:
+	// it is an internal address a caller can neither use nor need, and publishing
+	// it would leak the cluster's naming into a tenant's view.
+	Pod string `json:"-"`
 	// Runtime is the isolation boundary this sandbox GOT, which is not always the
 	// one it asked for: a caller states a preference and runtimeFor answers with
 	// what the sandbox can actually have. Reported so a person comparing two
@@ -46,12 +69,25 @@ type Sandbox struct {
 	// Never, no pool), and its name is never reused — so for as long as the pod
 	// this row names exists, it is running this runtime. The alternative, asking
 	// the apiserver on every read, buys nothing and costs a round trip per row.
-	Runtime    string `json:"runtime,omitempty"`
-	Volume     string `json:"volume,omitempty"`
-	Error      string `json:"error,omitempty"`
-	CreatedAt  int64  `json:"createdAt"`
-	LastUsedAt int64  `json:"lastUsedAt"`
-	ExpiresAt  int64  `json:"expiresAt,omitempty"`
+	Runtime string `json:"runtime,omitempty"`
+	// Volume is the persistent volume attached to the sandbox, when it has one. A
+	// dev sandbox keeps its work across leases through it; an exec sandbox has
+	// none and loses everything outside /mnt/data when the lease ends.
+	Volume string `json:"volume,omitempty"`
+	// Error is why the sandbox could not come up, in plain words. Present only
+	// with status "error", and it is the field to read rather than inferring a
+	// cause from the absence of a pod.
+	Error string `json:"error,omitempty"`
+	// CreatedAt is when the lease was first taken, Unix seconds.
+	CreatedAt int64 `json:"createdAt"`
+	// LastUsedAt is when the sandbox last did work, Unix seconds. The reaper reads
+	// it: a sandbox idle past the idle window is reclaimed even inside its TTL,
+	// because an idle lease is capacity nobody is using.
+	LastUsedAt int64 `json:"lastUsedAt"`
+	// ExpiresAt is when the lease ends, Unix seconds. Past it the reaper may take
+	// the sandbox at any time; it is a deadline, not a guarantee of survival until
+	// then, since an idle sandbox goes sooner.
+	ExpiresAt int64 `json:"expiresAt,omitempty"`
 }
 
 // Store is one org's sandbox registry — ONE SQLite file per org at
