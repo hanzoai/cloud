@@ -98,19 +98,29 @@ func (p *Platform) do(ctx context.Context, method, path, token string, body, out
 	return nil
 }
 
-// serverMessage pulls the `{ "message": … }` / `{ "error": … }` field the cloud's
-// errors use, falling back to the raw (truncated) body.
+// serverMessage pulls the human sentence out of a refusal, whichever vocabulary
+// the address answered in, falling back to the raw (truncated) body.
+//
+// An HTTP refusal is an RFC 9457 problem document, where `detail` is the sentence
+// about THIS occurrence and `title` the generic name of its kind. OAuth answers
+// its own `{error, error_description}` and some bodies carry a plain `message`.
+// All of them are read here because the person at the terminal wants the sentence,
+// not a lesson in which RFC the endpoint follows.
 func serverMessage(raw []byte) string {
 	var e struct {
+		Detail  string `json:"detail"`
 		Message string `json:"message"`
+		Desc    string `json:"error_description"`
 		Error   string `json:"error"`
+		Title   string `json:"title"`
 	}
 	if json.Unmarshal(raw, &e) == nil {
-		if e.Message != "" {
-			return e.Message
-		}
-		if e.Error != "" {
-			return e.Error
+		// Specific before generic: `title` is the last resort because "Bad Request"
+		// tells the reader only what the status code already did.
+		for _, m := range []string{e.Detail, e.Message, e.Desc, e.Error, e.Title} {
+			if m != "" {
+				return m
+			}
 		}
 	}
 	s := strings.TrimSpace(string(raw))
