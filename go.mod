@@ -32,7 +32,7 @@ require (
 	github.com/hanzoai/pubsub v1.4.6
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.5.2
-	github.com/hanzoai/trust v0.2.3
+	github.com/hanzoai/trust v0.2.4
 	github.com/hanzoai/types v0.1.1
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/hanzos3/go v1.0.2
