@@ -35,6 +35,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/zap-proto/zip"
 )
@@ -121,3 +122,32 @@ func s2sBillingCall(c *zip.Ctx) bool {
 // gates (e.g. the spend-alert admin gate) that must admit the metering cap-gate and the
 // SuperAdmin cap-oversight Forward alongside org admins, while refusing a plain member.
 func IsServiceToken(c *zip.Ctx) bool { return s2sBillingCall(c) }
+
+// ReaderOrg answers which tenant a money READ is scoped to: the validated
+// principal's org, or — for a trusted service — the org it names in X-Org-Id.
+//
+// ONE rule, here, because it drifted twice and both drifts were outages. Every
+// app is its own child PROCESS, so an in-process reader hook cannot reach `ai`;
+// it asks over HTTP bearing COMMERCE_SERVICE_TOKEN and no session, and a handler
+// that consults only the validated principal can answer nothing but "who are
+// you". /v1/billing/balance learned that, /v1/billing/tier did not, and neither
+// did the plane op behind it — one host, one token, three answers.
+//
+// It does not widen anything. A validated principal still wins; a service is
+// admitted only when it names an org, and the org rides the gateway-pinned
+// X-Org-Id, which the gateway strips from every client request. The token itself
+// cannot arrive from outside at all: the edge refuses a Bearer that is not an IAM
+// JWT or a pk-/sk- key, and the 64-hex service token parses as neither — so only
+// in-proc transport dispatch reaches a handler holding it. The SUBJECT stays
+// server-resolved by the caller, so naming a tenant is not naming a wallet.
+func ReaderOrg(c *zip.Ctx) (string, bool) {
+	if org, ok := principal.Org(c); ok {
+		return org, true
+	}
+	if IsServiceToken(c) {
+		if org := strings.TrimSpace(c.Org()); org != "" {
+			return org, true
+		}
+	}
+	return "", false
+}

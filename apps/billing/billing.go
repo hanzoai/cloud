@@ -285,17 +285,7 @@ var billingSubjectKeys = []string{"user", "userId", "customerId"}
 // admin and no roles, so it is a READ resolution only: the money WRITE
 // (createPaymentMethod) and the user-scoped breakdown (usageAccounts, which needs
 // c.User()) keep asking principal.Org and refuse it.
-func readerOrg(c *zip.Ctx) (string, bool) {
-	if org, ok := principal.Org(c); ok {
-		return org, true
-	}
-	if account.IsServiceToken(c) {
-		if org := strings.TrimSpace(c.Org()); org != "" {
-			return org, true
-		}
-	}
-	return "", false
-}
+func readerOrg(c *zip.Ctx) (string, bool) { return account.ReaderOrg(c) }
 
 // proxy resolves the caller's OWN org (readerOrg), pins the commerce
 // billing subject to it on EVERY subject key (the client can NEVER widen scope — the
