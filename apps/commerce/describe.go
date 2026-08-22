@@ -101,14 +101,14 @@ func describeCatalog() {
 			"identity: a rate keyed on the metered thing alone would let one product's price "+
 			"overwrite another's under the same name. A slug that already exists is refused rather "+
 			"than silently replaced. SuperAdmin only.")
-	openapi.Describe("/v1/commerce/rates/entries/:slug", http.MethodPut,
+	openapi.Describe("/v1/commerce/rates/entries/:product/:meter", http.MethodPut,
 		"Edit a rate, and mark it as operator-set",
 		"Edits one rate and MARKS it edited, which is the whole contract with the importer: an "+
 			"operator's price outranks the document it came from, so a later import leaves this row "+
 			"alone. Without that mark a price set here would apply, work, and silently revert on the "+
 			"next import. Only the editable fields move; identity and bookkeeping are not writable "+
 			"from the body. SuperAdmin only.")
-	openapi.Describe("/v1/commerce/rates/entries/:slug", http.MethodDelete,
+	openapi.Describe("/v1/commerce/rates/entries/:product/:meter", http.MethodDelete,
 		"Remove a rate outright",
 		"Deletes the row. ARCHIVING is usually what is wanted instead — a deleted rate cannot "+
 			"price a historical charge, so a past invoice that has to re-resolve its rate finds "+
@@ -116,9 +116,8 @@ func describeCatalog() {
 			"SuperAdmin only.")
 	openapi.Describe("/v1/commerce/rates/import", http.MethodPost,
 		"Load the published price document, reconciling rather than replacing",
-		"Takes an array of rates and seeds the authority from it. This is the seed, driven from "+
-			"admin rather than compiled in, because 506 published prices in an embed made a price "+
-			"change wait for a build. It RECONCILES: a row that matches is left alone, a row that "+
+		"Takes an array of rates and seeds the authority from it — the same reconcile the boot "+
+			"catalog runs, driven from admin instead. It RECONCILES: a row that matches is left alone, a row that "+
 			"has drifted is corrected, and a row an operator edited is skipped — so importing the "+
 			"same document twice is a no-op and importing a corrected one moves exactly the rows "+
 			"that changed. Answers what it received, created, corrected and left unchanged, so an "+

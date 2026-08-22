@@ -337,7 +337,7 @@ func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 	payer := principal.Ledger(c)
 	project, projectValidated := principal.ValidatedProject(c)
 	if tier == TierBulk {
-		if err := s.Bill.Gate(ctx, payer, project, projectValidated, meterKind, cloud.MicrosToGateCents(bulkMicros(usage.Characters))); err != nil {
+		if err := s.Bill.Gate(ctx, payer, project, projectValidated, meterKind, cloud.MicrosToGateCents(bulkMicros(ctx, usage.Characters))); err != nil {
 			return cloud.DenyResource(c, err)
 		}
 	}
@@ -360,7 +360,7 @@ func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 	if tier == TierBulk {
 		s.Bill.MeterUsage(payer, meterKind, metering.Usage{
 			Model: string(TierBulk), Project: project, Actor: c.User(),
-			AmountMicros: bulkMicros(usage.Characters),
+			AmountMicros: bulkMicros(ctx, usage.Characters),
 			RequestID:    c.RequestID(), ClientIP: cloud.ClientIP(c),
 		})
 	}

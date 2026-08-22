@@ -68,16 +68,34 @@ const (
 // per instance and the instance is isolated, so "admin" leaks nothing.
 const dedicatedAdminUser = "admin"
 
-// Billing + sizing policy knobs (clearly-named, env-overridable — never a
-// fabricated price). defaultStoragePriceCents mirrors hanzoai/pricing
-// infrastructure.blockStorage.pricePerGBMonthly ($0.08/GB-month).
+// Billing + sizing policy. defaultStoragePriceCents is the FLOOR: what a
+// GB-month cost before the meter authority existed, so an unreadable authority
+// keeps charging exactly what it charged yesterday.
+//
+// It used to be a hand-copy of hanzoai/pricing's display card
+// (infrastructure.blockStorage.pricePerGBMonthly, $0.08/GB-month), kept in step
+// by this comment. That file says of itself that nothing bills off it — display
+// cards and billing numbers are different facts that happen to agree — so the
+// price is a row in the authority now, and this is the number beneath it.
 const (
 	dedicatedSizeEnvPrefix   = "CLOUD_DEDICATED_SIZE" // per-kind CLOUD_DEDICATED_SIZE_DATASTORE
 	defaultDedicatedSize     = "10Gi"                 // one instance's default storage footprint
-	storagePriceEnv          = "CLOUD_STORAGE_PRICE_CENTS_PER_GB_MONTH"
-	defaultStoragePriceCents = 8              // $0.08/GB-month
-	dedicatedMeterInterval   = 24 * time.Hour // one GB-day charge per tick
+	defaultStoragePriceCents = 8                      // $0.08/GB-month
+	dedicatedMeterInterval   = 24 * time.Hour         // one GB-day charge per tick
+	// nanoPerCent converts the authority's nano-dollars into the cents this app
+	// bills in, stated once beside the only place that crosses the boundary.
+	nanoPerCent  = 10_000_000
+	daysPerMonth = 30
 )
+
+// storageMonthlyCents is the published price of one GB-month, in cents, falling
+// back to the floor above.
+//
+// A var so a test can drive a published price without an authority beside it.
+var storageMonthlyCents = func(ctx context.Context) int64 {
+	return cloud.RateNano(ctx, "storage", "block-gb-month",
+		defaultStoragePriceCents*nanoPerCent) / nanoPerCent
+}
 
 // Tenant-RBAC readiness wait bounds — a brand-new tenant namespace's RoleBinding
 // (which grants cloud-api create on datastores + secrets) is projected
@@ -545,7 +563,7 @@ func meterDedicatedFootprint(s *cloud.Service[state], ctx context.Context) {
 		if _, dedicated := dedicatedEngines[r.Kind]; !dedicated {
 			continue
 		}
-		cents := gbDayCents(sizeToGB(r.Size))
+		cents := gbDayCents(ctx, sizeToGB(r.Size))
 		if cents <= 0 {
 			continue
 		}
@@ -584,13 +602,19 @@ func startFootprintMeter(s *cloud.Service[state]) {
 
 // gbDayCents prices one GB-day of storage: ceil(gb * $/GB-month / 30), floored
 // at 1 cent for any non-empty instance so a running instance is always billed.
-func gbDayCents(gb int) int64 {
+func gbDayCents(ctx context.Context, gb int) int64 {
 	if gb <= 0 {
 		return 0
 	}
-	monthly := int64(gb) * int64(atoiEnv(storagePriceEnv, defaultStoragePriceCents))
-	d := max((monthly+29)/30, 1)
-	return d
+	rate := storageMonthlyCents(ctx)
+	if rate <= 0 {
+		// A published price of zero makes storage free. It is a legal price, and
+		// billing a floored 1 cent against it would charge for what an operator
+		// said to give away.
+		return 0
+	}
+	monthly := int64(gb) * rate
+	return max((monthly+daysPerMonth-1)/daysPerMonth, 1)
 }
 
 // sizeToGB parses a K8s quantity ("10Gi", "512Mi", "1Ti", "5G", raw bytes) to

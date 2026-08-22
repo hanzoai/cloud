@@ -274,7 +274,7 @@ func TestScoreAndLearn_MeterOneScreenPerEvent(t *testing.T) {
 // but the real number satisfies both.
 func TestSearch_IsPricedFromItsMeasuredSize(t *testing.T) {
 	const events = 20
-	want := cloud.MicrosToGateCents(screenMicros(events * len(candidates())))
+	want := cloud.MicrosToGateCents(screenMicros(context.Background(), events*len(candidates())))
 	if want < 2 {
 		t.Fatalf("a %d-event search costs %d cents, which is too coarse for this bracket to mean anything", events, want)
 	}
@@ -323,25 +323,29 @@ func TestGate_FailsClosed(t *testing.T) {
 	}
 }
 
-// TestScreenPrice_IsAConfigurablePolicyDefault: the price is a named operator
-// knob with a stated default, and a typo can never silently zero out billing.
-func TestScreenPrice_IsAConfigurablePolicyDefault(t *testing.T) {
-	if got := screenRate(); got != defaultScreenUUSD {
-		t.Fatalf("the unset price is %d, want the stated default %d", got, defaultScreenUUSD)
+// TestScreenPrice_FallsToTheFloorWhenNothingIsPublished: with no meter authority
+// beside this process, the price is the compiled floor — not zero, and not an
+// error. A screen priced at nothing is un-gated work, so the one thing this must
+// never do is resolve to free when the authority cannot be reached.
+//
+// The env override this replaced (CLOUD_RISK_PRICE_UUSD_PER_SCREEN) is gone: an
+// env var keeps no history, so nothing could say what we charged in March. The
+// price is a row now, and this constant is the floor beneath it.
+func TestScreenPrice_FallsToTheFloorWhenNothingIsPublished(t *testing.T) {
+	ctx := context.Background()
+	if got := screenRate(ctx); got != defaultScreenUUSD {
+		t.Fatalf("the unpublished price is %d, want the stated floor %d — a screen that "+
+			"costs nothing is a screen nobody is gated on", got, defaultScreenUUSD)
 	}
-	for _, bad := range []string{"-1", "not a number"} {
-		t.Setenv("CLOUD_RISK_PRICE_UUSD_PER_SCREEN", bad)
-		if got := screenRate(); got != defaultScreenUUSD {
-			t.Fatalf("%q resolved to %d — an unusable override must fall through to the default, never to free", bad, got)
-		}
+	if got := screenMicros(ctx, 4); got != 4*defaultScreenUUSD {
+		t.Fatalf("4 screens = %d, want %d", got, 4*defaultScreenUUSD)
 	}
-	t.Setenv("CLOUD_RISK_PRICE_UUSD_PER_SCREEN", "250")
-	if got := screenMicros(4); got != 1000 {
-		t.Fatalf("4 screens at 250 uUSD = %d, want 1000", got)
+	// n <= 0 is not work, and must not be billed as one screen.
+	if got := screenMicros(ctx, 0); got != 0 {
+		t.Fatalf("0 screens = %d, want 0", got)
 	}
-	t.Setenv("CLOUD_RISK_PRICE_UUSD_PER_SCREEN", "0")
-	if got := screenMicros(4); got != 0 {
-		t.Fatalf("an explicit zero price charged %d — zero must mean free, and therefore un-gated", got)
+	if got := screenMicros(ctx, -3); got != 0 {
+		t.Fatalf("-3 screens = %d, want 0", got)
 	}
 }
 
@@ -878,7 +882,7 @@ func TestEveryOp_IsGatedOnTheCallersOwnBalance(t *testing.T) {
 // price the METER at a flat 1 and the amount stops tracking the window.
 func TestFeatures_IsPricedFromItsWindow(t *testing.T) {
 	const days = 400
-	want := cloud.MicrosToGateCents(screenMicros(days))
+	want := cloud.MicrosToGateCents(screenMicros(context.Background(), days))
 	if want < 2 {
 		t.Fatalf("a %d-day catalogue costs %d cents, too coarse for this bracket to mean anything", days, want)
 	}

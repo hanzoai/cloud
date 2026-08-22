@@ -181,6 +181,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// address belongs to somebody else.
 	exposePosture()
 	exposePlan()
+	exposeRate()
 
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")

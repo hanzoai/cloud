@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -225,34 +224,42 @@ func (b bulk) Translate(ctx context.Context, j Job) (Result, error) {
 
 // ---- bulk pricing ----
 
-// defaultBulkPriceUUSDPer1kChars is the fallback bulk price in micro-USD per 1000
-// SOURCE characters when no operator override is set. A clearly-named, configurable
-// POLICY default — never a fabricated market price; ops sets the real number per
-// deployment via TRANSLATE_PRICE_UUSD_PER_1K_CHARS. 0 makes the tier free (and thus
-// un-gated), mirroring the edge gate's price==0 pass-through. The quality tier has
-// no knob here: it prices as the inference it is, through the model plane's meter.
+// defaultBulkPriceUUSDPer1kChars is the FLOOR for bulk translation, in micro-USD
+// per 1000 SOURCE characters: what this charged before the meter authority
+// existed, so an unreadable authority keeps charging exactly what it charged
+// yesterday. 0 makes the tier free (and thus un-gated), mirroring the edge gate's
+// price==0 pass-through. The quality tier has no price here: it prices as the
+// inference it is, through the model plane's meter.
 const defaultBulkPriceUUSDPer1kChars int64 = 20
 
+// nanoPerMicro converts the authority's nano-dollars into the micro-USD this app
+// bills in, stated once beside the only place that crosses the boundary.
+const nanoPerMicro int64 = 1000
+
+// charsPerUnit is what ONE billed unit of bulk translation is. The authority
+// prices a unit; this says how many characters make one.
+const charsPerUnit int64 = 1000
+
 // bulkMicros converts a source-character count to the bulk debit in micro-USD.
-func bulkMicros(chars int) int64 {
-	rate := bulkRate()
+func bulkMicros(ctx context.Context, chars int) int64 {
+	rate := bulkRate(ctx)
 	if chars <= 0 || rate <= 0 {
 		return 0
 	}
-	return int64(chars) * rate / 1000
+	return int64(chars) * rate / charsPerUnit
 }
 
-// bulkRate resolves the bulk price from TRANSLATE_PRICE_UUSD_PER_1K_CHARS, else the
-// policy default. A negative or unparseable value falls through to the default, so
-// a typo can never silently zero out billing.
-func bulkRate() int64 {
-	s := strings.TrimSpace(os.Getenv("TRANSLATE_PRICE_UUSD_PER_1K_CHARS"))
-	if s == "" {
-		return defaultBulkPriceUUSDPer1kChars
-	}
-	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || n < 0 {
-		return defaultBulkPriceUUSDPer1kChars
-	}
-	return n
+// bulkRate resolves the price of one billed unit from the meter authority, in
+// micro-USD, falling back to the compiled floor.
+//
+// THE ENV OVERRIDE IS GONE. TRANSLATE_PRICE_UUSD_PER_1K_CHARS priced this before
+// and was set by no deployment; an env var keeps no history, so nothing could say
+// what we charged in March or who changed it. It is a row now, edited at
+// admin.hanzo.ai with an audit trail, over the floor above.
+//
+// A var so a test can price the tier at ZERO — a legal price that makes it free,
+// and the case the gate-order proof needs.
+var bulkRate = func(ctx context.Context) int64 {
+	return cloud.RateNano(ctx, "translate", "bulk-chars",
+		defaultBulkPriceUUSDPer1kChars*nanoPerMicro) / nanoPerMicro
 }

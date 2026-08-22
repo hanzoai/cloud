@@ -56,6 +56,7 @@ var Ops = []string{
 	plane.BillingMode,
 	plane.BillingPayouts,
 	plane.BillingPlans,
+	plane.BillingRate,
 	plane.BillingRecharge,
 	plane.BillingRollup,
 	plane.BillingSettings,
@@ -262,6 +263,13 @@ func BillingPayouts(ctx context.Context) (*plane.Payouts, error) {
 // Calls plane.BillingPlans on commerce over the peer plane.
 func BillingPlans(ctx context.Context, in *plane.PlansIn) (*plane.Rendered, error) {
 	return plane.Ask[plane.PlansIn, plane.Rendered](ctx, App, plane.BillingPlans, in)
+}
+
+// BillingRate what one unit of a metered product costs.
+//
+// Calls plane.BillingRate on commerce over the peer plane.
+func BillingRate(ctx context.Context, in *plane.RateIn) (*plane.Rate, error) {
+	return plane.Ask[plane.RateIn, plane.Rate](ctx, App, plane.BillingRate, in)
 }
 
 // BillingRecharge recharge every org that has fallen below its threshold.
