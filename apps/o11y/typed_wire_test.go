@@ -271,7 +271,7 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 //
 // Unqualified, o11y's Service (a traced APM service) and ingress's Service (a
 // backend pool) are one name with two shapes, and so are Account, Channel, Event,
-// Host and TLSConfig — six collisions that made openapi.Weave refuse the whole
+// Host and TLSConfig — six collisions that made openapi.Compose refuse the whole
 // fleet document. It refused correctly: a generated SDK binds whichever shape the
 // merge read last.
 //

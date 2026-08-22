@@ -4123,11 +4123,11 @@
       "sha256": "1d8706dd81d19faedf1f6b83317a8162888f98dee57a60aa368cc88d5d81c3fb"
     },
     {
-      "description": "Read sandbox sandbox: The sandboxes this org holds, One sandbox.",
+      "description": "Read sandbox sandbox: Lists the caller org's sandboxes, newest first., Returns one sandbox: its class, project, image, the runtime it was given, its status and when its lease ends..",
       "name": "sandbox_sandbox",
       "path": "sandbox_sandbox/SKILL.md",
       "service": "sandbox",
-      "sha256": "78f38f7dd3b0bdf780f360bedc16673e4a59a673e7ec16d08870c2ced6ddf80e"
+      "sha256": "09db1a71b538aa42852f899c369061c2841631ce6571567b4a3cda52ad169360"
     },
     {
       "description": "Read sandbox screen: The screen, as a page, The screen, as a socket.",

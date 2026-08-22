@@ -41,10 +41,16 @@ type topupBody struct {
 
 // mountCards registers the card doors and the sweep. Called from routes.
 func mountCards(app cloud.Router, o ops) {
-	app.Post("/v1/billing/topup/token", cloud.Handle(o.s, topupWithToken))
-	app.Post("/v1/billing/topup", cloud.Handle(o.s, topupWithSavedCard))
+	zapp := cloud.ZipApp(app)
+	zip.Post(zapp, "/v1/billing/topup/token", o.topupToken)
+	zip.Post(zapp, "/v1/billing/topup", o.topupSaved)
+	// UNTYPED BY DESIGN — subscribe answers TWO statuses over two different
+	// bodies, and one of them is VERBATIM: a replayed sale returns the sealed
+	// bytes the first attempt sent (200), a fresh one the sale it just made (201).
+	// A typed op declares one Out, and re-marshalling a sealed replay is no longer
+	// the same bytes. See untypedByDesign.
 	app.Post("/v1/billing/subscribe/card", cloud.Handle(o.s, subscribeWithCard))
-	app.Post("/v1/billing/recharge/run-all", cloud.Handle(o.s, rechargeAll))
+	zip.Post(zapp, "/v1/billing/recharge/run-all", o.rechargeAll)
 }
 
 // All four are RAW, and for one reason each rather than a shared one: the two
@@ -103,60 +109,6 @@ func init() {
 			"One org's failure is reported in its own row and does not stop the rest.")
 }
 
-// topupWithToken charges a single-use card token.
-func topupWithToken(s *cloud.Service[state], c *zip.Ctx) error {
-	org, subject, err := payerOf(c)
-	if err != nil {
-		return err
-	}
-	var body topupBody
-	if berr := c.Bind(&body); berr != nil {
-		return zip.ErrBadRequest("invalid request body")
-	}
-	out, aerr := ask(c.Context(), org, "topup", func(ctx context.Context) (*plane.Charged, error) {
-		return commercepeer.BillingTopupCard(ctx, &plane.CardIn{
-			SourceID:       body.SourceID,
-			AmountCents:    body.AmountCents,
-			Currency:       body.Currency,
-			Subject:        subject,
-			IdempotencyKey: retryKey(c),
-		})
-	})
-	if aerr != nil {
-		return aerr
-	}
-	return c.JSON(http.StatusOK, out)
-}
-
-// topupWithSavedCard charges a card the caller already saved.
-func topupWithSavedCard(s *cloud.Service[state], c *zip.Ctx) error {
-	org, subject, err := payerOf(c)
-	if err != nil {
-		return err
-	}
-	var body topupBody
-	if berr := c.Bind(&body); berr != nil {
-		return zip.ErrBadRequest("invalid request body")
-	}
-	out, aerr := ask(c.Context(), org, "topup", func(ctx context.Context) (*plane.Charged, error) {
-		return commercepeer.BillingTopup(ctx, &plane.SavedCardIn{
-			MethodID:       body.MethodID,
-			AmountCents:    body.AmountCents,
-			Currency:       body.Currency,
-			Subject:        subject,
-			IdempotencyKey: retryKey(c),
-			// What the customer will read on their statement. The two callers of
-			// this charge say different true things there, so it is stated rather
-			// than invented in the store.
-			Description: "Top-up",
-		})
-	})
-	if aerr != nil {
-		return aerr
-	}
-	return c.JSON(http.StatusOK, out)
-}
-
 // subscribeWithCard buys a plan.
 //
 // It answers TWO shapes and keeps them apart, which is why it is raw: a fresh
@@ -207,27 +159,6 @@ func subscribeWithCard(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusBadGateway, "subscribe: could not read the sale")
 	}
 	return document(c, http.StatusCreated, b)
-}
-
-// rechargeAll sweeps every org's auto-recharge.
-//
-// Platform authority only: it charges cards across every tenant, so an org owner
-// reaching it could sweep-charge saved cards estate-wide.
-func rechargeAll(s *cloud.Service[state], c *zip.Ctx) error {
-	org, err := principalOrg(c.Context())
-	if err != nil {
-		return err
-	}
-	if !mayMint(c.Context()) {
-		return zip.ErrForbidden("platform authority required to run the recharge sweep")
-	}
-	out, aerr := ask(c.Context(), org, "recharge", func(ctx context.Context) (*plane.Recharge, error) {
-		return commercepeer.BillingRecharge(ctx)
-	})
-	if aerr != nil {
-		return aerr
-	}
-	return c.JSON(http.StatusOK, out)
 }
 
 // retryKey is the caller's own retry key, or empty for the store's windowed

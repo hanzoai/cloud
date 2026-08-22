@@ -11,7 +11,7 @@ import (
 // THE ADDRESS IS THE OWNER'S NAME, and this file is the ratchet that makes it so.
 //
 // HIP-0139 §3: every route a capability serves is under /v1/<name>, where <name>
-// is the app. The woven document carries both values on every operation — the
+// is the app. The composed document carries both values on every operation — the
 // address as the path, the owner as x-app (which is also the tag, §4) — so
 // whether they agree is a pure function of the document, measured here.
 //
@@ -80,7 +80,7 @@ func misfiled(path, app string) (string, bool) {
 	r := root(path)
 	switch {
 	case app == "":
-		return r, false // the weave stamps every operation; nothing to compare
+		return r, false // the compose stamps every operation; nothing to compare
 	case r == "/v1/"+app:
 		return r, false
 	case strings.HasPrefix(path, "/.well-known/"):

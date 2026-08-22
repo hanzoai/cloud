@@ -32,6 +32,7 @@ require (
 	github.com/hanzoai/pubsub v1.4.6
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.5.2
+	github.com/hanzoai/trust v0.2.3
 	github.com/hanzoai/types v0.1.1
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/hanzos3/go v1.0.2
@@ -50,7 +51,7 @@ require (
 	github.com/zap-proto/http v0.3.5
 	github.com/zap-proto/mcp v1.0.5
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.33.2
+	github.com/zap-proto/zip v1.33.3
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2
@@ -78,7 +79,6 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/go-webauthn/webauthn v0.17.4 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -90,7 +90,6 @@ require (
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
 	github.com/hanzoai/otel-collector v1.2.0 // indirect
 	github.com/hanzoai/sqlcipher v0.1.1 // indirect
-	github.com/hanzoai/trust v0.2.3 // indirect
 	github.com/hanzoai/voice v0.1.1-0.20260815163030-0c26e48ac43f // indirect
 	github.com/hanzokv/go/extra/kvcmd/v9 v9.22.0 // indirect
 	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
@@ -690,7 +689,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.6
-	github.com/hanzoai/ai v1.833.114
+	github.com/hanzoai/ai v1.833.119
 	github.com/hanzoai/authz v1.10.34
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.16

@@ -6,7 +6,7 @@
 // exist: an earlier catalogue was hand-kept per app and drifted — one subsystem
 // declared 12 tools while it served 365 — because nothing regenerated it from
 // the thing it described. These subsets are regenerated from source by
-// `make -f mk/fleet.mk check` and held against the woven document by the weave, so a
+// `make -f mk/fleet.mk check` and held against the composed document by the compose, so a
 // catalogue derived from them is red in CI the moment it disagrees.
 //
 // It carries operation ids and prose, and no schemas. The door publishes one
@@ -17,11 +17,11 @@
 // THE AUDIENCE COMES FROM openapi.yaml AND NOT FROM THE SUBSET, and the two are
 // not the same answer. A subset's x-public is what the app's own binary could
 // derive about itself, and one term of that rule is a fleet fact the app cannot
-// see: its STAGE (HIP-0139 §8, stamped by the weave). Read off the subsets, a
+// see: its STAGE (HIP-0139 §8, stamped by the compose). Read off the subsets, a
 // beta capability's 355 operations stayed in the door — offered to every model
 // while the same operations were absent from every generated SDK, which is
 // exactly the split the paragraph below says does not exist. openapi.yaml IS the
-// public contract — the weave writes the customer projection there and everything
+// public contract — the compose writes the customer projection there and everything
 // the fleet serves to private.yaml — so reading it is not a second copy of the
 // rule; it is the only copy, asked where it has been fully applied.
 package main

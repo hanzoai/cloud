@@ -297,7 +297,7 @@ func run(addr, zapAddr string) error {
 	//
 	// It is a rewrite and not a route. Registering the second spelling would put
 	// two addresses in the table for one thing, and every table it flows into
-	// after — the index, the woven document, each generated SDK, the tool list —
+	// after — the index, the composed document, each generated SDK, the tool list —
 	// would carry both and a reader would have to be told which is real. One
 	// string comparison at the door instead, and everything downstream sees the
 	// one name it already knows.
@@ -318,7 +318,7 @@ func run(addr, zapAddr string) error {
 	// THE API'S OWN INDEX, and the links every /v1 answer carries — here, for the
 	// same one reason clientip is: middleware reaches only what is composed after
 	// it, and both halves are about requests the subsystems below would otherwise
-	// answer. It costs the boot nothing; the index is woven on the first request
+	// answer. It costs the boot nothing; the index is composed on the first request
 	// that needs one (openapi/index.go).
 	index(app, composed)
 
@@ -791,7 +791,7 @@ func unfit(absent map[string]string) map[string]string {
 //
 // Two properties make the fix the honest one rather than merely a fix:
 //
-//   - It costs no subsystem. The document is woven from the subsets the plugins
+//   - It costs no subsystem. The document is composed from the subsets the plugins
 //     projected when they were BUILT (plugin.Spec — bytes in this binary), so
 //     answering it starts nothing. A host that had to mount 113 subsystems to
 //     describe them would have given back exactly what laziness buys.
@@ -823,7 +823,7 @@ func spec(app *zip.App, composed []string) {
 //
 // The host's, for the reason [spec] is the host's: the answer is about the whole
 // fleet and no plugin can see past itself. It reads the SAME subsets the document
-// is woven from, so the two doors describe one API by construction.
+// is composed from, so the two doors describe one API by construction.
 //
 // It is composed BEFORE the mount loops — see the call site — because the
 // addresses it answers are inside subtrees the mounts claim. That is also why it

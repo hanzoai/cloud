@@ -9,6 +9,28 @@ import (
 )
 
 func init() {
+	zip.Describe("DELETE /v1/billing/alerts/:id", zip.Doc{
+		Description: "Removes one of the caller's spend caps and answers 204.\n\nRemoving a cap RAISES what the org may spend, so it takes the same authority\nsetting one does. The caps that remain still bind: this drops one, never the\nwhole policy.",
+		Fields: map[string]string{
+			"alertRef.id": "ID is the cap to remove, from the path.",
+		},
+	})
+	zip.Describe("DELETE /v1/billing/methods/:id", zip.Doc{
+		Description: "Removes one card or account the caller has saved.\n\nIt detaches only the CALLER'S own — the wallet this request bills from,\nresolved server-side — so an id belonging to another customer of the same org\nis not something this operation can reach. A platform or service caller\ndetaches on the subject's behalf, and that authority is decided HERE, where the\ncredential is, and travels as a value: authority decided twice is authority\nthat eventually disagrees with itself.\n\nThe card is vaulted at the processor, so what goes is our token for it.",
+		Fields: map[string]string{
+			"Detachment.deleted": "Deleted is whether the method was actually removed. False with no error\nmeans it was already gone, which is a successful detach rather than a\nfailure — a retry must not be an error.",
+			"Detachment.id":      "ID is the method that was detached, echoed so a caller batching several can\ntell the answers apart.",
+			"methodRef.id":       "ID is the saved method to detach, from the path.",
+		},
+	})
+	zip.Describe("DELETE /v1/billing/portal/methods/:id", zip.Doc{
+		Description: "DetachPortalMethod is DetachMethod at the address a hosted checkout addresses\nit by. One set of rows, two spellings: a card detached at either is gone from\nboth, because there is one store behind them.",
+		Fields: map[string]string{
+			"Detachment.deleted": "Deleted is whether the method was actually removed. False with no error\nmeans it was already gone, which is a successful detach rather than a\nfailure — a retry must not be an error.",
+			"Detachment.id":      "ID is the method that was detached, echoed so a caller batching several can\ntell the answers apart.",
+			"methodRef.id":       "ID is the saved method to detach, from the path.",
+		},
+	})
 	zip.Describe("GET /v1/billing/accounts", zip.Doc{
 		Description: "Answers the caller's billing accounts: the org itself, its currency, when it\nwas opened, and the caller's own standing in it.\n\nThe standing is the caller's, resolved from the validated principal here and\nsent to the store rather than looked up there — the membership roster is IAM's\nand commerce keeps none, so a callee that answered \"what role is this\" would\nbe inventing it. An anonymous read gets the account with no role rather than\nan implied membership.\n\nScoped to the caller's own org, which is the whole tenancy story: there is no\norg field on the wire and none on the input.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
@@ -255,6 +277,14 @@ func init() {
 	zip.Describe("POST /v1/billing/mode", zip.Doc{
 		Description: "Moves this org between sandbox money and real money.\n\nIt decides whether a charge hits a real card, so it is the one posture change\nthat is not self-service: the platform bar, never an org owner, because an org\nthat could put itself in test mode could take priced work for free.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
+	zip.Describe("POST /v1/billing/recharge/run-all", zip.Doc{
+		Description: "Sweeps every org's auto-recharge and answers what it did.\n\nPLATFORM AUTHORITY ONLY. It charges saved cards across every tenant, so an org\nowner reaching it could sweep-charge the estate; a caller without it is\nrefused before anything is charged.\n\nThe answer explains a sweep that charged nobody as readily as one that\ncharged: it names how many orgs were considered and how many needed charging,\nwith a row each.",
+		Fields: map[string]string{
+			"Recharge.charged": "Charged is how many of them were actually charged. It is at most Orgs, and\nthe difference is orgs whose balance was already above their threshold.",
+			"Recharge.orgs":    "Orgs is how many orgs the sweep considered — every org with auto-recharge\narmed, whether or not it needed charging.",
+			"Recharge.results": "Results is one row per org considered, so a sweep that charged nobody is\nstill explainable. Never null.",
+		},
+	})
 	zip.Describe("POST /v1/billing/subscriptions/:id/cancel", zip.Doc{
 		Description: "Ends a subscription.\n\nIt cancels at the END OF THE PAID PERIOD by default, because a customer who\ncancels has already paid for the period they are in and taking it away is\ntaking money for nothing. `atPeriodEnd: false` ends it at once, which is the\ncaller asking for that.\n\nA subscription from another org is not found rather than refused, so an id\ncannot be probed for existence.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
@@ -267,6 +297,34 @@ func init() {
 		Fields: map[string]string{
 			"Subscription.mrrCents":       "MRRCents is what this subscription contributes per month — commerce's own\nfigure, interval-normalized and multiplied by its seats, so no reader\nre-derives it from price and interval.",
 			"SubscriptionRef.atPeriodEnd": "AtPeriodEnd cancels at the end of the paid period rather than at once. It\ndefaults TRUE on the door, because a customer who cancels has already paid\nfor the period they are in.",
+		},
+	})
+	zip.Describe("POST /v1/billing/topup", zip.Doc{
+		Description: "Charges a card the caller already saved and credits the\nbalance. Same receipt and the same retry safety as the token door; the only\ndifference is which card, so a caller topping up from a saved method never\nre-enters one.",
+		Fields: map[string]string{
+			"Charged.balanceCents":    "BalanceCents is the subject's balance AFTER the charge settled, in cents, so\na caller does not have to re-read to show the new number.",
+			"Charged.processorRef":    "ProcessorRef is the payment processor's own reference. It is the only field\nthat proves money moved at the GATEWAY rather than merely in our ledger,\nwhich is why it is answered and not only logged. Absent where the processor\nreturned none.",
+			"Charged.status":          "Status is how the charge ended. Read it rather than inferring success from\nthe HTTP status: the call succeeded whenever this field is present, and what\nthe PROCESSOR did is what this says.",
+			"Charged.test":            "Test states which bucket was credited — sandbox money or real money — so no\nreader has to guess whether a receipt is real. Sandbox and live funds are\nphysically separate ledgers, and a reader that conflates them restates the\ncompany's revenue.",
+			"Charged.transactionId":   "TransactionID is the ledger entry this charge created. It is the handle a\nlater read or a refund names, and it is minted by the ledger rather than by\nthe caller.",
+			"topupIn.amountCents":     "AmountCents is how much to charge, in cents of Currency. Required.",
+			"topupIn.currency":        "Currency is the ISO-4217 code to charge in. Empty takes the deployment's\nown default.",
+			"topupIn.paymentMethodId": "MethodID names a card the subject already saved, for the saved-card door.",
+			"topupIn.sourceId":        "SourceID is a single-use card token from the payment form, for the token\ndoor. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
+		},
+	})
+	zip.Describe("POST /v1/billing/topup/token", zip.Doc{
+		Description: "Charges a single-use card token and credits the caller's\nbalance.\n\nThe token comes from the payment form and is vaulted as part of the charge, so\nno card number reaches this service and none is stored here. The receipt names\nthe ledger entry, the new balance, and the PROCESSOR's own reference — which is\nthe only field that proves money moved at the gateway rather than only in our\nledger.\n\nRetry-safe on X-Idempotency-Key: the same key settles one charge and returns\nthe first receipt.",
+		Fields: map[string]string{
+			"Charged.balanceCents":    "BalanceCents is the subject's balance AFTER the charge settled, in cents, so\na caller does not have to re-read to show the new number.",
+			"Charged.processorRef":    "ProcessorRef is the payment processor's own reference. It is the only field\nthat proves money moved at the GATEWAY rather than merely in our ledger,\nwhich is why it is answered and not only logged. Absent where the processor\nreturned none.",
+			"Charged.status":          "Status is how the charge ended. Read it rather than inferring success from\nthe HTTP status: the call succeeded whenever this field is present, and what\nthe PROCESSOR did is what this says.",
+			"Charged.test":            "Test states which bucket was credited — sandbox money or real money — so no\nreader has to guess whether a receipt is real. Sandbox and live funds are\nphysically separate ledgers, and a reader that conflates them restates the\ncompany's revenue.",
+			"Charged.transactionId":   "TransactionID is the ledger entry this charge created. It is the handle a\nlater read or a refund names, and it is minted by the ledger rather than by\nthe caller.",
+			"topupIn.amountCents":     "AmountCents is how much to charge, in cents of Currency. Required.",
+			"topupIn.currency":        "Currency is the ISO-4217 code to charge in. Empty takes the deployment's\nown default.",
+			"topupIn.paymentMethodId": "MethodID names a card the subject already saved, for the saved-card door.",
+			"topupIn.sourceId":        "SourceID is a single-use card token from the payment form, for the token\ndoor. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
 		},
 	})
 }

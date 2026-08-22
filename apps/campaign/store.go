@@ -137,7 +137,7 @@ type campaignRecord struct {
 // type and not a second shape to keep in sync: the store, the fan-out and the
 // executors read in domain language while the document keeps the name the fleet's
 // flat schema namespace needs (apps/marketing already publishes an email
-// "Campaign", and openapi.Weave refuses one name meaning two things).
+// "Campaign", and openapi.Compose refuses one name meaning two things).
 type Campaign = campaignRecord
 
 // Store is the campaign database. ONE SQLite file — the system namespace's

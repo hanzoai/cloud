@@ -24,11 +24,11 @@ import (
 )
 
 // golden is the committed fleet document. Named again here rather than shared
-// with weave_test.go's identical constant because that file is the EXTERNAL test
+// with compose_test.go's identical constant because that file is the EXTERNAL test
 // package and these tests need serve(), which is unexported.
 const golden = "../openapi.yaml"
 
-// published is the committed fleet document as JSON — the same bytes the weave
+// published is the committed fleet document as JSON — the same bytes the compose
 // writes openapi.yaml from, read back.
 func published(t *testing.T) []byte {
 	t.Helper()
@@ -167,7 +167,7 @@ func TestServedCommandsAreTheProjectionOfTheDocument(t *testing.T) {
 		t.Fatal("no ETag: the list is immutable for the process lifetime and must say so")
 	}
 
-	// A SECOND app, weaving the same document from scratch — a different process
+	// A SECOND app, composing the same document from scratch — a different process
 	// would be a different map walk, and must not be a different artifact.
 	againStatus, againHead, again := ask(t, mounted(t), CommandPath)
 	if againStatus != http.StatusOK {

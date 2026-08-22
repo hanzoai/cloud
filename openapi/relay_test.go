@@ -112,7 +112,7 @@ func TestProjectRefusesAnOperationOutsideItsOwnDoor(t *testing.T) {
 	}
 }
 
-// THE SAME noun gate the weave uses, on the same terms: one schema name, one
+// THE SAME noun gate the compose uses, on the same terms: one schema name, one
 // shape, whether the two claimants are two apps or an app and the registry behind
 // its door.
 func TestProjectRefusesOneSchemaNameWithTwoShapes(t *testing.T) {

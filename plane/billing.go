@@ -281,7 +281,7 @@ type HoldersIn struct {
 // The name carries its product because the schema namespace is FLAT across the
 // whole fleet and the bare noun is already taken: apps/books publishes an
 // Account of its own — a chart-of-accounts line, a different thing entirely —
-// and one name with two shapes is what openapi.Weave refuses, since a generated
+// and one name with two shapes is what openapi.Compose refuses, since a generated
 // SDK would bind whichever it read last. The already-published side keeps the
 // name; this one, arriving later, qualifies.
 type BillingAccount struct {
@@ -876,8 +876,13 @@ type MethodRef struct {
 
 // Detachment is what a removal answers with.
 type Detachment struct {
-	Deleted bool   `json:"deleted"`
-	ID      string `json:"id"`
+	// Deleted is whether the method was actually removed. False with no error
+	// means it was already gone, which is a successful detach rather than a
+	// failure — a retry must not be an error.
+	Deleted bool `json:"deleted"`
+	// ID is the method that was detached, echoed so a caller batching several can
+	// tell the answers apart.
+	ID string `json:"id"`
 }
 
 // PlansIn narrows the public plan catalog to one category.
@@ -1024,11 +1029,27 @@ type SavedCardIn struct {
 // logged. Test states which bucket was credited so no reader has to guess
 // whether a receipt is real.
 type Charged struct {
+	// TransactionID is the ledger entry this charge created. It is the handle a
+	// later read or a refund names, and it is minted by the ledger rather than by
+	// the caller.
 	TransactionID string `json:"transactionId"`
-	BalanceCents  int64  `json:"balanceCents"`
-	Status        string `json:"status"`
-	ProcessorRef  string `json:"processorRef,omitempty"`
-	Test          bool   `json:"test"`
+	// BalanceCents is the subject's balance AFTER the charge settled, in cents, so
+	// a caller does not have to re-read to show the new number.
+	BalanceCents int64 `json:"balanceCents"`
+	// Status is how the charge ended. Read it rather than inferring success from
+	// the HTTP status: the call succeeded whenever this field is present, and what
+	// the PROCESSOR did is what this says.
+	Status string `json:"status"`
+	// ProcessorRef is the payment processor's own reference. It is the only field
+	// that proves money moved at the GATEWAY rather than merely in our ledger,
+	// which is why it is answered and not only logged. Absent where the processor
+	// returned none.
+	ProcessorRef string `json:"processorRef,omitempty"`
+	// Test states which bucket was credited — sandbox money or real money — so no
+	// reader has to guess whether a receipt is real. Sandbox and live funds are
+	// physically separate ledgers, and a reader that conflates them restates the
+	// company's revenue.
+	Test bool `json:"test"`
 }
 
 // SaleIn buys a plan with a card — either a fresh single-use token, which is
@@ -1090,7 +1111,13 @@ type Recharged struct {
 // count — that difference is how a reader tells "nobody was below threshold"
 // from "the sweep never ran".
 type Recharge struct {
-	Orgs    int         `json:"orgs"`
-	Charged int         `json:"charged"`
+	// Orgs is how many orgs the sweep considered — every org with auto-recharge
+	// armed, whether or not it needed charging.
+	Orgs int `json:"orgs"`
+	// Charged is how many of them were actually charged. It is at most Orgs, and
+	// the difference is orgs whose balance was already above their threshold.
+	Charged int `json:"charged"`
+	// Results is one row per org considered, so a sweep that charged nobody is
+	// still explainable. Never null.
 	Results []Recharged `json:"results"`
 }

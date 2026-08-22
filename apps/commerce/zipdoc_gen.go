@@ -234,6 +234,10 @@ func init() {
 	})
 	zip.Describe("POST /billing/method/detach", zip.Doc{
 		Description: "Removes one saved payment method.\n\nA method this subject does not own is NOT FOUND rather than refused — the same\nanswer whether the id names nothing or names somebody else's card — so an id\ncannot be probed for existence. Privileged is the DOOR'S determination that\nthis caller may act on any subject inside the org, and travels as one, because\nauthority decided twice is authority that eventually disagrees with itself.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"Detachment.deleted": "Deleted is whether the method was actually removed. False with no error\nmeans it was already gone, which is a successful detach rather than a\nfailure — a retry must not be an error.",
+			"Detachment.id":      "ID is the method that was detached, echoed so a caller batching several can\ntell the answers apart.",
+		},
 	})
 	zip.Describe("POST /billing/method/save", zip.Doc{
 		Description: "Saves a payment method for a subject: vaults the instrument at the processor\nand persists the row.\n\nSaving a card that is ALREADY on file answers with the row that already holds\nit rather than stacking a duplicate, and the door needs to tell the two apart\nto answer 201 or 200 — so whether the row is new is part of the answer, not\nsomething a reader infers.\n\nThe email names the processor's customer profile and is the CALLER'S own,\nresolved at the door from its credential: the store must never read an\nidentity it was not handed.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
@@ -261,6 +265,11 @@ func init() {
 	})
 	zip.Describe("POST /billing/recharge", zip.Doc{
 		Description: "Sweeps every org and charges the default card of those whose balance has\nfallen below their own threshold.\n\nIts caller is a SCHEDULE, not a person — there is no request behind an\noff-session charge — which is also why it takes no retry key: one run-all\nrequest's header would be one key for every org it touches, so the second\ncharge would replay the first one's receipt. Each org derives its own.\n\nOrgs is the POPULATION considered, not the row count. That difference is how a\nreader tells \"nobody was below threshold\" from \"the sweep never ran\".\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"Recharge.charged": "Charged is how many of them were actually charged. It is at most Orgs, and\nthe difference is orgs whose balance was already above their threshold.",
+			"Recharge.orgs":    "Orgs is how many orgs the sweep considered — every org with auto-recharge\narmed, whether or not it needed charging.",
+			"Recharge.results": "Results is one row per org considered, so a sweep that charged nobody is\nstill explainable. Never null.",
+		},
 	})
 	zip.Describe("POST /billing/rollup", zip.Doc{
 		Description: "Answers a subject's month: what the plan includes, what has been consumed\nagainst it, and the wallet beside it.\n\nThe two blocks stay SEPARATE because they are separate monies — one was sold\nwith the plan, one was bought with a card — and their sum is not a number\nanyone holds. Nothing here adds them, and a reader that did would be inventing\na balance.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
@@ -301,11 +310,23 @@ func init() {
 	zip.Describe("POST /billing/topup", zip.Doc{
 		Description: "Charges a card the subject already saved and credits their wallet.\n\nThe method must belong to the subject; one that does not is a MISS rather than\na refusal, so a guessed id cannot confirm that somebody else's card exists.\nThe description rides to the processor, where the customer reads it, which is\nwhy the caller says it rather than this side inventing a sentence.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
+			"Charged.balanceCents":    "BalanceCents is the subject's balance AFTER the charge settled, in cents, so\na caller does not have to re-read to show the new number.",
+			"Charged.processorRef":    "ProcessorRef is the payment processor's own reference. It is the only field\nthat proves money moved at the GATEWAY rather than merely in our ledger,\nwhich is why it is answered and not only logged. Absent where the processor\nreturned none.",
+			"Charged.status":          "Status is how the charge ended. Read it rather than inferring success from\nthe HTTP status: the call succeeded whenever this field is present, and what\nthe PROCESSOR did is what this says.",
+			"Charged.test":            "Test states which bucket was credited — sandbox money or real money — so no\nreader has to guess whether a receipt is real. Sandbox and live funds are\nphysically separate ledgers, and a reader that conflates them restates the\ncompany's revenue.",
+			"Charged.transactionId":   "TransactionID is the ledger entry this charge created. It is the handle a\nlater read or a refund names, and it is minted by the ledger rather than by\nthe caller.",
 			"SavedCardIn.description": "Description rides on the charge to the processor, which is where the\ncustomer reads it. A top-up and an auto-recharge say different true things\nthere, so it is a value rather than a sentence invented in the store.",
 		},
 	})
 	zip.Describe("POST /billing/topup/card", zip.Doc{
 		Description: "Charges a single-use card token and credits the subject's wallet.\n\nThis is the cold-customer path: nothing is saved first, so a caller with no\ncard on file can add funds. The nonce is spent by the charge and is worthless\nto anyone who reads it afterwards.\n\nThe bounds are enforced HERE and only here. A scripted or agent-driven request\nnever passes through a console's client-side cap, so the floor and the ceiling\nhave to bind where the money moves.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Fields: map[string]string{
+			"Charged.balanceCents":  "BalanceCents is the subject's balance AFTER the charge settled, in cents, so\na caller does not have to re-read to show the new number.",
+			"Charged.processorRef":  "ProcessorRef is the payment processor's own reference. It is the only field\nthat proves money moved at the GATEWAY rather than merely in our ledger,\nwhich is why it is answered and not only logged. Absent where the processor\nreturned none.",
+			"Charged.status":        "Status is how the charge ended. Read it rather than inferring success from\nthe HTTP status: the call succeeded whenever this field is present, and what\nthe PROCESSOR did is what this says.",
+			"Charged.test":          "Test states which bucket was credited — sandbox money or real money — so no\nreader has to guess whether a receipt is real. Sandbox and live funds are\nphysically separate ledgers, and a reader that conflates them restates the\ncompany's revenue.",
+			"Charged.transactionId": "TransactionID is the ledger entry this charge created. It is the handle a\nlater read or a refund names, and it is minted by the ledger rather than by\nthe caller.",
+		},
 	})
 	zip.Describe("POST /billing/transactions", zip.Doc{
 		Description: "Reads one page of a subject's ledger, newest first.\n\nThe SUBJECT travels and the org does not, which is the tenancy rule this plane\nkeeps everywhere: a subject is a wallet inside the caller's own org, so naming\none can reach another account of that org and nothing beyond it. The door\nresolves it from the validated principal, so a query cannot widen the read.\n\nCount is the size of the whole history rather than of the page, because that\ndifference is how a reader knows there is more to ask for.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",

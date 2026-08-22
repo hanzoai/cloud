@@ -61,6 +61,10 @@ stub 200; check "200 pass" 0 "no attack found"
 echo "reviewer CHOOSES a refusal (500) -> release still blocked"
 stub 500 '{"error":"boom"}'; check "500 refuses" 1 "cannot judge this change"
 
+echo "reviewer ANSWERS but not with a verdict -> refuses, and says what arrived"
+stub 200 '{"choices":[{"message":{"content":"I am unable to review this diff."}},{"finish_reason":"stop"}],"usage":{"completion_tokens":9}}'
+check "200 non-verdict" 1 "It answered:"
+
 echo "reviewer NEVER ANSWERS (503) -> recorded, release continues (~150s of retries)"
 stub 503 '{"msg":"identity is unavailable"}'; check "503 unreviewed" 0 "UNREVIEWED"
 

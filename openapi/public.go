@@ -9,7 +9,7 @@ package openapi
 // through the same origin.
 //
 //	PUBLIC    the customer surface — openapi.yaml, and GET /v1/openapi.json.
-//	INTERNAL  everything, unchanged — private.yaml, the weave the routing gates measure.
+//	INTERNAL  everything, unchanged — private.yaml, the compose the routing gates measure.
 //
 // THE PUBLIC ONE HOLDS THE NAME, because the name is what gets read. openapi.yaml
 // is what a developer types, what an SDK generator defaults to and what a
@@ -63,9 +63,9 @@ package openapi
 // # What holds it honest
 //
 // Both documents are COMMITTED and regenerated from source by the drift gate
-// (mk/fleet.mk check), by one run of one weave. An operation entering or leaving
+// (mk/fleet.mk check), by one run of one compose. An operation entering or leaving
 // the contract is a diff in openapi.yaml, reviewed next to the route that caused
-// it, and openapi/weave_test.go asserts the property the two names promise: no
+// it, and openapi/compose_test.go asserts the property the two names promise: no
 // alpha capability and no operator path reaches the public one, and both reach
 // the private one.
 
@@ -107,7 +107,7 @@ func audience(path string, op *Operation) bool {
 
 // stamp writes the audience on every operation.
 //
-// It runs at the end of [Spec], and AGAIN at the end of [Weave]. That is not two
+// It runs at the end of [Spec], and AGAIN at the end of [Compose]. That is not two
 // rules — it is one rule asked at the two points where the facts it reads are
 // complete, and the second reading subsumes the first.
 //
@@ -119,7 +119,7 @@ func audience(path string, op *Operation) bool {
 // Across the fleet, the end of Spec is too EARLY for one term of the rule. A
 // subset is written by the app's own binary, which does not read the fleet's
 // manifest and so cannot know its own stage (HIP-0139 §8); the stage arrives with
-// [Part], and Weave is where it is stamped. So Weave asks the whole rule again on
+// [Part], and Compose is where it is stamped. So Compose asks the whole rule again on
 // the finished composition, where every term — address, product, door, compat and
 // stage — is finally in hand. It is still a pure function of the parts.
 func stamp(d *Document) {
@@ -210,7 +210,7 @@ func Publish(d *Document) (*Document, error) {
 // Through JSON rather than by walking the Go value, because an operation's
 // bodies arrive in two shapes that are JSON-identical and structurally nothing
 // alike: [Register] builds closed *RequestBody / map[string]*Response values,
-// while a woven or folded operation carries zip's decoded map[string]any. One
+// while a composed or folded operation carries zip's decoded map[string]any. One
 // reader for both is the only way this cannot miss a $ref by arriving through
 // the wrong seam.
 func refs(op *Operation, need map[string]bool) error {
