@@ -1,7 +1,7 @@
 ---
 name: iam_invitations
 version: "8.0.0"
-description: "Read iam invitations: Returns your organization's invitations, newest first — who has been asked to join, on what terms, and how many seats each invitation still has left.."
+description: "Read iam invitations: Returns your organization's invitations, newest first — who has been asked to join, on what terms, and how many seats each invitation still has left., Returns one invitation: who it is for, what it grants on acceptance, and when it expires.."
 ---
 
 # Hanzo · IAM · invitations
@@ -15,16 +15,20 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.hanzo.ai/v1/iam/invitations` — Returns your organization's invitations, newest first — who has been asked to join, on what terms, and how many seats each invitation still has left.
+- `GET https://api.hanzo.ai/v1/iam/invitations/{owner}/{name}` — Returns one invitation: who it is for, what it grants on acceptance, and when it expires.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/invitations` → `iam.invitations.ListOutput` object with fields: `invitations`, `total`.
+- `/v1/iam/invitations/{owner}/{name}` → `iam.Invitation` object with fields: `application`, `code`, `createdAt`, `createdTime`, `defaultCode`, `deleted`, `displayName`, `email`, `id`, `isRegexp`, `name`, `owner`.
 
 ## Example
 

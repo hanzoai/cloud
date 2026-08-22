@@ -12922,6 +12922,40 @@ components:
           description: Name is the bucket name to create.
           type: string
       type: object
+    bucketIn:
+      properties:
+        name:
+          description: |-
+            Name is the bucket's friendly name, matching
+            ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. It is validated AS GIVEN and never
+            lower-cased for you: a client that creates "Photos" and then lists "photos"
+            would be reading a bucket it did not make, so mixed case is a clean 400.
+          type: string
+      type: object
+    bucketItem:
+      properties:
+        createdAt:
+          description: unix seconds
+          type: integer
+        name:
+          description: friendly name
+          type: string
+      type: object
+    bucketList:
+      properties:
+        buckets:
+          description: |-
+            Buckets are the caller org's buckets, friendly names, oldest first as the
+            store returns them.
+          items:
+            $ref: '#/components/schemas/bucketItem'
+          type: array
+        total:
+          description: |-
+            Total is how many buckets this org has. It equals len(buckets): the listing
+            is not paged, because an org's bucket count is small by construction.
+          type: integer
+      type: object
     bucketRecord:
       properties:
         bucket:
@@ -14653,6 +14687,73 @@ components:
           description: Summary is the one line describing what the category groups.
           type: string
       type: object
+    centre:
+      properties:
+        controls:
+          description: |-
+            Controls is the control inventory, each entry naming what it asserts, the
+            mechanism, where it is enforced, how it is verified and the clauses it maps
+            to.
+          items: {}
+          type: array
+        coverage:
+          description: |-
+            Coverage is the per-framework counts, computed from Controls against each
+            framework's whole published clause list.
+          items:
+            $ref: '#/components/schemas/coverRow'
+          type: array
+        documents:
+          description: Documents are the artifacts, each saying whether this reader
+            may read it.
+          items:
+            $ref: '#/components/schemas/docRow'
+          type: array
+        faq:
+          description: Faq is the knowledge base — the questions a reviewer asks,
+            answered.
+          items: {}
+          type: array
+        frameworks:
+          description: Frameworks are the clause universes the coverage is computed
+            against.
+          items:
+            $ref: '#/components/schemas/frameworkRow'
+          type: array
+        generated:
+          description: Generated is when this answer was computed, unix milliseconds.
+          type: integer
+        inventory:
+          $ref: '#/components/schemas/trustTally'
+          description: Inventory is how the controls themselves stand, independent
+            of framework.
+        org:
+          description: Org is whose centre this is.
+          type: string
+        policies:
+          description: Policies are the published policies.
+          items: {}
+          type: array
+        profile:
+          description: Profile is the organization's own description of itself.
+        risk:
+          description: |-
+            Risk is the risk profile — label and value pairs describing what this
+            organization handles and how.
+        subprocessors:
+          description: Subprocessors are the third parties this organization sends
+            data to.
+          items: {}
+          type: array
+        updates:
+          description: Updates is the changelog, newest as the organization ordered
+            it.
+          items: {}
+          type: array
+        version:
+          description: Version is the embedded inventory's version.
+          type: string
+      type: object
     chainList:
       properties:
         chains:
@@ -14955,6 +15056,88 @@ components:
         total:
           description: Total is how many rows Data holds.
           type: integer
+      type: object
+    clauseCoverage:
+      properties:
+        automated:
+          description: |-
+            Automated is how many clauses have an automated control behind them that
+            something can fail on behalf of.
+          type: integer
+        clauses:
+          description: Clauses is every clause the standard publishes, with what stands
+            behind it.
+          items:
+            $ref: '#/components/schemas/clauseRow'
+          type: array
+        edition:
+          description: Edition is which edition this clause list is taken from.
+          type: string
+        framework:
+          description: Framework is the framework id — "soc2", "iso27001", "nist80053".
+          type: string
+        generated:
+          description: Generated is when this was computed, unix milliseconds.
+          type: integer
+        name:
+          description: Name is the published standard's name.
+          type: string
+        none:
+          description: None is how many have nothing behind them.
+          type: integer
+        note:
+          description: |-
+            Note is what this clause list is scoped to, when a count alone would
+            misrepresent it.
+          type: string
+        partial:
+          description: Partial is how many are answered in part.
+          type: integer
+        publisher:
+          description: Publisher is who publishes it — AICPA, ISO/IEC, NIST.
+          type: string
+        statement:
+          description: Statement is the counts as one sentence, carrying the unit.
+          type: string
+        total:
+          description: Total is the framework's WHOLE published clause list — the
+            denominator.
+          type: integer
+        unit:
+          description: Unit is what ONE clause is — "criterion", "control", "family".
+          type: string
+        units:
+          description: Units is the plural of Unit, for rendering a sentence.
+          type: string
+        version:
+          description: Version is the embedded inventory's version.
+          type: string
+      type: object
+    clauseRow:
+      properties:
+        controls:
+          description: |-
+            Controls are the ids behind it, strongest first. Empty when nothing covers
+            it — and an absent control is never listed here, however it maps.
+          items:
+            type: string
+          type: array
+        group:
+          description: Group is the clause's section within the standard, when it
+            has one.
+          type: string
+        id:
+          description: ID is the clause id as the standard publishes it — "CC6.1",
+            "A.5.15", "AC".
+          type: string
+        level:
+          description: |-
+            Level is what the strongest control pointed at this clause is worth:
+            "automated", "partial" or "none".
+          type: string
+        title:
+          description: Title is the standard's own words for that clause.
+          type: string
       type: object
     clickCount:
       properties:
@@ -15730,6 +15913,39 @@ components:
             this page, or the cursor sent in when the page is empty.
           type: integer
       type: object
+    controlList:
+      properties:
+        absent:
+          description: |-
+            Absent is how many the organization does not have. Each still names the
+            clause it would satisfy, and none of them moves a coverage number.
+          type: integer
+        automated:
+          description: Automated is how many run with nobody in the loop.
+          type: integer
+        controls:
+          description: Controls is every control, opaque because the organization
+            owns its shape.
+          items: {}
+          type: array
+        partial:
+          description: Partial is how many run but do not cover their whole claim.
+          type: integer
+        statement:
+          description: Statement is the counts as one sentence, safe to quote.
+          type: string
+        total:
+          description: Total is how many controls this organization publishes.
+          type: integer
+        unverified:
+          description: |-
+            Unverified is how many rest on somebody having read the source rather than
+            on a test or an audit row.
+          type: integer
+        version:
+          description: Version is the embedded inventory's version.
+          type: string
+      type: object
     cookieAck:
       properties:
         result:
@@ -15762,6 +15978,56 @@ components:
           items:
             $ref: '#/components/schemas/pointView'
           type: array
+      type: object
+    coverRow:
+      properties:
+        automated:
+          description: |-
+            Automated is how many clauses have an automated control behind them that
+            something can fail on behalf of.
+          type: integer
+        edition:
+          description: Edition is which edition the clause list is taken from.
+          type: string
+        framework:
+          description: Framework is the framework id — "soc2", "iso27001", "nist80053".
+          type: string
+        name:
+          description: Name is the published standard's name.
+          type: string
+        none:
+          description: |-
+            None is how many have nothing behind them. It stays visible rather than
+            dropping out of the fraction.
+          type: integer
+        note:
+          description: |-
+            Note is what the clause list itself is scoped to, when the framework's
+            catalog says something a count alone would misrepresent.
+          type: string
+        partial:
+          description: Partial is how many are answered in part.
+          type: integer
+        publisher:
+          description: Publisher is who publishes it — AICPA, ISO/IEC, NIST.
+          type: string
+        statement:
+          description: Statement is the counts as one sentence, carrying the unit.
+          type: string
+        total:
+          description: |-
+            Total is the framework's WHOLE published clause list — the denominator.
+            Counting only the clauses some control happened to name would report 100%
+            every time.
+          type: integer
+        unit:
+          description: |-
+            Unit is what ONE clause is — "criterion", "control", "family". A count
+            without its unit is not a fact, so it travels with every number here.
+          type: string
+        units:
+          description: Units is the plural of Unit, for rendering a sentence.
+          type: string
       type: object
     crawlDocument:
       properties:
@@ -17149,6 +17415,49 @@ components:
             row are gone.
           type: boolean
       type: object
+    docRow:
+      properties:
+        attested:
+          description: |-
+            Attested reports whether somebody OUTSIDE this organization put their name
+            to it. Those are the artifacts a reviewer asks for, and they are released
+            through a grant rather than published — there is no field that can say
+            otherwise.
+          type: boolean
+        href:
+          description: Href is where to read it, present only when this reader may.
+          type: string
+        id:
+          description: ID is the document's id within this organization's centre.
+          type: string
+        kind:
+          description: |-
+            Kind is the artifact type — soc2, iso, pentest, letter, caiq, sig, vsa,
+            questionnaire, policy or other.
+          type: string
+        label:
+          description: Label is the artifact type in words, for rendering.
+          type: string
+        note:
+          description: Note is anything the organization says about this artifact.
+          type: string
+        released:
+          description: |-
+            Released reports whether THIS reader may read it. False means the artifact
+            exists and is available on request.
+          type: boolean
+        tier:
+          description: |-
+            Tier is "public" or "gated". It defaults to gated, so a new artifact is
+            closed until somebody opens it deliberately.
+          type: string
+        title:
+          description: Title is what the document is called.
+          type: string
+        updated:
+          description: Updated is when the record last changed, unix milliseconds.
+          type: integer
+      type: object
     docTypeList:
       properties:
         data:
@@ -17335,6 +17644,19 @@ components:
         yellow:
           description: Yellow is how many have drifted within tolerance.
           type: integer
+      type: object
+    dropped:
+      properties:
+        deleted:
+          description: Deleted is always true; a record that was not there is a 404
+            instead.
+          type: boolean
+        id:
+          description: ID is the record removed.
+          type: string
+        kind:
+          description: Kind is the section.
+          type: string
       type: object
     edgeState:
       properties:
@@ -18362,6 +18684,13 @@ components:
           description: Total is how many rows Data holds.
           type: integer
       type: object
+    faqList:
+      properties:
+        faq:
+          description: Faq is the questions and their answers.
+          items: {}
+          type: array
+      type: object
     fileContent:
       properties:
         content:
@@ -18769,6 +19098,38 @@ components:
           items:
             $ref: '#/components/schemas/Founder'
           type: array
+      type: object
+    frameworkList:
+      properties:
+        frameworks:
+          description: Frameworks is each framework and how many clauses it publishes.
+          items:
+            $ref: '#/components/schemas/frameworkRow'
+          type: array
+      type: object
+    frameworkRow:
+      properties:
+        edition:
+          description: Edition is which edition this clause list is taken from.
+          type: string
+        framework:
+          description: Framework is the framework id.
+          type: string
+        name:
+          description: Name is the published standard's name.
+          type: string
+        publisher:
+          description: Publisher is who publishes it.
+          type: string
+        total:
+          description: Total is how many clauses the standard publishes.
+          type: integer
+        unit:
+          description: Unit is what one clause is; Units is its plural.
+          type: string
+        units:
+          description: Units is the plural of Unit.
+          type: string
       type: object
     functionDetail:
       properties:
@@ -20471,16 +20832,6 @@ components:
             $ref: '#/components/schemas/iam.Application'
           type: array
       type: object
-    iam.ApplicationRef:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
-      type: object
     iam.AuditLog:
       properties:
         action:
@@ -20764,13 +21115,6 @@ components:
       - name
       - application
       type: object
-    iam.DeleteOrganizationInput:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
     iam.DeleteOrganizationOutput:
       properties:
         affected:
@@ -20809,27 +21153,33 @@ components:
       type: object
     iam.Input:
       properties:
+        action:
+          type: string
+        clientIp:
+          type: string
         createdTime:
           type: string
-        description:
-          type: string
-        displayName:
-          type: string
-        isDefault:
+        isTriggered:
           type: boolean
-        metadata:
+        language:
+          type: string
+        method:
           type: string
         name:
+          type: string
+        object:
           type: string
         organization:
           type: string
         owner:
           type: string
-        tags:
-          items:
-            type: string
-          type: array
-        workspace:
+        requestUri:
+          type: string
+        response:
+          type: string
+        statusCode:
+          type: integer
+        user:
           type: string
       type: object
     iam.Invitation:
@@ -20981,8 +21331,8 @@ components:
       type: object
     iam.ListOrganizationsOutput:
       properties:
-        count:
-          type: integer
+        cursor:
+          type: string
         organizations:
           items:
             $ref: '#/components/schemas/iam.Organization'
@@ -21003,17 +21353,6 @@ components:
           items:
             $ref: '#/components/schemas/iam.Key'
           type: array
-      type: object
-    iam.ListSessionsIn:
-      properties:
-        application:
-          type: string
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
       type: object
     iam.ListSessionsOut:
       properties:
@@ -21477,13 +21816,6 @@ components:
         signupGroup:
           type: string
       type: object
-    iam.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
     iam.Role:
       properties:
         createdAt:
@@ -21556,15 +21888,6 @@ components:
             type: string
           type: array
       type: object
-    iam.SearchOrganizationsOutput:
-      properties:
-        cursor:
-          type: string
-        organizations:
-          items:
-            $ref: '#/components/schemas/iam.Organization'
-          type: array
-      type: object
     iam.Session:
       properties:
         application:
@@ -21597,19 +21920,6 @@ components:
         updatedAt:
           format: date-time
           type: string
-      type: object
-    iam.SessionRef:
-      properties:
-        application:
-          type: string
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
-      - application
       type: object
     iam.SetAvatarInput:
       properties:
@@ -22534,37 +22844,6 @@ components:
         org:
           type: string
       type: object
-    iam.auditlogs.Input:
-      properties:
-        action:
-          type: string
-        clientIp:
-          type: string
-        createdTime:
-          type: string
-        isTriggered:
-          type: boolean
-        language:
-          type: string
-        method:
-          type: string
-        name:
-          type: string
-        object:
-          type: string
-        organization:
-          type: string
-        owner:
-          type: string
-        requestUri:
-          type: string
-        response:
-          type: string
-        statusCode:
-          type: integer
-        user:
-          type: string
-      type: object
     iam.bulk:
       properties:
         maxOperations:
@@ -22587,13 +22866,6 @@ components:
           type: array
         total:
           type: integer
-      type: object
-    iam.certs.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
       type: object
     iam.config:
       properties:
@@ -22675,20 +22947,6 @@ components:
           type: array
         total:
           type: integer
-      type: object
-    iam.invitations.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
-    iam.keys.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
       type: object
     iam.listProvidersOut:
       properties:
@@ -22772,13 +23030,6 @@ components:
             $ref: '#/components/schemas/iam.Permission'
           type: array
       type: object
-    iam.permission.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
     iam.person:
       properties:
         displayName:
@@ -22803,6 +23054,31 @@ components:
         deleted:
           type: boolean
       type: object
+    iam.projects.Input:
+      properties:
+        createdTime:
+          type: string
+        description:
+          type: string
+        displayName:
+          type: string
+        isDefault:
+          type: boolean
+        metadata:
+          type: string
+        name:
+          type: string
+        organization:
+          type: string
+        owner:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+        workspace:
+          type: string
+      type: object
     iam.projects.ListOutput:
       properties:
         projects:
@@ -22811,23 +23087,6 @@ components:
           type: array
         total:
           type: integer
-      type: object
-    iam.projects.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
-    iam.providerKey:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
       type: object
     iam.providerResult:
       properties:
@@ -22961,13 +23220,6 @@ components:
         total:
           type: integer
       type: object
-    iam.roles.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      type: object
     iam.scheme:
       properties:
         description:
@@ -22983,16 +23235,6 @@ components:
       properties:
         supported:
           type: boolean
-      type: object
-    iam.tokenKey:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
       type: object
     iam.tokenMutation:
       properties:
@@ -23019,26 +23261,6 @@ components:
           items:
             $ref: '#/components/schemas/iam.User'
           type: array
-      type: object
-    iam.users.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
-      type: object
-    iam.webauthnCredentialKey:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
-      required:
-      - owner
-      - name
       type: object
     iam.webauthnCredentialMutationResult:
       properties:
@@ -23090,13 +23312,6 @@ components:
           items:
             $ref: '#/components/schemas/iam.Workspace'
           type: array
-      type: object
-    iam.workspaces.Ref:
-      properties:
-        name:
-          type: string
-        owner:
-          type: string
       type: object
     imageOrigin:
       properties:
@@ -38039,6 +38254,45 @@ components:
             back out.
           type: string
       type: object
+    objectItem:
+      properties:
+        etag:
+          type: string
+        isDir:
+          description: true for a folder (common prefix)
+          type: boolean
+        key:
+          description: key RELATIVE to the requested prefix
+          type: string
+        lastModified:
+          description: unix seconds (0 for a folder)
+          type: integer
+        size:
+          description: bytes (0 for a folder)
+          type: integer
+      type: object
+    objectList:
+      properties:
+        bucket:
+          description: Bucket is the bucket that was listed, friendly name.
+          type: string
+        objects:
+          description: Objects are the entries at this level, keys RELATIVE to Prefix.
+          items:
+            $ref: '#/components/schemas/objectItem'
+          type: array
+        prefix:
+          description: |-
+            Prefix is the sub-folder the listing was scoped to, cleaned. Empty for the
+            bucket root.
+          type: string
+        total:
+          description: |-
+            Total is how many entries came back. The listing is BOUNDED, so a bucket
+            with more keys than the cap answers the cap and this says so — it is not a
+            count of what the bucket holds.
+          type: integer
+      type: object
     onboardReq:
       properties:
         name:
@@ -38924,6 +39178,13 @@ components:
           description: how many invocations fell in it — a real count, never interpolated
           type: integer
       type: object
+    policyList:
+      properties:
+        policies:
+          description: Policies is the list.
+          items: {}
+          type: array
+      type: object
     poolCreate:
       properties:
         autoScale:
@@ -39052,6 +39313,20 @@ components:
           items:
             $ref: '#/components/schemas/Preset'
           type: array
+      type: object
+    presignResponse:
+      properties:
+        expiresIn:
+          description: seconds until the URL expires
+          type: integer
+        key:
+          type: string
+        method:
+          description: '"PUT" (upload) or "GET" (download)'
+          type: string
+        url:
+          description: presigned URL the browser follows directly
+          type: string
       type: object
     previewReq:
       properties:
@@ -44229,6 +44504,40 @@ components:
             $ref: '#/components/schemas/runRecord'
           type: array
       type: object
+    s3Health:
+      properties:
+        error:
+          description: Error is why the probe is degraded, in plain words. Absent
+            when it is not.
+          type: string
+        presign:
+          description: |-
+            Presign is whether presigned upload and download URLs can be minted, which
+            needs a PUBLIC endpoint on top of the credentials. False does not make the
+            surface degraded — listing and creating still work.
+
+            NOT omitempty. On the ready path the untyped probe wrote this key
+            unconditionally, and omitting a false one would turn what a
+            healthy-but-presignless deployment reports from "presign: false" into
+            silence — two different facts. The degraded body now carries it too, which is
+            the one delta of typing this: the probe answers ONE shape under both of its
+            statuses, which is what makes a single declared Out honest.
+          type: boolean
+        ready:
+          description: |-
+            Ready is whether this deployment can serve object operations at all: true
+            only when admin credentials are configured.
+          type: boolean
+        service:
+          description: Service names the subsystem this probe is for. Always "s3".
+          type: string
+        status:
+          description: |-
+            Status is "ok" when the store is reachable in principle, "degraded" when it
+            is not. It is the field to read; the HTTP status carries the same fact for a
+            caller that only looks at the code.
+          type: string
+      type: object
     safeIn:
       properties:
         documentIds:
@@ -44783,6 +45092,28 @@ components:
         namespace:
           description: Namespace is the group the mounting function belongs to.
           type: string
+      type: object
+    sectionWrite:
+      properties:
+        data:
+          description: |-
+            Data is the record. What may be in it depends on the section, and every
+            section's required fields are validated: a control is held to the same rule
+            a committed one is, a subprocessor must say what it is for, an update must
+            carry the date it describes.
+        id:
+          description: |-
+            ID is the record's id. Omit it on a create and one is minted; the
+            single-valued sections (profile, risk) hold one record whatever is named.
+          type: string
+        kind:
+          description: Kind is the section being written. The URL is the authority.
+          type: string
+        ord:
+          description: |-
+            Ord orders this record within its section, ascending, ties broken by id.
+            It is the organization's own ordering — the page renders in it.
+          type: integer
       type: object
     seoAuditIn:
       properties:
@@ -46259,6 +46590,15 @@ components:
       required:
       - files
       type: object
+    subprocessorList:
+      properties:
+        subprocessors:
+          description: |-
+            Subprocessors is the list, each naming at least what it is and what it is
+            for — a name alone says nothing.
+          items: {}
+          type: array
+      type: object
     subscribeReq:
       properties:
         channel:
@@ -47206,6 +47546,455 @@ components:
           description: what kind of trigger it is; HTTP is the only one today
           type: string
       type: object
+    trustAsk:
+      properties:
+        accept:
+          description: |-
+            Accept must be true when the centre states an NDA. The text accepted is
+            recorded verbatim on the request, so a later edit to the NDA cannot rewrite
+            what this party agreed to.
+          type: boolean
+        email:
+          description: |-
+            Email is where the grant will be sent, and the ONLY address the resulting
+            link admits. Required.
+          type: string
+        item:
+          description: |-
+            Item names one published item to ask for. Optional; omitting it asks for
+            everything released on request.
+          type: string
+        party:
+          description: Party is the company the asker is from. Optional, and recorded
+            as stated.
+          type: string
+        reason:
+          description: |-
+            Reason is why they want it. Optional, and recorded as stated — it is what the
+            person deciding reads.
+          type: string
+        slug:
+          description: Slug is the centre's public address, taken from the path.
+          type: string
+      type: object
+    trustAskView:
+      properties:
+        createdAt:
+          description: CreatedAt is when the ask arrived, in unix milliseconds.
+          type: integer
+        decidedAt:
+          description: DecidedAt is when it was answered, in unix milliseconds; 0
+            while open.
+          type: integer
+        decidedBy:
+          description: DecidedBy is who answered it.
+          type: string
+        email:
+          description: |-
+            Email is the address that asked, as stated and UNVERIFIED — it names a party
+            and proves nothing, which is why the grant is addressed to it rather than
+            trusting it.
+          type: string
+        expiresAt:
+          description: ExpiresAt is when a granted ask closes, in unix milliseconds.
+          type: integer
+        id:
+          description: ID is the request's id.
+          type: string
+        item:
+          description: Item is the item asked for, empty when the whole released tier
+            was asked for.
+          type: string
+        link:
+          description: Link is the share link a granted ask became.
+          type: string
+        nda:
+          description: Nda is the text this party accepted, verbatim as it stood when
+            they accepted.
+          type: string
+        note:
+          description: Note is what the decider wrote when refusing.
+          type: string
+        party:
+          description: Party is the company the asker stated.
+          type: string
+        reason:
+          description: Reason is why they said they want it.
+          type: string
+        state:
+          description: State is open, granted or refused.
+          type: string
+      type: object
+    trustAsked:
+      properties:
+        id:
+          description: ID is the request's id, so the asker can be told about it later.
+          type: string
+        state:
+          description: 'State is always "open": recording an ask decides nothing.'
+          type: string
+      type: object
+    trustCoverage:
+      properties:
+        controls:
+          $ref: '#/components/schemas/trustTally'
+          description: Controls is how the controls stand, independent of any framework.
+        frameworks:
+          description: Frameworks is the per-framework counts.
+          items:
+            $ref: '#/components/schemas/coverRow'
+          type: array
+        generated:
+          description: Generated is when this was computed, unix milliseconds.
+          type: integer
+        version:
+          description: Version is the embedded inventory's version.
+          type: string
+      type: object
+    trustDecision:
+      properties:
+        days:
+          description: |-
+            Days is how long the grant stays open, from now. Optional; 14 by default and
+            365 at most — a longer release is describing a customer relationship rather
+            than a document.
+          type: integer
+        id:
+          description: ID is the request to answer, taken from the path.
+          type: string
+        note:
+          description: |-
+            Note is why. Recorded on the request either way, and it is what the record
+            shows a year later.
+          type: string
+      type: object
+    trustDesk:
+      properties:
+        grants:
+          description: Grants is every grant that has been made, newest first.
+          items:
+            $ref: '#/components/schemas/trustGrantView'
+          type: array
+        items:
+          description: Items is everything the org holds, both tiers, retired included.
+          items:
+            $ref: '#/components/schemas/trustItemView'
+          type: array
+        name:
+          description: Name is the centre's display name.
+          type: string
+        nda:
+          description: Nda is the text a party must accept before asking.
+          type: string
+        published:
+          description: Published is whether the centre answers at its public address.
+          type: boolean
+        requests:
+          description: Requests is every ask, newest first, open ones included.
+          items:
+            $ref: '#/components/schemas/trustAskView'
+          type: array
+        slug:
+          description: Slug is the public address, empty until the centre is published.
+          type: string
+      type: object
+    trustDocuments:
+      properties:
+        documents:
+          description: Documents is the list; a gated entry carries no address.
+          items:
+            $ref: '#/components/schemas/docRow'
+          type: array
+      type: object
+    trustEdit:
+      properties:
+        body:
+          description: Body replaces the item's content.
+          type: string
+        document:
+          description: |-
+            Document replaces the file the item points at — this is how a report is
+            superseded by its next edition. The new document must already exist in the
+            caller org's own store.
+          type: string
+        framework:
+          description: Framework replaces the standard it speaks to.
+          type: string
+        id:
+          description: ID is the item to change, taken from the path.
+          type: string
+        name:
+          description: Name replaces its title.
+          type: string
+        retired:
+          description: |-
+            Retired withdraws the item, or true→false restores it. A retired item leaves
+            the public centre at once and can no longer be granted; grants already made
+            over it stand, because they are part of the record.
+          type: boolean
+        summary:
+          description: Summary replaces the line about it.
+          type: string
+        tier:
+          description: |-
+            Tier moves it between public and gated. Moving an auditor-signed item to
+            public is refused.
+          type: string
+      type: object
+    trustGrantView:
+      properties:
+        email:
+          description: Email is the one address the link admits.
+          type: string
+        expiresAt:
+          description: ExpiresAt is when the grant closes, in unix milliseconds.
+          type: integer
+        item:
+          description: Item is the item granted, empty when the whole released tier
+            was granted.
+          type: string
+        link:
+          description: |-
+            Link is the share link's id — the token the party opens. Reading it here does
+            not widen it: the link admits only Email whoever holds the id.
+          type: string
+        live:
+          description: Live is whether the grant is still open at the time of reading.
+          type: boolean
+      type: object
+    trustGranted:
+      properties:
+        delivery:
+          description: |-
+            Delivery is empty when the asker was mailed, and otherwise says what happened
+            instead — so an approver is never left believing a mail went out that did not.
+          type: string
+        expiresAt:
+          description: ExpiresAt is when the grant closes, in unix milliseconds.
+          type: integer
+        link:
+          description: Link is the share link's id. The link admits only the address
+            that asked.
+          type: string
+        state:
+          description: State is "granted".
+          type: string
+      type: object
+    trustItem:
+      properties:
+        available:
+          description: |-
+            Available is "now" when the item can be read immediately, or "on request"
+            when it is released only to a party who asks and is answered. It is the one
+            field a page renders the difference from.
+          type: string
+        body:
+          description: |-
+            Body is the item's content, for the kinds that are text rather than a file —
+            an article, a subprocessor entry, a note. Empty for anything released on
+            request: a summary of a document is still the document.
+          type: string
+        framework:
+          description: Framework is the standard the item speaks to, when it speaks
+            to one.
+          type: string
+        id:
+          description: |-
+            ID addresses the item — for reading it if it is available now, or for naming
+            it in a request if it is not.
+          type: string
+        kind:
+          description: |-
+            Kind is what the item is: report, letter, policy, questionnaire,
+            subprocessor, article or update.
+          type: string
+        name:
+          description: Name is the item's title.
+          type: string
+        signed:
+          description: |-
+            Signed is "self" when the org states it itself and "auditor" when an
+            independent auditor put their name to it. It is the reason an item is
+            available now or on request, so a reader can see the rule rather than infer it.
+          type: string
+        summary:
+          description: Summary is a line about the item.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the item last changed, in unix milliseconds.
+          type: integer
+      type: object
+    trustItemView:
+      properties:
+        attester:
+          description: 'Attester is who vouched for it: self or auditor.'
+          type: string
+        body:
+          description: Body is the item's content for the kinds that are text rather
+            than a file.
+          type: string
+        createdAt:
+          description: CreatedAt is when it was published, in unix milliseconds.
+          type: integer
+        document:
+          description: Document is the data-room document holding its bytes, empty
+            when it has none.
+          type: string
+        framework:
+          description: Framework is the standard it speaks to, when it speaks to one.
+          type: string
+        id:
+          description: ID addresses the item.
+          type: string
+        kind:
+          description: Kind is what it is.
+          type: string
+        name:
+          description: Name is its title.
+          type: string
+        retired:
+          description: |-
+            Retired is whether it has been withdrawn. A retired item is absent from the
+            public centre and cannot be granted; it is kept because a grant already made
+            over it is part of the record.
+          type: boolean
+        summary:
+          description: Summary is a line about it.
+          type: string
+        tier:
+          description: |-
+            Tier is public or gated. Gated is the default and an auditor-signed item can
+            only ever be gated.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when it last changed, in unix milliseconds.
+          type: integer
+      type: object
+    trustPage:
+      properties:
+        items:
+          description: |-
+            Items is everything the centre publishes: what can be read now, and what
+            exists and is released on request.
+          items:
+            $ref: '#/components/schemas/trustItem'
+          type: array
+        name:
+          description: Name is the org's display name for its centre.
+          type: string
+        nda:
+          description: |-
+            Nda is the text a party must accept to ask for the gated items, verbatim.
+            Empty when the org asks for none.
+          type: string
+        slug:
+          description: Slug is the centre's public address.
+          type: string
+      type: object
+    trustPublish:
+      properties:
+        attester:
+          description: |-
+            Attester is who vouched for it: "self" for anything the org states itself, or
+            "auditor" for anything an independent auditor put their name to. REQUIRED, and
+            anything other than "self" is read as "auditor" — the safe direction, since an
+            auditor-signed item can only ever be released on request.
+          type: string
+        body:
+          description: |-
+            Body is the item's content for the kinds that are text rather than a file: an
+            article, a subprocessor entry, a dated note.
+          type: string
+        document:
+          description: |-
+            Document is a data-room document holding the item's bytes, uploaded first
+            through POST /v1/dataroom/documents. Optional: an item can be content with no
+            file. The document must already exist in the caller org's own store.
+          type: string
+        framework:
+          description: |-
+            Framework is the standard it speaks to. Optional and free text — the value is
+            the org's own, not a list this API keeps.
+          type: string
+        kind:
+          description: |-
+            Kind is what the item is: report, letter, policy, questionnaire, subprocessor,
+            article or update. Required.
+          type: string
+        name:
+          description: Name is the item's title. Required.
+          type: string
+        summary:
+          description: Summary is a line about it. Optional.
+          type: string
+        tier:
+          description: |-
+            Tier is who may read it: "public" or "gated". It DEFAULTS TO GATED and
+            anything that is not exactly "public" is gated, so an item published by a
+            caller that says nothing is private and someone has to release it on purpose.
+            "public" is refused for an auditor-signed item.
+          type: string
+      type: object
+    trustRefused:
+      properties:
+        state:
+          description: State is "refused".
+          type: string
+      type: object
+    trustSettings:
+      properties:
+        name:
+          description: Name is the centre's display name. Required to publish.
+          type: string
+        nda:
+          description: |-
+            Nda is the text a party must accept before asking for a document. Optional;
+            empty asks for no acceptance. The text in force is copied onto each request as
+            it is accepted, so editing it never changes what anyone already agreed to.
+          type: string
+        publish:
+          description: |-
+            Publish makes the centre answer at its public address. False withdraws it: the
+            address stops answering while every item, grant and record stays exactly as it
+            was, so withdrawing is reversible and loses nothing.
+          type: boolean
+        slug:
+          description: |-
+            Slug is the public address to answer at — a lowercase label of letters,
+            digits and hyphens. Required to publish, unique across the deployment, and one
+            org holds one: publishing under a new address MOVES the centre rather than
+            leaving the old one answering.
+          type: string
+      type: object
+    trustTally:
+      properties:
+        absent:
+          description: |-
+            Absent is how many the organization does not have. An absent control still
+            names the clause it would satisfy — that is a roadmap — but it never moves
+            a coverage number.
+          type: integer
+        automated:
+          description: Automated is how many run with nobody in the loop.
+          type: integer
+        partial:
+          description: |-
+            Partial is how many run but do not cover their whole claim. Each says what
+            is missing.
+          type: integer
+        statement:
+          description: Statement is the counts as one sentence, safe to quote.
+          type: string
+        total:
+          description: Total is how many controls this organization publishes.
+          type: integer
+        unverified:
+          description: |-
+            Unverified is how many rest on somebody having READ the source rather than
+            on a test or an audit row. Only a check that can FAIL counts as verified,
+            and coverage counts those one rung weaker than they claim to be.
+          type: integer
+      type: object
     unreconciledOut:
       properties:
         questions:
@@ -47324,6 +48113,13 @@ components:
             max 2048 bytes; http:// and every other scheme is refused.
           type: string
       type: object
+    updateList:
+      properties:
+        updates:
+          description: Updates is the entries, each carrying the date it describes.
+          items: {}
+          type: array
+      type: object
     upkeepIn:
       properties:
         agentOfRecord:
@@ -47335,6 +48131,17 @@ components:
           type: string
         structure:
           description: 'Structure is the entity kind: c-corp, llc or dao-llc.'
+          type: string
+      type: object
+    uploadIn:
+      properties:
+        bucket:
+          description: Bucket is the bucket to upload into, from the path.
+          type: string
+        key:
+          description: |-
+            Key is the object key relative to the bucket root. It is path-cleaned, so a
+            "../" cannot escape the bucket, and an empty or unclean key is 400.
           type: string
       type: object
     usage:
@@ -48054,6 +48861,20 @@ components:
             enumerated in a document at all. Empty for a wire that describes itself
             over its own protocol.
           type: string
+      type: object
+    written:
+      properties:
+        id:
+          description: |-
+            ID is the record's id — the one supplied, or the one minted when the
+            caller supplied none.
+          type: string
+        kind:
+          description: Kind is the section written.
+          type: string
+        updated:
+          description: Updated is when it was written, unix milliseconds.
+          type: integer
       type: object
     zapProcReq:
       properties:
@@ -68103,6 +68924,354 @@ paths:
       x-app: dataroom
       x-public: true
       x-tool: true
+  /v1/dataroom/trust:
+    get:
+      description: |-
+        Answers the caller org's OWN trust centre: its settings, every item it
+        holds in both tiers, the requests waiting on it, and the grants it has made.
+
+        The org is the caller's, taken from the validated bearer and from nothing else,
+        so this op cannot be pointed at another tenant — there is no field for one. An
+        org that has never opened a centre reads back an empty one rather than an error,
+        because having no trust centre is an ordinary state and this is the read that
+        tells you so.
+      operationId: get_dataroom_trust
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustDesk'
+          description: ok
+      summary: 'Answers the caller org''s OWN trust centre: its settings, every item
+        it holds in both tiers, the requests waiting on it, and the grants it has
+        made.'
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        SetCenter opens, publishes or withdraws the caller org's trust centre and answers
+        with the centre as it now stands.
+
+        Publishing requires a name and an address, and the address must be free: another
+        org already answering there is a conflict, never a takeover. Withdrawing closes
+        the public door only — items, grants and the access record are untouched, so an
+        org can go quiet and come back without losing anything.
+
+        Only an admin of the org may call it. The org is the caller's own, so there is no
+        field naming one and no way to point this at another tenant.
+      operationId: put_dataroom_trust
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustSettings'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustDesk'
+          description: ok
+      summary: SetCenter opens, publishes or withdraws the caller org's trust centre
+        and answers with the centre as it now stands.
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/artifacts:
+    post:
+      description: |-
+        Publish puts an item on the caller org's trust centre and answers with it.
+
+        The item is GATED unless it says otherwise, so a kind nobody has thought of yet
+        arrives private and someone has to release it deliberately — that default is what
+        keeps an auditor's report from becoming readable because a field went unset. An
+        item whose attester is "auditor" cannot be public at all: the database refuses the
+        pair, so no path through this API can publish one.
+
+        A file is optional and is uploaded FIRST, through POST /v1/dataroom/documents,
+        then named here — the data room is the one place bytes enter, so a trust centre
+        document is an ordinary data-room document and inherits its storage, its grants
+        and its page-by-page access record. A gated item that has a file is added to the
+        org's release room, which is what lets a party be granted the whole gated tier in
+        one link.
+
+        Only an admin of the org may call it.
+      operationId: post_dataroom_trust_artifacts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustPublish'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustItemView'
+          description: ok
+      summary: Publish puts an item on the caller org's trust centre and answers with
+        it.
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/artifacts/{id}:
+    patch:
+      description: |-
+        Amend changes an item on the caller org's trust centre — replace its file with a
+        newer edition, move it between public and gated, rewrite what it says, or retire
+        it — and answers with the item as it now stands.
+
+        Retiring is the withdrawal: the item leaves the public centre immediately and can
+        no longer be granted, while grants already made over it stand, because a release
+        that happened is part of the record and un-happening it in the record would be a
+        lie. Restoring is the same call with retired false.
+
+        Moving an item an independent auditor signed to the public tier is refused, and
+        refused by the database rather than only here. Only an admin of the org may call
+        it, and the item is resolved in that org's own store, so another org's id is not
+        found.
+      operationId: patch_dataroom_trust_artifacts_by_id
+      parameters:
+      - description: ID is the item to change, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustEdit'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustItemView'
+          description: ok
+      summary: Amend changes an item on the caller org's trust centre — replace its
+        file with a newer edition, move it between public and gated, rewrite what
+        it says, or retire it — and answers with the item as it now stands.
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/center/{slug}:
+    get:
+      description: |-
+        Answers an org's public trust centre: its name, the text a party must
+        accept to ask for a document, and every item it publishes.
+
+        An item is either available NOW — the things the org states itself, its policies,
+        its filled questionnaires, its subprocessor list, its knowledge base — or
+        available ON REQUEST, which is everything an independent auditor put their name
+        to. Both are listed by name and kind, so a reader can see WHAT exists before
+        asking for it; only the second withholds the content.
+
+        No principal is involved and none is accepted: the org is resolved from the
+        address, which answers only for a centre its owner has published. An address
+        nobody publishes at is not found, the same answer an unpublished one gets.
+      operationId: get_dataroom_trust_center_by_slug
+      parameters:
+      - description: |-
+          Slug is the centre's public address. It resolves only for an org that has
+          published; anything else is not found, so this cannot be used to learn which
+          orgs exist.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustPage'
+          description: ok
+      summary: 'Answers an org''s public trust centre: its name, the text a party
+        must accept to ask for a document, and every item it publishes.'
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/center/{slug}/file/{item}:
+    get:
+      description: |-
+        Streams the file behind an item a trust centre publishes openly — a policy, a filled questionnaire, a knowledge-base attachment — under its recorded content type.
+
+        No principal and no link: these are the things an org states about itself, so they are served to anyone who asks. The narrowing is in the lookup rather than in a check: the item must be public, must not be retired, and must belong to a centre its owner has published, so an item released only on request is NOT FOUND here rather than refused — the same answer an id that never existed gets, which is what stops this reporting what the released-on-request tier holds.
+
+        Bytes that cannot be fetched from object storage are 502, never a truncated file.
+      operationId: get_dataroom_trust_center_by_slug_file_by_item
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: item
+        required: true
+        schema:
+          type: string
+      summary: Read a public trust-centre item's bytes
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+  /v1/dataroom/trust/center/{slug}/requests:
+    post:
+      description: |-
+        Records a request to read what an independent auditor signed, and
+        answers with its id.
+
+        The org that owns the centre decides. Nothing is released here and no link is
+        minted: this writes the ask down, which is the whole promise the form makes.
+        The write is the answer — a request that could not be stored is an error, never
+        a receipt, so a form can never appear to have been sent and be gone.
+
+        `email` is required and is the ONLY address the eventual grant will admit, so an
+        address the asker cannot read is an ask that cannot be answered. Where the centre
+        states an NDA, `accept` must be true and the text in force is recorded verbatim
+        against the request.
+
+        Asking twice for the same thing from the same address is the SAME ask: the second
+        answers with the first's id rather than opening a second row, which is also what
+        keeps an anonymous door from filling a tenant's store.
+      operationId: post_dataroom_trust_center_by_slug_requests
+      parameters:
+      - description: Slug is the centre's public address, taken from the path.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustAsk'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustAsked'
+          description: ok
+      summary: Records a request to read what an independent auditor signed, and answers
+        with its id.
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/requests/{id}/grant:
+    post:
+      description: |-
+        Grant answers a request by opening access: it mints a share link over what was
+        asked for, addressed to the address that asked and closing at expiry, records the
+        decision, and mails the asker.
+
+        The link is NEVER a public URL. It carries the asker's address on its allow list,
+        so forwarding it to somebody else does not open it, and it expires. What the
+        party then does with it — which document, which page, for how long — is recorded
+        by the data room's own view tracking, which is where the access record for this
+        release lives; there is no second log.
+
+        A request that was already answered is refused rather than answered twice, so a
+        second click cannot mint a second link. Only an admin of the org may call it, and
+        the request is resolved in that org's own store, so another org's request id is
+        not found — which is also what stops one org deciding another's queue.
+
+        Mail is best effort and the grant does not depend on it: a deployment that sends
+        no mail still records the grant and says so in `delivery`, so the approver knows
+        to pass the address on themselves.
+      operationId: post_dataroom_trust_requests_by_id_grant
+      parameters:
+      - description: ID is the request to answer, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustDecision'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustGranted'
+          description: ok
+      summary: 'Grant answers a request by opening access: it mints a share link over
+        what was asked for, addressed to the address that asked and closing at expiry,
+        records the decision, and mails the asker.'
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
+  /v1/dataroom/trust/requests/{id}/refuse:
+    post:
+      description: |-
+        Refuse answers a request by declining it, recording who declined and why.
+
+        Nothing is released and no link is minted. The refusal STAYS on the record beside
+        the ask — a request that was turned down is part of the access record exactly as
+        one that was granted is, and deleting it would leave a queue that only ever shows
+        the decisions somebody liked.
+
+        A request that was already answered is refused rather than answered twice. Only an
+        admin of the org may call it, and the request is resolved in that org's own store,
+        so another org's request id is not found.
+      operationId: post_dataroom_trust_requests_by_id_refuse
+      parameters:
+      - description: ID is the request to answer, taken from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/trustDecision'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustRefused'
+          description: ok
+      summary: Refuse answers a request by declining it, recording who declined and
+        why.
+      tags:
+      - dataroom
+      x-app: dataroom
+      x-public: true
+      x-tool: true
   /v1/dataroom/view/{linkId}:
     get:
       description: |-
@@ -75520,21 +76689,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/add-membership:
-    post:
-      description: |-
-        Lets a person or an application act in an organization. It is the grant
-        behind "add someone to the team", and it is safe to repeat — granting a
-        membership that already exists changes nothing. Granting membership IS the org's authority to give, so it takes the
-        same gate a write to that org's own registry row takes: a SuperAdmin, an admin
-        of the org itself, or an org-admin-capable confidential client. One rule, one
-        place (internal/authz).
-      operationId: post_iam_add-membership
-      summary: Lets a person or an application act in an organization.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/admin/applications/upsert:
     post:
       description: |-
@@ -75727,19 +76881,24 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/applications/delete:
-    post:
+  /v1/iam/applications/{owner}/{name}:
+    delete:
       description: |-
         Removes an application. Anyone mid-sign-in through it is
         turned away and its client credentials stop working, so retire the integration
         before deleting it.
-      operationId: post_iam_applications_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.ApplicationRef'
+      operationId: delete_iam_applications_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -75753,19 +76912,18 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/applications/get:
     get:
       description: |-
         Returns one application: its sign-in methods, its allowed
         redirect URIs and the client credentials your integration authenticates with.
-      operationId: get_iam_applications_get
+      operationId: get_iam_applications_by_owner_by_name
       parameters:
-      - in: query
+      - in: path
         name: owner
         required: true
         schema:
           type: string
-      - in: query
+      - in: path
         name: name
         required: true
         schema:
@@ -75784,8 +76942,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/applications/update:
-    post:
+    put:
       description: |-
         Changes an application's display, its sign-in methods and the redirect
         URIs it may return to — the call that makes login work from a new host. Which
@@ -75794,7 +76951,18 @@ paths:
 
         Exported so the legacy update-application alias reuses this exact path — one
         update, two spellings.
-      operationId: post_iam_applications_update
+      operationId: put_iam_applications_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -75920,7 +77088,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/iam.auditlogs.Input'
+              $ref: '#/components/schemas/iam.Input'
         required: true
       responses:
         "200":
@@ -75936,18 +77104,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/audit-logs/delete:
-    post:
+  /v1/iam/audit-logs/{owner}/{name}:
+    delete:
       description: |-
         Removes an audit entry. Retention policy is normally what should expire
         a trail; deleting by hand leaves a gap a reviewer will notice.
-      operationId: post_iam_audit-logs_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.Ref'
+      operationId: delete_iam_audit-logs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -75961,18 +77134,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/audit-logs/get:
-    post:
+    get:
       description: |-
         Returns one audit entry in full: the action, the person or key behind it,
         and the request it came in on.
-      operationId: post_iam_audit-logs_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.Ref'
+      operationId: get_iam_audit-logs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -75987,18 +77164,28 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/audit-logs/update:
-    post:
+    put:
       description: |-
         Corrects an audit entry. The trail is append-only in normal operation
         and nothing in the Hanzo Cloud rewrites it — this exists for an administrator
         to correct an entry their own systems recorded wrongly.
-      operationId: post_iam_audit-logs_update
+      operationId: put_iam_audit-logs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/iam.auditlogs.Input'
+              $ref: '#/components/schemas/iam.Input'
         required: true
       responses:
         "200":
@@ -76164,18 +77351,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/certs/delete:
-    post:
+  /v1/iam/certs/{owner}/{name}:
+    delete:
       description: |-
         Removes a signing certificate. Tokens signed with it can no longer be
         verified, so retire it only once nothing is still presenting them.
-      operationId: post_iam_certs_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.certs.Ref'
+      operationId: delete_iam_certs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -76189,18 +77381,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/certs/get:
-    post:
+    get:
       description: |-
         Returns one signing certificate — its algorithm, its validity window and
         its public half. The private key is masked.
-      operationId: post_iam_certs_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.certs.Ref'
+      operationId: get_iam_certs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -76215,8 +77411,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/certs/update:
-    post:
+    put:
       description: |-
         Changes a signing certificate's settings. What it is called does not
         change, and neither does when it was added.
@@ -76240,7 +77435,18 @@ paths:
         yet is carried without a line here — and leaves three things the request may
         not move: the bound Model (id, createdAt, key, snapshot), the natural key
         (owner/name address the row, they do not mutate it), and the creation stamp.
-      operationId: post_iam_certs_update
+      operationId: put_iam_certs_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -76388,484 +77594,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/get-application:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-application
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-applications:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-applications
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-cert:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-cert
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-certs:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-certs
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-global-users:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-global-users
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-invitations:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-invitations
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-memberships:
-    get:
-      description: |-
-        Answers either question about who belongs where: which organizations one
-        person can act in, or who can act in one organization.
-
-        Both are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or
-        about a user whose home org is its own, and nothing else. The bound comes from
-        the verified credential via authz.Scope, so a request parameter can never
-        widen it — a membership row names who may act and spend in an org, so a
-        cross-tenant read is a customer roster leak.
-      operationId: get_iam_get-memberships
-      parameters:
-      - description: User is "<homeOrg>/<username>" — which organizations that identity
-          may act in.
-        in: query
-        name: user
-        required: false
-        schema:
-          type: string
-      - description: Org is an organization — who may act in it.
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Answer'
-          description: ok
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Answer'
-          description: bad request
-      summary: 'Answers either question about who belongs where: which organizations
-        one person can act in, or who can act in one organization.'
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/get-organization:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-organization
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-organization-projects:
-    get:
-      description: |-
-        Returns one organization's projects — what a scope switcher
-        lists so somebody can move between them.
-
-        You see your own organization and no other, whatever the request asks for.
-      operationId: get_iam_get-organization-projects
-      summary: Returns one organization's projects — what a scope switcher lists so
-        somebody can move between them.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-organization-workspaces:
-    get:
-      description: |-
-        Returns one organization's workspaces — what a scope
-        switcher lists so somebody can move between them.
-
-        You see your own organization and no other, whatever the request asks for.
-      operationId: get_iam_get-organization-workspaces
-      summary: Returns one organization's workspaces — what a scope switcher lists
-        so somebody can move between them.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-organizations:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-organizations
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-permission:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-permission
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-permissions:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-permissions
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-provider:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-provider
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-providers:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-providers
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-records:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-records
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-role:
-    get:
-      description: |-
-        Reads one record — the older spelling of the single reads on the
-        REST surface, over the same data and the same permissions.
-
-        Secrets are stripped. Naming a record in another organization does not reach
-        it, however the request spells it.
-      operationId: get_iam_get-role
-      summary: Reads one record — the older spelling of the single reads on the REST
-        surface, over the same data and the same permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-roles:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-roles
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-user:
-    get:
-      description: |-
-        Reads one person, two ways.
-
-        Name them and it is an ordinary read, with secrets stripped. Or hand it a
-        SECRET API key and it answers with the person that key belongs to — how a
-        service of yours turns a credential on an incoming request into an identity.
-
-        A publishable key resolves to nobody here, deliberately: it is safe to ship in
-        a browser precisely because it names an organization and never a person.
-
-        get-user is handler-authorized (authz.handlerAuthorizedExact) because the key
-        variant carries no owner/name for the Guard to authorize; so the owner/name
-        variant reinstates the SAME read authorization the Guard applies, through the ONE
-        policy function (authz.Can) — identical behavior, a cross-tenant or non-self read
-        still refused 403 — then reuses the generic getHandler verbatim for resolution and
-        redaction. No authz and no CRUD is reimplemented.
-      operationId: get_iam_get-user
-      summary: Reads one person, two ways.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-users:
-    get:
-      description: |-
-        Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-
-        Secrets are stripped from every row. Send both a page number and a page size to
-        page, and the total comes back alongside; send neither and you get the whole
-        set. You see your own organization and no other, whatever the request asks for.
-
-        Scoping note (intentional, fail-closed): iam's ownership model is mixed —
-        users/roles/permissions are owned by their tenant org, while organizations/
-        applications/providers/certs are platform-owned (Owner "admin"). A SuperAdmin
-        (Scope → the requested owner, empty = all) therefore lists every entity, which
-        is the console-admin path. A non-super is pinned by Scope to its own org, so it
-        lists its tenant-owned entities correctly and is refused the platform-owned
-        lists at the Guard (owner "" or "admin" both deny) — a safe 403, never another
-        tenant's rows. Non-super, membership-scoped views of the platform-owned
-        entities (e.g. an org console's own app list keyed on Application.Organization)
-        are a separate, additive surface, not a silent behavior of this generic lister.
-      operationId: get_iam_get-users
-      summary: Lists one kind of record in your organization — the older spelling
-        of the collection reads on the REST surface, over the same data and the same
-        permissions.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/invitations:
     get:
       description: |-
@@ -76924,18 +77652,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/invitations/delete:
-    post:
+  /v1/iam/invitations/{owner}/{name}:
+    delete:
       description: |-
         Withdraws an invitation. It stops being redeemable at once; anyone who
         already joined through it keeps their account.
-      operationId: post_iam_invitations_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.invitations.Ref'
+      operationId: delete_iam_invitations_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -76949,18 +77682,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/invitations/get:
-    post:
+    get:
       description: |-
         Returns one invitation: who it is for, what it grants on acceptance, and
         when it expires.
-      operationId: post_iam_invitations_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.invitations.Ref'
+      operationId: get_iam_invitations_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -76975,12 +77712,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/invitations/update:
-    post:
+    put:
       description: |-
         Changes an invitation's terms — the role it grants, how many may redeem
         it, or when it expires. What it is called does not change.
-      operationId: post_iam_invitations_update
+      operationId: put_iam_invitations_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -77075,18 +77822,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/keys/delete:
-    post:
+  /v1/iam/keys/{owner}/{name}:
+    delete:
       description: |-
         Revokes an API key. Anything still presenting it stops being authorized at
         once, so roll the replacement out before you revoke.
-      operationId: post_iam_keys_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.keys.Ref'
+      operationId: delete_iam_keys_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -77100,21 +77852,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/keys/get:
     get:
       description: |-
         Returns one API key: what it is called, what it may reach, and when it was
         issued.
-      operationId: get_iam_keys_get
+      operationId: get_iam_keys_by_owner_by_name
       parameters:
-      - in: query
+      - in: path
         name: owner
-        required: false
+        required: true
         schema:
           type: string
-      - in: query
+      - in: path
         name: name
-        required: false
+        required: true
         schema:
           type: string
       responses:
@@ -77131,24 +77882,43 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/keys/mint:
-    post:
+    put:
       description: |-
-        (re)generates the target user's key of the requested TYPE and
-        returns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`
-        (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
-        is safe to ship in client JS and resolves to an org, never a principal.
-
-        It writes the schema.Key row that the resolvers actually read. schema.User.AccessKey
-        is not a credential and nothing resolves it, so a key stamped there would
-        authenticate nobody.
-      operationId: post_iam_keys_mint
-      summary: (re)generates the target user's key of the requested TYPE and returns
-        it once, over the shared authorizeMinter + mintTarget seam.
+        Changes what a key is called or what it may reach. The credential
+        itself is not reissued — the key in your deployment keeps working.
+      operationId: put_iam_keys_by_owner_by_name
+      parameters:
+      - description: Owner is the tenant that holds the key; Name is unique within
+          Owner.
+        in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.Key'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Key'
+          description: ok
+      summary: Changes what a key is called or what it may reach.
       tags:
       - iam
       x-app: iam
       x-public: true
+      x-tool: true
   /v1/iam/keys/org:
     get:
       description: |-
@@ -77177,44 +77947,6 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/keys/revoke:
-    post:
-      description: |-
-        Clears the target user's key of the requested TYPE (immediate
-        revoke). Scoped by the same `?type` field mint takes, so revoking the browser key
-        leaves the server key working. A secret key's stored value is the sk- in its
-        schema.Key row.
-      operationId: post_iam_keys_revoke
-      summary: Clears the target user's key of the requested TYPE (immediate revoke).
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/keys/update:
-    post:
-      description: |-
-        Changes what a key is called or what it may reach. The credential
-        itself is not reissued — the key in your deployment keeps working.
-      operationId: post_iam_keys_update
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.Key'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Key'
-          description: ok
-      summary: Changes what a key is called or what it may reach.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
   /v1/iam/link:
     post:
       description: |-
@@ -77321,8 +78053,8 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/mfa/disable:
-    post:
+  /v1/iam/mfa:
+    delete:
       description: |-
         Turns a factor off, so sign-in stops asking for it. Naming no factor turns
         off ALL of them — the reset path. People may do this for themselves; doing it for
@@ -77332,7 +78064,7 @@ paths:
         The recovery codes go with the last factor: they are the way past a challenge, so
         keeping them alive for an account with nothing to challenge would leave a standing
         credential behind.
-      operationId: post_iam_mfa_disable
+      operationId: delete_iam_mfa
       summary: Turns a factor off, so sign-in stops asking for it.
       tags:
       - iam
@@ -77721,28 +78453,28 @@ paths:
   /v1/iam/organizations:
     get:
       description: |-
-        Returns the organizations you can see, newest first. Narrow it to one
-        parent account, and set a limit and offset to page through the rest.
+        Returns the organizations you can act in, the ones you belong to first
+        and the rest after, newest first, narrowed by an optional query against the
+        name or the display name.
 
-        READING THE REGISTRY IS AN OPERATOR ACT, and the handler now says so itself.
+        Platform operators see every organization; everyone else sees their own. Pass
+        the cursor from the previous page to continue; an empty cursor in the answer
+        means there is nothing more.
 
-        It never did: the scope lived only in the Guard, which refuses a non-operator
-        GET with 403 before the handler runs. That was true and sufficient for as long
-        as HTTP was the only way in. It stopped being sufficient when the same typed op
-        became reachable over the agent door, where a request arrives at the handler
-        with no middleware in front of it. A handler that reads no principal and treats
-        an absent Owner selector as no filter would answer such a caller with the whole
-        registry, so the scope has to be the handler's own, not the door's.
-
-        So the fact moves to where every door reaches it. The Guard keeps its own
-        refusal — two checks of one rule is not two rules, and the outer one still
-        spends nothing to refuse — but the rule no longer depends on which door was
-        used. A caller who wants the organizations they can ACT in asks Search, which
-        answers everyone from their own memberships.
+        THE SCOPE IS THE HANDLER'S OWN, so it holds at every door. The Guard refuses a
+        bearerless request before this runs, but the agent door carries a typed op to
+        its handler with no middleware in front of it — a handler that read no
+        principal would answer such a caller with the whole registry. Reading the
+        principal here is what makes the answer the same one over both.
       operationId: listOrganizations
       parameters:
+      - in: header
+        name: X-Forwarded-For
+        required: false
+        schema:
+          type: string
       - in: query
-        name: owner
+        name: q
         required: false
         schema:
           type: string
@@ -77752,10 +78484,10 @@ paths:
         schema:
           type: integer
       - in: query
-        name: offset
+        name: cursor
         required: false
         schema:
-          type: integer
+          type: string
       responses:
         "200":
           content:
@@ -77763,7 +78495,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.ListOrganizationsOutput'
           description: ok
-      summary: Returns the organizations you can see, newest first.
+      summary: Returns the organizations you can act in, the ones you belong to first
+        and the rest after, newest first, narrowed by an optional query against the
+        name or the display name.
       tags:
       - iam
       x-app: iam
@@ -77790,6 +78524,106 @@ paths:
           description: ok
       summary: Makes a new organization — the account your users, applications, roles,
         projects and workspaces are all named inside.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+  /v1/iam/organizations/{owner}/{name}:
+    delete:
+      description: |-
+        Removes an organization and everything named inside it. There is no
+        undo, and every session issued under it stops working.
+
+        The built-in admin organization cannot be deleted — losing it would leave the
+        account with no way back in.
+      operationId: deleteOrganization
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.DeleteOrganizationOutput'
+          description: ok
+      summary: Removes an organization and everything named inside it.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+    get:
+      description: |-
+        Returns one organization: its display, its defaults and the sign-in rules
+        everyone in it inherits.
+      operationId: getOrganization
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Organization'
+          description: ok
+      summary: 'Returns one organization: its display, its defaults and the sign-in
+        rules everyone in it inherits.'
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Changes an organization's display, its defaults and the sign-in rules
+        everyone in it inherits. Which organization it is does not change, and neither
+        does when it was created.
+      operationId: updateOrganization
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.UpdateOrganizationInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Organization'
+          description: ok
+      summary: Changes an organization's display, its defaults and the sign-in rules
+        everyone in it inherits.
       tags:
       - iam
       x-app: iam
@@ -77828,139 +78662,6 @@ paths:
           description: ok
       summary: 'Changes how an organization appears across Hanzo: the square mark
         beside its name, as an uploaded image or as a single emoji.'
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/organizations/delete:
-    post:
-      description: |-
-        Removes an organization and everything named inside it. There is no
-        undo, and every session issued under it stops working.
-
-        The built-in admin organization cannot be deleted — losing it would leave the
-        account with no way back in.
-      operationId: deleteOrganization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.DeleteOrganizationInput'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.DeleteOrganizationOutput'
-          description: ok
-      summary: Removes an organization and everything named inside it.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/organizations/get:
-    get:
-      description: |-
-        Returns one organization: its display, its defaults and the sign-in rules
-        everyone in it inherits.
-      operationId: getOrganization
-      parameters:
-      - in: query
-        name: owner
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: name
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Organization'
-          description: ok
-      summary: 'Returns one organization: its display, its defaults and the sign-in
-        rules everyone in it inherits.'
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/organizations/search:
-    get:
-      description: |-
-        Returns the organizations you can act in, the ones you belong to first
-        and the rest after, newest first, narrowed by an optional query against the
-        name or the display name.
-
-        Platform operators see every organization; everyone else sees their own. Pass
-        the cursor from the previous page to continue; an empty cursor in the answer
-        means there is nothing more.
-      operationId: searchOrganizations
-      parameters:
-      - in: header
-        name: X-Forwarded-For
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: q
-        required: false
-        schema:
-          type: string
-      - in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      - in: query
-        name: cursor
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.SearchOrganizationsOutput'
-          description: ok
-      summary: Returns the organizations you can act in, the ones you belong to first
-        and the rest after, newest first, narrowed by an optional query against the
-        name or the display name.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/organizations/update:
-    post:
-      description: |-
-        Changes an organization's display, its defaults and the sign-in rules
-        everyone in it inherits. Which organization it is does not change, and neither
-        does when it was created.
-      operationId: updateOrganization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.UpdateOrganizationInput'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Organization'
-          description: ok
-      summary: Changes an organization's display, its defaults and the sign-in rules
-        everyone in it inherits.
       tags:
       - iam
       x-app: iam
@@ -78070,18 +78771,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/permissions/delete:
-    post:
+  /v1/iam/permissions/{owner}/{name}:
+    delete:
       description: |-
         Revokes a permission. Everyone who held access only through it loses
         that access immediately; grants they hold by another route are untouched.
-      operationId: post_iam_permissions_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.permission.Ref'
+      operationId: delete_iam_permissions_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78095,21 +78801,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/permissions/get:
     get:
       description: |-
         Returns one permission: who it grants to, what it allows, and the
         resources it covers.
-      operationId: get_iam_permissions_get
+      operationId: get_iam_permissions_by_owner_by_name
       parameters:
-      - in: query
+      - in: path
         name: owner
-        required: false
+        required: true
         schema:
           type: string
-      - in: query
+      - in: path
         name: name
-        required: false
+        required: true
         schema:
           type: string
       responses:
@@ -78126,13 +78831,24 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/permissions/update:
-    post:
+    put:
       description: |-
         Changes who a permission grants to, what it allows, or the resources it
         covers. Access changes as soon as the write lands. What the permission is
         called does not change, and neither does when it was created.
-      operationId: post_iam_permissions_update
+      operationId: put_iam_permissions_by_owner_by_name
+      parameters:
+      - description: Identity — the (owner, name) natural key.
+        in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -78206,7 +78922,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/iam.Input'
+              $ref: '#/components/schemas/iam.projects.Input'
         required: true
       responses:
         "200":
@@ -78222,19 +78938,24 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/projects/delete:
-    post:
+  /v1/iam/projects/{owner}/{name}:
+    delete:
       description: |-
         Removes a project. The people and roles in your organization are
         unchanged; what goes is the scope itself, so move anything addressed by it
         first.
-      operationId: post_iam_projects_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.projects.Ref'
+      operationId: delete_iam_projects_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78248,16 +78969,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/projects/get:
-    post:
+    get:
       description: 'Returns one project: what it is called and how it is set up.'
-      operationId: post_iam_projects_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.projects.Ref'
+      operationId: get_iam_projects_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78271,17 +78996,27 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/projects/update:
-    post:
+    put:
       description: |-
         Changes a project's settings. What it is called does not change, and
         neither does when it was created.
-      operationId: post_iam_projects_update
+      operationId: put_iam_projects_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/iam.Input'
+              $ref: '#/components/schemas/iam.projects.Input'
         required: true
       responses:
         "200":
@@ -78357,8 +79092,8 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/providers/delete:
-    post:
+  /v1/iam/providers/{owner}/{name}:
+    delete:
       description: |-
         Removes a provider. Sign-in through it stops for every
         application that used it, so give those applications another method first.
@@ -78366,12 +79101,17 @@ paths:
         A provider that is already gone answers "nothing changed" rather than an
         error, so the call is safe to repeat.
       operationId: deleteProvider
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.providerKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78385,18 +79125,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/providers/get:
-    post:
+    get:
       description: |-
         Returns one provider: what it connects to and how it is
         configured. Its credentials come back masked.
       operationId: getProvider
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.providerKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78410,8 +79154,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/providers/update:
-    post:
+    put:
       description: |-
         Changes a provider's settings or rotates the credentials it
         holds. The change takes effect on the next sign-in through it — sessions
@@ -78420,6 +79163,17 @@ paths:
         A provider that is not there answers "nothing changed" rather than an error, so
         the call is safe to repeat.
       operationId: updateProvider
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -78539,29 +79293,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/resolve-key:
-    get:
-      description: |-
-        Answers which organization a PUBLISHABLE key belongs to —
-        what a service of yours calls to attribute a request that arrived carrying a
-        key shipped in a browser.
-
-        It names an organization and never a person: no path through it can load or
-        return a user, so a key you put in client code cannot become a way to learn
-        who anyone is. A key that is expired, secret rather than publishable, or
-        simply unknown all answer with the same sentence, and with a `code` saying
-        which of those it was. Only a confidential service that already proved it may
-        resolve keys at all ever reads that code — there is no anonymous caller here
-        to probe for which keys exist — and telling it apart is what lets the holder
-        be told to re-mint an expired key instead of hunting a configuration error.
-      operationId: get_iam_resolve-key
-      summary: Answers which organization a PUBLISHABLE key belongs to — what a service
-        of yours calls to attribute a request that arrived carrying a key shipped
-        in a browser.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/revoke-user-keys:
     post:
       description: |-
@@ -78631,18 +79362,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/roles/delete:
-    post:
+  /v1/iam/roles/{owner}/{name}:
+    delete:
       description: |-
         Removes a role. Everyone in it loses the access it carried; their
         accounts, and any other role they hold, are untouched.
-      operationId: post_iam_roles_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.roles.Ref'
+      operationId: delete_iam_roles_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78656,16 +79392,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/roles/get:
-    post:
+    get:
       description: 'Returns one role: who is in it, and the roles it includes.'
-      operationId: post_iam_roles_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.roles.Ref'
+      operationId: get_iam_roles_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -78679,13 +79419,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/roles/update:
-    post:
+    put:
       description: |-
         Changes who is in a role, or which roles it includes. Access changes for
         everyone in it as soon as the write lands. What the role is called does not
         change, and neither does when it was created.
-      operationId: post_iam_roles_update
+      operationId: put_iam_roles_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -79069,7 +79819,43 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/sessions/create:
+  /v1/iam/sessions:
+    get:
+      description: |-
+        Returns who is currently signed in to your organization, newest first, and
+        can be narrowed to one person or one application. It is what you read before
+        signing someone out.
+      operationId: listSessions
+      parameters:
+      - in: query
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: name
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: application
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.ListSessionsOut'
+          description: ok
+      summary: Returns who is currently signed in to your organization, newest first,
+        and can be narrowed to one person or one application.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
     post:
       description: |-
         Records a sign-in. Signing in again from another browser adds to the
@@ -79099,8 +79885,8 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/sessions/delete:
-    post:
+  /v1/iam/sessions/{owner}/{name}/{application}:
+    delete:
       description: |-
         Signs a person out of one application — the session ends and every
         browser carrying it stops being authenticated.
@@ -79108,12 +79894,22 @@ paths:
         A session that is already gone reports that nothing was deleted rather than an
         error, so the call is safe to repeat.
       operationId: deleteSession
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.SessionRef'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: application
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79128,18 +79924,27 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/sessions/get:
-    post:
+    get:
       description: |-
         Returns one person's session in one application — when it began and which
         browsers or devices are still carrying it.
       operationId: getSession
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.SessionRef'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: application
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79154,40 +79959,28 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/sessions/list:
-    post:
-      description: |-
-        Returns who is currently signed in to your organization, newest first, and
-        can be narrowed to one person or one application. It is what you read before
-        signing someone out.
-      operationId: listSessions
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.ListSessionsIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.ListSessionsOut'
-          description: ok
-      summary: Returns who is currently signed in to your organization, newest first,
-        and can be narrowed to one person or one application.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
-  /v1/iam/sessions/update:
-    post:
+    put:
       description: |-
         Replaces the set of browsers a session covers — signing out the ones you
         leave off while the session itself stays live. A session that does not exist is
         reported as missing rather than created.
       operationId: updateSession
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: application
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -79312,8 +80105,8 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/tokens/delete:
-    post:
+  /v1/iam/tokens/{owner}/{name}:
+    delete:
       description: |-
         Revokes an access token. Whatever was using it stops being
         authorized at once.
@@ -79321,12 +80114,17 @@ paths:
         A token that is already gone answers "nothing changed" rather than an error, so
         the call is safe to repeat.
       operationId: deleteToken
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.tokenKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79340,18 +80138,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/tokens/get:
-    post:
+    get:
       description: |-
         Returns one access token: who and what it was issued to, and when it
         expires.
       operationId: getToken
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.tokenKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79361,6 +80163,43 @@ paths:
           description: ok
       summary: 'Returns one access token: who and what it was issued to, and when
         it expires.'
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Changes an access token's scope or expiry.
+
+        A token that is not there answers "nothing changed" rather than an error, so
+        the call is safe to repeat.
+      operationId: updateToken
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.Token'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.tokenMutation'
+          description: ok
+      summary: Changes an access token's scope or expiry.
       tags:
       - iam
       x-app: iam
@@ -79385,33 +80224,6 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/tokens/update:
-    post:
-      description: |-
-        Changes an access token's scope or expiry.
-
-        A token that is not there answers "nothing changed" rather than an error, so
-        the call is safe to repeat.
-      operationId: updateToken
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.Token'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.tokenMutation'
-          description: ok
-      summary: Changes an access token's scope or expiry.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
   /v1/iam/unlink:
     post:
       description: |-
@@ -79457,6 +80269,18 @@ paths:
       - in: query
         name: owner
         required: true
+        schema:
+          type: string
+      - description: |-
+          Email narrows the page to the accounts carrying one address. Looking a
+          person up by their address is a QUERY over the collection, not an item
+          read: an address is not the natural key, two rows in one org can carry
+          one, and a caller that gets a page SEES both — where a single-item read
+          would have to choose, and choosing is how somebody joins a team under a
+          colleague's identity.
+        in: query
+        name: email
+        required: false
         schema:
           type: string
       - in: query
@@ -79514,19 +80338,24 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/users/delete:
-    post:
+  /v1/iam/users/{owner}/{name}:
+    delete:
       description: |-
         Removes a person from your organization. Their sessions stop working
         immediately and the account is gone rather than suspended — to keep the record
         and only stop sign-in, update the user instead.
-      operationId: post_iam_users_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.users.Ref'
+      operationId: delete_iam_users_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79540,7 +80369,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/users/get:
     get:
       description: |-
         Returns one person in your organization, addressed by their username or by
@@ -79551,16 +80379,16 @@ paths:
         picking one, and says so instead of reporting "no such user". Handing back an
         arbitrary one of two rows is how somebody gets added to a team under a
         colleague's identity.
-      operationId: get_iam_users_get
+      operationId: get_iam_users_by_owner_by_name
       parameters:
-      - in: query
+      - in: path
         name: owner
         required: true
         schema:
           type: string
-      - in: query
+      - in: path
         name: name
-        required: false
+        required: true
         schema:
           type: string
       - in: query
@@ -79582,8 +80410,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/users/update:
-    post:
+    put:
       description: |-
         Changes a person's profile, their roles, or the credentials they sign
         in with. Send a password to reset it; leave it out and their current one keeps
@@ -79592,7 +80419,18 @@ paths:
         Who they are does not change: their organization, username and the identifier
         their existing sessions are keyed on all survive the write, so an update never
         signs anyone out.
-      operationId: post_iam_users_update
+      operationId: put_iam_users_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -79613,6 +80451,58 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
+  /v1/iam/users/{owner}/{name}/keys:
+    delete:
+      description: |-
+        Clears the target user's key of the requested TYPE (immediate
+        revoke). Scoped by the same `?type` field mint takes, so revoking the browser key
+        leaves the server key working. A secret key's stored value is the sk- in its
+        schema.Key row.
+      operationId: delete_iam_users_by_owner_by_name_keys
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      summary: Clears the target user's key of the requested TYPE (immediate revoke).
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+    post:
+      description: |-
+        (re)generates the target user's key of the requested TYPE and
+        returns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`
+        (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
+        is safe to ship in client JS and resolves to an org, never a principal.
+
+        It writes the schema.Key row that the resolvers actually read. schema.User.AccessKey
+        is not a credential and nothing resolves it, so a key stamped there would
+        authenticate nobody.
+      operationId: post_iam_users_by_owner_by_name_keys
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      summary: (re)generates the target user's key of the requested TYPE and returns
+        it once, over the shared authorizeMinter + mintTarget seam.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
   /v1/iam/verification-codes:
     post:
       description: |-
@@ -79721,8 +80611,8 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/webauthn-credentials/delete:
-    post:
+  /v1/iam/webauthn-credentials/{owner}/{name}:
+    delete:
       description: |-
         Removes a passkey or security key — what you call when
         a device is lost. Make sure the person has another way to sign in first.
@@ -79730,12 +80620,17 @@ paths:
         A credential that is already gone answers "nothing changed" rather than an
         error, so the call is safe to repeat.
       operationId: deleteWebauthnCredential
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.webauthnCredentialKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79750,18 +80645,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/webauthn-credentials/get:
-    post:
+    get:
       description: |-
         Returns one passkey or security key: whose it is, what
         device it lives on, and when it was registered.
       operationId: getWebauthnCredential
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.webauthnCredentialKey'
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79776,8 +80675,7 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/webauthn-credentials/update:
-    post:
+    put:
       description: |-
         Renames a registered passkey or security key, so a
         person can tell their devices apart.
@@ -79785,6 +80683,17 @@ paths:
         A credential that is not there answers "nothing changed" rather than an error,
         so the call is safe to repeat.
       operationId: updateWebauthnCredential
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -79932,18 +80841,23 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/workspaces/delete:
-    post:
+  /v1/iam/workspaces/{owner}/{name}:
+    delete:
       description: |-
         Removes a workspace. The people and roles in your organization are
         unchanged; what goes is the scope itself.
-      operationId: post_iam_workspaces_delete
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.workspaces.Ref'
+      operationId: delete_iam_workspaces_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79957,16 +80871,20 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/workspaces/get:
-    post:
+    get:
       description: 'Returns one workspace: what it is called and how it is set up.'
-      operationId: post_iam_workspaces_get
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/iam.workspaces.Ref'
+      operationId: get_iam_workspaces_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
         required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -79980,12 +80898,22 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/workspaces/update:
-    post:
+    put:
       description: |-
         Changes a workspace's settings. What it is called does not change, and
         neither does when it was created.
-      operationId: post_iam_workspaces_update
+      operationId: put_iam_workspaces_by_owner_by_name
+      parameters:
+      - in: path
+        name: owner
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -105378,103 +106306,183 @@ paths:
   /v1/s3/buckets:
     get:
       description: |-
-        Returns the caller's own buckets under the friendly names they were created with, each with its creation time.
+        Lists the caller org's own buckets.
 
-        Another tenant's bucket is not refused, it is INVISIBLE — a bucket outside the caller's namespace is skipped during the listing rather than reported, so the operation cannot be used to discover that a name is taken elsewhere.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        Only the caller's: every bucket is physically named under a per-org prefix and
+        the listing strips that prefix, so a tenant sees friendly names and another
+        tenant's buckets are not in the answer at all.
       operationId: get_s3_buckets
-      summary: List your org's buckets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bucketList'
+          description: ok
+      summary: Lists the caller org's own buckets.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
     post:
       description: |-
-        Creates a new bucket in the caller's own namespace and answers 201 with its friendly name and creation time.
+        Makes a new bucket for the caller's org and answers 201 with it.
 
-        The name is validated exactly as sent and never quietly normalised: it must match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, so a mixed-case name is a clean 400 rather than a bucket created as `photos` that the caller keeps asking for as `Photos`. A name already in use in the caller's own namespace is 409.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        The physical name is derived from the caller's validated org, so a tenant can
+        only ever create inside its own namespace and no request field can redirect
+        that. A name already taken in the org is 409.
       operationId: post_s3_buckets
-      summary: Create a bucket in your org
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/bucketIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bucketItem'
+          description: created
+      summary: Makes a new bucket for the caller's org and answers 201 with it.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
   /v1/s3/buckets/{bucket}:
     delete:
       description: |-
-        Removes one of the caller's buckets, and only when it is already EMPTY — a bucket with objects in it answers 409 instead.
+        Removes an EMPTY bucket and answers 204.
 
-        That refusal is deliberate rather than a limitation: this API does not cascade a delete of a tenant's objects behind a single bucket call, so emptying the bucket stays an explicit act. A bucket that does not exist is 404, and a successful delete answers 204 with no body.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        A non-empty bucket is 409 rather than a cascade: deleting a tenant's objects
+        behind a single bucket call is not a thing this surface will do silently. A
+        bucket the caller's org does not own is the same 404 an unknown name gives.
       operationId: delete_s3_buckets_by_bucket
       parameters:
-      - in: path
+      - description: Bucket is the bucket's friendly name, from the path.
+        in: path
         name: bucket
         required: true
         schema:
           type: string
-      summary: Delete an empty bucket
+      responses:
+        "204":
+          description: no content
+      summary: Removes an EMPTY bucket and answers 204.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
   /v1/s3/buckets/{bucket}/objects:
     get:
       description: |-
-        Lists one folder level of a bucket: each entry's key, whether it is a folder, its size, last-modified time and ETag. `prefix` scopes the read to a sub-folder.
+        Lists one folder level of a bucket.
 
-        Keys come back RELATIVE to the requested prefix, not absolute, which is what lets a client render a breadcrumb without re-deriving it. The default is the folder view — sub-prefixes are returned as directory entries — and `recursive=true` flattens it to every key beneath the prefix instead.
-
-        The listing is bounded at 1000 entries so a large bucket cannot exhaust memory; treat a full page as "there may be more" rather than as the whole bucket.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        Folder-style by default: sub-prefixes come back as directory entries, which is
+        the file-manager view. `?recursive=true` lists every key flat under the prefix
+        instead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge
+        bucket cannot exhaust memory — Total is what came back, not what the bucket
+        holds.
       operationId: get_s3_buckets_by_bucket_objects
       parameters:
-      - in: path
+      - description: Bucket is the bucket to list, from the path.
+        in: path
         name: bucket
         required: true
         schema:
           type: string
-      summary: Browse one level of a bucket
+      - in: query
+        name: prefix
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: recursive
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/objectList'
+          description: ok
+      summary: Lists one folder level of a bucket.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
     post:
       description: |-
-        Returns a short-lived presigned PUT URL, with the method, the cleaned key and the seconds until it expires. The client uploads to that URL DIRECTLY — the bytes never pass through this API, and the storage credential never leaves the server.
+        Mints a presigned PUT URL the caller uploads to DIRECTLY.
 
-        The URL is signed against the public storage host and scoped to exactly one bucket and key, and it expires five minutes after it is issued. The key is path-cleaned before signing, so a traversal cannot escape the bucket. A deployment with no public storage endpoint answers 503, because there is no host to sign a browser-followable URL against.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        The bytes never pass through this binary and the admin credential never leaves
+        the server: the URL is signed against the PUBLIC host, scoped to exactly this
+        bucket and key, and expires. A deployment with no public endpoint configured
+        cannot mint one and answers 503 rather than a URL that will not work.
       operationId: post_s3_buckets_by_bucket_objects
       parameters:
-      - in: path
+      - description: Bucket is the bucket to upload into, from the path.
+        in: path
         name: bucket
         required: true
         schema:
           type: string
-      summary: Get a URL to upload one object directly
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/uploadIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/presignResponse'
+          description: ok
+      summary: Mints a presigned PUT URL the caller uploads to DIRECTLY.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
   /v1/s3/health:
     get:
       description: |-
-        A real readiness probe rather than a liveness stub: 200 only when the storage credentials are present, and it additionally reports whether presigning is available — the capability the two URL-issuing operations need and refuse without.
+        Health reports whether this deployment can serve object storage.
 
-        An unconfigured deployment answers 503 with `ready:false` and the reason, which is the same state in which every data-plane operation here refuses. Not token-gated, so the platform can probe it without a credential, and it carries no credential, bucket or tenant detail.
+        It is a REAL probe rather than a constant: 200 when admin credentials are
+        present, so the store is reachable in principle, and 503 with the reason when
+        they are not. It is deliberately NOT gated — liveness has to be probe-able
+        without a token — so it is the one operation here that names no bucket and
+        bills nothing.
       operationId: get_s3_health
-      summary: Whether object storage is usable here
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/s3Health'
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/s3Health'
+          description: service unavailable
+      summary: Health reports whether this deployment can serve object storage.
       tags:
       - s3
       x-app: s3
       x-public: true
+      x-tool: true
   /v1/sandbox:
     get:
       description: |-
@@ -109645,6 +110653,497 @@ paths:
       x-app: treasury
       x-public: true
       x-tool: true
+  /v1/trust:
+    get:
+      description: |-
+        Reads YOUR organization's whole trust centre, including the addresses of your
+        own gated documents. Same shape as the published door; the difference is that
+        this one is resolved from your validated bearer and shows you your own
+        artifacts.
+      operationId: get_trust
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/centre'
+          description: ok
+      summary: Reads YOUR organization's whole trust centre, including the addresses
+        of your own gated documents.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/{kind}/{id}:
+    delete:
+      description: |-
+        Removes one record from a section of your organization's trust centre. A
+        record that is not there is a 404, never a silent success. A control that
+        belongs to the deployment's own inventory is removed by a commit, not by a
+        request.
+      operationId: delete_trust_by_kind_by_id
+      parameters:
+      - description: |-
+          Kind is the section — profile, control, document, subprocessor, policy,
+          faq, update or risk. Anything else is not found. The URL is the authority:
+          a value here is bound from the path, which zip binds last.
+        example: faq
+        in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+      - description: |-
+          ID is the record's id within that section. The single-valued sections
+          (profile, risk) hold one record whatever id is named.
+        example: where-is-data-held
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dropped'
+          description: ok
+      summary: Removes one record from a section of your organization's trust centre.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Writes one record into a section of YOUR organization's trust centre —
+        profile, control, document, subprocessor, policy, faq, update or risk.
+
+        A control written here is held to exactly the rule a control committed to the
+        deployment's own inventory is held to, by the same validator: its prose may
+        not claim a certificate and may not name a framework (a framework belongs in
+        the mappings, where it arrives attached to a number), anything short of
+        automated must say what is missing, and a mapping to a clause no framework
+        declares is refused rather than scored as nothing.
+
+        A document defaults to GATED. An artifact an independent auditor signed — a
+        SOC 2 report, an ISO certificate, a penetration test, an auditor letter —
+        cannot be made public at all; it is released through a grant. A
+        self-assessment can, because the organization is the one attesting it.
+
+        The deployment's OWN control inventory is governed in git and is not writable
+        here: naming one of its ids is a conflict, not an overwrite.
+      operationId: put_trust_by_kind_by_id
+      parameters:
+      - description: Kind is the section being written. The URL is the authority.
+        example: subprocessor
+        in: path
+        name: kind
+        required: true
+        schema:
+          type: string
+      - description: |-
+          ID is the record's id. Omit it on a create and one is minted; the
+          single-valued sections (profile, risk) hold one record whatever is named.
+        example: acme-cloud
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              data:
+                name: A cloud
+                purpose: Compute
+              id: acme-cloud
+              kind: subprocessor
+            schema:
+              $ref: '#/components/schemas/sectionWrite'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/written'
+          description: ok
+      summary: Writes one record into a section of YOUR organization's trust centre
+        — profile, control, document, subprocessor, policy, faq, update or risk.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/controls:
+    get:
+      description: |-
+        Lists every control your organization publishes, with the counts.
+
+        A control names what it asserts, the mechanism behind it, the repository and
+        file where that mechanism is enforced, how it is verified, and the framework
+        clauses it maps to. Status is automated, partial or absent — and an absent one
+        still names the clause it would satisfy, which is a roadmap, while never
+        moving a coverage number.
+      operationId: get_trust_controls
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/controlList'
+          description: ok
+      summary: Lists every control your organization publishes, with the counts.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/controls/{id}:
+    get:
+      description: Reads one control by id.
+      operationId: get_trust_controls_by_id
+      parameters:
+      - description: ID is the control's id, dotted lowercase — "iam.pkce.s256".
+        example: iam.pkce.s256
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Reads one control by id.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/coverage:
+    get:
+      description: |-
+        Reads coverage: per framework, how many clauses have an automated control
+        behind them, how many are partial, and how many have none — each carrying the
+        unit it is counted in, because "12 of 20" is not a fact until you know what
+        the 20 are.
+
+        Nothing here is a verdict. There is no boolean, and a control that only a
+        person has read counts one rung weaker than it claims to be, because only a
+        check that can FAIL is evidence.
+      operationId: get_trust_coverage
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustCoverage'
+          description: ok
+      summary: 'Reads coverage: per framework, how many clauses have an automated
+        control behind them, how many are partial, and how many have none — each carrying
+        the unit it is counted in, because "12 of 20" is not a fact until you know
+        what the 20 are.'
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/coverage/{framework}:
+    get:
+      description: |-
+        Reads one framework clause by clause: every clause the standard publishes,
+        what covers it, and which controls stand behind it — so a coverage number can
+        be checked line by line rather than taken on trust.
+      operationId: get_trust_coverage_by_framework
+      parameters:
+      - description: Framework is the framework id — "soc2", "iso27001", "nist80053".
+        example: soc2
+        in: path
+        name: framework
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/clauseCoverage'
+          description: ok
+      summary: 'Reads one framework clause by clause: every clause the standard publishes,
+        what covers it, and which controls stand behind it — so a coverage number
+        can be checked line by line rather than taken on trust.'
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/documents:
+    get:
+      description: |-
+        Lists your organization's documents. Because this is your own centre, a gated
+        artifact carries its address here; through the published door it does not.
+      operationId: get_trust_documents
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trustDocuments'
+          description: ok
+      summary: Lists your organization's documents.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/evidence:
+    get:
+      description: |-
+        Reads the audit rows that stand behind one control, over a window.
+
+        The inventory decides what evidences what: a control names the audit actions
+        that are its trail, and this resolves the control id to those actions and
+        reads them. So evidence cannot drift from the inventory, and it is scoped to
+        your own organization — the query carries no organization field for a caller
+        to fill in.
+
+        A control that nothing in the trail evidences says so plainly rather than
+        answering an empty page, because an empty page reads like a clean quarter. A
+        deployment with no audit store answers 501 and says the trail was not read,
+        for the same reason.
+      operationId: get_trust_evidence
+      parameters:
+      - description: Control is the control id whose trail to read. Required.
+        example: iam.refresh.rotation
+        in: query
+        name: control
+        required: false
+        schema:
+          type: string
+      - description: |-
+          From is the inclusive lower bound, an RFC 3339 date or instant
+          ("2026-01-01" or "2026-01-01T00:00:00Z"). Empty leaves it unbounded. A
+          malformed bound is refused rather than silently widening the window.
+        example: "2026-01-01"
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      - description: To is the upper bound, same form and same tolerance.
+        in: query
+        name: to
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps the rows returned, 1..1000, default 100. It is a string because
+          an unparseable value is refused rather than read as zero.
+        example: "50"
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Reads the audit rows that stand behind one control, over a window.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/faq:
+    get:
+      description: Lists your knowledge base — the questions a reviewer asks, answered
+        once.
+      operationId: get_trust_faq
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/faqList'
+          description: ok
+      summary: Lists your knowledge base — the questions a reviewer asks, answered
+        once.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/frameworks:
+    get:
+      description: |-
+        Lists the frameworks coverage is computed against, and how many clauses each
+        publishes. That count is the denominator of every coverage number, which is
+        what keeps an uncovered clause visible instead of dropping out of the
+        fraction.
+      operationId: get_trust_frameworks
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/frameworkList'
+          description: ok
+      summary: Lists the frameworks coverage is computed against, and how many clauses
+        each publishes.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/policies:
+    get:
+      description: Lists your organization's published policies.
+      operationId: get_trust_policies
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/policyList'
+          description: ok
+      summary: Lists your organization's published policies.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/profile:
+    get:
+      description: |-
+        Reads your organization's trust-centre profile — the name, tagline and
+        summary a visitor sees, whether the centre is published, and where to send
+        somebody who wants a gated document.
+      operationId: get_trust_profile
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Reads your organization's trust-centre profile — the name, tagline
+        and summary a visitor sees, whether the centre is published, and where to
+        send somebody who wants a gated document.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/published/{org}:
+    get:
+      description: |-
+        Reads a published trust centre — the whole thing in one answer: the
+        organization's profile, its control inventory, coverage computed against each
+        framework's whole published clause list, its documents, subprocessors,
+        policies, knowledge base, updates and risk profile.
+
+        This is the PUBLIC door and needs no credential, because a published trust
+        centre is a public document. It answers only for an organization that has
+        published one — an organization that has not is not found rather than empty,
+        since an empty centre and a centre nobody meant to show read the same and are
+        not the same thing.
+
+        A gated document appears here with its title, its type and its date and NO
+        address: the listing says the artifact exists and that reading it takes a
+        grant. Nothing an independent auditor signed is ever released through this
+        door.
+      operationId: get_trust_published_by_org
+      parameters:
+      - description: Org is the organization's slug — the name in its address.
+        example: hanzo
+        in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/centre'
+          description: ok
+      security: []
+      summary: 'Reads a published trust centre — the whole thing in one answer: the
+        organization''s profile, its control inventory, coverage computed against
+        each framework''s whole published clause list, its documents, subprocessors,
+        policies, knowledge base, updates and risk profile.'
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/risk:
+    get:
+      description: |-
+        Reads your risk profile — the label and value pairs describing what your
+        organization handles and how.
+      operationId: get_trust_risk
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Reads your risk profile — the label and value pairs describing what
+        your organization handles and how.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/subprocessors:
+    get:
+      description: |-
+        Lists the third parties your organization sends data to, each naming what it
+        is for.
+      operationId: get_trust_subprocessors
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/subprocessorList'
+          description: ok
+      summary: Lists the third parties your organization sends data to, each naming
+        what it is for.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
+  /v1/trust/updates:
+    get:
+      description: Lists your trust-centre updates, newest as you ordered them.
+      operationId: get_trust_updates
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/updateList'
+          description: ok
+      summary: Lists your trust-centre updates, newest as you ordered them.
+      tags:
+      - trust
+      x-app: trust
+      x-public: true
+      x-tool: true
   /v1/usage:
     post:
       description: |-
@@ -112423,8 +113922,8 @@ tags:
     them, held as assertions: somebody, at some moment, from some evidence, asserted
     that this thing stands in that relation to that other thing.'
   name: graph
-- description: Package guide is a step-by-step checklist that gets your business running
-    on AI.
+- description: Package guide is the AI that builds an agentic company with you, one
+    measured step at a time.
   name: guide
 - description: 'Package help is a support desk: customers file tickets, your team
     answers them.'
@@ -112606,6 +114105,10 @@ tags:
 - description: 'Package treasury is the reserve fund behind every payout: real capital,
     held and accounted for.'
   name: treasury
+- description: 'Package trust is your trust centre: the controls you publish, the
+    coverage they compute to, the documents a reviewer asks for, and who you send
+    data to.'
+  name: trust
 - description: Package usage is what your org ran and what it cost, broken down per
     account.
   name: usage

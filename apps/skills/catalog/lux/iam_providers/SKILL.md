@@ -1,7 +1,7 @@
 ---
 name: iam_providers
 version: "8.0.0"
-description: "Read iam providers: Returns your organization's providers, newest first — the identity providers your people sign in with, and the senders and connectors your applications go through.."
+description: "Read iam providers: Returns your organization's providers, newest first — the identity providers your people sign in with, and the senders and connectors your applications go through., Returns one provider: what it connects to and how it is configured.."
 ---
 
 # Lux · IAM · providers
@@ -15,16 +15,20 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Endpoints
 
 - `GET https://api.lux.network/v1/iam/providers` — Returns your organization's providers, newest first — the identity providers your people sign in with, and the senders and connectors your applications go through.
+- `GET https://api.lux.network/v1/iam/providers/{owner}/{name}` — Returns one provider: what it connects to and how it is configured.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/providers` → `iam.listProvidersOut` object with fields: `providers`.
+- `/v1/iam/providers/{owner}/{name}` → `iam.providerResult` object with fields: `provider`.
 
 ## Example
 

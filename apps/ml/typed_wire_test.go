@@ -269,13 +269,14 @@ func TestTypedReadsFailClosedWithoutKubernetes(t *testing.T) {
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("GET /v1/ml/models = %d %s, want 503 with no kubernetes client", code, body)
 	}
+	// A refusal is an RFC 9457 problem document, so the sentence is `detail`.
 	var e struct {
-		Error string `json:"error"`
+		Detail string `json:"detail"`
 	}
 	if err := json.Unmarshal(body, &e); err != nil {
 		t.Fatalf("unmarshal %s: %v", body, err)
 	}
-	if !strings.Contains(e.Error, "kubernetes client not configured") {
+	if !strings.Contains(e.Detail, "kubernetes client not configured") {
 		t.Fatalf("503 body %s does not name the real reason", body)
 	}
 }

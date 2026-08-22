@@ -169,6 +169,7 @@ var allowedRequestUses = map[string]string{
 		"request. Fails closed off the HTTP path: no request means the unbilled, default-project answer, " +
 		"and principal.Acting has already refused before any op reaches it.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
+	"apps/s3/typed.go":      "orgOf — the one resolution both halves of the surface read, so a bucket is named in exactly one tenant's space whether it is reached as an op or as a tool. It reads the org off the validated principal and FAILS CLOSED where there is no request at all: a CLI LocalInvoke has no principal to name a tenant with, and answering with an unscoped bucket list would be worse than refusing.",
 	"apps/graph/graph.go": "actor — every assertion records WHO asserted it, and that identity is " +
 		"the caller's home org plus their user name (principal.Owner + c.User), strictly more than " +
 		"the tenant OrgFrom carries. The org itself still resolves through principal.OrgFrom beside " +
@@ -541,6 +542,20 @@ var allowedRequestUses = map[string]string{
 		"bodyless rate post would set a rate of zero. The TENANT is resolved with principal.OrgFrom " +
 		"(tenant, in this same file), never through the request. All fail closed off the HTTP path: no " +
 		"request, no attested admin, no actor, and nothing to require a body of.",
+	"apps/dataroom/trust_typed.go": "sudo / orgAdmin / actor — the trust centre's ONE resolver of the " +
+		"request. The plane has TWO admin scopes and conflating them is the privilege escalation it is " +
+		"built to prevent: the cross-tenant roster gates on platform sudo (principal.IsSuperAdmin, the " +
+		"reserved admin org's membership as SanitizeIdentity minted it), while changing what an org " +
+		"releases gates on being an admin OF THAT ORG (X-User-IsOrgAdmin) — two headers, neither of " +
+		"which principal.OrgFrom carries and neither of which has a ctx-side twin to read instead. " +
+		"Reading the org-scoped one as platform authority would hand every customer admin the roster; " +
+		"reading the platform one as org authority would refuse every legitimate customer. Neither can " +
+		"be an In field, for the usual reason — a caller that could name itself an admin would be one. " +
+		"actor records WHO granted access, on the validated user id (X-User-Id): an attribution on the " +
+		"access record, never an authority. The TENANT is resolved with principal.Acting throughout, " +
+		"never through the request. All three fail closed off the HTTP path, which is what closes the " +
+		"MCP door and the internal plane — both invoke a typed op DIRECTLY, with no route for the " +
+		"group's own sudoGate to sit on.",
 	"apps/link/http.go": "scope — the linked-account surface is scoped to (org, SUBJECT): every op keys " +
 		"the caller's own provider accounts and usage on the validated user id (c.User()) as well as the " +
 		"tenant, and principal.OrgFrom carries only the tenant. ONE function, which every op in the " +
