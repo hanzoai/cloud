@@ -246,9 +246,17 @@ func TestEveryAnswerUnderTheContractCarriesItsLinks(t *testing.T) {
 		}
 	}
 
-	// Outside the contract's namespace there is nothing to point at, and the
-	// console at "/" is not an API answer.
-	if resp, _ := reply(t, app, "/healthz"); len(resp.Header.Values("Link")) != 0 {
-		t.Errorf("GET /healthz carries %v — the links belong to /v1", resp.Header.Values("Link"))
+	// Outside the contract's namespace the CONTRACT has nothing to point at. The
+	// SERVICE still does: `service-desc` and `service-doc` (RFC 8631) name where
+	// this service is described and documented, and they are properties of the
+	// service rather than of /v1, so the framework stamps them on every answer.
+	// What must not appear off /v1 is the contract's own pair — `describedby` and
+	// `index` — because those say "this answer is part of the described API".
+	resp, _ := reply(t, app, "/healthz")
+	got := strings.Join(resp.Header.Values("Link"), " ")
+	for _, unwanted := range []string{`rel="describedby"`, `rel="index"`} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("GET /healthz carries %q — %s belongs to /v1", got, unwanted)
+		}
 	}
 }

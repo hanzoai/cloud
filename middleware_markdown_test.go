@@ -130,8 +130,11 @@ func TestMarkdown_ErrorStaysJSON(t *testing.T) {
 	if code != 400 {
 		t.Fatalf("status %d, want 400", code)
 	}
-	if !strings.HasPrefix(ct, "application/json") {
-		t.Fatalf("error content-type = %q, want application/json", ct)
+	// A refusal answers as a problem document (application/problem+json); the
+	// property under test is that asking for markdown does not rewrite it, so
+	// what matters is that it is still the JSON refusal and not markdown.
+	if !strings.HasPrefix(ct, "application/problem+json") && !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("error content-type = %q, want the JSON refusal", ct)
 	}
 	if !strings.Contains(body, "nope") {
 		t.Fatalf("error body: %s", body)

@@ -19,6 +19,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -62,6 +63,10 @@ type sink struct {
 }
 
 func (s sink) Write(p []byte) (int, error) { return s.r.write(s.b, p) }
+
+// linkTarget matches an RFC 8288 Link target — `<...>` — which addresses the
+// reply rather than being carried by it.
+var linkTarget = regexp.MustCompile(`<[^>]*>`)
 
 // TestPlaneWireIsZAPNotJSON captures a real IAMProjects call and states three
 // things about the bytes:
@@ -155,8 +160,14 @@ func TestPlaneWireIsZAPNotJSON(t *testing.T) {
 			t.Errorf("value %q is not on the wire — the reply did not carry it", v)
 		}
 	}
+	// Field names are looked for in what the reply CARRIES, not in what addresses
+	// it. A ZAP frame carries Link headers (RFC 8288) whose targets name the op —
+	// `</.well-known/zip/op/iam_projects>; rel="self"` — so an op whose name shares
+	// a word with a field would fail a scan of the whole frame while the payload is
+	// perfectly positional. Link targets are addresses; strip them and read the rest.
+	carried := linkTarget.ReplaceAllString(resp, "")
 	for _, name := range []string{"owner", "displayName", "description", "createdTime", "projects"} {
-		if strings.Contains(resp, name) {
+		if strings.Contains(carried, name) {
 			t.Errorf("FIELD NAME %q is on the wire: this is not ZAP's positional layout, "+
 				"something re-encoded the reply as JSON", name)
 		}
