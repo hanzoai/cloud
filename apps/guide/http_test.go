@@ -416,3 +416,72 @@ func TestBlueprintPatchMergeNullVsAbsent(t *testing.T) {
 		t.Fatal("an explicit null must clear the disable — a nil enabled reads as enabled")
 	}
 }
+
+// TestTheBlockedRefusalKeepsItsWholeBody pins the 409 ACROSS the conversion of
+// start and done to typed ops, and records the ONE thing that moved.
+//
+// The refusal was the last reason those two were raw handlers: its body is
+// structured — the sentence, the step and the steps blocking it — and a zip error
+// could not carry the extra members until HTTPError gained them. blockedErr.refusal
+// renders it now, so the same facts leave through a RETURNED error.
+//
+// WHAT MOVED, stated rather than glossed: the raw handler hand-wrote
+// {error, step, blockedBy}. A returned error renders through cloud.ErrorHandler →
+// HTTPError.MarshalJSON, which at the pinned zip (v1.34.0) is RFC 9457
+// problem-details — so the sentence is now `detail`, and `type`/`title` are added
+// beside it. The route's own vocabulary is UNCHANGED: `step` and `blockedBy` are
+// the fields a caller renders and they are exactly as they were.
+//
+// That is a wire change and it is the right direction: every OTHER refusal in the
+// fleet already renders this way, because every propagated error goes through that
+// one handler. This route's hand-written `error` key was the odd one out — one
+// address answering in a vocabulary the other ~2400 do not use — and a client
+// written against Hanzo's errors reads `detail` everywhere else.
+//
+// The assertion is on the WHOLE body, not the one field the older test happened to
+// read: it declared an `error` field and never checked it, which is exactly how a
+// key can move and no test notice.
+func TestTheBlockedRefusalKeepsItsWholeBody(t *testing.T) {
+	app := newApp(t)
+	r := req(t, app, http.MethodPost, "/v1/guide/steps/password-manager/done", "acme", nil)
+	if r.Code != http.StatusConflict {
+		t.Fatalf("blocked done want 409, got %d (%s)", r.Code, r.Body)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(r.Body, &got); err != nil {
+		t.Fatalf("the 409 is not JSON: %v — %s", err, r.Body)
+	}
+
+	// The route's OWN vocabulary — the half a caller acts on, and the half that
+	// must not move.
+	if got["step"] != "password-manager" {
+		t.Errorf("step = %v, want password-manager — the member did not survive the merge", got["step"])
+	}
+	blocked, _ := got["blockedBy"].([]any)
+	if len(blocked) != 1 || blocked[0] != "gsuite" {
+		t.Errorf("blockedBy = %v, want [gsuite] — this is the field that renders the reason", got["blockedBy"])
+	}
+
+	// The ENVELOPE, which is the fleet's and not this route's.
+	if got["detail"] != "step is blocked by unfinished dependencies" {
+		t.Errorf("detail = %v — the sentence is gone, or a domain key displaced it", got["detail"])
+	}
+	if n, _ := got["status"].(float64); int(n) != http.StatusConflict {
+		t.Errorf("status = %v, want 409: a client reading the body must not disagree with one "+
+			"reading the header", got["status"])
+	}
+	if got["title"] != "Conflict" || got["type"] != "about:blank" {
+		t.Errorf("the problem-details envelope is incomplete: title=%v type=%v", got["title"], got["type"])
+	}
+
+	// THE MERGE ORDER is the half worth a test rather than the feature: members are
+	// copied BEFORE the envelope is written, so a domain key named type, title,
+	// status, detail or code is silently overwritten by it. These two are `step` and
+	// `blockedBy` and collide with none — which is a fact to re-check per route, not
+	// a property of the mechanism.
+	for _, reserved := range []string{"type", "title", "status", "detail"} {
+		if _, ok := got[reserved]; !ok {
+			t.Errorf("the envelope did not write %q — a domain member displaced it", reserved)
+		}
+	}
+}
