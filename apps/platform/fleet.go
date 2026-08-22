@@ -285,8 +285,8 @@ func fleetRoutes(app *zip.App, s *cloud.Service[fleetState]) {
 	exposeFleet(s)
 }
 
-// THE ROLE GATE is board.admit(cloud.Admin) on the read routes and
-// board.admit(cloud.Super) on the mutation, at the top of each op — the platform's
+// THE ROLE GATE is admit(cloud.Admin) on the read routes and
+// admit(cloud.Super) on the mutation, at the top of each op — the platform's
 // one authorization rule (gate.go, HIP-0519), parameterised by how much authority
 // each route needs. The read board admits a SuperAdmin OR an admin of its own
 // org, which lets the platform operator drive it off a plain `hanzo login` with
@@ -526,7 +526,7 @@ type driftBoard struct {
 // columns still render.
 func (b board) listFleet(ctx context.Context, in *fleetQuery) (*driftBoard, error) {
 	s := b.s
-	c, err := b.admit(ctx, cloud.Admin)
+	c, err := admit(ctx, cloud.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -602,7 +602,7 @@ type fleetRef struct {
 // outside their own org, and a name found in none of them is 404 rather than a leak.
 func (b board) getFleetApp(ctx context.Context, in *fleetRef) (*AppView, error) {
 	s := b.s
-	c, err := b.admit(ctx, cloud.Admin)
+	c, err := admit(ctx, cloud.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -735,7 +735,7 @@ type restarted struct {
 // value is 400. A service with no Deployment to restart in that environment is 404.
 func (b board) deployFleet(ctx context.Context, in *restartRef) (*restarted, error) {
 	s := b.s
-	c, err := b.admit(ctx, cloud.Super)
+	c, err := admit(ctx, cloud.Super)
 	if err != nil {
 		return nil, err
 	}

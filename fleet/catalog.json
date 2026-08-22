@@ -5363,8 +5363,28 @@
    "doc": "Detaches a hostname and releases the claim.\n\nIt drops the host from the app's ingress and releases any custom claim on it, so\nthe name becomes claimable again — by this org or any other. Answers 204.\n\nThe default host is permanent and cannot be removed: that is 400, not 404. A host\nthat is neither attached nor claimed here is 404. Requires a validated principal;\n403 without one."
   },
   {
+   "id": "get_platform_apps",
+   "doc": "Answers what this organisation has declared, joined with what\nthe delivery plane has done about it.\n\nThe join is best-effort BY DESIGN and says so when it is missing: the\ndeclarations ARE the answer to \"what have I deployed\", so refusing the whole\nboard because the cluster is unreadable would lose the half that is readable.\nWhat must never happen is a silent null — an unreadable plane is reported as\n`cd.unavailable` carrying the reason, never as an app with no reconciliation.",
+   "read": true
+  },
+  {
+   "id": "get_platform_apps_by_app",
+   "doc": "Answers ONE declaration — what git says this app is, before the\ndelivery plane has had any say in it.",
+   "read": true
+  },
+  {
+   "id": "get_platform_apps_by_app_cd",
+   "doc": "Answers ONE app's reconciliation alone — the poll a deploy\nconsole makes while it waits, without re-reading the whole inventory each time.",
+   "read": true
+  },
+  {
    "id": "get_platform_builds",
    "doc": "Returns real build records for your org.\n\nIt lists the org's BuildKit build records — the git build step behind a deploy —\neach with the repo it built, the short commit, its status, when it started and\nhow long it took. These are real records or an honest empty list; a build appears\nhere because one ran, never because a page needed a row. Builds are created only\nby /deploy and the push-to-deploy hook. Requires a validated principal; 403\nwithout one.",
+   "read": true
+  },
+  {
+   "id": "get_platform_cd",
+   "doc": "Answers every Application the delivery plane holds.\n\nScoped to the namespaces the caller's own validated org owns: the ROLE opens\nthe door and the tenant boundary is applied inside, so an admin of one org\nnever observes another's.",
    "read": true
   },
   {

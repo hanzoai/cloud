@@ -1,7 +1,7 @@
 ---
 name: platform_cd
 version: "8.0.0"
-description: "Read platform cd: The delivery plane."
+description: "Read platform cd: Answers every Application the delivery plane holds.."
 ---
 
 # Hanzo · PLATFORM · cd
@@ -14,11 +14,11 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/platform/cd` — The delivery plane
+- `GET https://api.hanzo.ai/v1/platform/cd` — Answers every Application the delivery plane holds.
 
 ## Response
 
-- `/v1/platform/cd` → JSON object.
+- `/v1/platform/cd` → `cdResp` object with fields: `applications`.
 
 ## Example
 

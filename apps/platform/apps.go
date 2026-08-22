@@ -66,22 +66,28 @@ import (
 // apps").Get("")` composes to a literal trailing slash, and that slash is what the
 // OpenAPI emitter publishes, so every generated SDK would call an address the
 // manifest prefix does not name.
-func appsRoutes(app cloud.Router, s *cloud.Service[state], fs *cloud.Service[fleetState]) {
+func appsRoutes(app *zip.App, s *cloud.Service[state], fs *cloud.Service[fleetState]) {
+	// The WRITE stays raw and says why at typed_wire_test.go: cloud.Guard answers
+	// 403 before anything is read, while a typed op decodes the body first — so a
+	// non-admin sending a malformed declaration would be told its JSON is bad
+	// rather than that it may not declare. Error precedence is wire.
 	app.Post("/v1/platform/apps", cloud.Guard(cloud.Admin, cloud.Handle(s, declareApp)))
-	app.Get("/v1/platform/apps/:app", cloud.Guard(cloud.Admin, cloud.Handle(s, getDeclared)))
-	app.Get("/v1/platform/cd", cloud.Guard(cloud.Admin, cloud.Handle(fs, listCD)))
 	app.Get("/v1/platform/ci", cloud.Guard(cloud.Admin, cloud.Handle(s, listCI)))
 
-	// The two joining routes hold BOTH services, closed over here. Not a package
-	// global reached at request time: a global set in Mount is nil in every
-	// process that did not run this Mount, and a board reading nil renders an
-	// empty delivery plane rather than an unreadable one.
-	app.Get("/v1/platform/apps", cloud.Guard(cloud.Admin, func(c *zip.Ctx) error {
-		return listDeclared(s, fs, c)
-	}))
-	app.Get("/v1/platform/apps/:app/cd", cloud.Guard(cloud.Admin, func(c *zip.Ctx) error {
-		return getDeclaredCD(s, fs, c)
-	}))
+	// The READS are typed ops. They hold BOTH services through one receiver, for
+	// the reason the closures did: a global set in Mount is nil in every process
+	// that did not run this Mount, and a board reading nil renders an empty
+	// delivery plane rather than an unreadable one.
+	//
+	// Declared ABSOLUTELY on the app rather than on a Group, which is the same
+	// choice the raw routes made and for the same reason the header states: a
+	// Group's empty leaf composes to a literal trailing slash, and that slash is
+	// what the emitter publishes.
+	d := delivery{s: s, fs: fs}
+	zip.Get(app, "/v1/platform/apps", d.listDeclarations)
+	zip.Get(app, "/v1/platform/apps/:app", d.getDeclaration)
+	zip.Get(app, "/v1/platform/apps/:app/cd", d.getReconciliation)
+	zip.Get(app, "/v1/platform/cd", d.listReconciliations)
 }
 
 // ── the request ──────────────────────────────────────────────────────────────
@@ -338,108 +344,9 @@ type unreadable struct {
 	Reason string `json:"reason"`
 }
 
-func listDeclared(s *cloud.Service[state], fs *cloud.Service[fleetState], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	dir, err := resolveOrg(org, c.Query("org"), principal.IsSuperAdmin(c))
-	if err != nil {
-		return err
-	}
-	ds, err := declarations(s, c.Context(), dir)
-	if err != nil {
-		s.Log.Error("inventory read failed", "org", dir, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "could not read the declarations in %s: %v", dir, err)
-	}
-	out := declaredResp{Org: dir, Apps: make([]declared, 0, len(ds))}
-	for _, d := range ds {
-		out.Apps = append(out.Apps, declared{Declaration: d})
-	}
-	// The join is best-effort BY DESIGN and says so when it is missing: the
-	// declarations ARE the answer to "what have I deployed", and refusing the
-	// whole board because the cluster is unreadable would lose the half that is
-	// readable. What must never happen is a silent null — hence cdUnavailable.
-	apps, cdErr := cdApps(fs, c.Context(), requestPrincipal(c))
-	if cdErr != nil {
-		out.CD = &unreadable{Reason: cdErr.Error()}
-	} else {
-		by := map[string]*CDApp{}
-		for i := range apps {
-			by[apps[i].Name] = &apps[i]
-		}
-		for i := range out.Apps {
-			out.Apps[i].CD = by[out.Apps[i].Application]
-		}
-	}
-	return c.JSON(http.StatusOK, out)
-}
-
-func getDeclared(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	name := c.Param("app")
-	if !slugRE.MatchString(name) {
-		return zip.ErrBadRequest("app must be a DNS-1123 label")
-	}
-	dir, err := resolveOrg(org, c.Query("org"), principal.IsSuperAdmin(c))
-	if err != nil {
-		return err
-	}
-	ds, err := declarations(s, c.Context(), dir)
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "could not read the declarations in %s: %v", dir, err)
-	}
-	for _, d := range ds {
-		if d.Name == name {
-			return c.JSON(http.StatusOK, d)
-		}
-	}
-	return zip.ErrNotFound("no declaration for " + name + " in " + dir)
-}
-
-// getDeclaredCD answers one app's reconciliation alone — the poll a deploy UI
-// makes while it waits, without re-reading the whole inventory each time.
-func getDeclaredCD(s *cloud.Service[state], fs *cloud.Service[fleetState], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	name := c.Param("app")
-	if !slugRE.MatchString(name) {
-		return zip.ErrBadRequest("app must be a DNS-1123 label")
-	}
-	dir, err := resolveOrg(org, c.Query("org"), principal.IsSuperAdmin(c))
-	if err != nil {
-		return err
-	}
-	apps, err := cdApps(fs, c.Context(), requestPrincipal(c))
-	if err != nil {
-		return err
-	}
-	want := dir + "-" + name
-	for i := range apps {
-		if apps[i].Name == want {
-			return c.JSON(http.StatusOK, apps[i])
-		}
-	}
-	return zip.ErrNotFound("the delivery plane has no Application " + want +
-		" — a declaration on a branch has none until the branch is merged")
-}
-
 // cdResp is the delivery plane as this caller may observe it.
 type cdResp struct {
 	Applications []CDApp `json:"applications"`
-}
-
-func listCD(fs *cloud.Service[fleetState], c *zip.Ctx) error {
-	apps, err := cdApps(fs, c.Context(), requestPrincipal(c))
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, cdResp{Applications: apps})
 }
 
 // listCI is DECLARED AND NOT IMPLEMENTED, and answers so.

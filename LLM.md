@@ -5366,6 +5366,60 @@ not a copy: `fleet` is the platform's OWN service tier (the shared services it r
 board reads k8s directly with no IAM-store dependency, so it stays up when the store is
 not co-resident.
 
+### The delivery board is typed, and the gate had to move for it to be safe
+
+`GET /v1/platform/{apps, apps/:app, apps/:app/cd, cd}` are typed ops
+(`apps/platform/delivery.go`), so the fleet's delivery board is an MCP tool, a CLI
+command and a typed SDK method where it published an operationId and nothing else
+— an agent asked "what is deployed" had nothing to call. **platform 30 → 34 of 37;
+the fleet catalogue 1502 → 1506.**
+
+**THE GATE MOVED INSIDE THE OP, AND THAT IS A CORRECTNESS REQUIREMENT.**
+`cloud.Guard` is middleware on a ROUTE, and a typed op is ALSO reached by
+`tools/call` and by the CLI, neither of which passes through a router. Leaving the
+wrapper where it was and typing the routes would have published an UNGUARDED alias
+of an admin surface — the apps/exec incident verbatim ("a bespoke credential
+checked in middleware covers exactly one of a typed op's three doors").
+`cloud.Scope.Refusal`'s own doc comment already prescribed the remedy and named
+this package as where it lives. `TestTheDeliveryBoardIsShutToANonAdminOnEveryDoor`
+drives the MCP door specifically, because a route test cannot see it;
+mutation-checked by deleting one `admit`, which the test catches with the handler's
+own cluster error as the tell.
+
+**THE DISCRIMINATOR FOR WHICH ROUTES CONVERTED IS "READS NO BODY", NOT THE VERB.**
+All four are GETs, so zip's decode is skipped and there is no 400-before-403 to
+trade; `POST /v1/platform/apps` beside them stays raw for exactly that trade, and
+says so in `apps/platform/delivery_wire_test.go`. Reading the class as "GETs
+convert, POSTs do not" gets the next package wrong in both directions.
+
+**`admit` became a FUNCTION**, because it read nothing off its `board` receiver
+and a second surface needed it — and a second copy of an authorization rule is two
+rules.
+
+Two things this cost that are worth knowing before the next conversion:
+
+- **zipdoc needs a router whose TYPE it can resolve, and widening a parameter to
+  an interface is what breaks it.** `appsRoutes(app cloud.Router, …)` was already
+  being CALLED with the concrete `zapp`; the declaration alone made zipdoc refuse
+  every op in the file ("cannot resolve the path prefix of the router"). One word —
+  `*zip.App` — fixed it. Note this REFINES failure mode #13, which reads as though
+  the absolute-on-the-app form cannot carry prose at all: it can, and apps/world,
+  pricing, plan, prefs, share and now these four all do. What it cannot resolve is
+  an INTERFACE-typed router, whatever the path.
+- **A harness that never installed `cloud.Bridge` measures a gate that can only
+  refuse.** `mountDelivery` built a bare app, which was fine while the handlers
+  read identity straight off the `*zip.Ctx` and broke the moment they read it off a
+  context — 403 to a genuine admin, in tests only.
+
+**Three tests were RED ON MAIN when this landed and are green now**, and they were
+not this change: `dea956b18` made `ghcr.io/hanzoai/cloud` refused at
+`/v1/platform/runner` (it is numbered by its own release lane) and gave that
+behaviour its own test, but three older runner tests used that image as an
+incidental SAMPLE on the HTTP path and began measuring the exclusion instead of
+what they are named for. They now build `ghcr.io/hanzoai/iam`; the refusal is
+untouched. Prove a failure predates you by diffing the two failure SETS against a
+stash — not by reading the message and inferring.
+
 ## GTM: `/v1/campaign` orchestration → channels → connectors → analytics
 
 The go-to-market stack decomplects a campaign from its execution. A **Campaign is a
