@@ -398,6 +398,27 @@ func orgAdmin(claims *idClaims, org string) bool {
 // "born with nobody on it"). Role.Admits folds owner into admin, in the one
 // place that vocabulary is defined. TestOrgAdminAdmitsOwner pins it end to end.
 
+// orgSlugs renders a membership set as the comma-separated slug list
+// HeaderUserOrgs carries, in IAM's own order (home first).
+//
+// It is a RENDERING and not a decision: every entry is kept, roles are dropped
+// because the header answers "which orgs may this caller act in" and a role is a
+// separate question each org's own surface asks. An empty or duplicate slug is
+// skipped so the value cannot claim an org twice or name an empty one — the two
+// shapes a consumer would have to defend against otherwise.
+func orgSlugs(orgs []authz.Membership) string {
+	seen := make(map[string]bool, len(orgs))
+	out := make([]string, 0, len(orgs))
+	for _, o := range orgs {
+		if o.Org == "" || seen[o.Org] {
+			continue
+		}
+		seen[o.Org] = true
+		out = append(out, o.Org)
+	}
+	return strings.Join(out, ",")
+}
+
 func isMember(orgs []authz.Membership, org string) bool {
 	if org == "" {
 		return false

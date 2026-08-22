@@ -130,6 +130,29 @@ const HeaderUserBrand = "X-User-Brand"
 // validated claims alone, so it is never a value a caller chose.
 const HeaderUserIsApp = "X-User-IsApp"
 
+// HeaderUserOrgs carries the ORGS THE PRINCIPAL BELONGS TO — the slugs of IAM's
+// signed `orgs` membership set, comma-separated, home first as IAM writes it.
+//
+// X-Org-Id says which org this request ACTS IN, which is one org because a
+// request has one tenant. This says which orgs the caller MAY act in, which is
+// the different question an org switcher asks — and the only place that fact
+// exists is the token, so without it a surface listing "your orgs" has to either
+// re-validate the JWT itself (a second auth path) or ask IAM again (a hop for
+// something already in hand). Hanzo Base's workspace could not list one Base per
+// org for exactly that reason.
+//
+// It authorizes NOTHING on its own. Acting in an org still goes through the
+// effective-org decision below, which honours a selection only when the same
+// signed set contains it — so a reader of this header learns what to OFFER, and
+// the boundary decides what is allowed.
+//
+// Same shape as X-User-Brand beside it: an issuer fact rendered by cloud for its
+// own apps, minted only from validated claims and stripped on ingress, so it is
+// never a value a caller chose. Absent for a principal carrying no membership set
+// — an sk- key, a client_credentials machine — and a consumer must read absent as
+// "no orgs to offer", never as "every org".
+const HeaderUserOrgs = "X-User-Orgs"
+
 // Two categories of name reach this boundary and they are RESTORED differently,
 // which is the distinction to keep in mind reading the passes below.
 //
@@ -168,7 +191,7 @@ const HeaderUserIsApp = "X-User-IsApp"
 //     legitimately supplies and the edge propagates verbatim; deleting it would break
 //     the trace support follows, and it authorizes nothing.
 var stripped = func() []string {
-	out := []string{HeaderUserBrand, HeaderUserIsApp, zip.HeaderActedBy}
+	out := []string{HeaderUserBrand, HeaderUserIsApp, HeaderUserOrgs, zip.HeaderActedBy}
 	for _, h := range append(append([]string{}, authz.Headers...), authz.Retired...) {
 		if h != authz.HeaderRequestID {
 			out = append(out, h)
@@ -321,6 +344,12 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 			// stranger's token.
 			if id, ok := brand.ForIssuer(claims.Issuer); ok {
 				req.Header.Set(HeaderUserBrand, id)
+			}
+			// The membership set itself, for the surfaces that must OFFER a choice
+			// rather than make one. Minted before the effective-org decision, so it
+			// describes the token and not the outcome of the switch below.
+			if set := orgSlugs(claims.Orgs); set != "" {
+				req.Header.Set(HeaderUserOrgs, set)
 			}
 			// effOrg is the org actually acted as: the switched-to org for a global
 			// admin, else the principal's own owner. Sub-scopes are validated against

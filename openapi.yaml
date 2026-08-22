@@ -12797,6 +12797,25 @@ components:
           description: Status is "ok" when the subsystem is serving.
           type: string
       type: object
+    baseView:
+      properties:
+        bytes:
+          description: |-
+            Bytes is the store's size on disk, present only once it exists. It is what
+            this Base occupies, not a quota.
+          type: integer
+        exists:
+          description: |-
+            Exists reports whether this Base's store has been provisioned. False is an
+            org nobody has stored anything for yet, which is a state to name rather
+            than an error: the store is created the first time anything writes.
+          type: boolean
+        org:
+          description: |-
+            Org is the org this Base belongs to. It is the address every other Base
+            call is scoped by, and a Base has no name of its own.
+          type: string
+      type: object
     beginIn:
       properties:
         alreadyIncorporated:
@@ -57019,6 +57038,76 @@ paths:
       - auto
       x-app: auto
       x-public: true
+  /v1/base/bases:
+    get:
+      description: |-
+        Lists every Base the caller can reach, one per org their token carries.
+
+        The orgs come from IAM's signed membership set, so the list is exactly the
+        orgs the caller is a member of and cannot be widened by asking. It is the
+        account-wide view: a Base is per org, so this is one entry per org and there
+        is nothing to page.
+
+        A caller with no membership set — a machine credential, an API key — reaches
+        no Base and receives an empty list rather than a refusal, because holding no
+        membership is an answer and not a failure.
+      operationId: get_base_bases
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+              - bytes: 430080
+                exists: true
+                org: hanzo
+              schema:
+                items:
+                  $ref: '#/components/schemas/baseView'
+                type: array
+          description: ok
+      summary: Lists every Base the caller can reach, one per org their token carries.
+      tags:
+      - base
+      x-app: base
+      x-public: true
+      x-tool: true
+  /v1/base/bases/{org}:
+    get:
+      description: |-
+        Describes ONE org's Base — whether its store exists, and what it occupies.
+
+        The org must be one the caller's token carries; any other is not found, so
+        this cannot be used to learn which orgs exist. That check is the same
+        membership set the listing is built from, which is why the two can never
+        disagree about what a caller may see.
+      operationId: get_base_bases_by_org
+      parameters:
+      - description: |-
+          Org is the org whose Base to describe, from the path. An org the caller's
+          token does not carry is not found — the same answer a nonexistent one
+          gets, so the listing cannot be used to discover which orgs exist.
+        in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                bytes: 430080
+                exists: true
+                org: hanzo
+              schema:
+                $ref: '#/components/schemas/baseView'
+          description: ok
+      summary: Describes ONE org's Base — whether its store exists, and what it occupies.
+      tags:
+      - base
+      x-app: base
+      x-public: true
+      x-tool: true
   /v1/base/health:
     get:
       description: |-
