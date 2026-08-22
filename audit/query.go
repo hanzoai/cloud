@@ -29,6 +29,14 @@ type Filter struct {
 	// most.
 	Impersonated bool
 	Action       string    // action exact match
+	// Actions matches any ONE of several action names — the question "show me
+	// the rows that evidence this control", where a control is evidenced by a
+	// SET of actions. One query rather than one per name, because the caller
+	// needs them interleaved in time and bounded by one Limit; N queries would
+	// have to merge and re-sort them, and would page each name separately.
+	// Empty means unrestricted. Composes with Action as an AND, so naming both
+	// is a contradiction rather than a widening.
+	Actions []string
 	Resource     string    // res_type exact match
 	ResourceID   string    // res_id exact match (a specific resource instance)
 	Result       string    // outcome result: success|deny|error
@@ -103,6 +111,16 @@ func (f Filter) build() (string, []any) {
 	}
 	if f.Action != "" {
 		add("action = ?", f.Action)
+	}
+	if len(f.Actions) > 0 {
+		// The placeholder list is built from the COUNT of values, never from the
+		// values, so nothing a caller supplies reaches the SQL text — the same
+		// rule every predicate above follows.
+		marks := strings.TrimSuffix(strings.Repeat("?,", len(f.Actions)), ",")
+		conds = append(conds, "action IN ("+marks+")")
+		for _, a := range f.Actions {
+			args = append(args, a)
+		}
 	}
 	if f.Resource != "" {
 		add("res_type = ?", f.Resource)

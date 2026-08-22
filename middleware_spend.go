@@ -100,8 +100,9 @@ type PlanChecker interface {
 // take the strict posture, never be silently waved through as if it were free.
 func SpendGate(commerce CommerceClient) zip.Handler {
 	plans, _ := commerce.(PlanChecker)
+	allow, _ := commerce.(AllowanceChecker)
 	return func(c *zip.Ctx) error {
-		if reason := standing(c, c.Method(), c.Path(), plans); reason != "" {
+		if reason := standing(c, c.Method(), c.Path(), plans, allow); reason != "" {
 			return Refuse(c, "", reason)
 		}
 		return c.Next()
@@ -126,7 +127,7 @@ func SpendGate(commerce CommerceClient) zip.Handler {
 // POST /mcp and over the ZAP plane POST /.well-known/zip/op/<name>; neither is a
 // billable tree, so a ladder fed the request's own path admits every metered
 // operation ever reached through one.
-func standing(c *zip.Ctx, method, path string, plans PlanChecker) string {
+func standing(c *zip.Ctx, method, path string, plans PlanChecker, allow AllowanceChecker) string {
 	if !Switch(SwitchPaywallEnforced) {
 		return "" // dark — byte-identical to no gate at all.
 	}
@@ -144,7 +145,7 @@ func standing(c *zip.Ctx, method, path string, plans PlanChecker) string {
 		// No resolvable payer. Unknown, not unpaid, and never a free pass.
 		return unresolved(c, "no resolvable wallet", path)
 	}
-	switch s := Stand(c.Context(), licence(c.Context(), plans, w.Ledger), w); {
+	switch s := Stand(c.Context(), licence(c.Context(), plans, w.Ledger), AllowanceIn(c.Context(), allow, w), w); {
 	case s.Admits():
 		return ""
 	case s == Unknown:

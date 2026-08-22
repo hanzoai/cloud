@@ -4,17 +4,11 @@ package iam
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -226,16 +220,7 @@ func account(t *testing.T, pod *zip.App, cookie string) (owner, name string) {
 // that varies, which is the whole subject of this file.
 func signingKeys(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate signing key: %v", err)
-	}
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	if err := os.WriteFile(filepath.Join(dir, "cert-hanzo"), pemBytes, 0o600); err != nil {
-		t.Fatalf("project signing key: %v", err)
-	}
-	t.Setenv("IAM_SIGNING_KEYS", dir)
+	mountSigningKey(t, "cert-hanzo")
 }
 
 const password = "correct-horse-battery-staple"

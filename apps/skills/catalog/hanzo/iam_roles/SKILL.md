@@ -1,7 +1,7 @@
 ---
 name: iam_roles
 version: "8.0.0"
-description: "Read iam roles: Returns your organization's roles, newest first — each a named group of people that permissions are granted to.."
+description: "Read iam roles: Returns your organization's roles, newest first — each a named group of people that permissions are granted to., Returns one role: who is in it, and the roles it includes.."
 ---
 
 # Hanzo · IAM · roles
@@ -15,16 +15,20 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.hanzo.ai/v1/iam/roles` — Returns your organization's roles, newest first — each a named group of people that permissions are granted to.
+- `GET https://api.hanzo.ai/v1/iam/roles/{owner}/{name}` — Returns one role: who is in it, and the roles it includes.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/roles` → `iam.roles.ListOutput` object with fields: `roles`, `total`.
+- `/v1/iam/roles/{owner}/{name}` → `iam.Role` object with fields: `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `domains`, `groups`, `id`, `isEnabled`, `name`, `owner`, `roles`.
 
 ## Example
 

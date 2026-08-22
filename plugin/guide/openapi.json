@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package guide is a step-by-step checklist that gets your business running on AI.",
+    "description": "Package guide is the AI that builds an agentic company with you, one measured step at a time.",
     "version": "v1"
   },
   "servers": [

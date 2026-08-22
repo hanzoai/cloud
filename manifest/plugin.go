@@ -257,14 +257,6 @@ const (
 	// defaultRequestMiB is the reservation in the deployment this was measured in,
 	// and therefore what an unmanaged process assumes.
 	defaultRequestMiB = 6 * 1024
-	// workingSet is the count observed live in the deployment the per-child figure
-	// was measured in. It is NOT a floor on the derivation: at a reservation that
-	// cannot hold it, holding it anyway is how a pod is OOM-killed, and a host that
-	// thrashes is strictly better than one that dies. It is what the shipped
-	// reservation is checked AGAINST (cmd/cloud/warm_test.go), which is the right
-	// place for it — whether the pod is big enough for its catalog is a question
-	// about the pod, not about this arithmetic.
-	workingSet = 33
 )
 
 // warmFor is Warm over a value the caller already holds, so the derivation is

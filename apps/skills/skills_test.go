@@ -292,7 +292,13 @@ func TestCatalogIntegrity(t *testing.T) {
 // A deliberate deletion lowers this by hand in the same commit, where a reviewer
 // sees the number go down next to the reason — the same rule openapi/floor.json
 // carries for the document.
-const floorSkills = 675
+//
+// 675 -> 669: iam now addresses a record by its own path, and the verb spellings
+// it replaced (iam_get-user, iam_get-organizations and the rest) are no longer
+// routes. A skill for an address nothing serves is one an agent can pick and
+// never reach, so those six went with them. Every operation they described is
+// still reachable under its noun.
+const floorSkills = 669
 
 func TestTheCatalogMayNotQuietlyShrink(t *testing.T) {
 	sub, err := fs.Sub(catalogFS, "catalog")

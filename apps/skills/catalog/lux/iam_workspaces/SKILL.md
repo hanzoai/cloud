@@ -1,7 +1,7 @@
 ---
 name: iam_workspaces
 version: "8.0.0"
-description: "Read iam workspaces: Returns your organization's workspaces, newest first — the scope a team works in, alongside projects rather than instead of them.."
+description: "Read iam workspaces: Returns your organization's workspaces, newest first — the scope a team works in, alongside projects rather than instead of them., Returns one workspace: what it is called and how it is set up.."
 ---
 
 # Lux · IAM · workspaces
@@ -15,16 +15,20 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Endpoints
 
 - `GET https://api.lux.network/v1/iam/workspaces` — Returns your organization's workspaces, newest first — the scope a team works in, alongside projects rather than instead of them.
+- `GET https://api.lux.network/v1/iam/workspaces/{owner}/{name}` — Returns one workspace: what it is called and how it is set up.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
+| `name` | path | yes | string |  |
+| `owner` | path | yes | string |  |
 | `owner` | query | no | string |  |
 
 ## Response
 
 - `/v1/iam/workspaces` → `iam.workspaces.ListOutput` object with fields: `total`, `workspaces`.
+- `/v1/iam/workspaces/{owner}/{name}` → `iam.Workspace` object with fields: `bucket`, `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `id`, `isDefault`, `metadata`, `name`, `organization`, `owner`.
 
 ## Example
 

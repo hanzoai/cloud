@@ -117,7 +117,8 @@ func TestTypedOpsPreserveTheWire(t *testing.T) {
 		if code != http.StatusBadRequest {
 			t.Fatalf("empty body: %d, want 400", code)
 		}
-		if msg, _ := out["error"].(string); !strings.Contains(msg, "kind must be") {
+		// A refusal is an RFC 9457 problem document, so the sentence is `detail`.
+		if msg, _ := out["detail"].(string); !strings.Contains(msg, "kind must be") {
 			t.Errorf("empty body answered %q, want the handler's kind refusal", msg)
 		}
 	})

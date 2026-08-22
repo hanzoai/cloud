@@ -44,7 +44,13 @@ const defaultPoolSize = 8
 
 // Request is the dispatch envelope handed to globalThis.handle in JS.
 type Request struct {
-	Route  string            `json:"route"`
+	Route string `json:"route"`
+	// Method is the HTTP method this dispatch stands for. The envelope has always
+	// been documented as handle({route, method, ...}) and the binding never filled
+	// it, so a bundle guarding a write on it saw "GET" for every request. A host
+	// that dispatches outside HTTP leaves it empty and the bundle reads its own
+	// default.
+	Method string            `json:"method"`
 	Params map[string]string `json:"params,omitempty"`
 	Query  map[string]string `json:"query,omitempty"`
 	Tenant string            `json:"tenant,omitempty"`
@@ -234,6 +240,7 @@ func (h *Host) DispatchWith(ctx context.Context, req Request, hostGlobals map[st
 
 		arg := s.vm.ToValue(map[string]any{
 			"route":  req.Route,
+			"method": req.Method,
 			"params": toAnyMap(req.Params),
 			"query":  toAnyMap(req.Query),
 			"tenant": req.Tenant,
