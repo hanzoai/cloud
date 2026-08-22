@@ -21,6 +21,7 @@ func init() {
 		},
 	})
 	zip.Describe("DELETE /v1/projects/:slug/star", zip.Doc{
+		Description: "Removes the caller's own bookmark from a project, and answers whether\nit is starred afterwards.\n\nIt removes only YOUR star — the same one star wrote — so a project other\npeople have starred stays on their lists. Unstarring one you had not starred\nis not an error; it leaves it unstarred.",
 		Fields: map[string]string{
 			"projectsRef.slug":     "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
 			"projectsStar.starred": "Starred is whether THIS caller has starred the project after the toggle —\ntheir own bookmark, not a property the project carries, so two people see\ntwo answers for one project.",
@@ -575,7 +576,7 @@ func init() {
 		},
 	})
 	zip.Describe("PUT /v1/projects/:slug/star", zip.Doc{
-		Description: "And unstar are the two typed ops behind PUT/DELETE\n/v1/projects/:slug/star.\n\nBoth resolve the project through `siteOf` — the SAME org-scoped lookup every\nother route on this surface uses — so a star can only be written against a\nproject the caller can already see. Without that, the stars table would be a\nway to ask whether a slug exists in another tenant.",
+		Description: "Bookmarks a project for the person calling, and answers whether it is\nstarred afterwards.\n\nThe star is YOURS: it is keyed by you as well as by the project, so two people\nsee two answers for the same one and starring it says nothing about anybody\nelse's list. Starring a project you have already starred leaves it starred.",
 		Fields: map[string]string{
 			"projectsRef.slug":     "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
 			"projectsStar.starred": "Starred is whether THIS caller has starred the project after the toggle —\ntheir own bookmark, not a property the project carries, so two people see\ntwo answers for one project.",
