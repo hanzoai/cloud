@@ -399,6 +399,21 @@ func Listen(plugins []Plugin, enable []string) error {
 		openapi.Server{URL: "https://" + cfg.Domain},
 	)
 
+	// GET/POST /v1/graphql — the same route table as a graph. GET renders the
+	// schema every typed op describes; POST runs a query against it. Mounted here
+	// for the same reason the document above is: after MountAll, so it covers a
+	// complete table.
+	//
+	// graphql, not graph: /v1/graph is the knowledge graph's address — assertions,
+	// nodes and neighbours — and the two mean different things by the word. This
+	// one is the query language over the ops.
+	//
+	// A field resolves through the op's own contract — validate, authorize, the
+	// handler — so it reaches nothing the MCP door does not already reach. Ops
+	// whose routed path carries a gated group keep their own authority check for
+	// exactly that reason: the group orders the refusal, the op decides it.
+	app.MountGraph("/v1/graphql")
+
 	// Unified console UI — the SAME binary serves the @hanzo/gui console at the web
 	// root. Mounted LAST, after every /v1 route + the /zap plane + the health
 	// contract, so Fiber's in-order matching gives the API precedence: real API
