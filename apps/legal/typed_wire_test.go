@@ -157,7 +157,8 @@ func TestTypedOpsPreserveTheLegalWire(t *testing.T) {
 		if code != http.StatusBadRequest {
 			t.Fatalf("empty generate body = %d, want 400", code)
 		}
-		if msg, _ := out["error"].(string); !strings.Contains(msg, "templateId") {
+		// A refusal is an RFC 9457 problem document, so the sentence is `detail`.
+		if msg, _ := out["detail"].(string); !strings.Contains(msg, "templateId") {
 			t.Errorf("empty body answered %q, want the handler's templateId refusal", msg)
 		}
 	})
