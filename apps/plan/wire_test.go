@@ -195,8 +195,11 @@ func TestResolutionIsByteIdenticalForEveryPlanInTheCatalog(t *testing.T) {
 	}
 }
 
-// assertBundleError pins the one shape difference typing introduced on the error
-// path: same status, same message, same key, plus zip's `status`.
+// assertBundleError pins what typing did to the error path: it did not move the
+// message and it did not move the status. What it DID move is the vocabulary — a
+// refusal is an RFC 9457 problem document, so the sentence the bundle files under
+// `error` is filed under `detail`, beside the registered `type`, `title` and
+// `status`. The property is the same one; only the member names changed.
 func assertBundleError(t *testing.T, addr string, got []byte, wantStatus int, wantBody []byte) {
 	t.Helper()
 	var bundleErr struct{ Error string }
@@ -205,24 +208,30 @@ func assertBundleError(t *testing.T, addr string, got []byte, wantStatus int, wa
 	}
 	var typedErr struct {
 		Status int    `json:"status"`
-		Error  string `json:"error"`
+		Detail string `json:"detail"`
 	}
 	if err := json.Unmarshal(got, &typedErr); err != nil {
 		t.Fatalf("%s: typed %d body is not JSON: %s", addr, wantStatus, got)
 	}
-	if typedErr.Error != bundleErr.Error {
-		t.Errorf("%s: message moved: typed %q, bundle %q", addr, typedErr.Error, bundleErr.Error)
+	if typedErr.Detail != bundleErr.Error {
+		t.Errorf("%s: message moved: typed %q, bundle %q", addr, typedErr.Detail, bundleErr.Error)
 	}
 	if typedErr.Status != wantStatus {
-		t.Errorf("%s: zip's status field = %d, want %d", addr, typedErr.Status, wantStatus)
+		t.Errorf("%s: the refusal's status field = %d, want %d", addr, typedErr.Status, wantStatus)
 	}
-	// And nothing ELSE was added: exactly the two keys.
+	// And nothing ELSE was added: the four registered members and no extension
+	// member, because this refusal carries no domain detail beyond its sentence.
 	var keys map[string]json.RawMessage
 	if err := json.Unmarshal(got, &keys); err != nil {
 		t.Fatalf("%s: %v", addr, err)
 	}
-	if len(keys) != 2 {
-		t.Errorf("%s: error body carries %d keys, want exactly {status,error}: %s", addr, len(keys), got)
+	for _, k := range []string{"type", "title", "status", "detail"} {
+		if _, ok := keys[k]; !ok {
+			t.Errorf("%s: problem document is missing %q: %s", addr, k, got)
+		}
+	}
+	if len(keys) != 4 {
+		t.Errorf("%s: error body carries %d keys, want exactly the four registered members: %s", addr, len(keys), got)
 	}
 }
 
