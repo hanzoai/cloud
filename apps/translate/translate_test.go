@@ -571,25 +571,50 @@ func TestRequestValidation(t *testing.T) {
 // ---- pricing ----
 
 // TestBulkPricing: the bulk debit is proportional to the characters that actually
-// reached the backend, and the operator knob overrides the policy default.
+// reached the backend, it falls to the compiled floor when the meter authority
+// publishes nothing, and a published price of zero makes the tier free.
+//
+// The env override this replaced (TRANSLATE_PRICE_UUSD_PER_1K_CHARS) is gone: an
+// env var keeps no history, so nothing could say what we charged in March. The
+// price is a row now, and the seam a test drives is the resolver itself.
 func TestBulkPricing(t *testing.T) {
-	if got, want := bulkMicros(1000), defaultBulkPriceUUSDPer1kChars; got != want {
-		t.Fatalf("bulkMicros(1000) = %d, want %d", got, want)
+	ctx := context.Background()
+
+	// Nothing published and no commerce beside this process: the floor is the
+	// price, and it is NOT zero — free work is un-gated work.
+	if got, want := bulkMicros(ctx, 1000), defaultBulkPriceUUSDPer1kChars; got != want {
+		t.Fatalf("bulkMicros(1000) with nothing published = %d, want the floor %d", got, want)
 	}
-	if bulkMicros(0) != 0 {
+	if bulkMicros(ctx, 0) != 0 {
 		t.Fatal("a fully-cached rebuild must cost nothing")
 	}
-	t.Setenv("TRANSLATE_PRICE_UUSD_PER_1K_CHARS", "500")
-	if got := bulkMicros(2000); got != 1000 {
-		t.Fatalf("override rate: bulkMicros(2000) = %d, want 1000", got)
+	if got := bulkMicros(ctx, -5); got != 0 {
+		t.Fatalf("negative characters are not work, got %d", got)
 	}
-	t.Setenv("TRANSLATE_PRICE_UUSD_PER_1K_CHARS", "-1")
-	if got := bulkMicros(1000); got != defaultBulkPriceUUSDPer1kChars {
-		t.Fatalf("a bad rate must fall through to the default, got %d", got)
+
+	saved := bulkRate
+	t.Cleanup(func() { bulkRate = saved })
+
+	// A published price is charged per UNIT of 1000 source characters.
+	bulkRate = func(context.Context) int64 { return 500 }
+	if got := bulkMicros(ctx, 2000); got != 1000 {
+		t.Fatalf("2000 chars at 500 uUSD/1k = %d, want 1000", got)
 	}
-	t.Setenv("TRANSLATE_PRICE_UUSD_PER_1K_CHARS", "0")
-	if got := bulkMicros(1_000_000); got != 0 {
-		t.Fatalf("rate 0 must make the tier free, got %d", got)
+	if got := bulkMicros(ctx, 1000); got != 500 {
+		t.Fatalf("1000 chars at 500 uUSD/1k = %d, want 500", got)
+	}
+
+	// Zero is a legal published price and makes the tier free.
+	bulkRate = func(context.Context) int64 { return 0 }
+	if got := bulkMicros(ctx, 1_000_000); got != 0 {
+		t.Fatalf("a published rate of 0 must make the tier free, got %d", got)
+	}
+
+	// A NEGATIVE price is not a discount. It would bill a credit for work done,
+	// so it reads as nothing to charge rather than as money owed to the caller.
+	bulkRate = func(context.Context) int64 { return -1 }
+	if got := bulkMicros(ctx, 1000); got != 0 {
+		t.Fatalf("a negative rate billed %d; it must charge nothing, never a credit", got)
 	}
 }
 

@@ -39,6 +39,7 @@ package risk
 // fix is an ordering rule and not a message.
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -209,9 +210,8 @@ func TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope(t *testing.T
 // the hole the deletion above could have opened, closed.
 //
 // [cloud.ResourceMeter.Gate] returns EARLY when the cost is zero — before its own
-// empty-org refusal — and the price is an operator knob
-// (CLOUD_RISK_PRICE_UUSD_PER_SCREEN, and 0 is a legal value that makes the surface
-// free). So "the money door refuses an unidentified caller" is true only while
+// empty-org refusal — and the price is an operator's row in the meter authority,
+// where 0 is a legal value that makes the surface free. So "the money door refuses an unidentified caller" is true only while
 // somebody is charged. The app's own copy of the rule used to cover that case by
 // accident, because it ran before the price was computed.
 //
@@ -222,11 +222,15 @@ func TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope(t *testing.T
 // Mutation proof: revert [tenantOf]'s no-principal branch to
 // zip.ErrForbidden("no validated principal") and this reports the flat envelope on
 // every op; make it `return "", nil` and it reports 200 — an unidentified caller
-// served, for free, by one env var.
+// served, for free, by one price set to zero.
 func TestPricedOps_RefuseAnUnidentifiedCallerEvenWhenTheOperatorPricesThemAtZero(t *testing.T) {
 	probe.reset(true)
-	t.Setenv("CLOUD_RISK_PRICE_UUSD_PER_SCREEN", "0")
-	if screenMicros(1) != 0 {
+	// Zero is a legal price. It used to be reachable through an env var; the
+	// price is a row now, so the seam is the resolver itself.
+	saved := screenRate
+	t.Cleanup(func() { screenRate = saved })
+	screenRate = func(context.Context) int64 { return 0 }
+	if screenMicros(context.Background(), 1) != 0 {
 		t.Fatal("the price is not zero, so this test is not exercising the free path it exists for")
 	}
 	app := mountBilled(t, &ledger{available: 100_000_000})

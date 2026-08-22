@@ -25,7 +25,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -1292,24 +1291,34 @@ const maxBatch = 1000
 // same time, and which of the two it is depends only on who found it first.
 
 // defaultScreenUUSD is the fallback price of ONE screen in micro-USD when no
-// operator override is set. A clearly-named, configurable POLICY default — never
-// a fabricated market price; ops sets the real number per deployment via
-// CLOUD_RISK_PRICE_UUSD_PER_SCREEN. Zero makes screens free and therefore
-// un-gated, mirroring the edge gate's price==0 pass-through.
+// published one. It is the FLOOR, not the price: the meter authority answers
+// what a screen costs and this is what a screen cost before the authority
+// existed, so an unreadable authority keeps charging exactly what it charged
+// yesterday. Zero would make screens free and therefore un-gated, mirroring the
+// edge gate's price==0 pass-through.
 const defaultScreenUUSD int64 = 100
 
-// screenRate resolves the per-screen price. A negative or unparseable value falls
-// through to the default, so a typo can never silently zero out billing.
-func screenRate() int64 {
-	s := strings.TrimSpace(os.Getenv("CLOUD_RISK_PRICE_UUSD_PER_SCREEN"))
-	if s == "" {
-		return defaultScreenUUSD
-	}
-	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || n < 0 {
-		return defaultScreenUUSD
-	}
-	return n
+// nanoPerMicro converts the authority's nano-dollars to the micro-USD this app
+// bills in. Stated once, next to the only two places that cross the boundary,
+// because a factor of a thousand written twice is a factor of a thousand that
+// eventually differs in one of them.
+const nanoPerMicro int64 = 1000
+
+// screenRate resolves the per-screen price from the meter authority, in
+// micro-USD, falling back to the compiled floor.
+//
+// THE ENV OVERRIDE IS GONE. CLOUD_RISK_PRICE_UUSD_PER_SCREEN priced this before
+// and was set by no deployment; an env var keeps no history, so nothing could
+// say what we charged in March or who changed it. The price is a row now, edited
+// at admin.hanzo.ai with an audit trail, and the constant above is the floor
+// beneath it — two answers, in a stated order, instead of three.
+// Indirected through a var so a test can price a screen at ZERO, which is a legal
+// price that makes the surface free — and the property that a free surface is
+// still not an ANONYMOUS one is the thing gate_order_test exists to hold. The env
+// var used to be that seam by accident; this is the same seam on purpose, and the
+// same one callProvider uses a repo over.
+var screenRate = func(ctx context.Context) int64 {
+	return cloud.RateNano(ctx, "risk", "screen", defaultScreenUUSD*nanoPerMicro) / nanoPerMicro
 }
 
 // windowScreens prices a WINDOW of the warehouse: one screen per day rolled up
@@ -1323,8 +1332,8 @@ func screenRate() int64 {
 func windowScreens(window time.Duration) int { return int(window / (24 * time.Hour)) }
 
 // screenMicros is what n screens cost, in micro-USD.
-func screenMicros(n int) int64 {
-	rate := screenRate()
+func screenMicros(ctx context.Context, n int) int64 {
+	rate := screenRate(ctx)
 	if n <= 0 || rate <= 0 {
 		return 0
 	}
@@ -1373,7 +1382,7 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 	// [TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope] is what holds
 	// the remaining answer, and it fails if this file grows a second one back.
 	project, validated := principal.ValidatedProject(c)
-	if err := o.s.Bill.Gate(ctx, ledger, project, validated, kind, cloud.MicrosToGateCents(screenMicros(n))); err != nil {
+	if err := o.s.Bill.Gate(ctx, ledger, project, validated, kind, cloud.MicrosToGateCents(screenMicros(ctx, n))); err != nil {
 		return nil, cloud.Denied(err)
 	}
 	who := metering.Usage{
@@ -1383,7 +1392,7 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 	bill := o.s.Bill
 	return func(done int) {
 		use := who
-		use.AmountMicros = screenMicros(done)
+		use.AmountMicros = screenMicros(ctx, done)
 		bill.MeterUsage(ledger, kind, use)
 	}, nil
 }
