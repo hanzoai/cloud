@@ -1746,28 +1746,33 @@ jobs:
           # is a repository PERMISSION, not a missing scope, and no scope on a
           # per-run token reaches an estate it was not minted for.
           #
-          # FORGE_TOKEN is the org credential that spans them. All seven repos
-          # below are writable by an org identity (probed: push=true on each) and
-          # all seven workflows are active, so the poke had nothing wrong with it
-          # but the name in front of it.
+          # FORGE_TOKEN is the org credential that spans them. Every repo below
+          # is writable by an org identity and its workflow is active, so the poke
+          # had nothing wrong with it but the name in front of it.
           GIT_TOKEN: ${{ secrets.FORGE_TOKEN }}
           # The projections that exist ON GIT.HANZO.AI, which is the only place a
-          # dispatch can be answered. hanzo-kotlin/sdk and hanzo-cpp/sdk are in
-          # the old list and are NOT here: both 404 on git.hanzo.ai, so poking
-          # them is not a thing that can succeed. Mirror them to Hanzo Git and
-          # add them back; leaving them in would fail every release for two repos
-          # nothing can deliver to.
+          # dispatch can be answered. A projection belongs here when three things
+          # hold of it, each probed: the repo answers on git.hanzo.ai, its
+          # hanzo.yml declares a `client:` lane, and its caller declares the
+          # spec-ref input — without that last one the lane re-reads the locked
+          # ref and writes nothing, so the poke is ceremony.
+          #
           # repo:workflow — the workflow name is NOT uniform, and assuming it was
           # would fail every release on the one that differs. hanzo-docs/docs has
           # no cicd.yml at all (probed: 404 `workflow "cicd.yml" doesn't exist`);
-          # its spec-consuming workflow is deploy.yml. The six SDKs do use cicd.yml.
+          # its spec-consuming workflow is deploy.yml. The SDKs use cicd.yml.
           #
-          # hanzo-kotlin/sdk and hanzo-cpp/sdk are absent on purpose: both 404 on
-          # git.hanzo.ai, so there is nothing to poke. Mirror them and add them.
+          # Four projections are absent, each for a fact about the repo rather
+          # than a preference: hanzoai/ruby-sdk carries ci.yml and no `client:`
+          # lane, hanzo-dart/sdk is a read-only mirror of its GitHub original,
+          # hanzoai/swift-sdk carries no hanzo.yml, and the cpp client has no
+          # repository on this forge to poke.
           PROJECTIONS: >-
             hanzoai/python-sdk:cicd.yml hanzoai/js-sdk:cicd.yml
             hanzo-go/sdk:cicd.yml hanzo-rs/sdk:cicd.yml
-            hanzoai/java-sdk:cicd.yml hanzoai/cli:cicd.yml
+            hanzoai/java-sdk:cicd.yml hanzoai/kotlin-sdk:cicd.yml
+            hanzoai/php-sdk:cicd.yml hanzo-js/sdk-fetch:cicd.yml
+            hanzo-js/sdk-angular:cicd.yml hanzoai/cli:cicd.yml
             hanzo-docs/docs:deploy.yml
         run: |
           set -euo pipefail
