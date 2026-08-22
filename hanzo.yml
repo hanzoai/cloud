@@ -47,7 +47,7 @@
 #      Pinned by TestArtifactScripts_IndexPerFileWhenTheNameCarriesThePlatform,
 #      which runs both scripts for real and fails on the old behaviour.
 #
-#   2. NOT A BLOCKER: the door the comment below calls "being built next door" is
+#   2. NOT A BLOCKER: the endpoint the comment below calls "being built next door" is
 #      built, HERE. `POST /v1/platform/runner` with a `binaries:` recipe launches the
 #      artifact Job, and the only container that ever sees the object-store
 #      credential is the publisher, from the `artifact-s3` KMSSecret in the build
@@ -55,14 +55,14 @@
 #      is the ordinary one (SuperAdmin or OrgAdmin, `repoOwnerInOrg` confining an
 #      org-admin to its own owner), i.e. the IAM bearer the KMS step already
 #      mints. Live: an unauthenticated POST answers 403 `invalid build token`,
-#      which is a routed door refusing. It publishes to the same layout
+#      which is a routed endpoint refusing. It publishes to the same layout
 #      s3.hanzo.ai/<bucket>/<owner>/<repo>/<tag>/binaries.json that CLOUD_PLUGINS
-#      reads — one index, two front doors, exactly as apps/platform/artifact.go
+#      reads — one index, two endpoints, exactly as apps/platform/artifact.go
 #      says. Provisioning S3_ADMIN_* to use ci's own `bucket:` lane would be a
 #      SECOND credential for a job that already has one.
 #
 # So what remains is a decision about WHERE the plugin build runs, not a missing
-# secret: ci's `bucket:` lane (on the runner, needs the key) or this door (in the
+# secret: ci's `bucket:` lane (on the runner, needs the key) or this endpoint (in the
 # cluster, holds the key already, and takes the build off the release pipeline's
 # critical path — which is the point of a light host in the first place).
 #
@@ -87,7 +87,7 @@
 #      convention, either lane. (`out: dist/*` also aborts that lane today — it
 #      copies each match into dist/ by basename, and `cp x x` is an error, not a
 #      no-op.) The alternative is not 121 entries: that would blow the platform
-#      front door's 16-binary bound AND restate manifest/apps.go in YAML.
+#      endpoint's 16-binary bound AND restate manifest/apps.go in YAML.
 #
 #   2. Somebody has to answer where the write credential comes from. `bucket:`
 #      uploads through S3_ADMIN_ACCESS_KEY/S3_ADMIN_SECRET_KEY read from KMS, and
@@ -96,10 +96,10 @@
 #      red — and rollout, reach, fanout and receipt all declare needs: on the gate
 #      below. That is the release pipeline stopped in exchange for nothing, which is
 #      exactly the state ci's `site:` lane shipped in. The answer being built next
-#      door is to stop needing the credential: publish through an authenticated
+#      endpoint is to stop needing the credential: publish through an authenticated
 #      cloud endpoint on the IAM bearer the KMS step already mints, so CI names no
 #      bucket and holds no bucket key. If that is the direction, this wants the
-#      same door rather than a provisioned S3_ADMIN_*.
+#      same endpoint rather than a provisioned S3_ADMIN_*.
 #
 # When both hold, the whole declaration is:
 #
