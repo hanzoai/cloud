@@ -12,17 +12,17 @@
 #
 # It had stopped being true for a whole class of images. cloud's Dockerfile
 # declares `ARG REVISION=unknown`, and the label takes that default unless a
-# builder passes it. The docker/build-push-action lane happens to overwrite the
+# builder passes it. The docker/build-push-action builder happens to overwrite the
 # label from the outside (its `labels:` input is applied after the Dockerfile's
-# own LABEL), so ITS images were fine. The platform lane — buildctl, via
+# own LABEL), so ITS images were fine. The platform builder — buildctl, via
 # buildFrontendCmd in apps/platform/k8s.go — passes build-arg:VERSION and
 # build-arg:GIT_VERSION but no REVISION, so every image it published carried
 # `revision=unknown` and could not be traced to a commit at all.
 #
 # That is exactly how the two v1.801.410 images became indistinguishable without
 # a byte-level diff: one labelled 1b8b76ed (the real release), one labelled
-# `unknown` (the lane that overwrote the tag 12 minutes later). With the label
-# truthful on both lanes, "which commit is this image" is one call, and the
+# `unknown` (the builder that overwrote the tag 12 minutes later). With the label
+# truthful on both builders, "which commit is this image" is one call, and the
 # tag -> commit -> image triangle closes.
 #
 #   image-revision.sh <image-path> <ref> [bearer-token]
