@@ -38,21 +38,6 @@ import (
 // methods over one core rather than one `open(door)` factory.
 type ops struct{ s *Service }
 
-// orgFrom is the caller's validated org, off the context. It fails closed where
-// there is no request: a CLI LocalInvoke has no attested caller, and a sandbox is
-// leased against an org's ledger.
-func orgFrom(ctx context.Context) (string, error) {
-	c, ok := cloud.Request(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	o, ok := orgOf(c)
-	if !ok {
-		return "", principal.Refused(c)
-	}
-	return o, nil
-}
-
 // ── the collection ──────────────────────────────────────────────────────────
 
 // leaseIn is what POST /v1/sandbox takes. It is the same shape the door's lease
@@ -90,7 +75,7 @@ type leaseIn struct {
 // Answers 201 with the sandbox as leased, which names the runtime it GOT — not
 // the one that was asked for.
 func (o ops) create(ctx context.Context, in *leaseIn) (*Sandbox, error) {
-	org, err := orgFrom(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +115,7 @@ type sandboxList struct {
 // keyed on the validated org, so another tenant's sandbox is not something this
 // operation can return.
 func (o ops) list(ctx context.Context, in *sandboxFilter) (*sandboxList, error) {
-	org, err := orgFrom(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +144,7 @@ type sandboxRef struct {
 // An id the caller's org does not hold is the same 404 an unknown id gives — the
 // store is keyed on the org, so a cross-tenant id simply is not there.
 func (o ops) get(ctx context.Context, in *sandboxRef) (*Sandbox, error) {
-	org, err := orgFrom(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +175,7 @@ type endIn struct {
 // `?purge=1` additionally removes the record, so the sandbox stops being listed
 // at all rather than being listed as ended.
 func (o ops) del(ctx context.Context, in *endIn) (*struct{}, error) {
-	org, err := orgFrom(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +213,7 @@ type execRequest struct {
 // status is 200 and the exit code is in the answer, because "the command failed"
 // and "the call failed" are different facts.
 func (o ops) exec(ctx context.Context, in *execRequest) (*ExecResult, error) {
-	org, err := orgFrom(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +263,7 @@ func (o ops) screenTicket(ctx context.Context, in *sandboxRef) (*ticketGrant, er
 // ticketFor is the one mint both doors share, so neither can drift from the
 // other about what a ticket is or how long it lasts.
 func (o ops) ticketFor(ctx context.Context, in *sandboxRef, door string) (*ticketGrant, error) {
-	org, err := orgFrom(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
