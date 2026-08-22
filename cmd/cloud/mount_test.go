@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/webui"
@@ -78,13 +79,27 @@ func dead(t *testing.T, name, prefix string) manifest.App {
 	return manifest.App{Name: name, Prefixes: []string{prefix}, Eager: true}
 }
 
+// deadline is how long an app.Test call waits, spelled ONCE for this package.
+//
+// fiber's default is one second, which makes every request here an assertion
+// about latency that none of these tests meant to make. A host-shaped test mounts
+// the console, the spec door and several plugin subsystems, and under a
+// whole-repo `go test ./...` that shares a machine with everything else: three
+// reads of /v1/openapi.json failed as "i/o timeout" while the very next line of
+// the log shows the same path answering 200 in a millisecond.
+//
+// doorlimit_test.go already passed thirty seconds inline, twice — this is that
+// value, in one place, for every call site. Thirty seconds still catches a
+// handler that never returns, which is the only thing a deadline here is for.
+var deadline = zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}
+
 func do(t *testing.T, app *zip.App, path string) (int, string, string) {
 	t.Helper()
 	req, err := http.NewRequest("GET", "http://cloud"+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, deadline)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
 	}
