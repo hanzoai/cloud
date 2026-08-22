@@ -2287,12 +2287,20 @@
    "doc": "Chat answers a founder's question about their launch journey as the Business AI\ncoach: it grounds the reply in the org's REAL progress, its ranked available\nquests and its analytics funnel, and returns those candidate quests alongside so\nthe caller can act on one. READ-ONLY — it advises and never runs a step, so it\ncannot be talked into performing an action; the only executing path is POST\n/v1/guide/steps/{id}/do. One AI completion per call, billed to the caller's own\npayer."
   },
   {
+   "id": "post_guide_steps_by_id_done",
+   "doc": "Marks one step of the caller org's journey complete and returns the\nrefreshed journey.\n\nDependency-GATED, exactly as start is: a step whose prerequisites are unfinished\nis refused 409 carrying {error, step, blockedBy} naming what is in the way."
+  },
+  {
    "id": "post_guide_steps_by_id_reset",
    "doc": "Returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done."
   },
   {
    "id": "post_guide_steps_by_id_skip",
    "doc": "Marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it."
+  },
+  {
+   "id": "post_guide_steps_by_id_start",
+   "doc": "Marks one step of the caller org's journey in progress and returns the\nrefreshed journey.\n\nDependency-GATED: a step whose prerequisites are unfinished is refused 409\ncarrying {error, step, blockedBy}, where blockedBy names the exact steps in the\nway — enough to render the reason without asking again."
   }
  ],
  "help": [
