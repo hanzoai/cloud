@@ -709,3 +709,66 @@ func Actor(c *zip.Ctx) string {
 	}
 	return org + "/" + sub
 }
+
+// Orgs is the set of orgs the validated principal may act in, from the edge's
+// X-User-Orgs (cloud.HeaderUserOrgs) — IAM's signed membership set, home first.
+//
+// It answers what a surface may OFFER, never what it may do: acting in an org
+// still goes through Org, which reads the effective org the boundary decided.
+// So a caller cannot reach another tenant's rows by appearing in this list.
+//
+// It FAILS CLOSED the same way Org does, on the same fact: an empty user claim
+// means no validated principal, so the header that rode along is untrusted and
+// the answer is no orgs at all. A principal carrying no membership set — an sk-
+// key, a client_credentials machine — has none either, which is the truth about
+// it rather than a degraded read.
+func Orgs(c *zip.Ctx) []string { return OrgsOf(c.User(), c.Header(headerUserOrgs)) }
+
+// WithOrgs parks the membership set for a typed op, the way WithOrg parks the
+// effective org — so an op reads it from its context rather than reaching for
+// the request, and there is one place the set is resolved.
+func WithOrgs(ctx context.Context, c *zip.Ctx) context.Context {
+	set := Orgs(c)
+	if len(set) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, orgsKey{}, set)
+}
+
+// OrgsFrom resolves the set WithOrgs parked — the typed-op counterpart of Orgs.
+//
+// Off the HTTP path it answers NONE rather than falling back to the caller's
+// single org, and the distinction is the point: a background call acts for one
+// tenant, which is what Acting already says, and inventing a membership set for
+// it would let a surface offer a switch nobody signed.
+func OrgsFrom(ctx context.Context) []string {
+	set, _ := ctx.Value(orgsKey{}).([]string)
+	return set
+}
+
+type orgsKey struct{}
+
+// OrgsOf is that decision over the two values it turns on, so the plane reads it
+// the same way the HTTP boundary does — the split Org/OrgOf already makes.
+func OrgsOf(user, set string) []string {
+	if strings.TrimSpace(user) == "" {
+		return nil
+	}
+	var out []string
+	seen := make(map[string]bool)
+	for _, o := range strings.Split(set, ",") {
+		o = strings.TrimSpace(o)
+		if o == "" || len(o) > MaxOrgLen || seen[o] {
+			continue
+		}
+		seen[o] = true
+		out = append(out, strings.Clone(o))
+	}
+	return out
+}
+
+// headerUserOrgs is spelled here rather than imported because apps/principal is
+// a LEAF: the root cloud package imports it, so naming cloud.HeaderUserOrgs would
+// close a cycle. The two spellings are held together by
+// TestOrgsHeaderMatchesTheEdge in the root package, which reads both.
+const headerUserOrgs = "X-User-Orgs"

@@ -3,10 +3,31 @@
 package base
 
 import (
+	"encoding/json"
+
 	"github.com/zap-proto/zip"
 )
 
 func init() {
+	zip.Describe("GET /v1/base/bases", zip.Doc{
+		Description: "Lists every Base the caller can reach, one per org their token carries.\n\nThe orgs come from IAM's signed membership set, so the list is exactly the\norgs the caller is a member of and cannot be widened by asking. It is the\naccount-wide view: a Base is per org, so this is one entry per org and there\nis nothing to page.\n\nA caller with no membership set — a machine credential, an API key — reaches\nno Base and receives an empty list rather than a refusal, because holding no\nmembership is an answer and not a failure.",
+		Fields: map[string]string{
+			"baseView.bytes":  "Bytes is the store's size on disk, present only once it exists. It is what\nthis Base occupies, not a quota.",
+			"baseView.exists": "Exists reports whether this Base's store has been provisioned. False is an\norg nobody has stored anything for yet, which is a state to name rather\nthan an error: the store is created the first time anything writes.",
+			"baseView.org":    "Org is the org this Base belongs to. It is the address every other Base\ncall is scoped by, and a Base has no name of its own.",
+		},
+		Response: json.RawMessage(`[{"org":"hanzo","exists":true,"bytes":430080}]`),
+	})
+	zip.Describe("GET /v1/base/bases/:org", zip.Doc{
+		Description: "Describes ONE org's Base — whether its store exists, and what it occupies.\n\nThe org must be one the caller's token carries; any other is not found, so\nthis cannot be used to learn which orgs exist. That check is the same\nmembership set the listing is built from, which is why the two can never\ndisagree about what a caller may see.",
+		Fields: map[string]string{
+			"baseRef.org":     "Org is the org whose Base to describe, from the path. An org the caller's\ntoken does not carry is not found — the same answer a nonexistent one\ngets, so the listing cannot be used to discover which orgs exist.",
+			"baseView.bytes":  "Bytes is the store's size on disk, present only once it exists. It is what\nthis Base occupies, not a quota.",
+			"baseView.exists": "Exists reports whether this Base's store has been provisioned. False is an\norg nobody has stored anything for yet, which is a state to name rather\nthan an error: the store is created the first time anything writes.",
+			"baseView.org":    "Org is the org this Base belongs to. It is the address every other Base\ncall is scoped by, and a Base has no name of its own.",
+		},
+		Response: json.RawMessage(`{"org":"hanzo","exists":true,"bytes":430080}`),
+	})
 	zip.Describe("GET /v1/base/health", zip.Doc{
 		Description: "Reports that the base subsystem is serving.\n\nIt is deliberately INDEPENDENT of whether this deployment actually embeds the\nBase engine: the route answers before the CLOUD_BASE_EMBED gate and before the\n/v1/base/* wildcard, so a liveness probe measures the process rather than an\noptional feature, and the wildcard can never shadow it. It reads no tenant, so a\nprober that sends no principal is answered rather than refused.",
 		Fields: map[string]string{
