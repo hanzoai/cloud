@@ -24,11 +24,10 @@ type fakeVisor struct {
 	// {status,msg,data} shape — an un-upgraded Visor, which is the deploy skew
 	// this endpoint has actually been in.
 	nodesSpeakTheOldEnvelope bool
-	// machinesByOwner is the per-tenant REGISTRY inventory (/v1/get-machines).
+	// machinesByOwner is the per-tenant REGISTRY inventory (source=registry).
 	machinesByOwner map[string][]map[string]any
-	// liveByOwner is the per-tenant LIVE DigitalOcean reseller list
-	// (/v1/machines → ListComputeMachines) — the live droplet inventory that
-	// listMachines now unions with the registry.
+	// liveByOwner is the per-tenant LIVE house-account inventory (source=live) —
+	// the other half of the union Visor answers under /v1/machines.
 	liveByOwner map[string][]map[string]any
 	// nodesByOwner is the per-tenant DOKS worker NODES list (/v1/k8s/nodes →
 	// visor's TYPED ListNodes op) — the THIRD machine source managedMachines unions.
@@ -62,22 +61,84 @@ func nodesOut(nodes []map[string]any) map[string]any {
 	return map[string]any{"nodes": nodes}
 }
 
+// union is what Visor's one collection answers: registry rows first (they win a
+// collision), then any live row the registry does not already name.
+func (f *fakeVisor) union(owner string) []map[string]any {
+	var out []map[string]any
+	seen := map[string]bool{}
+	for _, m := range f.machinesByOwner[owner] {
+		c := map[string]any{"source": "registry"}
+		for k, v := range m {
+			c[k] = v
+		}
+		out = append(out, c)
+		seen[owner+"/"+m["name"].(string)] = true
+	}
+	for _, m := range f.liveByOwner[owner] {
+		if seen[owner+"/"+m["name"].(string)] {
+			continue
+		}
+		c := map[string]any{"source": "live"}
+		for k, v := range m {
+			c[k] = v
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+func (f *fakeVisor) launch(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	quote := map[string]any{"size": body["size"], "region": body["region"], "priceHourly": 1.57, "currency": "usd"}
+	if dry, _ := body["dryRun"].(bool); dry {
+		envelope200(w, quote)
+		return
+	}
+	machine := map[string]any{
+		"owner": f.lastOwner, "name": body["name"], "id": "drop-123",
+		"size": body["size"], "region": body["region"], "state": "provisioning",
+	}
+	envelope200(w, map[string]any{"machine": machine, "quote": quote})
+}
+
 func (f *fakeVisor) server(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/get-machines", func(w http.ResponseWriter, r *http.Request) {
-		owner := r.URL.Query().Get("owner")
-		f.lastOwner = owner
-		envelope200(w, f.machinesByOwner[owner])
-	})
-	// Live DO reseller list (ListComputeMachines). Exact-match path — it does NOT
-	// shadow /v1/machines/launch below (that is a distinct exact pattern).
+	// ONE machines collection, exactly as Visor now serves it: the org's OWN
+	// registry rows and the house-account live rows in one answer, each tagged
+	// with the source it came from, deduped by (owner, name) with the registry
+	// winning. The fake unions because the SERVER unions — a fake that still
+	// answered two addresses would let cloud pass a test no real Visor could.
 	mux.HandleFunc("/v1/machines", func(w http.ResponseWriter, r *http.Request) {
 		owner := r.URL.Query().Get("owner")
 		f.lastOwner = owner
-		envelope200(w, f.liveByOwner[owner])
+		if r.Method == http.MethodPost {
+			f.launch(w, r)
+			return
+		}
+		envelope200(w, f.union(owner))
 	})
-	// DOKS worker nodes (visor's typed ListNodes op) — the third machine source.
+	// One machine, named by its owner and its name.
+	mux.HandleFunc("/v1/machines/{owner}/{name}", func(w http.ResponseWriter, r *http.Request) {
+		owner, name := r.PathValue("owner"), r.PathValue("name")
+		f.lastOwner = owner
+		if r.Method == http.MethodDelete {
+			envelope200(w, true)
+			return
+		}
+		for _, m := range f.union(owner) {
+			if m["name"] == name {
+				envelope200(w, m)
+				return
+			}
+		}
+		envelope200(w, map[string]any{}) // not found -> empty machine
+	})
+	mux.HandleFunc("/v1/pools", func(w http.ResponseWriter, r *http.Request) {
+		f.lastOwner = r.URL.Query().Get("owner")
+		envelope200(w, f.poolsByOwner[f.lastOwner])
+	})
 	mux.HandleFunc("/v1/k8s/nodes", func(w http.ResponseWriter, r *http.Request) {
 		owner := r.URL.Query().Get("owner")
 		f.lastOwner = owner
@@ -87,40 +148,6 @@ func (f *fakeVisor) server(t *testing.T) *httptest.Server {
 		}
 		op200(w, nodesOut(f.nodesByOwner[owner]))
 	})
-	mux.HandleFunc("/v1/get-machine", func(w http.ResponseWriter, r *http.Request) {
-		id := r.URL.Query().Get("id") // owner/name
-		for _, ms := range f.machinesByOwner {
-			for _, m := range ms {
-				if id == m["owner"].(string)+"/"+m["name"].(string) {
-					envelope200(w, m)
-					return
-				}
-			}
-		}
-		envelope200(w, map[string]any{}) // not found → empty machine
-	})
-	mux.HandleFunc("/v1/machines/launch", func(w http.ResponseWriter, r *http.Request) {
-		f.lastOwner = r.URL.Query().Get("owner")
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		quote := map[string]any{"size": body["size"], "region": body["region"], "priceHourly": 1.57, "currency": "usd"}
-		if dry, _ := body["dryRun"].(bool); dry {
-			envelope200(w, quote)
-			return
-		}
-		machine := map[string]any{
-			"owner": f.lastOwner, "name": body["name"], "id": "drop-123",
-			"size": body["size"], "region": body["region"], "state": "provisioning",
-		}
-		envelope200(w, map[string]any{"machine": machine, "quote": quote})
-	})
-	mux.HandleFunc("/v1/delete-machine", func(w http.ResponseWriter, r *http.Request) {
-		envelope200(w, true)
-	})
-	mux.HandleFunc("/v1/get-node-pools", func(w http.ResponseWriter, r *http.Request) {
-		f.lastOwner = r.URL.Query().Get("owner")
-		envelope200(w, f.poolsByOwner[f.lastOwner])
-	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -129,8 +156,14 @@ func (f *fakeVisor) server(t *testing.T) *httptest.Server {
 // mountApp mounts the visor surface against the fake upstream.
 func mountApp(t *testing.T, f *fakeVisor) *zip.App {
 	t.Helper()
-	srv := f.server(t)
-	t.Setenv("VISOR_URL", srv.URL)
+	return mountAt(t, f.server(t).URL)
+}
+
+// mountAt is mountApp against any upstream, for a test whose subject is the
+// REQUEST cloud sends rather than the answer it gets back.
+func mountAt(t *testing.T, upstream string) *zip.App {
+	t.Helper()
+	t.Setenv("VISOR_URL", upstream)
 	t.Setenv("VISOR_CLIENT_ID", "")     // force bearer-forward path (fake ignores auth)
 	t.Setenv("VISOR_CLIENT_SECRET", "") //
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -224,7 +257,7 @@ func TestMachinesListTenantScopedAndShape(t *testing.T) {
 }
 
 // TestMachinesMergeLiveDOAndRegistry proves listMachines unions Visor's registry
-// (/v1/get-machines) with the LIVE DigitalOcean reseller list (/v1/machines): a
+// (source=registry) with the LIVE house-account list (source=live): a
 // droplet present ONLY in the live list surfaces (the bug this fixes), a machine
 // in BOTH is deduped (by id AND by name — even when the registry row has no
 // provider id yet), and the REGISTRY entry wins the collision so its enrichment
@@ -535,6 +568,55 @@ func TestGPUSpecOf(t *testing.T) {
 		spec, ok := gpuSpecOf(tc.slug)
 		if ok != tc.ok || spec.model != tc.model || spec.perNode != tc.perNode {
 			t.Fatalf("gpuSpecOf(%q) = %+v,%v want %s,%d,%v", tc.slug, spec, ok, tc.model, tc.perNode, tc.ok)
+		}
+	}
+}
+
+// A rename moves three things — the address, the QUERY it is scoped by, and the
+// BODY it carries — and each half fails quietly on its own: an address that
+// lands with the old query is not refused, it answers for whatever scope the
+// server falls back to. The three pool writes moved all three at once and
+// nothing drove them, so this asserts what ARRIVES upstream rather than what
+// cloud believes it sent.
+func TestPoolWritesReachTheNounAddresses(t *testing.T) {
+	type call struct{ method, path, query, body string }
+	var got []call
+	mux := http.NewServeMux()
+	record := func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, call{r.Method, r.URL.Path, r.URL.RawQuery, string(b)})
+		envelope200(w, map[string]any{"name": "gpu", "poolId": "p-1", "count": 4})
+	}
+	mux.HandleFunc("/v1/pools", record)
+	mux.HandleFunc("/v1/pools/{owner}/{name}", record)
+	mux.HandleFunc("/v1/pools/{owner}/{name}/size", record)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	app := mountAt(t, srv.URL)
+	do(t, app, http.MethodPost, "/v1/visor/clusters/c-1/pools", "acme",
+		map[string]any{"provider": "digitalocean", "name": "gpu", "size": "s-4vcpu-8gb", "count": 2})
+	do(t, app, http.MethodPost, "/v1/visor/clusters/c-1/pools/gpu/scale", "acme",
+		map[string]any{"provider": "digitalocean", "count": 4})
+	do(t, app, http.MethodDelete, "/v1/visor/clusters/c-1/pools/gpu", "acme", nil)
+
+	want := []call{
+		// The collection is scoped by a query, because a collection is scoped.
+		{http.MethodPost, "/v1/pools", "clusterId=c-1&owner=acme&provider=digitalocean", ""},
+		// An item is NAMED, so the tenant is in the address and the only query
+		// left is the value being set.
+		{http.MethodPut, "/v1/pools/acme/gpu/size", "count=4", ""},
+		{http.MethodDelete, "/v1/pools/acme/gpu", "", ""},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("upstream saw %d calls, want %d: %+v", len(got), len(want), got)
+	}
+	for i, w := range want {
+		if got[i].method != w.method || got[i].path != w.path {
+			t.Errorf("call %d: %s %s, want %s %s", i, got[i].method, got[i].path, w.method, w.path)
+		}
+		if got[i].query != w.query {
+			t.Errorf("call %d query: %q, want %q", i, got[i].query, w.query)
 		}
 	}
 }
