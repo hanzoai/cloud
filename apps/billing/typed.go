@@ -47,13 +47,28 @@ type noInput struct{}
 // billing_account claim) the org does not carry. The 401 is the same answer
 // every finance read has always given an absent identity.
 func payer(ctx context.Context) (org, subject string, err error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", "", zip.ErrUnauthorized("sign in to view finance")
-	}
 	c, ok := cloud.Request(ctx)
 	if !ok {
 		// Off the HTTP path there is no credential to resolve a wallet from.
+		return "", "", zip.ErrUnauthorized("sign in to view finance")
+	}
+	org, ok = principal.OrgFrom(ctx)
+	if !ok {
+		// A TRUSTED SERVICE names its tenant instead of carrying a session, and
+		// readerOrg is where that rule lives — the same one `balance` reads by, for
+		// the same reason. Every app is its own child PROCESS, so ai cannot see an
+		// in-process reader hook and asks over HTTP with COMMERCE_SERVICE_TOKEN;
+		// that request has no session, so OrgFrom alone is empty and the read was
+		// refused. balance already resolved this and the copy here did not follow,
+		// which is precisely the drift the comment on readerOrg warns about.
+		//
+		// It is not a widening: readerOrg admits a validated principal first and a
+		// service token ONLY when it names an org, and the subject stays
+		// server-resolved below — a caller still cannot ask about somebody else's
+		// wallet by putting a name in the body.
+		org, ok = readerOrg(c)
+	}
+	if !ok {
 		return "", "", zip.ErrUnauthorized("sign in to view finance")
 	}
 	return org, subjectFor(c, org), nil
