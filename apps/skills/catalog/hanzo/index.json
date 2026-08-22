@@ -3640,11 +3640,11 @@
       "sha256": "2e1884cfe0474dc6c16393a9e6bf5a8254b5023227b1e93d147b8fbf90d12d86"
     },
     {
-      "description": "Read platform apps: What this organization has declared, and what CD did with it, One declaration, One app's reconciliation.",
+      "description": "Read platform apps: Answers what this organisation has declared, joined with what the delivery plane has done about it., Answers ONE declaration — what git says this app is, before the delivery plane has had any say in it., Answers ONE app's reconciliation alone — the poll a depl",
       "name": "platform_apps",
       "path": "platform_apps/SKILL.md",
       "service": "platform",
-      "sha256": "6de8f824a8b4ed20ebd2cf963e2ed68fbfd39c3b441eb2ec737f4c81e2cb82f5"
+      "sha256": "aa965315b003120a9ad9157f4ce3f352d80cc43f1fc4b289336a16027e13ac4a"
     },
     {
       "description": "Read platform builds: Returns real build records for your org..",
@@ -3654,11 +3654,11 @@
       "sha256": "c3c7c79900a59866776cffec7282fa39f11e877003d775f00e644c801f398795"
     },
     {
-      "description": "Read platform cd: The delivery plane.",
+      "description": "Read platform cd: Answers every Application the delivery plane holds..",
       "name": "platform_cd",
       "path": "platform_cd/SKILL.md",
       "service": "platform",
-      "sha256": "02638c43084b5f26af6ff1436a3662556756df60b3110b9d9b57b01cc2f028e0"
+      "sha256": "426efeba15931312bc1f08e90ab9bdee343415f24050d533439e2a98b592b668"
     },
     {
       "description": "Read platform ci: Continuous integration (not wired).",

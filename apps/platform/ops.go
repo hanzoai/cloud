@@ -131,7 +131,11 @@ func (o ops) request(ctx context.Context) (*zip.Ctx, error) {
 // It returns the request because an admitted op always needs it — the ROLE only
 // opens the door, and the tenant boundary is then applied inside each handler by
 // scopedNamespaces, which reads the caller's own validated org off it.
-func (b board) admit(ctx context.Context, need cloud.Scope) (*zip.Ctx, error) {
+// It is a FUNCTION rather than a method because it reads nothing off a receiver —
+// only the context and the scope — and two receivers need it: the fleet board and
+// the delivery surface beside it. A method would have made the second one copy the
+// gate, and two copies of an authorization rule are two rules.
+func admit(ctx context.Context, need cloud.Scope) (*zip.Ctx, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
 		return nil, need.Refusal()

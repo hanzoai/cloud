@@ -1,7 +1,7 @@
 ---
 name: platform_cd
 version: "8.0.0"
-description: "Read platform cd: The delivery plane."
+description: "Read platform cd: Answers every Application the delivery plane holds.."
 ---
 
 # Zoo · PLATFORM · cd
@@ -14,11 +14,11 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/platform/cd` — The delivery plane
+- `GET https://api.zoo.ngo/v1/platform/cd` — Answers every Application the delivery plane holds.
 
 ## Response
 
-- `/v1/platform/cd` → JSON object.
+- `/v1/platform/cd` → `cdResp` object with fields: `applications`.
 
 ## Example
 
