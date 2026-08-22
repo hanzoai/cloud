@@ -212,16 +212,15 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// WithOperationID, which would make one app's ids a special case (LLM.md,
 	// failure mode 6). It is not the wire — no status, body or field name moves.
 	//
-	// The step transitions split on ONE fact: whether the route is dependency-GATED.
-	// start and done are, and a blocked step answers 409 with a STRUCTURED body
-	// ({error, step, blockedBy}) written in-band — a shape a typed op cannot
-	// produce, because its only non-2xx is the error it returns and that error's
-	// envelope is {status, code, error}. So those two stay UNTYPED until zip lands
-	// multi-status responses (LLM.md). skip and reset are NOT gated — the 409 branch
-	// is unreachable for them — so their whole answer set is expressible and they
-	// are ops.
-	g.Post("/steps/:id/start", cloud.Handle(s, markStart))
-	g.Post("/steps/:id/done", cloud.Handle(s, markDone))
+	// All four step transitions are ops. The two GATED ones (start, done) were the
+	// last holdouts, and their reason expired rather than being worked around: a
+	// blocked step answers 409 with a STRUCTURED body ({error, step, blockedBy}),
+	// which a zip error could not carry until v1.31.3 gave HTTPError its RFC 9457
+	// extension members. blockedErr.refusal renders it now, so the same body leaves
+	// through a returned error. skip and reset were never gated — the 409 branch is
+	// unreachable for them — which is why they converted first.
+	zip.Post(g, "/steps/:id/start", o.startStep)
+	zip.Post(g, "/steps/:id/done", o.doneStep)
 	zip.Post(g, "/steps/:id/skip", o.skipStep)
 	zip.Post(g, "/steps/:id/reset", o.resetStep)
 	// /do stays UNTYPED for a second reason on top of the 409: it STREAMS the
@@ -820,17 +819,42 @@ type stepRef struct {
 }
 
 // blockedErr reports that a GATED transition was refused because the step still
-// has unfinished dependencies. It is a value, not a zip error, because the two
-// gated routes answer it as a structured 409 body ({error, step, blockedBy}) that
-// a zip error envelope ({status, code, error}) cannot express — the one reason
-// start and done are still untyped handlers. The ungated routes pass gate=false
-// and can never receive it.
+// has unfinished dependencies. The ungated routes pass gate=false and can never
+// receive it.
+//
+// It USED TO BE a plain value that only a raw handler could render, because the
+// answer is a structured 409 and a zip error could carry no members beside its own
+// envelope. HTTPError.Detail is what changed that: `refusal` puts step and
+// blockedBy on the error itself, so a typed op refuses with the same facts.
+//
+// The ENVELOPE around them is the fleet's rather than this route's, and it is not
+// what the raw handler hand-wrote: a returned error renders through
+// cloud.ErrorHandler as RFC 9457 problem-details, so the sentence is `detail` with
+// `type` and `title` beside it where the handler wrote `error`. That is a wire
+// change on this address, it is pinned by TestTheBlockedRefusalKeepsItsWholeBody,
+// and it is the right direction — every other refusal in the fleet already reads
+// that way, because every propagated error goes through that one handler.
+//
+// THE MERGE IS SAFE HERE BECAUSE OF THE KEY NAMES, and that is worth checking per
+// route rather than assuming. Members are copied FIRST and the envelope written
+// over them, so a domain key named type, title, status, detail or code is silently
+// displaced; these are `step` and `blockedBy`, which collide with none. The money
+// wire is the counter-example — its nested {"error":{code,message}} cannot ride
+// Detail at all, which is why cloud.Denied keeps its middleware.
 type blockedErr struct {
 	step      string
 	blockedBy []string
 }
 
 func (e blockedErr) Error() string { return "step is blocked by unfinished dependencies" }
+
+// refusal renders the blocked answer: the 409 a caller reads, with `blockedBy`
+// naming the exact steps in the way — enough to render the reason without a second
+// request, which is the whole point of the structured body.
+func (e blockedErr) refusal() error {
+	return (&zip.HTTPError{Status: http.StatusConflict, Msg: e.Error()}).
+		With(map[string]any{"step": e.step, "blockedBy": e.blockedBy})
+}
 
 // applyStep is the ONE body of every step transition: reconcile the caller's
 // journey, refuse an id it does not contain, write the new state, and answer the
@@ -865,32 +889,38 @@ func applyStep(s *cloud.Service[state], ctx context.Context, org, id string, tar
 	return &ov, nil
 }
 
-// transition is the untyped half of the split: the GATED pair, whose blocked
-// answer is a structured 409 written in-band.
-func transition(s *cloud.Service[state], c *zip.Ctx, target State) error {
-	org, ok := tenant(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	ov, err := applyStep(s, c.Context(), org, idParam(c), target, true)
-	if blocked, ok := errors.AsType[blockedErr](err); ok {
-		return c.JSON(http.StatusConflict, map[string]any{
-			"error":     blocked.Error(),
-			"step":      blocked.step,
-			"blockedBy": blocked.blockedBy,
-		})
-	}
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, ov)
+// StartStep marks one step of the caller org's journey in progress and returns the
+// refreshed journey.
+//
+// Dependency-GATED: a step whose prerequisites are unfinished is refused 409
+// carrying {error, step, blockedBy}, where blockedBy names the exact steps in the
+// way — enough to render the reason without asking again.
+func (o ops) startStep(ctx context.Context, in *stepRef) (*overviewView, error) {
+	return o.gatedStep(ctx, in, StateInProgress)
 }
 
-func markStart(s *cloud.Service[state], c *zip.Ctx) error {
-	return transition(s, c, StateInProgress)
+// DoneStep marks one step of the caller org's journey complete and returns the
+// refreshed journey.
+//
+// Dependency-GATED, exactly as start is: a step whose prerequisites are unfinished
+// is refused 409 carrying {error, step, blockedBy} naming what is in the way.
+func (o ops) doneStep(ctx context.Context, in *stepRef) (*overviewView, error) {
+	return o.gatedStep(ctx, in, StateDone)
 }
-func markDone(s *cloud.Service[state], c *zip.Ctx) error {
-	return transition(s, c, StateDone)
+
+// gatedStep is the GATED transition an op performs — the twin of setStep, and the
+// only difference between them is that word. It passes gate=true, so applyStep can
+// hand it a blockedErr, which it renders as that value's own refusal.
+func (o ops) gatedStep(ctx context.Context, in *stepRef, target State) (*overviewView, error) {
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ov, err := applyStep(o.s, ctx, org, strings.TrimSpace(in.ID), target, true)
+	if blocked, ok := errors.AsType[blockedErr](err); ok {
+		return nil, blocked.refusal()
+	}
+	return ov, err
 }
 
 // SkipStep marks one step of the caller org's journey skipped and returns the

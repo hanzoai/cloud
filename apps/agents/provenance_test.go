@@ -83,14 +83,35 @@ func TestGuardRefusesSecretInTranscript(t *testing.T) {
 	if strings.Contains(string(resp), secret) {
 		t.Fatalf("refusal ECHOED the secret back — the one thing it must never do: %s", resp)
 	}
+	// THE SENTENCE IS `detail`, NOT `error`, and this test used to declare an
+	// `error` field and never assert it — which is exactly how a key moves and
+	// nothing notices. When this route became a typed op its refusal started
+	// leaving through cloud.ErrorHandler → HTTPError.MarshalJSON, which at the
+	// pinned zip is RFC 9457 problem-details, so the hand-written `error` key the
+	// raw handler produced became `detail` with `type` and `title` beside it.
+	//
+	// That is a real wire change on this address and it is the right direction:
+	// every other refusal in the fleet already renders that way, because every
+	// propagated error goes through that one handler. What a client BRANCHES on is
+	// unchanged — `code` is the discriminator and `findings` is the payload — and
+	// both are asserted below along with the envelope, so the next move is caught.
 	var out struct {
 		Code     string        `json:"code"`
-		Error    string        `json:"error"`
+		Detail   string        `json:"detail"`
+		Title    string        `json:"title"`
+		Type     string        `json:"type"`
+		Status   int           `json:"status"`
 		Findings []leakFinding `json:"findings"`
 	}
 	mustJSON(t, resp, &out)
 	if out.Code != "secret_in_transcript" || len(out.Findings) == 0 {
 		t.Fatalf("refusal must be machine-readable and name findings: %+v", out)
+	}
+	if !strings.Contains(out.Detail, "secret(s) detected") {
+		t.Errorf("the sentence is gone from `detail`, or a domain member displaced it: %+v", out)
+	}
+	if out.Status != http.StatusUnprocessableEntity || out.Title != "Unprocessable Entity" || out.Type != "about:blank" {
+		t.Errorf("the problem-details envelope is incomplete: %+v", out)
 	}
 	if out.Findings[0].Rule != "aws-access-key-id" {
 		t.Fatalf("want the aws rule named, got %q", out.Findings[0].Rule)

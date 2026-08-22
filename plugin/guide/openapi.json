@@ -319,8 +319,8 @@
     "/v1/guide/steps/{id}/done": {
       "post": {
         "operationId": "post_guide_steps_by_id_done",
-        "summary": "Mark a step of your org's journey finished",
-        "description": "Moves one step of the caller org's journey to done and answers the whole refreshed journey, which is what unblocks everything downstream of it.\n\nDependency-GATED like start: finishing a step whose prerequisites are themselves unfinished is 409 carrying `{error, step, blockedBy}` naming what is in the way, not a silent success. A step id the org's active journey does not contain is 404. Skipping is the ungated alternative — a founder declaring a step does not apply — and it lives at /skip.\n\nRequires a validated org; 403 without one. The mark is recorded as `manual`, and /reset returns the step to todo.",
+        "summary": "Marks one step of the caller org's journey complete and returns the refreshed journey.",
+        "description": "Marks one step of the caller org's journey complete and returns the\nrefreshed journey.\n\nDependency-GATED, exactly as start is: a step whose prerequisites are unfinished\nis refused 409 carrying {error, step, blockedBy} naming what is in the way.",
         "tags": [
           "guide"
         ],
@@ -329,12 +329,26 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/overviewView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/guide/steps/{id}/reset": {
@@ -410,8 +424,8 @@
     "/v1/guide/steps/{id}/start": {
       "post": {
         "operationId": "post_guide_steps_by_id_start",
-        "summary": "Mark a step of your org's journey started",
-        "description": "Moves one step of the caller org's journey to in-progress and answers the whole refreshed journey, so a console needs no second read.\n\nThe transition is dependency-GATED, and that is why the answer set is wider than a success: a step whose prerequisites are unfinished is 409 carrying `{error, step, blockedBy}`, where `blockedBy` names the exact steps in the way — enough to render the blockage rather than merely report it. A step id the org's active journey does not contain is 404.\n\nRequires a validated org; 403 without one, and the journey read and written is that org's alone. The mark is recorded as `manual`, and the journey is reconciled against the auto-detectors on every read, so a step the org has demonstrably completed elsewhere can still be moved to done underneath it.",
+        "summary": "Marks one step of the caller org's journey in progress and returns the refreshed journey.",
+        "description": "Marks one step of the caller org's journey in progress and returns the\nrefreshed journey.\n\nDependency-GATED: a step whose prerequisites are unfinished is refused 409\ncarrying {error, step, blockedBy}, where blockedBy names the exact steps in the\nway — enough to render the reason without asking again.",
         "tags": [
           "guide"
         ],
@@ -420,12 +434,26 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/overviewView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/guide/strategies": {
