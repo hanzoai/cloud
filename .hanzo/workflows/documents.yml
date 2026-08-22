@@ -296,7 +296,7 @@ jobs:
 
           # A push made with a token fires no workflow on this forge, so without
           # this the regenerated documents would sit on main having been gated by
-          # nothing until somebody else happened to push. Ask the train directly.
+          # nothing until somebody else happened to push. Dispatch the run directly.
           #
           # A WARNING RATHER THAN A FAILURE: the documents are already committed
           # and correct at this point, and reporting the whole lane red would say
