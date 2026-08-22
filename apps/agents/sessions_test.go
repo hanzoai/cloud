@@ -169,7 +169,7 @@ func doNoUser(t *testing.T, app *zip.App, method, path, org string, body any) (i
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
 	}
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, deadline)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
