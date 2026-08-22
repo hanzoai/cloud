@@ -262,6 +262,13 @@ func mountDelivery(t *testing.T) *zip.App {
 		State: fleetState{initErr: "no cluster (test)"},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// Bridge is what Serve installs in front of every typed route in every
+	// process, and it is what parks the request on the context a typed op is
+	// handed. Without it the four reads here answer 403 to a genuine admin —
+	// `admit` finds no request and fails closed — which is a harness that can
+	// only ever measure a refusal. The raw handlers this file used to drive read
+	// identity straight off the *zip.Ctx and so never needed it.
+	app.Use(cloud.Bridge())
 	appsRoutes(app, s, fs)
 	return app
 }
