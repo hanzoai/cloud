@@ -89,21 +89,33 @@ func (s *Store) StarredBy(ctx context.Context, org, user string) (map[string]boo
 	return out, rows.Err()
 }
 
-// star and unstar are the two typed ops behind PUT/DELETE
-// /v1/projects/:slug/star.
+// star bookmarks a project for the person calling, and answers whether it is
+// starred afterwards.
 //
-// Both resolve the project through `siteOf` — the SAME org-scoped lookup every
-// other route on this surface uses — so a star can only be written against a
-// project the caller can already see. Without that, the stars table would be a
-// way to ask whether a slug exists in another tenant.
+// The star is YOURS: it is keyed by you as well as by the project, so two people
+// see two answers for the same one and starring it says nothing about anybody
+// else's list. Starring a project you have already starred leaves it starred.
 func (o ops) star(ctx context.Context, in *projectsRef) (*projectsStar, error) {
 	return o.setStar(ctx, in, true)
 }
 
+// unstar removes the caller's own bookmark from a project, and answers whether
+// it is starred afterwards.
+//
+// It removes only YOUR star — the same one star wrote — so a project other
+// people have starred stays on their lists. Unstarring one you had not starred
+// is not an error; it leaves it unstarred.
 func (o ops) unstar(ctx context.Context, in *projectsRef) (*projectsStar, error) {
 	return o.setStar(ctx, in, false)
 }
 
+// setStar is the one body behind both ops, so they cannot drift on who may write
+// a star or on what a written one means.
+//
+// It resolves the project through `siteOf` — the SAME org-scoped lookup every
+// other route on this surface uses — so a star can only be written against a
+// project the caller can already see. Without that, the stars table would be a
+// way to ask whether a slug exists in another tenant.
 func (o ops) setStar(ctx context.Context, in *projectsRef, on bool) (*projectsStar, error) {
 	c, org, p, err := o.siteOf(ctx, in.Slug)
 	if err != nil {

@@ -46477,6 +46477,15 @@ components:
             subdomain belongs to another tenant and this site has none.
           type: string
       type: object
+    projectsStar:
+      properties:
+        starred:
+          description: |-
+            Starred is whether THIS caller has starred the project after the toggle —
+            their own bookmark, not a property the project carries, so two people see
+            two answers for one project.
+          type: boolean
+      type: object
     projectsUpdate:
       properties:
         cacheControl:
@@ -116081,6 +116090,71 @@ paths:
       - projects
       x-app: projects
       x-public: true
+  /v1/projects/{slug}/star:
+    delete:
+      description: |-
+        Removes the caller's own bookmark from a project, and answers whether
+        it is starred afterwards.
+
+        It removes only YOUR star — the same one star wrote — so a project other
+        people have starred stays on their lists. Unstarring one you had not starred
+        is not an error; it leaves it unstarred.
+      operationId: delete_projects_by_slug_star
+      parameters:
+      - description: |-
+          Slug is the project to act on, from the path. It is unique within the
+          caller's org and nowhere else, so another tenant's slug is a 404.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsStar'
+          description: ok
+      summary: Removes the caller's own bookmark from a project, and answers whether
+        it is starred afterwards.
+      tags:
+      - projects
+      x-app: projects
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Bookmarks a project for the person calling, and answers whether it is
+        starred afterwards.
+
+        The star is YOURS: it is keyed by you as well as by the project, so two people
+        see two answers for the same one and starring it says nothing about anybody
+        else's list. Starring a project you have already starred leaves it starred.
+      operationId: put_projects_by_slug_star
+      parameters:
+      - description: |-
+          Slug is the project to act on, from the path. It is unique within the
+          caller's org and nowhere else, so another tenant's slug is a 404.
+        in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsStar'
+          description: ok
+      summary: Bookmarks a project for the person calling, and answers whether it
+        is starred afterwards.
+      tags:
+      - projects
+      x-app: projects
+      x-public: true
+      x-tool: true
   /v1/projects/edge:
     get:
       description: |-
