@@ -131,16 +131,18 @@ vet: ## go vet this app and its entrypoint(s).
 # The binary is handed the DIRECTORY, never a redirect: a subsystem's dependencies
 # write to stdout at mount (hanzoai/commerce prints a sqlite-vec warning and GORM
 # debug lines), and `> file` splices those into the front of the document.
-# CLOUD_BASE_EMBED belongs beside them for the opposite reason: it is not a side
-# effect to avoid but a surface to REACH. base gates its hosting lane on it, so a
-# describe run without it mounts one health route and the document says the
-# capability serves nothing — which is what plugin/base/openapi.json said while
-# production served the whole per-org Base API. The projection has to be taken
-# from the app as the deployment runs it, or it describes a different binary.
+# CLOUD_BASE_EMBED is NOT set here, and the omission is the decision. Setting it
+# reaches base's hosting lane, which is otherwise absent from the document —
+# genuinely worth having — but it reaches /v1/waitlist with it, an address served
+# by the app `base` that HIP-0139 §3 calls misfiled, and openapi/misfiled.txt is
+# at ZERO lines. So turning it on documents one lane by putting the first
+# regression into a ratchet that may only shrink. Closing it is a §7.2 split —
+# waitlist as its own capability over the same package — after which this flag
+# can come back and the lane can be described.
 describe: build ## Emit this app's own OpenAPI subset into plugin/<app>/.
 	@for a in $(APPS); do \
 	  echo ">> describe $$a"; \
-	  GIT_SSH_ADDR=127.0.0.1:0 CLOUD_PUBSUB_PORT=0 CLOUD_BASE_EMBED=1 $(BIN)/$$a describe $(ROOT)/plugin/$$a || exit 1; \
+	  GIT_SSH_ADDR=127.0.0.1:0 CLOUD_PUBSUB_PORT=0 $(BIN)/$$a describe $(ROOT)/plugin/$$a || exit 1; \
 	done
 
 # Binaries only. plugin/<app>/openapi.json is a committed artifact, like the
