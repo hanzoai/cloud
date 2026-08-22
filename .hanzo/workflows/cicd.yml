@@ -1471,7 +1471,14 @@ jobs:
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
           KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'http://cloud.hanzo.svc.cluster.local:8000' }}
           KMS_SECRET_ENV: ${{ vars.KMS_SECRET_ENV || 'prod' }}
-          CLOUD_API: ${{ vars.CLOUD_API || 'https://api.hanzo.ai' }}
+          # The build front door, which is platform's and not the customer API's.
+          # cloud says so itself: apps/git/build_on_push.go names
+          # https://platform.hanzo.ai/v1/runner as the one direct-build address,
+          # and this is the same muscle a push reaches through /v1/git-webhook.
+          # api.hanzo.ai does not route /v1/runner — it answers 404 with the
+          # bare word "not found", which is not JSON, so a reader that pipes it
+          # into jq gets a parse error instead of a status.
+          RUNNER: ${{ vars.RUNNER || 'https://platform.hanzo.ai' }}
         run: |
           set -euo pipefail
           VERSION="${{ needs.image.outputs.version }}"
@@ -1530,12 +1537,18 @@ jobs:
             '{repo:$repo, sha:$sha, tag:$tag, bucket:"plugins",
               binaries:[{name:"plugins", run:"make -f mk/fleet.mk dist", out:"dist/*"}]}')
 
-          resp=$(curl -sS -X POST "${CLOUD_API}/v1/runner" \
+          resp=$(curl -sS -X POST "${RUNNER}/v1/runner" \
             -H "Authorization: Bearer ${BUILD_TOKEN}" \
             -H 'Content-Type: application/json' -d "$body")
-          index=$(printf '%s' "$resp" | jq -r '.index // empty')
-          job=$(printf '%s' "$resp" | jq -r '.buildJobId // empty')
-          [ -n "$index" ] || { echo "::error::/v1/runner did not accept the recipe: $resp"; exit 1; }
+          # The reply is READ before it is trusted to be JSON, the same way the KMS
+          # body above is. A refusal from an address that does not route this comes
+          # back as prose, and jq meeting prose under `set -e` ends the step on its
+          # own parse error — which names a column in something the reader cannot
+          # see, and takes the line below with it. That line is the whole diagnosis:
+          # it prints what actually came back.
+          index=$(printf '%s' "$resp" | jq -r '.index // empty' 2>/dev/null || true)
+          job=$(printf '%s' "$resp" | jq -r '.buildJobId // empty' 2>/dev/null || true)
+          [ -n "$index" ] || { echo "::error::/v1/runner at ${RUNNER} did not accept the recipe: $(printf '%s' "$resp" | head -c 300)"; exit 1; }
           echo "queued ${job:-?} -> ${index}"
 
           # Poll the INDEX, not the build status: the index is the one file a host
