@@ -8,12 +8,27 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// deadline is how long an app.Test call waits, and it is generous deliberately.
+//
+// fiber's default is ONE SECOND, which turns every request in this package into
+// an assertion about latency that none of these tests meant to make. Under a
+// whole-repo `go test ./...` this package shares a machine with every other one
+// and takes about six times as long as it does alone; a create that ANSWERED 201
+// in 1.36s failed as "i/o timeout" — the server was correct and the clock was
+// the only thing that had gone wrong.
+//
+// Thirty seconds still catches a handler that never returns, which is the one
+// thing a deadline here is for. A test that means to bound latency should say so
+// where it means it, not inherit it from the transport's default.
+var deadline = zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}
 
 // compose installs what the program's composer installs — cloud.Bridge, once at
 // the app root. A subsystem never installs its own, so a test app owes the same
@@ -77,7 +92,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 		// the gateway would. Empty org => no user (the anonymous 403 path).
 		req.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, deadline)
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
