@@ -169,6 +169,39 @@ func imageRegistryNamespace(image string) (string, bool) {
 	return "", false
 }
 
+// repository is an image ref with its version removed — what the registry calls
+// the thing, rather than which one. A digest is cut at the `@`; a tag is the
+// colon AFTER the last slash, because a host may carry a port and that colon
+// comes before one.
+func repository(image string) string {
+	if i := strings.IndexByte(image, '@'); i > 0 {
+		image = image[:i]
+	}
+	if i := strings.LastIndexByte(image, '/'); i >= 0 {
+		if j := strings.IndexByte(image[i:], ':'); j > 0 {
+			return image[:i+j]
+		}
+	}
+	return image
+}
+
+// excluded names the images this door does not publish, because their versions
+// are ordered somewhere else and two allocators cannot agree on a number.
+//
+// ghcr.io/hanzoai/cloud is the whole list, and the reason is stated above
+// runnerBuild: its numbers are allocated by a compare-and-swap in
+// .hanzo/workflows/cicd.yml, beside the commit being numbered. A second
+// allocator reading the same registry cannot reserve anything the first one
+// honours. That held for as long as everyone read the comment.
+var excluded = []string{"ghcr.io/hanzoai/cloud"}
+
+// imageExcluded refuses regardless of who is asking, SuperAdmin included: no
+// amount of authority makes two allocators agree, so this is asked before the
+// question of whose namespace it is.
+func imageExcluded(image string) bool {
+	return slices.Contains(excluded, repository(image))
+}
+
 // imageAllowed reports whether image targets a registry namespace the fabric owns
 // (the OUTER bound shared by the machine and IAM paths). It does NOT bind the
 // namespace to any caller — imageInOrgRegistry does that on the IAM path.
@@ -384,6 +417,9 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	}
 	if !imageAllowed(req.Image) {
 		return nil, zip.ErrForbidden("image must push to an owned registry (ghcr.io/{hanzoai,luxfi,zooai}/*)")
+	}
+	if imageExcluded(req.Image) {
+		return nil, zip.ErrForbidden(repository(req.Image) + " is versioned by its own release lane and is not published from this door")
 	}
 
 	// H1 — bind the image's registry namespace to the org the CREDENTIAL names.
