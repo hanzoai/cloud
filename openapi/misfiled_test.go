@@ -76,34 +76,34 @@ func TestShrinkKeepsOnlyWhatIsStillMeasured(t *testing.T) {
 }
 
 // TestNoOperationIsMisfiled is the gate, on the real fleet: every (address, app)
-// pair the woven document carries is in misfiled.txt, and every line there is
-// still measured. With -weave it regenerates the file (shrinking only); without,
+// pair the composed document carries is in misfiled.txt, and every line there is
+// still measured. With -compose it regenerates the file (shrinking only); without,
 // it verifies. Same dual mode as the golden, for the same reason.
 func TestNoOperationIsMisfiled(t *testing.T) {
 	subsets, err := openapi.Subsets(manifest.Names(), fromTree, manifest.StageOf)
 	if err != nil {
 		t.Fatal(err)
 	}
-	woven, err := openapi.Fleet(subsets)
+	composed, err := openapi.Fleet(subsets)
 	if err != nil {
-		t.Fatalf("weave: %v", err)
+		t.Fatalf("compose: %v", err)
 	}
 	was, err := openapi.ReadMisfiled(misfiledPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := openapi.Misfile(woven)
+	now := openapi.Misfile(composed)
 	// The first regeneration SEEDS the file with what is measured; every one
 	// after may only shrink it. An absent file is the seed case, an empty one is
 	// a clean fleet, and only the second refuses growth.
-	if _, err := os.Stat(misfiledPath); os.IsNotExist(err) && *weaveOut != "" {
+	if _, err := os.Stat(misfiledPath); os.IsNotExist(err) && *composeOut != "" {
 		was = now
 	}
 	kept, err := was.Shrink(now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if *weaveOut != "" {
+	if *composeOut != "" {
 		if err := kept.Write(misfiledPath); err != nil {
 			t.Fatalf("write %s: %v", misfiledPath, err)
 		}
