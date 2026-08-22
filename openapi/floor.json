@@ -1,6 +1,6 @@
 {
-  "paths": 1730,
-  "operations": 2391,
+  "paths": 1731,
+  "operations": 2393,
   "products": {
     "account": 10,
     "ad": 7,
@@ -85,7 +85,7 @@
     "plugins": 4,
     "pref": 2,
     "pricing": 33,
-    "projects": 27,
+    "projects": 29,
     "prompt": 6,
     "provisioning": 30,
     "pubsub": 2,
