@@ -20,6 +20,12 @@ func init() {
 			"projectsDomainRef.slug": "Slug is the project the host is attached to, from the path.",
 		},
 	})
+	zip.Describe("DELETE /v1/projects/:slug/star", zip.Doc{
+		Fields: map[string]string{
+			"projectsRef.slug":     "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
+			"projectsStar.starred": "Starred is whether THIS caller has starred the project after the toggle —\ntheir own bookmark, not a property the project carries, so two people see\ntwo answers for one project.",
+		},
+	})
 	zip.Describe("GET /v1/projects", zip.Doc{
 		Description: "Returns every project your org owns.\n\nEach row carries the slug, name, framework, visibility, status and live URL —\nthe same rows console and the builder render, because there is only one store\nbehind both. It requires a validated principal (403 without one) and is keyed\nby that principal's org, so it never contains another tenant's project.",
 		Fields: map[string]string{
@@ -566,6 +572,13 @@ func init() {
 			"projectsSiteDeploy.slug":         "Slug is the project the site was published into, created on the fly when\nthe slug was free.",
 			"projectsSiteDeploy.status":       "Status is the deployment status, \"live\" on success.",
 			"projectsSiteDeploy.url":          "URL is the canonical live URL, https://<slug>.<apex> — empty when the\nsubdomain belongs to another tenant and this site has none.",
+		},
+	})
+	zip.Describe("PUT /v1/projects/:slug/star", zip.Doc{
+		Description: "And unstar are the two typed ops behind PUT/DELETE\n/v1/projects/:slug/star.\n\nBoth resolve the project through `siteOf` — the SAME org-scoped lookup every\nother route on this surface uses — so a star can only be written against a\nproject the caller can already see. Without that, the stars table would be a\nway to ask whether a slug exists in another tenant.",
+		Fields: map[string]string{
+			"projectsRef.slug":     "Slug is the project to act on, from the path. It is unique within the\ncaller's org and nowhere else, so another tenant's slug is a 404.",
+			"projectsStar.starred": "Starred is whether THIS caller has starred the project after the toggle —\ntheir own bookmark, not a property the project carries, so two people see\ntwo answers for one project.",
 		},
 	})
 }
