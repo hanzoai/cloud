@@ -38,3 +38,31 @@
 # If you are adding a line: name the owner in a comment above it. A ratchet
 # nobody can read becomes an allowlist, and an allowlist is how a defect
 # becomes a feature.
+
+# ── hanzoai/iam: the DEPLOYED service is older than the module cloud pins ──────
+# Owner: whoever rolls iam.hanzo.ai. These 404 on iam.hanzo.ai ITSELF, not only
+# through the edge, and on GET and POST alike — so it is not a method the
+# document spells wrong and not an interceptor. cloud weaves its document from
+# the hanzoai/iam module in go.mod, which serves these; the running deployment
+# does not. Rolling iam past the pin retires every line below in one act, and
+# then they are six lines to delete rather than six defects to fix.
+GET /v1/iam/applications/get
+GET /v1/iam/keys/get
+GET /v1/iam/organizations/get
+GET /v1/iam/organizations/search
+GET /v1/iam/permissions/get
+GET /v1/iam/users/get
+
+# ── hanzoai/o11y: liveness is not a customer address, and a callback is not a GET
+# Owner: hanzoai/o11y. /healthz, /livez and /readyz are zip's OPS surface — a
+# SECOND listener a deployment brings up when it names OPS_PORT, never the public
+# one (HIP-0119 §1) — so publishing them on the public document names an address
+# the public listener is not meant to answer. Measured: GET 404, POST 405, i.e.
+# something is routed there and it is not this. The two /complete/* addresses are
+# OAuth callbacks, which a bare GET with no code or state cannot satisfy.
+# The repair is in o11y's own projection, not in a route here.
+GET /v1/o11y/complete/google
+GET /v1/o11y/complete/oidc
+GET /v1/o11y/healthz
+GET /v1/o11y/livez
+GET /v1/o11y/readyz
