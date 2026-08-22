@@ -3288,8 +3288,26 @@ into a test.
 The list moves every few merges: RE-MEASURE per app rather than trusting it, and
 note the count is a heuristic that reads `r.Header.Get("X-...")` as a route, so
 read the hits before believing a non-zero remainder (ingress's last "1" is one).
-`integrations` is the sharpest case of that heuristic lying: it measures 45
-untyped and serves **19**, because the other 26 hits are `hdr.Get("Retry-After")`
+`integrations` is COMPLETE at 22 typed / 21 refused, **and it is the case that
+proves a prose refusal does not count**. This file recorded it as 19 refused
+across three wire families, correctly, and it has been serving 21 — the two that
+drifted in were classified by nobody, because a comment cannot notice a route it
+does not mention. All 21 are in `untypedByDesign` now (apps/integrations/typed_wire_test.go),
+each carrying the reason that was already written AT its registration, and the
+gate sums the two ledgers against the served surface so the next one cannot
+arrive unclassified. Mutation-checked both directions.
+
+The families are the ones the old prose named, split on what the WIRE is rather
+than on the vendor: 13 BROWSER LEGS (a 302 to a sign-in, or a short HTML
+confirmation that sets a `__Host-` cookie), 7 INBOUND WEBHOOKS (four signed over
+the exact received bytes — Slack and GitHub HMAC, Discord Ed25519 — two
+header-authed ones that answer an EMPTY 200 to a body they cannot parse, and
+OpenRouter's, which reads its credential before touching the body so a caller
+with no key never buys a decode), and 1 GENERIC OAUTH CALLBACK serving every
+provider at once.
+
+The older measurement note is kept because the heuristic still lies: it measures 45
+untyped and serves **21**, because the other 26 hits are `hdr.Get("Retry-After")`
 and the `// app.Post(…)` MOUNT HANDOFF blocks each adapter file carries. It is
 COMPLETE at 22 typed / 19 refused, and the 19 fall into exactly three wire
 families named at its `routes()` — 8 legs that answer 302 (`zip.WithStatus`
