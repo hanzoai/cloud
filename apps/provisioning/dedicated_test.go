@@ -395,11 +395,40 @@ func TestDedicated_PricingPure(t *testing.T) {
 			t.Fatalf("sizeToGB(%q) = %d, want %d", c.size, got, c.wantGB)
 		}
 	}
-	// 10 GiB * $0.08/GB-month / 30 = 2.67 -> 3 cents/day; empty -> 0.
-	if got := gbDayCents(10); got != 3 {
-		t.Fatalf("gbDayCents(10) = %d, want 3", got)
+	ctx := context.Background()
+
+	// Nothing published and no commerce beside this process: the floor is the
+	// price. 10 GiB * $0.08/GB-month / 30 = 2.67 -> 3 cents/day; empty -> 0.
+	if got := gbDayCents(ctx, 10); got != 3 {
+		t.Fatalf("gbDayCents(10) at the floor = %d, want 3", got)
 	}
-	if got := gbDayCents(0); got != 0 {
+	if got := gbDayCents(ctx, 0); got != 0 {
 		t.Fatalf("gbDayCents(0) = %d, want 0", got)
+	}
+	if got := gbDayCents(ctx, -4); got != 0 {
+		t.Fatalf("a negative footprint is not storage, got %d", got)
+	}
+
+	saved := storageMonthlyCents
+	t.Cleanup(func() { storageMonthlyCents = saved })
+
+	// A running instance is never free while it is priced: a footprint too small
+	// to reach a cent a day still bills the floored 1.
+	storageMonthlyCents = func(context.Context) int64 { return 8 }
+	if got := gbDayCents(ctx, 1); got != 1 {
+		t.Fatalf("1 GiB/day = %d, want the floored 1 cent — a running instance is billed", got)
+	}
+
+	// A published price is charged instead of the floor.
+	storageMonthlyCents = func(context.Context) int64 { return 30 }
+	if got := gbDayCents(ctx, 10); got != 10 {
+		t.Fatalf("10 GiB at 30c/GB-month = %d, want 10 cents/day", got)
+	}
+
+	// Zero is a legal published price and makes storage free — the 1-cent floor
+	// must not charge for what an operator said to give away.
+	storageMonthlyCents = func(context.Context) int64 { return 0 }
+	if got := gbDayCents(ctx, 10_000); got != 0 {
+		t.Fatalf("a published price of 0 billed %d; storage was given away", got)
 	}
 }

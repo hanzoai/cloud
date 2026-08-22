@@ -263,6 +263,13 @@ func init() {
 			"Rendered.created": "Created reports that the act made a NEW row rather than answering with one\nthat already existed. It rides here because only the store can tell the two\napart — saving a card already on file answers with the row that holds it —\nand the door has to know which happened to answer 201 or 200. Absent on a\nread, where nothing was created and the zero value is the truth.",
 		},
 	})
+	zip.Describe("POST /billing/rate", zip.Doc{
+		Description: "Reads one row of the meter authority.\n\nAN ABSENT RATE IS NOT AN ERROR. It answers Found=false and the caller falls\nback to the floor it compiled in, because a meter nobody has published a price\nfor is the ordinary state of a new one — and failing the work would stop a\ncustomer's storage from provisioning over a missing price row. A STORE failure\nis a different thing and is returned as one: that is the authority being\nunwell, not the rate being absent, and a caller that cannot tell them apart\nwould quietly charge its floor while the real price sat unreadable.",
+		Fields: map[string]string{
+			"Rate.nano": "Nano is the price of one Unit in nano-dollars, a billionth of a dollar.\nCents cannot hold these: fractions of a cent per million tokens round to\nzero or to a hundred times the price.",
+			"Rate.unit": "Unit is what ONE of the billed quantity is, so a reader can tell a\nGB-month from a thousand characters without knowing the meter.",
+		},
+	})
 	zip.Describe("POST /billing/recharge", zip.Doc{
 		Description: "Sweeps every org and charges the default card of those whose balance has\nfallen below their own threshold.\n\nIts caller is a SCHEDULE, not a person — there is no request behind an\noff-session charge — which is also why it takes no retry key: one run-all\nrequest's header would be one key for every org it touches, so the second\ncharge would replay the first one's receipt. Each org derives its own.\n\nOrgs is the POPULATION considered, not the row count. That difference is how a\nreader tells \"nobody was below threshold\" from \"the sweep never ran\".\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
