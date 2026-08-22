@@ -21,7 +21,7 @@ package billing
 // credits, invoices and payment-methods were addresses commerce already serves
 // under /v1/billing. HIP-0139 §7 closes a shared address by fold, never by
 // alias, so a fold onto an address somebody already answers is a deletion — the
-// weave refuses one METHOD+path declared twice, and it is right to.
+// compose refuses one METHOD+path declared twice, and it is right to.
 //
 // TENANT ISOLATION. Identical to the /v1/billing/* reads: the org is the
 // VALIDATED IAM owner (principal.OrgFrom, parked by the composer's

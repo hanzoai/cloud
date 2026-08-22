@@ -18,7 +18,7 @@
 //
 // The fifth is Stage (HIP-0139 §8), and it is here for the same shape of reason:
 // who is shown a capability is decided once, about the capability, and read by
-// three things that must not each decide it — the weave that stamps x-stage, the
+// three things that must not each decide it — the compose that stamps x-stage, the
 // public rule that keeps a beta operation out of every generated client, and the
 // refusal at Serve that answers 404 on a beta prefix for an org without the flag.
 // Empty is ga. See App.Stage.

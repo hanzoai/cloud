@@ -239,15 +239,35 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // so — the same shape as the policy that selected no pod and the installer that
 // installed nothing.
 func Routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/sandbox", cloud.Handle(s, list))
-	app.Post("/v1/sandbox", cloud.Handle(s, create))
+	// The RESOURCE surface. It is typed now: every one of these was a raw route,
+	// which is invisible to every projection zip derives from its typed registry —
+	// so a caller could read seven addresses in the document and reach none of them
+	// as a tool, a CLI command or an SDK method. The two that stay raw are named in
+	// untypedByDesign (typed_wire_test.go) with the wire that keeps them there.
+	o := ops{s: s}
+	zapp := cloud.ZipApp(app)
+	zip.Get(zapp, "/v1/sandbox", o.list)
+	zip.Post(zapp, "/v1/sandbox", o.create, zip.WithStatus(http.StatusCreated))
 
 	g := app.Group("/v1/sandbox")
-	g.Get("/:id", cloud.Handle(s, get))
-	g.Delete("/:id", cloud.Handle(s, del))
-	g.Post("/:id/exec", cloud.Handle(s, execIn))
+	gz := zapp.Group("/v1/sandbox")
+	zip.Get(gz, "/:id", o.get)
+	zip.Delete(gz, "/:id", o.del)
+	zip.Post(gz, "/:id/exec", o.exec)
+	// UNTYPED BY DESIGN — fsRead answers text/plain (a file as its bytes, a
+	// directory as one entry per line) and fsWrite takes the file's RAW BYTES as
+	// its body. A typed op always marshals JSON and always decodes its body as
+	// JSON, so typing either would move the wire rather than describe it.
 	g.Get("/:id/fs", cloud.Handle(s, fsRead))
 	g.Post("/:id/fs", cloud.Handle(s, fsWrite))
+
+	// The two interactive TICKETS are typed and registered HERE rather than beside
+	// their doors, because cmd/zipdoc resolves a router it can READ in the file: a
+	// group passed as a parameter is not one, and prose it cannot place is prose
+	// silently dropped from the document and the MCP tool. terminal() and screen()
+	// keep the three routes that stay raw.
+	zip.Post(gz, "/:id/terminal/ticket", o.terminalTicket, zip.WithStatus(http.StatusCreated))
+	zip.Post(gz, "/:id/screen/ticket", o.screenTicket, zip.WithStatus(http.StatusCreated))
 
 	terminal(g, s)
 	screen(g, s)
@@ -341,92 +361,6 @@ type createBody struct {
 	// the runtime it GOT, which is the field to read.
 	Runtime string `json:"runtime"`
 	TTLSec  int    `json:"ttlSec"`
-}
-
-func create(s *Service, c *zip.Ctx) error {
-	o, ok := orgOf(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	var body createBody
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	// principal.IsSuperAdmin is THE predicate — membership of the reserved `admin`
-	// org, attested by the identity middleware. It is read here and nowhere else in
-	// this package: what it decides is which image a `dev` sandbox runs (imageFor),
-	// and a second caller of it would be a second answer to drift from.
-	// cloud.CallerBearer is the credential this request authenticated with, relayed
-	// UNCHANGED — the same one the identity middleware validated the principal
-	// with, and the subject of the exchange that gives the pod its owner's identity.
-	// It answers "" for an opaque API key, which no OIDC target could validate, so
-	// those leases start with no session rather than with a key in a shell.
-	m, err := Lease(s, c.Context(), o, principal.Ledger(c), principal.IsSuperAdmin(c), cloud.CallerBearer(c), Spec{
-		Class: body.Class, Project: body.Project, Image: body.Image,
-		Runtime: body.Runtime, TTLSec: body.TTLSec})
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusCreated, m)
-}
-
-func list(s *Service, c *zip.Ctx) error {
-	o, ok := orgOf(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	out, err := List(s, c.Context(), o, c.Query("project"), c.Query("status"))
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, map[string]any{"sandboxes": out})
-}
-
-func get(s *Service, c *zip.Ctx) error {
-	o, ok := orgOf(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	m, err := Get(s, c.Context(), o, idParam(c))
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, m)
-}
-
-func del(s *Service, c *zip.Ctx) error {
-	o, ok := orgOf(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	if err := End(s, c.Context(), o, idParam(c), c.Query("purge") == "1"); err != nil {
-		return err
-	}
-	c.Status(http.StatusNoContent)
-	return nil
-}
-
-func execIn(s *Service, c *zip.Ctx) error {
-	o, ok := orgOf(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	var body struct {
-		Argv       []string `json:"argv"`
-		Command    string   `json:"command"`
-		Stdin      string   `json:"stdin"`
-		Dir        string   `json:"dir"`
-		TimeoutSec int      `json:"timeoutSec"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	r, err := Run(s, c.Context(), o, idParam(c), Cmd{Argv: body.Argv, Command: body.Command,
-		Stdin: body.Stdin, Dir: body.Dir, TimeoutSec: body.TimeoutSec})
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, r)
 }
 
 // fsRead answers text, because this address always has: a file as its bytes, a

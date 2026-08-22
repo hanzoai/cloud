@@ -3,7 +3,7 @@ package openapi
 // What a product's description is allowed to be, and what it must never be.
 //
 // The prose travels: synopsis.go reads it once (when an app describes itself),
-// describe.go stamps it into that app's subset, and the weave lifts it onto the
+// describe.go stamps it into that app's subset, and the compose lifts it onto the
 // fleet document's product tags. Each hop is cheap to get subtly wrong in a way
 // no diff explains — a file note published as a product description reads exactly
 // like a real one — so the rules are pinned here.
@@ -158,11 +158,11 @@ func TestSynopsisIsEmptyForAnAppThatMountsTheHost(t *testing.T) {
 	}
 }
 
-// A tag is the app that serves the operation, so the woven document carries one
+// A tag is the app that serves the operation, so the composed document carries one
 // tag per app that published anything, described in that app's own words — a
 // shared address prefix is a fact about the ADDRESS (openapi/misfiled.go reads
 // it), never a second tag.
-func TestWeaveDescribesACapabilityInItsOwnWords(t *testing.T) {
+func TestComposeDescribesACapabilityInItsOwnWords(t *testing.T) {
 	part := func(app, says string, prefixes ...string) Part {
 		p := Part{App: app, Doc: &Document{
 			Info:  Info{Title: fleetInfo.Title, Description: says, Version: fleetInfo.Version},
@@ -176,7 +176,7 @@ func TestWeaveDescribesACapabilityInItsOwnWords(t *testing.T) {
 		return p
 	}
 
-	doc, err := Weave([]Part{
+	doc, err := Compose([]Part{
 		part("kms", "Package kms is the key plane.", "kms"),
 		part("knowledge", "Package knowledge is the knowledge base.", "kb"),
 		part("billing", "Package billing meters and invoices.", "billing", "finance"),
@@ -187,7 +187,7 @@ func TestWeaveDescribesACapabilityInItsOwnWords(t *testing.T) {
 		part("plugins", "Package plugin lists what is mounted.", "admin", "plugins"),
 	})
 	if err != nil {
-		t.Fatalf("weave: %v", err)
+		t.Fatalf("compose: %v", err)
 	}
 	want := map[string]string{
 		"kms":       "Package kms is the key plane.",

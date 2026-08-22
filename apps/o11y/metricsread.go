@@ -42,7 +42,7 @@ type point struct {
 // usageBucket is one time bucket of an org's LLM usage. NOT admin's usagePoint
 // (a DAILY {date,requests,spendCents,tokens} roll-up on the fleet board): these
 // are two different shapes, and the fleet document has ONE schema namespace, so
-// they must not share a name — the weave gate refuses it, because a generated
+// they must not share a name — the compose gate refuses it, because a generated
 // SDK would bind whichever it read last.
 type usageBucket struct {
 	// T is the bucket start, RFC3339 in UTC.

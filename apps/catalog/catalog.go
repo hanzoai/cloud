@@ -225,7 +225,7 @@ type browseQuery struct {
 //
 // It is named for its product rather than called `Response`: a typed op's Go type
 // name IS its schema name across the WHOLE fleet, the namespace is flat, and
-// openapi.Weave refuses one name with two shapes.
+// openapi.Compose refuses one name with two shapes.
 type catalogPage struct {
 	// Data is the page of matching entries, most recently updated first.
 	Data []Entry `json:"data"`

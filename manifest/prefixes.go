@@ -75,7 +75,7 @@ func Coresident(name string) bool {
 // StageOf is the stage the named app's row declares (App.Stage, HIP-0139 §8).
 //
 // It is a function rather than a field read at each call site because the two
-// callers are in packages that cannot see this type: the weave takes it as
+// callers are in packages that cannot see this type: the compose takes it as
 // `func(string) string` (openapi cannot import manifest — manifest's own tests
 // read that package), and the refusal at Serve takes the name it was handed.
 //

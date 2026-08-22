@@ -465,7 +465,7 @@ func (o ops) deleteDocType(ctx context.Context, in *docTypeRef) (*noContent, err
 // iam already publishes a Role: the role ENTITY, carrying a display name, its
 // members, its domains and the roles it includes. This is the far smaller thing —
 // the EDGE that joins one user to one role — and the two share nothing but the
-// word. The weave refuses that collision rather than pick a winner, and it is
+// word. The compose refuses that collision rather than pick a winner, and it is
 // right to: a generated SDK binds whichever shape it read last, so a client's
 // Role would silently mean an entity in one method and a grant in another.
 //
@@ -721,7 +721,7 @@ func (o ops) cancelDocument(ctx context.Context, in *docRef) (*docView, error) {
 // summaryView is how much of the DocType surface one org uses. It restates
 // engine.Summary rather than exporting it because a SCHEMA NAME is fleet-global:
 // "Summary" is already apps/marketing's, and one name with two shapes binds
-// whichever an SDK generator read last (openapi/weave_test.go refuses it).
+// whichever an SDK generator read last (openapi/compose_test.go refuses it).
 type summaryView struct {
 	// DocTypes is how many DocTypes the org has defined.
 	DocTypes int `json:"doctypes"`

@@ -8,7 +8,7 @@
 //
 // THAT GUARANTEE IS PER APP, AND IT ENDS AT THE APP. [Spec] and [Mount] read a
 // router that is right there. The FLEET document — what api.hanzo.ai serves —
-// cannot: the light host mounts no subsystem, so [MountFleet] weaves the
+// cannot: the light host mounts no subsystem, so [MountFleet] composes the
 // projections 116 app binaries wrote when they were BUILT (fleet.go). Between the
 // projection and the request sit two gaps no reading of any router closes: the
 // subset can be older than the code (mk/fleet.mk check regenerates it
@@ -328,7 +328,7 @@ type Parameter struct {
 // is that repo. Either way it names a place to go.
 //
 // It is written exactly once per operation, by whichever producer knows: [Project]
-// stamps the relay's source as the operation enters, [Weave] stamps the part's app
+// stamps the relay's source as the operation enters, [Compose] stamps the part's app
 // for everything else, and neither overwrites a value already there.
 //
 // Public is AUDIENCE: this operation is part of the customer contract. It is
@@ -361,8 +361,8 @@ type Operation struct {
 	//
 	// Absent means ga for the same reason the manifest's empty row does: ga is the
 	// default and a third spelling of it would be a second way to say one thing.
-	// It is stamped by [Weave], from the serving app's manifest row, because the
-	// row is the one place the fact is declared and the weave is the first point
+	// It is stamped by [Compose], from the serving app's manifest row, because the
+	// row is the one place the fact is declared and the compose is the first point
 	// at which a document knows whose app an operation came from — an app
 	// describing itself does not read the fleet's manifest and must not start
 	// guessing its own stage.
@@ -650,7 +650,7 @@ func Typed(app *zip.App) (Registry, error) {
 // registers them knows one replaced the other. So the SERVING code declares it —
 // hanzoai/iam tags the fifty-one entity verbs it inherited (`get-users`,
 // `add-application`, `set-preferred-mfa`) and the singular `application` address
-// it had before the kind was pluralized — and the declaration rides the weave
+// it had before the kind was pluralized — and the declaration rides the compose
 // out to hanzoai/openapi, whose merge keeps those addresses out of the published
 // document. Without it the customer surface carries two spellings of every one of
 // those operations: two SDK methods, two docs entries, two `hanzo iam` commands.
@@ -664,7 +664,7 @@ const Compat = "compat"
 //
 // Compat is an orthogonal fact about ONE address, not a product. Everything that
 // reads tags to answer "which products does this document publish" — the floor
-// ratchet, the weave's ownership claims, the document's own tag list — has to
+// ratchet, the compose's ownership claims, the document's own tag list — has to
 // ask this instead of iterating Tags, or `compat` arrives as a product with
 // twenty-three operations in it and a doc-site heading nothing answers to.
 func Products(tags []string) []string {
@@ -860,7 +860,7 @@ func Mount(app *zip.App, info Info, servers ...Server) {
 // encoding and the failure mode are stated once and cannot drift between them.
 //
 // LAZY is load-bearing in both: it is what lets Mount's document contain the
-// route this very call registers, and what keeps MountFleet's weave off the
+// route this very call registers, and what keeps MountFleet's compose off the
 // host's boot path.
 //
 // ONCE covers the bytes, not just the value, and that is not an optimization —
@@ -872,7 +872,7 @@ func Mount(app *zip.App, info Info, servers ...Server) {
 // memcpy and the Document itself is collectable.
 //
 // encoding/json rather than the app's own encoder, because these are the bytes
-// openapi.yaml is rendered from (openapi/weave_test.go): the served document and
+// openapi.yaml is rendered from (openapi/compose_test.go): the served document and
 // the committed artifact are then the same bytes, not two encodings that agree.
 // The document endpoint describes ITSELF, in an init rather than in serve, because
 // serve runs once per document source (Mount and MountFleet) and Describe refuses a
@@ -889,7 +889,7 @@ func init() {
 		"Serves the OpenAPI document for the routes this process actually answers — "+
 			"generated from the live router at request time, not from a checked-in file that "+
 			"can disagree with it.\n\n"+
-			"On an app it is that app's own surface; on the fleet's front door it is the woven "+
+			"On an app it is that app's own surface; on the fleet's front door it is the composed "+
 			"document for every mounted app. Unauthenticated by design: a client has to be able "+
 			"to read the contract before it holds a credential, and the document grants nothing.\n\n"+
 			"Rendered once and served as bytes thereafter, so the route table's immutability is "+

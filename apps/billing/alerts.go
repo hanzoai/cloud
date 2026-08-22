@@ -40,7 +40,7 @@ func mountAlerts(app cloud.Router, o ops) {
 	// carrying commerce's `null`, and a typed op writes either a value or an
 	// empty 204 — neither of which is that. A relay that tidied it would be
 	// changing a wire while claiming to preserve one.
-	app.Delete("/v1/billing/alerts/:id", cloud.Handle(o.s, dropAlert))
+	zip.Delete(cloud.ZipApp(app), "/v1/billing/alerts/:id", o.dropAlert)
 }
 
 // The delete is the one route in this family the wire keeps untyped, so its
@@ -180,21 +180,6 @@ func (o ops) amendAlert(ctx context.Context, in *plane.AlertPatch) (*plane.Alert
 // `null`, which is neither a value nor an empty 204, so a typed op could not
 // reproduce it. A cap belonging to another org is a 404, for the reason the
 // amend is.
-func dropAlert(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := capAdmin(c.Context()); err != nil {
-		return err
-	}
-	org, subject, err := payerOf(c)
-	if err != nil {
-		return err
-	}
-	if _, err := ask(c.Context(), org, "drop cap", func(ctx context.Context) (*plane.Dropped, error) {
-		return commercepeer.BillingAlertDrop(ctx, &plane.AlertRef{Subject: subject, ID: c.Param("id")})
-	}); err != nil {
-		return err
-	}
-	return c.JSON(http.StatusNoContent, nil)
-}
 
 // Answers whether one proposed spend fits inside this org's caps.
 //

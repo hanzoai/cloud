@@ -230,7 +230,7 @@ type Overview struct {
 // UsagePoint is one bucket of the LLM usage series. Named for the value rather than
 // for its shape: the OpenAPI schema namespace is FLAT across the whole fleet, and
 // `SeriesPoint` is already the admin launch board's {t, value} pair — one name with
-// two shapes is what the fleet weave refuses, since every generated SDK would bind
+// two shapes is what the fleet compose refuses, since every generated SDK would bind
 // whichever it read last.
 type UsagePoint struct {
 	// T is the bucket's start, RFC3339 UTC, aligned to the interval.

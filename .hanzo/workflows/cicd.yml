@@ -1,5 +1,5 @@
 name: CI/CD
-# THE RELEASE TRAIN. One workflow, one graph, one release.
+# ONE WORKFLOW, ONE GRAPH, ONE RELEASE.
 #
 #   gate ──┐
 #          ├─→ image ─→ live ─→ reach ─→ fanout ─→ receipt
@@ -23,7 +23,7 @@ name: CI/CD
 # So deploy.yml is GONE and its jobs are here, behind `needs:`. The gate was
 # always correct; it simply had no edge to the thing it was meant to stop.
 #
-# THE TRAIN HAD ONE CAR. It ended at "pin pushed" — nothing regenerated the
+# THE GRAPH HAD ONE JOB. It ended at "pin pushed" — nothing regenerated the
 # document's projections, so an SDK, the MCP tool list, the CLI's captured
 # command surface and the docs each moved only when a human remembered. Measured:
 # npm `hanzoai` had two versions in its entire history, `hanzo-client` was not on
@@ -31,44 +31,44 @@ name: CI/CD
 # that did had a `repository_dispatch: spec-update` listener NOTHING HAS EVER
 # SENT, and regenerating the CLI capture would have moved 15 operations.
 #
-# THE COUPLER IS THE DOCUMENT, PASSED BY VALUE AT A PINNED SHA. Every car below
-# carries (version, sha, sha256(openapi.yaml) — the customer contract). No car reads api.hanzo.ai to
+# WHAT EVERY JOB CARRIES IS THE DOCUMENT, PASSED BY VALUE AT A PINNED SHA. Every job below
+# carries (version, sha, sha256(openapi.yaml) — the customer contract). No job reads api.hanzo.ai to
 # GENERATE anything — at generation time the deploy has already happened, and
 # reading the host names whatever it is serving rather than the release that sent
 # it. The host is read for exactly one purpose: to prove the release is live.
 #
 # IT DOES NOT ROLL BACK. IT BLOCKS AND RESUMES. You cannot unpublish a package
-# version, so the cars are ordered by irreversibility — in-repo (gate) → registry
+# version, so the jobs are ordered by irreversibility — in-repo (gate) → registry
 # but unnamed (image; the TAG is minted only after smoke, so a tag can never name
 # an image that did not boot, and the pin moves in the same breath) → the outside
 # world (fanout).
-# Every car is idempotent on (version, digest): re-running at the same sha reuses
+# Every job is idempotent on (version, digest): re-running at the same sha reuses
 # the same version, re-probes instead of re-pushing, and treats "already there,
-# same bytes" as success. A failed car leaves a hole in the receipt, and the
+# same bytes" as success. A failed job leaves a hole in the receipt, and the
 # receipt is the definition of shipped.
 on:
   push:
     branches: [main]
     # NO TAG TRIGGER, and it is not an omission. A tag was listened for so the
-    # `binaries:` lane could publish the plugin artifact on a proven commit —
-    # but that lane DOES NOT EXIST: hanzo.yml declares no `binaries:` because
+    # `binaries:` block could publish the plugin artifact on a proven commit —
+    # but that block DOES NOT EXIST: hanzo.yml declares no `binaries:` because
     # `bucket:` uploads with S3_ADMIN_* keys that are in KMS for no org.
     #
     # So a tag started a run with no work in it. `image` refuses tag refs (it
     # mints the tag itself; building on one would take the next number and
     # publish a second image for a commit that already has one), and every
-    # other car declares needs: on image — so all of them skipped while gate
+    # other job declares needs: on image — so all of them skipped while gate
     # and containment spent a runner. A run of skipped jobs reports SUCCESS,
     # and a green run whose gate passed reads as a release that shipped.
     # Nothing shipped; there was nothing to ship.
     #
     # The tag stays what it is — the receipt for an image that already built
     # and smoked. Listen for it again in the same change that declares the
-    # lane consuming it, once the credential exists.
+    # block consuming it, once the credential exists.
   pull_request:
   # On-demand rebuild, and the RESUME entry point. A release that failed at
   # fanout is resumed by dispatching this workflow at the same sha: image and
-  # live recognise their own receipts and no-op in seconds, and the failed car
+  # live recognise their own receipts and no-op in seconds, and the failed job
   # runs again. It is also how sync-from-github.yml starts this after a
   # fast-forward — a push made with the workflow token fires no workflows.
   workflow_dispatch:
@@ -86,16 +86,16 @@ concurrency:
   # Jobs that have not started are forfeit to the newer run either way.
   #
   # A run holds the slot only while some job is literally executing — the
-  # attempt's status is an aggregate over its jobs — so the moment one car
+  # attempt's status is an aggregate over its jobs — so the moment one job
   # finishes and the next is still waiting for a runner, the run simultaneously
   # stops blocking newer runs and becomes eligible for that sweep. Finished jobs
-  # keep their result; the rest of the train is cancelled where it stands.
+  # keep their result; the rest of the run is cancelled where it stands.
   #
-  # THE CONSEQUENCE, AND IT IS THE REASON THE PIN SITS WHERE IT DOES: a car that
+  # THE CONSEQUENCE, AND IT IS THE REASON THE PIN SITS WHERE IT DOES: a job that
   # has not started yet is not a place to put work whose loss costs a deploy. No
   # setting here can protect it, because the flag that reads as if it would only
-  # ever governed the cars that are already running. So the pin is a step of the
-  # job that proves the image rather than a car of its own — see `image`.
+  # ever governed the jobs that are already running. So the pin is a step of the
+  # job that proves the image rather than a job of its own — see `image`.
   # ── ONE GROUP PER COMMIT, so every change runs to completion ─────────────────
   #
   # Pushes used to share the single group `release`. That coalesced them, which
@@ -128,7 +128,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # ══ CAR 0b ══ IS THIS CHANGE HOSTILE? Every other gate asks whether the code is
+  # ══ review ══ IS THIS CHANGE HOSTILE? Every other gate asks whether the code is
   # CORRECT. None asks what it is FOR. A commit that exfiltrates a provider key,
   # opens an egress or weakens an auth check compiles, passes its tests and ships.
   # This reads the diff and refuses it.
@@ -194,7 +194,7 @@ jobs:
           # Cloudflare and back to the pod next door. Under a burst of concurrent
           # runs the edge answered `error code: 502` in plain text, every review
           # failed to get an identity, and `image` (needs: review) was SKIPPED, so
-          # the train stopped with nothing red to point at. Measured both ways from
+          # the release stopped with nothing red to point at. Measured both ways from
           # inside the cluster: /v1/health 200 and POST /v1/kms/auth/login 400 — the
           # same answers the public host gives, one hop away and with no CDN in it.
           # This is the split-horizon rule cloud.IAMBaseURL already states for the
@@ -248,11 +248,10 @@ jobs:
           #
           # SIX, BECAUSE THREE DID NOT OUTLAST THE BURST. The CDN does not drop a
           # single packet and recover; it refuses for a stretch, and three tries
-          # nine seconds apart fitted inside one. Measured on 2026-08-21: reviews
-          # passed until 19:38 and failed from 19:56 on that same credential,
-          # while the deploy leg of those same runs — asking the same store a
-          # minute later — succeeded throughout. The window is what differed, so
-          # the window is what moves: 5s, 10s, 15s, 20s, 25s.
+          # nine seconds apart fit inside one. The same credential, asked a minute
+          # later, is answered — so what separates a refusal from an absence here
+          # is the WINDOW and not the identity, and the window is what moves:
+          # 5s, 10s, 15s, 20s, 25s, spanning seventy-five seconds.
           again() {
             local attempt=1 out=
             while :; do
@@ -267,7 +266,7 @@ jobs:
           kms_login() { printf %s "$KMS_CLIENT_SECRET" | login "$KMS_CLIENT_ID"; }
           KMS_TOKEN=$(again kms_login || true)
           if [ -z "$KMS_TOKEN" ]; then
-            echo "::error::review: KMS login at ${KMS_ENDPOINT} answered $(cat "$KMS_CODE" 2>/dev/null || echo 000) — $(head -c 200 "$KMS_BODY" 2>/dev/null). The reviewer's identity cannot be read, so the change does not pass. A 4xx is the store refusing this credential — rotate review/IAM_CLIENT_* or KMS_CLIENT_*; anything else is the door not answering, and this asked six times over seventy-five seconds."
+            echo "::error::review: KMS login at ${KMS_ENDPOINT} answered $(cat "$KMS_CODE" 2>/dev/null || echo 000) — $(head -c 200 "$KMS_BODY" 2>/dev/null). The reviewer's identity cannot be read, so the change does not pass. A 4xx is the store refusing this credential — rotate review/IAM_CLIENT_* or KMS_CLIENT_*; anything else is the endpoint not answering, and this asked six times over seventy-five seconds."
             rm -f "$KMS_BODY" "$KMS_CODE"
             exit 1
           fi
@@ -343,7 +342,7 @@ jobs:
           esac
           bash .hanzo/review/review.sh "$base" "${{ github.sha }}"
 
-  # ══ CAR 0 ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
+  # ══ gate ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
   #
   # The test gate, driven by hanzo.yml, whose `app-contract` step is
   # `make -f mk/fleet.mk check`: regenerate all 116 app subsets FROM
@@ -372,7 +371,7 @@ jobs:
     # read GITHUB_WORKFLOW_REF to find its own tools, that variable is GitHub's
     # and the Hanzo Git runner does not set it, and `set -u` turned the miss into an
     # abort — so every step after it, build through deploy, reported skipped.
-    # v1.0.17 defaults the variable; nothing else about the lane changed.
+    # v1.0.17 defaults the variable; nothing else about the job changed.
     #
     # PINNED TO @v1, NOT @v1.0.17, AND THE DIFFERENCE IS THAT THE TESTS RUN.
     # v1.0.17 declares the reusable's `tests` input as `type: boolean`, and
@@ -406,7 +405,7 @@ jobs:
     # This replaces a paragraph asserting the opposite — that Hanzo Git declines to
     # schedule a called workflow's jobs, so nothing had shipped since v1.801.490.
     # Both halves were read off the parent row. Measured on Hanzo Git: 2159 caller
-    # jobs have succeeded across 292 repos, and this lane's own gate succeeded 174
+    # jobs have succeeded across 292 repos, and this workflow's own gate succeeded 174
     # times in the ten days that paragraph called dead.
     #
     # ci publishes the reusable at .hanzo/workflows/build.yml and NOWHERE ELSE.
@@ -626,7 +625,7 @@ jobs:
 
           echo "OK: containment holds — apps/controlplane has zero buildable files by default and is linked into no cmd/ binary"
 
-  # ══ CAR 1 ══ THE IMAGE. Publish bytes; name them only once they boot.
+  # ══ image ══ THE IMAGE. Publish bytes; name them only once they boot.
   #
   # Unchanged from deploy.yml apart from `needs:` and the resume probe. The
   # version maxes over BOTH published image tags AND git tags: the registry is the
@@ -661,27 +660,7 @@ jobs:
     # second image for a commit that already has one). Everything else — main,
     # dispatch, and the ref-less shape — is a release. startsWith() on an absent
     # ref is false, so the missing value now means "not a tag", which is true.
-    #
-    # BREAK GLASS. `needs:` alone means "every one of these succeeded", which is
-    # right until the reviewer is refused by the thing this release repairs — the
-    # reviewer is an api.hanzo.ai caller, so an outage there stops the release that
-    # fixes it, and `image` is SKIPPED rather than failed, which is the shape that
-    # hides it. The results are named explicitly here so gate and containment still
-    # have to pass, and only the review term can be admitted by a variable.
-    #
-    # REVIEW_BREAK_GLASS is a repository variable holding the REASON. Setting it
-    # ships the next release unreviewed; clearing it re-arms the gate, with no code
-    # change either way. It already existed, carrying exactly that sentence, and was
-    # read by nothing — a control someone set believing it did something, which is
-    # worse than no control. The step below prints it, so a bypassed release says so
-    # in its own log rather than in somebody's memory.
-    if: >-
-      always()
-      && github.event_name != 'pull_request'
-      && !startsWith(github.ref, 'refs/tags/')
-      && needs.gate.result == 'success'
-      && needs.containment.result == 'success'
-      && (needs.review.result == 'success' || vars.REVIEW_BREAK_GLASS != '')
+    if: github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/')
     runs-on: [hanzo-build-linux-amd64]
     # cloud builds ~28 subsystems and has run 15m, 17m and 20m42s.
     timeout-minutes: 60
@@ -692,7 +671,7 @@ jobs:
       # tag is a name a registry can move; a digest is the content. The pin names
       # this and nothing else.
       digest: ${{ steps.img.outputs.digest }}
-      # THE ARBITER, carried to every car behind this one. cmd/lineage prints these
+      # THE ARBITER, carried to every job behind this one. cmd/lineage prints these
       # on a pass and only on a pass, so a job downstream names the repository and
       # the image of the release that was actually proven, rather than repeating a
       # literal that a rename can quietly point somewhere else.
@@ -701,24 +680,6 @@ jobs:
       image: ${{ steps.ver.outputs.image }}
       path: ${{ steps.ver.outputs.path }}
     steps:
-      # A BYPASSED RELEASE SAYS SO IN ITS OWN LOG. The condition above can admit
-      # this job with review red; if that happened, the reason is printed here and
-      # written to the run summary, so "why did this ship unreviewed" is answered
-      # by the run rather than by whoever remembers setting the variable.
-      - name: say whether the review gate was bypassed
-        if: needs.review.result != 'success'
-        run: |
-          {
-            echo "## Review gate BYPASSED"
-            echo
-            echo "review concluded \`${{ needs.review.result }}\` and this release was admitted by REVIEW_BREAK_GLASS."
-            echo
-            echo "> ${{ vars.REVIEW_BREAK_GLASS }}"
-            echo
-            echo "Clear the REVIEW_BREAK_GLASS repository variable to re-arm the gate."
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "::warning::review was ${{ needs.review.result }} — shipped under REVIEW_BREAK_GLASS: ${{ vars.REVIEW_BREAK_GLASS }}"
-
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
 
@@ -742,7 +703,7 @@ jobs:
       # the commit is already there — being there is what started this run.
       #
       # It was also the last thing forcing the private tree onto a github repo on
-      # every release, and the thing that broke the lane twice: once when the repo
+      # every release, and the thing that broke the release twice: once when the repo
       # it pushed to was public, and once when the credential could not see the
       # private one it was moved to ("Repository not found", run 38319). A step
       # that cannot fail is better than a step with two known ways to fail.
@@ -800,12 +761,12 @@ jobs:
           # there is nothing for a second reading to disagree with.
           printf '%s\npath=%s\n' "$ARBITER" "$path" | tee -a "$GITHUB_ENV" >> "$GITHUB_OUTPUT"
 
-          # THE DIGEST OF THE DOCUMENT, computed here and carried by every car
-          # below. This is the coupler: a projection generated from any other
+          # THE DIGEST OF THE DOCUMENT, computed here and carried by every job
+          # below. This is the value carried between jobs: a projection generated from any other
           # bytes is a projection of a release nobody shipped.
           # openapi.yaml, because the projections this couples are generated from
           # the CUSTOMER contract: the SDKs, the CLI and the docs. private.yaml is
-          # the operator's reading of the same commit and no car projects it.
+          # the operator's reading of the same commit and no job projects it.
           SPEC_SHA=$(sha256sum openapi.yaml | cut -d' ' -f1)
           echo "spec_sha256=$SPEC_SHA" >> "$GITHUB_OUTPUT"
 
@@ -849,7 +810,7 @@ jobs:
           # private github repo, not Hanzo Git: the claim is a compare-and-swap
           # and only one server can arbitrate it, so the register of names has to
           # be the one the claim writes to. Reading a different git than we claim
-          # against is how two lanes come to believe they both own a number.
+          # against is how two runs come to believe they both own a number.
           #
           # The register moved here from the public repo, so it starts from
           # v1.801.491 — the reconciliation release — rather than from the
@@ -898,13 +859,13 @@ jobs:
           # else here — the registry probe, the tag list, the max() — is a
           # READ, and a read cannot reserve anything.
           #
-          # The claim used to be taken LAST, by the deploy car's "Tag the release",
+          # The claim used to be taken LAST, by the deploy job's "Tag the release",
           # a whole ~20-minute build after the 404 probe that stood in for it.
-          # Two lanes starting inside that window both probed 404, both built,
+          # Two runs starting inside that window both probed 404, both built,
           # and both pushed — and A GHCR TAG IS MUTABLE, so the second push
           # silently REPLACED the first's bytes under the same name. v1.801.361
           # was overwritten at 04:40:53; v1.801.410 again at 08:17:12 by an
-          # image carrying no revision label. The losing lane then died at the
+          # image carrying no revision label. The losing run then died at the
           # tag step — long after it had already corrupted the winner's image,
           # which the winner went on to pin. A check that is 20 minutes from
           # the act it guards is not a check.
@@ -912,7 +873,7 @@ jobs:
           # Claiming FIRST inverts every one of those outcomes. The loser finds
           # out in one HTTP call, before it has built anything, and simply takes
           # the next number. Two commits can never hold one version, so no push
-          # can ever land on a name another lane owns, so tag -> commit is fixed
+          # can ever land on a name another run owns, so tag -> commit is fixed
           # before the image exists rather than asserted after it.
           #
           # A claim that is never built leaves a HOLE — a tag with no image.
@@ -977,7 +938,7 @@ jobs:
           NEXT="$CLAIMED"
 
           # WE OWN THE NAME — so anything already published under it is either
-          # our own earlier attempt or a lane that had no right to it, and those
+          # our own earlier attempt or a run that had no right to it, and those
           # two need opposite handling. `built` is therefore derived from the
           # IMAGE, not from the tag: since the claim now precedes the build, a
           # tag at our sha no longer implies bytes exist.
@@ -1004,7 +965,7 @@ jobs:
               echo "v$NEXT is already published from our sha — skipping the build (whether it was SMOKED is a different question, asked below)"
               BUILT=1
             else
-              echo "::error::v$NEXT is a version this run OWNS (tag at ${SHA}) but the registry already serves bytes built from '${REV:-an unlabelled commit}'. Another lane pushed onto a name it did not hold. Nothing here may overwrite it — publish the intended bytes under a new number and delete the foreign image."
+              echo "::error::v$NEXT is a version this run OWNS (tag at ${SHA}) but the registry already serves bytes built from '${REV:-an unlabelled commit}'. Another build pushed onto a name it did not hold. Nothing here may overwrite it — publish the intended bytes under a new number and delete the foreign image."
               exit 1
             fi
           elif [ "$CODE" != "404" ]; then
@@ -1067,7 +1028,7 @@ jobs:
           # same bytes, both orderings, 2026-08-06: gzip 245.5s/256.1s against zstd
           # 58.1s/53.3s, and the zstd image is 1.2% smaller.
           #
-          # This lane matches apps/platform/k8s.go deliberately. The two build the
+          # This step matches apps/platform/k8s.go deliberately. The two build the
           # SAME Dockerfile into the SAME repository, and a compression setting that
           # differs between them is not a preference — it decides the manifest media
           # type, which decides whether imagePullable's Accept negotiation gets a
@@ -1075,15 +1036,15 @@ jobs:
           outputs: type=image,push=true,compression=zstd,force-compression=true,oci-mediatypes=true
           # VERSION is what the binary reports as X-Api-Version. Without it the
           # ldflag falls back to the `dev` default and a released image cannot
-          # say which release it is — and every car below keys off that header.
+          # say which release it is — and every job below keys off that header.
           # REVISION is passed as a BUILD-ARG, not only as a label, because the
           # Dockerfile declares `ARG REVISION=unknown` and stamps the label from
           # it. A builder that sets only the outside label leaves that ARG at its
           # default, and a builder that sets neither publishes an image whose
-          # commit is unrecoverable — which is precisely what the platform lane
+          # commit is unrecoverable — which is precisely what the platform builder
           # did for every image it ever pushed. Feeding the ARG makes the label
           # truthful no matter which builder runs the Dockerfile, instead of
-          # truthful only in the lane that remembers to override it afterwards.
+          # truthful only in the builder that remembers to override it afterwards.
           build-args: |
             VERSION=v${{ steps.ver.outputs.version }}
             REVISION=${{ github.sha }}
@@ -1103,8 +1064,8 @@ jobs:
       # SOMETHING is there; it says nothing about whose. This is the moment the
       # image -> commit link is established, and the moment a clobber is still
       # cheap to catch: the claim above makes a collision impossible between two
-      # lanes that both honour it, but a lane that does not (the platform
-      # buildctl path pushed onto v1.801.410 twelve minutes after this lane did)
+      # builders that both honour it, but one that does not (the platform
+      # buildctl path pushed onto v1.801.410 twelve minutes after this job did)
       # is exactly what an invariant has to survive. Reading the revision label
       # back off the registry — not off our own build output — is the difference
       # between believing the push landed and knowing it did.
@@ -1133,7 +1094,7 @@ jobs:
 
           REV=$(bash .hanzo/scripts/image-revision.sh "$path" "v${{ steps.ver.outputs.version }}")
           if [ "$REV" != "${{ github.sha }}" ]; then
-            echo "::error::${img} resolves, but the bytes behind that tag were built from '${REV:-an unlabelled commit}', not ${{ github.sha }}. Another lane pushed over the tag this run owns. Nothing downstream may pin it."
+            echo "::error::${img} resolves, but the bytes behind that tag were built from '${REV:-an unlabelled commit}', not ${{ github.sha }}. Another build pushed over the tag this run owns. Nothing downstream may pin it."
             exit 1
           fi
           echo "$img is built from ${{ github.sha }} — tag, commit and image agree"
@@ -1232,11 +1193,11 @@ jobs:
           # nothing about it, which is how v1.801.565 shipped green and died at
           # the first real call (duplicate /v1/health, panic at mustBuild). One
           # remainder request forces the instance build; the panic or its 503
-          # fails the run here instead of the fleet. 401/403 are fine — the door
+          # fails the run here instead of the fleet. 401/403 are fine — the endpoint
           # answered, which is all this asks.
           # The "listening" line is logged as the socket begins accepting, so a
           # probe fired the same instant can still race the bind — retry a few
-          # one-second beats, treating 2xx OR an auth refusal as proof the door
+          # one-second beats, treating 2xx OR an auth refusal as proof the endpoint
           # answered, and only failing once the process is gone or the window closes.
           built=0
           for _ in $(seq 1 15); do
@@ -1459,12 +1420,12 @@ jobs:
           done
           echo "::error::could not push the pin after 5 attempts"; exit 1
 
-  # ══ NOT A CAR ══ THE PLUGIN SET, PUBLISHED BESIDE THE IMAGE.
+  # ══ NOT A JOB ══ THE PLUGIN SET, PUBLISHED BESIDE THE IMAGE.
   #
   # NOTHING `needs:` THIS, DELIBERATELY. It hangs off `image` for the version and
   # runs alongside live, so a slow or failed plugin publish can never hold a
   # release — which is the whole point of a light host, and the reason this is not
-  # a car. It still FAILS LOUDLY when the index does not appear: a job nobody
+  # a job. It still FAILS LOUDLY when the index does not appear: a job nobody
   # depends on going red is a signal someone reads, and a silent publish is how a
   # host ends up resolving a plugin set that was never there.
   #
@@ -1563,7 +1524,7 @@ jobs:
 
           # ONE recipe entry, not 121: the app set lives in manifest/apps.go and
           # restating it here would be a second copy of it in YAML — and 121
-          # entries would blow the door's own 16-binary bound. PLATFORMS lives in
+          # entries would blow the endpoint's own 16-binary bound. PLATFORMS lives in
           # mk/fleet.mk, so the platform list is not restated either.
           body=$(jq -nc --arg repo "$REPO" --arg sha "${{ github.sha }}" --arg tag "v${VERSION}" \
             '{repo:$repo, sha:$sha, tag:$tag, bucket:"plugins",
@@ -1586,7 +1547,7 @@ jobs:
             if [ "$code" = 200 ]; then
               n=$(jq '.binaries | length' /tmp/idx.json)
               echo "published ${n} artifacts at ${index}"
-              # A plugin the host cannot RESOLVE is the defect this lane was
+              # A plugin the host cannot RESOLVE is the defect this step was
               # blocked on, so assert the shape rather than the count: a real
               # triple, on a plugin the fleet actually runs.
               jq -e '.binaries[] | select(.name=="o11y" and .os=="linux" and .arch=="amd64" and (.sha256|length)==64)' \
@@ -1600,15 +1561,15 @@ jobs:
           echo "::error::${index} never appeared (40 min). The release SHIPPED — nothing depends on this job — but a host with no baked plugins has no index for v${VERSION}."
           exit 1
 
-  # ══ CAR 2 ══ PRODUCTION IS SERVING IT.
+  # ══ live ══ PRODUCTION IS SERVING IT.
   #
   # THE PIN IS NOT HERE. It is the last step of `image`, beside the smoke that
   # earns it — see that job's tail for why the two must not be separable. What is
-  # left here is the WAIT, and it is a separate car precisely because it is the
+  # left here is the WAIT, and it is a separate job precisely because it is the
   # part that is safe to lose: cancelling a probe costs a receipt, cancelling a
   # pin costs a deploy.
   #
-  # A pin is not a release either — the RUNNING VERSION is — and every car below
+  # A pin is not a release either — the RUNNING VERSION is — and every job below
   # describes a system to the outside world, so each must key off what is
   # deployed or it describes something that is not there.
   live:
@@ -1617,7 +1578,7 @@ jobs:
     timeout-minutes: 45
     steps:
       # cd.hanzo.ai reconciles on its own schedule, so between the pin and the
-      # running pod there is a window in which every car below would describe the
+      # running pod there is a window in which every job below would describe the
       # PREVIOUS version. Wait for the header the image itself reports, and refuse
       # to fan out if it never arrives.
       - name: Prove the release is live
@@ -1643,7 +1604,7 @@ jobs:
           echo "::error::api.hanzo.ai never reported ${WANT} (last saw '${GOT:-none}'). The image is published, tagged and pinned; cd.hanzo.ai has not reconciled it. Nothing downstream may describe a version that is not running — re-run this workflow at the same sha to resume once it has."
           exit 1
 
-  # ══ CAR 3 ══ THE DOCUMENT TELLS THE TRUTH ABOUT PRODUCTION.
+  # ══ reach ══ THE DOCUMENT TELLS THE TRUTH ABOUT PRODUCTION.
   #
   # `check` proves the document equals the code. Nothing proved the
   # address is REACHABLE, and three things break that independently: a stale
@@ -1707,20 +1668,20 @@ jobs:
       - name: Every published address is routed
         run: go run ./cmd/reach private.yaml https://api.hanzo.ai openapi/unreachable.txt
 
-      # THE MCP DOOR, AND WHETHER EVERY SUBSYSTEM ANSWERED IT.
+      # THE MCP ENDPOINT, AND WHETHER EVERY SUBSYSTEM ANSWERED IT.
       #
       # This step used to compare the live tool count against `jq -s length` over
       # the committed plugin/*/mcp.json. Both sides of that comparison came from
-      # the same files — the door was SERVING those bytes — so it could only ever
+      # the same files — the endpoint was SERVING those bytes — so it could only ever
       # prove the image carried the tree it was built from. It passed for months
       # while plugin/o11y/mcp.json held 12 tools and the o11y binary served 365.
       #
-      # The door composes itself by asking every subsystem now, so the release
+      # The endpoint composes itself by asking every subsystem now, so the release
       # question is a different and much better one: DID THEY ALL ANSWER. A
       # subsystem that is down, mis-rolled or wedged is named in the reply's
       # _meta, which is the one thing the old check could never see — a broken
       # deployment matched the files exactly.
-      - name: Every subsystem answered the MCP door
+      - name: Every subsystem answered the MCP endpoint
         run: |
           set -euo pipefail
           BODY=$(curl -fsS -X POST https://api.hanzo.ai/v1/mcp \
@@ -1731,12 +1692,12 @@ jobs:
           echo "MCP: ${TOOLS} tools live, ${DOWN} subsystems unavailable"
           if [ "$DOWN" != "0" ]; then
             echo "$BODY" | jq -r '.result._meta["hanzo.ai/unavailable"][] | "  \(.app): \(.error)"'
-            echo "::error::${DOWN} subsystems did not answer the fleet's agent door"
+            echo "::error::${DOWN} subsystems did not answer the fleet's MCP endpoint"
             exit 1
           fi
-          [ "$TOOLS" -gt 0 ] || { echo "::error::the MCP door serves ZERO tools"; exit 1; }
+          [ "$TOOLS" -gt 0 ] || { echo "::error::the MCP endpoint serves ZERO tools"; exit 1; }
 
-  # ══ CAR 4 ══ FAN OUT. One release, one document, every projection.
+  # ══ fanout ══ FAN OUT. One release, one document, every projection.
   #
   # Pokes every client projection so a release, not a clock, is what moves them.
   #
@@ -1799,7 +1760,7 @@ jobs:
           # repo:workflow — the workflow name is NOT uniform, and assuming it was
           # would fail every release on the one that differs. hanzo-docs/docs has
           # no cicd.yml at all (probed: 404 `workflow "cicd.yml" doesn't exist`);
-          # its spec-consuming lane is deploy.yml. The six SDKs do use cicd.yml.
+          # its spec-consuming workflow is deploy.yml. The six SDKs do use cicd.yml.
           #
           # hanzo-kotlin/sdk and hanzo-cpp/sdk are absent on purpose: both 404 on
           # git.hanzo.ai, so there is nothing to poke. Mirror them and add them.
@@ -1815,8 +1776,8 @@ jobs:
           ok=0; bad=""
           for entry in $PROJECTIONS; do
             repo="${entry%%:*}"; wf="${entry##*:}"
-            # THE REF TRAVELS WITH THE POKE, and until it did this whole car was
-            # ceremony. hanzoai/ci's client lane moves a projection's pin only when
+            # THE REF TRAVELS WITH THE POKE, and until it did this whole job was
+            # ceremony. hanzoai/ci's client workflow moves a projection's pin only when
             # it is handed a ref, and it read that from `client_payload` — which
             # `repository_dispatch` populates and Hanzo Git does not serve. So every
             # poke landed in `check`: re-read the LOCKED ref, assert its digest, exit
@@ -1908,12 +1869,12 @@ jobs:
             --arg fanout "${{ needs.fanout.result }}" \
             --arg n "${{ needs.fanout.outputs.dispatched }}" \
             '{version:$tag, sha:$sha, spec_sha256:$spec, digest:$digest,
-              cars:{image:$image, live:$live, reach:$reach, fanout:$fanout},
+              jobs:{image:$image, live:$live, reach:$reach, fanout:$fanout},
               projections_dispatched:($n|tonumber? // 0)}' > /tmp/release.json
           cat /tmp/release.json
 
-          BODY=$(jq -r '"**Document** `sha256:\(.spec_sha256)`\n\n| car | |\n|---|---|\n" +
-                        ([.cars|to_entries[]|"| \(.key) | \(.value) |"]|join("\n")) +
+          BODY=$(jq -r '"**Document** `sha256:\(.spec_sha256)`\n\n| job | |\n|---|---|\n" +
+                        ([.jobs|to_entries[]|"| \(.key) | \(.value) |"]|join("\n")) +
                         "\n\nProjections dispatched: \(.projections_dispatched)/9\n\n```json\n" +
                         (.|tostring) + "\n```"' /tmp/release.json)
 
@@ -1924,7 +1885,7 @@ jobs:
           # `set -euo pipefail`, kills the step before it can reach the POST that
           # creates it. So the create path — the one EVERY release takes — could never
           # run. Measured: this repo holds ONE release object, v1.801.31, whose body is
-          # a hand-written changelog, so the car has written a receipt for zero
+          # a hand-written changelog, so the job has written a receipt for zero
           # releases since it was added.
           #
           # PATCH and POST below KEEP -f, because there a non-2xx really is the error.
@@ -1933,8 +1894,8 @@ jobs:
           # SAY THE CONTENT TYPE. `curl -d` sends application/x-www-form-urlencoded,
           # so a JSON body binds to an empty struct: tag_name arrives unset, fails
           # Required, and Hanzo Git answers 422 — which -f turns into exit 22. That
-          # is every receipt this car has ever tried to write. The repo holds one
-          # release object, v1.801.31, from before the car existed.
+          # is every receipt this job has ever tried to write. The repo holds one
+          # release object, v1.801.31, from before the job existed.
           ID=$(curl -sS -H "Authorization: token ${GIT_TOKEN}" \
             "${api}/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
           if [ -n "$ID" ]; then
@@ -1954,8 +1915,8 @@ jobs:
           # footnote — the receipt exists precisely so "cloud shipped but the CLI
           # is two days stale" is a state you can point at rather than one that
           # goes unnoticed for a week.
-          if jq -e '[.cars[]] | any(. != "success")' /tmp/release.json >/dev/null; then
-            echo "::error::this release is INCOMPLETE — see the car table on the ${TAG} release. Fix the failing car and re-run this workflow at ${{ github.sha }}: image and live will recognise their own receipts and no-op, and only the failed car runs again."
+          if jq -e '[.jobs[]] | any(. != "success")' /tmp/release.json >/dev/null; then
+            echo "::error::this release is INCOMPLETE — see the job table on the ${TAG} release. Fix the failing job and re-run this workflow at ${{ github.sha }}: image and live will recognise their own receipts and no-op, and only the failed job runs again."
             exit 1
           fi
           echo "${TAG} is complete: document, image, production, reachability and all nine projections."
@@ -1964,7 +1925,7 @@ jobs:
       #
       # Every check above answers a question about the run it is in: did MY image
       # build, did MY tag survive, did MY pin go live. None of them can see an
-      # image published by a lane that never entered this workflow — and that is
+      # image published by a build that never entered this workflow — and that is
       # not a hypothetical gap, it is the one that happened. v1.801.478, 479, 480
       # and 484 were published with no tag in any repo while every cicd.yml run
       # on either side of them was green, because none of those runs was looking
@@ -1975,14 +1936,14 @@ jobs:
       # published: does every version in the registry have a receipt. It runs
       # last because release.json above is this release's receipt and should be
       # written whatever the wider state is, and it runs HERE rather than in
-      # the deploy car because a pre-existing orphan must not be able to block a deploy
+      # the deploy job because a pre-existing orphan must not be able to block a deploy
       # — a gate that wedges production on someone else's old mess gets switched
       # off within a day, and a switched-off gate is how this started.
       #
       # It is on the main path, not a cron, for the same reason: a scheduled
       # reconciliation is a thing that can quietly stop running and look
       # identical to a clean fleet. This cannot stop running without the release
-      # train stopping with it.
+      # stopping with it.
       - name: Every published image has a receipt
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}

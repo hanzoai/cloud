@@ -274,9 +274,9 @@ type catalogList struct {
 
 // promptReq creates a prompt, or appends a version to one that already exists.
 //
-// Named for the RECORD, not for the verb: a schema name is GLOBAL in the woven fleet
+// Named for the RECORD, not for the verb: a schema name is GLOBAL in the composed fleet
 // document, so "createReq" is a name several subsystems would each mean something
-// different by — and openapi.Weave refuses that outright rather than let one generated
+// different by — and openapi.Compose refuses that outright rather than let one generated
 // SDK bind whichever shape it read last. apps/git already publishes one.
 type promptReq struct {
 	// Name is the org-unique handle AND the URL segment the prompt is addressed by:

@@ -51,7 +51,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"github.com/hanzoai/cloud/apps/principal"
 	"io"
 	"net/http"
 	"strings"
@@ -257,40 +256,6 @@ func (t *tickets) sweep(now time.Time) {
 // a question the first one already closed, and a gate that decides nothing is
 // one somebody later has to reason about anyway. What the door decides is the
 // URL a caller is handed back, which is the only part that differs.
-func open(door string) func(*Service, *zip.Ctx) error {
-	return func(s *Service, c *zip.Ctx) error {
-		o, ok := orgOf(c)
-		if !ok {
-			return principal.Refused(c)
-		}
-		id := idParam(c)
-		m, _, err := find(s, c.Context(), o, id)
-		if err != nil {
-			return err
-		}
-		if m.Status != "running" {
-			return zip.Errorf(http.StatusConflict, "sandbox is %s", cmp.Or(m.Status, "unknown"))
-		}
-		tok, err := s.State.tickets.mint(time.Now(), o, m.ID)
-		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "ticket: %v", err)
-		}
-		return c.JSON(http.StatusCreated, map[string]any{
-			"ticket":    tok,
-			"expiresIn": int(ticketTTL / time.Second),
-			// The PATH, not a URL. Which host this address wears in public is the
-			// edge's answer and not ours — behind the gateway this process only ever
-			// sees an internal name — so handing back an absolute URL would hand back
-			// a guess. The client already knows the host it is talking to.
-			//
-			// It names the PAGE, because that is what a caller embeds; the page finds
-			// its own socket. A caller that wants the raw socket adds `/ws`, which is
-			// exactly what the page does.
-			"url": "/v1/sandbox/" + m.ID + "/" + door + "?ticket=" + tok,
-		})
-	}
-}
-
 // pty serves one terminal: a shell on a pseudo-terminal, for as long as
 // somebody is typing.
 func pty(s *Service, c *zip.Ctx) error {
@@ -656,7 +621,6 @@ func (w *window) Next() *remotecommand.TerminalSize {
 // spent ONCE: a page that redeemed it would be a page holding a credential that
 // no longer opens anything.
 func terminal(g zip.Router, s *Service) {
-	g.Post("/:id/terminal/ticket", cloud.Handle(s, open("terminal")))
 	g.Get("/:id/terminal", cloud.Handle(s, serve(document)))
 	g.Get("/:id/terminal/ws", cloud.Handle(s, pty))
 }
