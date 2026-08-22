@@ -176,7 +176,7 @@ done
 # not that the forge accepts what it answered with — a token minted for another audience,
 # or an identity with no account here, reads exactly like a fleet of private repositories.
 # If the IAM identity served nothing and a per-job token was displaced to try it, put the
-# per-job token back and ask again rather than reporting a lane that fetches nothing.
+# per-job token back and ask again rather than reporting a set of rewrites that fetches nothing.
 # WHAT THE IAM IDENTITY COULD NOT REACH, ASKED FOR AGAIN.
 #
 # The identity serves what its account can see, and a repository it cannot see denies
