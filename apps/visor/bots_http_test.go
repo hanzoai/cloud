@@ -132,8 +132,8 @@ func (f *botVM) server(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 
-	// GET /v1/machines?owner=&kind=bot — the resell list, kind-filtered.
-	mux.HandleFunc("/v1/machines", func(w http.ResponseWriter, r *http.Request) {
+	// GET /v1/machines?owner=&kind=bot — the collection, kind-filtered.
+	mux.HandleFunc("GET /v1/machines", func(w http.ResponseWriter, r *http.Request) {
 		f.lastOwner = r.URL.Query().Get("owner")
 		out := []map[string]any{}
 		if r.URL.Query().Get("kind") == "bot" || r.URL.Query().Get("kind") == "" {
@@ -144,8 +144,9 @@ func (f *botVM) server(t *testing.T) *httptest.Server {
 		envelope200(w, out)
 	})
 
-	// POST /v1/machines/launch — quote (dryRun) or launch a machine.
-	mux.HandleFunc("/v1/machines/launch", func(w http.ResponseWriter, r *http.Request) {
+	// POST /v1/machines — quote (dryRun) or launch a machine. Adding to the
+	// collection is what POST means, so it needs no address of its own.
+	mux.HandleFunc("POST /v1/machines", func(w http.ResponseWriter, r *http.Request) {
 		f.lastOwner = r.URL.Query().Get("owner")
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -178,15 +179,18 @@ func (f *botVM) server(t *testing.T) *httptest.Server {
 		op200(w, map[string]any{"agentBindings": out})
 	})
 
-	// /v1/machines/{id}[/agent] — the machine sub-resources. The machine itself is
-	// still casibase; its agent is typed.
-	mux.HandleFunc("/v1/machines/", func(w http.ResponseWriter, r *http.Request) {
-		f.lastOwner = r.URL.Query().Get("owner")
-		rest := strings.TrimPrefix(r.URL.Path, "/v1/machines/")
-		parts := strings.Split(rest, "/")
-		id := parts[0]
+	// /v1/machines/{owner}/{name}[/agent] — one machine and its sub-resource. The
+	// tenant is in the ADDRESS, so the fake reads it where the server does; there
+	// is no ?owner= on an item call to disagree with the path.
+	item := func(w http.ResponseWriter, r *http.Request) {
+		f.lastOwner = r.PathValue("owner")
+		id := r.PathValue("name")
+		parts := []string{id}
+		if strings.HasSuffix(r.URL.Path, "/agent") {
+			parts = append(parts, "agent")
+		}
 		switch {
-		case len(parts) == 1 && r.Method == http.MethodGet: // GetComputeMachine
+		case len(parts) == 1 && r.Method == http.MethodGet: // read one machine
 			if m, ok := f.bots[id]; ok {
 				envelope200(w, m)
 				return
@@ -226,7 +230,13 @@ func (f *botVM) server(t *testing.T) *httptest.Server {
 		default:
 			http.Error(w, "unhandled "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 		}
-	})
+	}
+
+	// Two EXACT addresses, not one subtree. A subtree pattern redirects the item
+	// call to a trailing slash, and Go's client answers a 301 by reissuing as GET
+	// — so a DELETE would arrive as a read and the fake would report success.
+	mux.HandleFunc("/v1/machines/{owner}/{name}", item)
+	mux.HandleFunc("/v1/machines/{owner}/{name}/agent", item)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
