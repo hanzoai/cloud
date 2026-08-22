@@ -370,7 +370,17 @@ try:
 except Exception:
     found = _verdicts(text)
     if not found:
-        print("::error::review: the reviewer did not answer with a JSON verdict — refusing rather than guessing"); sys.exit(1)
+        # SAY WHAT ARRIVED. Three different things reach here — an answer cut off
+        # mid-object, prose that never opened one, and a model declining in
+        # sentences — and they have three different remedies. Naming the
+        # finish_reason and the head of the text is what tells them apart, where
+        # "no verdict" alone sends the next reader to re-run and hope.
+        fin = (raw.get("choices") or [{}])[0].get("finish_reason")
+        used = (raw.get("usage") or {}).get("completion_tokens")
+        head = " ".join(text.split())[:200]
+        print(f"::error::review: the reviewer did not answer with a JSON verdict"
+              f" (finish_reason={fin}, completion_tokens={used}) — refusing rather"
+              f" than guessing. It answered: {head!r}"); sys.exit(1)
     if len(found) > 1:
         print("::error::review: the answer carries more than one verdict object — refusing rather than choosing between them"); sys.exit(1)
     v = found[0]
