@@ -127,7 +127,7 @@ func TestRunnerBuild_NoTokenConfigured(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunner(t, app, "anything", map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/cloud:v1"})
+		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
 	if code != http.StatusForbidden {
 		t.Fatalf("no token configured, no identity: want 403, got %d", code)
 	}
@@ -238,7 +238,7 @@ func TestRunnerBuild_IAMNonAdminRejected(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunnerAs(t, app, "member-uuid", "hanzo", false, false, map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/cloud:v1"})
+		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
 	if code != http.StatusForbidden {
 		t.Fatalf("IAM non-admin: want 403, got %d", code)
 	}
@@ -251,7 +251,7 @@ func TestRunnerBuild_IAMForgedNoUserRejected(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunnerAs(t, app, "", "hanzo", true, true, map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/cloud:v1"})
+		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
 	if code != http.StatusForbidden {
 		t.Fatalf("forged (no X-User-Id): want 403, got %d", code)
 	}
@@ -401,7 +401,10 @@ func TestRunnerBuild_AmbientTokenDoesNotPromoteOrgIdentity(t *testing.T) {
 func TestRunnerBuild_FabricTokenSpansOwnedRegistries(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
-	for _, image := range []string{"ghcr.io/hanzoai/cloud:v1", "ghcr.io/luxfi/node:v1", "ghcr.io/zooai/app:v1"} {
+	// One image per owned namespace, and NONE of them the cloud image: cloud is
+	// versioned by its own release lane and refused at this door regardless of
+	// who asks, so naming it here would test the exclusion rather than the span.
+	for _, image := range []string{"ghcr.io/hanzoai/app:v1", "ghcr.io/luxfi/node:v1", "ghcr.io/zooai/app:v1"} {
 		code, body := postRunner(t, app, testBuildTok, map[string]any{
 			"repo": "https://github.com/hanzoai/cloud", "image": image})
 		if code != http.StatusAccepted {
@@ -415,7 +418,7 @@ func TestRunnerBuild_BadToken(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
 	code, _ := postRunner(t, app, "wrong", map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/cloud:v1"})
+		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
 	if code != http.StatusForbidden {
 		t.Fatalf("bad token: want 403, got %d", code)
 	}
@@ -447,7 +450,7 @@ func TestRunnerBuild_Launches(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
 	code, body := postRunner(t, app, testBuildTok, map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "sha": "main", "image": "ghcr.io/hanzoai/cloud:v1.2.3"})
+		"repo": "https://github.com/hanzoai/cloud", "sha": "main", "image": "ghcr.io/hanzoai/app:v1.2.3"})
 	if code != http.StatusAccepted {
 		t.Fatalf("launch: want 202, got %d (%s)", code, body)
 	}
@@ -455,7 +458,7 @@ func TestRunnerBuild_Launches(t *testing.T) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		t.Fatalf("decode resp: %v", err)
 	}
-	if resp.BuildJobID == "" || resp.Image != "ghcr.io/hanzoai/cloud:v1.2.3" || resp.Status != "queued" {
+	if resp.BuildJobID == "" || resp.Image != "ghcr.io/hanzoai/app:v1.2.3" || resp.Status != "queued" {
 		t.Fatalf("unexpected resp: %+v", resp)
 	}
 }
@@ -474,7 +477,7 @@ func TestSharedTokenBuildsAndOnlyBuilds(t *testing.T) {
 	app := runnerApp(t)
 
 	enqueue, body := postRunner(t, app, "s3kr3t-fabric-token", map[string]any{
-		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/cloud:v1"})
+		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/app:v1"})
 	if enqueue == http.StatusForbidden {
 		t.Fatalf("the fabric token lost the ordinary build path it exists for: %d (%s)", enqueue, body)
 	}
