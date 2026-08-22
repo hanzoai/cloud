@@ -17,12 +17,12 @@ require (
 	github.com/hanzoai/account v0.3.3
 	github.com/hanzoai/amqp v0.4.2
 	github.com/hanzoai/cek v0.2.7
-	github.com/hanzoai/commerce v1.50.77
+	github.com/hanzoai/commerce v1.50.75
 	github.com/hanzoai/dataroom v1.1.7
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.76
+	github.com/hanzoai/iam v1.34.75
 	github.com/hanzoai/kafka v1.3.2
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
@@ -50,7 +50,7 @@ require (
 	github.com/zap-proto/http v0.3.5
 	github.com/zap-proto/mcp v1.0.5
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.33.2
+	github.com/zap-proto/zip v1.32.2
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2
@@ -690,7 +690,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.6
-	github.com/hanzoai/ai v1.833.116
+	github.com/hanzoai/ai v1.833.119
 	github.com/hanzoai/authz v1.10.34
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.16
