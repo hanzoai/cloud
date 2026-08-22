@@ -1,5 +1,5 @@
 name: CI/CD
-# THE RELEASE TRAIN. One workflow, one graph, one release.
+# ONE WORKFLOW, ONE GRAPH, ONE RELEASE.
 #
 #   gate ──┐
 #          ├─→ image ─→ live ─→ reach ─→ fanout ─→ receipt
@@ -23,7 +23,7 @@ name: CI/CD
 # So deploy.yml is GONE and its jobs are here, behind `needs:`. The gate was
 # always correct; it simply had no edge to the thing it was meant to stop.
 #
-# THE TRAIN HAD ONE CAR. It ended at "pin pushed" — nothing regenerated the
+# THE GRAPH HAD ONE JOB. It ended at "pin pushed" — nothing regenerated the
 # document's projections, so an SDK, the MCP tool list, the CLI's captured
 # command surface and the docs each moved only when a human remembered. Measured:
 # npm `hanzoai` had two versions in its entire history, `hanzo-client` was not on
@@ -31,20 +31,20 @@ name: CI/CD
 # that did had a `repository_dispatch: spec-update` listener NOTHING HAS EVER
 # SENT, and regenerating the CLI capture would have moved 15 operations.
 #
-# THE COUPLER IS THE DOCUMENT, PASSED BY VALUE AT A PINNED SHA. Every car below
-# carries (version, sha, sha256(openapi.yaml) — the customer contract). No car reads api.hanzo.ai to
+# WHAT EVERY JOB CARRIES IS THE DOCUMENT, PASSED BY VALUE AT A PINNED SHA. Every job below
+# carries (version, sha, sha256(openapi.yaml) — the customer contract). No job reads api.hanzo.ai to
 # GENERATE anything — at generation time the deploy has already happened, and
 # reading the host names whatever it is serving rather than the release that sent
 # it. The host is read for exactly one purpose: to prove the release is live.
 #
 # IT DOES NOT ROLL BACK. IT BLOCKS AND RESUMES. You cannot unpublish a package
-# version, so the cars are ordered by irreversibility — in-repo (gate) → registry
+# version, so the jobs are ordered by irreversibility — in-repo (gate) → registry
 # but unnamed (image; the TAG is minted only after smoke, so a tag can never name
 # an image that did not boot, and the pin moves in the same breath) → the outside
 # world (fanout).
-# Every car is idempotent on (version, digest): re-running at the same sha reuses
+# Every job is idempotent on (version, digest): re-running at the same sha reuses
 # the same version, re-probes instead of re-pushing, and treats "already there,
-# same bytes" as success. A failed car leaves a hole in the receipt, and the
+# same bytes" as success. A failed job leaves a hole in the receipt, and the
 # receipt is the definition of shipped.
 on:
   push:
@@ -57,7 +57,7 @@ on:
     # So a tag started a run with no work in it. `image` refuses tag refs (it
     # mints the tag itself; building on one would take the next number and
     # publish a second image for a commit that already has one), and every
-    # other car declares needs: on image — so all of them skipped while gate
+    # other job declares needs: on image — so all of them skipped while gate
     # and containment spent a runner. A run of skipped jobs reports SUCCESS,
     # and a green run whose gate passed reads as a release that shipped.
     # Nothing shipped; there was nothing to ship.
@@ -68,7 +68,7 @@ on:
   pull_request:
   # On-demand rebuild, and the RESUME entry point. A release that failed at
   # fanout is resumed by dispatching this workflow at the same sha: image and
-  # live recognise their own receipts and no-op in seconds, and the failed car
+  # live recognise their own receipts and no-op in seconds, and the failed job
   # runs again. It is also how sync-from-github.yml starts this after a
   # fast-forward — a push made with the workflow token fires no workflows.
   workflow_dispatch:
@@ -86,16 +86,16 @@ concurrency:
   # Jobs that have not started are forfeit to the newer run either way.
   #
   # A run holds the slot only while some job is literally executing — the
-  # attempt's status is an aggregate over its jobs — so the moment one car
+  # attempt's status is an aggregate over its jobs — so the moment one job
   # finishes and the next is still waiting for a runner, the run simultaneously
   # stops blocking newer runs and becomes eligible for that sweep. Finished jobs
-  # keep their result; the rest of the train is cancelled where it stands.
+  # keep their result; the rest of the run is cancelled where it stands.
   #
-  # THE CONSEQUENCE, AND IT IS THE REASON THE PIN SITS WHERE IT DOES: a car that
+  # THE CONSEQUENCE, AND IT IS THE REASON THE PIN SITS WHERE IT DOES: a job that
   # has not started yet is not a place to put work whose loss costs a deploy. No
   # setting here can protect it, because the flag that reads as if it would only
-  # ever governed the cars that are already running. So the pin is a step of the
-  # job that proves the image rather than a car of its own — see `image`.
+  # ever governed the jobs that are already running. So the pin is a step of the
+  # job that proves the image rather than a job of its own — see `image`.
   # ── ONE GROUP PER COMMIT, so every change runs to completion ─────────────────
   #
   # Pushes used to share the single group `release`. That coalesced them, which
@@ -128,7 +128,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # ══ CAR 0b ══ IS THIS CHANGE HOSTILE? Every other gate asks whether the code is
+  # ══ review ══ IS THIS CHANGE HOSTILE? Every other gate asks whether the code is
   # CORRECT. None asks what it is FOR. A commit that exfiltrates a provider key,
   # opens an egress or weakens an auth check compiles, passes its tests and ships.
   # This reads the diff and refuses it.
@@ -194,7 +194,7 @@ jobs:
           # Cloudflare and back to the pod next door. Under a burst of concurrent
           # runs the edge answered `error code: 502` in plain text, every review
           # failed to get an identity, and `image` (needs: review) was SKIPPED, so
-          # the train stopped with nothing red to point at. Measured both ways from
+          # the release stopped with nothing red to point at. Measured both ways from
           # inside the cluster: /v1/health 200 and POST /v1/kms/auth/login 400 — the
           # same answers the public host gives, one hop away and with no CDN in it.
           # This is the split-horizon rule cloud.IAMBaseURL already states for the
@@ -342,7 +342,7 @@ jobs:
           esac
           bash .hanzo/review/review.sh "$base" "${{ github.sha }}"
 
-  # ══ CAR 0 ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
+  # ══ gate ══ THE DOCUMENT EQUALS THE CODE. Everything below `needs:` this.
   #
   # The test gate, driven by hanzo.yml, whose `app-contract` step is
   # `make -f mk/fleet.mk check`: regenerate all 116 app subsets FROM
@@ -625,7 +625,7 @@ jobs:
 
           echo "OK: containment holds — apps/controlplane has zero buildable files by default and is linked into no cmd/ binary"
 
-  # ══ CAR 1 ══ THE IMAGE. Publish bytes; name them only once they boot.
+  # ══ image ══ THE IMAGE. Publish bytes; name them only once they boot.
   #
   # Unchanged from deploy.yml apart from `needs:` and the resume probe. The
   # version maxes over BOTH published image tags AND git tags: the registry is the
@@ -671,7 +671,7 @@ jobs:
       # tag is a name a registry can move; a digest is the content. The pin names
       # this and nothing else.
       digest: ${{ steps.img.outputs.digest }}
-      # THE ARBITER, carried to every car behind this one. cmd/lineage prints these
+      # THE ARBITER, carried to every job behind this one. cmd/lineage prints these
       # on a pass and only on a pass, so a job downstream names the repository and
       # the image of the release that was actually proven, rather than repeating a
       # literal that a rename can quietly point somewhere else.
@@ -761,12 +761,12 @@ jobs:
           # there is nothing for a second reading to disagree with.
           printf '%s\npath=%s\n' "$ARBITER" "$path" | tee -a "$GITHUB_ENV" >> "$GITHUB_OUTPUT"
 
-          # THE DIGEST OF THE DOCUMENT, computed here and carried by every car
-          # below. This is the coupler: a projection generated from any other
+          # THE DIGEST OF THE DOCUMENT, computed here and carried by every job
+          # below. This is the value carried between jobs: a projection generated from any other
           # bytes is a projection of a release nobody shipped.
           # openapi.yaml, because the projections this couples are generated from
           # the CUSTOMER contract: the SDKs, the CLI and the docs. private.yaml is
-          # the operator's reading of the same commit and no car projects it.
+          # the operator's reading of the same commit and no job projects it.
           SPEC_SHA=$(sha256sum openapi.yaml | cut -d' ' -f1)
           echo "spec_sha256=$SPEC_SHA" >> "$GITHUB_OUTPUT"
 
@@ -859,7 +859,7 @@ jobs:
           # else here — the registry probe, the tag list, the max() — is a
           # READ, and a read cannot reserve anything.
           #
-          # The claim used to be taken LAST, by the deploy car's "Tag the release",
+          # The claim used to be taken LAST, by the deploy job's "Tag the release",
           # a whole ~20-minute build after the 404 probe that stood in for it.
           # Two lanes starting inside that window both probed 404, both built,
           # and both pushed — and A GHCR TAG IS MUTABLE, so the second push
@@ -1036,7 +1036,7 @@ jobs:
           outputs: type=image,push=true,compression=zstd,force-compression=true,oci-mediatypes=true
           # VERSION is what the binary reports as X-Api-Version. Without it the
           # ldflag falls back to the `dev` default and a released image cannot
-          # say which release it is — and every car below keys off that header.
+          # say which release it is — and every job below keys off that header.
           # REVISION is passed as a BUILD-ARG, not only as a label, because the
           # Dockerfile declares `ARG REVISION=unknown` and stamps the label from
           # it. A builder that sets only the outside label leaves that ARG at its
@@ -1420,12 +1420,12 @@ jobs:
           done
           echo "::error::could not push the pin after 5 attempts"; exit 1
 
-  # ══ NOT A CAR ══ THE PLUGIN SET, PUBLISHED BESIDE THE IMAGE.
+  # ══ NOT A JOB ══ THE PLUGIN SET, PUBLISHED BESIDE THE IMAGE.
   #
   # NOTHING `needs:` THIS, DELIBERATELY. It hangs off `image` for the version and
   # runs alongside live, so a slow or failed plugin publish can never hold a
   # release — which is the whole point of a light host, and the reason this is not
-  # a car. It still FAILS LOUDLY when the index does not appear: a job nobody
+  # a job. It still FAILS LOUDLY when the index does not appear: a job nobody
   # depends on going red is a signal someone reads, and a silent publish is how a
   # host ends up resolving a plugin set that was never there.
   #
@@ -1561,15 +1561,15 @@ jobs:
           echo "::error::${index} never appeared (40 min). The release SHIPPED — nothing depends on this job — but a host with no baked plugins has no index for v${VERSION}."
           exit 1
 
-  # ══ CAR 2 ══ PRODUCTION IS SERVING IT.
+  # ══ live ══ PRODUCTION IS SERVING IT.
   #
   # THE PIN IS NOT HERE. It is the last step of `image`, beside the smoke that
   # earns it — see that job's tail for why the two must not be separable. What is
-  # left here is the WAIT, and it is a separate car precisely because it is the
+  # left here is the WAIT, and it is a separate job precisely because it is the
   # part that is safe to lose: cancelling a probe costs a receipt, cancelling a
   # pin costs a deploy.
   #
-  # A pin is not a release either — the RUNNING VERSION is — and every car below
+  # A pin is not a release either — the RUNNING VERSION is — and every job below
   # describes a system to the outside world, so each must key off what is
   # deployed or it describes something that is not there.
   live:
@@ -1578,7 +1578,7 @@ jobs:
     timeout-minutes: 45
     steps:
       # cd.hanzo.ai reconciles on its own schedule, so between the pin and the
-      # running pod there is a window in which every car below would describe the
+      # running pod there is a window in which every job below would describe the
       # PREVIOUS version. Wait for the header the image itself reports, and refuse
       # to fan out if it never arrives.
       - name: Prove the release is live
@@ -1604,7 +1604,7 @@ jobs:
           echo "::error::api.hanzo.ai never reported ${WANT} (last saw '${GOT:-none}'). The image is published, tagged and pinned; cd.hanzo.ai has not reconciled it. Nothing downstream may describe a version that is not running — re-run this workflow at the same sha to resume once it has."
           exit 1
 
-  # ══ CAR 3 ══ THE DOCUMENT TELLS THE TRUTH ABOUT PRODUCTION.
+  # ══ reach ══ THE DOCUMENT TELLS THE TRUTH ABOUT PRODUCTION.
   #
   # `check` proves the document equals the code. Nothing proved the
   # address is REACHABLE, and three things break that independently: a stale
@@ -1697,7 +1697,7 @@ jobs:
           fi
           [ "$TOOLS" -gt 0 ] || { echo "::error::the MCP door serves ZERO tools"; exit 1; }
 
-  # ══ CAR 4 ══ FAN OUT. One release, one document, every projection.
+  # ══ fanout ══ FAN OUT. One release, one document, every projection.
   #
   # Pokes every client projection so a release, not a clock, is what moves them.
   #
@@ -1776,7 +1776,7 @@ jobs:
           ok=0; bad=""
           for entry in $PROJECTIONS; do
             repo="${entry%%:*}"; wf="${entry##*:}"
-            # THE REF TRAVELS WITH THE POKE, and until it did this whole car was
+            # THE REF TRAVELS WITH THE POKE, and until it did this whole job was
             # ceremony. hanzoai/ci's client lane moves a projection's pin only when
             # it is handed a ref, and it read that from `client_payload` — which
             # `repository_dispatch` populates and Hanzo Git does not serve. So every
@@ -1869,12 +1869,12 @@ jobs:
             --arg fanout "${{ needs.fanout.result }}" \
             --arg n "${{ needs.fanout.outputs.dispatched }}" \
             '{version:$tag, sha:$sha, spec_sha256:$spec, digest:$digest,
-              cars:{image:$image, live:$live, reach:$reach, fanout:$fanout},
+              jobs:{image:$image, live:$live, reach:$reach, fanout:$fanout},
               projections_dispatched:($n|tonumber? // 0)}' > /tmp/release.json
           cat /tmp/release.json
 
-          BODY=$(jq -r '"**Document** `sha256:\(.spec_sha256)`\n\n| car | |\n|---|---|\n" +
-                        ([.cars|to_entries[]|"| \(.key) | \(.value) |"]|join("\n")) +
+          BODY=$(jq -r '"**Document** `sha256:\(.spec_sha256)`\n\n| job | |\n|---|---|\n" +
+                        ([.jobs|to_entries[]|"| \(.key) | \(.value) |"]|join("\n")) +
                         "\n\nProjections dispatched: \(.projections_dispatched)/9\n\n```json\n" +
                         (.|tostring) + "\n```"' /tmp/release.json)
 
@@ -1885,7 +1885,7 @@ jobs:
           # `set -euo pipefail`, kills the step before it can reach the POST that
           # creates it. So the create path — the one EVERY release takes — could never
           # run. Measured: this repo holds ONE release object, v1.801.31, whose body is
-          # a hand-written changelog, so the car has written a receipt for zero
+          # a hand-written changelog, so the job has written a receipt for zero
           # releases since it was added.
           #
           # PATCH and POST below KEEP -f, because there a non-2xx really is the error.
@@ -1894,8 +1894,8 @@ jobs:
           # SAY THE CONTENT TYPE. `curl -d` sends application/x-www-form-urlencoded,
           # so a JSON body binds to an empty struct: tag_name arrives unset, fails
           # Required, and Hanzo Git answers 422 — which -f turns into exit 22. That
-          # is every receipt this car has ever tried to write. The repo holds one
-          # release object, v1.801.31, from before the car existed.
+          # is every receipt this job has ever tried to write. The repo holds one
+          # release object, v1.801.31, from before the job existed.
           ID=$(curl -sS -H "Authorization: token ${GIT_TOKEN}" \
             "${api}/releases/tags/${TAG}" 2>/dev/null | jq -r '.id // empty')
           if [ -n "$ID" ]; then
@@ -1915,8 +1915,8 @@ jobs:
           # footnote — the receipt exists precisely so "cloud shipped but the CLI
           # is two days stale" is a state you can point at rather than one that
           # goes unnoticed for a week.
-          if jq -e '[.cars[]] | any(. != "success")' /tmp/release.json >/dev/null; then
-            echo "::error::this release is INCOMPLETE — see the car table on the ${TAG} release. Fix the failing car and re-run this workflow at ${{ github.sha }}: image and live will recognise their own receipts and no-op, and only the failed car runs again."
+          if jq -e '[.jobs[]] | any(. != "success")' /tmp/release.json >/dev/null; then
+            echo "::error::this release is INCOMPLETE — see the job table on the ${TAG} release. Fix the failing job and re-run this workflow at ${{ github.sha }}: image and live will recognise their own receipts and no-op, and only the failed job runs again."
             exit 1
           fi
           echo "${TAG} is complete: document, image, production, reachability and all nine projections."
@@ -1936,14 +1936,14 @@ jobs:
       # published: does every version in the registry have a receipt. It runs
       # last because release.json above is this release's receipt and should be
       # written whatever the wider state is, and it runs HERE rather than in
-      # the deploy car because a pre-existing orphan must not be able to block a deploy
+      # the deploy job because a pre-existing orphan must not be able to block a deploy
       # — a gate that wedges production on someone else's old mess gets switched
       # off within a day, and a switched-off gate is how this started.
       #
       # It is on the main path, not a cron, for the same reason: a scheduled
       # reconciliation is a thing that can quietly stop running and look
       # identical to a clean fleet. This cannot stop running without the release
-      # train stopping with it.
+      # stopping with it.
       - name: Every published image has a receipt
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
