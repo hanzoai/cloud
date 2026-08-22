@@ -1,5 +1,5 @@
 {
-  "operations": 784,
+  "operations": 782,
   "products": {
     "account": 2,
     "ad": 1,
@@ -29,7 +29,7 @@
     "framework": 2,
     "git": 18,
     "graph": 1,
-    "guide": 6,
+    "guide": 4,
     "iam": 70,
     "index": 3,
     "integrations": 21,

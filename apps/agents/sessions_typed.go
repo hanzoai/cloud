@@ -10,16 +10,29 @@ package agents
 // silently drop the array that tells an author WHICH secret to rotate. It ended
 // "they go typed when zip can express a response with a body per status."
 //
-// zip v1.31.3 is that: HTTPError.Detail carries RFC 9457 extension members,
-// MERGED under the envelope. The refusal now returns `findings` on the error
-// itself, so the body is what it always was and the op is in the registry.
+// zip.HTTPError.Detail is that: it carries RFC 9457 extension members, MERGED
+// under the envelope, so the refusal returns `findings` on the error itself and
+// the op is in the registry.
 //
-// The merge is safe here for a reason worth checking before copying it: the
-// domain key is `findings`, which does not collide with the envelope's own
-// status, code or error. A body that carries its OWN `error` key — the money
-// wire's nested {"error":{code,message}} — cannot ride Detail, because the
-// envelope is written last and would overwrite it. That is why cloud.Denied still
-// has its own middleware and this does not.
+// WHAT MOVED, because the wire did move and an earlier draft of this comment said
+// it had not: a returned error renders through cloud.ErrorHandler →
+// HTTPError.MarshalJSON, which at the pinned zip is RFC 9457 problem-details. So
+// the hand-written `error` key the raw handler produced is `detail` now, with
+// `type` and `title` beside it. `code` and `findings` — the discriminator a client
+// branches on and the payload an author acts on — are unchanged.
+//
+// It is the right direction: EVERY other refusal in this fleet already renders
+// that way, because every propagated error goes through that one handler. The raw
+// handler's `error` key was one address answering in a vocabulary the other ~2400
+// do not use. TestRefusesASecretInATranscript asserts the whole body now — it used
+// to declare an `error` field and never check it, which is exactly how a key moves
+// unnoticed.
+//
+// THE MERGE ORDER is what to check before copying this: members are copied FIRST
+// and the envelope written over them, so a domain key named type, title, status,
+// detail or code is silently displaced. Here it is `findings`, which collides with
+// none. The money wire's nested {"error":{code,message}} is the counter-example —
+// it cannot ride Detail at all, which is why cloud.Denied keeps its middleware.
 
 import (
 	"context"
@@ -36,12 +49,12 @@ import (
 
 // refusedLeak is the 422 a guarded write answers with, as a RETURNED error.
 //
-// The body is byte-for-byte the one refuseLeak wrote: `findings` merges under the
-// envelope zip writes from Status/Code/Msg, so status, code, error and findings
-// all appear exactly as they did — the count, the rule that fired, and every
-// finding with its masked preview and the SHA-256 fingerprint that lets an author
-// confirm they rotated the right value. The secret itself is never here, because
-// it was never stored.
+// It carries everything refuseLeak wrote: `findings` merges under the envelope, so
+// the count, the rule that fired, and every finding with its masked preview and
+// the SHA-256 fingerprint an author matches against the value they rotate all
+// arrive as they did. The sentence is `detail` rather than `error` (see the header
+// — the envelope is the fleet's, not this route's). The secret itself is never
+// here, because it was never stored.
 func refusedLeak(f []leakFinding) error {
 	return (&zip.HTTPError{
 		Status: http.StatusUnprocessableEntity,
