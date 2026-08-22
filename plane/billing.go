@@ -674,6 +674,45 @@ type WireInstructions struct {
 	Reference     string `json:"reference"`
 }
 
+// ---- billing.rate — what one unit of metered work costs ---------------------
+
+// BillingRate answers what the platform charges for one unit of something it
+// meters, from the authority an operator edits at admin.hanzo.ai.
+//
+// It is PLATFORM-GLOBAL and takes no subject. What a GB-month costs does not
+// depend on who is storing the bytes — a plan may include some of it, and a
+// wallet pays for the rest, but those are different questions asked elsewhere.
+// So unlike tier and rollup this op needs no validated org, which is also what
+// lets an app that is metering work ask it without one.
+const BillingRate = "billing_rate"
+
+// RateIn names the metered thing: the product it belongs to and what is metered
+// inside it. Both are required — together they are the identity, and a rate keyed
+// on the metered thing alone would let one product's price answer for another's.
+type RateIn struct {
+	Product string `json:"product"`
+	Meter   string `json:"meter"`
+}
+
+// Rate is what one unit costs.
+//
+// FOUND IS NOT REDUNDANT WITH NANO. Zero is a real price — something the platform
+// meters and gives away — and it must not read the same as "no rate is
+// published", which is what sends a caller to its own floor instead. A bool
+// carries the difference a number cannot.
+type Rate struct {
+	Product string `json:"product"`
+	Meter   string `json:"meter"`
+	// Unit is what ONE of the billed quantity is, so a reader can tell a
+	// GB-month from a thousand characters without knowing the meter.
+	Unit string `json:"unit,omitempty"`
+	// Nano is the price of one Unit in nano-dollars, a billionth of a dollar.
+	// Cents cannot hold these: fractions of a cent per million tokens round to
+	// zero or to a hundred times the price.
+	Nano  int64 `json:"nano"`
+	Found bool  `json:"found"`
+}
+
 // ---- billing.tier and billing.rollup — what a plan allows, and what is left --
 
 const (
