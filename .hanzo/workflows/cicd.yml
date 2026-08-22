@@ -1762,18 +1762,17 @@ jobs:
           # no cicd.yml at all (probed: 404 `workflow "cicd.yml" doesn't exist`);
           # its spec-consuming workflow is deploy.yml. The SDKs use cicd.yml.
           #
-          # Four projections are absent, each for a fact about the repo rather
-          # than a preference: hanzoai/ruby-sdk carries ci.yml and no `client:`
-          # lane, hanzo-dart/sdk is a read-only mirror of its GitHub original,
-          # hanzoai/swift-sdk carries no hanzo.yml, and the cpp client has no
-          # repository on this forge to poke.
+          # Three projections are absent, each for a fact about the repo rather
+          # than a preference: hanzo-dart/sdk is a read-only mirror of its GitHub
+          # original, hanzoai/swift-sdk holds a README and no client, and the cpp
+          # client has no repository on this forge to poke.
           PROJECTIONS: >-
             hanzoai/python-sdk:cicd.yml hanzoai/js-sdk:cicd.yml
             hanzo-go/sdk:cicd.yml hanzo-rs/sdk:cicd.yml
             hanzoai/java-sdk:cicd.yml hanzoai/kotlin-sdk:cicd.yml
             hanzoai/php-sdk:cicd.yml hanzo-js/sdk-fetch:cicd.yml
-            hanzo-js/sdk-angular:cicd.yml hanzoai/cli:cicd.yml
-            hanzo-docs/docs:deploy.yml
+            hanzo-js/sdk-angular:cicd.yml hanzoai/ruby-sdk:cicd.yml
+            hanzoai/cli:cicd.yml hanzo-docs/docs:deploy.yml
         run: |
           set -euo pipefail
           [ -n "${GIT_TOKEN:-}" ] || { echo "::error::FORGE_TOKEN is empty — a dispatch writes to another repository, and no per-run token reaches one"; exit 1; }
