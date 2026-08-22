@@ -41,6 +41,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -291,9 +292,9 @@ func project(c *zip.Ctx) string { return principal.Project(c) }
 // managedMachines is the org's Visor-provisioned machines: the deduped UNION of
 // Visor's THREE machine sources, so every real machine appears exactly once.
 //
-//   - REGISTRY (GET /v1/get-machines → GetMachines): Visor's DB-backed, masked
+//   - REGISTRY (GET /v1/machines, source=registry): Visor's DB-backed, masked
 //     machine records — they carry whatever Visor has synced/enriched.
-//   - LIVE DigitalOcean reseller list (GET /v1/machines → ListComputeMachines →
+//   - LIVE provider list (GET /v1/machines, source=live →
 //     service.ListOrgMachines): every droplet currently tagged to the org in
 //     Hanzo's house DO account, straight from the live DO API.
 //   - DOKS worker NODES (GET /v1/k8s/nodes → ListComputeKubernetesNodes):
@@ -312,15 +313,16 @@ func project(c *zip.Ctx) string { return principal.Project(c) }
 // never hiding the others (or the caller's BYO fold). Nothing is fabricated: only
 // machines Visor actually returns are surfaced.
 func managedMachines(s *cloud.Service[state], c *zip.Ctx, org string) []visorMachine {
+	// ONE call. Visor's /v1/machines answers from the organization's own provider
+	// credentials AND from the house account, keyed (owner, name), with Source
+	// saying which — so the join that used to live here lives where the data is.
+	// Asking twice and merging was how a caller who asked once got a partial
+	// answer without being told.
 	var registry, live, nodes []visorMachine
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &registry); err != nil {
-		// A Visor blip must not hide the org's OTHER machine source (or its BYO fold).
-		s.Log.Warn("visor get-machines failed; registry machines omitted", "org", org, "err", err)
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines", q("owner", org), nil, &registry); err != nil {
+		// A Visor blip must not hide the org's OTHER machine source (its BYO fold).
+		s.Log.Warn("visor machines failed; visor machines omitted", "org", org, "err", err)
 		registry = nil
-	}
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines", q("owner", org), nil, &live); err != nil {
-		s.Log.Warn("visor list-compute-machines failed; live DO machines omitted", "org", org, "err", err)
-		live = nil
 	}
 	// THIRD source: DOKS worker NODES (GET /v1/k8s/nodes → visor unions the
 	// house-account hanzo-org-tagged clusters + BYOC Provider.ClusterID clusters).
@@ -450,7 +452,7 @@ func (o ops) getMachine(ctx context.Context, in *machineRef) (*machineView, erro
 	}
 	var m visorMachine
 	// Visor keys a machine by owner/name; the REST :id is the org-scoped name.
-	if err := o.State.cl.call(c, http.MethodGet, "/v1/get-machine", q("id", org+"/"+name), nil, &m); err != nil {
+	if err := o.State.cl.call(c, http.MethodGet, machine(org, name), "", nil, &m); err != nil {
 		return nil, err
 	}
 	if m.Name == "" && m.Id == "" {
@@ -562,7 +564,7 @@ func init() {
 }
 
 // launchMachine quotes (dryRun) or launches a metered, per-org machine. It fronts
-// Visor's resell launch (/v1/machines/launch), which owns the balance gate and
+// Visor's resell launch (POST /v1/machines), which owns the balance gate and
 // per-hour metering — cloud never bills compute itself; it forwards the tenant.
 // A dryRun returns Visor's price quote verbatim (spends nothing); a real launch
 // returns the launched machine as a clean machineView.
@@ -586,7 +588,7 @@ func launchMachine(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("size is required")
 	}
 	var data json.RawMessage
-	if err := s.State.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), body, &data); err != nil {
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/machines", q("owner", org), body, &data); err != nil {
 		return err
 	}
 	// dryRun: pass Visor's quote through unchanged (it is the authoritative price).
@@ -616,6 +618,22 @@ func launchMachine(s *cloud.Service[state], c *zip.Ctx) error {
 // that one into the published spec, and how the Go type spells "no content" is
 // not something an API reader needs to know.)
 
+// machine addresses ONE machine on Visor. The tenant is in the ADDRESS, so a
+// call cannot be scoped to one org and aimed at another — which is what an
+// ?owner= query beside a bare id allowed. Collections still take ?owner=,
+// because a collection is scoped and an item is named.
+func machine(org, name string) string {
+	return "/v1/machines/" + url.PathEscape(org) + "/" + url.PathEscape(name)
+}
+
+// pool addresses ONE node pool on Visor, by the (owner, name) its row is keyed
+// by. A cluster read reports the provider's id for a pool alongside its name;
+// the delete below has always sent that string as the name, so it is the name
+// this addresses with.
+func pool(org, name string) string {
+	return "/v1/pools/" + url.PathEscape(org) + "/" + url.PathEscape(name)
+}
+
 // deleteMachine terminates one of the caller org's machines. Visor takes the
 // machine identity as owner+name, and the owner is the validated principal, so a
 // caller can only ever terminate its own tenant's machine. Answers 204.
@@ -628,9 +646,7 @@ func (o ops) deleteMachine(ctx context.Context, in *machineRef) (*struct{}, erro
 	if name == "" {
 		return nil, zip.ErrBadRequest("machine id required")
 	}
-	// Visor delete-machine takes the machine identity in the body (owner+name).
-	body := map[string]string{"owner": org, "name": name}
-	if err := o.State.cl.call(c, http.MethodPost, "/v1/delete-machine", "", body, nil); err != nil {
+	if err := o.State.cl.call(c, http.MethodDelete, machine(org, name), "", nil, nil); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -722,13 +738,13 @@ func (o ops) listClusters(ctx context.Context, _ *noArgs) (*clusterList, error) 
 	}
 	var pools []visorNodePool
 	var down []sourceFailure
-	if err := o.State.cl.call(c, http.MethodGet, "/v1/get-node-pools", q("owner", org), nil, &pools); err != nil {
+	if err := o.State.cl.call(c, http.MethodGet, "/v1/pools", q("owner", org), nil, &pools); err != nil {
 		down = visorDown(err)
 		// Visor unreachable — same graceful fold as listMachines/listGpus: a down
 		// optional provider must NOT 502 the Clusters/GPUs page (it surfaced as a
 		// console error on every load where Visor isn't deployed). Log and fall
 		// through with no managed pools; the org's BYO clusters below still list.
-		o.Log.Warn("visor get-node-pools failed; returning BYO-only cluster list", "org", org, "err", err)
+		o.Log.Warn("visor pools failed; returning BYO-only cluster list", "org", org, "err", err)
 		pools = nil
 	}
 	// ONE fleet surface: managed clusters (Visor node pools) + the org's BYO ones,
@@ -780,18 +796,18 @@ func (o ops) createPool(ctx context.Context, in *poolCreate) (*nodePoolView, err
 		return nil, zip.ErrBadRequest("provider is required")
 	}
 	// Forward only the CreateNodePoolSpec fields; provider/clusterId/owner ride in
-	// the query exactly as Visor's create-node-pool expects.
+	// the query exactly as Visor's pool collection expects.
 	spec := map[string]any{
 		"name": strings.TrimSpace(in.Name), "size": strings.TrimSpace(in.Size), "count": in.Count,
 		"minNodes": in.MinNodes, "maxNodes": in.MaxNodes, "autoScale": in.AutoScale,
 	}
-	var pool visorNodePool
-	if err := o.State.cl.call(c, http.MethodPost, "/v1/create-node-pool",
-		q("owner", org, "provider", provider, "clusterId", clusterID), spec, &pool); err != nil {
+	var created visorNodePool
+	if err := o.State.cl.call(c, http.MethodPost, "/v1/pools",
+		q("owner", org, "provider", provider, "clusterId", clusterID), spec, &created); err != nil {
 		return nil, err
 	}
 	cloud.Created(ctx)
-	v := toNodePoolView(pool)
+	v := toNodePoolView(created)
 	return &v, nil
 }
 
@@ -819,25 +835,21 @@ func (o ops) scalePool(ctx context.Context, in *poolScale) (*nodePoolView, error
 	if err != nil {
 		return nil, err
 	}
-	clusterID := strings.TrimSpace(in.ClusterID)
 	poolID := strings.TrimSpace(in.PoolID)
 	if poolID == "" {
 		return nil, zip.ErrBadRequest("poolId required")
 	}
-	provider := strings.TrimSpace(in.Provider)
-	if provider == "" {
-		return nil, zip.ErrBadRequest("provider is required")
-	}
 	if in.Count < 0 {
 		return nil, zip.ErrBadRequest("count must be non-negative")
 	}
-	var pool visorNodePool
-	if err := o.State.cl.call(c, http.MethodPost, "/v1/scale-node-pool",
-		q("owner", org, "provider", provider, "clusterId", clusterID, "poolId", poolID, "count", strconv.Itoa(in.Count)),
-		nil, &pool); err != nil {
+	var scaled visorNodePool
+	// The pool is in the address; Visor reads the provider, the cluster and the
+	// upstream id from its own row, so there is nothing left to repeat.
+	if err := o.State.cl.call(c, http.MethodPut, pool(org, poolID)+"/size",
+		q("count", strconv.Itoa(in.Count)), nil, &scaled); err != nil {
 		return nil, err
 	}
-	v := toNodePoolView(pool)
+	v := toNodePoolView(scaled)
 	return &v, nil
 }
 
@@ -858,22 +870,11 @@ func (o ops) deletePool(ctx context.Context, in *poolRef) (*struct{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	clusterID := strings.TrimSpace(in.ClusterID)
 	poolID := strings.TrimSpace(in.PoolID)
 	if poolID == "" {
 		return nil, zip.ErrBadRequest("poolId required")
 	}
-	provider := strings.TrimSpace(in.Provider)
-	if provider == "" {
-		return nil, zip.ErrBadRequest("provider is required")
-	}
-	// delete-node-pool takes the pool identity in the body; owner scopes it to the
-	// caller's tenant and provider+clusterId drive the DOKS-side delete.
-	body := map[string]any{
-		"owner": org, "name": poolID, "poolId": poolID,
-		"provider": provider, "clusterId": clusterID,
-	}
-	if err := o.State.cl.call(c, http.MethodPost, "/v1/delete-node-pool", "", body, nil); err != nil {
+	if err := o.State.cl.call(c, http.MethodDelete, pool(org, poolID), "", nil, nil); err != nil {
 		return nil, err
 	}
 	return nil, nil

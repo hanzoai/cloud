@@ -49,7 +49,7 @@ type visorKubernetesCluster struct {
 }
 
 // visorK8sNodePool mirrors visor/service.NodePool (the cluster-detail subset). Its
-// pool id arrives as `id` (not the `poolId` the verb node-pool surface emits), so it
+// pool id arrives as `id` (not the `poolId` a pool read emits), so it
 // is a distinct wire type mapped explicitly to nodePoolView.
 type visorK8sNodePool struct {
 	ID        string `json:"id"`

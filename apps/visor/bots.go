@@ -15,10 +15,10 @@
 // A bot machine = Agent (cloud /v1/agents) + Machine (vm, kind=bot) + the binding
 // between them. Composition, one way per verb:
 //
-//	launch  = vm POST /v1/machines/launch {kind:bot}  THEN vm PUT .../agent
+//	launch  = vm POST /v1/machines {kind:bot}         THEN vm PUT .../agent
 //	list    = vm GET  /v1/machines?kind=bot           joined with the org's bindings
-//	get     = vm GET  /v1/machines/:id                joined with its binding
-//	delete  = vm DELETE .../agent (unbind)            THEN vm DELETE /v1/machines/:id
+//	get     = vm GET  /v1/machines/:owner/:name       joined with its binding
+//	delete  = vm DELETE .../agent (unbind)            THEN vm DELETE /v1/machines/:owner/:name
 //	message = the AGENT path: run the bot's bound agent via /v1/agents/:agent/run
 //	stop    = vm DELETE .../agent — halt the bot's @hanzo/bot runtime
 //	pause   = the same halt: DigitalOcean/vm expose no VM-suspend primitive, so a
@@ -229,7 +229,7 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 	if body.DryRun {
 		launch := map[string]any{"name": name, "size": size, "region": body.Region, "kind": "bot", "dryRun": true}
 		var data json.RawMessage
-		if err := s.State.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), launch, &data); err != nil {
+		if err := s.State.cl.call(c, http.MethodPost, "/v1/machines", q("owner", org), launch, &data); err != nil {
 			return err
 		}
 		var quote any
@@ -258,7 +258,7 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 	// bootstraps the @hanzo/bot runtime cloud-init for a bot spec (specIsBot).
 	launch := map[string]any{"name": name, "size": size, "region": body.Region, "kind": "bot", "dryRun": false}
 	var data json.RawMessage
-	if err := s.State.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), launch, &data); err != nil {
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/machines", q("owner", org), launch, &data); err != nil {
 		return err
 	}
 
@@ -278,8 +278,8 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 	// Bind the (now-existing) cloud Agent to the freshly-launched machine. org is
 	// the validated tenant (never a client field); agent defaults to the bot name.
 	var binding agentBinding
-	if err := s.State.cl.op(c, http.MethodPut, "/v1/machines/"+url.PathEscape(machineID)+"/agent",
-		q("owner", org),
+	if err := s.State.cl.op(c, http.MethodPut, machine(org, machineID)+"/agent",
+		"",
 		map[string]any{"agentName": agent, "botVersion": body.BotVersion},
 		&binding); err != nil {
 		return err
@@ -348,7 +348,7 @@ func (o ops) getBot(ctx context.Context, in *botRef) (*botView, error) {
 		return nil, err
 	}
 	var m visorMachine
-	if err := o.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, &m); err != nil {
+	if err := o.State.cl.call(c, http.MethodGet, machine(org, id), "", nil, &m); err != nil {
 		return nil, err
 	}
 	if m.Name == "" && m.Id == "" {
@@ -360,7 +360,7 @@ func (o ops) getBot(ctx context.Context, in *botRef) (*botView, error) {
 	// unbound machine is a 404 here and leaves binding zero, which is the
 	// "no binding" signal the check below already reads.
 	var binding agentBinding
-	_ = o.State.cl.op(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent", q("owner", org), nil, &binding)
+	_ = o.State.cl.op(c, http.MethodGet, machine(org, id)+"/agent", "", nil, &binding)
 	if !machineIsBot(m) && !binding.identifies() {
 		return nil, zip.ErrNotFound("bot not found")
 	}
@@ -377,8 +377,8 @@ func (o ops) deleteBot(ctx context.Context, in *botRef) (*struct{}, error) {
 	}
 	// Tear down both halves: unbind the agent first (best-effort — a bot with no
 	// binding still deletes), then terminate the machine.
-	_ = o.State.cl.op(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent", q("owner", org), nil, nil)
-	if err := o.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, nil); err != nil {
+	_ = o.State.cl.op(c, http.MethodDelete, machine(org, id)+"/agent", "", nil, nil)
+	if err := o.State.cl.call(c, http.MethodDelete, machine(org, id), "", nil, nil); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -406,7 +406,7 @@ func botAction(s *cloud.Service[state], c *zip.Ctx) error {
 // (re-bind to resume, or DELETE /v1/visor/compute/bots/:id to tear it down).
 // Idempotent: a bot with no binding still reports stopped.
 func stopBot(s *cloud.Service[state], c *zip.Ctx, org, id string) error {
-	if err := s.State.cl.op(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent", q("owner", org), nil, nil); err != nil {
+	if err := s.State.cl.op(c, http.MethodDelete, machine(org, id)+"/agent", "", nil, nil); err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"id": id, "status": "stopped"})
@@ -422,7 +422,7 @@ func messageBot(s *cloud.Service[state], c *zip.Ctx, org, id string) error {
 	// A machine with no binding is a 404 from vm, and it is not a fault here: the
 	// honest answer is the 400 below, which says what the caller can do about it.
 	// Anything else is a real upstream failure and is surfaced.
-	if err := s.State.cl.op(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent", q("owner", org), nil, &binding); err != nil && !notFound(err) {
+	if err := s.State.cl.op(c, http.MethodGet, machine(org, id)+"/agent", "", nil, &binding); err != nil && !notFound(err) {
 		return err
 	}
 	agent := strings.TrimSpace(binding.AgentName)
@@ -529,8 +529,8 @@ func (o ops) bindAgent(ctx context.Context, in *bindAgentReq) (*agentBinding, er
 	// principal, so a body field repeating it would be a second place to say one
 	// thing and a field a caller could disagree with.
 	var binding agentBinding
-	if err := o.State.cl.op(c, http.MethodPut, "/v1/machines/"+url.PathEscape(id)+"/agent",
-		q("owner", org),
+	if err := o.State.cl.op(c, http.MethodPut, machine(org, id)+"/agent",
+		"",
 		map[string]any{"agentName": in.AgentName, "botVersion": in.BotVersion},
 		&binding); err != nil {
 		return nil, err
@@ -552,7 +552,7 @@ func (o ops) getAgent(ctx context.Context, in *machineRef) (*agentBinding, error
 		return nil, zip.ErrBadRequest("machine id required")
 	}
 	var binding agentBinding
-	if err := o.State.cl.op(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent", q("owner", org), nil, &binding); err != nil {
+	if err := o.State.cl.op(c, http.MethodGet, machine(org, id)+"/agent", "", nil, &binding); err != nil {
 		// vm answers 404 for a machine that runs no bot. That is this route's own
 		// answer too, said in this route's words rather than passed through with
 		// vm's prose attached.
@@ -576,7 +576,7 @@ func (o ops) unbindAgent(ctx context.Context, in *machineRef) (*struct{}, error)
 	if id == "" {
 		return nil, zip.ErrBadRequest("machine id required")
 	}
-	if err := o.State.cl.op(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent", q("owner", org), nil, nil); err != nil {
+	if err := o.State.cl.op(c, http.MethodDelete, machine(org, id)+"/agent", "", nil, nil); err != nil {
 		return nil, err
 	}
 	return nil, nil
