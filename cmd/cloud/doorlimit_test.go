@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/zap-proto/zip"
 
@@ -37,7 +36,7 @@ func TestTheDoorAcceptsABodyLargerThanTheFrameworkDefault(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/probe", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/octet-stream")
 
-	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	resp, err := app.Test(req, deadline)
 	if err != nil {
 		t.Fatalf("door refused a %d-byte body at the transport: %v", len(body), err)
 	}
@@ -94,7 +93,7 @@ func TestTheDoorReportsTheCallerAndNotTheIngress(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	req.Header.Set("X-Forwarded-For", visitor)
-	if _, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true}); err != nil {
+	if _, err := app.Test(req, deadline); err != nil {
 		t.Fatalf("probe did not reach the handler: %v", err)
 	}
 	if seen != visitor {
