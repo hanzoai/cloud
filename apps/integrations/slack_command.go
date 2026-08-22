@@ -90,19 +90,19 @@ const (
 
 // commandRegistry answers with the fleet's commands, built ONCE. The document is
 // a function of bytes embedded at build time, so it cannot change while the
-// process runs and weaving it per slash would be work whose answer is fixed.
+// process runs and composing it per slash would be work whose answer is fixed.
 //
 // It is nothing's argument and no test repoints it: resolution takes the command
 // list as a parameter, so a fixture is passed in rather than swapped for.
 var commandRegistry = sync.OnceValues(fleetCommands)
 
-// registryFailed keeps a broken weave to ONE log line per process. The failure
+// registryFailed keeps a broken compose to ONE log line per process. The failure
 // is permanent (the document is a function of embedded bytes), so repeating it
 // per slash would say nothing new.
 var registryFailed sync.Once
 
 // fleetCommands is the projection GET /v1/commands serves, resolved IN THIS
-// PROCESS: the fleet document woven from every app's own build-time subset,
+// PROCESS: the fleet document composed from every app's own build-time subset,
 // handed to zip.CommandsFromSpec. Asking the front door for it over HTTP would
 // make a Slack turn depend on the host answering a public GET about itself.
 //
@@ -127,7 +127,7 @@ func fleetCommands() ([]zip.Command, error) {
 
 // commands is the registry, or nil when it could not be built — which is a
 // SOFT failure on purpose: a slash body still reaches the agent, so a fleet that
-// cannot weave its document loses commands, not Slack.
+// cannot compose its document loses commands, not Slack.
 func commands(s *cloud.Service[state]) []zip.Command {
 	cmds, err := commandRegistry()
 	if err != nil {

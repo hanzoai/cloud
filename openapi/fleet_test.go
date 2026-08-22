@@ -2,7 +2,7 @@ package openapi_test
 
 // The composition the LIGHT HOST serves, in isolation from the fleet's size.
 //
-// openapi/weave_test.go proves Fleet over the real 113 subsets equals the
+// openapi/compose_test.go proves Fleet over the real 113 subsets equals the
 // committed golden, and cmd/cloud/openapi_test.go proves the host answers with
 // exactly that. What is left — and what those two cannot show, because both run
 // on a document that is already correct — is what Fleet and MountFleet do when
@@ -102,10 +102,10 @@ func TestSubsetsRefuseAnAppThatPublishedNothing(t *testing.T) {
 // file can be edited: /v1/billing/methods was written into commerce's subset by
 // copying the /v1/billing/portal/methods block, operationId and prose together,
 // and two paths then claimed get_billing_portal_methods. Nothing could be
-// regenerated until it was fixed — the weave is the sole writer of openapi.yaml,
+// regenerated until it was fixed — the compose is the sole writer of openapi.yaml,
 // so the CLI, the SDKs, MCP and the docs were all frozen behind it.
 //
-// Weave DID refuse it. But a collision inside ONE part reaches Weave with no app
+// Compose DID refuse it. But a collision inside ONE part reaches Compose with no app
 // attached, so the report could name the two addresses and nothing else, and
 // which of 123 subsets shipped them was a search. Subsets is holding the name
 // when it decodes the bytes, so this is where the question gets answered.
@@ -121,7 +121,7 @@ func TestSubsetsRefusesAnAppWhoseOwnIDsCollide(t *testing.T) {
 	_, err = openapi.Subsets([]string{"commerce"}, func(string) []byte { return collide }, ga)
 	if err == nil {
 		t.Fatal("Subsets accepted one operationId at two addresses — every generator downstream " +
-			"mis-consumes that document, and the weave that catches it later cannot say whose it is")
+			"mis-consumes that document, and the compose that catches it later cannot say whose it is")
 	}
 	if !strings.Contains(err.Error(), "commerce") {
 		t.Errorf("refusal = %q, want it to name the app — naming only the paths is what cost a "+

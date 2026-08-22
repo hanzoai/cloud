@@ -415,7 +415,7 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 	$(MAKE) zipdoc-check
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 	# The drift gate: regenerate the document FROM SOURCE and fail on any diff.
-	# The weave above proves the subsets compose; this proves they are still the
+	# The compose above proves the subsets compose; this proves they are still the
 	# routes. Only the second one catches a route added without regenerating.
 	$(MAKE) -f mk/fleet.mk check
 
@@ -445,9 +445,9 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 #      projects its own router into plugin/<app>/openapi.json (mk/fleet.mk — one lean
 #      binary per app, no fused build and no mega link). It no longer writes an MCP
 #      catalogue beside it: the door asks the subsystems (package fleet).
-#   3. the weave composes those subsets into private.yaml (openapi/weave.go),
+#   3. the compose composes those subsets into private.yaml (openapi/compose.go),
 #      refusing when two apps claim one path or one schema name. There is no
-#      monolith left to read: the woven document IS everything the fleet serves,
+#      monolith left to read: the composed document IS everything the fleet serves,
 #      admin family and staged capabilities included, and is what an operator
 #      reads and what the routing gates measure.
 #   4. the same run projects that document and writes openapi.yaml beside it
@@ -460,13 +460,13 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 # Both are golden files: written here, and verified two different ways — and the
 # difference between them is the whole lesson.
 #
-# The WEAVE (weave, run by `make test`) proves the subsets COMPOSE: no two
+# The COMPOSITION (compose, run by `make test`) proves the subsets COMPOSE: no two
 # apps claiming one path, no two claiming one schema name. It compares the subsets
-# to the golden they weave into. Both are derived artifacts, and nothing in that
+# to the golden they compose into. Both are derived artifacts, and nothing in that
 # comparison forces either back to the routes — so they agree with each other
-# while both are wrong. This comment used to claim the weave caught a route added
+# while both are wrong. This comment used to claim the compose caught a route added
 # without regenerating. It does not, and plugin/ingress proved it: eight paths
-# were added, the subset was never regenerated, the golden was woven from that
+# were added, the subset was never regenerated, the golden was composed from that
 # same stale subset, `make test` stayed green, and the entire ingress API was
 # missing from the spec every SDK is generated from.
 #

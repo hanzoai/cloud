@@ -110,7 +110,7 @@ type campaignRef struct {
 // campaignRecord (store.go) and campaignResults (metrics.go) are what this surface
 // publishes. Each is declared under its published name — with Campaign and Metrics
 // as domain aliases of the same type — because the fleet's schema namespace is FLAT
-// (openapi.Weave refuses one name meaning two things, and apps/marketing already
+// (openapi.Compose refuses one name meaning two things, and apps/marketing already
 // publishes an email "Campaign", apps/agents a "Metrics"), and because a field's
 // doc comment only reaches the document under the name its struct literal carries.
 

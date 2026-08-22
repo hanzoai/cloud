@@ -123,7 +123,7 @@ func main() {
 
 	// The third leg: the package's Makefile, naming the apps it backs and
 	// including the one build contract. Without it `make describe` has no rule to
-	// run for that app, so it publishes no OpenAPI subset, so the fleet weave
+	// run for that app, so it publishes no OpenAPI subset, so the fleet compose
 	// fails on an app that is otherwise complete.
 	for pkg, apps := range backs {
 		sort.Strings(apps)

@@ -7,7 +7,7 @@ package dataset
 // the drift is invisible until a customer finds it.
 //
 // A typed op's Go type name IS its schema name and the fleet's schema namespace
-// is FLAT — openapi.Weave refuses one name with two shapes across apps — so every
+// is FLAT — openapi.Compose refuses one name with two shapes across apps — so every
 // name below carries the plane it belongs to.
 
 import (

@@ -138,9 +138,9 @@ func TestTheSpecDoorIsTheHostsNotACatchAlls(t *testing.T) {
 // it there, of openapi.Door, for both doors at once. The full-fleet version
 // belongs here beside TestTheSpecDoorIsTheHostsNotACatchAlls and cannot be
 // written yet: that test is red on this tree because openapi.Fleet refuses the
-// whole weave over a duplicate operationId (get_billing_portal_methods, two
+// whole compose over a duplicate operationId (get_billing_portal_methods, two
 // billing routes), so the host answers 500 on BOTH doors. Add it in the commit
-// that fixes the weave.
+// that fixes the compose.
 func TestTheCommandDoorOpensOnTheHostsOwnMount(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	spec(app, []string{"kms", "flags"})
@@ -225,7 +225,7 @@ func TestTheServedDocumentIsTheArtifact(t *testing.T) {
 	}
 	if !bytes.Equal(got, want) {
 		t.Fatalf("the host serves %d paths and %s carries %d, but the documents are not the same "+
-			"bytes. They are woven by one function (openapi.Fleet) over one set of files, so this "+
+			"bytes. They are composed by one function (openapi.Fleet) over one set of files, so this "+
 			"means the host read something else — check plugin.Spec's embed against plugin/*/openapi.json.",
 			len(served), golden, len(committed))
 	}

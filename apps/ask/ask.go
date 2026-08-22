@@ -58,7 +58,7 @@ const maxQuestion = 2000
 // It is named for its product rather than AskRequest, and askAnswer likewise: the
 // schema namespace is FLAT across the whole fleet, apps/books ALREADY publishes an
 // `AskRequest` and an `AskResponse` of different shapes (its books-grounded ask),
-// and openapi.Weave refuses one name with two shapes. This request is declared to
+// and openapi.Compose refuses one name with two shapes. This request is declared to
 // the document (see the init below), so the collision would have been live the
 // moment it was.
 type askRequest struct {

@@ -365,7 +365,7 @@ type frameworkList struct {
 // trustDocuments lists the artifacts and says whether this reader may read each
 // one. The name carries the product because the schema namespace is flat and
 // fleet-wide: `documentList` is already framework's, and one name meaning two
-// shapes is a refusal at the weave.
+// shapes is a refusal at the compose.
 type trustDocuments struct {
 	// Documents is the list; a gated entry carries no address.
 	Documents []docRow `json:"documents"`

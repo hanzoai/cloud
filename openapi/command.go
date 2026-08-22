@@ -120,7 +120,7 @@ func init() {
 // zip.CommandsFromSpec sorts by (Service, Name) with an unstable sort, and 41 of
 // the fleet's 2,323 commands share that key — `mq streams-delete` is claimed by
 // three. The tie is then broken by the order the document's path map happened to
-// iterate in, so two processes weaving the SAME document serve the same commands
+// iterate in, so two processes composing the SAME document serve the same commands
 // in different orders under different ETags. Behind more than one replica that
 // turns every conditional request that lands on a different pod into a full
 // re-download of half a megabyte, which is precisely what the ETag was for.
@@ -146,7 +146,7 @@ func order(cmds []zip.Command) {
 // It takes the document's OWN renderer, so the two endpoints are one artifact
 // read two ways: whichever is asked for first renders the document, and the
 // other is then a projection of those exact bytes rather than of a second build
-// that could differ. Lazy for the same reason [serve] is — it keeps the weave
+// that could differ. Lazy for the same reason [serve] is — it keeps the compose
 // off the light host's boot path, and it is what lets the document contain the
 // route this very call registers.
 func serveCommands(app *zip.App, document func() ([]byte, error)) {

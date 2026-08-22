@@ -1,8 +1,8 @@
 // Command reach answers: does the DEPLOYED api answer every address this
 // document publishes?
 //
-// The document is a build-time weave of each app's own projection of its own
-// router (plugin/embed.go). `check` proves that weave equals the source.
+// The document is a build-time compose of each app's own projection of its own
+// router (plugin/embed.go). `check` proves that compose equals the source.
 // Neither proves the thing a caller actually needs: that the address is
 // reachable in production. Three things break that and nothing else checks any
 // of them —
