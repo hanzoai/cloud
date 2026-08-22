@@ -3,7 +3,6 @@ package agents
 import (
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/apps/principal"
 	"net/http"
 	"strings"
 	"time"
@@ -328,17 +327,18 @@ func mountSessions(s *cloud.Service[state], app cloud.Router) {
 	zip.Get(g, "/sessions/:id", o.get)
 	zip.Patch(g, "/sessions/:id", o.patch)
 	zip.Get(g, "/sessions/:id/tree", o.tree)
-	// UNTYPED, all five: the guard gate answers 422 IN BAND with the findings that
-	// refused the write ({status, code, error, findings:[…]}, provenance.go), and
-	// zip's error type carries {status, code, error} and nothing else — a typed op
-	// would silently drop the findings array that tells the author WHICH secret to
-	// rotate. They go typed when zip can express a response with a body per status.
-	g.Post("/sessions/:id/events", cloud.Handle(s, appendSessionEvent))
+	// All five were raw because the guard gate answers 422 IN BAND with the
+	// findings that refused the write, and zip's error carried a sentence and no
+	// body — so a typed op would have dropped the array that tells an author WHICH
+	// secret to rotate. zip v1.31.3 carries extension members on the error, so the
+	// refusal keeps its shape and these keep their registry entry. See
+	// sessions_typed.go for why the merge is safe HERE and not on the money wire.
+	zip.Post(g, "/sessions/:id/events", o.appendEvent, zip.WithStatus(http.StatusCreated))
 	zip.Get(g, "/sessions/:id/control", o.drain)
-	g.Post("/sessions/:id/pause", cloud.Handle(s, pauseSession))
-	g.Post("/sessions/:id/resume", cloud.Handle(s, resumeSession))
-	g.Post("/sessions/:id/stop", cloud.Handle(s, stopSession))
-	g.Post("/sessions/:id/message", cloud.Handle(s, messageSession))
+	zip.Post(g, "/sessions/:id/pause", o.pause)
+	zip.Post(g, "/sessions/:id/resume", o.resume)
+	zip.Post(g, "/sessions/:id/stop", o.stop)
+	zip.Post(g, "/sessions/:id/message", o.message)
 
 	// The readable build (provenance.go). PUBLIC — no tenancy — because the only
 	// rows either route can reach are ones an author explicitly published. A
@@ -1033,63 +1033,6 @@ type eventReq struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
-func appendSessionEvent(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	sto, err := s.State.storeFor(org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "store: %v", err)
-	}
-	id := idParam(c)
-	x, err := sto.GetSession(c.Context(), org, id)
-	if err == errSessionNotFound {
-		return zip.ErrNotFound("session not found")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-	}
-	var body eventReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	kind := strings.TrimSpace(body.Kind)
-	if !validKind(kind) {
-		return zip.ErrBadRequest("kind must be message|tool-call|spawn|log|status|control")
-	}
-	if len(body.Payload) > maxEventPayload {
-		return zip.ErrBadRequest("payload too large")
-	}
-	if len(body.Payload) > 0 && !json.Valid(body.Payload) {
-		return zip.ErrBadRequest("payload must be valid JSON")
-	}
-	// The guard gate. A transcript turn is stored ONLY after it is proved free of
-	// credentials — the same engine the code-security surface runs, at the write
-	// boundary, refusing loudly. See guardEvent in provenance.go for why this
-	// refuses rather than redacts.
-	if leaks := guardEvent(string(body.Payload)); leaks != nil {
-		return refuseLeak(c, leaks)
-	}
-	actor := strings.TrimSpace(body.Actor)
-	if actor == "" {
-		actor = billingActor(org, c.User())
-	}
-	if len(actor) > maxActor {
-		return zip.ErrBadRequest("actor too long")
-	}
-	evID := mint.ID("evt")
-	e, err := sto.AppendEvent(c.Context(), Event{
-		ID: evID, SessionID: id, Org: org, Kind: kind, Actor: actor,
-		Payload: string(body.Payload), CreatedAt: time.Now().Unix(),
-	})
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "append: %v", err)
-	}
-	publishEvent(s, org, x.RootID, e)
-	return c.JSON(http.StatusCreated, toEventView(e))
-}
-
 // ---- control (record intent + forward to the tasks engine when task-backed) ----
 
 // controlReq is a steering command's optional body. pause, resume and stop usually
@@ -1109,98 +1052,6 @@ type controlPayload struct {
 	Command string          `json:"command"`
 	Message string          `json:"message,omitempty"`
 	Payload json.RawMessage `json:"payload,omitempty"`
-}
-
-func pauseSession(s *cloud.Service[state], c *zip.Ctx) error   { return control(s, c, CmdPause) }
-func resumeSession(s *cloud.Service[state], c *zip.Ctx) error  { return control(s, c, CmdResume) }
-func stopSession(s *cloud.Service[state], c *zip.Ctx) error    { return control(s, c, CmdStop) }
-func messageSession(s *cloud.Service[state], c *zip.Ctx) error { return control(s, c, CmdMessage) }
-
-// control records a steering command as a durable control event (the intent the
-// running surface consumes) and, when the session is backed by a hanzoai/tasks
-// workflow AND a tasks backend is wired, forwards it to the engine's signal/
-// cancel API. Org/actor-authorized: principal.Org already requires a validated
-// principal AND same-org ownership of the session, so no other tenant can steer.
-func control(s *cloud.Service[state], c *zip.Ctx, command string) error {
-	org, ok := tenant(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	sto, err := s.State.storeFor(org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "store: %v", err)
-	}
-	id := idParam(c)
-	x, err := sto.GetSession(c.Context(), org, id)
-	if err == errSessionNotFound {
-		return zip.ErrNotFound("session not found")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-	}
-	if isTerminalStatus(x.Status) {
-		return zip.Errorf(http.StatusConflict, "session is %s; cannot %s a finished session", x.Status, command)
-	}
-	// The control body is optional (pause/resume/stop often carry none); only
-	// parse when present so a bodyless command is not a 400.
-	var body controlReq
-	if len(c.Body()) > 0 {
-		if err := c.Bind(&body); err != nil {
-			return err
-		}
-	}
-	if len(body.Message) > maxControlMsg {
-		return zip.ErrBadRequest("message too long")
-	}
-	if len(body.Payload) > maxEventPayload {
-		return zip.ErrBadRequest("payload too large")
-	}
-	if len(body.Payload) > 0 && !json.Valid(body.Payload) {
-		return zip.ErrBadRequest("payload must be valid JSON")
-	}
-	// The guard gate. A transcript turn is stored ONLY after it is proved free of
-	// credentials — the same engine the code-security surface runs, at the write
-	// boundary, refusing loudly. See guardEvent in provenance.go for why this
-	// refuses rather than redacts.
-	if leaks := guardEvent(string(body.Payload)); leaks != nil {
-		return refuseLeak(c, leaks)
-	}
-	if command == CmdMessage && strings.TrimSpace(body.Message) == "" && len(body.Payload) == 0 {
-		return zip.ErrBadRequest("message requires a 'message' or 'payload'")
-	}
-
-	actor := billingActor(org, c.User())
-	cp, _ := json.Marshal(controlPayload{Command: command, Message: body.Message, Payload: body.Payload})
-	evID := mint.ID("evt")
-	e, err := sto.AppendEvent(c.Context(), Event{
-		ID: evID, SessionID: id, Org: org, Kind: KindControl, Actor: actor,
-		Payload: string(cp), CreatedAt: time.Now().Unix(),
-	})
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "record control: %v", err)
-	}
-	publishEvent(s, org, x.RootID, e)
-
-	// Forward to the durable-execution engine when this session is task-backed.
-	// The intent is ALREADY durably recorded above, so a forward failure is
-	// reported (502) without losing the command; a session with no workflow link
-	// or no wired backend is record-only (stream-consuming surfaces act on it).
-	forwarded := false
-	if x.TaskWorkflowID != "" && s.State.tasks != nil && s.State.tasks.Enabled() {
-		var ferr error
-		if command == CmdStop {
-			ferr = s.State.tasks.Cancel(c.Context(), x.TaskWorkflowID, x.TaskRunID, reasonOf(body.Message))
-		} else {
-			ferr = s.State.tasks.Signal(c.Context(), x.TaskWorkflowID, x.TaskRunID, command, signalPayload(body))
-		}
-		if ferr != nil {
-			return zip.Errorf(http.StatusBadGateway, "control recorded but tasks forward failed: %v", ferr)
-		}
-		forwarded = true
-	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"command": command, "event": toEventView(e), "forwarded": forwarded,
-	})
 }
 
 func reasonOf(msg string) string {

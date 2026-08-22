@@ -641,6 +641,94 @@ func init() {
 		},
 		Example: json.RawMessage(`{"agent":"hanzo-dev","title":"ship the landing page","host":"gpu-01"}`),
 	})
+	zip.Describe("POST /v1/agents/sessions/:id/events", zip.Doc{
+		Description: "Records one turn of a session's transcript and answers 201 with it.\n\nTHE TURN IS SCANNED BEFORE IT IS STORED. The same engine the code-security\nsurface runs reads the payload at this boundary, and a credential in it refuses\nthe append with 422 rather than redacting it — a redacted transcript is one\nthat still had the secret in it once, and this way the author learns which\nvalue to rotate. The refusal carries every finding: the rule, the severity, the\nline, a MASKED preview and the fingerprint. The secret is never in the answer.",
+		Fields: map[string]string{
+			"eventIn.actor":       "Actor is who produced the turn. Empty takes the validated caller, which is\nwhat an agent writing its own transcript wants; naming one is for a surface\nrecording on somebody else's behalf.",
+			"eventIn.id":          "ID is the session to append to, from the path.",
+			"eventIn.kind":        "Kind is what this turn IS: message, tool-call, spawn, log, status or\ncontrol. Anything else is refused — the vocabulary is closed so a reader\ncan branch on it.",
+			"eventIn.payload":     "Payload is the turn's own body, any valid JSON up to 64 KiB. It is SCANNED\nfor credentials before it is stored, and a hit refuses the whole append with\n422 and the findings — this plane never redacts a secret into a transcript\nit then keeps.",
+			"eventView.actor":     "Actor is who produced the turn. A write that names nobody takes the calling\nprincipal, so this is rarely empty in practice.",
+			"eventView.createdAt": "CreatedAt is when the turn was recorded, RFC 3339 in UTC to the second. Seconds\nare coarse enough that two turns can share one, which is why Seq and not this\nis the order.",
+			"eventView.id":        "ID is the event's own handle, minted as \"evt_\" + 32 hex characters. It\nidentifies the turn; Seq is what ORDERS it.",
+			"eventView.kind":      "Kind is what the turn IS, from a closed six: message (a model turn),\ntool-call, spawn (a subagent started), log, status, control (a steering\ncommand the running surface consumes). Anything else is refused at the write.",
+			"eventView.payload":   "Payload is the turn's body, embedded as JSON rather than as a string —\nwhatever the writer sent, up to 64 KiB, checked for well-formedness and\nscanned for credentials before it was stored. Its SHAPE is the writer's\nbusiness and varies by Kind; this surface does not interpret it.",
+			"eventView.seq":       "Seq is the turn's position in this session's log: monotonic from 1, assigned\nby the store inside the insert, and unique PER SESSION rather than globally.\nIt is the cursor a reader resumes from after a reconnect — ask for everything\nafter your last-seen seq.",
+			"eventView.sessionId": "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
+		},
+	})
+	zip.Describe("POST /v1/agents/sessions/:id/message", zip.Doc{
+		Description: "Sends a steering message to a running session — the door a\nhuman or another agent interrupts through. It requires a `message` or a\n`payload`; the other three commands do not.",
+		Fields: map[string]string{
+			"controlIn.id":            "ID is the session to steer, from the path.",
+			"controlIn.message":       "Message is free text for the running agent, up to 16 KiB. On a stop it is\nrecorded as the cancellation reason.",
+			"controlIn.payload":       "Payload is a structured argument for the command: any valid JSON up to\n64 KiB, scanned for credentials before it is stored (a hit refuses the\ncommand with 422 and the findings). A task-backed session receives it as\nthe forwarded signal's argument.",
+			"controlResult.command":   "Command is the verb that was recorded: pause, resume, stop or message.",
+			"controlResult.event":     "Event is the durable control event the command became. The intent is\nrecorded whether or not it reached an engine, which is what makes a\nstream-consuming surface able to act on it.",
+			"controlResult.forwarded": "Forwarded is whether the command also reached the durable-execution engine.\nFALSE IS NOT A FAILURE: a session with no workflow link, or a deployment\nwith no tasks backend, is record-only by design. A forward that was\nattempted and failed is a 502, never a false here.",
+			"eventView.actor":         "Actor is who produced the turn. A write that names nobody takes the calling\nprincipal, so this is rarely empty in practice.",
+			"eventView.createdAt":     "CreatedAt is when the turn was recorded, RFC 3339 in UTC to the second. Seconds\nare coarse enough that two turns can share one, which is why Seq and not this\nis the order.",
+			"eventView.id":            "ID is the event's own handle, minted as \"evt_\" + 32 hex characters. It\nidentifies the turn; Seq is what ORDERS it.",
+			"eventView.kind":          "Kind is what the turn IS, from a closed six: message (a model turn),\ntool-call, spawn (a subagent started), log, status, control (a steering\ncommand the running surface consumes). Anything else is refused at the write.",
+			"eventView.payload":       "Payload is the turn's body, embedded as JSON rather than as a string —\nwhatever the writer sent, up to 64 KiB, checked for well-formedness and\nscanned for credentials before it was stored. Its SHAPE is the writer's\nbusiness and varies by Kind; this surface does not interpret it.",
+			"eventView.seq":           "Seq is the turn's position in this session's log: monotonic from 1, assigned\nby the store inside the insert, and unique PER SESSION rather than globally.\nIt is the cursor a reader resumes from after a reconnect — ask for everything\nafter your last-seen seq.",
+			"eventView.sessionId":     "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
+		},
+	})
+	zip.Describe("POST /v1/agents/sessions/:id/pause", zip.Doc{
+		Description: "Asks a running session to pause. Recorded durably, and forwarded\nto the durable-execution engine when the session is task-backed.",
+		Fields: map[string]string{
+			"controlIn.id":            "ID is the session to steer, from the path.",
+			"controlIn.message":       "Message is free text for the running agent, up to 16 KiB. On a stop it is\nrecorded as the cancellation reason.",
+			"controlIn.payload":       "Payload is a structured argument for the command: any valid JSON up to\n64 KiB, scanned for credentials before it is stored (a hit refuses the\ncommand with 422 and the findings). A task-backed session receives it as\nthe forwarded signal's argument.",
+			"controlResult.command":   "Command is the verb that was recorded: pause, resume, stop or message.",
+			"controlResult.event":     "Event is the durable control event the command became. The intent is\nrecorded whether or not it reached an engine, which is what makes a\nstream-consuming surface able to act on it.",
+			"controlResult.forwarded": "Forwarded is whether the command also reached the durable-execution engine.\nFALSE IS NOT A FAILURE: a session with no workflow link, or a deployment\nwith no tasks backend, is record-only by design. A forward that was\nattempted and failed is a 502, never a false here.",
+			"eventView.actor":         "Actor is who produced the turn. A write that names nobody takes the calling\nprincipal, so this is rarely empty in practice.",
+			"eventView.createdAt":     "CreatedAt is when the turn was recorded, RFC 3339 in UTC to the second. Seconds\nare coarse enough that two turns can share one, which is why Seq and not this\nis the order.",
+			"eventView.id":            "ID is the event's own handle, minted as \"evt_\" + 32 hex characters. It\nidentifies the turn; Seq is what ORDERS it.",
+			"eventView.kind":          "Kind is what the turn IS, from a closed six: message (a model turn),\ntool-call, spawn (a subagent started), log, status, control (a steering\ncommand the running surface consumes). Anything else is refused at the write.",
+			"eventView.payload":       "Payload is the turn's body, embedded as JSON rather than as a string —\nwhatever the writer sent, up to 64 KiB, checked for well-formedness and\nscanned for credentials before it was stored. Its SHAPE is the writer's\nbusiness and varies by Kind; this surface does not interpret it.",
+			"eventView.seq":           "Seq is the turn's position in this session's log: monotonic from 1, assigned\nby the store inside the insert, and unique PER SESSION rather than globally.\nIt is the cursor a reader resumes from after a reconnect — ask for everything\nafter your last-seen seq.",
+			"eventView.sessionId":     "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
+		},
+	})
+	zip.Describe("POST /v1/agents/sessions/:id/resume", zip.Doc{
+		Description: "Asks a paused session to continue, on the same terms as a pause.",
+		Fields: map[string]string{
+			"controlIn.id":            "ID is the session to steer, from the path.",
+			"controlIn.message":       "Message is free text for the running agent, up to 16 KiB. On a stop it is\nrecorded as the cancellation reason.",
+			"controlIn.payload":       "Payload is a structured argument for the command: any valid JSON up to\n64 KiB, scanned for credentials before it is stored (a hit refuses the\ncommand with 422 and the findings). A task-backed session receives it as\nthe forwarded signal's argument.",
+			"controlResult.command":   "Command is the verb that was recorded: pause, resume, stop or message.",
+			"controlResult.event":     "Event is the durable control event the command became. The intent is\nrecorded whether or not it reached an engine, which is what makes a\nstream-consuming surface able to act on it.",
+			"controlResult.forwarded": "Forwarded is whether the command also reached the durable-execution engine.\nFALSE IS NOT A FAILURE: a session with no workflow link, or a deployment\nwith no tasks backend, is record-only by design. A forward that was\nattempted and failed is a 502, never a false here.",
+			"eventView.actor":         "Actor is who produced the turn. A write that names nobody takes the calling\nprincipal, so this is rarely empty in practice.",
+			"eventView.createdAt":     "CreatedAt is when the turn was recorded, RFC 3339 in UTC to the second. Seconds\nare coarse enough that two turns can share one, which is why Seq and not this\nis the order.",
+			"eventView.id":            "ID is the event's own handle, minted as \"evt_\" + 32 hex characters. It\nidentifies the turn; Seq is what ORDERS it.",
+			"eventView.kind":          "Kind is what the turn IS, from a closed six: message (a model turn),\ntool-call, spawn (a subagent started), log, status, control (a steering\ncommand the running surface consumes). Anything else is refused at the write.",
+			"eventView.payload":       "Payload is the turn's body, embedded as JSON rather than as a string —\nwhatever the writer sent, up to 64 KiB, checked for well-formedness and\nscanned for credentials before it was stored. Its SHAPE is the writer's\nbusiness and varies by Kind; this surface does not interpret it.",
+			"eventView.seq":           "Seq is the turn's position in this session's log: monotonic from 1, assigned\nby the store inside the insert, and unique PER SESSION rather than globally.\nIt is the cursor a reader resumes from after a reconnect — ask for everything\nafter your last-seen seq.",
+			"eventView.sessionId":     "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
+		},
+	})
+	zip.Describe("POST /v1/agents/sessions/:id/stop", zip.Doc{
+		Description: "Ends a running session. `message` is recorded as the cancellation\nreason, which is what a later reader of the transcript sees.\n\nSTOPPING IS NOT DELETING: the session, its transcript and anything it produced\nstay readable. A session that has already finished is 409 rather than a second\nstop.",
+		Fields: map[string]string{
+			"controlIn.id":            "ID is the session to steer, from the path.",
+			"controlIn.message":       "Message is free text for the running agent, up to 16 KiB. On a stop it is\nrecorded as the cancellation reason.",
+			"controlIn.payload":       "Payload is a structured argument for the command: any valid JSON up to\n64 KiB, scanned for credentials before it is stored (a hit refuses the\ncommand with 422 and the findings). A task-backed session receives it as\nthe forwarded signal's argument.",
+			"controlResult.command":   "Command is the verb that was recorded: pause, resume, stop or message.",
+			"controlResult.event":     "Event is the durable control event the command became. The intent is\nrecorded whether or not it reached an engine, which is what makes a\nstream-consuming surface able to act on it.",
+			"controlResult.forwarded": "Forwarded is whether the command also reached the durable-execution engine.\nFALSE IS NOT A FAILURE: a session with no workflow link, or a deployment\nwith no tasks backend, is record-only by design. A forward that was\nattempted and failed is a 502, never a false here.",
+			"eventView.actor":         "Actor is who produced the turn. A write that names nobody takes the calling\nprincipal, so this is rarely empty in practice.",
+			"eventView.createdAt":     "CreatedAt is when the turn was recorded, RFC 3339 in UTC to the second. Seconds\nare coarse enough that two turns can share one, which is why Seq and not this\nis the order.",
+			"eventView.id":            "ID is the event's own handle, minted as \"evt_\" + 32 hex characters. It\nidentifies the turn; Seq is what ORDERS it.",
+			"eventView.kind":          "Kind is what the turn IS, from a closed six: message (a model turn),\ntool-call, spawn (a subagent started), log, status, control (a steering\ncommand the running surface consumes). Anything else is refused at the write.",
+			"eventView.payload":       "Payload is the turn's body, embedded as JSON rather than as a string —\nwhatever the writer sent, up to 64 KiB, checked for well-formedness and\nscanned for credentials before it was stored. Its SHAPE is the writer's\nbusiness and varies by Kind; this surface does not interpret it.",
+			"eventView.seq":           "Seq is the turn's position in this session's log: monotonic from 1, assigned\nby the store inside the insert, and unique PER SESSION rather than globally.\nIt is the cursor a reader resumes from after a reconnect — ask for everything\nafter your last-seen seq.",
+			"eventView.sessionId":     "SessionID is the session this turn belongs to. Carried on every event so a\nstream frame stands alone — a subscriber watching a whole tree gets turns from\nseveral sessions down one connection.",
+		},
+	})
 	zip.Describe("POST /v1/agents/targets", zip.Doc{
 		Description: "Registers a machine as an agent target, or re-links one that is\nalready registered. Re-linking is idempotent and keyed on org+host+owner, so a\nmachine that reconnects refreshes its own row rather than piling up duplicates;\nit answers 200, while a first registration answers 201.",
 		Fields: map[string]string{
