@@ -5,10 +5,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -151,4 +153,110 @@ func TestWebSearchProjectsAsATool(t *testing.T) {
 		return
 	}
 	t.Fatalf("search_web is not in this subsystem's tools/list — %.300s", raw)
+}
+
+// untypedByDesign is the CLOSED list of addresses this subsystem serves raw,
+// keyed by PATH rather than by "METHOD /path".
+//
+// The key is the path because ONE `All` registration refuses for every method at
+// once: `/v1/websearch/search` publishes five operations from a single call, so
+// keying by method would state one fact five times and let four copies rot
+// independently. apps/iam keys its ledger the same way for the same reason.
+//
+// Both entries are COMPATIBILITY surfaces — wires we did not design and do not
+// own — which is a different kind of refusal from "zip cannot express this" and
+// does not expire when zip gains a capability:
+//
+//   - THE SEARXNG DOOR answers every method in the router's set (registered with
+//     All; zip has no typed All), and a client composes the address from its own
+//     base URL. Typing it means either publishing five typed ops over one handler
+//     or dropping the methods a SearXNG client actually sends. It ALSO carries the
+//     precedence fact: `searchGuard` wraps the handler only for an unvalidated
+//     caller, so an API-key refusal is decided before anything is parsed.
+//   - THE FIRECRAWL SCRAPE keeps firecrawl's BODY and firecrawl's ANSWER verbatim
+//     (websearch.go says so at the registration). A typed In/Out would restate a
+//     third party's shape in Go and drift from it on their next release.
+//
+// Neither costs the plane its capability: `POST /v1/websearch` is the SAME
+// metaSearch at an address the registry can hold, and it is typed, described and
+// projected — which is what TestWebSearchIsTheSameSearchAsTheCompatDoor proves.
+var untypedByDesign = map[string]string{
+	"/v1/websearch/search": "the SearXNG-compatible door — one All registration answering every method, " +
+		"whose request shape and answer belong to SearXNG's contract rather than to us.",
+	"/v1/websearch/scrape": "the firecrawl-compatible fetch — the body and the answer are firecrawl's, " +
+		"carried verbatim so a firecrawl client is re-pointed rather than rewritten.",
+}
+
+// TestEveryRouteIsTypedOrNamed requires the two ledgers to SUM to the served
+// surface. A route added raw goes red without anyone remembering this file, and a
+// reason naming an address this subsystem no longer serves goes red too.
+//
+// The sum is DERIVED from the live document rather than written down, because a
+// hand-written total is the thing that goes stale: an `All` publishes five
+// operations from one registration, so the count nobody can predict is exactly
+// the count a constant would get wrong.
+func TestEveryRouteIsTypedOrNamed(t *testing.T) {
+	app := mounted(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "websearch", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	reg, err := openapi.Typed(app)
+	if err != nil {
+		t.Fatalf("typed: %v", err)
+	}
+
+	served, typed := map[string]bool{}, map[string]bool{}
+	for path, item := range doc.Paths {
+		if !strings.HasPrefix(path, "/v1/websearch") {
+			continue
+		}
+		for method := range item {
+			served[strings.ToUpper(method)+" "+path] = true
+		}
+	}
+	for key := range reg.Ops {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/websearch") {
+			typed[key] = true
+		}
+	}
+
+	var untyped, named []string
+	for key := range served {
+		if typed[key] {
+			continue
+		}
+		_, path, _ := strings.Cut(key, " ")
+		if _, ok := untypedByDesign[path]; !ok {
+			untyped = append(untyped, key)
+			continue
+		}
+		named = append(named, key)
+	}
+	if len(untyped) > 0 {
+		sort.Strings(untyped)
+		t.Errorf("served but neither typed nor named: %s\n"+
+			"A raw route publishes no schema, no MCP tool, no CLI command and no typed SDK "+
+			"method. Convert it, or name its PATH in untypedByDesign with the wire fact that "+
+			"keeps it raw — re-read against the pinned zip, never inherited from an older pass.",
+			strings.Join(untyped, ", "))
+	}
+	for path := range untypedByDesign {
+		hit := false
+		for key := range served {
+			if _, p, _ := strings.Cut(key, " "); p == path {
+				hit = true
+				if typed[key] {
+					t.Errorf("untypedByDesign names %q, which IS a typed op — delete the entry", key)
+				}
+			}
+		}
+		if !hit {
+			t.Errorf("untypedByDesign names %q, which this subsystem no longer serves", path)
+		}
+	}
+	if got, want := len(typed)+len(named), len(served); got != want {
+		t.Errorf("the two ledgers must sum to the served surface: typed %d + named %d = %d, served %d",
+			len(typed), len(named), got, want)
+	}
 }
