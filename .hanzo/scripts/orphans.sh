@@ -5,16 +5,16 @@
 # WHY THIS EXISTS. hanzo.yml states the release invariant as "main push → build →
 # smoke → tag → pin → prove live", and every job in cicd.yml upholds its own link
 # in that chain. Nothing upheld the chain ITSELF. Each job can only see the
-# release it is running; an image published by a lane that never entered cicd.yml
+# release it is running; an image published by a build that never entered cicd.yml
 # is invisible to all of them, and that is not hypothetical — it is how
 # v1.801.478, 479, 480 and 484 came to exist with no tag in any repo, while 480
 # served production. The registry is the only place that knows what was actually
 # published, so the registry is what has to be asked.
 #
-# The check is deliberately lane-agnostic. It does not ask WHO built an image or
+# The check is deliberately builder-agnostic. It does not ask WHO built an image or
 # whether some workflow succeeded; it compares what is published against what is
-# tagged. A gate phrased in terms of a lane can only catch that lane, and the
-# lane that caused this outage was the one nobody thought to instrument.
+# tagged. A check phrased in terms of one builder can only catch that builder,
+# and the publisher worth catching is the one nobody thought to instrument.
 #
 # A RECEIPT IS A TAG ON THE REPOSITORY THAT ISSUES THE NUMBERS, and there is one of
 # those — the repository cicd.yml claims against. A tag anywhere else is a different

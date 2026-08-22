@@ -50,8 +50,8 @@ on:
   push:
     branches: [main]
     # NO TAG TRIGGER, and it is not an omission. A tag was listened for so the
-    # `binaries:` lane could publish the plugin artifact on a proven commit —
-    # but that lane DOES NOT EXIST: hanzo.yml declares no `binaries:` because
+    # `binaries:` block could publish the plugin artifact on a proven commit —
+    # but that block DOES NOT EXIST: hanzo.yml declares no `binaries:` because
     # `bucket:` uploads with S3_ADMIN_* keys that are in KMS for no org.
     #
     # So a tag started a run with no work in it. `image` refuses tag refs (it
@@ -64,7 +64,7 @@ on:
     #
     # The tag stays what it is — the receipt for an image that already built
     # and smoked. Listen for it again in the same change that declares the
-    # lane consuming it, once the credential exists.
+    # block consuming it, once the credential exists.
   pull_request:
   # On-demand rebuild, and the RESUME entry point. A release that failed at
   # fanout is resumed by dispatching this workflow at the same sha: image and
@@ -371,7 +371,7 @@ jobs:
     # read GITHUB_WORKFLOW_REF to find its own tools, that variable is GitHub's
     # and the Hanzo Git runner does not set it, and `set -u` turned the miss into an
     # abort — so every step after it, build through deploy, reported skipped.
-    # v1.0.17 defaults the variable; nothing else about the lane changed.
+    # v1.0.17 defaults the variable; nothing else about the job changed.
     #
     # PINNED TO @v1, NOT @v1.0.17, AND THE DIFFERENCE IS THAT THE TESTS RUN.
     # v1.0.17 declares the reusable's `tests` input as `type: boolean`, and
@@ -405,7 +405,7 @@ jobs:
     # This replaces a paragraph asserting the opposite — that Hanzo Git declines to
     # schedule a called workflow's jobs, so nothing had shipped since v1.801.490.
     # Both halves were read off the parent row. Measured on Hanzo Git: 2159 caller
-    # jobs have succeeded across 292 repos, and this lane's own gate succeeded 174
+    # jobs have succeeded across 292 repos, and this workflow's own gate succeeded 174
     # times in the ten days that paragraph called dead.
     #
     # ci publishes the reusable at .hanzo/workflows/build.yml and NOWHERE ELSE.
@@ -703,7 +703,7 @@ jobs:
       # the commit is already there — being there is what started this run.
       #
       # It was also the last thing forcing the private tree onto a github repo on
-      # every release, and the thing that broke the lane twice: once when the repo
+      # every release, and the thing that broke the release twice: once when the repo
       # it pushed to was public, and once when the credential could not see the
       # private one it was moved to ("Repository not found", run 38319). A step
       # that cannot fail is better than a step with two known ways to fail.
@@ -810,7 +810,7 @@ jobs:
           # private github repo, not Hanzo Git: the claim is a compare-and-swap
           # and only one server can arbitrate it, so the register of names has to
           # be the one the claim writes to. Reading a different git than we claim
-          # against is how two lanes come to believe they both own a number.
+          # against is how two runs come to believe they both own a number.
           #
           # The register moved here from the public repo, so it starts from
           # v1.801.491 — the reconciliation release — rather than from the
@@ -861,11 +861,11 @@ jobs:
           #
           # The claim used to be taken LAST, by the deploy job's "Tag the release",
           # a whole ~20-minute build after the 404 probe that stood in for it.
-          # Two lanes starting inside that window both probed 404, both built,
+          # Two runs starting inside that window both probed 404, both built,
           # and both pushed — and A GHCR TAG IS MUTABLE, so the second push
           # silently REPLACED the first's bytes under the same name. v1.801.361
           # was overwritten at 04:40:53; v1.801.410 again at 08:17:12 by an
-          # image carrying no revision label. The losing lane then died at the
+          # image carrying no revision label. The losing run then died at the
           # tag step — long after it had already corrupted the winner's image,
           # which the winner went on to pin. A check that is 20 minutes from
           # the act it guards is not a check.
@@ -873,7 +873,7 @@ jobs:
           # Claiming FIRST inverts every one of those outcomes. The loser finds
           # out in one HTTP call, before it has built anything, and simply takes
           # the next number. Two commits can never hold one version, so no push
-          # can ever land on a name another lane owns, so tag -> commit is fixed
+          # can ever land on a name another run owns, so tag -> commit is fixed
           # before the image exists rather than asserted after it.
           #
           # A claim that is never built leaves a HOLE — a tag with no image.
@@ -938,7 +938,7 @@ jobs:
           NEXT="$CLAIMED"
 
           # WE OWN THE NAME — so anything already published under it is either
-          # our own earlier attempt or a lane that had no right to it, and those
+          # our own earlier attempt or a run that had no right to it, and those
           # two need opposite handling. `built` is therefore derived from the
           # IMAGE, not from the tag: since the claim now precedes the build, a
           # tag at our sha no longer implies bytes exist.
@@ -965,7 +965,7 @@ jobs:
               echo "v$NEXT is already published from our sha — skipping the build (whether it was SMOKED is a different question, asked below)"
               BUILT=1
             else
-              echo "::error::v$NEXT is a version this run OWNS (tag at ${SHA}) but the registry already serves bytes built from '${REV:-an unlabelled commit}'. Another lane pushed onto a name it did not hold. Nothing here may overwrite it — publish the intended bytes under a new number and delete the foreign image."
+              echo "::error::v$NEXT is a version this run OWNS (tag at ${SHA}) but the registry already serves bytes built from '${REV:-an unlabelled commit}'. Another build pushed onto a name it did not hold. Nothing here may overwrite it — publish the intended bytes under a new number and delete the foreign image."
               exit 1
             fi
           elif [ "$CODE" != "404" ]; then
@@ -1028,7 +1028,7 @@ jobs:
           # same bytes, both orderings, 2026-08-06: gzip 245.5s/256.1s against zstd
           # 58.1s/53.3s, and the zstd image is 1.2% smaller.
           #
-          # This lane matches apps/platform/k8s.go deliberately. The two build the
+          # This step matches apps/platform/k8s.go deliberately. The two build the
           # SAME Dockerfile into the SAME repository, and a compression setting that
           # differs between them is not a preference — it decides the manifest media
           # type, which decides whether imagePullable's Accept negotiation gets a
@@ -1041,10 +1041,10 @@ jobs:
           # Dockerfile declares `ARG REVISION=unknown` and stamps the label from
           # it. A builder that sets only the outside label leaves that ARG at its
           # default, and a builder that sets neither publishes an image whose
-          # commit is unrecoverable — which is precisely what the platform lane
+          # commit is unrecoverable — which is precisely what the platform builder
           # did for every image it ever pushed. Feeding the ARG makes the label
           # truthful no matter which builder runs the Dockerfile, instead of
-          # truthful only in the lane that remembers to override it afterwards.
+          # truthful only in the builder that remembers to override it afterwards.
           build-args: |
             VERSION=v${{ steps.ver.outputs.version }}
             REVISION=${{ github.sha }}
@@ -1064,8 +1064,8 @@ jobs:
       # SOMETHING is there; it says nothing about whose. This is the moment the
       # image -> commit link is established, and the moment a clobber is still
       # cheap to catch: the claim above makes a collision impossible between two
-      # lanes that both honour it, but a lane that does not (the platform
-      # buildctl path pushed onto v1.801.410 twelve minutes after this lane did)
+      # builders that both honour it, but one that does not (the platform
+      # buildctl path pushed onto v1.801.410 twelve minutes after this job did)
       # is exactly what an invariant has to survive. Reading the revision label
       # back off the registry — not off our own build output — is the difference
       # between believing the push landed and knowing it did.
@@ -1094,7 +1094,7 @@ jobs:
 
           REV=$(bash .hanzo/scripts/image-revision.sh "$path" "v${{ steps.ver.outputs.version }}")
           if [ "$REV" != "${{ github.sha }}" ]; then
-            echo "::error::${img} resolves, but the bytes behind that tag were built from '${REV:-an unlabelled commit}', not ${{ github.sha }}. Another lane pushed over the tag this run owns. Nothing downstream may pin it."
+            echo "::error::${img} resolves, but the bytes behind that tag were built from '${REV:-an unlabelled commit}', not ${{ github.sha }}. Another build pushed over the tag this run owns. Nothing downstream may pin it."
             exit 1
           fi
           echo "$img is built from ${{ github.sha }} — tag, commit and image agree"
@@ -1547,7 +1547,7 @@ jobs:
             if [ "$code" = 200 ]; then
               n=$(jq '.binaries | length' /tmp/idx.json)
               echo "published ${n} artifacts at ${index}"
-              # A plugin the host cannot RESOLVE is the defect this lane was
+              # A plugin the host cannot RESOLVE is the defect this step was
               # blocked on, so assert the shape rather than the count: a real
               # triple, on a plugin the fleet actually runs.
               jq -e '.binaries[] | select(.name=="o11y" and .os=="linux" and .arch=="amd64" and (.sha256|length)==64)' \
@@ -1760,7 +1760,7 @@ jobs:
           # repo:workflow — the workflow name is NOT uniform, and assuming it was
           # would fail every release on the one that differs. hanzo-docs/docs has
           # no cicd.yml at all (probed: 404 `workflow "cicd.yml" doesn't exist`);
-          # its spec-consuming lane is deploy.yml. The six SDKs do use cicd.yml.
+          # its spec-consuming workflow is deploy.yml. The six SDKs do use cicd.yml.
           #
           # hanzo-kotlin/sdk and hanzo-cpp/sdk are absent on purpose: both 404 on
           # git.hanzo.ai, so there is nothing to poke. Mirror them and add them.
@@ -1777,7 +1777,7 @@ jobs:
           for entry in $PROJECTIONS; do
             repo="${entry%%:*}"; wf="${entry##*:}"
             # THE REF TRAVELS WITH THE POKE, and until it did this whole job was
-            # ceremony. hanzoai/ci's client lane moves a projection's pin only when
+            # ceremony. hanzoai/ci's client workflow moves a projection's pin only when
             # it is handed a ref, and it read that from `client_payload` — which
             # `repository_dispatch` populates and Hanzo Git does not serve. So every
             # poke landed in `check`: re-read the LOCKED ref, assert its digest, exit
@@ -1925,7 +1925,7 @@ jobs:
       #
       # Every check above answers a question about the run it is in: did MY image
       # build, did MY tag survive, did MY pin go live. None of them can see an
-      # image published by a lane that never entered this workflow — and that is
+      # image published by a build that never entered this workflow — and that is
       # not a hypothetical gap, it is the one that happened. v1.801.478, 479, 480
       # and 484 were published with no tag in any repo while every cicd.yml run
       # on either side of them was green, because none of those runs was looking

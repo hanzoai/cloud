@@ -1,7 +1,7 @@
 # Canonical CI config for hanzoai/cloud — read by the hanzoai/ci reusable
 # (.hanzo/workflows/cicd.yml, the `gate` job) and platform.hanzo.ai.
 #
-# NO images: lane HERE, and the reason changed. The cloud MAIN image and its v*
+# NO images: BLOCK HERE, and the reason changed. The cloud MAIN image and its v*
 # tags still have exactly ONE owner, and the tag-is-a-receipt invariant still
 # holds (main push → claim → build → smoke → RECORD → pin → prove live). But that owner is
 #
@@ -13,12 +13,12 @@
 # namespace the version claim uses. Resume reads that fact. An artifact existing
 # proves it was built and never that it was tested, and the two questions are now
 # asked of the two systems that know — the registry, and git.
-# the `image` job of .hanzo/workflows/cicd.yml, and nothing else. A lane that
-# publishes this image has to outlive the pin it moves, and a job on a runner does;
+# the `image` job of .hanzo/workflows/cicd.yml, and nothing else. A publisher of this image
+# has to outlive the pin it moves, and a job on a runner does;
 # a pipeline running inside the single replica whose pin it moves does not, because
 # its own last step ends the process still executing it.
 #
-# This file still declares no image because a lane here would be a SECOND builder
+# This file still declares no image because a block here would be a SECOND builder
 # on the same commit — the double-build that re-opens the phantom-tag hole. One
 # owner, in the one place the rest of the fleet already builds. No other artifact
 # in this repo is built as an image either — the prebuilt inputs cloud's
@@ -34,15 +34,15 @@
 # NO deploy here either: the `rollout` job ends in universe/charts/app/pin.sh,
 # and cd.hanzo.ai reconciles what that pin records.
 
-# NO binaries: LANE YET — AND THE CREDENTIAL IS NO LONGER THE REASON.
+# NO binaries: BLOCK YET — AND THE CREDENTIAL IS NO LONGER THE REASON.
 #
 # Both blockers below are CLOSED. Read this first, because the text under them
 # was written when they were open and it sends you to provision an S3 key that
 # is not needed:
 #
-#   1. FIXED in hanzoai/ci (`the run:/out: lane indexes per FILE`) and in THIS
-#      repo, apps/platform/artifact.go — both lanes now derive {name, os, arch}
-#      from the filename when it carries the <name>-<os>-<arch> shape the Go lane
+#   1. FIXED in hanzoai/ci (`the run:/out: path indexes per FILE`) and in THIS
+#      repo, apps/platform/artifact.go — both paths now derive {name, os, arch}
+#      from the filename when it carries the <name>-<os>-<arch> shape the Go path
 #      already writes, and keep the recipe name + "any" for a wheel or a tarball.
 #      Pinned by TestArtifactScripts_IndexPerFileWhenTheNameCarriesThePlatform,
 #      which runs both scripts for real and fails on the old behaviour.
@@ -58,11 +58,11 @@
 #      which is a routed endpoint refusing. It publishes to the same layout
 #      s3.hanzo.ai/<bucket>/<owner>/<repo>/<tag>/binaries.json that CLOUD_PLUGINS
 #      reads — one index, two endpoints, exactly as apps/platform/artifact.go
-#      says. Provisioning S3_ADMIN_* to use ci's own `bucket:` lane would be a
+#      says. Provisioning S3_ADMIN_* to use ci's own `bucket:` block would be a
 #      SECOND credential for a job that already has one.
 #
 # So what remains is a decision about WHERE the plugin build runs, not a missing
-# secret: ci's `bucket:` lane (on the runner, needs the key) or this endpoint (in the
+# secret: ci's `bucket:` block (on the runner, needs the key) or this endpoint (in the
 # cluster, holds the key already, and takes the build off the release pipeline's
 # critical path — which is the point of a light host in the first place).
 #
@@ -79,23 +79,23 @@
 # Two things outside this repo have to be true before the declaration at the
 # bottom of this comment becomes real:
 #
-#   1. hanzoai/ci's run:/out: lane must index per FILE, not per RECIPE. It records
+#   1. hanzoai/ci's run:/out: path must index per FILE, not per RECIPE. It records
 #      {name: <the recipe's>, os: any, arch: any} for every file it collects —
 #      right for a wheel, and precisely what manifest/release.go cannot read. The
 #      fix is to derive the triple from the filename when it carries the
-#      <name>-<os>-<arch> shape ci's OWN Go lane already writes: one naming
-#      convention, either lane. (`out: dist/*` also aborts that lane today — it
+#      <name>-<os>-<arch> shape ci's OWN Go path already writes: one naming
+#      convention, either path. (`out: dist/*` also aborts that path today — it
 #      copies each match into dist/ by basename, and `cp x x` is an error, not a
 #      no-op.) The alternative is not 121 entries: that would blow the platform
 #      endpoint's 16-binary bound AND restate manifest/apps.go in YAML.
 #
 #   2. Somebody has to answer where the write credential comes from. `bucket:`
 #      uploads through S3_ADMIN_ACCESS_KEY/S3_ADMIN_SECRET_KEY read from KMS, and
-#      those names are in KMS for NO ORG. The lane fails CLOSED on that, so
+#      those names are in KMS for NO ORG. The path fails CLOSED on that, so
 #      declaring it would publish nothing and turn every TAG build of this repo
 #      red — and rollout, reach, fanout and receipt all declare needs: on the gate
 #      below. That is the release pipeline stopped in exchange for nothing, which is
-#      exactly the state ci's `site:` lane shipped in. The answer being built next
+#      exactly the state ci's `site:` block shipped in. The answer being built next
 #      endpoint is to stop needing the credential: publish through an authenticated
 #      cloud endpoint on the IAM bearer the KMS step already mints, so CI names no
 #      bucket and holds no bucket key. If that is the direction, this wants the
