@@ -227,6 +227,13 @@ var allowedRequestUses = map[string]string{
 		"plane. Ownership needs X-User-Id and org-admin-ness (X-User-IsOrgAdmin), neither of which " +
 		"principal.OrgFrom carries. Both fail closed off the HTTP path: no request, no attested caller, " +
 		"no management rights.",
+	"apps/agents/sessions_typed.go": "callerUser — the validated USER a session write is " +
+		"attributed to, which is not the tenant and not merely whether the caller is signed " +
+		"in. apps/principal carries org, validated, brand, ledger, project and payer across " +
+		"this seam and NOT the user id, so there is no ctx helper to read it from; adding one " +
+		"is a change to shared identity plumbing rather than to this op. It fails soft on " +
+		"purpose: off the HTTP path there is no attested caller and the org alone names the " +
+		"actor, so the write is still recorded rather than refused.",
 	"apps/agents/routing_http.go": "claimKeyOf — the route-work plane authenticates a MACHINE with a " +
 		"claim key that rides in its own header (X-Target-Key), which is the second of that plane's two " +
 		"independent proofs alongside the validated org. principal.OrgFrom carries the org and nothing else, " +
