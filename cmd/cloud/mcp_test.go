@@ -25,7 +25,7 @@ func doMethod(t *testing.T, app *zip.App, method, path, body string) (int, strin
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, deadline)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
