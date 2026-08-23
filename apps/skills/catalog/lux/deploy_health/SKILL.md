@@ -1,7 +1,7 @@
 ---
 name: deploy_health
 version: "8.0.0"
-description: "Read deploy health: Whether this control plane can actually reach the cluster it deploys to."
+description: "Read deploy health: Health reports whether this deployment can observe the delivery plane.."
 ---
 
 # Lux · DEPLOY · health
@@ -14,11 +14,11 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/deploy/health` — Whether this control plane can actually reach the cluster it deploys to
+- `GET https://api.lux.network/v1/deploy/health` — Health reports whether this deployment can observe the delivery plane.
 
 ## Response
 
-- `/v1/deploy/health` → JSON object.
+- `/v1/deploy/health` → `deployHealth` object with fields: `crd`, `k8s`, `service`, `status`.
 
 ## Example
 

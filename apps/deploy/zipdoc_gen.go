@@ -192,6 +192,15 @@ func init() {
 			"GitOpsPlane.reason":         "Reason says why the plane is absent, in words a caller can show. Empty when\nInstalled.",
 		},
 	})
+	zip.Describe("GET /v1/deploy/health", zip.Doc{
+		Description: "Health reports whether this deployment can observe the delivery plane.\n\n200 only when the Kubernetes API answers AND the App custom resource is served;\n503 with the same shape otherwise, naming which half failed. It reports BOOLEANS\nand never the underlying error, because the route is unauthenticated — liveness\nmust be probe-able without a token — and a raw client error can disclose the\napiserver address or an RBAC detail. That detail is logged server-side instead.",
+		Fields: map[string]string{
+			"deployHealth.crd":     "CRD reports whether the App custom resource is served and listable. Absent\nwhen the apiserver was unreachable, because then it is unknown rather than\nfalse.",
+			"deployHealth.k8s":     "K8s reports whether the Kubernetes API is reachable. Absent when the probe\ndid not get far enough to find out.",
+			"deployHealth.service": "Service names the subsystem answering, so a probe response is attributable\nwhen several are collected together.",
+			"deployHealth.status":  "Status is `ok` when this deployment can serve the delivery plane, and\n`degraded` otherwise. It agrees with the HTTP status by construction — see\nStatusCode.",
+		},
+	})
 	zip.Describe("GET /v1/deploy/projects", zip.Doc{
 		Description: "Returns the argocd AppProjectList this console groups and\nfilters applications by. Projects are owned by Hanzo IAM rather than by argocd,\nso they are REFLECTED read-only from the IAM project store and nothing is\npersisted here: a validated org member gets its own organization's projects and\na platform SuperAdmin gets every organization's.\n\nA SuperAdmin whose IAM store is not reachable falls back to the real\nargoproj.io AppProject CRs when that CRD is served, and otherwise to one\npermissive synthesized project per distinct project name the App CRs declare.\nA project named \"default\" is always present, because that is what an App CR\ncarrying no project label projects to.",
 		Fields: map[string]string{
