@@ -82,10 +82,7 @@ const (
 	defaultDedicatedSize     = "10Gi"                 // one instance's default storage footprint
 	defaultStoragePriceCents = 8                      // $0.08/GB-month
 	dedicatedMeterInterval   = 24 * time.Hour         // one GB-day charge per tick
-	// nanoPerCent converts the authority's nano-dollars into the cents this app
-	// bills in, stated once beside the only place that crosses the boundary.
-	nanoPerCent  = 10_000_000
-	daysPerMonth = 30
+	daysPerMonth             = 30
 )
 
 // storageMonthlyCents is the published price of one GB-month, in cents, falling
@@ -93,8 +90,7 @@ const (
 //
 // A var so a test can drive a published price without an authority beside it.
 var storageMonthlyCents = func(ctx context.Context) int64 {
-	return cloud.RateNano(ctx, "storage", "block-gb-month",
-		defaultStoragePriceCents*nanoPerCent) / nanoPerCent
+	return cloud.RateCents(ctx, "storage", "block-gb-month", defaultStoragePriceCents)
 }
 
 // Tenant-RBAC readiness wait bounds — a brand-new tenant namespace's RoleBinding
