@@ -4578,11 +4578,11 @@
       "sha256": "829b399aad2465964ebfadb2d2dd9a1157bb21e5d9c17281fc8532b3f5e7d70f"
     },
     {
-      "description": "Read visor compute: Returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs., Returns one of the caller org's bot machines with its agent binding., The regions a machine or GPU can be launched into.",
+      "description": "Read visor compute: Returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs., Returns one of the caller org's bot machines with its agent binding., Regions lists the regions a machine can be launched i",
       "name": "visor_compute",
       "path": "visor_compute/SKILL.md",
       "service": "visor",
-      "sha256": "e67756d1d2cd1539ea43ed621062c5c7981bdca77a66c5cdd01c3e3f27fe2d90"
+      "sha256": "d6b871ccd7bde8a14f7cf2beff40e0020487be9f106cd27810d32ebdb0c80726"
     },
     {
       "description": "Read visor fleet: Returns every compute unit the caller's org has, from every source, each carrying its latest utilization: agent run-targets, the BYO machines that dialed in, attached BYO clusters and Visor-provisioned machines., Returns the caller org's gpu-jobs render queue, e",

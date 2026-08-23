@@ -1,4 +1,4 @@
-package meet
+package research
 
 // typed_wire_test.go is the ledger: every operation this app serves is either a
 // typed op or a NAMED refusal carrying the wire fact that keeps it raw, and the two
@@ -20,22 +20,18 @@ import (
 // untypedByDesign is the CLOSED list, each entry re-read against the PINNED zip
 // rather than inherited.
 var untypedByDesign = map[string]string{
-	"POST /v1/meet/getToken": "answers the raw join token as text/plain — the office client reads it " +
-		"with res.text(). A typed op always marshals its Out to JSON, so typing this turns `<token>` " +
-		"into `\"<token>\"` under application/json and breaks every published bundle in the field.",
-	"GET /v1/meet/session": "its gate is principal.Minted — the identity boundary's OWN attestation, " +
-		"parked on the REQUEST — and a typed op holds a context, not a request. The context-side facts " +
-		"a typed op CAN read (OrgFrom / ValidatedFrom) derive from headers nothing strips in a " +
-		"hand-written plugin main, which is the forgeable signal this route was fixed to stop " +
-		"selecting on. Typing it would put the weaker fact back in front of the same rows.",
+	"GET /v1/research/artifacts/{sha256}": "answers the artifact's BYTES — c.SendStream under " +
+		"application/octet-stream, or image/png for a snapshot. A typed op's only response path is " +
+		"c.JSON(out); there is no Out that carries a byte stream, and base64 in a JSON field would be " +
+		"a different wire rather than the same one typed.",
 }
 
 // TestEveryRouteIsTypedOrNamed fails three ways: a served route that is neither
 // typed nor named, a name this app no longer serves, and a name that has BECOME a
 // typed op — which is how a refusal that stops being true gets noticed.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
-	app := mount(t, "k", "s")
-	doc, err := openapi.Spec(app, openapi.Info{Title: "meet", Version: "v1"})
+	app := mountResearch(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "research", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
@@ -46,7 +42,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 
 	served, typed := map[string]bool{}, map[string]bool{}
 	for path, item := range doc.Paths {
-		if !strings.HasPrefix(path, "/v1/meet") {
+		if !strings.HasPrefix(path, "/v1/research") {
 			continue
 		}
 		for method := range item {
@@ -54,7 +50,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		}
 	}
 	for key := range reg.Ops {
-		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/meet") {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/research") {
 			typed[key] = true
 		}
 	}

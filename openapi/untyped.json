@@ -1,5 +1,5 @@
 {
-  "operations": 780,
+  "operations": 778,
   "products": {
     "account": 2,
     "ad": 1,
@@ -56,7 +56,7 @@
     "team": 10,
     "todo": 3,
     "translate": 1,
-    "visor": 5,
+    "visor": 3,
     "websearch": 6,
     "world": 1
   }

@@ -3225,6 +3225,43 @@ drives all three branches. And `healthReport` was already `apps/event`'s: the
 unpublished name yielded to `deployHealth`, which is the flat-namespace rule
 catching a collision one step before the weave would have refused the package.
 
+**AN UPSTREAM SHAPE IS A REASON NOT TO MODEL IT, NOT A REASON TO PUBLISH NOTHING.**
+`apps/visor`'s two compute-catalog reads were refused because "the shape is Visor's
+and not this package's". That is a TRUE fact doing the WRONG WORK: it argues
+against writing a Go struct for somebody else's contract — which would drift on
+their next release and silently drop any field it did not name — and says nothing
+about publishing the ADDRESS. A `json.RawMessage` Out publishes `{}`, "any JSON",
+which is the honest schema for a contract we do not own, and carries the same bytes
+through (apps/plan proved the byte-identity for this exact relay shape). visor
+29 → 31; the two are an MCP tool, a CLI command and an SDK method each now.
+
+Two things that pass for assertions and are not, both hit in that one change:
+
+- **A component that does not exist asserts nothing.** A self-marshalling type is
+  INLINED into the operation and never enters `components`, so
+  `doc.Components.Schemas["catalogList"]` was always absent and the check around it
+  always passed. It asserts on the OPERATION's own `responses.200` now, and is
+  mutation-checked by modelling the upstream shape and watching it name the `$ref`.
+- **A ledger my own scan called missing.** `apps/visor` has held one all along, in
+  `projection_test.go` under neither name my greps keyed on — the third time this
+  session a scan-by-pattern returned the wrong list. It caught the conversion
+  immediately, which is the argument for the fleet-wide ratchet: `openapi/
+  untyped.json` needs no per-app cooperation and no one to remember a naming
+  convention.
+
+**Five more apps gained a ledger** — meet, graph, pref, research, knowledge — and
+all five refusals survived re-reading, in four distinct families: a `text/plain`
+token and a byte STREAM (no Out carries either), a MULTIPART upload (`op.invoke`
+json-decodes every non-empty body), a request-side gate (`principal.Minted` is the
+boundary's own attestation, parked on the REQUEST, and a typed op holds a context —
+typing it would put the forgeable header-derived fact back in front of the same
+rows), an OPEN key space with a 413 decided before the parse, and a SECOND PROTOCOL
+at one address (GraphQL's `{data, errors}` envelope rides a 200 on a field-level
+failure; the JSON-RPC doors are the same fact). Each was mutation-checked by
+emptying its list — meet 1 of 3, graph 6 of 7, pref 1 of 2, research 7 of 8,
+knowledge 8 of 9 — because five ledgers passing first run is a result worth
+distrusting until each is shown to see a real surface.
+
 ## The typed migration: one registry entry, or a route and nothing else
 
 Measured at `e88ea216`, and re-measurable — do not trust these numbers past the
