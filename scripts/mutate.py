@@ -87,33 +87,33 @@ MUTANTS = [
         (E, '\tif presented(c) {\n\t\treturn zip.ErrForbidden("valid bearer or a resolvable ingest key required")\n\t}\n', '')],
      "TestEveryDoorFailsClosedOnUnresolvableCredential", PA),
 
-    ("routes: register a POST outside the doors loop", [
+    ("routes: register a POST outside the endpoints loop", [
         (A, '\tapp.Get("/v1/errors", cloud.Handle(s, errorsLens))',
             '\tapp.Post("/v1/rogue", cloud.Handle(s, errorsLens))\n\tapp.Get("/v1/errors", cloud.Handle(s, errorsLens))')],
      "TestRoutedPostSetIsExactlyTheDoors", PA),
 
-    ("doors: silently drop a declared door", [
+    ("endpoints: silently drop a declared endpoint", [
         (E, '\t{path: "/v1/todo", decode: decodeIngest, source: sourceCapture},\n', '')],
      "TestIngestSurfaceIsExactlyTheContract", PA),
 
-    ("doors: rebind a door onto the OTHER wire", [
+    ("endpoints: rebind an endpoint onto the OTHER wire", [
         (E, '\t{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},',
             '\t{path: "/v1/analytics", decode: decodeInsights, source: sourceCapture},')],
      "TestIngestSurfaceIsExactlyTheContract", PA),
 
-    ("doors: relabel a door's origin tag", [
+    ("endpoints: relabel an endpoint's origin tag", [
         (E, '\t{path: "/v1/todo", decode: decodeIngest, source: sourceCapture},',
             '\t{path: "/v1/todo", decode: decodeIngest, source: sourceEvent},')],
      "TestIngestSurfaceIsExactlyTheContract", PA),
 
-    ("routes: resurrect the retired /v1/ingest door", [
+    ("routes: resurrect the retired /v1/ingest endpoint", [
         (A, '\tapp.Get("/v1/errors", cloud.Handle(s, errorsLens))',
-            '\tapp.Post("/v1/ingest", cloud.Handle(s, doors[0].ingest))\n\tapp.Get("/v1/errors", cloud.Handle(s, errorsLens))')],
+            '\tapp.Post("/v1/ingest", cloud.Handle(s, endpoints[0].ingest))\n\tapp.Get("/v1/errors", cloud.Handle(s, errorsLens))')],
      "TestRetiredDoorIsGoneFromBothSurfaces", PA),
 
     ("carve: hand sites fewer paths than are routed", [
-        (A, '\tfor _, d := range doors {\n\t\tcarve[d.path] = d.anon\n\t}',
-            '\tfor _, d := range doors[:1] {\n\t\tcarve[d.path] = d.anon\n\t}')],
+        (A, '\tfor _, d := range endpoints {\n\t\tcarve[d.path] = d.anon\n\t}',
+            '\tfor _, d := range endpoints[:1] {\n\t\tcarve[d.path] = d.anon\n\t}')],
      "TestSiteHostCarvesExactlyTheDoors", PA),
 
     ("sites: widen the carve lookup to a prefix match", [
@@ -154,7 +154,7 @@ MUTANTS = [
             'var publicKinds = map[string]bool{"pageview": true, "error": true, "event": true, "identify": true, "group": true}')],
      "TestAnonIdentity_RefusedAtEveryDoor|TestEveryDoorProjectsTheAnonymousCaller", PA),
 
-    ("door.anon: file the site's beacon under the public tenant", [
+    ("endpoint.anon: file the site's beacon under the public tenant", [
         (E, '\treturn publicIngest(c, d.decode, org, d.source)',
             '\treturn publicIngest(c, d.decode, publicTenant, d.source)')],
      "TestSiteHostLaneWritesTheResolvedSiteOrg", PA),
@@ -175,7 +175,7 @@ MUTANTS = [
             '\t\t\t\tif h, ok := analyticsIngest(c); ok {\n\t\t\t\t\treturn h(c.Org(), c)')],
      "TestMiddlewareAnalyticsCarveCustomDomain", PS),
 
-    ("door.anon: consult handle on the site-host lane", [
+    ("endpoint.anon: consult handle on the site-host lane", [
         (E, '\treturn publicIngest(c, d.decode, org, d.source)', '\t_ = org\n\treturn handle(c, d.decode, d.source)')],
      "TestSiteHostLaneNeverConsultsHandle", PA),
 
@@ -184,7 +184,7 @@ MUTANTS = [
      "TestEveryDoorStampsItsOwnSource", PA),
 
     # ── the anon lane's own $source: a second handler, stamped independently ──
-    ("door.anon: stamp a CONSTANT source instead of the door's own", [
+    ("endpoint.anon: stamp a CONSTANT source instead of the endpoint's own", [
         (E, '\treturn publicIngest(c, d.decode, org, d.source)',
             '\treturn publicIngest(c, d.decode, org, sourceEvent)')],
      "TestEveryDoorStampsItsOwnSource", PA),
@@ -257,7 +257,7 @@ MUTANTS = [
             'if ts.After(now.Add(maxClockSkew)) {')],
      "TestBackdatedTimestampIsClamped", PA),
 
-    # The same removal, asked from the live door instead of the unit: the team wire's
+    # The same removal, asked from the live endpoint instead of the unit: the team wire's
     # epoch-MILLIS is the reachable way to 1970 (`"timestamp":1`), and teamTime is
     # deliberately not where it is stopped.
     ("clamp: the team wire reaches 1970 through the write core", [
@@ -488,7 +488,7 @@ MUTANTS = [
     # nothing bounds the bytes but the edge's BodyLimit — and each subject is
     # copied into a dedupe key, a grouping key and one bound parameter per event
     # in a statement against a single-writer file.
-    ("label: the resolve door takes a subject of any size", [
+    ("label: the resolve endpoint takes a subject of any size", [
         (LT, '\t\tsubject, err := admitSubject(e.Subject)\n'
              '\t\tif err != nil {\n'
              '\t\t\treturn nil, zip.Errorf(http.StatusBadRequest, "subjects[%d]: %v", i, err)\n'
@@ -498,7 +498,7 @@ MUTANTS = [
 
     # The read filter becomes a bound parameter against the tenant's own file, so
     # an unbounded one is kilobytes in a statement looking for a value the write
-    # door could never have stored.
+    # endpoint could never have stored.
     ("label: the read filter binds a subject of any size", [
         (LT, '\tif strings.TrimSpace(in.Subject) != "" {\n'
              '\t\tif q.Subject, err = admitSubject(in.Subject); err != nil {\n'
@@ -528,10 +528,10 @@ MUTANTS = [
              '')],
      "TestNoCountBoundStandsWithoutAByteBound", PL),
 
-    # THE STRUCTURAL HALF: a new caller-sized field on a door, with no ceiling.
-    # This is the shape the defect actually arrived in — the write door bounded
-    # its subject, the read doors added later did not, and nothing compared them.
-    ("label: a new caller-sized field arrives on a door with no ceiling", [
+    # THE STRUCTURAL HALF: a new caller-sized field on an endpoint, with no ceiling.
+    # This is the shape the defect actually arrived in — the write endpoint bounded
+    # its subject, the read endpoints added later did not, and nothing compared them.
+    ("label: a new caller-sized field arrives on an endpoint with no ceiling", [
         (LT, '\tBefore string `json:"before"`\n}',
              '\tBefore string `json:"before"`\n\tReason string `json:"reason,omitempty"`\n}')],
      "TestEveryCallerSizedFieldDeclaresACeiling", PL),

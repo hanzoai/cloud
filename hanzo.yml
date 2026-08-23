@@ -47,7 +47,7 @@
 #      Pinned by TestArtifactScripts_IndexPerFileWhenTheNameCarriesThePlatform,
 #      which runs both scripts for real and fails on the old behaviour.
 #
-#   2. NOT A BLOCKER: the endpoint the comment below calls "being built next door" is
+#   2. NOT A BLOCKER: the endpoint the comment below calls "being built next endpoint" is
 #      built, HERE. `POST /v1/platform/runner` with a `binaries:` recipe launches the
 #      artifact Job, and the only container that ever sees the object-store
 #      credential is the publisher, from the `artifact-s3` KMSSecret in the build
