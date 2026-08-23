@@ -260,9 +260,7 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	if ttl <= 0 {
 		ttl = classes[class].ttl
 	}
-	if ttl > maxTTL {
-		ttl = maxTTL
-	}
+	ttl = s.State.clk.capTTL(ttl)
 
 	// THE CREDENTIALS, both resolved HERE — before the row and before the pod, for
 	// the reason runtimeFor is asked here: a lease that cannot be honoured must
