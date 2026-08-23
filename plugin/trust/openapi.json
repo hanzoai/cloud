@@ -25,7 +25,7 @@
       "get": {
         "operationId": "get_trust",
         "summary": "Reads YOUR organization's whole trust centre, including the addresses of your own gated documents.",
-        "description": "Reads YOUR organization's whole trust centre, including the addresses of your\nown gated documents. Same shape as the published door; the difference is that\nthis one is resolved from your validated bearer and shows you your own\nartifacts.",
+        "description": "Reads YOUR organization's whole trust centre, including the addresses of your\nown gated documents. Same shape as the published endpoint; the difference is that\nthis one is resolved from your validated bearer and shows you your own\nartifacts.",
         "tags": [
           "trust"
         ],
@@ -167,7 +167,7 @@
       "get": {
         "operationId": "get_trust_documents",
         "summary": "Lists your organization's documents.",
-        "description": "Lists your organization's documents. Because this is your own centre, a gated\nartifact carries its address here; through the published door it does not.",
+        "description": "Lists your organization's documents. Because this is your own centre, a gated\nartifact carries its address here; through the published endpoint it does not.",
         "tags": [
           "trust"
         ],
@@ -348,7 +348,7 @@
       "get": {
         "operationId": "get_trust_published_by_org",
         "summary": "Reads a published trust centre — the whole thing in one answer: the organization's profile, its control inventory, coverage computed against each framework's whole published clause list, its documents, subprocessors, policies, knowledge base, updates and risk profile.",
-        "description": "Reads a published trust centre — the whole thing in one answer: the\norganization's profile, its control inventory, coverage computed against each\nframework's whole published clause list, its documents, subprocessors,\npolicies, knowledge base, updates and risk profile.\n\nThis is the PUBLIC door and needs no credential, because a published trust\ncentre is a public document. It answers only for an organization that has\npublished one — an organization that has not is not found rather than empty,\nsince an empty centre and a centre nobody meant to show read the same and are\nnot the same thing.\n\nA gated document appears here with its title, its type and its date and NO\naddress: the listing says the artifact exists and that reading it takes a\ngrant. Nothing an independent auditor signed is ever released through this\ndoor.",
+        "description": "Reads a published trust centre — the whole thing in one answer: the\norganization's profile, its control inventory, coverage computed against each\nframework's whole published clause list, its documents, subprocessors,\npolicies, knowledge base, updates and risk profile.\n\nThis is the PUBLIC endpoint and needs no credential, because a published trust\ncentre is a public document. It answers only for an organization that has\npublished one — an organization that has not is not found rather than empty,\nsince an empty centre and a centre nobody meant to show read the same and are\nnot the same thing.\n\nA gated document appears here with its title, its type and its date and NO\naddress: the listing says the artifact exists and that reading it takes a\ngrant. Nothing an independent auditor signed is ever released through this\nendpoint.",
         "tags": [
           "trust"
         ],

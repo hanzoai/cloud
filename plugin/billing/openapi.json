@@ -1096,7 +1096,7 @@
       "post": {
         "operationId": "post_billing_topup",
         "summary": "Charges a card the caller already saved and credits the balance.",
-        "description": "Charges a card the caller already saved and credits the\nbalance. Same receipt and the same retry safety as the token door; the only\ndifference is which card, so a caller topping up from a saved method never\nre-enters one.",
+        "description": "Charges a card the caller already saved and credits the\nbalance. Same receipt and the same retry safety as the token endpoint; the only\ndifference is which card, so a caller topping up from a saved method never\nre-enters one.",
         "tags": [
           "billing"
         ],
@@ -2307,7 +2307,7 @@
       "SubscriptionRef": {
         "properties": {
           "atPeriodEnd": {
-            "description": "AtPeriodEnd cancels at the end of the paid period rather than at once. It\ndefaults TRUE on the door, because a customer who cancels has already paid\nfor the period they are in.",
+            "description": "AtPeriodEnd cancels at the end of the paid period rather than at once. It\ndefaults TRUE on the endpoint, because a customer who cancels has already\npaid for the period they are in.",
             "type": "boolean"
           },
           "id": {
@@ -2571,11 +2571,11 @@
             "type": "string"
           },
           "paymentMethodId": {
-            "description": "MethodID names a card the subject already saved, for the saved-card door.",
+            "description": "MethodID names a card the subject already saved, for the saved-card endpoint.",
             "type": "string"
           },
           "sourceId": {
-            "description": "SourceID is a single-use card token from the payment form, for the token\ndoor. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
+            "description": "SourceID is a single-use card token from the payment form, for the token\nendpoint. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
             "type": "string"
           }
         },

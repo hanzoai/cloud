@@ -157,7 +157,7 @@
       "Hit": {
         "properties": {
           "corpus": {
-            "description": "Corpus is which store the document lives in: \"kb\" for a document either\nknowledge leg returned, \"code\" for a span out of one of the org's own\nrepositories. It is PROVENANCE — read it to say where a hit came from, not\nto branch on: the fused ranking is what decides order, and a caller that\nfilters by corpus wants the backend's own door instead.",
+            "description": "Corpus is which store the document lives in: \"kb\" for a document either\nknowledge leg returned, \"code\" for a span out of one of the org's own\nrepositories. It is PROVENANCE — read it to say where a hit came from, not\nto branch on: the fused ranking is what decides order, and a caller that\nfilters by corpus wants the backend's own endpoint instead.",
             "type": "string"
           },
           "doctype": {
