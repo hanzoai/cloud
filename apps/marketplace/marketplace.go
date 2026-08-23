@@ -34,7 +34,7 @@
 //
 //	tools → x402         x402_settle     settle this tool call   (apps/x402/rpc.go)
 //	x402  → marketplace  market_price    what it costs, who is paid (rpc.go here)
-//	x402  → wallets      wallets_payee   resolve the payee wallet (apps/wallets/rpc.go)
+//	x402  → wallets      wallets_payee   resolve the payee wallet (apps/wallet/rpc.go)
 //	x402  → commerce     finance_credit  credit the payee (apps/commerce/credit_rpc.go)
 //
 // The in-process client stays the FAST PATH where the owner is co-resident; the plane

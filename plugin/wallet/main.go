@@ -20,7 +20,7 @@ import (
 // distributed CGGMP21 keygen on the ring, and a Safe additionally deploys a
 // contract with real gas; signing and proposing each run a threshold round. The
 // surface is org-scoped with no admin gate, so a tenant reaches all of it. The
-// meter is apps/wallets/meter.go, and custody is the predicate — KindKMS is an
+// meter is apps/wallet/meter.go, and custody is the predicate — KindKMS is an
 // in-process keygen, buys nothing, and stays free.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{

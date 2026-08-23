@@ -22,7 +22,7 @@
 //	organic → apps/social    (the social connectors — NO executor registered yet)
 //	email   → apps/marketing (sendgrid/mailchimp/… — NO executor registered yet)
 //
-// Only the paid executor is wired today (plugin/campaigns/clients.go). A campaign
+// Only the paid executor is wired today (plugin/campaign/clients.go). A campaign
 // carrying an organic or email channel launches its paid channels and records the
 // others "unavailable" — honest, never a faked launch. Until those two executors
 // exist, /v1/social and /v1/marketing are the ONLY way to run those channels, and
