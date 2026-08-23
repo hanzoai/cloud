@@ -29,6 +29,28 @@ func init() {
 			"wireFact.value":          "Value is what the relation points at: another entity's key when Names is\ntrue, otherwise a scalar.",
 		},
 	})
+	zip.Describe("GET /v1/graph/search", zip.Doc{
+		Description: "Finds assertions by their text where read finds them by their keys.\n\nIt is the READ with one more term, not a second way to leave the store: same\norder, same ceiling, same tenancy, and searching composes with narrowing by\nrelation and by instant because all of them are terms of one filter.\n\nIt resolves nothing. What matches is what was asserted, including claims that\nwere later corrected — which is the honest answer to \"where is this mentioned\"\nand the reason the caller then asks resolve about what it found.",
+		Fields: map[string]string{
+			"graphReadOut.assertions": "Assertions are the matching rows in the order they were written, oldest\nfirst. Every version is here: this read resolves nothing and withholds\nnothing, so a superseded claim and the one that superseded it both appear.",
+			"graphSearchIn.as_of":     "AsOf bounds the search to what was knowable at an instant, RFC 3339. Absent\nsearches everything this plane holds.",
+			"graphSearchIn.limit":     "Limit caps how many assertions come back. Absent, zero, or anything above\nthe walk ceiling is the ceiling.",
+			"graphSearchIn.q":         "Q is what to look for: words, matched as prefixes, all of them required.\nPunctuation is text here rather than syntax, so an entity key searches as\nitself.",
+			"graphSearchIn.relation":  "Relation narrows to one relation. Absent matches every relation.",
+			"wireFact.at":             "At is when the thing was so, RFC 3339, as the asserter gave it.",
+			"wireFact.by":             "By is the identity that filed it — `owner` or `owner/user` — stamped from\nthe validated principal at the write, never from the body.",
+			"wireFact.confidence":     "Confidence in [0,1] as the asserter gave it; absent is 0. It breaks a tie\nbetween two assertions equally knowable and decides nothing else.",
+			"wireFact.entity":         "Entity is the thing described, in the organization's own namespace.",
+			"wireFact.evidence":       "Evidence points at the record the claim came from. Absent when the asserter\ngave none.",
+			"wireFact.id":             "ID is the assertion's content address, minted by the server from what was\nasserted. Two callers who assert the identical thing land on one ID and one\nrow; changing any asserted field makes a different ID and a second row.",
+			"wireFact.knowable":       "Knowable is the first instant this plane could have answered with the\nassertion, RFC 3339: the later of Seen and the server's clock at the write.\nDerived and never supplied, which is what stops history filed today from\nbeing backdated into a past read.",
+			"wireFact.names":          "Names true means the assertion is an edge and Value is an entity. A walk\nreads only these.",
+			"wireFact.relation":       "Relation is what was asserted of it.",
+			"wireFact.seen":           "Seen is when the asserter says it became knowable, RFC 3339. Provenance\nonly — Knowable is what an as-of read is bounded by.",
+			"wireFact.source":         "Source names who asserted, as the caller gave it. This plane ranks no\nsource above another, so it never outweighs a later Knowable.",
+			"wireFact.value":          "Value is what the relation points at: another entity's key when Names is\ntrue, otherwise a scalar.",
+		},
+	})
 	zip.Describe("GET /v1/graph/vocabulary", zip.Doc{
 		Fields: map[string]string{
 			"graphVocabularyOut.bound":     "Bound is the ceiling on one walk.",
