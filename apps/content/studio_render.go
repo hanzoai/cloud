@@ -66,9 +66,14 @@ const (
 
 // assetNegative kills the two things the reference must NOT leak into the render: any text
 // (CAD annotations / labels / watermarks) and the CAD construction lines (art direction:
-// panels flatten to one fabric color, never reproduced as visible clients).
+// panels flatten to one fabric color, never reproduced as visible seams).
+//
+// SEAM HERE IS A SEWN SEAM, and it is the term the model is trained on for one. It is
+// the garment word, not Feathers' testing word, so it is untouched by the rename that
+// took the latter out of this codebase — which did reach in and take it, turning a
+// negative prompt that suppressed stitch lines into one that suppressed nothing.
 const assetNegative = "text, watermark, logo, label, caption, typography, " +
-	"cad lines, construction lines, client lines, panel lines, sketch outline, " +
+	"cad lines, construction lines, seam lines, panel lines, sketch outline, " +
 	"extra garments, deformed, distorted, low quality, blurry"
 
 // assetScenes is the per-kind scene prose. Each is a complete photographic direction; the
@@ -555,7 +560,7 @@ func assetPrompt(kind string, in GenerateInput) string {
 	var b strings.Builder
 	b.WriteString(scene)
 	b.WriteString(" Preserve the exact garment design, cut, and color from the reference. ")
-	b.WriteString("Render every panel as one continuous fabric color — no construction lines, no clients, no text.")
+	b.WriteString("Render every panel as one continuous fabric color — no construction lines, no seams, no text.")
 	if brief := strings.TrimSpace(in.Brief); brief != "" {
 		b.WriteString(" ")
 		b.WriteString(brief)

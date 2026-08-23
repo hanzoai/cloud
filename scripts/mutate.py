@@ -189,23 +189,23 @@ MUTANTS = [
             '\treturn publicIngest(c, d.decode, org, sourceEvent)')],
      "TestEveryDoorStampsItsOwnSource", PA),
 
-    # ── the write path's seams: silent data loss behind a 200 receipt ─────────
-    ("seam: warehouseExec defaults to a no-op that discards every INSERT", [
+    # ── the write path's clients: silent data loss behind a 200 receipt ─────────
+    ("client: warehouseExec defaults to a no-op that discards every INSERT", [
         (C, '\twarehouseExec  = datastore.Exec',
             '\twarehouseExec  = func(context.Context, string, ...any) error { return nil }')],
-     "TestWritePathSeamsDefaultToTheRealThing", PA),
+     "TestWritePathClientsDefaultToTheRealThing", PA),
 
-    ("seam: warehouseReady defaults to always-true, removing the gate", [
+    ("client: warehouseReady defaults to always-true, removing the gate", [
         (C, '\twarehouseReady = datastore.Ready', '\twarehouseReady = func() bool { return true }')],
-     "TestWritePathSeamsDefaultToTheRealThing", PA),
+     "TestWritePathClientsDefaultToTheRealThing", PA),
 
     # The blank var is load-bearing: OrgForKey is capture.go's only use of the cloud
     # package, so substituting it also orphans the import. That made this mutant
     # NO-COMPILE — an exit code the old scoring would have counted as a kill.
-    ("seam: resolveKeyOrg defaults to a resolver that admits any key", [
+    ("client: resolveKeyOrg defaults to a resolver that admits any key", [
         (C, 'var resolveKeyOrg = cloud.OrgForKey',
             'var resolveKeyOrg = func(context.Context, string) (string, bool) { return "acme", true }\n\nvar _ = cloud.OrgForKey')],
-     "TestWritePathSeamsDefaultToTheRealThing", PA),
+     "TestWritePathClientsDefaultToTheRealThing", PA),
 
     # ── the PII scrub's CALL SITE, not the scrub ──────────────────────────────
     ("write core: store RAW properties, skipping the PII scrub", [
