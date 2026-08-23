@@ -18,7 +18,10 @@ import (
 // them is that the caller can TELL — because the caller's fallback is the number
 // it charged yesterday, and the only thing worse than a stale price is a zero one.
 
-func bootForRate(t *testing.T) {
+// boot stands the embedded commerce up for one test. It is named for what it
+// does rather than for the first test that needed it — nothing here is about
+// rates, and a helper named after one caller is a helper the next caller copies.
+func boot(t *testing.T) {
 	t.Helper()
 	emb, err := commercemod.Embed(context.Background(), commercemod.EmbedConfig{DataDir: t.TempDir(), Dev: true})
 	if err != nil {
@@ -47,7 +50,7 @@ func putRate(t *testing.T, ctx context.Context, product, meter, unit string, nan
 }
 
 func TestRate_AnswersThePublishedPrice(t *testing.T) {
-	bootForRate(t)
+	boot(t)
 	ctx := context.Background()
 	putRate(t, ctx, "storage", "cold-gb-month", "GB-month", 80_000_000, "")
 
@@ -71,7 +74,7 @@ func TestRate_AnswersThePublishedPrice(t *testing.T) {
 // ZERO IS A PRICE. Something the platform meters and gives away is not the same
 // as something nobody has priced, and a number alone cannot carry the difference.
 func TestRate_ZeroIsPublishedNotAbsent(t *testing.T) {
-	bootForRate(t)
+	boot(t)
 	ctx := context.Background()
 	putRate(t, ctx, "translate", "given-away", "1k characters", 0, "")
 
@@ -91,7 +94,7 @@ func TestRate_ZeroIsPublishedNotAbsent(t *testing.T) {
 // An absent rate is not an error: a meter nobody has priced is the ordinary state
 // of a new one, and failing would stop the work over a missing row.
 func TestRate_AbsentIsNotAnError(t *testing.T) {
-	bootForRate(t)
+	boot(t)
 	out, err := planeRate(context.Background(), &plane.RateIn{Product: "storage", Meter: "nothing-here"})
 	if err != nil {
 		t.Fatalf("an unpublished rate returned an error: %v — a meter nobody has priced "+
@@ -108,7 +111,7 @@ func TestRate_AbsentIsNotAnError(t *testing.T) {
 // A row that is stored but NOT SOLD is not what the platform charges today, so it
 // reads as absent — the same answer the public plan catalog gives for one.
 func TestRate_AnUnlistedRowDoesNotPrice(t *testing.T) {
-	bootForRate(t)
+	boot(t)
 	ctx := context.Background()
 	for _, status := range []string{"archived", "draft"} {
 		putRate(t, ctx, "risk", "screen-"+status, "screen", 999_000, status)
@@ -126,7 +129,7 @@ func TestRate_AnUnlistedRowDoesNotPrice(t *testing.T) {
 // Identity is BOTH parts, and a request that names neither is a bad request
 // rather than a lookup of "/".
 func TestRate_RefusesAHalfNamedMeter(t *testing.T) {
-	bootForRate(t)
+	boot(t)
 	for _, in := range []plane.RateIn{
 		{Product: "storage"},
 		{Meter: "block-gb-month"},
