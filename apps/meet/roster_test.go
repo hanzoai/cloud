@@ -9,6 +9,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/principal"
@@ -30,6 +31,11 @@ import (
 // B, and that difference IS the tenant boundary meet enforces. An authority that
 // said yes to any workspace would make the boundary untestable at the endpoint.
 type answers struct {
+	// mu guards the counters below. The real authority is another PROCESS, so it is
+	// asked concurrently the moment two requests are in flight — which is exactly
+	// what the two-replica race in record_test.go models, and what made this the
+	// first fixture in the package to need a lock.
+	mu      sync.Mutex
 	row     func(workspace, subject string) plane.Member // what the rows say about one workspace
 	list    plane.Spaces                                 // what they say about all of them
 	err     error                                        // or why they cannot be read
@@ -39,6 +45,8 @@ type answers struct {
 }
 
 func (a *answers) member(_ context.Context, workspace, subject string) (*plane.Member, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.asked++
 	a.subject, a.saw = subject, workspace
 	if a.err != nil {
@@ -52,6 +60,8 @@ func (a *answers) member(_ context.Context, workspace, subject string) (*plane.M
 }
 
 func (a *answers) workspaces(_ context.Context, subject string) (*plane.Spaces, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.asked++
 	a.subject = subject
 	if a.err != nil {

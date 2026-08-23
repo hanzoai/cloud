@@ -148,7 +148,14 @@ func verifyCSRF(s *cloud.Service[state], token, uid, org string) bool {
 // CSRF-able. Explicit Authorization/X-Authorization (Bearer/Basic) ⇒ not ambient; no
 // Cookie at all (gateway header-injection, the tests) ⇒ not ambient.
 func ambientCookieAuth(c *zip.Ctx) bool {
-	if strings.TrimSpace(c.Header("Authorization")) != "" || strings.TrimSpace(c.Header("X-Authorization")) != "" {
+	// cloud.Presented is the identity boundary's OWN header reader, asked whole —
+	// not its parse re-applied here per header. The boundary's rule is a CROSS-header
+	// precedence that reads Basic from Authorization only, so judging the two headers
+	// by one per-header rule made `X-Authorization: Basic …` explicit to this gate and
+	// invisible to the boundary, which fell through to the cookie and authenticated
+	// the write this gate had just excused. Asking the one function makes the two
+	// agree by construction rather than by two implementations happening to match.
+	if cloud.Presented(c) != "" {
 		return false
 	}
 	return len(c.Fiber().Request().Header.Peek("Cookie")) > 0
@@ -165,19 +172,47 @@ func ambientCookieAuth(c *zip.Ctx) bool {
 func requireCSRF(s *cloud.Service[state]) zip.Middleware {
 	return func(next zip.Handler) zip.Handler {
 		return func(c *zip.Ctx) error {
-			if !ambientCookieAuth(c) {
-				return next(c) // Bearer/Basic/gateway/API — not CSRF-able
-			}
-			tok := strings.TrimSpace(c.Header("X-CSRF-Token"))
-			if tok == "" {
-				return zip.ErrForbidden("missing CSRF token (GET /v1/account/csrf and echo it in X-CSRF-Token)")
-			}
-			if !verifyCSRF(s, tok, strings.TrimSpace(c.User()), strings.TrimSpace(c.Org())) {
-				return zip.ErrForbidden("invalid or expired CSRF token")
+			if err := checkCSRF(s, c); err != nil {
+				return err
 			}
 			return next(c)
 		}
 	}
+}
+
+// checkCSRF is THE decision, once: nil when this request may change something, a
+// 403 when it may not. The middleware above and the exported predicate below are
+// two ways to ASK it, never two copies of it.
+func checkCSRF(s *cloud.Service[state], c *zip.Ctx) error {
+	if !ambientCookieAuth(c) {
+		return nil // Bearer/Basic/gateway/API — not CSRF-able
+	}
+	tok := strings.TrimSpace(c.Header("X-CSRF-Token"))
+	if tok == "" {
+		return zip.ErrForbidden("missing CSRF token (GET /v1/account/csrf and echo it in X-CSRF-Token)")
+	}
+	if !verifyCSRF(s, tok, strings.TrimSpace(c.User()), strings.TrimSpace(c.Org())) {
+		return zip.ErrForbidden("invalid or expired CSRF token")
+	}
+	return nil
+}
+
+// CSRF is the same gate as a PREDICATE, for a write that cannot be reached by a
+// middleware at all.
+//
+// A typed op has TWO doors and only one of them is a route. zip records the route's
+// handler and the op as two fields of one entry and wraps only the handler, while
+// the MCP door calls the op directly — so no Use, Group or With reaches a
+// tools/call, and a prefix-scoped gate is skipped there by construction while the
+// depth-0 identity middleware still authenticates the caller. An op that must not
+// be reachable cross-site therefore asks this itself, inside the op, where both
+// doors pass.
+//
+// The general repair is a gate zip applies to the OP rather than the route
+// (App.Authorize); until that exists this is how a surface covers both doors
+// without inventing a second anti-CSRF token.
+func CSRF(c *zip.Ctx) error {
+	return checkCSRF(&cloud.Service[state]{State: state{csrfKey: sharedCSRFKey(nil)}}, c)
 }
 
 // RequireCSRF exposes the ambient-cookie anti-CSRF gate as a STANDALONE middleware for a

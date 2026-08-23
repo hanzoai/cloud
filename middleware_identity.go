@@ -656,7 +656,23 @@ func sessionBridgeSameOrigin(c *zip.Ctx) bool {
 // The returned token is NOT trusted here: validatedPrincipal feeds it through
 // v.validate (sig/iss/aud/exp), and CallerBearer relays it to a target that
 // re-validates it. Empty when the request carries no credential.
-func callerToken(c *zip.Ctx) string {
+// Presented is the credential the caller PUT ON THIS REQUEST, and empty when it
+// put none there — the header half of callerToken, exactly, and nothing after it.
+//
+// The split is not cosmetic. A credential a caller presents cannot be supplied by
+// a cross-site page (a browser will not set these headers for one), while an
+// AMBIENT credential — a cookie, a same-origin session bridge — is sent by any page
+// that can reach us. That is the whole anti-CSRF distinction, so apps/account asks
+// this rather than deciding for itself what an explicit credential looks like.
+//
+// IT IS A CROSS-HEADER PRECEDENCE, and that is why it has to be one function
+// rather than one parse applied twice. Basic is read from Authorization ONLY: a
+// Basic value under X-Authorization is not a credential to this reader, so a gate
+// that judged the two headers with the same per-header rule called such a request
+// explicit while the boundary below fell through to the cookie — and the cookie
+// then authenticated the write the gate had just excused. One question, one
+// answer, one SHAPE.
+func Presented(c *zip.Ctx) string {
 	tok := bearerFromAuth(c.Header("Authorization"))
 	if tok == "" {
 		tok = bearerFromAuth(c.Header("X-Authorization"))
@@ -664,6 +680,11 @@ func callerToken(c *zip.Ctx) string {
 	if tok == "" {
 		tok = basicFromAuth(c.Header("Authorization"))
 	}
+	return tok
+}
+
+func callerToken(c *zip.Ctx) string {
+	tok := Presented(c)
 	if tok == "" {
 		for _, name := range cookieTokenNames {
 			if val := c.Fiber().Cookies(name); val != "" {
