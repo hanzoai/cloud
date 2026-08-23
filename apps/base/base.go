@@ -264,14 +264,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// is one handler and one prefix.
 	p := newPool(root, deps)
 
-	// Which Bases the caller can reach, at a literal path so it wins the address
-	// against the wildcard below (most-specific-first, the same rule /health
-	// relies on). It has to be here rather than beside /health, because the
-	// listing describes the pool's own stores and the pool exists only with the
-	// embed on — a deployment hosting no Bases has no listing to give.
-	//
-	// Behind the wildcard this address would reach ONE org's engine, which has no
-	// route for it and answers not-found; the workspace read that as an account
 	app.All("/v1/base/*", func(c *zip.Ctx) error { return serveOrg(p, log, c) })
 
 	mounted = &subsystem{pool: p, platform: platformApp}
