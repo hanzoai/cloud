@@ -124,9 +124,41 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 
 	// The routes that stay raw are honestly absent — they carry no shape, so the
 	// document must not claim one for them.
-	for _, p := range []string{"/v1/visor/compute/regions", "/v1/visor/compute/sizes", "/v1/visor/compute/bots/launch"} {
+	//
+	// The two CATALOG reads used to be on this list and are typed ops now. They were
+	// here because their shape is Visor's rather than ours, which reads like a
+	// blocker and is not: a json.RawMessage Out publishes `{}` — "any JSON", the true
+	// thing to say about an upstream contract we do not own — and carries the same
+	// bytes through. Modelling upstream's shape would have been the mistake; refusing
+	// to publish the ADDRESS because of it was a smaller one, and cost them a tool, a
+	// CLI command and an SDK method each.
+	for _, p := range []string{"/v1/visor/compute/bots/launch"} {
 		if _, ok := doc.Paths[p]; ok {
 			t.Errorf("%s is raw by design but appears in the document", p)
+		}
+	}
+	// And the catalog reads ARE in the document, with an open schema rather than an
+	// invented one — the assertion that keeps the fix above from being reverted into
+	// a modelled copy of somebody else's contract.
+	for _, p := range []string{"/v1/visor/compute/regions", "/v1/visor/compute/sizes"} {
+		op, ok := doc.Paths[p]["get"]
+		if !ok {
+			t.Errorf("%s is a typed op and must appear in the document", p)
+			continue
+		}
+		if op.Description == "" {
+			t.Errorf("%s carries no description, so it reaches no SDK and no MCP tool", p)
+		}
+		// The response schema is OPEN — `{}`, "any JSON" — and that is asserted on
+		// the OPERATION rather than on a component, because a self-marshalling type
+		// is INLINED and never enters components. An earlier version of this check
+		// looked up a `catalogList` component, found nothing, and passed: an
+		// assertion that passes because nothing rendered is no assertion.
+		raw, _ := json.Marshal(op.Responses["200"])
+		if s := string(raw); !strings.Contains(s, `"schema":{}`) {
+			t.Errorf("%s publishes %s as its 200 — the payload is UPSTREAM's, so the honest schema is "+
+				"an open one. A modelled shape here is a second copy of somebody else's contract, free "+
+				"to drift on their next release and silently dropping any field it does not name", p, s)
 		}
 	}
 }
