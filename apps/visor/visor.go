@@ -223,8 +223,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// RAW: both pass Visor's catalog payload through VERBATIM, so the shape is
 	// Visor's and this package does not know it. A typed Out would have to invent
 	// one — the opposite of what the passthrough is for.
-	app.Get("/v1/visor/compute/regions", cloud.Handle(s, listRegions))
-	app.Get("/v1/visor/compute/sizes", cloud.Handle(s, listSizes))
+	// The compute CATALOG. Typed, and its Out is a json.RawMessage on purpose: the
+	// shape is Visor's and not this package's, so the honest schema is "any JSON"
+	// (zip asks whether a type marshals ITSELF before asking what it is made of, so
+	// a RawMessage publishes {} rather than a shape we would have to keep in step
+	// with an upstream we do not own). The bytes are the same bytes — the same value
+	// re-marshalled — which is what apps/plan proved for the same relay shape.
+	zip.Get(reg, "/v1/visor/compute/regions", o.regions)
+	zip.Get(reg, "/v1/visor/compute/sizes", o.sizes)
 
 	// A machine's AGENT — thin proxy over vm's binding surface (mark a machine as
 	// running the @hanzo/bot runtime for a cloud Agent).
@@ -464,25 +470,59 @@ func (o ops) getMachine(ctx context.Context, in *machineRef) (*machineView, erro
 
 // ---- compute catalog (regions / sizes) ----
 
-// listRegions and listSizes expose the global compute catalog that backs the launch
-// drawer. Both delegate to catalog: DRY, one org-gated passthrough of Visor's
-// authoritative list. GET /v1/visor/compute/regions, GET /v1/visor/compute/sizes.
-func listRegions(s *cloud.Service[state], c *zip.Ctx) error { return catalog(s, c, "/v1/regions") }
-func listSizes(s *cloud.Service[state], c *zip.Ctx) error   { return catalog(s, c, "/v1/sizes") }
+// Regions lists the regions a machine can be launched in.
+//
+// The catalog is GLOBAL — identical for every tenant — so no owner is forwarded
+// upstream. It is still org-gated, because a catalog is a map of what this
+// deployment can spend money in and an anonymous caller has no business reading it.
+func (o ops) regions(ctx context.Context, _ *noArgs) (*catalogList, error) {
+	return o.catalog(ctx, "/v1/regions")
+}
 
-// catalog proxies a global (non-org-scoped) Visor catalog list. Org-gated so only a
-// validated principal reaches it, but no ?owner is forwarded — the region/size catalog
-// is identical for every tenant. The Visor payload is passed through verbatim so the
-// wire shape stays the single source of truth.
-func catalog(s *cloud.Service[state], c *zip.Ctx, upstream string) error {
-	if _, ok := tenant(c); !ok {
-		return principal.Refused(c)
+// Sizes lists the machine sizes available to launch, with their specifications.
+//
+// Global and org-gated, exactly as the region catalog is, and for the same reasons.
+func (o ops) sizes(ctx context.Context, _ *noArgs) (*catalogList, error) {
+	return o.catalog(ctx, "/v1/sizes")
+}
+
+// catalogList is a global Visor catalog, carried VERBATIM.
+//
+// It is a json.RawMessage rather than a modelled shape because the shape is
+// upstream's: writing it out here would be a second copy of somebody else's
+// contract, free to drift on their next release and silently dropping any field
+// this struct did not name. As a RawMessage it publishes `{}` — "any JSON", which
+// is the true thing to say — and the bytes reaching the caller are the bytes Visor
+// sent, re-marshalled through the same encoder the untyped relay used.
+type catalogList json.RawMessage
+
+// MarshalJSON carries the upstream payload through unchanged. This is what makes
+// the RawMessage publish as an open schema instead of as a byte array: zip asks
+// whether a type marshals itself before asking what it is made of.
+func (l catalogList) MarshalJSON() ([]byte, error) {
+	if len(l) == 0 {
+		return []byte("null"), nil
 	}
-	var data json.RawMessage
-	if err := s.State.cl.call(c, http.MethodGet, upstream, "", nil, &data); err != nil {
-		return err
+	return l, nil
+}
+
+// UnmarshalJSON captures the upstream payload verbatim.
+func (l *catalogList) UnmarshalJSON(raw []byte) error {
+	*l = append((*l)[:0], raw...)
+	return nil
+}
+
+// catalog proxies one global (non-org-scoped) Visor catalog list.
+func (o ops) catalog(ctx context.Context, upstream string) (*catalogList, error) {
+	c, _, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, data)
+	var data catalogList
+	if err := o.State.cl.call(c, http.MethodGet, upstream, "", nil, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
 }
 
 type launchReq struct {
@@ -493,13 +533,18 @@ type launchReq struct {
 	DryRun       bool   `json:"dryRun"`
 }
 
-// The prose for the five operations here that cannot be typed ops. Every other route
-// in visor is typed and zipdoc lifts its doc comment into zipdoc_gen.go; these five
-// stay raw handlers for the reasons Mount states beside each — two launches whose
-// response shape depends on `dryRun`, two catalog passthroughs whose shape is Visor's
-// and not this package's, and one verb dispatch that streams an agent's answer back
-// verbatim. So there is no comment for anything to lift and the published document
-// would carry an operationId and nothing else. Two of the five SPEND REAL MONEY, so a
+// The prose for the three operations here that cannot be typed ops. Every other
+// route in visor is typed and zipdoc lifts its doc comment into zipdoc_gen.go;
+// these three stay raw handlers for the reasons Mount states beside each — two
+// launches whose response shape depends on `dryRun`, and one verb dispatch that
+// streams an agent's answer back verbatim. So there is no comment for anything to
+// lift and the published document would carry an operationId and nothing else.
+//
+// It said FIVE until the two catalog passthroughs became typed ops. Their reason —
+// "the shape is Visor's and not this package's" — is a true fact that was doing the
+// wrong work: it argues against MODELLING upstream's shape, not against publishing
+// the address. A json.RawMessage Out says "any JSON", which is the honest schema for
+// a contract we do not own, and carries the same bytes through. Two of the five SPEND REAL MONEY, so a
 // caller reading only the document has to be told where the quote is. Declared
 // through the same registry Register uses, so a description renders only while the
 // router actually serves the route.
@@ -516,20 +561,6 @@ func init() {
 			"body, so a launch always lands in the caller's OWN tenant and the machine it creates "+
 			"is only ever visible to that tenant. Fails closed: a validated principal is required "+
 			"(403 without one) and `size` (or its `instanceType` alias) is required (400).")
-	openapi.Describe("/v1/visor/compute/regions", http.MethodGet,
-		"The regions a machine or GPU can be launched into",
-		"Lists the launch regions the compute catalog offers, passed through verbatim from the "+
-			"provider so the shape stays the provider's single source of truth. The catalog is "+
-			"GLOBAL, not per-tenant: no owner is forwarded and every org sees the same list. It "+
-			"is still gated — a validated principal is required, 403 without one — because the "+
-			"catalog is what backs the launch drawer, not public marketing copy.")
-	openapi.Describe("/v1/visor/compute/sizes", http.MethodGet,
-		"The machine and GPU sizes that can be launched",
-		"Lists the instance sizes the compute catalog offers, passed through verbatim from the "+
-			"provider so the shape stays the provider's single source of truth. These are the "+
-			"values `size` accepts on a launch. The catalog is GLOBAL, not per-tenant: no owner "+
-			"is forwarded and every org sees the same list. It is still gated — a validated "+
-			"principal is required, 403 without one.")
 	openapi.Describe("/v1/visor/compute/bots/launch", http.MethodPost,
 		"Launch a bot machine — an agent plus the machine that runs it — or price one",
 		"Creates BOTH halves of a bot in one call and answers 201 with the bot: the cloud agent "+

@@ -6862,6 +6862,16 @@
    "read": true
   },
   {
+   "id": "get_visor_compute_regions",
+   "doc": "Regions lists the regions a machine can be launched in.\n\nThe catalog is GLOBAL — identical for every tenant — so no owner is forwarded\nupstream. It is still org-gated, because a catalog is a map of what this\ndeployment can spend money in and an anonymous caller has no business reading it.",
+   "read": true
+  },
+  {
+   "id": "get_visor_compute_sizes",
+   "doc": "Sizes lists the machine sizes available to launch, with their specifications.\n\nGlobal and org-gated, exactly as the region catalog is, and for the same reasons.",
+   "read": true
+  },
+  {
    "id": "listBots",
    "doc": "Returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1. A bindings read that fails only costs the reconciled status: a bot\nstill lists without it.",
    "read": true

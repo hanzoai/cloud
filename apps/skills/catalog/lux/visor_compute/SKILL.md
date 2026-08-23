@@ -1,7 +1,7 @@
 ---
 name: visor_compute
 version: "8.0.0"
-description: "Read visor compute: Returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs., Returns one of the caller org's bot machines with its agent binding., The regions a machine or GPU can be launched into."
+description: "Read visor compute: Returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs., Returns one of the caller org's bot machines with its agent binding., Regions lists the regions a machine can be launched i"
 ---
 
 # Lux · VISOR · compute
@@ -16,8 +16,8 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 - `GET https://api.lux.network/v1/visor/compute/bots` — Returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs.
 - `GET https://api.lux.network/v1/visor/compute/bots/{id}` — Returns one of the caller org's bot machines with its agent binding.
-- `GET https://api.lux.network/v1/visor/compute/regions` — The regions a machine or GPU can be launched into
-- `GET https://api.lux.network/v1/visor/compute/sizes` — The machine and GPU sizes that can be launched
+- `GET https://api.lux.network/v1/visor/compute/regions` — Regions lists the regions a machine can be launched in.
+- `GET https://api.lux.network/v1/visor/compute/sizes` — Sizes lists the machine sizes available to launch, with their specifications.
 
 ## Parameters
 

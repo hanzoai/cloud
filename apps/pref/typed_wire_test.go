@@ -1,4 +1,4 @@
-package meet
+package pref
 
 // typed_wire_test.go is the ledger: every operation this app serves is either a
 // typed op or a NAMED refusal carrying the wire fact that keeps it raw, and the two
@@ -20,22 +20,19 @@ import (
 // untypedByDesign is the CLOSED list, each entry re-read against the PINNED zip
 // rather than inherited.
 var untypedByDesign = map[string]string{
-	"POST /v1/meet/getToken": "answers the raw join token as text/plain — the office client reads it " +
-		"with res.text(). A typed op always marshals its Out to JSON, so typing this turns `<token>` " +
-		"into `\"<token>\"` under application/json and breaks every published bundle in the field.",
-	"GET /v1/meet/session": "its gate is principal.Minted — the identity boundary's OWN attestation, " +
-		"parked on the REQUEST — and a typed op holds a context, not a request. The context-side facts " +
-		"a typed op CAN read (OrgFrom / ValidatedFrom) derive from headers nothing strips in a " +
-		"hand-written plugin main, which is the forgeable signal this route was fixed to stop " +
-		"selecting on. Typing it would put the weaker fact back in front of the same rows.",
+	"PATCH /v1/pref": "three facts at once, none of them expressible. A 16 KiB REQUEST-BYTE cap " +
+		"answers 413 before any parse, and zip's global BodyLimit is far larger, so a typed op cannot " +
+		"see it. An empty body and a literal `null` body each answer 400, where op.invoke skips the " +
+		"decode for the first and decodes the second to a nil map. And the key space is OPEN — the " +
+		"only carrier is map[string]any, whose typeName is \"\" so no request body is published at all.",
 }
 
 // TestEveryRouteIsTypedOrNamed fails three ways: a served route that is neither
 // typed nor named, a name this app no longer serves, and a name that has BECOME a
 // typed op — which is how a refusal that stops being true gets noticed.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
-	app := mount(t, "k", "s")
-	doc, err := openapi.Spec(app, openapi.Info{Title: "meet", Version: "v1"})
+	app := mountPrefs(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "pref", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
@@ -46,7 +43,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 
 	served, typed := map[string]bool{}, map[string]bool{}
 	for path, item := range doc.Paths {
-		if !strings.HasPrefix(path, "/v1/meet") {
+		if !strings.HasPrefix(path, "/v1/pref") {
 			continue
 		}
 		for method := range item {
@@ -54,7 +51,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		}
 	}
 	for key := range reg.Ops {
-		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/meet") {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/pref") {
 			typed[key] = true
 		}
 	}
