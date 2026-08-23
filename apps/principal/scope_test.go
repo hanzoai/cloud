@@ -367,3 +367,40 @@ func TestPayerFrom_NoCallerIsNoPayer(t *testing.T) {
 		t.Errorf("PayerFrom(bare ctx) = %q want \"\" — no caller is no payer", got)
 	}
 }
+
+// TestProjectScopeFromIsProjectScopeAcrossTheSeam is the reason that function
+// exists rather than each plane applying its own default test. The storage key a
+// typed op derives and the one a request-side caller derives must be the same
+// key, or the same org's data lands in two places depending on which door it
+// came through.
+func TestProjectScopeFromIsProjectScopeAcrossTheSeam(t *testing.T) {
+	for header, want := range map[string]string{
+		"":        "", // names no project: the whole-org view
+		"default": "", // the literal default IS that same scope
+		"alpha":   "alpha",
+	} {
+		headers := map[string]string{}
+		if header != "" {
+			headers["X-Project-Id"] = header
+		}
+		serve(t, headers, func(c *zip.Ctx) error {
+			if got := principal.ProjectScope(c); got != want {
+				t.Errorf("ProjectScope(%q) = %q, want %q", header, got, want)
+			}
+			ctx := principal.WithProject(context.Background(), c)
+			if got := principal.ProjectScopeFrom(ctx); got != want {
+				t.Errorf("ProjectScopeFrom(%q) = %q, want %q", header, got, want)
+			}
+			return nil
+		})
+	}
+}
+
+// TestProjectScopeFromWithoutARequestNarrowsNothing pins the off-HTTP answer. A
+// context with no request behind it must resolve to the whole-org view rather
+// than to some project nobody selected.
+func TestProjectScopeFromWithoutARequestNarrowsNothing(t *testing.T) {
+	if got := principal.ProjectScopeFrom(context.Background()); got != "" {
+		t.Errorf("a bare context resolved to project %q; it selects no database", got)
+	}
+}
