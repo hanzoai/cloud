@@ -2414,9 +2414,9 @@ components:
           type: string
         replyChannel:
           description: |-
-            ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door
-            that started it has somewhere for it to talk. Empty means nobody is
-            listening and the run simply does not narrate — which is the app door's
+            ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the
+            surface that started it has somewhere for it to talk. Empty means nobody is
+            listening and the run simply does not narrate — which is the app surface's
             case, because /v1/agents/coding hands back a session id and the session stream is
             a better progress feed than any message could be.
 
@@ -4525,7 +4525,7 @@ components:
             knowledge leg returned, "code" for a span out of one of the org's own
             repositories. It is PROVENANCE — read it to say where a hit came from, not
             to branch on: the fused ranking is what decides order, and a caller that
-            filters by corpus wants the backend's own door instead.
+            filters by corpus wants the backend's own endpoint instead.
           type: string
         doctype:
           description: |-
@@ -6825,7 +6825,7 @@ components:
           description: |-
             Name is the provider id, and it is the value that goes back in the URL to
             start a login: GET /v1/team/account/auth/{provider}. This deployment
-            surfaces exactly one, "openid" — the hanzo.id door.
+            surfaces exactly one, "openid" — the hanzo.id provider.
           type: string
       type: object
     ProviderRow:
@@ -8219,7 +8219,7 @@ components:
             caller that scrubbed the returned result would still have streamed the
             unredacted bytes into the session as they were written — to a durable event
             store, an SSE feed and a chat thread — because the narration leaves the
-            sandbox by a different door from the result. Nothing downstream can take a
+            sandbox by a different path from the result. Nothing downstream can take a
             secret back out of a message that has already been delivered.
 
             The sandbox holds these only for the life of the one command, applies them
@@ -9404,8 +9404,8 @@ components:
         atPeriodEnd:
           description: |-
             AtPeriodEnd cancels at the end of the paid period rather than at once. It
-            defaults TRUE on the door, because a customer who cancels has already paid
-            for the period they are in.
+            defaults TRUE on the endpoint, because a customer who cancels has already
+            paid for the period they are in.
           type: boolean
         id:
           type: string
@@ -11543,7 +11543,7 @@ components:
           description: |-
             Tools are the tool names this agent may call, and the list IS the authority:
             an agent that declares none gets none. The single entry "*" means whatever the
-            fleet's tool door serves at the moment of the run, resolved per run rather
+            fleet's MCP server serves at the moment of the run, resolved per run rather
             than frozen here, which is how the default assistant reaches subsystems that
             shipped after it was defined. Empty array, never null.
           items:
@@ -11564,8 +11564,8 @@ components:
         served:
           description: |-
             Served reports that THIS process mounted it, so its tools are on this
-            process's door rather than behind a sibling this process only knows the name
-            of.
+            process's MCP server rather than behind a sibling this process only knows the
+            name of.
           type: boolean
       type: object
     aiMCPSurface:
@@ -11585,9 +11585,9 @@ components:
           type: array
         tools:
           description: |-
-            Tools is how many tools THIS PROCESS's door carries: its own typed-op
+            Tools is how many tools THIS PROCESS's MCP server carries: its own typed-op
             registry, projected. It is the only number a subsystem can state honestly —
-            what the FLEET's door carries is a question only the host can ask, and it
+            what the FLEET's server carries is a question only the host can ask, and it
             asks it by asking every subsystem (POST /v1/mcp, tools/list).
           type: integer
       type: object
@@ -14138,7 +14138,7 @@ components:
           description: |-
             DM is whether the transport carries a DIRECT message at all. True for slack,
             teams and telegram. False for discord, honestly: that ingress is guild-scoped
-            slash commands — an interaction without a guild id is refused at the door —
+            slash commands — an interaction without a guild id is refused at the endpoint —
             so nothing ever arrives classified as a DM, no reply route is ever learned
             for one, and a send addressed at a Discord DM is refused 409.
           type: boolean
@@ -14159,7 +14159,7 @@ components:
           description: |-
             Thread is whether a reply can be threaded UNDER a specific message. True for
             slack alone: it is the only transport whose ingress reports a thread
-            (thread_ts, published as the envelope's replyTo) and whose door posts back
+            (thread_ts, published as the envelope's replyTo) and whose send posts back
             into it. Discord's replyTo makes an inline reply rather than a thread,
             Telegram's answers one message id, and Teams carries no reply target at all —
             a replyTo sent to it is ignored.
@@ -16912,7 +16912,7 @@ components:
           description: |-
             Tools are the tool names this agent may call. Omitted or empty grants NONE —
             that default is the agent's authority and is not widened anywhere. The single
-            entry "*" means whatever the fleet's tool door serves at the time of each run.
+            entry "*" means whatever the fleet's MCP server serves at the time of each run.
           items:
             type: string
           type: array
@@ -19143,8 +19143,8 @@ components:
         token:
           description: |-
             Token is the crypto-random signing capability for this recipient. It is the
-            entire credential their door accepts, so treat it as a secret and hand it
-            only to them: the signing link is built from it.
+            entire credential their signing endpoint accepts, so treat it as a secret
+            and hand it only to them: the signing link is built from it.
           type: string
       type: object
     esignLink:
@@ -20868,7 +20868,7 @@ components:
           type: integer
         refused:
           description: |-
-            Refused is how many members were turned away at the door, before the store
+            Refused is how many members were turned away on arrival, before the store
             was touched — a missing entity, a timestamp that is not RFC 3339, a
             confidence outside [0,1]. The rest of the batch was still recorded.
           type: integer
@@ -21258,7 +21258,7 @@ components:
             (warehouse.go). It is reported on the DEGRADED report too, and deliberately: a
             warehouse that is unreachable is exactly when facts start failing their
             deliveries, so suppressing the number here would hide it precisely when it
-            moves. ANY NON-ZERO VALUE IS AN ALARM — it counts data the door already
+            moves. ANY NON-ZERO VALUE IS AN ALARM — it counts data the endpoint already
             answered 200 for.
         plane:
           $ref: '#/components/schemas/healthPlane'
@@ -43517,7 +43517,7 @@ components:
             accepted, because a future timestamp moves the aggregates' leading edge and
             leaves every later event for that subject reading as though it never
             happened. History older than the window is folded in from your own event
-            surface, not through this door.
+            surface, not through this endpoint.
           type: string
         device:
           description: |-
@@ -43886,7 +43886,7 @@ components:
             a case id, a decision id. At most 512 bytes, required at the write, and opaque
             to this plane — stored and returned verbatim, never resolved. It is what an
             adverse action is defended with, which is why an assertion carrying none is
-            refused at the door.
+            refused at the endpoint.
           type: string
         hold:
           description: |-
@@ -43976,7 +43976,7 @@ components:
         kinds:
           description: |-
             Kinds, Dispositions and Sources are the closed vocabularies. A value
-            outside them is refused at the door.
+            outside them is refused at the endpoint.
           items:
             type: string
           type: array
@@ -45450,7 +45450,7 @@ components:
           type: string
         tag:
           description: |-
-            Tag is the publish path segment, so both front doors write ONE index at ONE
+            Tag is the publish path segment, so both entry points write ONE index at ONE
             URL. It defaults to the pinned ref, and must be named explicitly for a
             branch.
           type: string
@@ -48333,12 +48333,12 @@ components:
           type: string
         paymentMethodId:
           description: MethodID names a card the subject already saved, for the saved-card
-            door.
+            endpoint.
           type: string
         sourceId:
           description: |-
             SourceID is a single-use card token from the payment form, for the token
-            door. It is vaulted as part of the charge, so a caller never holds card
+            endpoint. It is vaulted as part of the charge, so a caller never holds card
             numbers and this service never sees one.
           type: string
       type: object
@@ -49866,9 +49866,10 @@ components:
           type: string
         wires:
           description: |-
-            Wires is every protocol door onto World, REST first. It is deliberately NOT
-            a list of REST operations: GET /v1/openapi.json is the one enumeration of
-            those, and a second copy here would be a second thing to keep true.
+            Wires is every protocol entry point onto World, REST first. It is
+            deliberately NOT a list of REST operations: GET /v1/openapi.json is the one
+            enumeration of those, and a second copy here would be a second thing to keep
+            true.
           items:
             $ref: '#/components/schemas/worldWire'
           type: array
@@ -49933,8 +49934,9 @@ components:
       type: http
 info:
   description: 'The Hanzo Cloud API as a customer calls it: every operation under
-    /v1/ except the operator''s admin product, relay doors, legacy spellings and capabilities
-    still reached by flag. Tagged by product: the first path segment after /v1/.'
+    /v1/ except the operator''s admin product, relay routes, legacy spellings and
+    capabilities still reached by flag. Tagged by product: the first path segment
+    after /v1/.'
   title: Hanzo Cloud API
   version: v1
 openapi: 3.1.0
@@ -49942,9 +49944,9 @@ paths:
   /v1:
     get:
       description: |-
-        The API root. One row per capability — its name, the address it answers under, whether it is generally available, and the sentence it says about itself — plus the links to the document at /v1/openapi.json and the agent door.
+        The API root. One row per capability — its name, the address it answers under, whether it is generally available, and the sentence it says about itself — plus the links to the document at /v1/openapi.json and the agent MCP server.
 
-        It is a projection of that same document and carries the same surface a customer calls: the operator's admin product, the relay doors, the legacy spellings and any capability that is not yet generally available are in neither.
+        It is a projection of that same document and carries the same surface a customer calls: the operator's admin product, the relays, the legacy spellings and any capability that is not yet generally available are in neither.
 
         Unauthenticated by design, exactly as the document it derives from: a client has to be able to read the contract before it holds a credential, and a list of capability names grants nothing.
       operationId: get_capabilities
@@ -51239,7 +51241,7 @@ paths:
 
         The handle is a session id, and that is deliberate: the session is already the
         run's durable record and its live stream (/v1/agents/sessions/{id}/stream), so
-        this door does not grow a progress endpoint, a status endpoint or a cancel
+        this op does not grow a progress endpoint, a status endpoint or a cancel
         endpoint of its own. One way to watch a run, whoever started it.
 
         It is also how work CONTINUES. Pass an earlier run's session as `after` and
@@ -51595,7 +51597,7 @@ paths:
   /v1/agents/sessions/{id}/message:
     post:
       description: |-
-        Sends a steering message to a running session — the door a
+        Sends a steering message to a running session — the endpoint a
         human or another agent interrupts through. It requires a `message` or a
         `payload`; the other three commands do not.
       operationId: post_agents_sessions_by_id_message
@@ -51619,8 +51621,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/controlResult'
           description: ok
-      summary: Sends a steering message to a running session — the door a human or
-        another agent interrupts through.
+      summary: Sends a steering message to a running session — the endpoint a human
+        or another agent interrupts through.
       tags:
       - agents
       x-app: agents
@@ -53150,20 +53152,20 @@ paths:
   /v1/ai/mcp/tools:
     get:
       description: |-
-        Tools reports what THIS PROCESS's MCP door carries: how many tools its own
+        Tools reports what THIS PROCESS's MCP server carries: how many tools its own
         registry projects, optionally their names, and which subsystems this process
-        composed. It is the answer to "is this door up and does it have anything behind
-        it" — a question a status code cannot answer, since an empty door and a full
-        one are both 200. What the FLEET's door carries is the fleet door's own answer:
-        POST /v1/mcp, tools/list, which asks every subsystem and names the ones that
-        did not reply.
+        composed. It is the answer to "is this MCP server up and does it have anything
+        behind it" — a question a status code cannot answer, since an empty server and
+        a full one are both 200. What the FLEET's server carries is the fleet server's
+        own answer: POST /v1/mcp, tools/list, which asks every subsystem and names the
+        ones that did not reply.
       operationId: aiMCPTools
       parameters:
       - description: |-
           Names asks for this process's tool NAMES and not only how many there are.
-          Off by default: a list of names is a page, and the question this op exists
-          to answer ("is the door up and does it have anything behind it") is answered
-          by the count.
+          Off by default: a list of names is a page, and the question this op exists to
+          answer ("is the MCP server up and does it have anything behind it") is
+          answered by the count.
         in: query
         name: names
         required: false
@@ -53176,7 +53178,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/aiMCPSurface'
           description: ok
-      summary: 'Tools reports what THIS PROCESS''s MCP door carries: how many tools
+      summary: 'Tools reports what THIS PROCESS''s MCP server carries: how many tools
         its own registry projects, optionally their names, and which subsystems this
         process composed.'
       tags:
@@ -59068,7 +59070,7 @@ paths:
     post:
       description: |-
         Charges a card the caller already saved and credits the
-        balance. Same receipt and the same retry safety as the token door; the only
+        balance. Same receipt and the same retry safety as the token endpoint; the only
         difference is which card, so a caller topping up from a saved method never
         re-enters one.
       operationId: post_billing_topup
@@ -63357,11 +63359,11 @@ paths:
   /v1/commerce/catalog/models/refresh:
     post:
       description: 'Pulls the upstream model list and lands it through the same upsert
-        the push door uses, so the rule that a sync owns cost and an administrator
-        owns price holds no matter which door a row came through. It takes no body
-        — the upstream is READ rather than told. If that upstream cannot be read the
-        call answers 502 and writes NOTHING: a sync that cannot see its source must
-        never conclude the source is empty, because that conclusion would withdraw
+        the push endpoint uses, so the rule that a sync owns cost and an administrator
+        owns price holds no matter which endpoint a row came through. It takes no
+        body — the upstream is READ rather than told. If that upstream cannot be read
+        the call answers 502 and writes NOTHING: a sync that cannot see its source
+        must never conclude the source is empty, because that conclusion would withdraw
         every model on sale. The gate is a PLATFORM principal so the scheduled job''s
         service token qualifies.'
       operationId: post_commerce_catalog_models_refresh
@@ -64437,8 +64439,8 @@ paths:
 
         It BUILDS the handler rather than being it, because the screen has to sit inside
         the value every projection of this op dispatches to — see exposePayments. `charge`
-        is the money move, `take` is the screened door onto it, and the only registrable
-        one is the second.
+        is the money move, `take` is the screened entry point onto it, and the only
+        registrable one is the second.
       operationId: takePayment
       requestBody:
         content:
@@ -67847,7 +67849,7 @@ paths:
     post:
       description: |-
         Advance runs the ONE guarded transition of the formation machine. It is the
-        only door between stages: the actions populate data, this decides ordering.
+        only endpoint between stages: the actions populate data, this decides ordering.
 
         An edge the machine does not define answers 409; an edge whose guard is not yet
         satisfied answers 422 naming what is missing. Reaching the terminal `company`
@@ -70312,8 +70314,8 @@ paths:
 
         Publishing requires a name and an address, and the address must be free: another
         org already answering there is a conflict, never a takeover. Withdrawing closes
-        the public door only — items, grants and the access record are untouched, so an
-        org can go quiet and come back without losing anything.
+        the public endpoint only — items, grants and the access record are untouched, so
+        an org can go quiet and come back without losing anything.
 
         Only an admin of the org may call it. The org is the caller's own, so there is no
         field naming one and no way to point this at another tenant.
@@ -70506,7 +70508,7 @@ paths:
 
         Asking twice for the same thing from the same address is the SAME ask: the second
         answers with the first's id rather than opening a second row, which is also what
-        keeps an anonymous door from filling a tenant's store.
+        keeps an anonymous endpoint from filling a tenant's store.
       operationId: post_dataroom_trust_center_by_slug_requests
       parameters:
       - description: Slug is the centre's public address, taken from the path.
@@ -72164,7 +72166,7 @@ paths:
         own key so it survives sealing untouched: a completed document can always be
         compared against what was uploaded. Creation is recorded on the audit trail.
 
-        This is the sender's door: a validated principal is required, and the document
+        This is the sender's surface: a validated principal is required, and the document
         lands in that principal's OWN org. Isolation is physical rather than a filter —
         each tenant has its own store — so another org's document id is simply not
         there. A body over 32 MiB is refused with 413.
@@ -72351,9 +72353,10 @@ paths:
         Adds someone to a draft and mints their signing token.
 
         It answers 201 with the recipient's id and their signing TOKEN — the
-        crypto-random capability that is the only credential the signer's door accepts —
-        so this response is where the signing link is built from. A CC recipient is
-        recorded as already complete, because they are never asked to sign.
+        crypto-random capability that is the only credential the signer's surface
+        accepts — so this response is where the signing link is built from. A CC
+        recipient is recorded as already complete, because they are never asked to
+        sign.
 
         Only while DRAFT: adding a recipient to a document already sent is a 409,
         because the field layout and the turn order were fixed when it went out. An
@@ -72458,12 +72461,12 @@ paths:
         recipient as having opened it and records that on the audit trail, so this read
         has a side effect by design.
 
-        This door takes NO account: the signing token is the entire credential, and it
-        names the recipient, so a signer sees only their own fields and never the other
-        recipients' tokens. The token resolves to its owning tenant FIRST, before any
-        per-tenant store is opened, and the org segment is only checked against that
-        answer. An unknown or wrong-org token is one and the same 404, never a hint that
-        some other document exists.
+        This surface takes NO account: the signing token is the entire credential, and
+        it names the recipient, so a signer sees only their own fields and never the
+        other recipients' tokens. The token resolves to its owning tenant FIRST, before
+        any per-tenant store is opened, and the org segment is only checked against
+        that answer. An unknown or wrong-org token is one and the same 404, never a
+        hint that some other document exists.
       operationId: get_esign_o_by_org_sign_by_token
       parameters:
       - in: path
@@ -73268,9 +73271,9 @@ paths:
 
         THE STATUS SAYS WHETHER ANYTHING LANDED, so a green check can never mean an empty warehouse. 200 means at least one event was stored (or that nothing was sent), and a nonzero `dropped` beside a nonzero `accepted` is a PARTIAL batch, never a failed one — a batch is not refused whole for its worst element. If NOTHING was stored the request is an error, and it names the one thing that fixes it: 401 `ingest_key_required` when every event was refused for want of a credential (the same events land with a key), and 400 `unroutable_events` when the caller HAD capability and the body still named nothing storable.
 
-        ONE door for every wire a Hanzo surface emits, dispatched by the SHAPE of the body and never by a second path: a bare event object, a bare array of them, the {batch:[…]} / {events:[…]} envelope, the team console's snake_case array, and the PostHog wire (spelled `distinct_id`/`api_key`, which the canonical wire never uses). BATCH IS A BODY, NOT A PATH — there is no /v1/event/batch, because an array already is one.
+        ONE endpoint for every wire a Hanzo surface emits, dispatched by the SHAPE of the body and never by a second path: a bare event object, a bare array of them, the {batch:[…]} / {events:[…]} envelope, the team console's snake_case array, and the PostHog wire (spelled `distinct_id`/`api_key`, which the canonical wire never uses). BATCH IS A BODY, NOT A PATH — there is no /v1/event/batch, because an array already is one.
 
-        WHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the door itself grants nothing. A validated bearer or an org API key writes the full event at full fidelity. A PUBLISHABLE key (pk-, on Authorization: Bearer, x-hanzo-ingest-key, or ?ingest_key= for navigator.sendBeacon, which cannot set headers) does the same, and is the credential a browser bundle ships: it is deliberately NOT a secret, it resolves WHICH tenant a beacon belongs to and nothing more. A pk- never authenticates and can READ NOTHING — not this org's errors, not a lens, not any other route on this API — so a leaked one lets a stranger write into your stream, and never lets one read out of it. Reading these rows back always takes a real bearer. A Hanzo Team workspace token resolves its org at REDUCED capability: the signed account names the person, so a `distinctId` in the body cannot pin events on a colleague.
+        WHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the endpoint itself grants nothing. A validated bearer or an org API key writes the full event at full fidelity. A PUBLISHABLE key (pk-, on Authorization: Bearer, x-hanzo-ingest-key, or ?ingest_key= for navigator.sendBeacon, which cannot set headers) does the same, and is the credential a browser bundle ships: it is deliberately NOT a secret, it resolves WHICH tenant a beacon belongs to and nothing more. A pk- never authenticates and can READ NOTHING — not this org's errors, not a lens, not any other route on this API — so a leaked one lets a stranger write into your stream, and never lets one read out of it. Reading these rows back always takes a real bearer. A Hanzo Team workspace token resolves its org at REDUCED capability: the signed account names the person, so a `distinctId` in the body cannot pin events on a colleague.
 
         NO CREDENTIAL IS REFUSED: a write the server cannot attribute to a project is 401 `ingest_key_required`, and a credential that IS presented but resolves to no project is 403 `ingest_key_unknown`. Nothing is filed under a shared tenant — events nobody can read are worse than events nobody sent, because the caller is told it succeeded. A browser bundle therefore always ships a pk-, which is what /v1/event/tag.js takes.
 
@@ -73306,7 +73309,7 @@ paths:
       description: |-
         Accepts the CURRENT Sentry wire — the framed envelope a modern SDK posts, carrying its items in one request — so an application already instrumented with Sentry reports into Hanzo's error tracking by pointing its DSN here and changing nothing else.
 
-        CLOUD ROUTES IT AND READS NONE OF IT. The body is relayed byte-for-byte to the observability plane, which parses the wire, verifies the credential and answers; this door declares no response shape because it does not know one. A deployment with no observability plane mounted answers 503.
+        CLOUD ROUTES IT AND READS NONE OF IT. The body is relayed byte-for-byte to the observability plane, which parses the wire, verifies the credential and answers; this endpoint declares no response shape because it does not know one. A deployment with no observability plane mounted answers 503.
 
         THE CREDENTIAL IS A SENTRY DSN KEY, NOT A HANZO PRINCIPAL. This is one of the few writes on the platform that carries no bearer and no org header by design — a Sentry SDK has neither — and it is exempt from the principal gate for that reason. The observability plane verifies the DSN key itself, fail-closed: a request without a valid one is refused there, never admitted here. Presenting a Hanzo bearer instead does nothing.
 
@@ -73333,9 +73336,9 @@ paths:
   /v1/event/{project}/store:
     post:
       description: |-
-        Accepts the LEGACY Sentry wire: one event per request, what an SDK predating envelopes sends. Same door, same credential, same destination as the envelope endpoint — kept open so an old client reports without being upgraded first. New instrumentation has no reason to choose it.
+        Accepts the LEGACY Sentry wire: one event per request, what an SDK predating envelopes sends. Same handler, same credential, same destination as the envelope endpoint — kept open so an old client reports without being upgraded first. New instrumentation has no reason to choose it.
 
-        CLOUD ROUTES IT AND READS NONE OF IT. The body is relayed byte-for-byte to the observability plane, which parses the wire, verifies the credential and answers; this door declares no response shape because it does not know one. A deployment with no observability plane mounted answers 503.
+        CLOUD ROUTES IT AND READS NONE OF IT. The body is relayed byte-for-byte to the observability plane, which parses the wire, verifies the credential and answers; this endpoint declares no response shape because it does not know one. A deployment with no observability plane mounted answers 503.
 
         THE CREDENTIAL IS A SENTRY DSN KEY, NOT A HANZO PRINCIPAL. This is one of the few writes on the platform that carries no bearer and no org header by design — a Sentry SDK has neither — and it is exempt from the principal gate for that reason. The observability plane verifies the DSN key itself, fail-closed: a request without a valid one is refused there, never admitted here. Presenting a Hanzo bearer instead does nothing.
 
@@ -73459,7 +73462,7 @@ paths:
     get:
       description: |-
         Returns the caller org's most recent product events, newest first.
-        The console's raw-event view over event.event — the same table the capture doors
+        The console's raw-event view over event.event — the same table the capture endpoints
         fill — one row per stored event, with the row's attributes returned as the
         properties object.
 
@@ -73757,12 +73760,12 @@ paths:
         output, not a listing of the directory — and each is fetched from
         GET /v1/exec/download/{session}/{name}.
 
-        The tenant is the caller's, never the body's, at every door. A typed op is also
-        an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no
+        The tenant is the caller's, never the body's, at every entry point. A typed op is
+        also an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no
         route and therefore no middleware, so nothing there could have checked a
         credential. tenantOf refuses a context carrying neither a validated principal nor
-        exec's own admission marker, so those doors fail closed without a second gate to
-        keep in step.
+        exec's own admission marker, so those entry points fail closed without a second
+        gate to keep in step.
       operationId: post_exec
       requestBody:
         content:
@@ -77095,7 +77098,7 @@ paths:
   /v1/git/webhook:
     post:
       description: |-
-        GONE (410). This was the canonical forge's push-to-deploy door, and it never dispatched a build in its life.
+        GONE (410). This was the canonical forge's push-to-deploy endpoint, and it never dispatched a build in its life.
 
         It handed each verified push to cloud.OnGitPush, a single-registrant client whose only registrant lives in apps/platform. cloud runs each app as its own OS process, so in the git process that builder is nil forever — and this handler answered 204 either way. Delivered, signature valid, green on the forge's hook page, and nothing built.
 
@@ -77264,7 +77267,7 @@ paths:
       description: |-
         Runs a GraphQL query against this organization's assertions.
 
-        It is the one door here a caller can TRAVERSE: the REST ops each answer a single question, so composing them — the entities this one points at, and what each of those resolves to — costs a request per hop with the intermediate keys held by the caller. Here that is one query and the nesting is the answer's shape.
+        It is the one endpoint here a caller can TRAVERSE: the REST ops each answer a single question, so composing them — the entities this one points at, and what each of those resolves to — costs a request per hop with the intermediate keys held by the caller. Here that is one query and the nesting is the answer's shape.
 
         It adds no way to ask anything new. Every field runs the SAME operation the matching REST route runs, so the tenancy, the as-of bound, the traversal bounds and the conflict rule are the ones already in force; the schema is served by introspection.
 
@@ -79292,7 +79295,7 @@ paths:
       description: |-
         Answers which organization a publishable key belongs to — what a service calls to attribute a request that arrived carrying a key shipped in a browser. This is the noun spelling of `/v1/iam/resolve-key`, the same handler at the address that replaces it; both answer while callers migrate.
 
-        It names an ORGANIZATION and never a person. No path through it loads or returns a user, so a key placed in client code cannot become a way to learn who anyone is — which is the whole reason this is a separate door from the one below.
+        It names an ORGANIZATION and never a person. No path through it loads or returns a user, so a key placed in client code cannot become a way to learn who anyone is — which is the whole reason this is a separate endpoint from the one below.
 
         A key that is expired, secret rather than publishable, or simply unknown all answer with the same sentence and a `code` saying which it was. Only a confidential service that has already proved it may resolve keys reads that code — there is no anonymous caller here to probe which keys exist — and telling those apart is what lets a holder be told to re-mint an expired key instead of hunting a configuration error.
       operationId: get_iam_keys_org
@@ -79308,7 +79311,7 @@ paths:
 
         It resolves a KEY and nothing else. The verb it replaces also reads a user by `?id=`, and carrying that here would make this a second address for the user read — the exact thing being retired. Ask for a person by name at the user read; ask here only what a credential resolves to.
 
-        Requires a confidential caller: the resolver authenticates as an app, so a request without that credential resolves nothing rather than falling back to an anonymous lookup. An unresolvable key answers with a `code` distinguishing expired from wrong-door from unknown, so the holder can be told which one cure applies.
+        Requires a confidential caller: the resolver authenticates as an app, so a request without that credential resolves nothing rather than falling back to an anonymous lookup. An unresolvable key answers with a `code` distinguishing expired from wrong-endpoint from unknown, so the holder can be told which one cure applies.
       operationId: get_iam_keys_principal
       summary: Resolve a SECRET key to the principal it authenticates
       tags:
@@ -84494,7 +84497,7 @@ paths:
   /v1/integrations/openrouter/webhook:
     post:
       description: |-
-        OpenRouter's spend is invisible to every Hanzo money lens because those lenses read hanzo.cloud_usage and OpenRouter meters keys of its own. Point a Broadcast destination (Settings ▸ Observability ▸ Webhook) at this door and each generation span becomes ONE row in that same ledger with provider `openrouter`, so one query answers what we spend everywhere. Enable the Cost and Identity field categories: cost is the money and identity carries `openrouter.api_key_name`, which is what says WHICH key spent it — it lands in `account` as openrouter/<key name>.
+        OpenRouter's spend is invisible to every Hanzo money lens because those lenses read hanzo.cloud_usage and OpenRouter meters keys of its own. Point a Broadcast destination (Settings ▸ Observability ▸ Webhook) at this endpoint and each generation span becomes ONE row in that same ledger with provider `openrouter`, so one query answers what we spend everywhere. Enable the Cost and Identity field categories: cost is the money and identity carries `openrouter.api_key_name`, which is what says WHICH key spent it — it lands in `account` as openrouter/<key name>.
 
         AUTHENTICATION IS A HANZO KEY. Broadcast signs nothing; its only authentication is the destination's Headers map, so send a key as `Authorization: Bearer pk-…` and it is admitted exactly as /v1/event admits a beacon's: a project key resolves through the project that minted it, an IAM-issued key through IAM. That key names the org every row is filed under; it can write and cannot read. No key, or a key that names no org, is 401 and nothing is stored.
 
@@ -84757,7 +84760,7 @@ paths:
         It is deliberately public and unauthenticated, because it IS the credential
         exchange and runs before any principal exists. That makes it the one route in
         this subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather
-        than on any caller-supplied header, and body-capped at the same door.
+        than on any caller-supplied header, and body-capped in the same place.
 
         The submitted secret is never logged and never echoed, and failures collapse
         to one clean status with no upstream detail: 401 when the credential does not
@@ -88585,7 +88588,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/MCPResponse'
           description: Success
-      summary: 'The agent door: every subsystem''s operations as MCP tools'
+      summary: 'The agent endpoint: every subsystem''s operations as MCP tools'
       tags:
       - openapi
       x-app: openapi
@@ -88680,7 +88683,7 @@ paths:
   /v1/metrics/batch:
     post:
       description: |-
-        Writes every sample in a luxfi/metric `MetricBatch` into the calling org's store and answers `{written}`: the number of SAMPLES stored, not families and not metrics. This is the exact wire shape the ZAP `MsgMetricBatch` transport carries, so the HTTP door and the optional ZAP push receiver share one code path and one meaning — the transport is an optimisation, never a different contract.
+        Writes every sample in a luxfi/metric `MetricBatch` into the calling org's store and answers `{written}`: the number of SAMPLES stored, not families and not metrics. This is the exact wire shape the ZAP `MsgMetricBatch` transport carries, so the HTTP endpoint and the optional ZAP push receiver share one code path and one meaning — the transport is an optimisation, never a different contract.
 
         A counter or gauge lands as one sample. A histogram or summary contributes DERIVED `<name>_sum` and `<name>_count` series, so one metric can write more than one sample and `written` can exceed the number of metrics you sent. The batch's own `TimestampNs` stamps every sample it carries.
 
@@ -90938,7 +90941,7 @@ paths:
 
         The answer is a Location header and no body, which is why it is not a typed operation — declaring a JSON response for a redirect would publish a shape that does not exist and hide the header that is the entire point.
 
-        UNAUTHENTICATED by necessity: it is how a caller GETS a principal, so requiring one would be circular. It is not an open door — the code it carries is single-use and verified against the provider.
+        UNAUTHENTICATED by necessity: it is how a caller GETS a principal, so requiring one would be circular. It is not an open endpoint — the code it carries is single-use and verified against the provider.
       operationId: get_o11y_complete_google
       summary: Complete a Google sign-in
       tags:
@@ -102130,7 +102133,7 @@ paths:
       description: |-
         Serves the OpenAPI document for the routes this process actually answers — generated from the live router at request time, not from a checked-in file that can disagree with it.
 
-        On an app it is that app's own surface; on the fleet's front door it is the composed document for every mounted app. Unauthenticated by design: a client has to be able to read the contract before it holds a credential, and the document grants nothing.
+        On an app it is that app's own surface; on the fleet's public endpoint it is the composed document for every mounted app. Unauthenticated by design: a client has to be able to read the contract before it holds a credential, and the document grants nothing.
 
         Rendered once and served as bytes thereafter, so the route table's immutability is what makes a repeat request a memcpy rather than a re-encode of a megabyte document.
       operationId: get_openapi.json
@@ -102647,8 +102650,8 @@ paths:
       description: |-
         Answers every Application the delivery plane holds.
 
-        Scoped to the namespaces the caller's own validated org owns: the ROLE opens
-        the door and the tenant boundary is applied inside, so an admin of one org
+        Scoped to the namespaces the caller's own validated org owns: the ROLE admits
+        the caller and the tenant boundary is applied inside, so an admin of one org
         never observes another's.
       operationId: get_platform_cd
       responses:
@@ -102897,7 +102900,7 @@ paths:
   /v1/platform/hook:
     post:
       description: |-
-        The forge's push-to-deploy door. git.hanzo.ai runs as a separate server, so its pushes never reach this fleet's own receive-pack; without this a push to the host we call canonical builds nothing. A verified push is handed to the SAME two clients a native push travels — the single-registrant deploy trigger, and the many-subscriber lifecycle stream that notifies and indexes — and the build decision itself stays downstream in the one place that knows what a push means.
+        The forge's push-to-deploy endpoint. git.hanzo.ai runs as a separate server, so its pushes never reach this fleet's own receive-pack; without this a push to the host we call canonical builds nothing. A verified push is handed to the SAME two clients a native push travels — the single-registrant deploy trigger, and the many-subscriber lifecycle stream that notifies and indexes — and the build decision itself stays downstream in the one place that knows what a push means.
 
         PUBLIC at the JWT layer, because the forge carries no Hanzo session: AUTHENTICATION IS THE SIGNATURE. The HMAC covers the raw bytes and is verified BEFORE the payload is parsed, so an unauthenticated body is never decoded. The secret is read from KMS; a deployment that cannot read it answers 503 and processes nothing, rather than trusting a delivery it could not check. The body is read UNCOMPRESSED — a request declaring a Content-Encoding is refused 415 before it is touched, because decoding one is unbounded work bought with a few bytes and no credential. A bad signature is 401, a payload over 8 MiB is 413, and a malformed one 400.
 
@@ -105713,7 +105716,7 @@ paths:
 
         It writes into the SAME org-scoped store as /v1/projects — it ensures a
         project (framework `static`) for the resolved slug and records a deployment —
-        so this is a second door onto one publish pipeline, not a second copy of
+        so this is a second entry point to one publish pipeline, not a second copy of
         project state. Ordering is the billing contract: the hosting gate runs BEFORE
         any inference or upload, so a denied gate generates and uploads NOTHING, and
         the debit lands once, only after the site is actually live. The tokens are
@@ -107379,8 +107382,8 @@ paths:
         IT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;
         learning is a transformation over observations; a verdict is a query against the
         result. This op is the first two. [ops.score] is the third, it is pure, and it
-        is the ONE door to a verdict. They were one call, which meant you could not
-        record without training and could not train without being answered — and the
+        is the ONE entry point to a verdict. They were one call, which meant you could
+        not record without training and could not train without being answered — and the
         model ran twice over every event to produce a verdict the response carried and
         no caller read.
 
@@ -108142,7 +108145,7 @@ paths:
     post:
       description: |-
         Mints a short-lived grant to open the screen of a desktop
-        sandbox. Same properties as the terminal ticket, for the other door.
+        sandbox. Same properties as the terminal ticket, for the other endpoint.
       operationId: post_sandbox_by_id_screen_ticket
       parameters:
       - description: ID is the sandbox to address, from the path.
@@ -109958,7 +109961,7 @@ paths:
 
         A REFUSAL IS HTTP 200 carrying {"error": {severity, code, params}} — the platform Status the client translates — not a 4xx. An unreadable body, an unauthorized session and an unknown verb all arrive that way, so a caller that reads only the status code reads every failure here as a success.
 
-        NO CREDENTIAL IS EVER HANDLED HERE. login, signUp, the OTP verbs, password change and reset, join and the guest-token exchange each answer Unauthorized with "sign in at hanzo.id" — a stated policy, not an unknown method, so the door being shut is a fact a test can pin. Sessions come from the OAuth pair under /account/auth.
+        NO CREDENTIAL IS EVER HANDLED HERE. login, signUp, the OTP verbs, password change and reset, join and the guest-token exchange each answer Unauthorized with "sign in at hanzo.id" — a stated policy, not an unknown method, so the refusal is a fact a test can pin. Sessions come from the OAuth pair under /account/auth.
 
         Auth is the team session token: Authorization: Bearer, else the HttpOnly account-token cookie. The tenant is that token's SIGNED org claim, never a header, and selectWorkspace resolves only among the orgs the token proves membership of. It also demands an explicit workspaceUrl — it never falls back to a first workspace, and a slug that resolves in two of the caller's orgs answers Ambiguous rather than picking one.
       operationId: post_team_account
@@ -109974,7 +109977,7 @@ paths:
 
         A browser is the intended caller. Anything else must follow the Location AND keep the Set-Cookie, because the callback refuses a flow whose state it cannot match. That cookie carries the random nonce plus the client's navigateUrl, so the round trip needs no second channel, and it lives ten minutes — the whole budget for the hop.
 
-        The provider segment only picks a hint: the redirect_uri is ALWAYS the canonical openid callback, the one IAM has registered. Measured end to end, hanzo.id strips that hint today, so /auth/google and /auth/openid land on the same Hanzo sign-in page — the federation shortcut is an upstream fix, not a second door here.
+        The provider segment only picks a hint: the redirect_uri is ALWAYS the canonical openid callback, the one IAM has registered. Measured end to end, hanzo.id strips that hint today, so /auth/google and /auth/openid land on the same Hanzo sign-in page — the federation shortcut is an upstream fix, not a second endpoint here.
       operationId: get_team_account_auth_by_provider
       parameters:
       - in: path
@@ -110041,7 +110044,7 @@ paths:
       description: |-
         Writes the team session token into the HttpOnly `account-token` cookie — Secure, SameSite=Lax, whole-origin scope, thirty days — and answers {"result": true}. This is how the client turns the token it caught off the OAuth bounce into a credential page JS can no longer read, which IS the security property: script that cannot see the cookie cannot exfiltrate it, and every later call on the files, billing and collaborator planes authenticates from it when no bearer is sent.
 
-        The token is VERIFIED — signature and expiry, against this service's own signing secret — BEFORE it is stored. Anything this service did not sign is 401 and nothing is written; persisting a caller-supplied value unchecked would be a session-fixation door, where an attacker pins a cookie the victim's browser then presents as its own.
+        The token is VERIFIED — signature and expiry, against this service's own signing secret — BEFORE it is stored. Anything this service did not sign is 401 and nothing is written; persisting a caller-supplied value unchecked would be a session-fixation hole, where an attacker pins a cookie the victim's browser then presents as its own.
 
         The token may arrive as `token` in the JSON body or, when the body is absent or unparseable, from the Authorization bearer — an unreadable body is NOT an error here. The sibling DELETE clears this same cookie and signs the browser out of team only: the IAM cookie set alongside it is a different credential with its own lifetime and is left alone.
       operationId: put_team_account_cookie
@@ -110054,7 +110057,7 @@ paths:
     get:
       description: |-
         Returns the identity providers this deployment starts a login
-        with. It is always exactly one — hanzo.id. Which identities that door accepts
+        with. It is always exactly one — hanzo.id. Which identities that provider accepts
         (Google, GitHub, passkey, password) is IAM's question, answered on IAM's own
         page next to the identity check and the training-data consent that must
         precede a first session; listing them here would be a second place holding
@@ -111043,7 +111046,7 @@ paths:
       description: |-
         Answers 405. A todo board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
 
-        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
+        Offering it here would put a second endpoint on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
 
         What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and read the schedule a milestone is. Those are the routes beside this one.
       operationId: post_todo_projects
@@ -111057,7 +111060,7 @@ paths:
       description: |-
         Answers 405. A todo board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
 
-        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
+        Offering it here would put a second endpoint on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
 
         What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and read the schedule a milestone is. Those are the routes beside this one.
       operationId: delete_todo_projects_by_key
@@ -111104,7 +111107,7 @@ paths:
       description: |-
         Answers 405. A todo board IS a repository on this deployment's forge, so creating, renaming and deleting one is a FORGE operation carried out with FORGE permissions.
 
-        Offering it here would put a second door on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
+        Offering it here would put a second endpoint on the same object, guarded by this surface instead of by the forge — a weaker guard on the same thing. So the route exists and refuses, rather than 404ing: "not this service's job" and "no such thing" are different facts, and the body names the forge so a caller knows where the job IS done.
 
         What this surface DOES own is the work on a board: list the boards you can see, read and file their issues, move a card between columns, and read the schedule a milestone is. Those are the routes beside this one.
       operationId: patch_todo_projects_by_key
@@ -111475,7 +111478,7 @@ paths:
       description: |-
         Runs one of the caller's activated tools and answers with its output.
 
-        This is the door onto the tool plane's DYNAMIC half — the half no build-time
+        This is the endpoint onto the tool plane's DYNAMIC half — the half no build-time
         catalogue can hold, because it is per-tenant: an org's connected connector
         actions, its authored skills, its agents and functions, and the tools of every
         external MCP server it registered. A tool's existence, its price and its
@@ -111521,7 +111524,7 @@ paths:
 
         This is the SHELF an org picks from. A listing with a streamable-http endpoint
         can be enabled as-is — POST /v1/tools/mcp/servers with its id — and its tools then
-        join the org's tool plane and the fleet's MCP door. A listing that only ships a
+        join the org's tool plane and the fleet's MCP server. A listing that only ships a
         stdio package needs a process to run it, which is why the transports are on
         every entry rather than implied.
 
@@ -111714,7 +111717,7 @@ paths:
     post:
       description: |-
         Gives the caller's org one more external MCP server, so its tools
-        join the org's tool plane and the fleet's MCP door. It is the ONE way an org
+        join the org's tool plane and the fleet's MCP server. It is the ONE way an org
         gains a server, whether it typed the URL in or enabled a catalog listing: both
         write the SAME record, and `source` says which it was. A second registration
         path would be a second place for a server to exist, and then a second place to
@@ -111748,7 +111751,7 @@ paths:
                 $ref: '#/components/schemas/MCPServer'
           description: created
       summary: Gives the caller's org one more external MCP server, so its tools join
-        the org's tool plane and the fleet's MCP door.
+        the org's tool plane and the fleet's MCP server.
       tags:
       - tools
       x-app: tools
@@ -112201,7 +112204,7 @@ paths:
     get:
       description: |-
         Reads YOUR organization's whole trust centre, including the addresses of your
-        own gated documents. Same shape as the published door; the difference is that
+        own gated documents. Same shape as the published endpoint; the difference is that
         this one is resolved from your validated bearer and shows you your own
         artifacts.
       operationId: get_trust
@@ -112433,7 +112436,7 @@ paths:
     get:
       description: |-
         Lists your organization's documents. Because this is your own centre, a gated
-        artifact carries its address here; through the published door it does not.
+        artifact carries its address here; through the published endpoint it does not.
       operationId: get_trust_documents
       responses:
         "200":
@@ -112596,7 +112599,7 @@ paths:
         framework's whole published clause list, its documents, subprocessors,
         policies, knowledge base, updates and risk profile.
 
-        This is the PUBLIC door and needs no credential, because a published trust
+        This is the PUBLIC endpoint and needs no credential, because a published trust
         centre is a public document. It answers only for an organization that has
         published one — an organization that has not is not found rather than empty,
         since an empty centre and a centre nobody meant to show read the same and are
@@ -112605,7 +112608,7 @@ paths:
         A gated document appears here with its title, its type and its date and NO
         address: the listing says the artifact exists and that reading it takes a
         grant. Nothing an independent auditor signed is ever released through this
-        door.
+        endpoint.
       operationId: get_trust_published_by_org
       parameters:
       - description: Org is the organization's slug — the name in its address.
@@ -114997,8 +115000,8 @@ paths:
         results are public web pages, identical for every caller, so nothing here is
         scoped and nothing here can leak across orgs. A typed op is also an MCP tool
         and a CLI command, and tools/call invokes it with no route and therefore no
-        middleware — so the gate is in the handler, where every door reaches it, rather
-        than in a middleware only one door passes through.
+        middleware — so the gate is in the handler, where every caller reaches it,
+        rather than in a middleware only one caller passes through.
       operationId: search_web
       requestBody:
         content:
@@ -115024,7 +115027,7 @@ paths:
       description: |-
         Takes {url} and answers {success, data:{markdown, metadata}} — the exact contract a firecrawl client decodes. The fetch, extraction and optional browser render run in-process; there is no crawler pod to be down.
 
-        The shared service key is required as an Authorization Bearer, compared in constant time: unset on the deployment is 503, missing or wrong is 401. Unlike search, a validated principal does NOT substitute for it — this is the service-to-service door.
+        The shared service key is required as an Authorization Bearer, compared in constant time: unset on the deployment is 503, missing or wrong is 401. Unlike search, a validated principal does NOT substitute for it — this is the service-to-service endpoint.
 
         A page is archived under the caller's own org and project, taken from the verified principal when there is one, so a scrape lands in the same corpus /v1/crawl fills and a URL already read under that scope is answered from the archive without touching the network. A service caller carrying no principal shares the unscoped prefix.
 
@@ -115126,8 +115129,8 @@ paths:
   /v1/world:
     get:
       description: |-
-        Answers GET /v1/world — the product's front door, naming every wire this
-        surface answers on.
+        Answers GET /v1/world — the product's public endpoint, naming every wire
+        this surface answers on.
 
         It exists because two of those wires are INVISIBLE to the generated document.
         /v1/world/mcp and /v1/world/zap are carved off the cloud catch-all by the
@@ -115149,8 +115152,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/worldIndex'
           description: ok
-      summary: Answers GET /v1/world — the product's front door, naming every wire
-        this surface answers on.
+      summary: Answers GET /v1/world — the product's public endpoint, naming every
+        wire this surface answers on.
       tags:
       - world
       x-app: world
@@ -115490,8 +115493,8 @@ tags:
   name: iam
 - description: Package index is fast full-text search over your own data, typos forgiven.
   name: index
-- description: 'Package ingress is your front door: automatic TLS certificates and
-    hostname routing to any backend, changed live.'
+- description: 'Package ingress is your edge: automatic TLS certificates and hostname
+    routing to any backend, changed live.'
   name: ingress
 - description: Package integrations is how your org connects third-party accounts
     like Slack, and revokes them.
@@ -115557,9 +115560,9 @@ tags:
     them, chart them.'
   name: o11y
 - description: 'The served contract: the OpenAPI document every client, tool list
-    and command group is generated from, its command projection, the agent door that
-    offers the same operations over MCP, and the index a client follows from the API
-    root to reach any of it.'
+    and command group is generated from, its command projection, the agent endpoint
+    that offers the same operations over MCP, and the index a client follows from
+    the API root to reach any of it.'
   name: openapi
 - description: 'Package plan is the plan catalog: every tier you can buy, what it
     costs, and what it grants.'
@@ -115679,8 +115682,8 @@ tags:
     their keys, and sign with them.'
   name: wallet
 - description: 'Package web3 is the chain-access surface: which chains this deployment
-    can reach, a JSON-RPC door onto each, and the two token reads every wallet UI
-    needs.'
+    can reach, a JSON-RPC endpoint onto each, and the two token reads every wallet
+    UI needs.'
   name: web3
 - description: 'Package webhooks is how your app hears about events: register an endpoint,
     pick the events, get each one delivered and signed.'

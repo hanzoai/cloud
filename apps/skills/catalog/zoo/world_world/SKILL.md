@@ -1,7 +1,7 @@
 ---
 name: world_world
 version: "8.0.0"
-description: "Read world world: Answers GET /v1/world — the product's front door, naming every wire this surface answers on.."
+description: "Read world world: Answers GET /v1/world — the product's public endpoint, naming every wire this surface answers on.."
 ---
 
 # Zoo · WORLD · world
@@ -14,7 +14,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/world` — Answers GET /v1/world — the product's front door, naming every wire this surface answers on.
+- `GET https://api.zoo.ngo/v1/world` — Answers GET /v1/world — the product's public endpoint, naming every wire this surface answers on.
 
 ## Response
 
