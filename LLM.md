@@ -5793,6 +5793,58 @@ reactor config, org-scoped like every repo route. The code index is also per-rep
 indexes the default branch only — a feature-branch push is skipped so it cannot
 clobber the canonical index. None of these decide whether a ref syncs.
 
+## What one unit of metered work costs — the meter authority, asked over the plane
+
+The platform meters work in several apps — a GB-month of block storage, a
+thousand characters translated, a risk screen. Each priced its own with a
+compiled constant plus an env override and the same eight-line resolver copied
+beside it. An env var keeps no history, so nothing could answer what we charged
+in March or who changed it, and three copies of one rule is three chances for
+them to disagree.
+
+The price is a ROW now, in commerce's meter authority, edited at admin.hanzo.ai
+with an audit trail. The apps that meter are separate processes and cannot open
+that store, so they ask the process that owns it — `plane.BillingRate`, published
+by `apps/commerce/rate_rpc.go`, the same shape `resource_billing_peer.go` uses for
+the spend gate and for the same reason.
+
+**It takes no subject.** What a GB-month costs does not depend on whose bytes they
+are; a plan may include some of it and a wallet pays for the rest, and both of
+those are asked elsewhere.
+
+**The floor is a PRICE, not an error path.** `cloud.RateNano` (and the unit
+wrappers below) take the caller's compiled constant as a floor, and a meter with
+no row, an authority that is unwell, and a process with no commerce beside it all
+return it. Every floor is what that app charged before the authority existed, so
+an unreadable price keeps charging exactly what it charged yesterday. Failing
+instead would stop a customer's storage provisioning over a missing row.
+
+**`Found` rides beside the number** because ZERO IS A PRICE — something the
+platform meters and gives away — and it must not read the same as "nothing is
+published", which is what sends a caller to its floor. A bool carries a
+difference a number cannot. A row that is stored but not sold (`Status` draft or
+archived) reads as absent, the same answer the public plan catalog gives.
+
+**Ask in the unit you bill in.** `RateCents` and `RateMicros` take the floor in
+the unit the answer comes back in, so a call site names one number and does no
+arithmetic. That is not sugar: three apps each held a factor and multiplied up
+then divided down — six expressions and four constants for two facts, one of
+which was already declared elsewhere in the tree. The factors are unexported,
+because a caller holding one is a caller doing the conversion itself.
+
+**Testing a conversion needs two tests.** A round trip CANNOT see a wrong factor:
+multiply and divide by the same wrong number and the floor comes back unchanged.
+Measured — with `nanoPerCent` wrong by 10x, `TestRateUnitsRoundTripTheFloor`
+passes and only `TestTheUnitFactorsAreWhatTheyClaim`, which reads the factors in
+one direction against arithmetic tied to the seeded rates, fails.
+
+Two products are deliberately OUTSIDE the authority, and a test in commerce
+refuses them: a MODEL is priced by its `ModelRoute` row (`InputPrice`/
+`OutputPrice`, resolved org-first and read ahead of config and the compiled
+table), and a TOOL is priced by its marketplace listing, set by the publisher who
+is paid for it. A row here would be a second answer to a question that already
+has one, on the money path, with no stated precedence.
+
 ## The money plane runs locally, and `make e2e` proves the prepaid cycle
 
 `commerce` is co-resident (`apps/commerce.go` → `commercemod.Embed` on cloud's own zip
