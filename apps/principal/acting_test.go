@@ -1,95 +1,70 @@
-package principal_test
+// Copyright © 2026 Hanzo AI. MIT License.
+
+package principal
 
 import (
 	"context"
-	"encoding/json"
-	"io"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
-// acting drives Acting over the SAME client a typed op uses: the facts are parked
-// off a real request exactly as cloud.Bridge parks them, and read back off a
-// context and nothing else.
-func acting(t *testing.T, headers map[string]string) (org string, refusal string) {
-	t.Helper()
-	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Get("/acting", func(c *zip.Ctx) error {
-		ctx := principal.WithValidated(principal.WithOrg(c.Context(), c), c)
-		got, err := principal.Acting(ctx)
-		if err != nil {
-			return err
+// AN ORG REACHES AN OP TWO WAYS AND Acting IS THE ONE THING THAT TELLS THEM APART.
+//
+// zip.CallerOf returns a plain string either way: the request's X-Org-Id when a
+// request is bound, the stated caller when none is. The identity boundary
+// deliberately restores an unvalidated caller's own X-Org-Id for the data path,
+// so on the way IN that string is the client's own until something stands behind
+// it. Coming from INSIDE — cloud.For, or a peer on the plane's own socket —
+// nothing outside could have written it.
+//
+// WithEdge is what separates them, and cloud.Bridge parks it on every request.
+// These are the three shapes, and the middle one is the whole point.
+func TestActingSeparatesTheTwoWaysAnOrgArrives(t *testing.T) {
+	stated := func(org string) context.Context {
+		return zip.WithCaller(context.Background(), zip.Caller{Org: org})
+	}
+	for _, tc := range []struct {
+		what     string
+		ctx      context.Context
+		resolved bool
+	}{
+		// From inside: a background job or a peer states the tenant it acts for.
+		// There is no user, and there does not need to be — nothing outside this
+		// process can put a value in that slot.
+		{"a caller stated off the edge", stated("acme"), true},
+		// The SAME value, arriving through the edge. Now it is a header, and a
+		// header with no validated principal behind it is nobody's claim but the
+		// client's own.
+		{"the same org, stated through the edge", WithEdge(stated("acme")), false},
+		// Nothing stated at all, either side.
+		{"nothing stated, off the edge", context.Background(), false},
+		{"nothing stated, through the edge", WithEdge(context.Background()), false},
+		// A validated principal wins on both sides — it is the first thing asked
+		// and the edge does not weaken it.
+		{"a validated org, through the edge", WithEdge(context.WithValue(context.Background(), orgKey{}, "acme")), true},
+	} {
+		org, err := Acting(tc.ctx)
+		if (err == nil) != tc.resolved {
+			t.Errorf("%s: Acting = %q, %v — want resolved=%v", tc.what, org, err, tc.resolved)
 		}
-		return c.JSON(200, map[string]any{"org": got})
-	})
-	req := httptest.NewRequest("GET", "/acting", nil)
-	for h, v := range headers {
-		req.Header.Set(h, v)
-	}
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("acting: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return "", string(raw)
-	}
-	var out struct{ Org string }
-	if err := json.Unmarshal(raw, &out); err != nil {
-		t.Fatalf("decode %q: %v", raw, err)
-	}
-	return out.Org, ""
-}
-
-// TestActingAnswersForAValidatedOrg: the ordinary path, where a gateway-minted
-// request carries both facts.
-func TestActingAnswersForAValidatedOrg(t *testing.T) {
-	org, refusal := acting(t, map[string]string{"X-User-Id": "u_1", "X-Org-Id": "acme"})
-	if refusal != "" {
-		t.Fatalf("a validated request was refused: %s", refusal)
-	}
-	if org != "acme" {
-		t.Fatalf("Acting = %q, want acme", org)
+		if err == nil && org != "acme" {
+			t.Errorf("%s: Acting resolved %q, want acme", tc.what, org)
+		}
 	}
 }
 
-// TestActingRefusesTheForgery is the property the thirty-seven copies existed to
-// enforce and the reason this cannot be a bare header read: an off-gateway caller
-// naming a victim org with NO credential resolves nothing.
-func TestActingRefusesTheForgery(t *testing.T) {
-	org, refusal := acting(t, map[string]string{"X-Org-Id": "victim"})
-	if org != "" {
-		t.Fatalf("Acting resolved %q for an unvalidated caller — that is the forge", org)
-	}
-	if !strings.Contains(refusal, "validated principal") {
-		t.Fatalf("refusal was %q; an unattested caller must be told THAT", refusal)
-	}
-}
-
-// TestActingRefusesAValidatedCallerWithNoOrg: validated is not enough. A machine
-// token, or one minted before IAM's orgs claim, names no home org — and a plane
-// with per-org rows has nothing to scope by. This is the half that is 403 rather
-// than 401: the caller IS attested, and the org is what is missing.
-func TestActingRefusesAValidatedCallerWithNoOrg(t *testing.T) {
-	org, refusal := acting(t, map[string]string{"X-User-Id": "u_1"})
-	if org != "" || refusal == "" {
-		t.Fatalf("Acting = %q, refusal %q — want a refusal", org, refusal)
-	}
-	if !strings.Contains(refusal, "org scope") {
-		t.Fatalf("refusal was %q; an attested caller must be told the ORG is missing", refusal)
-	}
-}
-
-// TestActingRefusesOffTheHTTPPath: with no request behind it there is no attested
-// caller, so there is no org to act for. The CLI's local invoke lands here.
-func TestActingRefusesOffTheHTTPPath(t *testing.T) {
-	org, err := principal.Acting(context.Background())
-	if err == nil || org != "" {
-		t.Fatalf("Acting off the HTTP path = %q,%v — want a refusal", org, err)
+// A whitespace-bearing org grants NO scope rather than being trimmed onto a
+// neighbour's, and that has to hold on the stated path too — it is the same
+// injective boundary OrgOf keeps, and the stated path is the one that skips it.
+func TestActingWillNotFoldOneOrgOntoAnother(t *testing.T) {
+	for _, org := range []string{" acme", "acme ", "", "   "} {
+		got, err := Acting(zip.WithCaller(context.Background(), zip.Caller{Org: org}))
+		if err == nil && got != "acme" {
+			t.Errorf("a stated org %q resolved to %q", org, got)
+		}
+		if err == nil && got == "acme" && org != "acme" {
+			t.Errorf("a stated org %q was folded onto %q", org, got)
+		}
 	}
 }

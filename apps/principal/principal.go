@@ -34,6 +34,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -245,6 +246,34 @@ func WithOrg(ctx context.Context, c *zip.Ctx) context.Context {
 	return context.WithValue(ctx, orgKey{}, org)
 }
 
+// WithActing re-points the tenant a derived call acts for, for the one caller
+// that legitimately acts on somebody else's books: cloud.As, where an operator
+// carries their OWN identity — which the callee re-checks — while the tenant
+// being read is another org's.
+//
+// It exists because [OrgFrom] has two readers of what it calls one fact, and
+// re-pointing only the caller made them disagree. A derived call that crossed a
+// socket resolved the new tenant (the callee reads headers) and the same call
+// CO-RESIDENT resolved the old one (zip.Here hands the caller's own context
+// straight to the handler, where the slot below still held the original org and
+// is asked first). One call, two answers, decided by whether the two apps
+// happened to be in one binary — which is exactly the thing plane.Ask exists to
+// keep from being the caller's business.
+//
+// It grants nothing. Naming an org was never what granted anything: the callee
+// applies its own rules to the identity, which is carried whole and unchanged.
+// The org is read VERBATIM — never trimmed. Trimming first and checking after
+// is the same fold wearing a check: "acme " would pass as "acme" and two
+// distinct orgs would share one namespace, which is precisely what
+// OrgHasUnsafeRune refuses. Empty is not "unsafe", it names nothing, and it is
+// how a caller says "keep my own tenant".
+func WithActing(ctx context.Context, org string) context.Context {
+	if org == "" || OrgHasUnsafeRune(org) || len(org) > MaxOrgLen {
+		return ctx
+	}
+	return context.WithValue(ctx, orgKey{}, strings.Clone(org))
+}
+
 // OrgFrom resolves the org WithOrg parked — the typed-op counterpart of Org, and
 // the same value. The org is never an In field: an In field is caller-supplied,
 // so a tenant key read from one is a cross-tenant read the caller asserted for
@@ -341,11 +370,84 @@ func sentence(validated bool) string {
 
 func refused(validated bool) error { return zip.ErrForbidden(sentence(validated)) }
 
+// OrgHasUnsafeRune reports whether s carries any whitespace, control, or
+// zero-width/format rune — the class that defeats the injectivity of the
+// org→namespace map. strings.TrimSpace (and fasthttp's own header-value OWS
+// trimming) silently drop such runes at the edges, so two DISTINCT IAM org
+// names ("acme" vs "acme ", or an NBSP/ZWSP variant) would collapse onto ONE
+// namespace / image ref — a cross-org fold. The identity trust boundary
+// REFUSES to grant org-scoping from an org bearing one of these (fail secure)
+// instead of folding it, so distinct raw names never collide and no namespace
+// is ever derived from an invisible-character identifier.
+//
+// Case / '-' / '.' / other visible punctuation are deliberately NOT unsafe:
+// those fold INJECTIVELY through the slugger's hash. Only the invisible /
+// edge-trimmable class — which no injective fold can survive once transport
+// strips it — is rejected. A legitimate IAM org slug never contains such a
+// rune, so no real caller is affected.
+//
+// It is DERIVED from namespace.Sanitize rather than re-deciding the rune class,
+// because the identity boundary and the slugger have to refuse exactly the same
+// names: this predicate is the reason a request gets no org-scoping, and
+// Sanitize's "" is the reason that org could not have named a database anyway.
+// Two spellings of one rule is a rule that eventually disagrees with itself.
+// The empty org is not "unsafe" — it names nothing, which callers already
+// handle — so it is excluded, exactly as it was when the loop lived here.
+func OrgHasUnsafeRune(s string) bool { return s != "" && namespace.Sanitize(s) == "" }
+
+// AN ORG REACHES AN OP TWO WAYS AND THEY ARE VOUCHED FOR DIFFERENTLY, which is
+// the third thing this collapses. From OUTSIDE it rode in as a header, and a
+// header is the client's own until something stands behind it — OrgFrom above is
+// that, and nothing else is admitted, because the boundary deliberately restores
+// an unvalidated caller's own org header for the data path.
+//
+// From INSIDE there is no header in play. cloud.For states the tenant a
+// background call acts for, and a peer on the internal plane's socket states one
+// too; both are in-process or in-cluster and neither is reachable from outside,
+// which is exactly what EdgeFrom asks. OrgFrom cannot admit them by construction
+// — it composes validated-ness AND an org, and a background job has no user to be
+// validated — so a plane op that asked it alone refused the caller a door had
+// just admitted, and one that read the caller alone trusted a header nobody
+// vouched for. Both were live. This is the one rule that is neither.
 func Acting(ctx context.Context) (string, error) {
 	if org, ok := OrgFrom(ctx); ok {
 		return org, nil
 	}
+	if !EdgeFrom(ctx) {
+		// Read exactly as the boundary reads a header: REFUSED for an unsafe rune,
+		// never trimmed. TrimSpace here would fold "acme " onto "acme" — the
+		// cross-org collapse OrgHasUnsafeRune exists to prevent — and this is the
+		// one path with no boundary in front of it to have caught it already.
+		if org := zip.CallerOf(ctx).Org; org != "" && !OrgHasUnsafeRune(org) && len(org) <= MaxOrgLen {
+			return org, nil
+		}
+	}
 	return "", RefusedFrom(ctx)
+}
+
+// edgeKey names the slot that says a CLIENT REQUEST is behind this context.
+// Unexported zero-size type, exactly like orgKey.
+type edgeKey struct{}
+
+// WithEdge marks a context as having come through the identity boundary — a
+// request from outside. cloud.Bridge parks it, unconditionally, because it is a
+// fact about the DOOR and not about the caller: an unvalidated request came
+// through the edge just as much as a validated one did.
+//
+// It exists so [Acting] can tell the two ways an org reaches an op apart. That is
+// not a distinction anything else here can make: zip.CallerOf answers with the
+// request's headers when a request is bound and with the stated caller when none
+// is, and returns the same plain string either way.
+func WithEdge(ctx context.Context) context.Context {
+	return context.WithValue(ctx, edgeKey{}, true)
+}
+
+// EdgeFrom reports whether this call came from outside. False for an in-process
+// caller, for a background job, and for a peer arriving on the internal plane's
+// own socket — none of which pass the edge.
+func EdgeFrom(ctx context.Context) bool {
+	ok, _ := ctx.Value(edgeKey{}).(bool)
+	return ok
 }
 
 // validatedKey names the slot the WEAKER fact crosses the same client in.
