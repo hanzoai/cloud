@@ -1832,7 +1832,7 @@
       "get": {
         "operationId": "listOrganizations",
         "summary": "Returns the organizations you can act in, the ones you belong to first and the rest after, newest first, narrowed by an optional query against the name or the display name.",
-        "description": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.\n\nTHE SCOPE IS THE HANDLER'S OWN, so it holds at every door. The Guard refuses a\nbearerless request before this runs, but the agent door carries a typed op to\nits handler with no middleware in front of it — a handler that read no\nprincipal would answer such a caller with the whole registry. Reading the\nprincipal here is what makes the answer the same one over both.",
+        "description": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.\n\nTHE SCOPE IS THE HANDLER'S OWN, so it holds at every endpoint. The Guard refuses\na bearerless request before this runs, but the MCP server carries a typed op to\nits handler with no middleware in front of it — a handler that read no\nprincipal would answer such a caller with the whole registry. Reading the\nprincipal here is what makes the answer the same one over both.",
         "tags": [
           "iam"
         ],
@@ -5782,7 +5782,7 @@
             "type": "string"
           },
           "scope": {
-            "description": "Scope is the key's ACCESS CLASS, orthogonal to Type (which names the bound\nprincipal). Empty (the default, \"secret\") is a full key: a pk- publishable\nhalf AND a confidential sk- half, the sk- authenticating a server-side reader.\nKeyScopePublish is a WRITE-ONLY publishable key — a pk- half only, no secret —\nthat resolves to just an ORG (never a principal) at the ingest door and is safe\nto ship in client JS. A missing value on an existing row reads as the default,\nso every pre-Scope key is a secret key unchanged.",
+            "description": "Scope is the key's ACCESS CLASS, orthogonal to Type (which names the bound\nprincipal). Empty (the default, \"secret\") is a full key: a pk- publishable\nhalf AND a confidential sk- half, the sk- authenticating a server-side reader.\nKeyScopePublish is a WRITE-ONLY publishable key — a pk- half only, no secret —\nthat resolves to just an ORG (never a principal) at the ingest endpoint and is safe\nto ship in client JS. A missing value on an existing row reads as the default,\nso every pre-Scope key is a secret key unchanged.",
             "type": "string"
           },
           "state": {
