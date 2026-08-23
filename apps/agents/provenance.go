@@ -184,20 +184,6 @@ func guardEvent(payload string) []leakFinding {
 	return out
 }
 
-// refuseLeak is the 422 a guarded write answers with: the count, the first rule
-// that fired, and every finding — rule, severity, line, MASKED preview, and the
-// SHA-256 fingerprint that lets the author confirm they rotated the right value.
-// The secret itself is never in this body, because it was never stored.
-func refuseLeak(c *zip.Ctx, f []leakFinding) error {
-	return c.JSON(http.StatusUnprocessableEntity, map[string]any{
-		"status": http.StatusUnprocessableEntity,
-		"code":   "secret_in_transcript",
-		"error": "transcript rejected: " + strconv.Itoa(len(f)) + " secret(s) detected (" +
-			f[0].Rule + "). Secrets belong in KMS and are referenced by name; rotate the exposed value.",
-		"findings": f,
-	})
-}
-
 // ---- the public read ----
 
 // buildTurn is one readable turn: what was said or done, and the commit that
