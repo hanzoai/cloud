@@ -471,7 +471,7 @@
       "post": {
         "operationId": "post_sandbox_by_id_screen_ticket",
         "summary": "Mints a short-lived grant to open the screen of a desktop sandbox.",
-        "description": "Mints a short-lived grant to open the screen of a desktop\nsandbox. Same properties as the terminal ticket, for the other door.",
+        "description": "Mints a short-lived grant to open the screen of a desktop\nsandbox. Same properties as the terminal ticket, for the other endpoint.",
         "tags": [
           "sandbox"
         ],
@@ -748,7 +748,7 @@
             "type": "array"
           },
           "blind": {
-            "description": "Blind is the set of secrets this command must never publish.\n\nIt exists because output is redacted where it is PRODUCED or not at all. A\ncaller that scrubbed the returned result would still have streamed the\nunredacted bytes into the session as they were written — to a durable event\nstore, an SSE feed and a chat thread — because the narration leaves the\nsandbox by a different door from the result. Nothing downstream can take a\nsecret back out of a message that has already been delivered.\n\nThe sandbox holds these only for the life of the one command, applies them\nto every stream leaving it, and never logs or stores them.",
+            "description": "Blind is the set of secrets this command must never publish.\n\nIt exists because output is redacted where it is PRODUCED or not at all. A\ncaller that scrubbed the returned result would still have streamed the\nunredacted bytes into the session as they were written — to a durable event\nstore, an SSE feed and a chat thread — because the narration leaves the\nsandbox by a different path from the result. Nothing downstream can take a\nsecret back out of a message that has already been delivered.\n\nThe sandbox holds these only for the life of the one command, applies them\nto every stream leaving it, and never logs or stores them.",
             "items": {
               "type": "string"
             },

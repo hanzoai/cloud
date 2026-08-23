@@ -6413,7 +6413,7 @@
             "type": "integer"
           },
           "service": {
-            "description": "Service is the emitting service's name, from the span's own service column.\nThe whole cloud binary reports under ONE such name however many subsystems\nit mounts, which is what the per-subsystem board next door exists to split\napart.",
+            "description": "Service is the emitting service's name, from the span's own service column.\nThe whole cloud binary reports under ONE such name however many subsystems\nit mounts, which is what the per-subsystem board beside it exists to split\napart.",
             "type": "string"
           }
         },
