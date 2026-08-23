@@ -304,6 +304,18 @@ func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
 			// older IAM omits it, which decodes to "" — unrestricted, the same answer
 			// a key with no limit gives, so a version skew cannot silently deny.
 			Scope string `json:"scope"`
+			// BillingAccount names WHICH LEDGER this key spends from, and IAM answers
+			// it here exactly as it answers it in a token's claim. Dropping it did not
+			// leave the payer unknown — it left it WRONG: account.Payer falls out of
+			// its named-account arm to the shape rule, which answers Person(org, name)
+			// and never pools the signup org. For a service account that names a
+			// wallet no funding path addresses, so a first-party key reads $0 beside
+			// the balance it is entitled to spend, while a token for the same identity
+			// reads the real one.
+			//
+			// An older IAM omits the field, which decodes to "" — the same answer as
+			// before this was read, so a version skew changes nothing.
+			BillingAccount string `json:"billing_account"`
 		} `json:"data"`
 	}
 	if json.Unmarshal(raw, &env) != nil || env.Status != "ok" || env.Data == nil {
@@ -322,6 +334,10 @@ func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
 			PreferredUsername: strings.TrimSpace(env.Data.Name),
 			Email:             strings.TrimSpace(env.Data.Email),
 			IsAdmin:           env.Data.IsAdmin,
+			// Onto the SAME field a token's `billing_account` claim lands on, so
+			// renderBillingAccount mints X-Billing-Account-Id identically for a key
+			// and a session. One payer, however the caller authenticated.
+			BillingAccount: strings.TrimSpace(env.Data.BillingAccount),
 		},
 		// The org came from the SUBJECT: IAM resolved this accessKey to a user row,
 		// and that row's owner is the tenant. No application mints it and no claim
