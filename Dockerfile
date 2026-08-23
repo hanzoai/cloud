@@ -404,11 +404,25 @@ LABEL org.opencontainers.image.revision="${REVISION}" \
 # processes, all parented to /cloud, which drove the node to PID pressure and
 # got cloud ITSELF evicted. A zombie costs no CPU and no memory, so nothing but
 # an eviction ever surfaces it. tini reaps them.
-RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs git tini \
+# sqlcipher carries the CLI, and it is the ONE that can open these files: every
+# store here is SQLCipher (cek), so a stock `sqlite3` opens them as "file is not a
+# database" — the encryption is not a mode you pass, it is the format. It is also
+# what makes a CONSISTENT copy possible at all: `.backup` walks the pager and
+# takes a lock, where copying cloud.db + -wal + -shm out of a live pod is a
+# snapshot of three files at three instants. Measured the hard way — a 2.4 GB
+# stream out of a running pod broke twice mid-transfer and left a torn archive.
+#
+# It answers to `sqlite3` too, because that is what every runbook and every hand
+# types, and on this image the engine behind that name IS sqlcipher. The line
+# below already tells the same lie at the library level for the same reason
+# (libsqlcipher linked as libsqlite3.so.0); one name, one engine, both layers.
+RUN apk add --no-cache ca-certificates tzdata sqlcipher sqlcipher-libs git tini \
     && SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)" \
     && test -n "$SC" \
     && ln -sf "$SC" /usr/lib/libsqlite3.so.0 \
-    && test -x /sbin/tini
+    && ln -sf "$(command -v sqlcipher)" /usr/bin/sqlite3 \
+    && test -x /sbin/tini \
+    && test -x /usr/bin/sqlite3
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
