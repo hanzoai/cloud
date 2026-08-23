@@ -105,7 +105,7 @@ func (in *Durable) wire(org string) (jetstream.ConsumerConfig, error) {
 	}
 	filter := ""
 	if in.Filter != "" {
-		if filter, err = wireSubject(org, in.Filter); err != nil {
+		if filter, err = absSubject(org, in.Filter); err != nil {
 			return jetstream.ConsumerConfig{}, err
 		}
 	}

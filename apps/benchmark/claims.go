@@ -450,7 +450,7 @@ func (o ops) putClaims(ctx context.Context, in *putClaimsIn) (*putClaimsOut, err
 	return out, nil
 }
 
-// claimRow projects a claim onto the wire shape. ClaimRow states its fields
+// claimRow projects a claim onto the row shape. ClaimRow states its fields
 // rather than embedding publishedClaim because an embedded struct's field docs
 // do not reach the published registry — the wire gate catches exactly that, and
 // an undescribed property on a public surface is the thing it is there to stop.

@@ -332,7 +332,7 @@ type payment struct {
 	via string
 	// cents and currency are the amount the door was asked to move, in that
 	// currency's minor unit — the pair both mints declare under the same two names
-	// ([wireAmount], PaymentIn) because both are projections of one core.
+	// ([bodyAmount], PaymentIn) because both are projections of one core.
 	//
 	// They are kept as themselves rather than read back out of facts, which holds the
 	// SCORER's vocabulary: there the amount is nano-USD, converted, and absent
@@ -415,7 +415,7 @@ func riskGate(lg luxlog.Logger) screen { return screen{lg: lg, receipt: receiptO
 // prose became RequireCSRF's. A gate must not be able to rewrite the document.
 func (s screen) route(next zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
-		cents, currency := wireAmount(c)
+		cents, currency := bodyAmount(c)
 		p := seen(c, c.Path(), cents, currency)
 		if err := s.decide(c.Context(), p); err != nil {
 			return err
@@ -719,7 +719,7 @@ func (s screen) decide(ctx context.Context, p payment) error {
 // a request the door has already answered.
 //
 // The AMOUNT is a parameter because it is the one fact the transports carry
-// differently: the raw door has bytes and reads them with [wireAmount], the typed op
+// differently: the raw door has bytes and reads them with [bodyAmount], the typed op
 // is handed them decoded. Everything else comes off the request, which every
 // projection with a connection behind it has.
 func seen(c *zip.Ctx, door string, amountCents int64, currency string) payment {
@@ -1033,7 +1033,7 @@ func serviceOrg(c *zip.Ctx) string {
 //
 // ONE READER FOR EVERY DOOR, and the AMOUNT IS A PARAMETER because that is the one
 // fact the transports carry differently while the doors carry it identically. The raw
-// door has only bytes and reads them with [wireAmount]; the typed op is handed the
+// door has only bytes and reads them with [bodyAmount]; the typed op is handed the
 // same two values already decoded, which over MCP is the only place they exist at all
 // — the request body there is a JSON-RPC envelope with the payment inside
 // `arguments`, so a reader that went back to the wire would state no value on exactly
@@ -1088,7 +1088,7 @@ func paymentSignals(c *zip.Ctx, amountCents int64, currency string) map[string]s
 	return paymentFacts(cloud.ClientIP(c), cloud.ClientCountry(c), amountCents, currency)
 }
 
-// wireAmount is the amount a RAW door was asked to move, read off its request body —
+// bodyAmount is the amount a RAW door was asked to move, read off its request body —
 // the one door that has no decoded input to be handed. commerce's top-up body and the
 // typed op's PaymentIn declare the amount and the currency under the SAME field names
 // (`amountCents`, `currency`), because both are projections of one core that takes one
@@ -1097,7 +1097,7 @@ func paymentSignals(c *zip.Ctx, amountCents int64, currency string) map[string]s
 // A body that does not decode is not the screen's refusal to make: the handler behind
 // it validates its own wire and answers 400 in its own words. Here it simply means the
 // amount was not observed.
-func wireAmount(c *zip.Ctx) (int64, string) {
+func bodyAmount(c *zip.Ctx) (int64, string) {
 	var body struct {
 		AmountCents int64  `json:"amountCents"`
 		Currency    string `json:"currency"`
