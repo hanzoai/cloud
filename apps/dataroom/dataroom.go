@@ -105,11 +105,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("dataroom.Mount: empty DataDir")
 	}
 
-	// Native /v1/dataroom/health — always answers (HealthOwner), no auth, BEFORE
-	// any fallible setup, so liveness never depends on the bundle/index/storage.
-	app.Get("/v1/dataroom/health", func(c *zip.Ctx) error {
-		return c.JSON(http.StatusOK, map[string]string{"service": "dataroom", "status": "ok"})
-	})
+	// Native /v1/dataroom/health — always answers (HealthOwner), no auth, BEFORE any
+	// fallible setup, so liveness never depends on the bundle, the index or storage.
+	//
+	// A TYPED op, declared ABSOLUTELY on the app rather than on the group the rest
+	// of the surface hangs off. That is what "before any fallible setup" means in
+	// code: the group is built after the bundle loads, and a bundle that fails to
+	// load returns early — so a probe registered there would not exist in exactly
+	// the case an operator is probing for. It was raw only because of WHERE it is
+	// registered, never because of its wire, which is why its own ledger carried it
+	// as a DEBT rather than a refusal.
+	zip.Get(cloud.ZipApp(app), "/v1/dataroom/health", probeOps{}.health)
 
 	bundle, err := dataroombundle.Bundle()
 	if err != nil {
@@ -580,3 +586,35 @@ func Shutdown(context.Context) error {
 	mounted = nil
 	return firstErr
 }
+
+// probeOps carries the liveness probe. It holds NOTHING, which is the point: the
+// probe must answer before the bundle, the index and the object store exist, so it
+// can depend on none of them.
+type probeOps struct{}
+
+// dataroomLiveness is what the probe answers. It is a constant shape — the route
+// reports that this process is up and serving, and deliberately reports nothing
+// about the bundle or the store, because a probe that failed on a dependency would
+// take the whole subsystem out of rotation over a data room nobody is reading.
+type dataroomLiveness struct {
+	// Service names the subsystem answering, so a probe response is attributable
+	// when several are collected together.
+	Service string `json:"service"`
+	// Status is `ok`. This probe has no degraded answer by design: it reports
+	// process liveness and nothing that could be false while the process serves.
+	Status string `json:"status"`
+}
+
+// Health reports that the data room subsystem is up.
+//
+// It answers before the bundle loads, holds no state and touches no store, so it
+// stays true in exactly the situation an operator is probing for. It says nothing
+// about whether a room can be OPENED — that is what the room operations answer —
+// because a liveness probe that fails on a dependency takes a working process out
+// of rotation.
+func (probeOps) health(context.Context, *noProbeInput) (*dataroomLiveness, error) {
+	return &dataroomLiveness{Service: "dataroom", Status: "ok"}, nil
+}
+
+// noProbeInput is the In of an op that reads nothing off the wire.
+type noProbeInput struct{}

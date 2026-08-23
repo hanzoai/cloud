@@ -3092,15 +3092,24 @@ Split into the three terms, the package reads honestly for the first time —
     `decodeBody` refuses with **413 on the raw length before anything is parsed**
     against a PACKAGE-LOCAL `maxBody` far below zip's global BodyLimit — the same
     body-cap class apps/channels, apps/prefs and apps/esign each record.
-  - OWED (2): `GET /health` is a bare 200 with a constant body — no second status,
-    no error branch — and stays raw only because it must answer BEFORE the bundle
-    loads, which is a fact about WHERE it is registered, not about its wire; the
-    absolute-on-the-app form apps/world, pricing, plan, prefs and share already
-    use registers at the same point and types cleanly. `GET /view/{linkId}` reads
-    NO body, so the 413 cap that blocks its two POST siblings does not apply, and
-    its tenancy is not a blocker either — the handler resolves the org from the
-    link index rather than from a principal, and a typed op can call the same
-    index. What it needs is an Out for the viewer payload, which the bundle owns.
+  - OWED (1, was 2). **`GET /health` is PAID**: it was a bare 200 with a constant
+    body, raw only because it must answer BEFORE the bundle loads — a fact about
+    WHERE it is registered, not about its wire. Declared absolutely on the app (the
+    form apps/world, pricing, plan, prefs and share already use) it registers at the
+    same point and types cleanly. dataroom 19 → 20; the ratchet 781 → 780.
+    `GET /view/{linkId}` is **still owed, on a sharper reason**: neither thing that
+    looks like a blocker is one — it reads no body, so the 413 cap that stops its
+    POST siblings does not apply, and `ops.run` already takes an explicit org, so
+    resolving the tenant from the link index is fine. What it needs is a field list
+    that lives in another repo. Measured, so the next attempt starts from data: a
+    DATAROOM_LINK answers `{link:{id,name,linkType,expired,allowDownload,
+    emailProtected,hasPassword,dataroom:{id,pId,name,description}}}`, and
+    `dataroomLink.linkType` is documented as DATAROOM_LINK **or** DOCUMENT_LINK — so
+    a second variant exists, and `json.Unmarshal` into a struct DROPS what the
+    struct does not name. Guessing means a document link silently losing the object
+    it is about. **That is the captable rule applied to a RESPONSE**, and it is
+    worth stating in that direction too: a shape nothing reports is worse than a
+    route nothing publishes.
 
 Read the prose that stood here before — "10 typed, 7 refused", every refusal
 sound — and the package looks finished. It was neither: the count was wrong and

@@ -1617,11 +1617,11 @@
       "sha256": "772f08e5e0dbf1198114a9550031d03fa8dcc268196424062c1588553b0a6b31"
     },
     {
-      "description": "Read dataroom health: Liveness of the dataroom subsystem.",
+      "description": "Read dataroom health: Health reports that the data room subsystem is up..",
       "name": "dataroom_health",
       "path": "dataroom_health/SKILL.md",
       "service": "dataroom",
-      "sha256": "403548184e636d5d38d74b7a48d4bd22a59494fa71b3143fad644f5def3a1be7"
+      "sha256": "fdfb89873463f5cd4ce9c025c264740032652b35587fd892b1f3a46869eaeac0"
     },
     {
       "description": "Read dataroom links: Returns every live share link in the caller org's own store, newest first, with the controls a visitor will meet: whether an address is required, whether a password is set, the allow and deny lists, whether download is permitted, and when the link expires..",

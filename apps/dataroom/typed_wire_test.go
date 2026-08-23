@@ -46,16 +46,19 @@ var untypedByDesign = map[string]string{
 // Keeping the two lists apart is what stops a reader concluding this package is
 // at its floor. It is not: two of the eight raw addresses are simply unwritten.
 var typingOwed = map[string]string{
-	"GET /v1/dataroom/health": "a bare 200 with a constant body — no second status, no error branch, " +
-		"nothing wire-bound. It stays raw only because it must answer BEFORE the bundle loads, which is " +
-		"a fact about WHERE it is registered and not about its wire: declared absolutely on the app " +
-		"(zip.Get(zapp, \"/v1/dataroom/health\", …), the form apps/world, pricing, plan, prefs and share " +
-		"already use) it registers at the same point and types cleanly.",
-	"GET /v1/dataroom/view/{linkId}": "reads NO body (viewer(s, …, readBody=false)), so the 413 cap that " +
-		"blocks its two POST siblings does not apply to it. Its tenancy is not a blocker either: the " +
-		"handler resolves the org from the link index rather than from a principal, and a typed op can " +
-		"call the same index. What it needs is an Out for the viewer payload, which the bundle owns — " +
-		"apps/goja's Raw/Scalar kit, already used by this package, is the shape for that.",
+	"GET /v1/dataroom/view/{linkId}": "the two things that LOOK like blockers are not: it reads no body, " +
+		"so the 413 cap that stops its POST siblings does not apply, and its tenancy is fine — the org " +
+		"comes from the link index and ops.run already takes an explicit org. What it needs is the " +
+		"DOCUMENT_LINK variant's field list, which lives in the bundle (github.com/hanzoai/dataroom " +
+		"goja/src/routes) and not here.\n\n" +
+		"MEASURED, so the next attempt starts from data: a DATAROOM_LINK answers " +
+		"{link:{id,name,linkType,expired,allowDownload,emailProtected,hasPassword," +
+		"dataroom:{id,pId,name,description}}}. linkType is documented on dataroomLink as DATAROOM_LINK " +
+		"or DOCUMENT_LINK, so a second variant exists and presumably carries `document` where this one " +
+		"carries `dataroom` — and json.Unmarshal into a struct DROPS what the struct does not name, so " +
+		"a guess here means a document link silently losing the object it is about. That is the captable " +
+		"rule applied to a response: a shape nothing reports is worse than a route nothing publishes. " +
+		"Read the bundle route, then write the Out.",
 }
 
 // TestEveryRouteIsTypedOrNamed sums THREE terms against the served surface, so

@@ -1,7 +1,7 @@
 ---
 name: dataroom_health
 version: "8.0.0"
-description: "Read dataroom health: Liveness of the dataroom subsystem."
+description: "Read dataroom health: Health reports that the data room subsystem is up.."
 ---
 
 # Zoo · DATAROOM · health
@@ -14,11 +14,11 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/dataroom/health` — Liveness of the dataroom subsystem
+- `GET https://api.zoo.ngo/v1/dataroom/health` — Health reports that the data room subsystem is up.
 
 ## Response
 
-- `/v1/dataroom/health` → JSON object.
+- `/v1/dataroom/health` → `dataroomLiveness` object with fields: `service`, `status`.
 
 ## Example
 
