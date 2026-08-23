@@ -28,6 +28,37 @@ import (
 // serving it is strictly better than making a customer wait on a lookup.
 var rateCallTimeout = 2 * time.Second
 
+// RateCents is [RateNano] in cents, and [RateMicros] is it in micro-USD. The
+// floor is given in the SAME unit the answer comes back in, so a call site names
+// one number in the unit it bills in and does no arithmetic at all.
+//
+// They exist because the conversion WAS the duplication. Three apps each held a
+// factor, multiplied their floor up and divided the answer down — six
+// expressions and four constants for two facts, one of which (nanoPerCent) was
+// already declared elsewhere in the tree. A factor of a thousand written six
+// times is a factor of a thousand that eventually differs in one of them.
+//
+// The authority speaks nano because that is the precision a cheap meter needs;
+// what a caller bills in is the caller's; converting between them is neither's,
+// and belongs here, once, beside the number being converted.
+func RateCents(ctx context.Context, product, meter string, floorCents int64) int64 {
+	return RateNano(ctx, product, meter, floorCents*nanoPerCent) / nanoPerCent
+}
+
+// RateMicros is [RateNano] in micro-USD. See [RateCents].
+func RateMicros(ctx context.Context, product, meter string, floorMicros int64) int64 {
+	return RateNano(ctx, product, meter, floorMicros*nanoPerMicro) / nanoPerMicro
+}
+
+// A nano-dollar is 10^-9 USD, so a cent is 10^7 of them and a micro-USD is 10^3.
+//
+// Unexported on purpose: a caller holding the factor is a caller doing the
+// conversion itself, which is the thing the two wrappers exist to stop.
+const (
+	nanoPerCent  int64 = 10_000_000
+	nanoPerMicro int64 = 1_000
+)
+
 // RateNano is the published price of one unit of product/meter, in nano-dollars,
 // or floor when the platform has not published one.
 //

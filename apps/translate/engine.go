@@ -232,10 +232,6 @@ func (b bulk) Translate(ctx context.Context, j Job) (Result, error) {
 // inference it is, through the model plane's meter.
 const defaultBulkPriceUUSDPer1kChars int64 = 20
 
-// nanoPerMicro converts the authority's nano-dollars into the micro-USD this app
-// bills in, stated once beside the only place that crosses the boundary.
-const nanoPerMicro int64 = 1000
-
 // charsPerUnit is what ONE billed unit of bulk translation is. The authority
 // prices a unit; this says how many characters make one.
 const charsPerUnit int64 = 1000
@@ -260,6 +256,5 @@ func bulkMicros(ctx context.Context, chars int) int64 {
 // A var so a test can price the tier at ZERO — a legal price that makes it free,
 // and the case the gate-order proof needs.
 var bulkRate = func(ctx context.Context) int64 {
-	return cloud.RateNano(ctx, "translate", "bulk-chars",
-		defaultBulkPriceUUSDPer1kChars*nanoPerMicro) / nanoPerMicro
+	return cloud.RateMicros(ctx, "translate", "bulk-chars", defaultBulkPriceUUSDPer1kChars)
 }
