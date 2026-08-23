@@ -83,7 +83,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -259,30 +258,39 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// on this path by design — so the whole request travels: path, query, headers
 	// and body. Its answer is relayed VERBATIM, because a 401 "invalid ingest
 	// key" is the SDK's signal to stop retrying and must not be reshaped.
-	obsError := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(io.LimitReader(r.Body, maxEnvelopeBytes))
-		if err != nil {
-			http.Error(w, "read body", http.StatusBadRequest)
-			return
+	obsError := func(c *zip.Ctx) error {
+		// The transport already refuses anything past the fleet's 16 MiB
+		// BodyLimit before a handler runs, so this reads a bounded body and then
+		// applies the envelope's own smaller ceiling. Truncating rather than
+		// refusing is what this path has always done — worth knowing that a
+		// truncated envelope does not parse downstream, so the round trip is
+		// spent either way, but changing it would change what an SDK sees.
+		body := c.Body()
+		if len(body) > maxEnvelopeBytes {
+			body = body[:maxEnvelopeBytes]
 		}
-		hdr := make([]planeops.Header, 0, len(r.Header))
-		for k := range r.Header {
-			hdr = append(hdr, planeops.Header{Name: k, Value: r.Header.Get(k)})
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), obsErrorTimeout)
+		fc := c.Fiber()
+		hdr := make([]planeops.Header, 0, 16)
+		fc.Request().Header.VisitAll(func(k, v []byte) {
+			hdr = append(hdr, planeops.Header{Name: string(k), Value: string(v)})
+		})
+		ctx, cancel := context.WithTimeout(c.Context(), obsErrorTimeout)
 		defer cancel()
 		out, err := cloud.Ask[planeops.ObsErrorIn, planeops.ObsErrorOut](ctx, peerO11y, planeops.ObsErrorPost,
-			&planeops.ObsErrorIn{Path: r.URL.Path, Query: r.URL.RawQuery, Headers: hdr, Body: body})
+			&planeops.ObsErrorIn{
+				Path:    c.Path(),
+				Query:   string(fc.Request().URI().QueryString()),
+				Headers: hdr,
+				Body:    body,
+			})
 		if err != nil || out == nil {
-			http.Error(w, "error ingest unavailable", http.StatusServiceUnavailable)
-			return
+			return zip.Errorf(http.StatusServiceUnavailable, "error ingest unavailable")
 		}
 		if out.ContentType != "" {
-			w.Header().Set("Content-Type", out.ContentType)
+			c.SetHeader("Content-Type", out.ContentType)
 		}
-		w.WriteHeader(out.Status)
-		_, _ = w.Write(out.Body)
-	}))
+		return c.Bytes(out.Status, out.Body)
+	}
 	app.Post("/v1/event/:project/envelope", obsError)
 	app.Post("/v1/event/:project/store", obsError)
 
