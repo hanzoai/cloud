@@ -165,6 +165,9 @@ type state struct {
 	// stop one. In memory for the same reason the tickets are: it holds a live
 	// goroutine's cancel, which exists nowhere but here. See work.go.
 	work *work
+	// The lifetime policy, read ONCE here so a sweep cannot see two policies
+	// halfway through a pass. See lifecycle.go.
+	clk clocks
 }
 
 // storeFor is the ONE way this package reaches a store, through
@@ -198,6 +201,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		rt:      newRuntime(),
 		tickets: newTickets(),
 		work:    newWork(),
+		clk:     newClocks(),
 	}}
 	Routes(app, s)
 	// The peer half. Registered beside the routes because they are two adapters
@@ -223,7 +227,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		"namespace", s.State.rt.ns, "image", s.State.rt.image,
 		"bare", s.State.rt.bare,
 		"cluster", s.State.rt.ready() == nil,
-		"reapEvery", reapEvery, "idleAfter", idleAfter)
+		"reapEvery", reapEvery, "idleConnected", s.State.clk.connected,
+		"idleDisconnected", s.State.clk.disconnected, "maxLife", s.State.clk.absolute)
 	return nil
 }
 
@@ -336,6 +341,7 @@ func New(deps cloud.Deps) (*Service, error) {
 		rt:      newRuntime(),
 		tickets: newTickets(),
 		work:    newWork(),
+		clk:     newClocks(),
 	}}, nil
 }
 

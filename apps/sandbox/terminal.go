@@ -299,7 +299,7 @@ func attach(s *Service, c *zip.Ctx, run func(context.Context, Sandbox, *pipe, *f
 	// would be closed before the first keystroke. What bounds it instead is the
 	// LEASE — the same expiry the reaper enforces — so a terminal cannot outlive
 	// the sandbox it is attached to even if the reaper is behind.
-	ctx, stop := context.WithDeadline(context.Background(), leaseEnd(m))
+	ctx, stop := context.WithDeadline(context.Background(), leaseEnd(m, s.State.clk.absolute))
 	// ATTENTION, for as long as somebody is typing. The reaper ends a sandbox
 	// that has gone an hour untouched, and attention is stamped by exec and fs
 	// calls — which a terminal makes none of. Without this, a session somebody is
@@ -329,13 +329,18 @@ func attach(s *Service, c *zip.Ctx, run func(context.Context, Sandbox, *pipe, *f
 }
 
 // leaseEnd is when this terminal must be over: the sandbox's own expiry, or the
-// longest lease anything here may hold when the row carries none. A row with no
-// expiry is a row written before the lease was, not permission to run forever.
-func leaseEnd(m Sandbox) time.Time {
+// absolute ceiling when the row carries none. A row with no expiry is a row
+// written before the lease was, not permission to run forever.
+//
+// The ceiling is PASSED rather than read from a constant here, because it is one
+// fact with several readers — the create clamps to it, the reaper's extension is
+// bounded by it, the sweep ends past it, and this bounds a socket by it. A
+// package constant beside each reader is the same day written four times.
+func leaseEnd(m Sandbox, max time.Duration) time.Time {
 	if m.ExpiresAt > 0 {
 		return time.Unix(m.ExpiresAt, 0)
 	}
-	return time.Now().Add(maxTTL * time.Second)
+	return time.Now().Add(max)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
