@@ -451,23 +451,23 @@ func run(addr, zapAddr string) error {
 		// it and ships nothing.
 		app.Logger().Error("console: no release mounted — serving the API without it",
 			"err", consoleErr)
-	} else {
-		// A publish reaches users through this loop, in one poll interval — the
-		// whole point of taking the console out of the binary. Stopped when run
-		// returns.
-		go consoleSrc.Watch(consoleCtx)
 	}
+	// WATCHED EITHER WAY. A publish reaches users through this loop in one poll
+	// interval, and so does a REPAIR: the boot read is not the only chance the
+	// process gets. This used to be the else-branch of the error above, which meant
+	// the one case that most needed re-reading — the read that failed — was the one
+	// case nothing re-read. Stopped when run returns.
+	go consoleSrc.Watch(consoleCtx)
 
 	// nil is webui's stated "this process serves no console": the catch-all still
 	// keeps the API namespaces honest and still answers the agent door, and a
 	// console path gets a 503 saying so. Mounting an empty release ERRORS, so this
 	// is conditional for the same reason cloud.Listen's is — doing it
 	// unconditionally turns "serves none" back into "starts none".
-	if consoleErr == nil {
-		if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
-			return fmt.Errorf("console: %w", err)
-		}
-	} else if err := webui.Mount(app, nil); err != nil {
+	// MOUNTED EITHER WAY, because the Source is polled: webui takes an empty one
+	// and answers 503 until a poll fills it, which is the same answer it gave when
+	// nothing was mounted — with the difference that this one can stop being true.
+	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 
