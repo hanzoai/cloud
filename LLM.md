@@ -3066,9 +3066,38 @@ TWO ledgers and its gate sums THREE terms:
     typingOwed       work that is OWED — the mechanism exists, the blocker is
                      named, the entry is deleted when the op is written
 
-What each owed op needs is the BUNDLE ROUTE'S OWN accepted fields, and that is
-why they are listed rather than written: the names live in
-`github.com/hanzoai/captable` (`goja/src/routes/*`), not here. `schema.go`'s DDL
+**THE BLOCKER WAS NOT A BLOCKER — the bundle's source is a Go module dependency,
+so it is in the module cache at the version go.mod pins.** This ledger said for
+months that the accepted field names "live in `github.com/hanzoai/captable`
+(`goja/src/routes/*`), not here", and treated that as the reason eleven writes
+could not be written. It is one command away and offline:
+`$(go env GOMODCACHE)/github.com/hanzoai/captable@v1.0.0/goja/src/routes/*.ts`.
+The names were never unknowable; they were unread — the same shape as a refusal
+that names its own expiry condition, one level up.
+
+Two writes are converted as the worked examples (the two smallest, so the pattern
+is proved before it reaches a seventeen-field share issuance) and the other nine
+are SPECIFIED in the ledger, field by field, so the next writer starts from data.
+captable 20 → 22 typed; the ratchet 777 → 775.
+
+**Reading the source rather than guessing paid for itself twice in two routes.**
+`shares.transfer` takes a FOURTH field, `certificateId`, required for a partial
+transfer — omit it and every split answers "certificateId is required" with no way
+for a caller to supply one, which is precisely the silent-drop this ledger existed
+to prevent. And `rounds.investments.add` answers **201** where the transfer answers
+**200**, because it MINTS a security rather than moving one; the untyped relay
+carried that by passing the bundle's status through, and a typed op has to declare
+it. The suite caught the status within a minute; nothing but the source would have
+caught the field.
+
+One of the eleven is not merely unwritten: `POST /stakeholders` takes a single
+object **or an ARRAY** (`Array.isArray(raw) ? raw : [raw]`), which is the
+polymorphic-body class apps/index records for its own document writes — so it
+moves to `untypedByDesign` rather than being written.
+
+It also closed an asymmetry worse than either extreme: the DELETES on this plane
+were already typed, so an agent could delete a share issuance through the fleet
+door and not create one. `schema.go`'s DDL
 gives snake_case COLUMNS, which are not the JSON the routes take, and the
 `openapi.Describe` prose gives semantics without naming a field. **DO NOT GUESS
 THEM.** `goja.Body` assembles only the fields declared, so a name that does not
