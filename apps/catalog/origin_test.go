@@ -128,7 +128,7 @@ func TestUnnamedLicenceStillCredits(t *testing.T) {
 	}
 }
 
-// gallery swaps the curated-catalog seam for one test.
+// gallery swaps the curated-catalog client for one test.
 func gallery(t *testing.T, cat []template.StarterKit) {
 	t.Helper()
 	prev := curated

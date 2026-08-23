@@ -233,7 +233,7 @@ func opsOf(schema json.RawMessage) []string {
 // describe fetches ONE operation's descriptor through the door's own
 // fleet.Describe, and reads the owning subsystem's bytes back out of it.
 //
-// What the seam guarantees is that the model is offered exactly what it will
+// What the client guarantees is that the model is offered exactly what it will
 // CALL, and op is that name: it came out of a subsystem tool's `op` enum a
 // moment ago, and a tools/call naming it reaches the operation's own handler.
 // So the offer is named op, with the owner's own description and schema behind

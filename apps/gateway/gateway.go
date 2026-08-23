@@ -112,7 +112,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // noArgs is the input of an op that takes none: no body, no query, no path param.
 type noArgs struct{}
 
-// caller is the ONE identity seam both config ops ask. It returns the caller's
+// caller is the ONE identity client both config ops ask. It returns the caller's
 // VALIDATED org (principal.OrgFrom — never an input field, which is caller-supplied)
 // together with the request, because this surface gates on two facts the org alone
 // does not carry: SuperAdmin-ness (X-User-IsAdmin) and the ?org=<slug> a SuperAdmin

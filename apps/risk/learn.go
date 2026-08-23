@@ -268,7 +268,7 @@ type resident struct {
 	mu  sync.Mutex
 	key tenant
 	// mod is this organisation's fitted model, whatever family it belongs to. It is
-	// the [detector] seam and not one family's store, which is what lets a bigger
+	// the [detector] client and not one family's store, which is what lets a bigger
 	// model be slotted in without forking this plane.
 	mod detector
 	// geom is the SPACE mod runs in — a family and that family's own geometry
@@ -457,7 +457,7 @@ type plane struct {
 	// work; everyone else for that tenant waits on its channel and takes the
 	// result.
 	//
-	// TWO DEFECTS, ONE SEAM, because they are the same fact — "this tenant's
+	// TWO DEFECTS, ONE CLIENT, because they are the same fact — "this tenant's
 	// residency is being changed right now" — and two mechanisms for one fact is
 	// how they disagree:
 	//
@@ -1753,7 +1753,7 @@ type report struct {
 // searchDeadline bounds one run end to end.
 const searchDeadline = 10 * time.Minute
 
-// charge is the money seam as the plane sees it: GATE n screens, and get back the
+// charge is the money client as the plane sees it: GATE n screens, and get back the
 // meter for what was actually done. It is ONE function and not a gate-and-a-book
 // pair because the two halves are one decision made twice — a bound, then its
 // outcome — and a plane that took them as two parameters could be handed a gate
@@ -1788,7 +1788,7 @@ type charge func(kind string, n int) (meter func(done int), err error)
 // because the upper bound is [maxHistory] × the grid whatever the tenant's actual
 // history holds. Two bounds, each where its own size is a number.
 //
-// price is the money seam: it GATES n screens and returns the meter for what was
+// price is the money client: it GATES n screens and returns the meter for what was
 // actually DONE. Each half gates before its work and meters after it, which is
 // why the grid's meter is called when the grid ENDS however it ends — a run
 // cancelled by a rollout after four of sixty-four candidates is billed for four.

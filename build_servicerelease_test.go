@@ -11,7 +11,7 @@ import (
 // file used to assert.
 //
 // The test that stood here was called TestOnServiceReleaseNoop and it proved
-// "the dispatch seam is a safe no-op when no releaser is registered". It passed
+// "the dispatch client is a safe no-op when no releaser is registered". It passed
 // for as long as it existed, and it is why the defect shipped: the no-op was
 // never safe. platform runs as its own plugin and every plugin main mounts
 // exactly one app, so "no releaser registered" was the state of every process

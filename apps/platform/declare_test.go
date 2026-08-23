@@ -514,7 +514,7 @@ func TestUpdateRefusesAForeignRepository(t *testing.T) {
 
 // Without the universe credential nothing is attempted and the error names the
 // ref, never a value. Fail-closed: an anonymous push would fail deep in the git
-// seam with a worse message.
+// client with a worse message.
 func TestDeclareFailsClosedWithNoCredential(t *testing.T) {
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}}
 	_, err := declare(s, context.Background(), testSpec(), modeBranch)
@@ -599,7 +599,7 @@ func mapKeys(m map[string]any) []string {
 }
 
 // A retry of the same deploy must SUCCEED. Any client retries, and the first cut
-// of this seam did not: it based every branch write on main, so a second call a
+// of this client did not: it based every branch write on main, so a second call a
 // second later committed the same tree at a different timestamp — a different
 // sha, a non-fast-forward push, and a raw git hint the caller could not act on.
 //

@@ -401,7 +401,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"orgs":2,"users":14,"products":31,"activeProducts":29,"drift":1,"spendCents30d":250000,"tokens30d":0,"creditsCents":10000,"lastSync":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
 	})
 	zip.Describe("GET /v1/admin/products", zip.Doc{
-		Description: "Lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict. Optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform seam, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
+		Description: "Lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict. Optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform client, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
 		Fields: map[string]string{
 			"productRow.cluster":       "hanzo-k8s",
 			"productRow.declaredTag":   "spec.image.tag on the App CR (declared truth)",
@@ -700,14 +700,14 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"started":true}}`),
 	})
 	zip.Describe("POST /v1/admin/waitlist/boost", zip.Doc{
-		Description: "Grants a user waitlist points, moving them up toward the access cutoff.\nThis is the access lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant seam (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too. The reason\nfield goes only to that row.",
+		Description: "Grants a user waitlist points, moving them up toward the access cutoff.\nThis is the access lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant client (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too. The reason\nfield goes only to that row.",
 		Fields: map[string]string{
 			"rawOut.data":                   "Data is the upstream's payload verbatim, left undescribed for the same reason\nas iamRowsOut: re-describing someone else's schema here would be a second copy\nof it, free to drift.",
 			"rawOut.msg":                    "Msg is the failure reason when Status is \"error\", empty otherwise.",
 			"rawOut.status":                 "Status is \"ok\" or \"error\", at HTTP 200 either way. It is THIS layer's verdict\non the forwarding; an upstream that answered carries its own status inside\ndata.",
 			"rawOut.total":                  "Total is the upstream's row count when it forwarded a list, and absent when it\nforwarded a single object — which is why it is optional rather than zero.",
 			"waitlistBoostRequest.email":    "Email identifies the entry to boost. Either this or RefCode is required.",
-			"waitlistBoostRequest.points":   "Points is how many points to award. Must be positive — this seam exists to move\nsomeone UP toward the cutoff.",
+			"waitlistBoostRequest.points":   "Points is how many points to award. Must be positive — this client exists to move\nsomeone UP toward the cutoff.",
 			"waitlistBoostRequest.reason":   "Reason is the operator's justification. Not sent to the engine; it is recorded on\nthe audit row, which is the point of asking for it.",
 			"waitlistBoostRequest.refCode":  "RefCode identifies the entry by its referral code, when the email is unknown.",
 			"waitlistBoostRequest.waitlist": "Waitlist is the waitlist slug the grant lands on. Required.",

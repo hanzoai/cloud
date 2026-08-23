@@ -236,7 +236,7 @@ type scheme struct {
 // been stable for decades, they are published by the schemes themselves, and no
 // database is licensed to state them. What a licensed database adds — the
 // institution behind a prefix, its country, whether the product is debit,
-// credit or prepaid — is exactly what the issuer seam declares we do not have.
+// credit or prepaid — is exactly what the issuer client declares we do not have.
 var schemes = []scheme{
 	{"visa", []string{"4"}, []int{13, 16, 19}},
 	{"mastercard", []string{"51", "52", "53", "54", "55"}, []int{16}},

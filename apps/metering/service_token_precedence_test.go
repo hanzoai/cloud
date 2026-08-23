@@ -56,7 +56,7 @@ func stampIAMForS2S(c *zip.Ctx) error {
 // transport → the real commerce middleware chain (IAM stamp + Admin-masked
 // TokenRequired) → the balance handler → back to a gate verdict — with finance NOT
 // co-resident (the split-deploy / live topology whose balance read goes over the wire
-// instead of the finance-direct seam). It proves that a low-scope IAM principal's
+// instead of the finance-direct client). It proves that a low-scope IAM principal's
 // debit gate is processed via the SERVICE-TOKEN path: a funded org is ALLOWED and an
 // unfunded org gets a clean 402 (ErrInsufficientBalance), never a 403/500 from the
 // scope gate. The client is fail-CLOSED, so a scope-gate rejection would surface as a

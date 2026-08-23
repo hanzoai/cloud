@@ -9,12 +9,12 @@ import (
 	"github.com/hanzoai/cloud/apps/idv"
 )
 
-// idv.go wires the formation's founder-KYC seam to the SHARED identity-verification
+// idv.go wires the formation's founder-KYC client to the SHARED identity-verification
 // provider (clients/idv) — the ONE place the platform orchestrates a KYC/KYB
 // provider. When no external provider is configured the honest manualKYC default
 // stands (callback-driven, never auto-approves). When an operator names a real
 // provider (Persona / Onfido / Stripe Identity) via CLOUD_IDV_PROVIDER, that provider
-// drives founder verification through the SAME seam Hanzo Compliance uses for org-side
+// drives founder verification through the SAME client Hanzo Compliance uses for org-side
 // onboarding — one provider, no duplication.
 
 // resolveKYC returns the founder-KYC provider for a mount. It is FAIL-CLOSED: a
@@ -43,7 +43,7 @@ func kmsGetter(deps cloud.Deps) idv.SecretFn {
 	return deps.KMS.GetSecret
 }
 
-// idvKYC adapts the shared idv.Provider to the company KYCProvider seam: it maps a
+// idvKYC adapts the shared idv.Provider to the company KYCProvider client: it maps a
 // Founder to an idv.Subject and the provider's honest status vocabulary onto the
 // formation's three-state KYC status, keeping the payment gate closed on anything but
 // a provider-reported pass.

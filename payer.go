@@ -60,7 +60,7 @@ func (p Payer) Billable() bool { return p.Wallet != "" }
 // zero-size type, so only this package can mint or read one.
 type payerKey struct{}
 
-// PayerOf resolves the payer from whichever side of the seam this call arrived on.
+// PayerOf resolves the payer from whichever side of the client this call arrived on.
 //
 // TWO DOORS, ONE ANSWER, and that is the whole point. A request-bearing call reads
 // the request; a call with no request at all — the ZAP plane, MCP's tools/call, the

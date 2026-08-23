@@ -26,7 +26,7 @@ package team
 //     (the backoff that turns a 403 storm into a quiet trickle). No retries, ever.
 //
 // It is the chat twin of bots.go: bots.go is the READ/projection surface (agents
-// AS members); this is the WRITE/response surface (agents that ANSWER). The seam to
+// AS members); this is the WRITE/response surface (agents that ANSWER). The client to
 // the LLM is a single injected func (AgentRunner) so the transactor stays decoupled
 // from clients/agents' concrete run machinery and the loop is unit-testable with a
 // fake runner.

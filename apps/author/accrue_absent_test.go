@@ -15,7 +15,7 @@ import (
 // and reported a completed accrual of zero, with no error channel to say so.
 //
 // Absence is ErrNoPeer now. A royalty that silently does not accrue is the one
-// outcome this seam must not be able to express.
+// outcome this client must not be able to express.
 func TestAccrueAbsentIsAnErrorNotAZero(t *testing.T) {
 	prev := mounted
 	mounted = nil

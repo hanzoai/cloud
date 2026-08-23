@@ -134,11 +134,11 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// Hand the push to the SAME deploy trigger the embedded git server fires, so an
-	// upstream merge and a native push travel one seam rather than two CIs. This
+	// upstream merge and a native push travel one client rather than two CIs. This
 	// runs BEFORE the token mint and the mirror on purpose: a build reads from
 	// GitHub, so it must not be lost because native mirroring was unavailable —
 	// otherwise a sync outage silently stops the fleet from releasing. Best-effort
-	// by the seam's contract. Bot-authored pushes are excluded by the same guard
+	// by the client's contract. Bot-authored pushes are excluded by the same guard
 	// automations use: our outbound mirror pushes AS the App, and a release must
 	// never rebuild itself.
 	if !isBotActor(actorOf(ev)) {

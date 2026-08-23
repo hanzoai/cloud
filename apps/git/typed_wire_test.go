@@ -281,7 +281,7 @@ func TestRefusedRoutesDeclareTheBodyTheyRead(t *testing.T) {
 			t.Errorf("%s reads a %s body and declares none — every generated SDK offers "+
 				"this call with no payload parameter. Restore its openapi.Register (webhook.go).", key, want)
 		case declared:
-			// Operation.RequestBody is `any` because two seams write it; a REFUSED
+			// Operation.RequestBody is `any` because two clients write it; a REFUSED
 			// route's can only have come from openapi.Register.
 			body, ok := op.RequestBody.(*openapi.RequestBody)
 			if !ok {
@@ -385,14 +385,14 @@ func TestCLINamesCollideExactlyWhereKnown(t *testing.T) {
 }
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody wrote
+// because the CLIENT they arrived through cannot carry one — not because nobody wrote
 // it. All three DO have doc comments in zap.go; reflection cannot see them.
 //
 // It is exact in BOTH directions. A bare property anywhere else goes red, and an
 // entry here that starts publishing prose goes red too — that is the day the
 // generator learns, and this ledger must shrink then rather than outlive the gap.
 var proseless = map[string]bool{
-	// REFLECTION SEAM. The three ZAP procedures that read a body are declared with
+	// REFLECTION CLIENT. The three ZAP procedures that read a body are declared with
 	// openapi.Register (webhook.go) rather than typed, because they are raw handlers
 	// binding a shared envelope — the reason is in untypedByDesign above. Register
 	// derives its schema by REFLECTION, and Go drops comments at compile time, so

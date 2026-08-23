@@ -576,7 +576,7 @@ type fakeIAM struct {
 // signinApp builds the real router over a state whose IAM is a local fake (or the
 // literal issuer when one is given, for the no-network authorize assertions).
 //
-// The token verifier is the ONE seam a test replaces: cloud's real validator needs
+// The token verifier is the ONE client a test replaces: cloud's real validator needs
 // a live JWKS and an RS256-signed token, which would test go-jose rather than this
 // flow. The contract it stands in for — verified claims decide, a validation
 // failure refuses — is exercised in both directions below.

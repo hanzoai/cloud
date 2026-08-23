@@ -14,7 +14,7 @@ import (
 	"github.com/hanzoai/cloud/internal/shorten"
 )
 
-// EvalRunner is the PLUGGABLE execution seam (P3): the two independent steps of
+// EvalRunner is the PLUGGABLE execution client (P3): the two independent steps of
 // an evaluation, kept orthogonal so a DigitalOcean-backed runner and the
 // in-process gateway runner both satisfy the same contract. The store, API and
 // FE stay native and runner-agnostic regardless of which runner is wired.

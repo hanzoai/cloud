@@ -10,7 +10,7 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-// importer_test.go proves the seam around the advance: which repository, which
+// importer_test.go proves the client around the advance: which repository, which
 // refs, which credential, and what is remembered afterwards.
 //
 // The advance itself is proved in advance_test.go against bare hosts. Here the
@@ -524,7 +524,7 @@ func TestAnAccountsRefsStayInItsOwnReplica(t *testing.T) {
 // they took one name on the forge and the second import walked into the first's
 // refs and its HEAD — the account collision again, one level down.
 //
-// Refusing is the answer this seam already gives an account carrying the
+// Refusing is the answer this client already gives an account carrying the
 // separator [repo.flat] joins on. The case it must NOT refuse — a flat group,
 // with a repository directly in it — goes down the same path here, and lands.
 func TestNestedNamespacesDoNotCollapse(t *testing.T) {
@@ -630,7 +630,7 @@ func TestAPushWithNoTargetIsNotASync(t *testing.T) {
 }
 
 // TestSyncedRepositoriesAreBornAdvanceOnly: the forge is asked to refuse a force
-// push and a deletion on every branch of a repository this seam creates.
+// push and a deletion on every branch of a repository this client creates.
 //
 // The advance never sends a force and never deletes, but that is one client's
 // discipline — a colleague with a clone, or a future caller, reaches the same
@@ -649,7 +649,7 @@ func TestSyncedRepositoriesAreBornAdvanceOnly(t *testing.T) {
 		t.Error("the rule refuses the push the repository exists to receive")
 	}
 	if rule["enable_force_push"] != false {
-		t.Error("the rule permits a force push, which is the one thing this seam exists to prevent")
+		t.Error("the rule permits a force push, which is the one thing this client exists to prevent")
 	}
 }
 

@@ -62,7 +62,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The store seam. Production is always the one warehouse client; a test
+// The store client. Production is always the one warehouse client; a test
 // substitutes these to drive the plane without standing a store up. Held as
 // values on the same terms as apps/analytics holds warehouseReady/warehouseExec,
 // so there is one convention for "the warehouse, replaceable in a test".

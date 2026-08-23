@@ -163,14 +163,14 @@ curl -s -X POST "$H/v1/company/fundraise/deck?name=deck.pdf" \
 ## Honest gaps (what is real vs pending)
 
 - **Google token refresh.** The OAuth flow seals `access_token` + `refresh_token` in
-  KMS. Access tokens expire in ~1h; a refresh seam (mint a fresh access token from
+  KMS. Access tokens expire in ~1h; a refresh client (mint a fresh access token from
   the refresh token inside `apps/integrations`) is not yet wired, so a long-idle
   connection must re-consent. Import runs immediately after connect, so this does not
   affect the runbook.
 - **E-sign completion.** The fundraising SAFE/note signature request
-  (`/v1/company/fundraise/safe`) returns a reference from the esign seam; the
+  (`/v1/company/fundraise/safe`) returns a reference from the esign client; the
   `clients/sign` bundle's create→recipients→fields→send sequence has no synchronous
-  in-process Go seam yet, so completion is driven by an explicit signal, not a live
+  in-process Go client yet, so completion is driven by an explicit signal, not a live
   provider webhook. See the PR's gap list.
 - **State filing.** Not part of the import path (already-incorporated orgs are already
   filed). For greenfield formation, filing is an honest stub — see

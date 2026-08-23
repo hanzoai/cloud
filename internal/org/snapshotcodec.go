@@ -5,7 +5,7 @@
 
 package org
 
-// snapshotcodec.go is the SWAPPABLE ship mechanism — the seam that lets HOW the durable
+// snapshotcodec.go is the SWAPPABLE ship mechanism — the client that lets HOW the durable
 // payload is produced/applied change without touching WHEN it ships (the fence, the
 // monotone round, CarryForward). Today the default codec checkpoints the WAL and copies
 // the whole file; a WAL-frame delta codec
@@ -47,7 +47,7 @@ type snapshotCodec interface {
 // with nothing shipped and nothing to lose. This used to ship a wrapped-key sidecar
 // framed ahead of the database, which is the thing that could go missing.
 //
-// checkpoint is the crypto-integration seam. The SQLCipher page-level and plaintext
+// checkpoint is the crypto-integration client. The SQLCipher page-level and plaintext
 // backends encrypt on WRITE, so the default nil path (a raw TRUNCATE checkpoint, fail
 // closed on busy) already leaves the real path holding fresh bytes. The pure-Go
 // encryption ENVELOPE instead defers encryption to Checkpoint/Close — the plaintext lives

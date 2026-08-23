@@ -10,7 +10,7 @@ import (
 	tasksworker "github.com/hanzoai/tasks/pkg/sdk/worker"
 )
 
-// reactor.go is the ONE durable seam every git-lifecycle reactor rides.
+// reactor.go is the ONE durable client every git-lifecycle reactor rides.
 //
 // cloud.EmitLifecycle fans a fact out to subscribers in-process, which is the right
 // shape for deciding WHETHER to act — but not for the acting. Work done inline in a

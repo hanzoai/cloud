@@ -24,11 +24,11 @@
 // would make that impossible. Internal Go names stay idiomatic only where they do
 // not leak (Terms, Settlement, gate).
 //
-// SEAMS. The marketplace registry (another subsystem) owns the mapping
+// CLIENTS. The marketplace registry (another subsystem) owns the mapping
 // resource→Terms (price + recipient wallet); x402 only enforces it (Registry +
 // Publish). Recipient resolution rides the wallets subsystem
 // (wallet.ResolvePaymentTarget). On-chain broadcast of the authorization is a
-// Settler seam; the LIVE default is ledger settlement.
+// Settler client; the LIVE default is ledger settlement.
 package x402
 
 import (

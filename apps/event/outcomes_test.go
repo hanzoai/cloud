@@ -7,7 +7,7 @@ import (
 )
 
 // TestOutcomesSQL_TenantIsolation is the isolation-invariant test for the experiments
-// measurement seam: the org is a BOUND argument (never interpolated into SQL) and
+// measurement client: the org is a BOUND argument (never interpolated into SQL) and
 // every event name is bound too, so a hostile org slug or event name can never escape
 // into the query — the same boundary every analytics builder holds.
 func TestOutcomesSQL_TenantIsolation(t *testing.T) {

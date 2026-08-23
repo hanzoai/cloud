@@ -75,7 +75,7 @@ type service struct {
 	gdeltBase string
 	log       luxlog.Logger
 
-	// Reserved composition seams, wired now so the root is complete:
+	// Reserved composition clients, wired now so the root is complete:
 	//   ai  — the news-summarization slice (groq/openrouter-summarize parity).
 	//   kms — per-feed API-key custody for authenticated upstreams (never plaintext).
 	ai  cloud.AIClient

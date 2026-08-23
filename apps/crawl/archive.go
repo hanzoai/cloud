@@ -4,7 +4,7 @@ package crawl
 // throwaway. Kept pages can be re-read without paying the network again, indexed
 // for search, and built against later.
 //
-// It rides the ONE object seam the binary already has (types.VFSClient, deps.VFS
+// It rides the ONE object client the binary already has (types.VFSClient, deps.VFS
 // over the shared S3 gateway). No second S3 client, no second bucket, no second
 // set of credentials to configure or rotate — clients/s3vfs already resolved all
 // of that, and tenant isolation there is the org-scoped KEY PREFIX, which is
@@ -149,7 +149,7 @@ func (a *Archive) Put(ctx context.Context, s Scope, requested string, p *Page) e
 //
 // Any failure — missing, unreachable, corrupt — is reported the same way: not
 // found. A caller's only sensible response to each is to fetch, so distinguishing
-// them at this seam would create a decision nobody makes differently.
+// them at this client would create a decision nobody makes differently.
 func (a *Archive) Get(ctx context.Context, s Scope, url string) (*Page, bool) {
 	if a == nil || a.vfs == nil {
 		return nil, false

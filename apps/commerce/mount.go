@@ -11,7 +11,7 @@
 // co-residence contract: commerce registers its routes
 // directly on the HOST's zip app (EmbedConfig.App) — one router, one specificity
 // space, zero handler adaptation. This adapter narrows cloud.Deps, boots the
-// embed, and wires the in-process seams. Direction is one-way: cloud → commerce.
+// embed, and wires the in-process clients. Direction is one-way: cloud → commerce.
 //
 // PCI SCOPE. Commerce is a LIGHT ROUTER, NOT in PCI-DSS scope: tokens + intent IDs
 // only, NEVER a PAN. PAN-touching paths call the out-of-process Payments / Vault
@@ -512,7 +512,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// of the types. A route cannot be added here that forgets it, because there is
 	// no route here to add.
 
-	// In-process seams:
+	// In-process clients:
 	//   - the commerce transport routes the S2S billing byte-stream into the co-resident
 	//     app (the metering debit path) instead of a socket to a standalone pod.
 	//   - the commerce client reads the Embedded's datastore DIRECTLY (entitlements +
@@ -523,7 +523,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Usage-cap enforcement on the FINANCE path. The unified binary records usage in
 	// the finance ledger (fin.RecordUsage), NOT commerce's transaction store — which
 	// it leaves empty — so the cap must read spend from, and fire alerts on, the
-	// finance ledger. Two seams, both org-wide (the finance Entry carries no scope;
+	// finance ledger. Two clients, both org-wide (the finance Entry carries no scope;
 	// per-scope caps are a follow-up):
 	//   - SetPeriodSpendReader: AuthorizeSpendCap's scopeSpentCents reads the org's
 	//     finance period spend instead of the empty commerce transaction ledger, so

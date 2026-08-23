@@ -12,7 +12,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// community.go — git's half of the visibility seam.
+// community.go — git's half of the visibility client.
 //
 // clients/projects decides what a project's source must BE (public by default,
 // private is paid, hidden is moderation, deleted is deleted) and EMITS that as
@@ -91,7 +91,7 @@ func publish(ctx context.Context, org string, ev plane.Visibility) error {
 		return fmt.Errorf("community: provision %s/%s: %w", org, slug, err)
 	}
 
-	// Already there: reconcile the one field this seam owns.
+	// Already there: reconcile the one field this client owns.
 	if err := store.SetPublic(ctx, org, "", slug, listed, now); err != nil {
 		return fmt.Errorf("community: set visibility %s/%s: %w", org, slug, err)
 	}
@@ -149,7 +149,7 @@ func mirror(ctx context.Context, org, slug, description string, listed bool) err
 
 // exposePublish serves the visibility method on the internal plane.
 //
-// This replaces cloud.RegisterPublisher. The seam resolved in-process, and each
+// This replaces cloud.RegisterPublisher. The client resolved in-process, and each
 // app is its own process now (cmd/cloud "mounts every subsystem as its own
 // process"), so projects' call reached a nil publisher and returned silently —
 // public projects stopped getting repos the day the fleet split, with nothing

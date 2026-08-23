@@ -97,7 +97,7 @@ func TestSplitReleaseImage(t *testing.T) {
 	}
 }
 
-// TestReleaseServiceRefusesAGitDeclaredApp proves the seam refuses a real App CR
+// TestReleaseServiceRefusesAGitDeclaredApp proves the client refuses a real App CR
 // (git-declared, selfHeal-reverted): a valid semver image yields the refusal that
 // names where to commit the tag, and the CR is left untouched.
 func TestReleaseServiceRefusesAGitDeclaredApp(t *testing.T) {
@@ -166,7 +166,7 @@ func TestReleaseServiceFailClosed(t *testing.T) {
 	}
 }
 
-// TestRegisterReleaserRoundTrip proves the build.go inversion seam: after
+// TestRegisterReleaserRoundTrip proves the build.go inversion client: after
 // registerReleaser, cloud.OnServiceRelease dispatches to the paas primitive — the
 // path apps/platform/release.go drives on a self-release. The App is
 // git-declared, so the dispatch surfaces the refusal and the CR is untouched.

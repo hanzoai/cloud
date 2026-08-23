@@ -21,7 +21,7 @@ import (
 // These tests cover the project-API-key → org resolution on the deprecated PostHog
 // door, so keyed, bearer-less SDK traffic (posthog-js / insights-go batch) maps to a
 // tenant. They drive the REAL /v1/event handler (PostHog wire) through the injectable
-// resolveKeyOrg seam, so no IAM is needed. The observable proxy for "resolved to a
+// resolveKeyOrg client, so no IAM is needed. The observable proxy for "resolved to a
 // tenant" is "passed the credential gate" — i.e. NOT 403; without a datastore the
 // handler then returns 503, so any non-403 status means the request was admitted.
 //

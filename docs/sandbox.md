@@ -82,7 +82,7 @@ never built it.**
 
 Three of the four consumers are already in this binary. `apps/exec` needs an
 upstream, `apps/functions/invoke.go` needs an upstream, `apps/coding` holds a
-`Runner` seam. Put the scheduler anywhere else and three in-process calls become
+`Runner` client. Put the scheduler anywhere else and three in-process calls become
 three network hops.
 
 The duplicate-product argument is the same one that already got settled: the
@@ -298,7 +298,7 @@ rewrite of that interface and nothing in the agent loop changes.
 `agent/run` frames are `{type: step|log|result|error, step, message, status,
 branch, commitSha, diffstat, changed, ok, logTail}` — **byte-identical to
 `apps/coding/task.go`'s `message` struct**, so `apps/coding` rebinds its
-`Runner` seam to `apps/sandbox` and its orchestration, its session mirroring and
+`Runner` client to `apps/sandbox` and its orchestration, its session mirroring and
 its tests do not move.
 
 Credentials ride in the **body**, never argv, never a URL, never a log — the
@@ -356,7 +356,7 @@ both, `apps/exec` is untouched, and no `/api/` appears anywhere.
 hanzo.chat  --LIBRECHAT_CODE_BASEURL-->  cloud /v1/exec (apps/exec, proxy)
                                            --CODE_EXEC_UPSTREAM--> exec pool boxd /v1/exec
 /v1/functions invoke  ------------------->  same upstream, /v1/exec
-apps/coding (Runner seam, rebound)  ----->  apps/sandbox (in-process) --> box /v1/box/agent/run
+apps/coding (Runner client, rebound)  ----->  apps/sandbox (in-process) --> box /v1/box/agent/run
 hanzo.app ProjectFs  -------------------->  cloud /v1/sandbox/boxes/:id/fs/* --> box /v1/box/fs/*
 ```
 

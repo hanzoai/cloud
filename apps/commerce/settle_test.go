@@ -64,7 +64,7 @@ func funded(t *testing.T) finance.Client {
 	return fin
 }
 
-// quiet substitutes the risk plane's teaching seam and DRAINS it before the test tears
+// quiet substitutes the risk plane's teaching client and DRAINS it before the test tears
 // its fixture down.
 //
 // The settlement's RECORD is detached by design — [screen.learn] spawns a goroutine
@@ -93,7 +93,7 @@ func quiet(t *testing.T) {
 }
 
 // stating makes a screen read a settlement the TEST states rather than one a commerce
-// datastore holds. It is the [teach] pattern applied to the other seam: what a payment
+// datastore holds. It is the [teach] pattern applied to the other client: what a payment
 // actually settled for is a fact about a row in another module's store, and a door test
 // has no business booting one to assert where the money went.
 func stating(s screen, got settlement) screen {
@@ -115,7 +115,7 @@ func refusing(s screen, err error) screen {
 // for a whole green suite: [stating] answers a settlement whatever it is asked, so a
 // test driving a caller whose receipt lives in one org and whose balance lives in
 // another still saw the credit land. What the read is KEYED ON is a property, and a
-// seam that cannot state it is a seam that cannot hold it.
+// client that cannot state it is a client that cannot hold it.
 type asked struct {
 	org string
 	id  string
@@ -673,7 +673,7 @@ func TestSettle_ARefusedCreditStillTeachesTheModel(t *testing.T) {
 	app := creditDoorBody(t,
 		stating(riskGate(luxlog.New("settletest")), settlement{cents: 500000, currency: "jpy"}),
 		`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`)
-	// AFTER the fixture: creditDoorBody substitutes the same seam ([quiet]), and the
+	// AFTER the fixture: creditDoorBody substitutes the same client ([quiet]), and the
 	// watcher has to be the one in place when the door runs.
 	seen := watchTeaching(t)
 
@@ -920,7 +920,7 @@ func (j *journal) String() string {
 	return j.lines.String()
 }
 
-// TestReceiptOf_ReadsTheRowTheMoneyCoreWROTE — the seam's DEFAULT, against a real
+// TestReceiptOf_ReadsTheRowTheMoneyCoreWROTE — the client's DEFAULT, against a real
 // commerce datastore.
 //
 // Every other test in this file states the settlement, which is what lets them run
@@ -931,7 +931,7 @@ func (j *journal) String() string {
 //
 // It SKIPS rather than fails on a build whose SQLite has no math functions, because
 // commerce cannot bootstrap there at all — the same artifact TestBalanceCents and
-// TestInProcessClient hit under -race, and not a fact about this seam.
+// TestInProcessClient hit under -race, and not a fact about this client.
 func TestReceiptOf_ReadsTheRowTheMoneyCoreWROTE(t *testing.T) {
 	emb, err := commercemod.Embed(context.Background(), commercemod.EmbedConfig{DataDir: t.TempDir(), Dev: true})
 	if err != nil {

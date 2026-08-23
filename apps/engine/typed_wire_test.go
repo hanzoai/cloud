@@ -316,7 +316,7 @@ func TestOrgLessButValidatedIsServed(t *testing.T) {
 // ── the lens over the measured wire ─────────────────────────────────────────
 
 // The model table relays verbatim — the server's own list envelope with its
-// load-status extension — and one model's state reads through the POST seam
+// load-status extension — and one model's state reads through the POST client
 // while staying a GET on this plane.
 func TestModelsLensRelaysTheMeasuredWire(t *testing.T) {
 	app, f := harness(t)
@@ -335,17 +335,17 @@ func TestModelsLensRelaysTheMeasuredWire(t *testing.T) {
 		t.Fatalf("model(unknown) = %d %s — the product's own not_found must relay", status, body)
 	}
 
-	// The id moved from our query string into the upstream body: the seam is
+	// The id moved from our query string into the upstream body: the client is
 	// POST /v1/models/status carrying model_id.
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var seam bool
+	var client bool
 	for _, c := range f.calls {
 		if c.method == http.MethodPost && c.path == "/v1/models/status" && strings.Contains(string(c.body), `"model_id":"`+fakeModel+`"`) {
-			seam = true
+			client = true
 		}
 	}
-	if !seam {
+	if !client {
 		t.Error("no upstream POST /v1/models/status carried the model id")
 	}
 }

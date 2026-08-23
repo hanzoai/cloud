@@ -145,7 +145,7 @@ func callableTools(a Agent) []string {
 // per-DEPLOYMENT, not per-run — and it is deliberately narrow: names, prose,
 // schemas, and one call that takes raw JSON in and returns text out. Nothing in
 // it is a map, which is what let the same shape cross a process boundary
-// unchanged (door.go) rather than being redesigned at the seam.
+// unchanged (door.go) rather than being redesigned at the client.
 type toolPlane interface {
 	// catalog resolves the tool NAMES an agent declares into definitions the
 	// model can be offered. A name that resolves to nothing is simply absent —
@@ -199,7 +199,7 @@ func (registryTools) catalog(ctx context.Context, org, _ string, want []string) 
 }
 
 // call dispatches through the registry's ONE policy path, bound to the run's own
-// principal. The arguments are decoded into a map HERE, at the in-process seam
+// principal. The arguments are decoded into a map HERE, at the in-process client
 // that requires one, and nowhere else — the map never appears on a type that has
 // to cross a process boundary.
 func (registryTools) call(ctx context.Context, org, actor, name, args string) (string, error) {

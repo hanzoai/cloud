@@ -154,8 +154,8 @@ func TestUnifiedIngest_SameFactSameTenant(t *testing.T) {
 
 // ── pluggable auth on the ONE door: IAM's pk- folded into /v1/event ──────────
 
-// stubKeyOrg points the ONE IAM key seam at a table for the test's duration.
-// resolveKeyOrg is a var precisely so the seam can be swapped without a network;
+// stubKeyOrg points the ONE IAM key client at a table for the test's duration.
+// resolveKeyOrg is a var precisely so the client can be swapped without a network;
 // these exercise the DOOR, not IAM's resolution.
 func stubKeyOrg(t *testing.T, table map[string]string) {
 	t.Helper()

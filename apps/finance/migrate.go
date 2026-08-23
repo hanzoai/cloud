@@ -83,7 +83,7 @@ func carryRef(org string) string { return "backfill:" + org }
 // It reads the LIVE books because [MigrateOrg] writes them: a cutover carries real money,
 // and the sandbox ledger has no legacy balance to move.
 //
-// The read needs the ledger FILE and the money seam does not carry one, so it asks the
+// The read needs the ledger FILE and the money client does not carry one, so it asks the
 // published client for its books. *ledgerFinance is the only value in this process that
 // has any — a client that is not one cannot answer, and says so rather than reporting a
 // carry it did not verify.

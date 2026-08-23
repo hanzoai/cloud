@@ -24,7 +24,7 @@ import (
 )
 
 // memVFS is an in-memory types.VFSClient standing in for the S3/SeaweedFS data
-// plane. sign now routes PDF bytes through the object-storage seam (__blob), so the
+// plane. sign now routes PDF bytes through the object-storage client (__blob), so the
 // test drives that exact path (Put on create/seal, Get on view/download).
 type memVFS struct {
 	mu sync.Mutex
@@ -178,7 +178,7 @@ func TestFullSigningFlow(t *testing.T) {
 		t.Fatalf("bad create response: %s", body)
 	}
 
-	// M8: the PDF BYTES went to the object-storage seam (__blob), NOT the tenant
+	// M8: the PDF BYTES went to the object-storage client (__blob), NOT the tenant
 	// SQLite. The VFS holds the original blob under the tenant-scoped key, and the
 	// stored bytes equal the uploaded PDF (not base64) — proof it is off-DB.
 	vfs.mu.Lock()
@@ -193,7 +193,7 @@ func TestFullSigningFlow(t *testing.T) {
 	}
 	vfs.mu.Unlock()
 	if !foundOriginal {
-		t.Fatal("uploaded PDF bytes were not stored on the object-storage seam (M8)")
+		t.Fatal("uploaded PDF bytes were not stored on the object-storage client (M8)")
 	}
 
 	// 3. add a SIGNER recipient

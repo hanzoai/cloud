@@ -173,11 +173,11 @@ func TestHeartbeatStill200sWithoutDatastore(t *testing.T) {
 	}
 }
 
-// ---- the in-process seam ----
+// ---- the in-process client ----
 
 // TargetsForOrg / LoadOn are org-keyed and fail closed — the board reads through
 // them, so a cross-tenant id must never resolve.
-func TestInProcessSeamIsOrgScopedAndFailsClosed(t *testing.T) {
+func TestInProcessClientIsOrgScopedAndFailsClosed(t *testing.T) {
 	app := mountApp(t, nil)
 	code, body := do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
 		"label": "Secret", "kind": TargetGPU, "host": "secret.local",

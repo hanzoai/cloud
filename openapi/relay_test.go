@@ -2,7 +2,7 @@ package openapi_test
 
 // What a door owes, tested as refusals.
 //
-// A relay is the one seam in this package that can ADD an operation, so it is the
+// A relay is the one client in this package that can ADD an operation, so it is the
 // one that has to be hardest to lie with. Everything below is a case where the
 // honest answer is "no": a registry that answered with nothing, a registry that
 // answered about somebody else's prefix, two registries that mean different things

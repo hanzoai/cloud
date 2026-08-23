@@ -9413,7 +9413,7 @@ components:
           description: |-
             Kind is how the baseline comes to exist: fetch (downloaded from a
             publisher), local (computed here), attest (held by the component that
-            screens against it, freshness reported), or seam (declared and NOT held,
+            screens against it, freshness reported), or client (declared and NOT held,
             because the source needs a licence we do not have).
           type: string
         match:
@@ -12551,7 +12551,7 @@ components:
           $ref: '#/components/schemas/Price'
           description: |-
             Price is what a call costs and who is paid, absent for a free tool.
-            Enforcement is the x402 settlement seam; this is the declaration.
+            Enforcement is the x402 settlement client; this is the declaration.
         source:
           description: |-
             Source is where the tool comes from: connector, function, zap-service,
@@ -55943,7 +55943,7 @@ components:
           type: string
         points:
           description: |-
-            Points is how many points to award. Must be positive — this seam exists to move
+            Points is how many points to award. Must be positive — this client exists to move
             someone UP toward the cutoff.
           type: integer
         reason:
@@ -59567,7 +59567,7 @@ paths:
         verdict. Optionally narrowed by kind, tier or env, each an exact match.
 
         The rows are the SAME observation /v1/platform/fleet renders — read through the in-process
-        platform seam, not a second k8s client — so the two boards can never disagree about what
+        platform client, not a second k8s client — so the two boards can never disagree about what
         the fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,
         never a fabricated row.
       operationId: adminProducts
@@ -60701,7 +60701,7 @@ paths:
         Grants a user waitlist points, moving them up toward the access cutoff.
         This is the access lever: the cutoff itself does not move, the person does.
 
-        It funnels through the engine's verified grant seam (POST /v1/waitlist/award with
+        It funnels through the engine's verified grant client (POST /v1/waitlist/award with
         source="grant" — the ONE path that honours an explicit points amount) and writes a
         tamper-evident audit row either way, so a FAILED grant is recorded too. The reason
         field goes only to that row.
@@ -69672,7 +69672,7 @@ paths:
         MRR?", "how long is my runway?" — with figures taken from their ledger, never a guessed
         number. A deterministic keyword router picks the intent and reads the real metrics, and
         those figures, followups and report sources are computed BEFORE any model call and are
-        never altered by one: the optional narration seam only rephrases the sentence, and it
+        never altered by one: the optional narration client only rephrases the sentence, and it
         degrades silently to the templated answer when no AI plane is wired. It is strictly
         read-only — it restates the books, it never posts to them.
       operationId: post_books_ask
@@ -70936,7 +70936,7 @@ paths:
       description: |-
         Pushes the campaign live on each of its channels through that channel's executor and answers the whole campaign with the per-channel outcome written back onto it.
 
-        The fan-out is BEST-EFFORT PER CHANNEL, and the honest reading of the result is the rule most callers get wrong: one channel failing never aborts the others, so each channel row carries its own `live`, `failed` or `unavailable` status and detail, and a paid launch can be live while an email launch failed. The campaign itself is `live` when AT LEAST ONE channel launched and `failed` only when none did — `live` is not a claim that every channel launched. Repeating the call is safe: a channel already live is skipped, never re-launched. A campaign carrying more than one creative has its variant assigned here by the experiment seam and tagged as `utm_content`.
+        The fan-out is BEST-EFFORT PER CHANNEL, and the honest reading of the result is the rule most callers get wrong: one channel failing never aborts the others, so each channel row carries its own `live`, `failed` or `unavailable` status and detail, and a paid launch can be live while an email launch failed. The campaign itself is `live` when AT LEAST ONE channel launched and `failed` only when none did — `live` is not a claim that every channel launched. Repeating the call is safe: a channel already live is skipped, never re-launched. A campaign carrying more than one creative has its variant assigned here by the experiment client and tagged as `utm_content`.
 
         Org-scoped and fails closed: a valid bearer is required (403 without one), the campaign is read under the caller's OWN org so another tenant's id is a 404, and a campaign with no channels is a 400 — there is nothing to launch. Each executor resolves its own org's connector token from the org passed to it, so a launch can never spend through another tenant's connector.
       operationId: post_campaign_by_id_launch
@@ -78172,7 +78172,7 @@ paths:
       description: |-
         Renders the formation documents for the chosen structure and
         jurisdiction, ingests each into the org's data room, and submits the state
-        filing through the filing seam.
+        filing through the filing client.
 
         With no filing partner wired the filing is recorded honestly as "manual" — no
         filing id is fabricated. Available only at the documents stage.
@@ -78186,7 +78186,7 @@ paths:
           description: ok
       summary: Renders the formation documents for the chosen structure and jurisdiction,
         ingests each into the org's data room, and submits the state filing through
-        the filing seam.
+        the filing client.
       tags:
       - company
       x-app: company
@@ -78552,7 +78552,7 @@ paths:
         ATTRIBUTED to the provider.
 
         It NEVER trusts a client-asserted status — the status comes from the provider
-        seam — so a client cannot force a pass here, and an already-passing founder
+        client — so a client cannot force a pass here, and an already-passing founder
         (e.g. a reviewer confirmation) is left untouched.
       operationId: post_company_kyc_refresh
       responses:
@@ -80412,7 +80412,7 @@ paths:
       x-tool: true
     post:
       description: |-
-        Takes the file ITSELF as the raw request body — not a JSON envelope, not multipart — stores it on the object-storage seam, and records the metadata row, answering with the new document. `?name=` names it (default "document"), the request's Content-Type becomes the recorded mime type, and `?numPages=` is optional.
+        Takes the file ITSELF as the raw request body — not a JSON envelope, not multipart — stores it on the object-storage client, and records the metadata row, answering with the new document. `?name=` names it (default "document"), the request's Content-Type becomes the recorded mime type, and `?numPages=` is optional.
 
         Requires a validated principal; 403 without one. An empty body is 400 and anything over 64 MiB is 413 — a data room holds decks and PDFs, not a media library.
 
@@ -81469,7 +81469,7 @@ paths:
   /v1/deploy/applications/{name}/rollback:
     post:
       description: |-
-        Performs exactly what the sync action performs: it stamps the sync-requested timestamp onto the application's App CR and answers the application re-projected. It does NOT select, pin or revert to a prior image tag, and that is the one thing to know before wiring anything to it — the name is the console's, the behaviour is the sync. Pinning a previous release rides the release seam, which this address does not call yet.
+        Performs exactly what the sync action performs: it stamps the sync-requested timestamp onto the application's App CR and answers the application re-projected. It does NOT select, pin or revert to a prior image tag, and that is the one thing to know before wiring anything to it — the name is the console's, the behaviour is the sync. Pinning a previous release rides the release client, which this address does not call yet.
 
         SuperAdmin-only and fail-closed, reading no request body, with an unknown application name a 404 and no cluster client a 503 — the same gate and the same failures as the sync it shares a handler with.
       operationId: post_deploy_applications_by_name_rollback
@@ -87566,7 +87566,7 @@ paths:
       description: |-
         GONE (410). This was the canonical forge's push-to-deploy door, and it never dispatched a build in its life.
 
-        It handed each verified push to cloud.OnGitPush, a single-registrant seam whose only registrant lives in apps/platform. cloud runs each app as its own OS process, so in the git process that builder is nil forever — and this handler answered 204 either way. Delivered, signature valid, green on the forge's hook page, and nothing built.
+        It handed each verified push to cloud.OnGitPush, a single-registrant client whose only registrant lives in apps/platform. cloud runs each app as its own OS process, so in the git process that builder is nil forever — and this handler answered 204 either way. Delivered, signature valid, green on the forge's hook page, and nothing built.
 
         Push-to-deploy now belongs to POST https://platform.hanzo.ai/v1/git-webhook, which owns the build system-of-record and dispatches BuildKit Jobs. git.hanzo.ai delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.
 
@@ -90067,7 +90067,7 @@ paths:
     post:
       description: |-
         (re)generates the target user's key of the requested TYPE and
-        returns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`
+        returns it once, over the shared authorizeMinter + mintTarget client. `?type=secret`
         (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
         is safe to ship in client JS and resolves to an org, never a principal.
 
@@ -90076,7 +90076,7 @@ paths:
         authenticate nobody.
       operationId: post_iam_mint-user-keys
       summary: (re)generates the target user's key of the requested TYPE and returns
-        it once, over the shared authorizeMinter + mintTarget seam.
+        it once, over the shared authorizeMinter + mintTarget client.
       tags:
       - iam
       x-app: iam
@@ -92415,7 +92415,7 @@ paths:
     post:
       description: |-
         (re)generates the target user's key of the requested TYPE and
-        returns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`
+        returns it once, over the shared authorizeMinter + mintTarget client. `?type=secret`
         (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
         is safe to ship in client JS and resolves to an org, never a principal.
 
@@ -92435,7 +92435,7 @@ paths:
         schema:
           type: string
       summary: (re)generates the target user's key of the requested TYPE and returns
-        it once, over the shared authorizeMinter + mintTarget seam.
+        it once, over the shared authorizeMinter + mintTarget client.
       tags:
       - iam
       x-app: iam
@@ -98208,7 +98208,7 @@ paths:
       description: |-
         Publishes a post NOW, synchronously, whatever its
         schedule. No social connector is wired today, so every channel answers an
-        honest 501 naming the seam a real one would plug into, and the post is
+        honest 501 naming the client a real one would plug into, and the post is
         recorded failed with that exact reason — never a faked "published".
       operationId: post_marketing_calendar_by_id_publish
       parameters:
@@ -99164,7 +99164,7 @@ paths:
         Publish offers one tool on the marketplace, optionally monetized. The tool must
         already resolve in the publisher's own scope, so a listing can never advertise a
         capability that does not exist; a listing with a price must name the payout wallet
-        the x402 seam settles to, so a monetized offer is never unpayable. The price is
+        the x402 client settles to, so a monetized offer is never unpayable. The price is
         exact to 18 decimal places, so a per-call price below a cent is a real price and
         not a rounded-away zero. The listing is owned by the publishing org, paid into a
         wallet of that same org, and answers 201 with the created row.
@@ -113590,11 +113590,11 @@ paths:
   /v1/platform/hook:
     post:
       description: |-
-        The forge's push-to-deploy door. git.hanzo.ai runs as a separate server, so its pushes never reach this fleet's own receive-pack; without this a push to the host we call canonical builds nothing. A verified push is handed to the SAME two seams a native push travels — the single-registrant deploy trigger, and the many-subscriber lifecycle stream that notifies and indexes — and the build decision itself stays downstream in the one place that knows what a push means.
+        The forge's push-to-deploy door. git.hanzo.ai runs as a separate server, so its pushes never reach this fleet's own receive-pack; without this a push to the host we call canonical builds nothing. A verified push is handed to the SAME two clients a native push travels — the single-registrant deploy trigger, and the many-subscriber lifecycle stream that notifies and indexes — and the build decision itself stays downstream in the one place that knows what a push means.
 
         PUBLIC at the JWT layer, because the forge carries no Hanzo session: AUTHENTICATION IS THE SIGNATURE. The HMAC covers the raw bytes and is verified BEFORE the payload is parsed, so an unauthenticated body is never decoded. The secret is read from KMS; a deployment that cannot read it answers 503 and processes nothing, rather than trusting a delivery it could not check. The body is read UNCOMPRESSED — a request declaring a Content-Encoding is refused 415 before it is touched, because decoding one is unbounded work bought with a few bytes and no credential. A bad signature is 401, a payload over 8 MiB is 413, and a malformed one 400.
 
-        A verified push that reaches both seams answers 200 with fired true and the NUMBER OF BUILDS it launched — zero is ordinary, since most pushes track no application, and it is the answer 'fired' cannot give. A push that could not be dispatched answers 500: the delivery page shows it red, and the Replay that prompts reaches a fresh attempt rather than being declined as already landed.
+        A verified push that reaches both clients answers 200 with fired true and the NUMBER OF BUILDS it launched — zero is ordinary, since most pushes track no application, and it is the answer 'fired' cannot give. A push that could not be dispatched answers 500: the delivery page shows it red, and the Replay that prompts reaches a fresh attempt rather than being declined as already landed.
 
         The deliveries deliberately ignored answer 200 with a reason and nothing else: a payload that is not a push, a ref DELETE (a zero `after` has no commit to build), a BOT-authored push (release automation pushes as the forge's own Actions user, and a release must never rebuild itself), a push from a forge namespace that maps to no org, and a redelivery of a push already fired. Branches and tags both reach the build trigger, because releases are cut by tag and filtering here would silently stop publishing.
       operationId: post_platform_hook
@@ -122637,7 +122637,7 @@ paths:
         activation are all rows, not code, so they cannot be known until the caller is.
 
         One policy, the registry's: resolve by precedence, refuse an unactivated tool
-        403, settle a priced one through the x402 seam or fail closed 402, then
+        403, settle a priced one through the x402 client or fail closed 402, then
         dispatch to the winning source bound to the caller's own (org, project). One
         metered unit, one audit record. A caller can only ever dispatch its own tools.
 

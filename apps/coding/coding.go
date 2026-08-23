@@ -5,14 +5,14 @@
 //
 // It is a LIBRARY, not an app: no route, no plugin, no manifest row. Its one
 // caller is plugin/agents, which registers the one door. It touches its
-// collaborators only through interface seams (Sessions, PR, Runner) plus two
+// collaborators only through interface clients (Sessions, PR, Runner) plus two
 // git functions (CloneURL, VerifyRef), so the whole orchestration is unit-testable
 // with fakes and — critically — coding does NOT import apps/git: git imports
 // apps/integrations, integrations calls coding, so coding->git would cycle.
 // The composition root assembles the real Dispatcher (adapters.go) and injects
 // it into the trigger surface.
 //
-// ISOLATION: org is the ONLY tenant key and is threaded to every seam call
+// ISOLATION: org is the ONLY tenant key and is threaded to every client call
 // (session, todo, git, and the bot-gateway X-Org-Id). A run for org A can only
 // ever open A's session, read/verify A's repo, and file A's PR. The clone URL is
 // built from (org, repo) so the sandbox is pointed only at this org's namespace,
@@ -94,7 +94,7 @@ const (
 	statusError = "error"
 )
 
-// Sessions is the live agent-session registry seam (clients/agents in-process).
+// Sessions is the live agent-session registry client (clients/agents in-process).
 type Sessions interface {
 	Open(ctx context.Context, org, actor, agent, title string) (string, error)
 	// OpenOn opens a session tagged with the run's dispatch TARGET, so a routed
@@ -107,7 +107,7 @@ type Sessions interface {
 
 // PR opens the pull request for a finished run and says where it can be read.
 //
-// It is ONE seam with two backends behind it, because a repository can live in
+// It is ONE client with two backends behind it, because a repository can live in
 // two places and a run must not care which: the work item lands on our board
 // either way, and the address comes back from the forge for a repository that
 // lives only here or from GitHub for one that mirrors there. A caller that had to
@@ -117,13 +117,13 @@ type PR interface {
 	Open(ctx context.Context, in PRInput) (PRRef, error)
 }
 
-// Runner is the bot-gateway coding-task seam (clients/bot in-process client).
+// Runner is the bot-gateway coding-task client (clients/bot in-process client).
 type Runner interface {
 	Run(ctx context.Context, org, userID string, req RunRequest, onStep func(Step)) (RunResult, error)
 }
 
 // PRInput / PRRef mirror todo's agent-PR shape without leaking its types into
-// the seam (the adapter bridges).
+// the client (the adapter bridges).
 type PRInput struct {
 	Org string
 	// Actor is the forge login the proposal is opened as — the person the run
@@ -243,7 +243,7 @@ type Req struct {
 	SessionID string
 }
 
-// RoutedRun is the NON-SECRET spec coding hands the Route seam to enqueue on the
+// RoutedRun is the NON-SECRET spec coding hands the Route client to enqueue on the
 // durable engine. It mirrors agents.RoutedRun so coding.go stays pure (no agents
 // import); the adapter bridges the two, exactly as PRInput/RunRequest mirror
 // their downstream types. It carries no credential by design — the executing
@@ -300,7 +300,7 @@ const (
 	maxPromptLen          = 32 << 10 // 32 KiB — a task prompt, not a document
 )
 
-// Dispatcher wires the seams. The two git functions are injected (not an
+// Dispatcher wires the clients. The two git functions are injected (not an
 // interface) because they are pure reads with no cloud-side state. Both take a
 // ctx: git is another PROCESS, so both are calls that can be slow, refused, or
 // cancelled with the run.
@@ -310,7 +310,7 @@ type Dispatcher struct {
 	Runner    Runner
 	CloneURL  func(ctx context.Context, org, actor, repo string) string
 	VerifyRef func(ctx context.Context, org, repo, branch string) (string, bool)
-	// Log is an optional structured log seam for best-effort mirror failures; nil
+	// Log is an optional structured log client for best-effort mirror failures; nil
 	// is fine (mirror failures are non-fatal and simply dropped).
 	Log func(msg string, kv ...any)
 	// Route enqueues a routed run on the durable engine (the tasks-engine binding
@@ -338,7 +338,7 @@ type Dispatcher struct {
 }
 
 // Run executes one coding job end to end and returns its Result. It never
-// panics on a seam failure (each is turned into a recorded error); the caller
+// panics on a client failure (each is turned into a recorded error); the caller
 // runs it under a bounded, recovered goroutine with a deadline ctx.
 func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	org := strings.TrimSpace(req.Org)
@@ -483,7 +483,7 @@ type completion struct {
 // completeChanged is the shared terminal for a run that reported CHANGES: confirm the
 // pushed branch LANDED in native git (integrity — trust the tips we can read, not a
 // self-report), open the native PR work item, mirror the done status, and close the
-// session done. Fail-closed: when the verify seam is wired and the ref is absent, the
+// session done. Fail-closed: when the verify client is wired and the ref is absent, the
 // session closes ERROR and NO PR is filed. A todo failure is recorded but does not
 // fail the run (the branch is pushed + verified). ctx is the cancel-immune terminal
 // context. Used by the local path (Run) and the routed completion (finalizeRouted).

@@ -38,7 +38,7 @@ func TestPace_AStaleWindowStopsFreezingTheSubject(t *testing.T) {
 	k := key(t, brandA, orgA)
 	arm(t, p, k)
 
-	// The plane's clock is a seam, so this drives time instead of waiting for it.
+	// The plane's clock is a client, so this drives time instead of waiting for it.
 	clock := time.Now().UTC()
 	p.now = func() time.Time { return clock }
 

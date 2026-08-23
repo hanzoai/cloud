@@ -6,11 +6,11 @@ import (
 )
 
 // wire.go is this app's WIRE CONTRACT with the bot runtime — the stub behind the
-// Runtime seam. It says WHAT bots asks the runtime (list this org's runs, halt one
+// Runtime client. It says WHAT bots asks the runtime (list this org's runs, halt one
 // of them); how the bytes get there is runtime's problem.
 //
 // This file is the ONE place in this package that knows the runtime exists. The
-// handlers (bots.go) never see it: they hold the Runtime seam, which a test fills
+// handlers (bots.go) never see it: they hold the Runtime client, which a test fills
 // with a fake.
 //
 // The id space is the RUNTIME'S. A run id here is whatever the runtime named its
@@ -22,7 +22,7 @@ const listOp = "/v1/bot"
 
 func stopOp(runID string) string { return "/v1/bot/" + url.PathEscape(runID) + "/stop" }
 
-// wire is the Runtime seam over the real runtime.
+// wire is the Runtime client over the real runtime.
 type wire struct{}
 
 // runRow is the runtime's row shape (its GET /v1/bot emits exactly these). It

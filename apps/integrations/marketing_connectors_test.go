@@ -127,7 +127,7 @@ func oauthCallbackViaState(t *testing.T, app *zip.App, provider, org, code strin
 }
 
 // kmsSecret reads a custodied secret straight from the org's KMS namespace for a
-// provider — the seal-verification seam every e2e test uses.
+// provider — the seal-verification client every e2e test uses.
 func kmsSecret(t *testing.T, kc *kms.Client, org, provider, name string) ([]byte, bool) {
 	t.Helper()
 	v, err := kc.Get(kmsPath(org, provider), name, kmsEnv)

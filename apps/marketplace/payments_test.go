@@ -1,11 +1,11 @@
 package marketplace
 
-// payments_test.go proves the pay-per-use seam END TO END, over HTTP, with money
+// payments_test.go proves the pay-per-use client END TO END, over HTTP, with money
 // actually moving: publish a monetized listing → a buyer installs it → calling the
 // tool is refused with a real x402 challenge → the buyer signs an ERC-3009
 // authorization over exactly those terms → the call runs and the ledger ties.
 //
-// Nothing here is faked below the seam. The registry is the marketplace's own, the
+// Nothing here is faked below the client. The registry is the marketplace's own, the
 // charger is the marketplace's own, the settlement is x402's, the payee wallet is a
 // real KMS wallet in the wallets subsystem, and the ledger is a real finance
 // ledger. The only stand-in is the TOOL, which does not participate in payment.
@@ -121,8 +121,8 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 		t.Fatalf("marketplace.Mount: %v", err)
 	}
 
-	// The REAL tool plane, not a stand-in for it. A payment seam proved through a
-	// hand-rolled route proves the seam and not the product: the door that has to
+	// The REAL tool plane, not a stand-in for it. A payment client proved through a
+	// hand-rolled route proves the client and not the product: the door that has to
 	// carry a payer, map a 402 and let the challenge header out is tools' own
 	// callTool, so that is the door every test here knocks on.
 	if err := tools.Mount(app, deps); err != nil {
@@ -327,7 +327,7 @@ func TestPricedToolChallengedThenSettles(t *testing.T) {
 	if code != http.StatusPaymentRequired {
 		t.Fatalf("unpaid priced call = %d (%s), want 402", code, body)
 	}
-	if bytes.Contains(body, []byte("payment seam not configured")) {
+	if bytes.Contains(body, []byte("payment client not configured")) {
 		t.Fatalf("still fails closed on an unwired charger, not an x402 challenge: %s", body)
 	}
 	req := m.challengeOf(hdr)
@@ -371,7 +371,7 @@ func TestPricedToolChallengedThenSettles(t *testing.T) {
 	}
 }
 
-// TestUnpricedToolUnaffected: closing the seam must not put a toll on anything that
+// TestUnpricedToolUnaffected: closing the client must not put a toll on anything that
 // was free. An unlisted tool, and a listed-but-free one, both dispatch with no
 // challenge and no ledger movement — even though the charger is wired and consulted.
 func TestUnpricedToolUnaffected(t *testing.T) {

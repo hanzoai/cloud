@@ -548,7 +548,7 @@ type KV interface {
 	Eval(ctx context.Context, script string, keys []string, args ...any) *kv.Cmd
 }
 
-// Compile-time proof that the real client fits the narrow seam.
+// Compile-time proof that the real client fits the narrow client.
 var _ KV = kv.Cmdable(nil)
 
 // PresenceStore is the shared answer to "which replica holds this node's
@@ -710,7 +710,7 @@ func (r *Registry) releaseAll() {
 // landed there, and cloud has already answered that question exactly once
 // (shardrouter forwards an org's request to the pod owning its files, over the
 // peer address from CLOUD_PEERS). A second mechanism for "reach my peer pod"
-// would be a second answer to a settled question. Nor is there a ZAP client seam
+// would be a second answer to a settled question. Nor is there a ZAP client client
 // to reuse: zapface is a server face whose dispatch replays each call as an
 // in-process HTTP request into the same Fiber app, so a ZAP hop here would be
 // this HTTP hop with an extra codec in front of it.

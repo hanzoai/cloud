@@ -11,7 +11,7 @@ now the FORGE's (git.hanzo.ai, `forge/`), not this app's. What that removed:
   validated principal or a public read, and `packCaller` has no `ref` field
   because no caller is confined to one any more.
 - `export.go` (`CloneURL`, `VerifyRef`) and `propose.go`, with
-  `plugin/git/seams.go` that published them. A run's ref check read a bare repo
+  `plugin/git/clients.go` that published them. A run's ref check read a bare repo
   off local disk; it now reads the forge, which is where the run actually pushed.
 - Five plane ops: `git_grant`, `git_revoke`, `git_clone_url`, `git_verify_ref`,
   `git_propose`, and their wire shapes.
@@ -85,7 +85,7 @@ zipdoc_gen.go is a nameless MCP tool. Prose was the previous form of this
 partition, and prose cannot fail — that is the whole reason it moved.
 
 Every route with a JSON request/response shape is a typed op (ops.go states the
-seam; routes() in git.go registers them on the /v1/git group behind
+client; routes() in git.go registers them on the /v1/git group behind
 bridgePrincipal). The four refusal families below were re-verified against the
 handlers and against zip v1.18.15 itself, not against this file. Do not re-type
 them; run the gate before believing any route counter that says git has untyped
@@ -276,14 +276,14 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
 ## Known class instances (blocked on zip, counted not prosed)
 
 - **The ZAP five have no declarable RESPONSE, and that is a shared-name problem,
-  not a missing seam.** Their envelope is real (`cloud.OK` → `{status, msg,
+  not a missing client.** Their envelope is real (`cloud.OK` → `{status, msg,
   data}`), but `data` is `repoView` / `[]repoView` / `usageView` — names zip's
   typed fold ALREADY publishes as components off the typed /v1 ops. Reflecting
   them a second time through `openapi.schemaOf` would put two derivations behind
   one schema name, which is exactly what `openapi.Weave` refuses ("every
   generated SDK would bind whichever it read last"). So the request halves are
-  declared and the response halves wait on the two seams agreeing who owns a
-  shared view type. The pack responses and the twelve HTML pages have no seam at
+  declared and the response halves wait on the two clients agreeing who owns a
+  shared view type. The pack responses and the twelve HTML pages have no client at
   all: `openapi.Binary` is request-only by design, and a text/html response is
   the second half it deliberately does not invent.
 - Bodyless POST (playbook #7 in the root LLM.md): **0** — `POST
@@ -498,7 +498,7 @@ same test found, one layer down.
 ### Why this is NOT a thin proxy to the forge, yet
 
 The forge is the authority and `apps/git` imports `forge` NOWHERE, so the obvious
-answer is to serve reads through it. The read seam even exists and is clean:
+answer is to serve reads through it. The read client even exists and is clean:
 `Repository` (`repository.go`) with `openRepository` (`gitbackend.go`) as its ONE
 door, so a `forgeRepository` would move browse, the UI, the code index, the CI
 config read and repo detail with no handler change.
@@ -526,7 +526,7 @@ name. That is the whole reason this shape is available today and a proxy is not.
 
 Two supporting facts about how far the retirement has already gone, both
 measured: `apps/sync`'s importer answers the same `GitImporter` and
-`GitMirrorController` seams AGAINST THE FORGE and says so in its own header;
+`GitMirrorController` clients AGAINST THE FORGE and says so in its own header;
 `apps/deploy` and `apps/lsp` already read tree and rev from the forge; the live
 push door is `/v1/platform/hook` and `apps/git/webhook.go` is a 410 tombstone
 pointing at it. And the SSH front door is already dead: it binds `:2222`, no

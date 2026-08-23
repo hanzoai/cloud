@@ -481,7 +481,7 @@ func TestRunOpensRootSession(t *testing.T) {
 	}
 }
 
-// ---- bus (the ZAP stream seam) ----
+// ---- bus (the ZAP stream client) ----
 
 func TestBusFanoutOrgFilterAndOverrun(t *testing.T) {
 	b := newBus()

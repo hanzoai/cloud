@@ -75,11 +75,11 @@
 // (Submit / Finalized / IsFinalized) the engine defines, with the multi-voter
 // ceremony the engine lacks.
 //
-// # Stub boundaries (drop-in seams for later increments)
+// # Stub boundaries (drop-in clients for later increments)
 //
-// Each seam is an interface with a deterministic in-package stub today and a
+// Each client is an interface with a deterministic in-package stub today and a
 // documented published/real implementation later. The BYZANTINE CEREMONY LOGIC
-// around every seam (barrier, quorum, dedup, proof-of-possession enforcement,
+// around every client (barrier, quorum, dedup, proof-of-possession enforcement,
 // independent verification, policy gate, deterministic apply) is REAL and
 // tested — only the primitives below are stubbed:
 //
@@ -88,19 +88,19 @@
 //	              commit-reveal, no real lattice). Real drop-in: the
 //	              protocol/quasar/pulsar PulsarRoundSigner cert-profile impl
 //	              being forward-ported by the cryptographer.
-//	CertComposer  seam in signer.go. Stub: structurally-valid triple-gate
+//	CertComposer  client in signer.go. Stub: structurally-valid triple-gate
 //	              QuasarCert. Real drop-in: quasar.ComposePolaris over the
 //	              four real threshold legs (BLS/Pulsar/Corona/Magnetar).
 //	              (Verification likewise moves from the structural
 //	              QuasarCert.Verify to the cryptographic VerifyWithRealKeys.)
-//	ShareCustody  seam in custody.go. The per-pod IDENTITY key is now a REAL
-//	              random ML-DSA-65 keypair with asymmetric PoP verify (seam a,
+//	ShareCustody  client in custody.go. The per-pod IDENTITY key is now a REAL
+//	              random ML-DSA-65 keypair with asymmetric PoP verify (client a,
 //	              landed). Still stub: it is in-memory (not KMS-sealed) and the
 //	              z-share is seed-derived. Real drop-in: KMS-sealed per-pod share
-//	              custody (KMSSecret CRD) + write-fence — seam b.
-//	Transport     seam in transport.go. Stub: in-memory broadcast bus. Real
+//	              custody (KMSSecret CRD) + write-fence — client b.
+//	Transport     client in transport.go. Stub: in-memory broadcast bus. Real
 //	              drop-in: ZAP messaging.
-//	ControlDB     seam in placement.go. Stub: in-memory map. Real drop-in:
+//	ControlDB     client in placement.go. Stub: in-memory map. Real drop-in:
 //	              the control.db persistence backend.
 //
 // # Adversarial review (red → blue) — what holds, what is deferred
@@ -116,13 +116,13 @@
 // and the apply-boundary fork gate (now ParentRoot-checked); the self-composed
 // cert check is documented structural-only.
 //
-// CLASS-B — PoP DISCHARGED (seam a): the per-pod IDENTITY key is now a fresh
+// CLASS-B — PoP DISCHARGED (client a): the per-pod IDENTITY key is now a fresh
 // random ML-DSA-65 keypair (custody.go), never seed-derived, so proof-of-
 // possession is unforgeable. The byzantine-safety tests are therefore now
 // MEANINGFUL and GREEN: the two TestRed_B_* cases are un-skipped and assert the
 // closed defence, and TestSafety_RogueAndForgedLegs_Rejected forges a
 // correctly-derived leg (a valid ML-DSA signature under an attacker-generated
-// key, not a bit-flip) and still rejects it. RESIDUAL (closes in seam c): the
+// key, not a bit-flip) and still rejects it. RESIDUAL (closes in client c): the
 // z-share / threshold-signing material is still seed-derived, so the cert crypto
 // (SignatureCore / composer) stays stub and ProductionBCCSigningReady() stays
 // false until the real cert lands.
@@ -148,12 +148,12 @@
 //     so a `go build`/`go run` serve binary can never satisfy it). Proven by a
 //     real subprocess in TestContainment_NonHarnessProcessRefuses
 //     (containment_test.go), not just in-process logic.
-//  3. External-cert seam — CertComposer.Compose returns selfComposedCert (an
+//  3. External-cert client — CertComposer.Compose returns selfComposedCert (an
 //     unexported wrapper only Compose can produce), and verifyOwnCertStructure
 //     accepts ONLY that type — never a bare *quasar.QuasarCert. An externally-
 //     received cert (deserialized off the wire on a future recovery/light-
 //     client/gossip path) has no way to become a selfComposedCert; the ONLY
-//     exported seam for such a cert is VerifyExternalCert (driver.go), which is
+//     exported client for such a cert is VerifyExternalCert (driver.go), which is
 //     intentionally unimplemented and fails closed today rather than silently
 //     falling back to the structural check. Locked from a black-box vantage
 //     (exported-surface-only) by TestExternalCert_MustNotAdmitThroughStructuralCheck
@@ -162,7 +162,7 @@
 // # Increment-2 security work (before this guards a real KMS shard lease)
 //
 //   - Real distributed DKG across pods (not in-process, not seed-derived shares)
-//   - [DONE — seam a] asymmetric ML-DSA-65 identity keys
+//   - [DONE — client a] asymmetric ML-DSA-65 identity keys
 //     (github.com/luxfi/crypto/mldsa), so leg/commit proof-of-possession is
 //     unforgeable and the byzantine-safety suite regains meaning (the two
 //     TestRed_B_* cases are un-skipped and green).
@@ -176,7 +176,7 @@
 //   - VerifyExternalCert's real implementation: route to the cryptographic
 //     quasar VerifyUnderPolicy / VerifyWithRealKeys — never QuasarCert.Verify —
 //     the moment any recovery/light-client/gossip path needs to accept a peer's
-//     cert. The seam and its fail-closed default already exist (see above); only
+//     cert. The client and its fail-closed default already exist (see above); only
 //     the crypto call is missing.
 //   - Flip ProductionBCCSigningReady() to true in the SAME change that deletes
 //     the stub types it currently guards (acceptBindingsOnly, stubSignatureCore,

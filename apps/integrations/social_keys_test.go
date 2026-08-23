@@ -52,7 +52,7 @@ func TestWarpcastConnectSealsAndIsolates(t *testing.T) {
 	if !ok || string(got) != warpcastKey {
 		t.Fatalf("key must seal in acme's namespace, got %q ok=%v", got, ok)
 	}
-	// Isolation: org B has nothing and the seam refuses it.
+	// Isolation: org B has nothing and the client refuses it.
 	if _, ok := kmsSecret(t, kc, "orgb", "warpcast", apiKeySecret); ok {
 		t.Fatal("orgb must not have a credential")
 	}

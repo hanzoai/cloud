@@ -5,7 +5,7 @@ import (
 	"errors"
 )
 
-// query.go is the code leg's in-process seam, and it is the SAME shape apps/index
+// query.go is the code leg's in-process client, and it is the SAME shape apps/index
 // publishes for the lexical leg: Ready reports whether this binary can serve, Search
 // answers. /v1/search fuses it with the other two — IN-PROCESS, no HTTP hop, for the
 // two reasons index/query.go already gives: a fused query is an agent tool call on a
@@ -34,7 +34,7 @@ func Ready() bool { return mounted != nil }
 // door and the code door can never disagree about what the index holds.
 //
 // It bills NOTHING. The metering a request-scoped search does is attributed to the
-// caller's ledger through the request, and this seam is reached from a fused query
+// caller's ledger through the request, and this client is reached from a fused query
 // that meters its own call; charging here would bill one search twice.
 func Search(ctx context.Context, org, query string, limit int) ([]Span, error) {
 	if mounted == nil {

@@ -1,6 +1,6 @@
 package projects
 
-// typed.go is the ONE seam between a /v1/projects request and this plane's TYPED
+// typed.go is the ONE client between a /v1/projects request and this plane's TYPED
 // ops, and the ONE place the package reaches for the request from inside one.
 //
 // A typed op — func(context.Context, *In) (*Out, error) — receives a context and

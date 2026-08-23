@@ -113,7 +113,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	//
 	// generate used to stay a RAW handler for exactly this envelope, on the belief
 	// that a typed op can answer only its Out schema or zip's flat
-	// {status,code,error}. cloud.Denied + this middleware is the seam that closed
+	// {status,code,error}. cloud.Denied + this middleware is the client that closed
 	// that gap (the same pairing apps/projects, apps/datasets and apps/risk use), so
 	// the route is typed now and the body is unchanged — pinned both ways, by
 	// TestGenerateIsATypedOp and TestGenerate402IsTheMoneyWireBody.

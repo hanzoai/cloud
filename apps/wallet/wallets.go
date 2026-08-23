@@ -1,7 +1,7 @@
 package wallet
 
-// wallets.go owns the HTTP surface (/v1/wallet/*), the Mount/config seam that
-// selects the custody set, the process singleton, and the finance seam.
+// wallets.go owns the HTTP surface (/v1/wallet/*), the Mount/config client that
+// selects the custody set, the process singleton, and the finance client.
 //
 //	POST /v1/wallet/accounts   {name}                              -> create account
 //	GET  /v1/wallet/accounts                                       -> list MY accounts
@@ -37,7 +37,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Config env keys — the config seam.
+// Config env keys — the config client.
 const (
 	envMPCAddr        = "CLOUD_WALLETS_MPC_ADDR"           // comma-sep ring node base URLs (:9800); unset ⇒ mpc/treasury/safe fail closed
 	envMPCKeyRef      = "CLOUD_WALLETS_MPC_API_KEY_REF"    // KMS ref of the ring's MPC_INTERNAL_API_KEY bearer token; NEVER a plaintext value
@@ -55,12 +55,12 @@ type state struct {
 	audit          *audit.Recorder // best-effort; nil disables it
 }
 
-// mounted is the process singleton the finance seam resolves. nil when the
+// mounted is the process singleton the finance client resolves. nil when the
 // subsystem is not linked/enabled, which makes WalletForLedgerAccount a no-op.
 var mounted *cloud.Service[state]
 
 // Mount wires the wallets surface onto app per HIP-0106. Complex flavour: it
-// holds a package-global (mounted, the finance seam singleton) so it constructs
+// holds a package-global (mounted, the finance client singleton) so it constructs
 // the Service value directly rather than via cloud.Mount.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
@@ -729,10 +729,10 @@ func (o ops) proposeTransaction(ctx context.Context, in *safeTxIn) (*safeProposa
 	}, nil
 }
 
-// ── finance seam (seam ONLY — no live wiring, does NOT touch treasury) ────────
+// ── finance client (client ONLY — no live wiring, does NOT touch treasury) ────────
 
 // WalletForLedgerAccount resolves the on-chain wallet bound to a finance ledger
-// account — the seam by which the treasury reserve signer BECOMES an MPC treasury
+// account — the client by which the treasury reserve signer BECOMES an MPC treasury
 // wallet later. Pure lookup; ("",false) when unmounted/unbound. Does NOT modify treasury.
 func WalletForLedgerAccount(ctx context.Context, org, ledgerAccount string) (address string, ok bool) {
 	s := mounted
@@ -764,7 +764,7 @@ type PaymentTarget struct {
 func Mounted() bool { return mounted != nil }
 
 // ResolvePaymentTarget resolves a payout wallet {org, walletID} to its address +
-// ledger subject — the seam the x402 settlement uses to route payment to a
+// ledger subject — the client the x402 settlement uses to route payment to a
 // recipient wallet. The lookup is org-scoped (getWallet), so a resource can only
 // ever name a wallet WITHIN the org it declared: no cross-org payee spoofing.
 // ("", false) when wallets is unmounted or the wallet is not found in that org.

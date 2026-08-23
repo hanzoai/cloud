@@ -46,14 +46,14 @@ func mountPublished(t *testing.T) *zip.App {
 }
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody wrote
+// because the CLIENT they arrived through cannot carry one — not because nobody wrote
 // it. Every one of them HAS a doc comment in hook.go; reflection cannot see it.
 //
 // It is exact in BOTH directions. A bare property anywhere else goes red, and an
 // entry here that starts publishing prose goes red too — that is the day the
 // generator learns, and the ledger must shrink then rather than outlive the gap.
 var proseless = map[string]bool{
-	// REFLECTION SEAM. POST /v1/platform/hook is declared with openapi.Register
+	// REFLECTION CLIENT. POST /v1/platform/hook is declared with openapi.Register
 	// (hook.go) and not as a typed op, because AUTHENTICATION IS THE SIGNATURE: the
 	// HMAC covers the raw bytes and is verified BEFORE the payload is parsed, and a
 	// typed op decodes first. Register derives its schema by REFLECTION, and Go

@@ -3,14 +3,14 @@ package platform
 // hook_test.go drives the forge's push door over REAL HTTP against the real
 // route, because the two properties that matter are both properties of the wire:
 // what a delivery has to carry to be believed, and what running it costs the
-// fleet. Both seams are observed through the same registrations production uses
+// fleet. Both clients are observed through the same registrations production uses
 // — the push builder and the lifecycle subscriber list — so a test cannot pass by
 // asserting a call it made itself.
 //
 // The door this replaces was tested by registering a builder in-process and
 // checking the call that registration had just made possible, which is why its
 // suite stayed green for as long as the door was dead. Every assertion here is
-// about the SEAM, and the fired/not-fired counts are the whole point.
+// about the CLIENT, and the fired/not-fired counts are the whole point.
 
 import (
 	"bytes"
@@ -46,7 +46,7 @@ const (
 	hookBefore = "0123456789abcdef0123456789abcdef01234567"
 )
 
-// fired records what the two seams received. Both are appended under one lock so
+// fired records what the two clients received. Both are appended under one lock so
 // a test reads a consistent pair.
 type fired struct {
 	mu     sync.Mutex
@@ -85,14 +85,14 @@ func (f *fired) settle(t *testing.T, pushes, events int) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("seams fired %d push / %d lifecycle, want %d / %d", p, e, pushes, events)
+			t.Fatalf("clients fired %d push / %d lifecycle, want %d / %d", p, e, pushes, events)
 		}
 		time.Sleep(time.Millisecond)
 	}
 }
 
 // hookApp mounts the forge door the way Mount does — the raw route over a Service
-// whose KMS holds `key` — and registers both seams so the test observes exactly
+// whose KMS holds `key` — and registers both clients so the test observes exactly
 // what production dispatches. An empty key seals nothing, which is how the
 // no-secret refusal is exercised.
 //
@@ -373,11 +373,11 @@ func TestHook_RefusesAnOversizedBody(t *testing.T) {
 	}
 }
 
-// ── the payload, and both seams ──────────────────────────────────────────────
+// ── the payload, and both clients ──────────────────────────────────────────────
 
-// THE PROPERTY THIS DOOR EXISTS FOR: a verified push reaches BOTH seams, exactly
+// THE PROPERTY THIS DOOR EXISTS FOR: a verified push reaches BOTH clients, exactly
 // once each, carrying what each one reads.
-func TestHook_FiresBothSeamsOnce(t *testing.T) {
+func TestHook_FiresBothClientsOnce(t *testing.T) {
 	app, f := hookApp(t, hookSecret)
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
 
@@ -591,7 +591,7 @@ func TestHook_RefusesAMalformedPayload(t *testing.T) {
 // ── one push, one build ──────────────────────────────────────────────────────
 
 // The forge redelivers a request it could not complete, and a retry landing after
-// the seams already ran would build the same commit twice — on the tenant's
+// the clients already ran would build the same commit twice — on the tenant's
 // compute. The FACT is the key, so the second delivery is declined and the counts
 // stay at one.
 func TestHook_ARedeliveryFiresOnce(t *testing.T) {
@@ -670,7 +670,7 @@ func TestHook_ADispatchFailureIsRefusedAndLeavesNoDedup(t *testing.T) {
 	if v.Fired {
 		t.Fatalf("a dispatch that failed claimed to have fired: %+v", v)
 	}
-	// The lifecycle seam does not run either: the delivery is unprocessed as a
+	// The lifecycle client does not run either: the delivery is unprocessed as a
 	// whole, and the Replay redoes both halves.
 	if p, e := f.counts(); p != 1 || e != 0 {
 		t.Fatalf("dispatched %d push / %d lifecycle; want the one attempt and no lifecycle", p, e)

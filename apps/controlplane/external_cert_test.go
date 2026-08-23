@@ -5,7 +5,7 @@
 // selfComposedCert, no verifyOwnCertStructure — exactly the vantage point of
 // a future external/recovery/light-client package. It proves that surface
 // offers no way to admit an externally-obtained cert through the structural
-// check: VerifyExternalCert is the only exported verify seam for such a cert,
+// check: VerifyExternalCert is the only exported verify client for such a cert,
 // and it fails closed today (increment-2's cryptographic verify is not
 // implemented), never silently falling back to the structural gate.
 package controlplane_test
@@ -37,7 +37,7 @@ func TestExternalCert_MustNotAdmitThroughStructuralCheck(t *testing.T) {
 		t.Fatal("test setup: the external copy must itself be structurally well-formed (that's the attack this test defends against)")
 	}
 
-	// The ONLY exported verify seam for an externally-obtained cert MUST fail
+	// The ONLY exported verify client for an externally-obtained cert MUST fail
 	// closed: increment-2's cryptographic VerifyUnderPolicy/VerifyWithRealKeys
 	// is not implemented yet, so admitting it here — even though it would
 	// pass the structural check — would be exactly the forgeable-cert

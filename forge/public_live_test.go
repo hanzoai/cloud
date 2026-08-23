@@ -3,7 +3,7 @@ package forge_test
 // public_live_test.go answers the one question a stub cannot: does closing a
 // repository actually stop people reading it?
 //
-// Everything else about this seam is our code and can be proved against a fake.
+// Everything else about this client is our code and can be proved against a fake.
 // "Private means nobody may read it" is a claim about FORGEJO, and the whole
 // design — born private, opened by a write, closed by the same write — is worth
 // nothing if that claim is false or if the fork answers the edit and keeps
@@ -92,7 +92,7 @@ func readable(t *testing.T, origin, owner, repo string) (api bool, clone bool) {
 }
 
 // TestLive_ClosingARepositoryClosesReadAccess is the load-bearing check of the
-// whole visibility seam: the retraction that must never silently fail.
+// whole visibility client: the retraction that must never silently fail.
 func TestLive_ClosingARepositoryClosesReadAccess(t *testing.T) {
 	c, owner, origin := live(t)
 	ctx := t.Context()
@@ -132,7 +132,7 @@ func TestLive_ClosingARepositoryClosesReadAccess(t *testing.T) {
 		t.Fatalf("a CLOSED repository is still readable by the world: api=%v clone=%v", api, clone)
 	}
 
-	// Closing again is not an error and does not re-open it: the seam fires on
+	// Closing again is not an error and does not re-open it: the client fires on
 	// every write, so the second one has to be free.
 	if err := c.SetPublic(ctx, owner, repo, false); err != nil {
 		t.Fatalf("close again: %v", err)

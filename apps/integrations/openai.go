@@ -31,7 +31,7 @@ const (
 	openaiDeviceTTL = 15 * time.Minute               // overall device-flow deadline
 )
 
-// openaiBase reads OPENAI_AUTH_BASE at call time (httptest seam), defaulting
+// openaiBase reads OPENAI_AUTH_BASE at call time (httptest client), defaulting
 // to the production auth origin.
 func openaiBase() string {
 	if v := strings.TrimSpace(os.Getenv("OPENAI_AUTH_BASE")); v != "" {

@@ -8,11 +8,11 @@ package platform
 // They read the document back through JSON — which is how every consumer reads it
 // — rather than through the emitter's in-memory Go types. That is deliberate, and
 // it is what this file learned: it used to narrow to openapi.Register's concrete
-// types, because the surface declared its bodies through that seam and the typed
-// fold builds different Go values for the same JSON. Asserting on the seam meant
+// types, because the surface declared its bodies through that client and the typed
+// fold builds different Go values for the same JSON. Asserting on the client meant
 // asserting on WHO built the document, so converting these routes to typed ops
 // broke every assertion here without one byte of the published contract changing.
-// JSON is the contract; the seam is an implementation detail.
+// JSON is the contract; the client is an implementation detail.
 
 import (
 	"encoding/json"

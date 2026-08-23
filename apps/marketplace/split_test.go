@@ -7,7 +7,7 @@ package marketplace
 // The shipped topology is one binary per app: manifest/apps.go declares tools,
 // marketplace, x402, wallets and commerce as five ordinary prefix-routed rows, the
 // Dockerfile builds a plugin binary per row, and cmd/cloud loads each as a CHILD
-// PROCESS. Every seam that made a price payable — x402.reg, tools.std's charger,
+// PROCESS. Every client that made a price payable — x402.reg, tools.std's charger,
 // wallets' mounted singleton, finance.Current — is a process-global, so in that
 // topology all four bind nothing. A priced tool was refused rather than sold.
 //
@@ -199,7 +199,7 @@ func seedWallet(app *zip.App, org string) (string, error) {
 // function, no MCP source mounts there — so every publish answers "unknown tool".
 // The same is true of install, which calls tools.Default().Activate against a
 // registry with no activation store. Both are the SAME bug class as the one under
-// test, on a different seam (the tool REGISTRY, not the payment rail), and they need
+// test, on a different client (the tool REGISTRY, not the payment rail), and they need
 // their own ops. Faking a provider here would hide that; stating it, and seeding the
 // datum the payment path actually reads, does not. See apps/tools/LLM.md.
 func seedListing(store *Store, wallet string) error {
@@ -249,7 +249,7 @@ type fleet struct {
 }
 
 // splitFleet starts the peers as real processes and mounts the tool plane HERE,
-// alone, with every seam a co-resident composition would have bound left unbound.
+// alone, with every client a co-resident composition would have bound left unbound.
 func splitFleet(t *testing.T) *fleet {
 	t.Helper()
 	if testing.Short() {
@@ -299,7 +299,7 @@ func splitFleet(t *testing.T) *fleet {
 	// Activation is the TOOL plane's own store, so it is written here — the one
 	// place in this test that is not an app's public route, because marketplace's
 	// install writes tools.Default() in ITS process and that registry has no
-	// activation store at all. That is a separate seam from the payment rail and it
+	// activation store at all. That is a separate client from the payment rail and it
 	// is named in apps/tools/LLM.md rather than papered over here.
 	for _, name := range []string{pricedTool, freeTool} {
 		if err := tools.Default().Activate(context.Background(), buyerOrg, "default", name, "u_"+buyerOrg); err != nil {
@@ -500,7 +500,7 @@ func TestSplitFleetSettlesAPricedTool(t *testing.T) {
 	if code != http.StatusPaymentRequired {
 		t.Fatalf("unpaid priced call = %d (%s), want 402", code, body)
 	}
-	if bytes.Contains(body, []byte("payment seam not configured")) {
+	if bytes.Contains(body, []byte("payment client not configured")) {
 		t.Fatalf("the tools process still has no rail across the boundary: %s", body)
 	}
 	req := f.challengeOf(hdr)
@@ -557,7 +557,7 @@ func TestSplitFleetSettlesAPricedTool(t *testing.T) {
 	}
 }
 
-// TestSplitFleetFreeToolNeedsNoPayment: closing the seam must not put a toll on
+// TestSplitFleetFreeToolNeedsNoPayment: closing the client must not put a toll on
 // what was free. A listed-but-free tool dispatches with no challenge and no ledger
 // movement, even though every dispatch is offered to the rail — over four sockets.
 func TestSplitFleetFreeToolNeedsNoPayment(t *testing.T) {

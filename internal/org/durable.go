@@ -7,7 +7,7 @@ package org
 
 // durable.go packages the single-writer + durability discipline (proven in
 // handoff_test.go with the raw primitives) into ONE reusable value a per-org SQLite
-// store wires at its open/write/close seam. It composes the three orthogonal lanes,
+// store wires at its open/write/close client. It composes the three orthogonal lanes,
 // each kept in its own package:
 //
 //	WHO writes   — ha election via CASFencer: HRW names the owner, the lease binds
@@ -76,7 +76,7 @@ type Durability struct {
 // through whatever store it is handed. The ship mechanism is likewise swappable: the
 // default wholeFile codec can be replaced by a WAL-frame delta codec behind snapshotCodec
 // without touching the fence or round. WithCheckpoint injects the envelope's re-encrypting
-// Checkpoint (crypto-integration seam).
+// Checkpoint (crypto-integration client).
 func NewDurability(cond replica.ConditionalStore, view ownerView, cipher *Cipher, opts ...DurabilityOption) *Durability {
 	var o durabilityOpts
 	for _, fn := range opts {

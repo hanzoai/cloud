@@ -1,6 +1,6 @@
 package platform
 
-// pushbuild_e2e_test.go proves the whole "cloud IS the git forge" seam in ONE
+// pushbuild_e2e_test.go proves the whole "cloud IS the git forge" client in ONE
 // process: a REAL `git push` over smart-HTTP to the embedded git forge
 // (clients/git) drives the REAL platform push builder (buildFromPush) and enqueues
 // a build for the app tracking that repo+branch.
@@ -9,7 +9,7 @@ package platform
 // TestPushFiresBuildTrigger proves a push reaches cloud.OnGitPush, and this
 // package's TestBuildFromPush_LaunchesMatchingApp proves buildFromPush enqueues a
 // deployment — but neither wires a live push through the real builder. This test
-// connects them through the ACTUAL production seam (cloud.RegisterPushBuilder ⇄
+// connects them through the ACTUAL production client (cloud.RegisterPushBuilder ⇄
 // cloud.OnGitPush) so a regression on either side, or in the global inversion
 // point between them, fails here.
 //
@@ -99,7 +99,7 @@ func TestPushToForgeEnqueuesBuild(t *testing.T) {
 	const gitHost = "git.hanzo.ai"
 
 	// 1. Platform Service over a READY fake cluster, and register the REAL push
-	//    builder exactly as platform.Mount does. This is the one production seam.
+	//    builder exactly as platform.Mount does. This is the one production client.
 	_, s := mountSvcK8s(t, fakeK8s())
 	prev := selfGitHost
 	selfGitHost = gitHost

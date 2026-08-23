@@ -6,14 +6,14 @@ import "sync/atomic"
 //
 // clients/flags owns evaluation and imports THIS package (cloud.Deps, Handle,
 // OrgStore, …). serve.go mounts the edge middleware and therefore imports
-// routers. So the root package can never import flags — and without a seam, no
+// routers. So the root package can never import flags — and without a client, no
 // filter mounted from serve.go can read a switch at all. That is not a
 // theoretical gap: the `paywall_enforced` switch was registered in the cockpit
 // and governed only clients/entitlement.RequireProduct, a leaf free to import
 // flags, while the paywall serve.go actually mounts stayed env-gated. Flipping
 // the switch in admin.hanzo.ai changed nothing.
 //
-// The seam inverts at the direction the dependency already runs: flags calls
+// The client inverts at the direction the dependency already runs: flags calls
 // SetSwitchReader on mount, the root package calls Switch. One function in, one
 // function out, no new import in either direction.
 

@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-// setExperimentForTest wires assign and restores the seams on cleanup.
+// setExperimentForTest wires assign and restores the clients on cleanup.
 func setExperimentForTest(t *testing.T, assign AssignFunc) {
 	t.Helper()
-	prevA, prevAn := assignSeam, analyzeSeam
+	prevA, prevAn := assignClient, analyzeClient
 	SetExperiment(assign, nil)
 	t.Cleanup(func() { SetExperiment(prevA, prevAn) })
 }

@@ -26,7 +26,7 @@ import (
 // import handler queues a bounded background import intersected with the GRANTED set.
 
 // recordingImporter is a cloud.GitImporter test double that records the calls the
-// integrations plane makes across the seam.
+// integrations plane makes across the client.
 type recordingImporter struct {
 	mu       sync.Mutex
 	inbound  []cloud.GitInboundReq

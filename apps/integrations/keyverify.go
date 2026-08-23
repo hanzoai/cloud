@@ -75,12 +75,12 @@ type keySpec struct {
 }
 
 // envBase returns a trimmed, slash-normalized origin override from env, or "".
-// It is the ONE httptest/operator seam every origin builder consults first.
+// It is the ONE httptest/operator client every origin builder consults first.
 func envBase(key string) string {
 	return strings.TrimRight(strings.TrimSpace(os.Getenv(key)), "/")
 }
 
-// constOrigin returns a fixed origin, overridable via env (the httptest seam),
+// constOrigin returns a fixed origin, overridable via env (the httptest client),
 // so an operator or a test can repoint a provider without a rebuild.
 func constOrigin(envKey, def string) func(VerifyInput) (string, error) {
 	return func(VerifyInput) (string, error) {

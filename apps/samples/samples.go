@@ -1,5 +1,5 @@
 // Package samples is the fleet's compute-utilization time series: ONE table, ONE
-// writer seam, ONE read face that every compute source feeds.
+// writer client, ONE read face that every compute source feeds.
 //
 // The fleet already reports lifecycle, liveness and static inventory — the Visor
 // machines, the BYO workers that dialed in, the BYO clusters, the agent
@@ -11,7 +11,7 @@
 // a series. This package is the missing plane, and it is the ONLY one: sources
 // append here rather than growing private telemetry tables.
 //
-// It is deliberately a LEAF. It depends on the datastore seam (ai/object) and the
+// It is deliberately a LEAF. It depends on the datastore client (ai/object) and the
 // tenancy vocabulary (apps/principal) and nothing else in cloud, so every
 // compute source — apps/agents, apps/visor, ml — can import it without a
 // cycle (apps/links imports apps/agents, and apps/agents imports this).

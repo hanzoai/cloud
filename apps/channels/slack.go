@@ -10,7 +10,7 @@ import (
 )
 
 // slack.go is the Slack transport: envelope normalization from the ingress
-// seam and egress through the ONE existing chat.postMessage path
+// client and egress through the ONE existing chat.postMessage path
 // (integrations.SendSlack).
 
 // slackDoor is the send door; tests spy it, prod never repoints.

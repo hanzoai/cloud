@@ -40,7 +40,7 @@ func init() {
 			"when AT LEAST ONE channel launched and `failed` only when none did — `live` is not a "+
 			"claim that every channel launched. Repeating the call is safe: a channel already live "+
 			"is skipped, never re-launched. A campaign carrying more than one creative has its "+
-			"variant assigned here by the experiment seam and tagged as `utm_content`.\n\n"+
+			"variant assigned here by the experiment client and tagged as `utm_content`.\n\n"+
 			"Org-scoped and fails closed: a valid bearer is required (403 without one), the "+
 			"campaign is read under the caller's OWN org so another tenant's id is a 404, and a "+
 			"campaign with no channels is a 400 — there is nothing to launch. Each executor "+
@@ -114,7 +114,7 @@ func pauseCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 // failure never aborts the others. Returns the mutated campaign; the caller
 // persists it.
 func fanOut(ctx context.Context, org string, camp Campaign) Campaign {
-	// A/B: if the campaign carries more than one creative, the experiment seam
+	// A/B: if the campaign carries more than one creative, the experiment client
 	// assigns the variant this launch runs (utm_content the executor tags). With
 	// no experiment wired, or a single creative, variant is "" (single-creative).
 	variant := assignVariant(ctx, org, camp)

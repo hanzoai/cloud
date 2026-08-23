@@ -352,7 +352,7 @@ func accrueOne(s *cloud.Service[state], ctx context.Context, a Author, deploying
 	return won
 }
 
-// AccrueForOrg is the seam the unified affiliate accrual walk calls once per source
+// AccrueForOrg is the client the unified affiliate accrual walk calls once per source
 // org (with the spend it already read): it accrues royalty to EVERY approved author
 // whose verified repo that org deployed (excluding the author's own org), latched
 // at-most-once per (author, org, period). Returns the number of NEW royalty

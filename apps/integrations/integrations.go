@@ -195,12 +195,12 @@ type Device struct {
 }
 
 // SyncHook pulls provider-side state INTO Hanzo (e.g. a GitHub App installation's
-// repo list). It is a #51 seam: DECLARED on Provider, nil for every provider
+// repo list). It is a #51 client: DECLARED on Provider, nil for every provider
 // today, and NOT wired to any route. When GitHub creds land, github.go sets this
 // to the installation-token-minting + repo-sync implementation.
 type SyncHook func(ctx context.Context, conn Connection) error
 
-// WritebackHook pushes Hanzo state TO the provider. It is a #51 seam: declared,
+// WritebackHook pushes Hanzo state TO the provider. It is a #51 client: declared,
 // nil today, not wired.
 type WritebackHook func(ctx context.Context, conn Connection, payload []byte) error
 
@@ -282,7 +282,7 @@ type Provider struct {
 	// when the provider has no revoke endpoint.
 	Revoke func(ctx context.Context, creds OAuthConfig, token string) error
 
-	// #51 seams — declared, nil today, not wired to a route (see SyncHook/WritebackHook).
+	// #51 clients — declared, nil today, not wired to a route (see SyncHook/WritebackHook).
 	Sync      SyncHook
 	Writeback WritebackHook
 }
@@ -307,7 +307,7 @@ func register(p *Provider) {
 
 // state is integrations' own data; shared deps live in the embedded cloud.Base —
 // logger (s.Log), deployment domain (s.Domain, e.g. api.hanzo.ai — builds the
-// redirect_uri). mounted is the in-process seam other subsystems (the channel) reach
+// redirect_uri). mounted is the in-process client other subsystems (the channel) reach
 // through the package funcs at the bottom of this file.
 type state struct {
 	store      *Store
@@ -419,7 +419,7 @@ type authorizeOut struct {
 // ── Mount / lifecycle ──────────────────────────────────────────────────────────
 
 // Mount wires /v1/integrations/* onto app. Complex flavour: it publishes the
-// package global `mounted` (the in-process token-custody seam) and pairs with a
+// package global `mounted` (the in-process token-custody client) and pairs with a
 // Shutdown, so it constructs the cloud.Service value directly (cloud.NewBase +
 // &cloud.Service[state]{…}) rather than via cloud.Mount.
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -1695,7 +1695,7 @@ func saveUser(ctx context.Context, s *cloud.Service[state], org, user, label str
 	return saved, nil
 }
 
-// ── in-process seam (mirror agents `var mounted *cloud.Service`) ───────────────
+// ── in-process client (mirror agents `var mounted *cloud.Service`) ───────────────
 //
 // Token custody lives ONLY here; the channel (af3999a) never touches KMS directly.
 // Every func is nil-safe against an unmounted subsystem.
@@ -1778,7 +1778,7 @@ func OrgForExternalID(provider, externalID string) (string, bool) {
 
 // ConnectionFor returns an org's non-secret connection metadata for a provider.
 //
-// NOTE (single contract deviation): the contract names this seam `Connection`,
+// NOTE (single contract deviation): the contract names this client `Connection`,
 // but Go forbids a func and a type sharing an identifier and `Connection` is the
 // domain-noun TYPE (used by SyncHook/WritebackHook, the store, and this return
 // value). The accessor is therefore `ConnectionFor` — the idiomatic Go name for

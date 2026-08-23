@@ -7,7 +7,7 @@
 // programs shared — which is how a GET on three surfaces came to mint platform
 // credit. Earnings are PAYABLES now: each program ACCRUES and RECORDS what is owed,
 // and a human settles it out of band. Platform credit is issued only by an admin
-// grant (apps/admin/core.ApplyGrant). TestSeamIsReadOnly fails if a write returns.
+// grant (apps/admin/core.ApplyGrant). TestClientIsReadOnly fails if a write returns.
 //
 // # It used to ask over HTTP, and it never once got an answer
 //
@@ -28,7 +28,7 @@
 //
 // Commerce is an INTERFACE so each program's store/handler logic stays testable
 // with a fake ledger; Client is the ONE production binding. A program keeps its
-// own narrow (unexported-method) seam and a thin adapter delegating to Client —
+// own narrow (unexported-method) client and a thin adapter delegating to Client —
 // Go package-scoped interface methods can't cross packages, and the adapter is
 // where a program still names its own grant tag.
 package payout

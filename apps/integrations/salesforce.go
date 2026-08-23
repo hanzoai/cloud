@@ -41,7 +41,7 @@ const (
 	// store, and the reader needs the host to build any REST call.
 	salesforceInstanceURL = "instance_url"
 	// salesforceLoginBaseEnv repoints the login host for sandbox orgs
-	// (test.salesforce.com) or the httptest seam. My-domain orgs also work through
+	// (test.salesforce.com) or the httptest client. My-domain orgs also work through
 	// login.salesforce.com for the authorization leg.
 	salesforceLoginBaseEnv = "SALESFORCE_LOGIN_BASE"
 )
@@ -167,7 +167,7 @@ func salesforceInstance(raw string) (string, error) {
 	if !validHostLabel(host) {
 		return "", fmt.Errorf("salesforce returned an unusable instance host")
 	}
-	// A test seam (SALESFORCE_LOGIN_BASE set) points the whole flow at httptest, whose
+	// A test client (SALESFORCE_LOGIN_BASE set) points the whole flow at httptest, whose
 	// instance_url is a loopback host:port — allow it there only. In prod, pin the host
 	// to a Salesforce suffix, reject a bare IP literal (IMDS/RFC1918/loopback), and drop
 	// any port, so a spoofed token endpoint cannot make the reader dial an attacker host.

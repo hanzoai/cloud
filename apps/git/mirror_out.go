@@ -106,7 +106,7 @@ func mirrorOutbound(s *cloud.Service[state], ctx context.Context, ev cloud.Lifec
 		// Loop prevention: refs that arrived via an inbound sync FROM this host must
 		// not be re-mirrored straight back to it. Origin is "" for a native push
 		// (always mirrors); a future inbound sync stamps the source host, and this
-		// suppresses the echo. The seam is wired now; inbound sync sets it later.
+		// suppresses the echo. The client is wired now; inbound sync sets it later.
 		if ev.Origin != "" && strings.EqualFold(strings.TrimSpace(ev.Origin), t.Host) {
 			continue
 		}

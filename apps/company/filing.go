@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// filing.go implements the state-of-incorporation filing seam. Forming a real
+// filing.go implements the state-of-incorporation filing client. Forming a real
 // company means filing the Certificate of Incorporation (C-Corp) or Articles of
 // Organization (LLC/DAO-LLC) with the Secretary of State and paying the state fee.
 // Hanzo Company does NOT do that itself — it is performed by a registered-agent /

@@ -18,7 +18,7 @@ import (
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 )
 
-// storefront_test.go proves the ONE catalog seam: a PUBLISHED product Asset surfaces
+// storefront_test.go proves the ONE catalog client: a PUBLISHED product Asset surfaces
 // as the storefront product image (the commerce Listing headerImage karma.style reads).
 
 // ---- unit: the catalog gate (which assets are product imagery) ----

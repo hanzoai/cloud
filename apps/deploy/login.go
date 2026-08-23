@@ -117,7 +117,7 @@ type oauth struct {
 	http         *http.Client
 
 	// verify is cloud's own token validator (NewTokenValidator(issuer).Validate).
-	// It is a seam so a test can drive the round trip without a live JWKS; in the
+	// It is a client so a test can drive the round trip without a live JWKS; in the
 	// binary there is exactly one implementation, and a nil verify fails closed.
 	verify func(raw string) (cloud.VerifiedIdentity, error)
 }

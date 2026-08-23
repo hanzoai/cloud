@@ -62,7 +62,7 @@ import (
 // # There are three copies, and they close together
 //
 // One project's source lives in three places: the repository on the forge this
-// seam writes, the one the git app serves, and the real repository at
+// client writes, the one the git app serves, and the real repository at
 // github.com/hanzo-community that gives an author a link to hand out. All three
 // are derived from the same row and all three are moved by the same [want] — the
 // forge here, the other two through the git app ([tell]), which is where a
@@ -131,7 +131,7 @@ func (p Project) listed() bool {
 //
 // It is NOT the estate's own namespace, and that is the whole tenancy argument.
 // forge.Owner maps this deployment's tenant to `hanzoai`, which holds the
-// estate's 250 real repositories — cloud, iam, kms — and the one thing this seam
+// estate's 250 real repositories — cloud, iam, kms — and the one thing this client
 // does is set a repository's visibility from a tenant-chosen slug. Published
 // there, a project named `cloud` would address `hanzoai/cloud`, and naming your
 // project after ours would open our source or close it. A namespace that holds
@@ -170,7 +170,7 @@ func repoName(org, slug string) (string, bool) {
 }
 
 // parts is the inverse of [repoName]: the project a repository name belongs to,
-// and false for a name this seam cannot have minted.
+// and false for a name this client cannot have minted.
 //
 // The audit needs the direction that starts at the forge (see [sweep]), and it
 // only has one because the separator is not in either half's alphabet: the cut
@@ -205,7 +205,7 @@ func plain(s string) bool {
 // row has three states: a project that is listed, one that is not, and one that
 // is not there at all.
 //
-// It is the whole vocabulary of this seam. Every path below reads a row into one
+// It is the whole vocabulary of this client. Every path below reads a row into one
 // of these ([wanted]) and applies it ([apply]); the paths differ only in which
 // of the three they are allowed to reach.
 //
@@ -351,7 +351,7 @@ func tell(ctx context.Context, org, slug string, w want, p Project) error {
 // that is not there is already closed) nor this machine to be able to write its
 // contents, so it does not go through forge.Ensure — which refuses an ARCHIVED
 // repository, and would therefore make an archived repository the one kind this
-// seam could never close.
+// client could never close.
 func retract(ctx context.Context, m *forge.Client, name string) (bool, error) {
 	err := m.SetPublic(ctx, community, name, false)
 	switch {
@@ -603,7 +603,7 @@ func enqueue(s *cloud.Service[state], org, slug string, do step) {
 	name, ok := repoName(org, slug)
 	if !ok {
 		// Said once, here, rather than discovered five attempts later: a name this
-		// seam cannot spell is a permanent condition, not a failure to retry. The
+		// client cannot spell is a permanent condition, not a failure to retry. The
 		// project keeps working and publishes nothing, which is the safe half.
 		s.Log.Warn("project cannot be published: its name is not spellable as a repository",
 			"org", org, "slug", slug)
@@ -863,7 +863,7 @@ func sweep(s *cloud.Service[state], ctx context.Context) error {
 		readable++
 		org, slug, ok := parts(r.Name)
 		if !ok {
-			// A name this seam cannot have minted, so no row can be permitting it:
+			// A name this client cannot have minted, so no row can be permitting it:
 			// [repoName] is the only way a repository reaches this namespace.
 			s.Log.Error("visibility audit: an open repository nothing here published",
 				"repo", community+"/"+r.Name)

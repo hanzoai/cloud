@@ -122,8 +122,8 @@
     "/v1/company/documents": {
       "post": {
         "operationId": "post_company_documents",
-        "summary": "Renders the formation documents for the chosen structure and jurisdiction, ingests each into the org's data room, and submits the state filing through the filing seam.",
-        "description": "Renders the formation documents for the chosen structure and\njurisdiction, ingests each into the org's data room, and submits the state\nfiling through the filing seam.\n\nWith no filing partner wired the filing is recorded honestly as \"manual\" — no\nfiling id is fabricated. Available only at the documents stage.",
+        "summary": "Renders the formation documents for the chosen structure and jurisdiction, ingests each into the org's data room, and submits the state filing through the filing client.",
+        "description": "Renders the formation documents for the chosen structure and\njurisdiction, ingests each into the org's data room, and submits the state\nfiling through the filing client.\n\nWith no filing partner wired the filing is recorded honestly as \"manual\" — no\nfiling id is fabricated. Available only at the documents stage.",
         "tags": [
           "company"
         ],
@@ -563,7 +563,7 @@
       "post": {
         "operationId": "post_company_kyc_refresh",
         "summary": "RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the PULL path to a provider-reported terminal status.",
-        "description": "RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the\nPULL path to a provider-reported terminal status. For the manual provider the\ncheck stays pending; for a real provider it reflects the settled decision,\nATTRIBUTED to the provider.\n\nIt NEVER trusts a client-asserted status — the status comes from the provider\nseam — so a client cannot force a pass here, and an already-passing founder\n(e.g. a reviewer confirmation) is left untouched.",
+        "description": "RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the\nPULL path to a provider-reported terminal status. For the manual provider the\ncheck stays pending; for a real provider it reflects the settled decision,\nATTRIBUTED to the provider.\n\nIt NEVER trusts a client-asserted status — the status comes from the provider\nclient — so a client cannot force a pass here, and an already-passing founder\n(e.g. a reviewer confirmation) is left untouched.",
         "tags": [
           "company"
         ],

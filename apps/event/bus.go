@@ -361,7 +361,7 @@ func (b *bus) close() {
 	}
 }
 
-// publish is the ingest path's ONE seam onto the bus, and the ONLY way a fact leaves
+// publish is the ingest path's ONE client onto the bus, and the ONLY way a fact leaves
 // this package. It is a package var for exactly the reason resolveKeyOrg is: production
 // is always publishToStream, and a test substitutes it to read back the facts a lane
 // actually produced — the tenant stamp and the route are what matter there, and neither

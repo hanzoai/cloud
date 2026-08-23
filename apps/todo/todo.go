@@ -102,7 +102,7 @@ var kinds = map[string]bool{
 //
 // The bill meter is the shared per-org resource gate+meter. A project todo is
 // FREE by default (charging per issue is the wrong product), so the create fee
-// defaults to 0 → Gate is a pass-through and Meter a no-op; the seam is wired
+// defaults to 0 → Gate is a pass-through and Meter a no-op; the client is wired
 // uniformly with every other subsystem and ops can price it per deployment via
 // CLOUD_TODO_FEE_CENTS[_PROJECT|_ISSUE].
 type state struct {
@@ -144,7 +144,7 @@ const store = "tracker"
 // none is selected) is the physical tenant boundary — the todo's own
 // KEY-based projects are rows WITHIN it. org and project MUST already be
 // validated: principal.Org/principal.Project for a request, or the caller's own
-// server-side resolution for an in-process seam.
+// server-side resolution for an in-process client.
 func storeFor(s *cloud.Service[state], org, project string) (*Store, error) {
 	ns, err := cloud.OrgNamespace(org, project)
 	if err != nil {

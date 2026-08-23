@@ -25,7 +25,7 @@ package coding
 // The coding path did exactly that. The run was spawned on a bare
 // context.Background() with no tenant stated at all, and the routed path's
 // target lookup ran on the inbound webhook's request context, where a statement
-// would have been discarded anyway. Every seam call in every coding run
+// would have been discarded anyway. Every client call in every coding run
 // therefore answered `authorize: no org on the call`: no session, an empty clone
 // URL the dispatcher reads as "git is not available", and a run dead before a
 // model was ever asked anything. The chat turn died of this shape one file over
@@ -120,7 +120,7 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 	org = strings.TrimSpace(org)
 	if !OrgRE.MatchString(org) {
 		// Shape-checked, not merely non-empty. The org becomes a git namespace and
-		// the tenant every seam call authorizes on, so an org carrying a separator
+		// the tenant every client call authorizes on, so an org carrying a separator
 		// or a dot segment would address another tenant. It arrives from the
 		// gateway or the plane already validated; this is the second lock, on the
 		// side that would actually be harmed if the first ever failed.
@@ -192,7 +192,7 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 
 	// The session is opened on the DOOR's context, which already carries the
 	// tenant (the door stated it, or it arrived on the wire). It is the one
-	// synchronous seam call, and it is what makes the handle real.
+	// synchronous client call, and it is what makes the handle real.
 	sessionID, err := d.Sessions.OpenOn(ctx, org, subject, agentRefOr(in.AgentRef),
 		codingTitle(repo, prompt), req.TargetID)
 	if err != nil {
@@ -209,7 +209,7 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 	//
 	// It carries the REMOTE with it. A grant is a key registered on one
 	// repository, so "which repository" and "the right to push to it" are one
-	// fact and are resolved together; asking a separate seam where to clone from
+	// fact and are resolved together; asking a separate client where to clone from
 	// would be a second answer that could disagree with the credential.
 	//
 	// A ROUTED RUN NEEDS NO CREDENTIAL — the machine authenticates git with its
@@ -249,7 +249,7 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 	// Both halves are load-bearing. DETACHED because the run outlives the door's
 	// request by minutes — on the door's context the model call is cancelled the
 	// instant we answer. STATED because detaching drops the request the tenant was
-	// riding on, and every seam call left in the run authorizes on the caller.
+	// riding on, and every client call left in the run authorizes on the caller.
 	// This is the exact pairing the chat bridge uses, and the exact one whose
 	// absence made every coding run fail.
 	runCtx, cancel := runContext(org, req.TimeoutSeconds)
@@ -273,7 +273,7 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 			}
 		}()
 		defer func() {
-			// A run executes untrusted model output through a long seam chain. An
+			// A run executes untrusted model output through a long client chain. An
 			// unrecovered panic here would take down every tenant sharing this
 			// process, so it is contained — registered last so it runs first.
 			if r := recover(); r != nil && log != nil {

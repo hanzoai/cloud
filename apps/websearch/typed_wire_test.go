@@ -17,7 +17,7 @@ import (
 
 // mounted brings the subsystem up on a bare app with the Bridge installed — the
 // middleware cloud.Identify puts in front of every typed route in every process,
-// and the thing that carries a validated principal across the typed-op seam. A
+// and the thing that carries a validated principal across the typed-op client. A
 // test without it measures a gate that can only ever refuse.
 func mounted(t *testing.T) *zip.App {
 	t.Helper()

@@ -13,7 +13,7 @@ import (
 )
 
 // telegram.go is the Telegram transport: envelope normalization from the
-// ingress seam and egress through the ONE existing Bot API send path
+// ingress client and egress through the ONE existing Bot API send path
 // (integrations.SendTelegram).
 
 // errRoomNotBound rejects egress to a room the caller's org has no verified

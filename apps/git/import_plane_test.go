@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Every subsystem runs as its own process, so a seam registered in one is nil in
+// Every subsystem runs as its own process, so a client registered in one is nil in
 // the others. The app that DECIDES to import (integrations, holding the provider
 // credential) is never the app that owns the repos, which is why an import
 // answered "git importer not registered" while both apps were healthy.
@@ -20,7 +20,7 @@ func TestImportIsPublishedOnThePlane(t *testing.T) {
 	if !strings.Contains(string(src), `"/git/import"`) {
 		t.Error("no plane route: an import from another process cannot arrive")
 	}
-	// Wired at Mount, beside the other cross-app seams — a published op nothing
+	// Wired at Mount, beside the other cross-app clients — a published op nothing
 	// calls exposeImport for is unreachable.
 	mount, err := os.ReadFile("git.go")
 	if err != nil {

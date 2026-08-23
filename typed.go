@@ -1,6 +1,6 @@
 package cloud
 
-// typed.go is the seam between a REQUEST and a TYPED op. ZipApp (scope.go) gets a
+// typed.go is the client between a REQUEST and a TYPED op. ZipApp (scope.go) gets a
 // subsystem to the registry; this gets each request across it.
 //
 // zip.Get[In,Out] is the ONE registration every projection reads — REST,

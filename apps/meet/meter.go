@@ -9,7 +9,7 @@ package meet
 // the most expensive thing per head this platform hands out. The surface declared
 // cloud.Free, so nothing authorized it and nothing recorded it.
 //
-// THE UNIT IS THE SEAT, NOT THE MINUTE, and that is a statement about this seam
+// THE UNIT IS THE SEAT, NOT THE MINUTE, and that is a statement about this client
 // rather than a rounding of the bill. Media rides browser-to-SFU directly; this
 // process issues a signed token and then never hears from the session again —
 // there is no webhook receiver, no room API client, and therefore no duration

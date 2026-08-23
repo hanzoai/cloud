@@ -27,7 +27,7 @@ import (
 )
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody wrote
+// because the CLIENT they arrived through cannot carry one — not because nobody wrote
 // one. Every field below IS described in the Go source; the two ends key it on
 // different names.
 //

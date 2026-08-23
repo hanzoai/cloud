@@ -90,7 +90,7 @@ type braveResponse struct {
 // braveEngine is JSON, not HTML — which is why it carries its own fetch instead
 // of a `parse`. The engine struct's parse takes an *html.Node, and pretending a
 // JSON API is a page in order to fit that shape would be the adapter this
-// codebase keeps deleting. `fetch` is the seam: an engine either parses HTML or
+// codebase keeps deleting. `fetch` is the client: an engine either parses HTML or
 // fetches for itself, never both.
 var braveEngine = engine{
 	name: braveName,

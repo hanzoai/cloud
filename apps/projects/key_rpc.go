@@ -12,7 +12,7 @@ import (
 
 // The ingest door asks projects which project minted a beacon's key.
 //
-// Same seam and same reason as sites_rpc.go: the reader (the /v1/event door) and
+// Same client and same reason as sites_rpc.go: the reader (the /v1/event door) and
 // the owner of the fact (this store) are different processes in production, so
 // the package-level registry event.SetKeyResolver writes is nil where the
 // door reads it. In-process when they are co-resident, over the plane when they

@@ -29,7 +29,7 @@ const (
 	copilotSlowStep = 5 // slow_down: +5 s when the response carries no interval
 )
 
-// copilotBase reads COPILOT_GITHUB_BASE at call time (httptest seam),
+// copilotBase reads COPILOT_GITHUB_BASE at call time (httptest client),
 // defaulting to the login host.
 func copilotBase() string {
 	if v := strings.TrimSpace(os.Getenv("COPILOT_GITHUB_BASE")); v != "" {
@@ -38,7 +38,7 @@ func copilotBase() string {
 	return "https://github.com"
 }
 
-// copilotAPI reads COPILOT_API_BASE at call time (httptest seam), defaulting
+// copilotAPI reads COPILOT_API_BASE at call time (httptest client), defaulting
 // to the API host the Copilot verify lives on.
 func copilotAPI() string {
 	if v := strings.TrimSpace(os.Getenv("COPILOT_API_BASE")); v != "" {
@@ -100,7 +100,7 @@ func copilotStart(ctx context.Context) (*DeviceStart, error) {
 		UserCode: userCode,
 		// ALWAYS the constructed canonical URL: upstream validates the response's
 		// verification_uri then REPLACES it with this canonical value anyway —
-		// constructing is the same outcome with one path (and a trivial httptest seam).
+		// constructing is the same outcome with one path (and a trivial httptest client).
 		VerifyURL: copilotBase() + "/login/device",
 		Interval:  out.Interval, // raw wire value — begin() is the sole normalizer
 		ExpiresAt: time.Now().Unix() + out.ExpiresIn,
@@ -172,7 +172,7 @@ func copilotPoll(ctx context.Context, g Grant) (*DevicePoll, error) {
 	}, nil
 }
 
-// copilotVerify is the token intake seam: an existing GitHub token is admitted
+// copilotVerify is the token intake client: an existing GitHub token is admitted
 // only after copilotToken proves Copilot access (verify-before-store).
 func copilotVerify(ctx context.Context, in VerifyInput) (*ExchangeResult, error) {
 	tok := strings.TrimSpace(in.Token)

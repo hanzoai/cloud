@@ -136,7 +136,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // @hanzo/plans catalog (the single source of truth). It runs the bundle's
 // "entitlements" route on the shared goja host and returns the parsed, namespaced
 // `entitlements` map (e.g. "world.api_rate_limit", "ai.tokens_per_min"). This is
-// the one Go seam other subsystems use to read plan entitlements without importing
+// the one Go client other subsystems use to read plan entitlements without importing
 // the catalog data or reimplementing the fromLegacy derivation. Tenant is the
 // public "hanzo" catalog (plan entitlements are tenant-independent metadata).
 //
@@ -171,7 +171,7 @@ func Entitlements(ctx context.Context, id string) (map[string]any, error) {
 // source of truth). It runs the bundle's "entitlements" route on the shared goja
 // host — the SAME route /v1/plan/entitlements/:id serves — and returns the parsed
 // `entitlements` map plus the `license_features` list the bundle's toLicenseFeatures
-// transform produces. It is the seam the commerce entitlement resolver
+// transform produces. It is the client the commerce entitlement resolver
 // (commerce.CheckEntitlement) uses to map a subscription's plan tier to the flat
 // features a signed license carries, WITHOUT reimplementing the vocabulary in Go
 // (the entitlement transforms stay in one place — the JS bundle).

@@ -5,7 +5,7 @@
 // runs a git generator over `charts/app/values/*/*.yaml` on main, and every file
 // it matches becomes one Application rendering the shared `charts/app` chart.
 // So there is exactly one way to deploy: write a values file. This file is that
-// write, expressed as a Go seam the /v1/platform surface can call.
+// write, expressed as a Go client the /v1/platform surface can call.
 //
 // ── what the path decides, and why the caller never names it ─────────────────
 //
@@ -83,7 +83,7 @@ const (
 	// the repository root. Stated once; every path here is built from it.
 	declarePrefix = "charts/app/values"
 
-	// declareBranchPrefix namespaces every branch this seam pushes. Nothing else
+	// declareBranchPrefix namespaces every branch this client pushes. Nothing else
 	// writes refs under it, so a reviewer reading `git branch -r` can tell an
 	// API-authored declaration from a human one without opening the diff.
 	declareBranchPrefix = "deploy"
@@ -220,7 +220,7 @@ const platformProject = "hanzo-platform"
 //
 // ⚠ THIS IS THE HALF THAT LIVES IN ANOTHER REPOSITORY, so it is VERIFIED rather
 // than assumed — see checkFence, which reads the live template out of the clone
-// this seam already makes and refuses to write main while the two disagree.
+// this client already makes and refuses to write main while the two disagree.
 func declareProject(dir string) string {
 	if reserved(dir) {
 		return platformProject
@@ -734,7 +734,7 @@ func fenceOf(root, org string) (string, error) {
 	return got, nil
 }
 
-// ── the git seam ─────────────────────────────────────────────────────────────
+// ── the git client ─────────────────────────────────────────────────────────────
 //
 // Clone, credential and race handling are pin.go's — the same shallow
 // single-branch clone, the same token read from KMS and carried as an

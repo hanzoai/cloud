@@ -22,7 +22,7 @@ import (
 
 // mountStack mounts the three composed planes — flags (assignment), research
 // (evidence), experiments (the composition) — on one app sharing one DataDir, so the
-// e2e proof exercises the REAL seams: real deterministic flags assignment, real
+// e2e proof exercises the REAL clients: real deterministic flags assignment, real
 // research evidence writes, the real /v1/experiment surface.
 func mountStack(t *testing.T) *zip.App {
 	t.Helper()
@@ -213,7 +213,7 @@ func TestExperiment_FeatureFlagProof(t *testing.T) {
 		fake.outcomes = append(fake.outcomes, MetricOutcome{Subject: subj, Exposed: true, Converted: converted})
 	}
 
-	// 4. ANALYZE — per-variant lift + significance (the in-process seam campaign uses).
+	// 4. ANALYZE — per-variant lift + significance (the in-process client campaign uses).
 	a, err := Analyze(context.Background(), org, project, "checkout_cta", time.Now().Add(-time.Hour), time.Now(), 0.05)
 	if err != nil {
 		t.Fatalf("analyze: %v", err)

@@ -21,13 +21,13 @@ import (
 // carrying no terms, which no client could ever satisfy. Prices were in the catalog
 // and revenue was not.
 //
-// So the seam asks the process that owns the rail instead of assuming, exactly as
+// So the client asks the process that owns the rail instead of assuming, exactly as
 // resource_billing_peer.go asks commerce whether a priced create may run. The tool
 // plane still knows nothing about money: it sends a resource id and the proof that
 // arrived on the request, and reads back an outcome. What a call costs, who is paid
 // and whether a signature verifies remain entirely on the other side.
 //
-// ONE POLICY, TWO TRANSPORTS. Dispatch offers EVERY call to the seam, free ones
+// ONE POLICY, TWO TRANSPORTS. Dispatch offers EVERY call to the client, free ones
 // included, because "is this priced" is one lookup in the same table that settles
 // and asking it twice is how a gate and a settlement come to disagree. That is
 // unchanged here; only the wire is new.

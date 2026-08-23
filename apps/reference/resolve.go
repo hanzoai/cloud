@@ -85,7 +85,7 @@ func (s *snap) age(now time.Time) time.Duration {
 func build(set Set, took []version, entries []Entry) *snap {
 	s := &snap{set: set, took: took, byKey: map[string]Entry{}}
 
-	if set.Kind == KindSeam {
+	if set.Kind == KindClient {
 		s.refusal = set.Refusal
 		return s
 	}
@@ -382,7 +382,7 @@ func answer(set Set, s *snap, own *overrides, key string, now time.Time) (Refere
 		a.Refusal = "this set has never loaded, so it cannot tell a clean key from an unknown one"
 	}
 
-	// The override is consulted even for a seam or an unloaded set, and
+	// The override is consulted even for a client or an unloaded set, and
 	// deliberately: an organisation's own deny list is the one thing that still
 	// works when the published source does not, and refusing to read it because
 	// the baseline is unavailable would take away the only control left.

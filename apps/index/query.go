@@ -6,7 +6,7 @@ import (
 	"errors"
 )
 
-// query.go is the lexical leg's in-process seam: Query reads, Reconcile writes.
+// query.go is the lexical leg's in-process client: Query reads, Reconcile writes.
 // /v1/search (clients/search) fuses Query with the vector leg, and both legs reach
 // the SAME store the Meilisearch dialect serves — IN-PROCESS, no HTTP hop. That
 // matters twice: the fused query is an agent tool call whose latency budget is a

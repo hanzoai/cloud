@@ -207,7 +207,7 @@ func TestGuestRefusalIsCapabilityNotCredential(t *testing.T) {
 // The instrument binds through a sync.Once (production has one composition root that
 // installs the provider before serving), so the test installs its own provider and
 // resets the Once — the same substitution this package already makes for publicRate and
-// the warehouse seam.
+// the warehouse client.
 func TestDropIsVisibleToAnAlert(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	prev := otel.GetMeterProvider()

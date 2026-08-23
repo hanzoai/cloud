@@ -8,7 +8,7 @@ import (
 )
 
 // TestCampaignWhere_BindsOrgAndCampaignPositionally is the tenancy-invariant test
-// for the campaign-metrics seam: the org (tenant_id) and campaign (utm_campaign)
+// for the campaign-metrics client: the org (tenant_id) and campaign (utm_campaign)
 // are ALWAYS bound parameters, never interpolated, so a caller can only read its
 // own org's campaign and a hostile campaign id can never escape into SQL.
 func TestCampaignWhere_BindsOrgAndCampaignPositionally(t *testing.T) {
@@ -78,7 +78,7 @@ func TestCampaignWhere_ScopesTheSignal(t *testing.T) {
 }
 
 // TestCampaignMetrics_HonestEmptyWhenDatastoreDisabled: with no warehouse
-// connected (unit-test default), the seam returns honest-empty (Available=false)
+// connected (unit-test default), the client returns honest-empty (Available=false)
 // and NO error — the campaign metrics view still renders spend + channels.
 func TestCampaignMetrics_HonestEmptyWhenDatastoreDisabled(t *testing.T) {
 	ev, err := CampaignMetrics(context.Background(), "acme", "cmp_1", "", time.Now().Add(-time.Hour), time.Now())

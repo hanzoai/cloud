@@ -22,7 +22,7 @@
 // the VALIDATED principal (principal.Org → the X-Org-Id the identity boundary minted
 // from a verified credential, HIP-0026 / SanitizeIdentity), NEVER from a body or
 // query field. The org is then the ONLY input to token custody: the per-org token is
-// read in-process through the ONE seam integrations.TokenFor, which keys KMS on that
+// read in-process through the ONE client integrations.TokenFor, which keys KMS on that
 // org (/orgs/{org}/integrations/cloudflare/api_token). So a request can ONLY ever
 // address its own org's Cloudflare account:
 //   - no validated principal ⟹ principal.Org fails ⟹ 403 (a forged X-Org-Id with no
@@ -246,7 +246,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // The six routes above cannot be typed ops — each carries a wire fact the
 // declaration cannot express, and relay_wire_test.go names all six with the reason.
 // But "cannot be a typed op" is not "must be undocumented". Three of them still take
-// ordinary JSON, and openapi.Register is the seam for exactly that case: it declares
+// ordinary JSON, and openapi.Register is the client for exactly that case: it declares
 // the body off the very struct the handler binds, so the published contract follows
 // the code, and it is pure DESCRIPTION — no route, status, field or byte moves.
 // Without it those three reach every generated SDK with no request shape at all,
@@ -270,7 +270,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // have. Left bare they reached every SDK and the MCP tool list as an operationId
 // and a tag — six Cloudflare calls a caller could not tell apart, on a plane whose
 // whole point is that the org's OWN token is what moves. openapi.Describe is that
-// prose's seam, keyed exactly like Register and just as unable to invent a route.
+// prose's client, keyed exactly like Register and just as unable to invent a route.
 //
 // Each description is stated beside the Register it belongs to, so the body and
 // the prose for one operation are read and edited as one thing.

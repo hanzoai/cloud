@@ -12,7 +12,7 @@ import (
 // ONE AUTHORITY. IAM mints; everything else asks.
 //
 // The estate's bearer surface is one issuer (hanzoai/iam) and one verification
-// seam (hanzoai/authz/edge, which the root middleware speaks; an op reads the
+// client (hanzoai/authz/edge, which the root middleware speaks; an op reads the
 // result through principal). A second authority never announces itself — it
 // arrives as one import and two hundred lines of "just a session token", and
 // it fails permissively where the real one fails closed: the root's deleted
@@ -24,7 +24,7 @@ import (
 // depend on the second authority without naming it. Outside apps/iam — the
 // authority — no app file imports what a bearer is hand-rolled from
 // (crypto/hmac, a JWT library), no file joins the condemned package, and no file
-// calls identity.hs256, the seam the HS256 arm is reached through. The third
+// calls identity.hs256, the client the HS256 arm is reached through. The third
 // selector is not symmetry: transactor.go imports nothing condemned and still
 // cannot compile without the arm, so an import-only pin reported the reader set
 // as one file when it was two, and the deletion this map exists to drive would
@@ -45,7 +45,7 @@ var allowedTokenPrimitives = map[string]string{
 	"apps/team/account.go": "where the HS256 arm is DEFINED (identity.hs256), and one of its two callers. " +
 		"identity.who resolves an IAM access token first and falls back to that decode, so every other team " +
 		"surface resolves a caller and touches no algorithm. collabws, typed and the files plane's helpers " +
-		"left the reader set for good when the seam landed — they authorize against the membership rows and " +
+		"left the reader set for good when the client landed — they authorize against the membership rows and " +
 		"work on either lane. The transactor only stopped IMPORTING; it still calls the arm, and it is the " +
 		"deletion's real blocker (see its entry). Deleting the arm here is the LAST step, not the first: it " +
 		"waits on login minting IAM-only and on front/love/analytics-collector verifying IAM.\n\n" +
@@ -58,7 +58,7 @@ var allowedTokenPrimitives = map[string]string{
 		"the door (identity.forThisDeployment; shape pinned by TestSessionAudienceIsNamedNotPatterned, " +
 		"behaviour by TestIAMLaneRefusesAForeignAudience). A second session-issuing surface owes the same " +
 		"gate — verification says IAM minted it, never that it was minted for you.",
-	"apps/team/transactor.go": "THE SECOND READER, reached through the seam rather than an import — it calls " +
+	"apps/team/transactor.go": "THE SECOND READER, reached through the client rather than an import — it calls " +
 		"identity.hs256 on the credential in its path segment — and it is what actually blocks the deletion. " +
 		"Cut the arm and this is the one file left that will not compile.\n\n" +
 		"IT HAS NO IAM LANE BY DECISION. A browser can put a credential on a WebSocket in two places. The URL " +
@@ -126,7 +126,7 @@ var tokenPrimitives = []string{
 }
 
 // callsHS256 reports whether path CALLS identity.hs256 — the HS256 arm reached
-// through the seam. A caller imports nothing condemned, so this is the only way
+// through the client. A caller imports nothing condemned, so this is the only way
 // the pin sees it; the definition alone does not count, or every file would.
 func callsHS256(t *testing.T, path string) bool {
 	t.Helper()
@@ -163,10 +163,10 @@ func TestOnlyIAMMintsTokens(t *testing.T) {
 					}
 				}
 			}
-			// The seam, checked second so a file that also imports keeps the
+			// The client, checked second so a file that also imports keeps the
 			// sharper label. This is what makes the reader set complete.
 			if _, ok := found[f]; !ok && callsHS256(t, f) {
-				found[f] = "identity.hs256 (the seam, not an import)"
+				found[f] = "identity.hs256 (the client, not an import)"
 			}
 		}
 	}

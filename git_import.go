@@ -19,7 +19,7 @@ import (
 // (values, not places).
 //
 // It used to be the embedded git object plane that answered these, against bare
-// repositories on this fleet's own disks. The forge holds them now; the seam did
+// repositories on this fleet's own disks. The forge holds them now; the client did
 // not move, only what is behind it.
 
 // GitImportReq imports one external repo onto the forge: create the repo if

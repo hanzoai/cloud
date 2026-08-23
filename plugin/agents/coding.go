@@ -19,7 +19,7 @@ package main
 // It lives at the composition root because the engine cannot live anywhere else.
 // apps/coding imports apps/agents (the routed workflow's types), so apps/agents
 // can never import apps/coding, and neither can hold both halves. A main is a
-// leaf: it is the one place that can. That is the same reason the six seam ops
+// leaf: it is the one place that can. That is the same reason the six client ops
 // next door are declared here rather than in either app.
 //
 // # Why the tenant is read and never accepted

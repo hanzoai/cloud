@@ -41,8 +41,8 @@ type commerceTxn struct {
 	CreatedAt string       `json:"createdAt"`
 }
 
-// txnSource is the measurement seam to commerce: per-org transactions, live or sandbox.
-// Production is commerceReader (the S2S read); tests inject a fake. It is the ONLY seam
+// txnSource is the measurement client to commerce: per-org transactions, live or sandbox.
+// Production is commerceReader (the S2S read); tests inject a fake. It is the ONLY client
 // to the posting source — there is no second money reader.
 type txnSource interface {
 	transactions(ctx context.Context, org string, sandbox bool) ([]commerceTxn, error)
@@ -143,7 +143,7 @@ func entry(reverse bool, dr, cr string, amount int64) []Leg {
 	return []Leg{{Account: dr, Debit: amount}, {Account: cr, Credit: amount}}
 }
 
-// costSource is the measurement seam for COST-OF-GOODS matching: given a recognized usage
+// costSource is the measurement client for COST-OF-GOODS matching: given a recognized usage
 // transaction it reports the matching cloud/GPU cost in cents and whether a REAL figure
 // exists (ok). The production projection reads the ai-owned cloud_usage ledger — the same
 // hanzo.cloud_usage cost_cents column the admin compute/o11y surfaces aggregate
@@ -154,7 +154,7 @@ type costSource interface {
 	usageCost(ctx context.Context, org string, sandbox bool, t commerceTxn) (cents int64, ok bool)
 }
 
-// noCost is the default cost seam: NO real figure, so nothing is accrued. Wiring the
+// noCost is the default cost client: NO real figure, so nothing is accrued. Wiring the
 // hanzo.cloud_usage cost_cents projection here (per-org, matched to the usage window) is
 // the followup that makes COGS — and thus a real gross-margin P&L — book in production.
 type noCost struct{}
@@ -162,12 +162,12 @@ type noCost struct{}
 func (noCost) usageCost(context.Context, string, bool, commerceTxn) (int64, bool) { return 0, false }
 
 // cogsVoucher accrues the cloud/GPU cost of goods MATCHING a recognized usage revenue:
-// Dr 5000 Cloud COGS / Cr 2300 Accrued infra payable, for the `cents` the cost seam
+// Dr 5000 Cloud COGS / Cr 2300 Accrued infra payable, for the `cents` the cost client
 // reports. It is a SEPARATE voucher (keyed cogs_accrual/txn, never commerce_txn) so revenue
 // posting and cost accrual stay orthogonal and independently idempotent — commerce
 // transactions remain the SOLE revenue source and are never double-counted. Only a usage
 // recognition accrues COGS; a negative (de-recognition) reverses the accrual, keeping cost
-// matched to revenue. A non-positive cost books nothing (the gate the seam's ok already
+// matched to revenue. A non-positive cost books nothing (the gate the client's ok already
 // enforces, belt-and-braces so no zero-cost voucher is ever emitted).
 func cogsVoucher(t commerceTxn, cents int64) (Voucher, bool) {
 	if classify(t) != kindUsage || cents <= 0 {
@@ -212,11 +212,11 @@ func ingestOrg(ctx context.Context, src txnSource, cost costSource, st *store, o
 		// COGS accrual runs OUTSIDE the revenue cursor, over EVERY usage row in the window.
 		// The accrual is keyed (cogs_accrual, txn.ID) and idempotency is its correctness
 		// boundary — never the revenue cursor — so the cost pass does NOT skip on cur.LastAt.
-		// This is what lets the cost seam BACKFILL: when the cloud_usage cost projection is
+		// This is what lets the cost client BACKFILL: when the cloud_usage cost projection is
 		// wired AFTER the revenue cursor has already advanced past a usage txn, the next sync
 		// re-scans that txn and books its matching COGS voucher (posting it exactly once).
 		// Coupling this to the revenue cursor would strand every pre-wiring period as
-		// revenue-only, overstating gross margin forever. Gated on the seam's ok, so the live
+		// revenue-only, overstating gross margin forever. Gated on the client's ok, so the live
 		// noCost path still books nothing.
 		if cost != nil {
 			if cents, has := cost.usageCost(ctx, org, sandbox, t); has {

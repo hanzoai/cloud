@@ -125,7 +125,7 @@ func TestNewS3VFSDoesNotBlockBootOnAHangingStore(t *testing.T) {
 	}
 }
 
-// TestS3VFSIsVFSClient is the compile-time seam proof (also asserted by the
+// TestS3VFSIsVFSClient is the compile-time client proof (also asserted by the
 // package-level var in s3vfs.go) — the impl really satisfies the interface files.go
 // consumes.
 func TestS3VFSIsVFSClient(t *testing.T) {

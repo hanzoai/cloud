@@ -26,7 +26,7 @@ func providerForHost(host string) string {
 	return ProviderGitHub
 }
 
-// forge is the narrow identity seam the author verification path needs, across the
+// forge is the narrow identity client the author verification path needs, across the
 // supported code forges (GitHub, GitLab). Repo ownership is proven ONE of two ways,
 // and this interface makes BOTH testable with a fake — the HTTP impl below is the ONE
 // production binding:

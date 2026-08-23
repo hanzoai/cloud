@@ -284,7 +284,7 @@ func TestMeteredSurfacesHoldAMeter(t *testing.T) {
 					"deliberately free today.", name, name)
 			}
 			if zeroed {
-				t.Errorf("apps/%s: every Meter call passes a literal 0 — the seam is wired and "+
+				t.Errorf("apps/%s: every Meter call passes a literal 0 — the client is wired and "+
 					"records nothing.\nA debit of zero posts no ledger entry, so the surface "+
 					"is free while reading as metered. Charge the fee the deployment "+
 					"configures (cloud.ResourceFeeCents), or declare the surface Free.", name)
@@ -369,7 +369,7 @@ var meteredWithoutAMeter = map[string]bool{
 // its own: does it charge a NUMBER?
 //
 // A meter priced at zero posts no ledger entry, so the surface is free while every
-// structural check reads it as metered — the seam is wired, the standing is
+// structural check reads it as metered — the client is wired, the standing is
 // required, and the debit is a no-op. plugin/sandbox passed this test that way
 // for its whole life. The evidence is the DEFAULT a fee resolves to:
 // cloud.FeeCents(env, kind, 0) is a surface that charges nothing unless an operator

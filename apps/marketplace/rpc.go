@@ -16,7 +16,7 @@ import (
 // table is nil. Reading a nil table as "nothing is priced" is how every listed tool
 // became free the moment the fleet split, so the rail asks the owner instead.
 //
-// It is the SAME lookup the in-process seam serves — registry.Price, one method,
+// It is the SAME lookup the in-process client serves — registry.Price, one method,
 // one store — projected onto the wire. There is no second price rule here, because
 // a second rule is how a gate and a settlement come to disagree.
 //

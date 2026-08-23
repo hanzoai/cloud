@@ -5,11 +5,11 @@ package campaign
 // only this interface; it never imports ads / publish / marketing and never
 // touches a credential. Each concrete channel CONSUMES its own connectors
 // (paid → the ad connectors, organic → the social connectors, email → the email
-// connectors) through the integrations.TokenFor custody seam, and is registered
+// connectors) through the integrations.TokenFor custody client, and is registered
 // here at the composition root — the SAME injected-function pattern the coding
 // dispatcher uses (coding.NewDispatcher(git.CloneURL, …)). One constructor, N
 // registrations: the campaign package stays free of every executor's type. Today
-// N is 1 — plugin/campaigns/seams.go registers paid (ads) and nothing else.
+// N is 1 — plugin/campaigns/clients.go registers paid (ads) and nothing else.
 
 import (
 	"context"
@@ -29,7 +29,7 @@ const (
 // Plan is the org-scoped, channel-specific slice a campaign hands ONE executor at
 // launch. It carries no credential — the executor resolves the org's connector
 // token itself (integrations.TokenFor), so credential custody never crosses this
-// seam. Variant is the A/B creative assigned for this fan-out (the utm_content
+// client. Variant is the A/B creative assigned for this fan-out (the utm_content
 // the executor tags its events with); "" when the campaign runs a single creative.
 type Plan struct {
 	CampaignID  string
@@ -38,7 +38,7 @@ type Plan struct {
 	Platform    string   // paid→meta|google|tiktok|…; organic→x|instagram|…; email→(provider)
 	Account     string   // provider account ref (ad-account id, page id, list id)
 	Content     []string // creative(s); Content[0] is the active creative for this launch
-	Variant     string   // A/B creative id (utm_content) assigned by the experiment seam, or ""
+	Variant     string   // A/B creative id (utm_content) assigned by the experiment client, or ""
 	BudgetCents int64
 	ScheduleAt  int64 // unix; 0 = launch now
 }
@@ -55,7 +55,7 @@ type Ref struct {
 	Detail     string
 }
 
-// The three executor operations, as primitive-typed function seams so a concrete
+// The three executor operations, as primitive-typed function clients so a concrete
 // channel package never has to import campaign to be registered.
 type (
 	LaunchFunc func(ctx context.Context, org string, p Plan) (Ref, error)
@@ -110,7 +110,7 @@ func (c channel) Pause(ctx context.Context, org string, ref Ref) error {
 }
 
 // NewChannel builds a Channel from a kind and its injected executor funcs. The
-// composition root calls it once per channel (plugin/campaigns/seams.go) with the
+// composition root calls it once per channel (plugin/campaigns/clients.go) with the
 // concrete ads/publish/marketing execution funcs, then RegisterChannel-s it.
 func NewChannel(kind string, launch LaunchFunc, spend SpendFunc, pause PauseFunc) Channel {
 	return channel{kind: kind, launch: launch, spend: spend, pause: pause}

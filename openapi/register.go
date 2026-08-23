@@ -1,4 +1,4 @@
-// Register and Describe are the seam through which a subsystem DECLARES what
+// Register and Describe are the client through which a subsystem DECLARES what
 // the router cannot derive: the payload types an operation binds (Register)
 // and, for an operation whose handler the wire refuses to let become a typed
 // op, its prose (Describe). The projector (From) reads only two sources: the
@@ -127,7 +127,7 @@ type Bytes struct{ Type string }
 //
 // REQUEST-only, like Binary: a response that varies by shape is a fact no route
 // here needs stated yet, and inventing the second half before one asks is how one
-// seam becomes two.
+// client becomes two.
 type OneOf []any
 
 var oneOfReq = reflect.TypeFor[OneOf]()
@@ -183,7 +183,7 @@ func Register(path, method string, req, resp any) {
 // streams, raw proxies, redirects. Leaving those bare publishes an operationId
 // and NOTHING else: every SDK generated off the document offers a call it
 // cannot explain, and a spec-derived CLI a command with no help text. Describe
-// is that prose's seam, with the same drift-proof property Register has: a
+// is that prose's client, with the same drift-proof property Register has: a
 // description whose route is not in the router never renders, so prose is
 // additive metadata on routes that exist — the registry still cannot add an
 // operation.

@@ -8,7 +8,7 @@ package org
 // checkpoint_test.go pins the crypto-integration contract: a fenced ship must fold the
 // WAL into the real on-disk file (and, on the pure-Go encryption envelope, re-encrypt it)
 // BEFORE reading the bytes it ships — otherwise it ships STALE state and a takeover reads
-// a lost acked write. It proves the WithCheckpoint seam runs on every Sync before the
+// a lost acked write. It proves the WithCheckpoint client runs on every Sync before the
 // read, that the shipped snapshot carries the just-committed write, and that a failing
 // checkpoint fails the ship CLOSED (never a stale ship acked).
 

@@ -10,7 +10,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// ops.go is git's TYPED-op seam.
+// ops.go is git's TYPED-op client.
 //
 // A typed op (zip.Get[In, Out] and friends) is ONE value with N projections: the
 // REST route, the JSON Schema in /.well-known/openapi.json, the tool at /mcp and

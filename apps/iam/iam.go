@@ -23,7 +23,7 @@
 // published FIVE path keys and 35 placeholder operations where 78 real paths and 94
 // typed operations were, so not one of them had a schema, an MCP tool, a CLI command
 // or an SDK method. The refusal apps/iam/typed_wire_test.go used to gate was a
-// property of that SEAM, never of IAM, and the seam is gone.
+// property of that CLIENT, never of IAM, and the client is gone.
 //
 // The specific self-service routes layered in front (skills) still win, because
 // zip matches the most specific pattern. The two addresses that were NOT specificity

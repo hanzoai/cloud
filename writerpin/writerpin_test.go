@@ -94,7 +94,7 @@ func TestResolve_FallsBackAndExplains(t *testing.T) {
 	}
 }
 
-// The seam itself: with an elector registered, resolve USES it — and without one,
+// The client itself: with an elector registered, resolve USES it — and without one,
 // a binary that asked for a lease is told plainly that it cannot have one rather
 // than silently running as a single writer it did not choose.
 func TestResolve_UsesRegisteredElector(t *testing.T) {

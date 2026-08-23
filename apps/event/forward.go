@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// forward.go is the CONSUMER fan-out seam of the canonical event plane. The ONE
+// forward.go is the CONSUMER fan-out client of the canonical event plane. The ONE
 // write core (ingestEvents) commits a batch as FACTS — the publish that the sink
 // lands in event.fact under its own signal; nothing here writes storage.
 // This file used to sit beside a second storage write (the wide hanzo.events INSERT)
@@ -37,7 +37,7 @@
 //     surfaces in the LLM views (GET /v1/o11y/llm/observations, /llm/traces, and the
 //     eval board) beside the gen_ai spans the ai emit path sends over the ZAP wire.
 //
-// The seam is:
+// The client is:
 //
 //   - ONE-WAY. analytics never imports its consumers; a sink (destinations, o11y)
 //     calls AddSink / AddErrorSink / AddSpanSink from its own Mount. No sinks means no
@@ -96,7 +96,7 @@ var sinks []func(org string, evs []SinkEvent)
 
 // AddSink registers a downstream fan-out consumer and returns its remover.
 // Every registered sink receives every accepted batch, each on its own
-// detached, panic-guarded dispatch — one seam, N consumers, none of which can
+// detached, panic-guarded dispatch — one client, N consumers, none of which can
 // block or fail ingest or each other.
 func AddSink(fn func(org string, evs []SinkEvent)) (remove func()) {
 	i := len(sinks)

@@ -320,7 +320,7 @@ func gate(next http.Handler) http.Handler {
 }
 
 // refuse writes the gate's fail-closed answer. ONE writer, so every refusal on
-// this seam is the same shape (403 + JSON reason) whatever term rejected it.
+// this client is the same shape (403 + JSON reason) whatever term rejected it.
 func refuse(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
@@ -330,7 +330,7 @@ func refuse(w http.ResponseWriter, msg string) {
 // superAdmin is the SAME platform-sudo predicate scope.go's admin() owns —
 // X-User-IsAdmin, minted by SanitizeIdentity ONLY for a verified member of the
 // reserved admin org and never restored from client input. Read off the request
-// here because this seam is a net/http handler, not a zip.Ctx.
+// here because this client is a net/http handler, not a zip.Ctx.
 func superAdmin(r *http.Request) bool { return r.Header.Get("X-User-IsAdmin") == "true" }
 
 // orgOf is the validated tenant SanitizeIdentity pinned from the principal's
@@ -340,7 +340,7 @@ func orgOf(r *http.Request) string { return strings.TrimSpace(r.Header.Get("X-Or
 
 // THERE IS NO QUERY-KEY ORG FILTER HERE, AND THERE MUST NOT BE ONE.
 //
-// A `scopeToTenant` used to sit at this seam, deleting ?org=/?orgId=/?tenant=/
+// A `scopeToTenant` used to sit at this client, deleting ?org=/?orgId=/?tenant=/
 // ?allOrgs= from a non-admin's request "so org A cannot read org B". It was
 // removed because it did nothing and hid a bypass while claiming to be a control:
 //
@@ -438,7 +438,7 @@ func mountRuntime(deps cloud.Deps) error {
 }
 
 // Mount composes the whole observability surface into its host as ONE app,
-// through [zip.Router.Use] — the same seam apps/iam composes identity through.
+// through [zip.Router.Use] — the same client apps/iam composes identity through.
 //
 // The verb used to be Graft, and the prose here went on naming it after zip
 // removed it: [zip.App.Graft] does not resolve, so the one link a reader would
@@ -466,7 +466,7 @@ func mountRuntime(deps cloud.Deps) error {
 // ONE origin for the whole product, not one for the module and none for the rest.
 // The cloud-native reads here and hanzoai/o11y's relay table are two halves of one
 // route table — that is what mountScope's "specific routes before the module's"
-// invariant IS — and splitting the origin down that seam would namespace half of
+// invariant IS — and splitting the origin down that client would namespace half of
 // o11y's types and leave the other half bare, which is two conventions for one
 // product.
 //

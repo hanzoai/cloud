@@ -288,7 +288,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 }
 
 // proseless is the CLOSED list of published properties that carry NO description,
-// and it names a SEAM rather than anyone's diligence.
+// and it names a CLIENT rather than anyone's diligence.
 //
 // All eight belong to the three bodies declared with openapi.Register (the init in
 // cloudflare.go). Register derives a schema by REFLECTION from the Go type, and Go

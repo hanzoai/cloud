@@ -18,7 +18,7 @@ import (
 // the App webhook keeps them LIVE (`issues` / `issue_comment` events), and the
 // backfill endpoint seeds the EXISTING issues across an org's granted repos. Both
 // build the SAME cloud.IssueUpsert and go through the ONE todo sink — no second
-// path, no todo import (the todo_seam inversion).
+// path, no todo import (the todo_client inversion).
 
 // The todo team every mirrored GitHub issue files under (repo is the per-issue
 // discriminator within it).
@@ -76,7 +76,7 @@ func assigneeOf(is githubIssue) string {
 	return ""
 }
 
-// mirrorGitHubIssue upserts one GitHub issue into org's todo via the seam,
+// mirrorGitHubIssue upserts one GitHub issue into org's todo via the client,
 // returning (created, error). The ExtRef ("github:owner/repo#N") anchors idempotency
 // across webhook redeliveries and backfill re-runs.
 func mirrorGitHubIssue(ctx context.Context, org, repo, fullName string, is githubIssue) (bool, error) {

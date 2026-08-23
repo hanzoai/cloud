@@ -175,7 +175,7 @@ func TestMirrorTargetCRUDAndIsolation(t *testing.T) {
 	}
 }
 
-// ── push → Slack notify (via the slackNotify seam) ───────────────────────────
+// ── push → Slack notify (via the slackNotify client) ───────────────────────────
 
 type notifyCall struct {
 	org, channel, text string

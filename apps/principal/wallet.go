@@ -184,7 +184,7 @@ func nameOf(id string) string {
 	return id
 }
 
-// PayerFrom is [Payer] where only the CONTEXT crossed the seam — the ZAP plane,
+// PayerFrom is [Payer] where only the CONTEXT crossed the client — the ZAP plane,
 // MCP's tools/call, and the fleet-agent door, none of which carry an HTTP request.
 // It is the Org/OrgFrom pair again: one fact, one rule, read from either side.
 //

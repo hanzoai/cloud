@@ -348,7 +348,7 @@ func ClientIPAcross(r *http.Request) string {
 // Proxies is the resolved trust set as CIDR strings, for a framework that wants
 // the allowlist rather than the predicate.
 //
-// zip resolves the caller once at the seam and honours a forwarded header only
+// zip resolves the caller once at the client and honours a forwarded header only
 // where the app names its own hops (zip.Config.TrustProxy + TrustedProxies), so
 // without this the framework's answer is the socket peer — which behind an
 // ingress is one address for every caller on earth. Handing it THIS list keeps

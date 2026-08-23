@@ -32,7 +32,7 @@ import (
 
 // ── the harness ─────────────────────────────────────────────────────────────
 
-// fakeProducer substitutes the door's ONE seam onto the broker and records what it
+// fakeProducer substitutes the door's ONE client onto the broker and records what it
 // was handed, so a test reads back the record a request actually produced. Restored
 // via t.Cleanup, the same discipline fakeWarehouse keeps.
 //
@@ -523,16 +523,16 @@ func TestReplayAnswersTheSharedReceipt(t *testing.T) {
 	}
 }
 
-// ── 6. the seam defaults to the real thing ──────────────────────────────────
+// ── 6. the client defaults to the real thing ──────────────────────────────────
 
-// TestProduceSeamDefaultsToTheRealThing pins what fakeProducer substitutes, for the
-// same reason TestWritePathSeamsDefaultToTheRealThing pins the write path's: a
+// TestProduceClientDefaultsToTheRealThing pins what fakeProducer substitutes, for the
+// same reason TestWritePathClientsDefaultToTheRealThing pins the write path's: a
 // `produce` rebound at its DECLARATION to a func returning nil would discard every
 // recording while each caller still got its 200, and nothing else in this package
 // would notice.
-func TestProduceSeamDefaultsToTheRealThing(t *testing.T) {
+func TestProduceClientDefaultsToTheRealThing(t *testing.T) {
 	if !samePtr(produce, produceSnapshot) {
-		t.Error("produce does not default to produceSnapshot — a substituted produce seam " +
+		t.Error("produce does not default to produceSnapshot — a substituted produce client " +
 			"discards recordings behind a 200 receipt")
 	}
 }

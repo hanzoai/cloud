@@ -167,7 +167,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // them raw (the note in Mount, and rawRoutes in ops_projection_test.go).
 //
 // zipdoc lifts prose off a typed op's doc comment; these two are not typed ops, so
-// there is nothing for it to lift and openapi.Describe is the seam. rawRoutes
+// there is nothing for it to lift and openapi.Describe is the client. rawRoutes
 // measured what staying raw costs — "route-only entries: path parameters, no
 // requestBody, no responses, no prose". The first two are the schema half and wait
 // on zip; the prose half does not, and leaving it unpaid publishes the two calls a
@@ -284,7 +284,7 @@ func bridgeFacts(c *zip.Ctx) error {
 	return c.Continue()
 }
 
-// callerOf is caller() across the typed-op seam, and the SAME decision: the org
+// callerOf is caller() across the typed-op client, and the SAME decision: the org
 // comes from principal.OrgFrom (what principal.Org decided, parked by
 // cloud.Bridge) and the rest from bridgeFacts. No validated org means the ZERO
 // Caller — exactly what caller() returns for an unvalidated principal — which

@@ -19,7 +19,7 @@ import (
 //   - connectorToolProvider.Dispatch — the unified tool plane, which is how a
 //     connector action is reached from POST /v1/tools/call and therefore from the
 //     fleet's one agent door.
-//   - InvokeTool — the in-process seam a sibling subsystem (the Business AI guide)
+//   - InvokeTool — the in-process client a sibling subsystem (the Business AI guide)
 //     uses to act as an org without an HTTP hop, metering + auditing with no HTTP
 //     context.
 //
@@ -65,7 +65,7 @@ func dispatchTool(ctx context.Context, org, name string, args map[string]any) (a
 
 // InvokeTool runs a single MCP tool as principal `org`, in-process — the same
 // dispatch, credential scope, per-org concurrency bound, metering, and audit as
-// POST /v1/tools/call, minus the HTTP hop. It is the seam a sibling
+// POST /v1/tools/call, minus the HTTP hop. It is the client a sibling
 // subsystem (the Business AI guide) uses to act through the per-principal MCP
 // plane. `org` MUST be the caller's VALIDATED principal.Org: the dispatch pins
 // every credential and effect to it, so an in-process caller can never exceed that
@@ -94,7 +94,7 @@ func ToolExists(name string) bool {
 	return ok
 }
 
-// auditToolCall appends the tool-call audit record from the in-process seam (no
+// auditToolCall appends the tool-call audit record from the in-process client (no
 // HTTP context, so no actor sub/email/ip — the org is the attributable actor).
 // Nil recorder → no-op. Mirrors auditRun.
 func auditToolCall(s *cloud.Service[state], ctx context.Context, org, tool, result string, status int) {

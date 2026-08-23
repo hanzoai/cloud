@@ -1,7 +1,7 @@
 package team
 
 // This file is the bots-as-members READ surface (inspectability) + the in-process
-// seam that sources bots from the canonical agents store. It replaces team-go's
+// client that sources bots from the canonical agents store. It replaces team-go's
 // IAM-SA HTTP enumeration (pkg/bots), which was broken (HANZO_API_KEY rejected →
 // bot_members=0). The ONE source of bots is now agents.ListForOrg, called
 // in-process.
@@ -143,7 +143,7 @@ func (b *botsBridge) syncOrg(ctx context.Context, org string) (int, error) {
 	return touched, nil
 }
 
-// agentsBotLister is the ONE in-process seam to the canonical agent registry: it
+// agentsBotLister is the ONE in-process client to the canonical agent registry: it
 // reads the org's agents via agents.ListForOrg (org-scoped, no HTTP hop) and maps
 // each to the minimal Bot shape the roster reconcile projects. A retired/archived
 // agent (Status not active/ready) projects as an inactive Employee (drops out of
@@ -166,7 +166,7 @@ func botActive(status string) bool {
 	return status == "" || status == "active" || status == "ready"
 }
 
-// agentReplyRunner is the ONE in-process seam the Chunter responder (chat.go) uses
+// agentReplyRunner is the ONE in-process client the Chunter responder (chat.go) uses
 // to make a bot answer: it runs the agent through agents.RunOnBehalf — the SAME
 // billed/metered/recorded run path the HTTP POST /v1/agents/:id/run handler uses —
 // on behalf of the human who addressed it, and returns the model's text. A run that

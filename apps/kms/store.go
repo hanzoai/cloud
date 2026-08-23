@@ -9,7 +9,7 @@ package kms
 // files, so exactly one process may open it — the hard reason cloud ran
 // replicas=1 with a cross-process writer lease. This store drops ZapDB entirely:
 // each org's sealed secrets live in ITS OWN encrypted SQLite file
-// ({DataDir}/orgs/{org}/kms.db via the canonical cloud.OrgDB → cek seam), which
+// ({DataDir}/orgs/{org}/kms.db via the canonical cloud.OrgDB → cek client), which
 // has NO exclusive-opener lock. Two tenants never share a file, so different pods
 // can serve different tenants (consistent-hash org→pod); within a tenant, WAL +
 // busy_timeout serialize writers and the horizontal-scale model pins each tenant

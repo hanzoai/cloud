@@ -1,6 +1,6 @@
 package ask
 
-// registry.go — the CONTRIBUTOR seam. /v1/ask is a UNIFIED grounded advisor: a plain-language
+// registry.go — the CONTRIBUTOR client. /v1/ask is a UNIFIED grounded advisor: a plain-language
 // question is routed to the domain(s) that can ground it, each domain hands back REAL figures
 // read in-process, and the model only narrates the figures it is handed. A Contributor is one
 // such domain (books today; o11y/metrics/billing tomorrow). New domains plug in here WITHOUT
@@ -23,13 +23,13 @@ type Fact struct {
 	Period string `json:"period,omitempty"`
 }
 
-// Contributor is one grounded domain behind the advisor. It is the ONE plug-in seam: a domain
+// Contributor is one grounded domain behind the advisor. It is the ONE plug-in client: a domain
 // declares WHICH questions it can ground (CanAnswer) and HOW it reads the real figures (Gather),
 // and the router composes it with no domain-specific branch of its own.
 //
 //   - Name reports the domain id surfaced as the answer's `domain` and used in traces.
 //   - CanAnswer is the lightweight classifier: does this domain ground THIS question? Keyword/
-//     intent today; an LLM classifier can replace the body without changing the seam.
+//     intent today; an LLM classifier can replace the body without changing the client.
 //   - Gather reads the REAL figures IN-PROCESS under the caller's own creds (the replayable
 //     header set), returning the facts and the domain reads (sources) that backed them. It
 //     never writes and never fabricates: an empty/zero domain yields honest zero figures.

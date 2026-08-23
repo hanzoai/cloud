@@ -10,7 +10,7 @@ import (
 	"github.com/hanzoai/cloud/apps/framework"
 )
 
-// hooks.go is the seam between the framework DocType lifecycle and the ONE marketing
+// hooks.go is the client between the framework DocType lifecycle and the ONE marketing
 // state machine (lifecycle.go). For every publishable marketing DocType it registers
 // before_save GATES that enforce, at the storage boundary, two rules no matter who
 // writes (the /v1/content endpoints, a raw PUT /v1/framework/:doctype, the console's

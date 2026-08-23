@@ -26,7 +26,7 @@ import (
 
 // noFinance is the PLUGIN-PROCESS shape: no co-resident ledger at all. It is not
 // publishFinance(t, nil) — that hands over a typed nil, which is a non-nil Client the
-// consumer then calls — but a cleared seam, which is what finance.Current() reports in
+// consumer then calls — but a cleared client, which is what finance.Current() reports in
 // a `--enable billing` child where wireFinance never ran.
 func noFinance(t *testing.T) {
 	t.Helper()

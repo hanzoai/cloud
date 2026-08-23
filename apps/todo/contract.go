@@ -61,9 +61,9 @@
 // that must survive a restart is github.com/hanzoai/tasks (its CONTRACT: "there
 // is no second async system"). If you write `go func(){}` you are writing a bug.
 //
-// # The seams — compose by reference, never by embedding
+// # The clients — compose by reference, never by embedding
 //
-// The three planes touch only across thin, one-directional seams:
+// The three planes touch only across thin, one-directional clients:
 //
 //	Issue   <-> DocType   a domain record links to the engineering work item
 //	                      about it (and back) by ExtRef. A helpdesk ticket that
@@ -74,7 +74,7 @@
 //	task     -> Issue     a task may PATCH an Issue's board state as its durable
 //	                      side effect (build passed -> move the pr to done).
 //
-// Never invert a seam: the todo holds no queue and no domain schema; DocType
+// Never invert a client: the todo holds no queue and no domain schema; DocType
 // holds no board and no queue; tasks holds no records and no columns. Intent,
 // records, and execution stay decomplected — three values, each complete.
 

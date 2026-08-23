@@ -221,7 +221,7 @@ func TestTheBuilderPublishesItsBodies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
-	// Operation.RequestBody and .Responses are `any` — the two seams build
+	// Operation.RequestBody and .Responses are `any` — the two clients build
 	// JSON-identical but differently-typed shapes — so read the operation the way
 	// every consumer does, through the marshalled document.
 	type media struct {
@@ -266,7 +266,7 @@ func TestTheBuilderPublishesItsBodies(t *testing.T) {
 	// of either; a regression here would silently strip the descriptions off it.
 	//
 	// Read it the way every consumer does — through the marshalled document —
-	// rather than by type-asserting whichever seam happened to write the value.
+	// rather than by type-asserting whichever client happened to write the value.
 	raw, err := json.Marshal(doc.Components.Schemas["AuthoredPlugin"])
 	if err != nil {
 		t.Fatalf("marshal AuthoredPlugin component: %v", err)
@@ -281,7 +281,7 @@ func TestTheBuilderPublishesItsBodies(t *testing.T) {
 	}
 	if strings.TrimSpace(ap.Properties["org"].Description) == "" {
 		t.Errorf("AuthoredPlugin.org lost its description — the untyped declaration must not "+
-			"overwrite the typed schema for a component both seams name; got %s", raw)
+			"overwrite the typed schema for a component both clients name; got %s", raw)
 	}
 }
 

@@ -136,7 +136,7 @@ type waitlistBoostRequest struct {
 	Email string `json:"email"`
 	// RefCode identifies the entry by its referral code, when the email is unknown.
 	RefCode string `json:"refCode"`
-	// Points is how many points to award. Must be positive — this seam exists to move
+	// Points is how many points to award. Must be positive — this client exists to move
 	// someone UP toward the cutoff.
 	Points int `json:"points"`
 	// Reason is the operator's justification. Not sent to the engine; it is recorded on
@@ -147,7 +147,7 @@ type waitlistBoostRequest struct {
 // waitlistBoost grants a user waitlist points, moving them up toward the access cutoff.
 // This is the access lever: the cutoff itself does not move, the person does.
 //
-// It funnels through the engine's verified grant seam (POST /v1/waitlist/award with
+// It funnels through the engine's verified grant client (POST /v1/waitlist/award with
 // source="grant" — the ONE path that honours an explicit points amount) and writes a
 // tamper-evident audit row either way, so a FAILED grant is recorded too. The reason
 // field goes only to that row.

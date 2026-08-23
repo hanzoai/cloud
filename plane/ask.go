@@ -6,7 +6,7 @@ package plane
 // It lives here rather than in package cloud for one structural reason: the
 // generated per-app clients (plane/<app>, see plane/gen) are the ONE typed
 // way to call a peer, and package cloud is itself a caller — the edge
-// rate-limiter reads finance_scope_rules, the KMS seam reads a secret, the site
+// rate-limiter reads finance_scope_rules, the KMS client reads a secret, the site
 // edge resolves a host. A client that had to import cloud could therefore never
 // be imported BY cloud, and the one call that most needs to stop being an HTTP
 // URL would be the one call the mechanism could not express. A leaf has no such
@@ -77,7 +77,7 @@ func Bind() {
 // Unbind forgets what Bind resolved, so the next Bind reads the environment
 // again.
 //
-// It is the test seam, and it exists for the same reason ResetPlane does: a
+// It is the test client, and it exists for the same reason ResetPlane does: a
 // process binds once, so nothing in production calls this, but a test that points
 // a run at its own directory has to be able to say the previous answer is stale.
 func Unbind() {

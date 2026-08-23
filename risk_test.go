@@ -17,8 +17,8 @@ import (
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 )
 
-// resetScorer restores the seam after a test, so one test's installed scorer can
-// never leak into another's — the package-level seam is the only shared state
+// resetScorer restores the client after a test, so one test's installed scorer can
+// never leak into another's — the package-level client is the only shared state
 // here and it is reset explicitly rather than hoped about.
 func resetScorer(t *testing.T) {
 	t.Helper()
@@ -245,13 +245,13 @@ func TestRiskScorerInstalled(t *testing.T) {
 	resetScorer(t)
 	SetRiskScorer(nil)
 	if RiskScorerInstalled() {
-		t.Fatal("no scorer is installed, but the seam says there is one")
+		t.Fatal("no scorer is installed, but the client says there is one")
 	}
 	SetRiskScorer(func(context.Context, string, RiskQuery) (RiskVerdict, error) {
 		return RiskVerdict{Action: ActionAllow}, nil
 	})
 	if !RiskScorerInstalled() {
-		t.Fatal("a scorer is installed, but the seam says there is not")
+		t.Fatal("a scorer is installed, but the client says there is not")
 	}
 	SetRiskScorer(nil) // a degraded scorer withdraws rather than answering badly.
 	if RiskScorerInstalled() {

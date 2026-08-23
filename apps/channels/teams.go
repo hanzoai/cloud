@@ -10,7 +10,7 @@ import (
 )
 
 // teams.go is the Teams transport: envelope normalization from the ingress
-// seam and egress through the ONE existing Bot Connector send path
+// client and egress through the ONE existing Bot Connector send path
 // (integrations.SendTeams).
 
 // teamsDoor is the send door; tests spy it, prod never repoints.

@@ -31,7 +31,7 @@ import (
 // only by the children the router spawned — and that was already the boundary
 // protecting a secret read (plane.KMSGet) and a debit (plane.FinanceRecord). It is
 // the same boundary and it is now carrying more weight. Narrowing it means peer
-// credentials on the plane itself (SO_PEERCRED, per-op), which is a fleet-wide seam
+// credentials on the plane itself (SO_PEERCRED, per-op), which is a fleet-wide client
 // and belongs to whoever owns it — not smuggled in behind a payment fix.
 
 // exposeCredit publishes the ledger credit. Mount calls it.

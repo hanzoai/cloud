@@ -247,7 +247,7 @@ func tenant(ctx context.Context) (string, error) {
 // "which file does this request touch" has one answer from one input.
 //
 // org MUST already be validated: principal.Org for a request, or the caller's
-// own server-side resolution for an in-process seam.
+// own server-side resolution for an in-process client.
 func (s *state) storeFor(org string) (*store, error) {
 	ns, err := cloud.OrgNamespace(org, "")
 	if err != nil {

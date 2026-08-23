@@ -7,7 +7,7 @@ package fleet_test
 // Every test here starts REAL child processes' worth of machinery — a zip app
 // per subsystem, listening on its own ZAP unix socket, exactly as a plugin child
 // does — and drives the composed door with JSON-RPC bodies. Nothing is stubbed at
-// the seam being tested, because the seam being tested is the seam that was wrong:
+// the client being tested, because the client being tested is the client that was wrong:
 // the old door answered from a committed array and every test of it passed while
 // the array was missing 353 of o11y's ops.
 //

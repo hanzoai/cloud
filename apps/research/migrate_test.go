@@ -95,7 +95,7 @@ func TestNoMigrationNeededForNewProvenanceField(t *testing.T) {
 }
 
 // openRawStore opens the orm-backed store directly over a plain SQLite *sql.DB (the
-// same seam cloud.OrgStore uses, minus cek encryption) so a reopen test exercises
+// same client cloud.OrgStore uses, minus cek encryption) so a reopen test exercises
 // the RECORD layer's schema idempotency without the file/encryption layer, which is
 // owned and covered elsewhere.
 func openRawStore(t *testing.T, path string) *store {

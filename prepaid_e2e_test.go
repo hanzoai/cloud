@@ -132,7 +132,7 @@ func e2eToken(t *testing.T, key *rsa.PrivateKey, owner, name string) string {
 	return signWith(t, key, c)
 }
 
-// e2eLedger publishes a real finance ledger on the process-wide money seam.
+// e2eLedger publishes a real finance ledger on the process-wide money client.
 func e2eLedger(t *testing.T) *ledgerReader {
 	t.Helper()
 	fin := finance.New(t.TempDir())
@@ -387,7 +387,7 @@ func TestPrepaidOverTheWireIsOrgScoped(t *testing.T) {
 
 // ── the OTHER meter: the one every chargeable product actually uses ──────────────
 
-// TestResourceMeterOverTheWire proves the seam the fleet's money really moves
+// TestResourceMeterOverTheWire proves the client the fleet's money really moves
 // through. BillingGate (above) charges what a surface DECLARES at the edge, and
 // no surface in the fleet declares a positive price — so today it charges nobody.
 // Every product that CAN be billed bills through ResourceMeter instead: gate

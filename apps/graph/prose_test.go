@@ -82,7 +82,7 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	}
 }
 
-// proseless is the REFLECTION SEAM, and it is the whole cost of the one route
+// proseless is the REFLECTION CLIENT, and it is the whole cost of the one route
 // here that cannot be a typed op.
 //
 // POST /v1/graph/graphql answers a shape the CALLER chose — its selection set —

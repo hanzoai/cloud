@@ -1,6 +1,6 @@
 package cloud
 
-// The scorer seam — the ONE door from anywhere in cloud to /v1/risk.
+// The scorer client — the ONE door from anywhere in cloud to /v1/risk.
 //
 // /v1/risk is the platform's scoring and decision plane: it judges an entity at
 // a lifecycle moment and answers with an action. Everything that DEFENDS a
@@ -9,7 +9,7 @@ package cloud
 // second scorer would be a second answer to one question, and the two would
 // disagree silently, which is the failure mode a risk product cannot have.
 //
-// The seam inverts the import — package cloud cannot import an app, since every
+// The client inverts the import — package cloud cannot import an app, since every
 // app imports cloud — so the app that owns /v1/risk hands its scoring function to
 // the core at mount and the core calls it through a nil-safe accessor. That is
 // what makes the gate below complete and testable before a scorer exists, and
@@ -22,8 +22,8 @@ package cloud
 // would arm the risk process while apps/gateway's RiskScorerInstalled — running in
 // the gateway binary — stayed false. Sibling apps DO co-reside wherever a root asks
 // them to: plugin/campaigns, plugin/integrations and plugin/guide each link three or
-// four apps/* and wire process-global seams across them (seams.go in each), which is
-// this seam's shape exactly, under no build tag. One import in one composition root
+// four apps/* and wire process-global clients across them (clients.go in each), which is
+// this client's shape exactly, under no build tag. One import in one composition root
 // is the whole distance between the two arrangements, so read "one process per app"
 // as the current composition and never as an impossibility.
 //
@@ -447,7 +447,7 @@ func riskUnavailable(q RiskQuery, why string) RiskVerdict {
 // RiskUnavailable is that same policy, for a scorer that has to state one fact
 // [Decide] cannot observe from here.
 //
-// A scorer reached over the plane learns something the seam does not: whether the
+// A scorer reached over the plane learns something the client does not: whether the
 // app it asks is PART OF THIS DEPLOYMENT. Over a socket, "not deployed" arrives as
 // a failed call like any other — and read as an error it would take the
 // fail-CLOSED branch, so a fleet that simply does not run the risk app would
@@ -456,7 +456,7 @@ func riskUnavailable(q RiskQuery, why string) RiskVerdict {
 // peer that is here and silent.
 //
 // So the scorer states the refusal and this applies the ONE policy to it, rather
-// than a second copy of the rule appearing at the one seam that needs it most.
+// than a second copy of the rule appearing at the one client that needs it most.
 // Every other refusal stays [Decide]'s to determine.
 func RiskUnavailable(q RiskQuery, why string) RiskVerdict { return riskUnavailable(q, why) }
 
@@ -472,7 +472,7 @@ func answering(why string) bool { return why != RefusalAbsent && why != RefusalS
 // very busy caller and refuse the lot. "We do not know" and "it is the empty
 // string" are different answers and only one of them is true.
 //
-// Stated once, at the seam every question passes through, so no gate has to
+// Stated once, at the client every question passes through, so no gate has to
 // remember it.
 func Facts(m map[string]string) map[string]string {
 	for k, v := range m {

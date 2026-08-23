@@ -3,7 +3,7 @@
 //
 // It serves listing, discovery and install per org/project at /v1/marketplace.
 // A monetized listing declares a price + recipient wallet and enforces through
-// the x402 seam.
+// the x402 client.
 //
 // It is a THIN layer over the unified tool plane (apps/tools): discovery reads
 // the tool registry (every source, activated flags); "install"/"uninstall" ARE the
@@ -14,7 +14,7 @@
 // itself.
 //
 // TWO TRANSPORTS, ONE POLICY — because the shipped topology has no co-residency.
-// The three seams this package binds are process-globals (x402.reg, tools.std, and
+// The three clients this package binds are process-globals (x402.reg, tools.std, and
 // wallets' mounted singleton), so they bind within ONE process, and the fleet runs
 // ONE PROCESS PER APP. That is not a possible future deployment, it is the only one:
 // manifest/apps.go declares marketplace, tools, x402 and wallets as four ordinary
@@ -37,7 +37,7 @@
 //	x402  → wallets      wallets_payee   resolve the payee wallet (apps/wallets/rpc.go)
 //	x402  → commerce     finance_credit  credit the payee (apps/commerce/credit_rpc.go)
 //
-// The in-process seam stays the FAST PATH where the owner is co-resident; the plane
+// The in-process client stays the FAST PATH where the owner is co-resident; the plane
 // answers where it is not. Both are the same policy and both fail closed, which is
 // what payments_test.go (one process) and split_test.go (five real processes) assert
 // against each other.
@@ -81,7 +81,7 @@ type state struct {
 
 var mounted *cloud.Service[state]
 
-// Mount wires /v1/marketplace/* and closes the payment seam both ways, so a
+// Mount wires /v1/marketplace/* and closes the payment client both ways, so a
 // published listing's price is challenged and settled at every call.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
@@ -97,7 +97,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "marketplace"), State: state{store: store, audit: deps.Audit}}
 	mounted = s
 
-	// Close the payment seam, both halves, from the one store that already holds
+	// Close the payment client, both halves, from the one store that already holds
 	// the price and the payee (payments.go). Publish FIRST: from the instant a
 	// charger is installed a dispatch can ask what a tool costs, and it must find
 	// the table already there rather than a moment of "nothing is priced".
@@ -167,10 +167,10 @@ func projectOf(ctx context.Context) string {
 	return principal.Project(c)
 }
 
-// Shutdown detaches the payment seams and closes the store, in that order.
+// Shutdown detaches the payment clients and closes the store, in that order.
 // Idempotent.
 //
-// Detaching first is the whole point: both seams close over the store, so leaving
+// Detaching first is the whole point: both clients close over the store, so leaving
 // them installed past Close would leave a price table answering from a closed
 // database — and a price lookup that errors fails a dispatch closed, turning a
 // clean shutdown into 402s on every tool in the process. Nothing priced, nothing
@@ -300,7 +300,7 @@ type publishReq struct {
 // Publish offers one tool on the marketplace, optionally monetized. The tool must
 // already resolve in the publisher's own scope, so a listing can never advertise a
 // capability that does not exist; a listing with a price must name the payout wallet
-// the x402 seam settles to, so a monetized offer is never unpayable. The price is
+// the x402 client settles to, so a monetized offer is never unpayable. The price is
 // exact to 18 decimal places, so a per-call price below a cent is a real price and
 // not a rounded-away zero. The listing is owned by the publishing org, paid into a
 // wallet of that same org, and answers 201 with the created row.
@@ -463,7 +463,7 @@ func callerOf(ctx context.Context) string {
 }
 
 // record appends one audit row. It takes the CONTEXT rather than the request because
-// its callers are typed ops, and it reaches the request through the same seam they
+// its callers are typed ops, and it reaches the request through the same client they
 // do; off the HTTP path there is no actor and no path to attribute, so it records
 // nothing rather than an anonymous half-row.
 func record(ctx context.Context, s *cloud.Service[state], org, resourceID, result string, status int) {

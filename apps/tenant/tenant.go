@@ -83,8 +83,8 @@ func (k Key) Brand() string {
 	return b
 }
 
-// Org is the key's BARE org half — the value cloud's own seams (cloud.OrgDB, the
-// meter, the source planes' own tenant column) are keyed on. Those seams scope by
+// Org is the key's BARE org half — the value cloud's own clients (cloud.OrgDB, the
+// meter, the source planes' own tenant column) are keyed on. Those clients scope by
 // brand at a different layer, so handing them the qualified key would
 // double-qualify. Every use of this method is therefore a read of a plane this
 // one does not own, and is visible as such.

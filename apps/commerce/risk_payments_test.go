@@ -529,7 +529,7 @@ const paymentsDoor = "/v1/commerce/payments"
 
 // isolate gives one test its own risk plane: a socket directory with no listener in it
 // (so "not deployed" is the state of the world unless the test installs a scorer) and a
-// scorer seam that is put back afterwards.
+// scorer client that is put back afterwards.
 //
 // It is [shortRuntimeDir] and not t.TempDir, and the difference is load-bearing HERE
 // more than anywhere: a unix socket address is capped near a hundred bytes, t.TempDir

@@ -10,7 +10,7 @@ import (
 	"github.com/hanzoai/cloud/apps/agents"
 )
 
-// fakeRouter records every routed run handed to the Route seam.
+// fakeRouter records every routed run handed to the Route client.
 type fakeRouter struct {
 	mu     sync.Mutex
 	runs   []RoutedRun
@@ -166,7 +166,7 @@ func TestRun_NoTarget_LocalPathUnchanged(t *testing.T) {
 		t.Fatalf("the local runner must execute the default path: %+v", res)
 	}
 	if router.called != 0 || gate.called != 0 {
-		t.Fatalf("routing seams must be untouched on the local path: route=%d gate=%d", router.called, gate.called)
+		t.Fatalf("routing clients must be untouched on the local path: route=%d gate=%d", router.called, gate.called)
 	}
 	// The session was opened WITHOUT a target (local open path).
 	if len(sess.opened) != 1 || sess.opened[0].target != "" {
@@ -254,7 +254,7 @@ func TestRun_Routed_NeedsNoCredential_CarriesNoSecret(t *testing.T) {
 func TestRun_RoutedButRoutingUnwired_FailsClosed(t *testing.T) {
 	sess := &fakeSessions{id: "sess_x"}
 	run := &fakeRunner{}
-	// No Route / TargetGate seams.
+	// No Route / TargetGate clients.
 	d := Dispatcher{Sessions: sess, PR: &fakePR{}, Runner: run,
 		CloneURL: func(_ context.Context, org, actor, repo string) string {
 			return "https://git.test/v1/git/" + org + "/" + repo + ".git"
@@ -381,8 +381,8 @@ func TestFinalizeRouted_ReportedError_ClosesError_NoPR(t *testing.T) {
 	}
 }
 
-// NewDispatcher wires the routed completion seam, so the durable delivery activity
-// reaches this dispatcher's verify/PR/session seams. Without it, a routed run's
+// NewDispatcher wires the routed completion client, so the durable delivery activity
+// reaches this dispatcher's verify/PR/session clients. Without it, a routed run's
 // session would never close.
 func TestNewDispatcher_WiresRoutedFinalizer(t *testing.T) {
 	prev := routedFinalizer
@@ -390,7 +390,7 @@ func TestNewDispatcher_WiresRoutedFinalizer(t *testing.T) {
 	routedFinalizer = nil
 	_ = NewDispatcher(nil)
 	if routedFinalizer == nil {
-		t.Fatal("NewDispatcher must wire the routed completion seam (else routed sessions never close)")
+		t.Fatal("NewDispatcher must wire the routed completion client (else routed sessions never close)")
 	}
 }
 

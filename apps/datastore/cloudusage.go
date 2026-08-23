@@ -22,7 +22,7 @@ import (
 // that was up. Meanwhile THIS package's connection is live in exactly those
 // binaries.
 //
-// The alternative to a copy is a func var the host injects. That seam is never
+// The alternative to a copy is a func var the host injects. That client is never
 // wired here by construction: the whole point of these binaries is that they do
 // not link ai, so the var is nil in all six and the read path is dead again.
 // Two copies of idempotent DDL against one table converge; a nil hook does not.

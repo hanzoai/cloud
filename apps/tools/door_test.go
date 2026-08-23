@@ -14,7 +14,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// door_test.go pins the seam that makes the catalog worth having: a server an org
+// door_test.go pins the client that makes the catalog worth having: a server an org
 // ENABLED shows up as tools on the fleet's one MCP door, namespaced by the server
 // it came from, callable, and invisible to every other tenant.
 

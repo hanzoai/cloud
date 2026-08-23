@@ -13,9 +13,9 @@ import (
 // tagged utm_content) and whose metric = the campaign result read from the ONE
 // analytics plane. The experiments primitive owns the bucketing (experiment.Assign)
 // and the pull-model analysis (experiment.Analyze reads analytics×flags×research
-// ITSELF); campaign only COMPOSES those two seams, wired at the composition root.
+// ITSELF); campaign only COMPOSES those two clients, wired at the composition root.
 //
-// Both seams are nil-safe: with no experiment primitive wired, a campaign runs a
+// Both clients are nil-safe: with no experiment primitive wired, a campaign runs a
 // SINGLE creative (Content[0]) and reports no A/B analysis — the honest degrade.
 // Nothing here fabricates a variant or a result, and nothing re-measures what the
 // experiments plane already measures (no duplicate evidence store).
@@ -33,16 +33,16 @@ type AssignFunc func(ctx context.Context, org, experimentID, subject string) (va
 type AnalyzeFunc func(ctx context.Context, org, experimentID string, start, end time.Time) (json.RawMessage, error)
 
 var (
-	assignSeam  AssignFunc
-	analyzeSeam AnalyzeFunc
+	assignClient  AssignFunc
+	analyzeClient AnalyzeFunc
 )
 
 // SetExperiment wires the experiments primitive into the campaign plane. Called
-// once at the composition root (plugin/campaigns/seams.go) with the experiment.Assign +
-// experiment.Analyze adapters. Passing nils clears the seam (single-creative mode).
+// once at the composition root (plugin/campaigns/clients.go) with the experiment.Assign +
+// experiment.Analyze adapters. Passing nils clears the client (single-creative mode).
 func SetExperiment(assign AssignFunc, analyze AnalyzeFunc) {
-	assignSeam = assign
-	analyzeSeam = analyze
+	assignClient = assign
+	analyzeClient = analyze
 }
 
 // ExperimentKey is the stable experiment identity for a campaign's creative A/B. A
@@ -54,14 +54,14 @@ func ExperimentKey(campaignID string) string { return "campaign:" + campaignID }
 // assignVariant returns the creative variant this launch should run. It composes
 // experiment.Assign (subject = the campaign, so a campaign's variant is stable
 // until the experiment decides a winner). With more than one creative AND an
-// assignment seam wired it asks the primitive; otherwise "" — Content[0], the
+// assignment client wired it asks the primitive; otherwise "" — Content[0], the
 // honest single-creative default. Fail-soft: an assignment error never blocks a
 // launch (e.g. the org never set up the experiment).
 func assignVariant(ctx context.Context, org string, camp Campaign) string {
-	if assignSeam == nil || len(camp.Content) <= 1 {
+	if assignClient == nil || len(camp.Content) <= 1 {
 		return ""
 	}
-	variant, err := assignSeam(ctx, org, ExperimentKey(camp.ID), camp.ID)
+	variant, err := assignClient(ctx, org, ExperimentKey(camp.ID), camp.ID)
 	if err != nil {
 		return ""
 	}
@@ -72,10 +72,10 @@ func assignVariant(ctx context.Context, org string, camp Campaign) string {
 // campaign runs a single creative, no primitive is wired, or the experiment has no
 // analysis yet. Best-effort — a metrics read never fails on the A/B lens.
 func analyzeExperiment(ctx context.Context, org string, camp Campaign, start, end time.Time) json.RawMessage {
-	if analyzeSeam == nil || len(camp.Content) <= 1 {
+	if analyzeClient == nil || len(camp.Content) <= 1 {
 		return nil
 	}
-	raw, err := analyzeSeam(ctx, org, ExperimentKey(camp.ID), start, end)
+	raw, err := analyzeClient(ctx, org, ExperimentKey(camp.ID), start, end)
 	if err != nil {
 		return nil
 	}

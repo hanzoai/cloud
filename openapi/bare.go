@@ -19,7 +19,7 @@ import (
 // sign, the closed vocabulary or the absence rule can travel with it.
 //
 // It REPORTS rather than refuses, which is the one way it differs from Complete.
-// The two seams that carry prose cannot reach every published shape yet —
+// The two clients that carry prose cannot reach every published shape yet —
 // [Register] derives its schema by reflection and Go drops comments, so a
 // Register-declared component publishes shapes without descriptions no matter what
 // its source says — and a relay carries another repo's document, whose prose is

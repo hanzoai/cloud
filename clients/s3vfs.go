@@ -4,7 +4,7 @@ package clients
 // on the shared SeaweedFS S3 gateway — the canonical, key-based, already-running
 // object store. CTO decision (.97): back deps.VFS on S3, NOT the content-addressed
 // hanzoai/vfs (its single-block PutBlock->BlockID API does not fit the key-based
-// VFSClient seam; an adapter+crypto is needless complexity for small avatars).
+// VFSClient client; an adapter+crypto is needless complexity for small avatars).
 //
 // It reuses the ONE shared S3 construction (s3admin.Admin — the SAME endpoint +
 // S3_ADMIN_* credentials clients/s3 and clients/projects use; no second client
@@ -45,7 +45,7 @@ type s3vfs struct {
 	ensured atomic.Int32 // atomic: 1 once the bucket is confirmed present (create-if-absent)
 }
 
-// Compile-time proof s3vfs satisfies the seam.
+// Compile-time proof s3vfs satisfies the client.
 var _ types.VFSClient = (*s3vfs)(nil)
 
 // NewS3VFS builds the S3-backed VFSClient from the shared admin config. The S3

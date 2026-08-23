@@ -226,7 +226,7 @@ var reportRow = "(?" + strings.Repeat(",?", strings.Count(reportColumns, ",")) +
 // warehouseReady and warehouseExec are cloud's ONE warehouse connection as this
 // plane uses it — two calls and no more, so this package cannot reach the
 // connection for anything else. Package vars so a test observes the statement
-// without standing a warehouse up, the seam metaGraph already is for the outbound
+// without standing a warehouse up, the client metaGraph already is for the outbound
 // side; never reassigned in production.
 var (
 	warehouseReady = datastore.Ready
@@ -285,7 +285,7 @@ func record(ctx context.Context, org, platform string, ms []Metric) error {
 const reportTimeout = 60 * time.Second
 
 // Pull runs every enabled destination that has a Reporter for org over w, and
-// records what each platform reported. It is the seam an on-demand caller and a
+// records what each platform reported. It is the client an on-demand caller and a
 // schedule both drive — one driver, not two paths — and it answers with the rows
 // written per platform.
 func Pull(ctx context.Context, org string, w Window) (map[string]int, error) {

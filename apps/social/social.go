@@ -17,7 +17,7 @@
 // has no publisher wired and answers 501.
 //
 // The publish edge (publish.go) and the scheduler (scheduler.go) ARE folded: a post
-// fans out to its channel's connected accounts through the Publisher seam, on an
+// fans out to its channel's connected accounts through the Publisher client, on an
 // explicit publish, on create (when scheduled for now-or-earlier), and on the scheduler
 // tick (scheduled → published when the time arrives). The provider push itself is the
 // swappable Publisher edge; its fail-closed default is honest — no Hanzo deployment

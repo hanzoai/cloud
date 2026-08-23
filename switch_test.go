@@ -12,7 +12,7 @@ func TestSwitch_DarkUntilAnEngineMounts(t *testing.T) {
 	}
 }
 
-// The seam exists so the EDGE can read a switch the engine owns: flags.Mount calls
+// The client exists so the EDGE can read a switch the engine owns: flags.Mount calls
 // SetSwitchReader, and from then on the value the engine reports is the value the
 // edge sees — including flipping back off, which is the kill switch.
 func TestSwitch_ReadsThroughTheInstalledReader(t *testing.T) {

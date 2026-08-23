@@ -584,10 +584,10 @@ func TestAuthenticated_OptOutNotHonoredForPrincipal(t *testing.T) {
 	}
 }
 
-// ── the fan-out seam delivers to the org that owns the write ────────────────
+// ── the fan-out client delivers to the org that owns the write ────────────────
 
 // TestFanOut_ProjectedWriteReachesItsOwnOrg: a write that landed fans out to the org
-// that owns it, which is the seam an org's connected ad platforms hang off.
+// that owns it, which is the client an org's connected ad platforms hang off.
 //
 // It asked something else once — that the reserved `$public` tenant never reached a
 // destination, because destinations take the RAW pre-scrub event. That tenant is

@@ -44,7 +44,7 @@ func init() {
 			"Tool.dispatchable":   "Dispatchable is whether the tool can be CALLED. False for a listing-only\nentry: a skill is activated and attached to an agent, never called.",
 			"Tool.inputSchema":    "Schema is the JSON Schema of the call arguments — the MCP inputSchema.\nAbsent for a tool that takes none.",
 			"Tool.name":           "Name is the tool's id in the flat, fleet-wide tool namespace — the value a\ntools/call passes. Unique across sources: a collision is resolved by source\nprecedence before the caller ever sees it.",
-			"Tool.price":          "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement seam; this is the declaration.",
+			"Tool.price":          "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement client; this is the declaration.",
 			"Tool.source":         "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",
 			"toolList.tools":      "Tools is every tool the caller may see, deduplicated by name with source\nprecedence applied.",
 			"toolQuery.activated": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
@@ -177,7 +177,7 @@ func init() {
 			"Tool.dispatchable":     "Dispatchable is whether the tool can be CALLED. False for a listing-only\nentry: a skill is activated and attached to an agent, never called.",
 			"Tool.inputSchema":      "Schema is the JSON Schema of the call arguments — the MCP inputSchema.\nAbsent for a tool that takes none.",
 			"Tool.name":             "Name is the tool's id in the flat, fleet-wide tool namespace — the value a\ntools/call passes. Unique across sources: a collision is resolved by source\nprecedence before the caller ever sees it.",
-			"Tool.price":            "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement seam; this is the declaration.",
+			"Tool.price":            "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement client; this is the declaration.",
 			"Tool.source":           "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",
 			"sourceQuery.activated": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
 			"sourceToolList.source": "Source is the source these tools came from.",
@@ -232,7 +232,7 @@ func init() {
 		Example: json.RawMessage(`{"featured":true,"official":false}`),
 	})
 	zip.Describe("POST /v1/tools/call", zip.Doc{
-		Description: "Runs one of the caller's activated tools and answers with its output.\n\nThis is the door onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 seam or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set.",
+		Description: "Runs one of the caller's activated tools and answers with its output.\n\nThis is the door onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 client or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set.",
 		Fields: map[string]string{
 			"toolCall.arguments": "Arguments is the tool's own input object, passed through verbatim to\nwhichever source owns it.",
 			"toolCall.name":      "Name is the tool to run, exactly as GET /v1/tools reports it.",

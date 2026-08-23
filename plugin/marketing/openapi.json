@@ -404,7 +404,7 @@
       "post": {
         "operationId": "post_marketing_calendar_by_id_publish",
         "summary": "Publishes a post NOW, synchronously, whatever its schedule.",
-        "description": "Publishes a post NOW, synchronously, whatever its\nschedule. No social connector is wired today, so every channel answers an\nhonest 501 naming the seam a real one would plug into, and the post is\nrecorded failed with that exact reason — never a faked \"published\".",
+        "description": "Publishes a post NOW, synchronously, whatever its\nschedule. No social connector is wired today, so every channel answers an\nhonest 501 naming the client a real one would plug into, and the post is\nrecorded failed with that exact reason — never a faked \"published\".",
         "tags": [
           "marketing"
         ],

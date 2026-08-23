@@ -3,7 +3,7 @@
 // An org authors flows — a trigger and a tree of connector actions — and this
 // runs them durably at /v1/auto and keeps their run history.
 //
-// It composes THREE existing seams rather than reinventing them:
+// It composes THREE existing clients rather than reinventing them:
 //
 //   - apps/integrations — per-org connector credentials (KMS-sealed). Connectors
 //     reach a token ONLY through integrations.TokenFor, never KMS directly.
@@ -252,7 +252,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// enabled flow whose WEBHOOK trigger matches (source,event) fires. Distinct
 	// /hooks/* prefix — no wildcard, no shadow of the flow/run routes above. External
 	// provider webhooks (GitHub/Stripe) + inbound channels reach the SAME Deliver via
-	// the wire seam (SetTrigger), so this is one dispatch door, three entrances.
+	// the wire client (SetTrigger), so this is one dispatch door, three entrances.
 	//
 	// UNTYPED — the body is an OPEN-KEYED event payload and the (source,event) key is in
 	// the URL. An In can carry one or the other: a struct binds the path params and

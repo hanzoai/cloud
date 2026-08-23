@@ -296,7 +296,7 @@ func (o *offer) finish() {
 	o.once.Do(func() { close(o.closed) })
 }
 
-// OfferRoutedRun is the exported seam the coding delivery activity uses to place
+// OfferRoutedRun is the exported client the coding delivery activity uses to place
 // a run into the live rendezvous. Kept here (agents owns targets + sessions) so
 // the machine-facing HTTP surface and the durable activity share ONE mailbox.
 func OfferRoutedRun(run RoutedRun) *offer { return routedMailbox.Offer(run) }

@@ -174,7 +174,7 @@ type traceListQuery struct {
 // traceListSQL renders the statement and its positional arguments. It is a pure
 // function of the clamped query so the tenant pin and both clamps can be
 // measured without a warehouse — a cross-tenant leak is invisible to a handler
-// test that cannot reach Datastore, and this is the seam where it would happen.
+// test that cannot reach Datastore, and this is the client where it would happen.
 func traceListSQL(q traceListQuery) (string, []any) {
 	// `end` is backtick-quoted because END is a SQL keyword (CASE … END); start
 	// is not, so it is not quoted. The aliases are what the row scan reads, and

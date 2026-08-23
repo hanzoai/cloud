@@ -15,7 +15,7 @@ import (
 
 // The SuperAdmin usage-cap + promo control plane, twinning /v1/admin/flags. It owns
 // no store: it FORWARDS to commerce (the billing source of truth) over the ONE
-// service-token seam —
+// service-token client —
 //
 //	promos      → commerce /v1/platform/promo   (the admin-configured plan promo)
 //	caps        → commerce's spend-alert ops, BY NAME over the internal plane

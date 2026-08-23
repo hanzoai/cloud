@@ -172,7 +172,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 }
 
 // proseless is the CLOSED list of published components whose properties carry NO
-// description, and it is a property of the SEAM they came through, not of anyone's
+// description, and it is a property of the CLIENT they came through, not of anyone's
 // diligence. These are the bodies of the untyped ingest doors and the health probe,
 // declared through openapi.Register (event.go) because those routes cannot be typed
 // ops. Register derives a schema by REFLECTION from the Go type, and Go drops
@@ -191,7 +191,7 @@ var proseless = map[string]bool{
 	// The canonical ingest wire: Event | []Event | {batch:[…]}.
 	"Event": true, "CaptureBatch": true, "CaptureEvent": true, "UTM": true, "Exception": true,
 	// The signal BODIES and the structured stack, nested inside those same ingest
-	// shapes and reaching the document through the same Register seam. Their fields
+	// shapes and reaching the document through the same Register client. Their fields
 	// carry doc comments in Go — reflection simply cannot see them, which is the one
 	// reason they are listed here rather than described.
 	"LogBody": true, "SpanBody": true, "MetricBody": true, "ClipBody": true, "Frame": true,
@@ -201,7 +201,7 @@ var proseless = map[string]bool{
 	"insightsBody": true, "insightsEvent": true,
 	// The session-replay snapshot wire (replay.go). Its fields carry doc comments in
 	// Go like every other type here; it reaches the document through the same
-	// reflection-based Register seam, which cannot see them.
+	// reflection-based Register client, which cannot see them.
 	"replayBody": true,
 }
 

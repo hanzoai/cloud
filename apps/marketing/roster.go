@@ -14,7 +14,7 @@ import (
 	iamstore "github.com/hanzoai/iam/pkg/store"
 )
 
-// roster.go is the IDENTITY seam: the ONE place marketing learns who an org's
+// roster.go is the IDENTITY client: the ONE place marketing learns who an org's
 // customers are. A customer is not a CRM row — it is a user in Hanzo IAM, owned
 // by its org — so the roster is READ from IAM and never copied here. There is no
 // marketing-local contact table to drift, and marketing can never mutate a user.

@@ -192,7 +192,7 @@ func init() {
 		Example: json.RawMessage(`{"to":"founders"}`),
 	})
 	zip.Describe("POST /v1/company/documents", zip.Doc{
-		Description: "Renders the formation documents for the chosen structure and\njurisdiction, ingests each into the org's data room, and submits the state\nfiling through the filing seam.\n\nWith no filing partner wired the filing is recorded honestly as \"manual\" — no\nfiling id is fabricated. Available only at the documents stage.",
+		Description: "Renders the formation documents for the chosen structure and\njurisdiction, ingests each into the org's data room, and submits the state\nfiling through the filing client.\n\nWith no filing partner wired the filing is recorded honestly as \"manual\" — no\nfiling id is fabricated. Available only at the documents stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
@@ -658,7 +658,7 @@ func init() {
 		Example: json.RawMessage(`{"email":"ada@acme.com","status":"reviewer_confirmed"}`),
 	})
 	zip.Describe("POST /v1/company/kyc/refresh", zip.Doc{
-		Description: "RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the\nPULL path to a provider-reported terminal status. For the manual provider the\ncheck stays pending; for a real provider it reflects the settled decision,\nATTRIBUTED to the provider.\n\nIt NEVER trusts a client-asserted status — the status comes from the provider\nseam — so a client cannot force a pass here, and an already-passing founder\n(e.g. a reviewer confirmation) is left untouched.",
+		Description: "RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the\nPULL path to a provider-reported terminal status. For the manual provider the\ncheck stays pending; for a real provider it reflects the settled decision,\nATTRIBUTED to the provider.\n\nIt NEVER trusts a client-asserted status — the status comes from the provider\nclient — so a client cannot force a pass here, and an already-passing founder\n(e.g. a reviewer confirmation) is left untouched.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",

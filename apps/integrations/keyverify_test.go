@@ -60,7 +60,7 @@ func captureServer(t *testing.T, status int) (*httptest.Server, *capture) {
 	return srv, c
 }
 
-// fixedOrigin ignores the input and always serves url — the synthetic-spec seam.
+// fixedOrigin ignores the input and always serves url — the synthetic-spec client.
 func fixedOrigin(url string) func(VerifyInput) (string, error) {
 	return func(VerifyInput) (string, error) { return url, nil }
 }
@@ -354,7 +354,7 @@ func TestCatalogWellFormed(t *testing.T) {
 	}
 }
 
-// TestCatalogWiring drives a few real registrations through their env seam to a
+// TestCatalogWiring drives a few real registrations through their env client to a
 // capture server, proving the registration is wired to keyVerify with the right
 // path and placement — not just that the metadata is present.
 func TestCatalogWiring(t *testing.T) {

@@ -300,7 +300,7 @@ func TestCloudflareTenantIsolation(t *testing.T) {
 	if _, ok := ConnectionFor("orga", "cloudflare", ""); !ok {
 		t.Fatal("orgb disconnect deleted orga's row — tenant isolation broken")
 	}
-	// The in-process token seam also refuses to hand B a credential.
+	// The in-process token client also refuses to hand B a credential.
 	if _, err := TokenFor(context.Background(), "orgb", "cloudflare", cloudflareTokenSecret); err == nil {
 		t.Fatal("TokenFor returned a credential for a non-connected org")
 	}

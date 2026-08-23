@@ -25,13 +25,13 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// sale is one statement that LEFT this process, as the seam saw it.
+// sale is one statement that LEFT this process, as the client saw it.
 type sale struct {
 	org string
 	in  *plane.EventIn
 }
 
-// mute substitutes the event plane's seam so a door fixture states its sale to a
+// mute substitutes the event plane's client so a door fixture states its sale to a
 // function instead of to an analytics child that is not running. It is [quiet]'s
 // half for the other plane: [screen.emit] spawns a goroutine the request outlives,
 // and a fixture that unbinds the plane underneath it is racing a peer call it
@@ -45,7 +45,7 @@ func mute(t *testing.T) {
 	t.Cleanup(func() { send = prior })
 }
 
-// watchSales substitutes the seam and hands back what leaves, so what a settlement
+// watchSales substitutes the client and hands back what leaves, so what a settlement
 // states can be asserted without an analytics child to receive it.
 func watchSales(t *testing.T) <-chan sale {
 	t.Helper()

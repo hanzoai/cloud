@@ -70,7 +70,7 @@ func TestAIProviderKeySealsAndResolvesEndToEnd(t *testing.T) {
 	}
 
 	// 3. The admin view agrees with the completion path — keyPresent cannot claim a
-	//    key the gateway would fail to find, because both read the same seam.
+	//    key the gateway would fail to find, because both read the same client.
 	if !aiobject.ProviderKeyPresent(&aiobject.Provider{Name: "openrouter", ClientSecret: ref}) {
 		t.Error("ProviderKeyPresent = false for a key that just sealed and resolved")
 	}

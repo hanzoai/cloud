@@ -18,7 +18,7 @@ package tel
 //
 // THE UNIT IS THE ACT WE CAN SEE. A number order and a message are each one act,
 // and the fee matches. A CALL is priced per placement rather than per minute, and
-// that is a statement about this seam rather than a rounding of the carrier's
+// that is a statement about this client rather than a rounding of the carrier's
 // bill: the completion callback carries the caller's own webhook URL (tel.go's
 // callInput.Webhook is forwarded to the carrier verbatim), so the duration is
 // delivered to the customer and never to this process. There is no minute here to

@@ -2072,7 +2072,7 @@
       "get": {
         "operationId": "adminProducts",
         "summary": "Lists the fleet workload registry: every operator App CR across the platform namespaces with its declared vs running image tag, reconciled health/phase and drift verdict.",
-        "description": "Lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict. Optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform seam, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
+        "description": "Lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict. Optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform client, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
         "tags": [
           "admin"
         ],
@@ -2991,7 +2991,7 @@
       "post": {
         "operationId": "adminWaitlistBoost",
         "summary": "Grants a user waitlist points, moving them up toward the access cutoff.",
-        "description": "Grants a user waitlist points, moving them up toward the access cutoff.\nThis is the access lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant seam (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too. The reason\nfield goes only to that row.",
+        "description": "Grants a user waitlist points, moving them up toward the access cutoff.\nThis is the access lever: the cutoff itself does not move, the person does.\n\nIt funnels through the engine's verified grant client (POST /v1/waitlist/award with\nsource=\"grant\" — the ONE path that honours an explicit points amount) and writes a\ntamper-evident audit row either way, so a FAILED grant is recorded too. The reason\nfield goes only to that row.",
         "tags": [
           "admin"
         ],
@@ -7343,7 +7343,7 @@
             "type": "string"
           },
           "points": {
-            "description": "Points is how many points to award. Must be positive — this seam exists to move\nsomeone UP toward the cutoff.",
+            "description": "Points is how many points to award. Must be positive — this client exists to move\nsomeone UP toward the cutoff.",
             "type": "integer"
           },
           "reason": {

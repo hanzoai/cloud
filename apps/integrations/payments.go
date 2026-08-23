@@ -66,7 +66,7 @@ func init() {
 }
 
 // shopifyOrigin builds the store's Admin API origin from the caller's store
-// domain (VerifyInput.AccountID). Env-overridable for the httptest seam.
+// domain (VerifyInput.AccountID). Env-overridable for the httptest client.
 func shopifyOrigin(in VerifyInput) (string, error) {
 	if v := envBase("SHOPIFY_API_BASE"); v != "" {
 		return v, nil

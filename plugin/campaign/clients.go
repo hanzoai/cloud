@@ -11,18 +11,18 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 )
 
-// The cross-subsystem seams campaign owns, wired in ITS OWN composition root.
+// The cross-subsystem clients campaign owns, wired in ITS OWN composition root.
 //
-// These used to live in package apps (wire_seams.go), which the whole fleet
+// These used to live in package apps (wire_clients.go), which the whole fleet
 // linked. campaign never imports ads and ads never imports campaign; this main
 // is the ONE place that imports both, so it adapts ads' connector-consuming
-// execution funcs onto campaign's primitive-typed channel seam. Same injected-
+// execution funcs onto campaign's primitive-typed channel client. Same injected-
 // function decoupling the coding dispatcher uses. init() runs once at load.
 func init() {
 	// GTM PAID channel: the /v1/campaign orchestrator fans out to executors that
 	// satisfy campaign.Channel; this adapts ads' provider.go funcs (each resolves
 	// the org's ad token through integrations.TokenFor and fails closed) onto the
-	// primitive-typed channel seam.
+	// primitive-typed channel client.
 	campaign.RegisterChannel(campaign.NewChannel(campaign.KindPaid,
 		func(ctx context.Context, org string, p campaign.Plan) (campaign.Ref, error) {
 			r, err := ad.LaunchPaid(ctx, org, ad.PaidPlan{

@@ -183,14 +183,14 @@ func TestMetaE2EConnectSealsAndIsolates(t *testing.T) {
 	if strings.Contains(conn.AccountLabel+conn.ExternalID, "META-LONG-LIVED-SECRET") {
 		t.Fatal("token leaked into the connection row")
 	}
-	// Tenant isolation: org B has no secret and the token seam refuses it.
+	// Tenant isolation: org B has no secret and the token client refuses it.
 	if _, ok := kmsSecret(t, kc, "orgb", "meta_ads", accessSecret); ok {
 		t.Fatal("orgb must not have a credential")
 	}
 	if _, err := TokenFor(context.Background(), "orgb", "meta_ads", accessSecret); err == nil {
 		t.Fatal("TokenFor must refuse a non-connected org")
 	}
-	// The connecting org CAN read its token via the in-process seam.
+	// The connecting org CAN read its token via the in-process client.
 	if v, err := TokenFor(context.Background(), "acme", "meta_ads", accessSecret); err != nil || string(v) != "META-LONG-LIVED-SECRET" {
 		t.Fatalf("acme TokenFor want the sealed token, got %q err=%v", v, err)
 	}

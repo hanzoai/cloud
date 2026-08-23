@@ -255,7 +255,7 @@ func ensureSecretSync(s *cloud.Service[state], ctx context.Context, org string, 
 // tenantKMSIdentity provisions (or resolves) the PER-TENANT IAM machine identity
 // whose client_credentials token carries owner=<org> — the credential the
 // kms-operator authenticates with (via /v1/kms/auth/login) to read ONLY that
-// tenant's KMS scope. It is the sole seam where a privileged IAM write happens, so
+// tenant's KMS scope. It is the sole client where a privileged IAM write happens, so
 // it is an injected dependency, not inlined: a concrete impl is wired ONLY when a
 // scoped IAM admin credential is configured and verified.
 //
@@ -277,7 +277,7 @@ type tenantKMSIdentity interface {
 	// audience cloud accepts on the KMS machine path — so the operator's token clears
 	// SanitizeIdentity and the org-scope guard admits it to /orgs/<org> only. A SHARED
 	// app (one secret + an "@org"/"-org-" selector) is FORBIDDEN here: it would share
-	// one clientSecret across tenants — the cross-tenant hole this seam exists to
+	// one clientSecret across tenants — the cross-tenant hole this client exists to
 	// avoid. NEVER mint the identity in the admin/master org; owner MUST be the tenant.
 	EnsureOrgIdentity(ctx context.Context, org string) (clientID, clientSecret string, err error)
 }

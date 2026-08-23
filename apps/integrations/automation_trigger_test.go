@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// TestAutomationTriggerSeam proves the inbound-event seam: a wired seam receives the
-// verified event verbatim, an empty org is a fail-closed no-op, and an unwired seam
+// TestAutomationTriggerClient proves the inbound-event client: a wired client receives the
+// verified event verbatim, an empty org is a fail-closed no-op, and an unwired client
 // (automations disabled) never panics.
-func TestAutomationTriggerSeam(t *testing.T) {
+func TestAutomationTriggerClient(t *testing.T) {
 	orig := fireAutomation
 	t.Cleanup(func() { fireAutomation = orig })
 
@@ -25,20 +25,20 @@ func TestAutomationTriggerSeam(t *testing.T) {
 
 	fireTrigger(context.Background(), "acme", "github", "push", "sha1", 2, map[string]any{"repo": "r"})
 	if len(got) != 1 {
-		t.Fatalf("seam fired %d times, want 1", len(got))
+		t.Fatalf("client fired %d times, want 1", len(got))
 	}
 	if c := got[0]; c.org != "acme" || c.source != "github" || c.name != "push" || c.dedupe != "sha1" || c.depth != 2 || c.payload["repo"] != "r" {
-		t.Fatalf("seam passed wrong args: %+v", c)
+		t.Fatalf("client passed wrong args: %+v", c)
 	}
 
-	// Empty org is a fail-closed no-op even with the seam wired.
+	// Empty org is a fail-closed no-op even with the client wired.
 	got = nil
 	fireTrigger(context.Background(), "", "github", "push", "sha2", 0, nil)
 	if len(got) != 0 {
 		t.Fatalf("empty-org fire must be a no-op, got %d", len(got))
 	}
 
-	// Unwired seam (automations disabled) is a safe no-op — must not panic.
+	// Unwired client (automations disabled) is a safe no-op — must not panic.
 	fireAutomation = nil
 	fireTrigger(context.Background(), "acme", "github", "push", "sha3", 0, nil)
 }

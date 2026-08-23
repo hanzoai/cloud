@@ -16,13 +16,13 @@ import (
 )
 
 // A target is a place an agent session can be dispatched to run: a laptop, a cloud
-// box, a GPU host, or a whole cluster. It is the #48 link-a-compute seam over the
+// box, a GPU host, or a whole cluster. It is the #48 link-a-compute client over the
 // SAME agents.db (one store, one tenancy column) as sessions/events — NOT a rival
 // device registry. It composes with the compute fleet rather than duplicating it: a
 // session records the target id it runs on (agent_sessions.target), and the org's
 // unified board (GET /v1/visor/fleet, apps/visor/board.go) unions these registered
 // targets with its BYO workers (GET /v1/visor/fleet/workers), BYO clusters and Visor
-// machines — reading this registry through the in-process seam below rather than
+// machines — reading this registry through the in-process client below rather than
 // copying it.
 //
 //	POST   /v1/agents/targets        register a target -> Target
@@ -300,7 +300,7 @@ func (s *Store) GetTargetByHost(ctx context.Context, org, host string) (Target, 
 	return t, nil
 }
 
-// ---- the in-process seam (org-scoped, fail-closed) ----
+// ---- the in-process client (org-scoped, fail-closed) ----
 //
 // TargetsForOrg / LoadOn are the exported twins of the list + detail reads above:
 // the ONE way another in-process subsystem (the /v1/visor/fleet board in clients/visor)
@@ -466,7 +466,7 @@ func sampleOf(t Target) samples.Sample {
 //     machine its heartbeat.
 //
 // This is the shape the billing warehouse write already uses (`go zapWriteUsage`):
-// the seam is synchronous, the CALLER owns the concurrency.
+// the client is synchronous, the CALLER owns the concurrency.
 func recordSample(s *cloud.Service[state], t Target) {
 	if t.MetricsAt == 0 {
 		return // no heartbeat in this write — nothing to append

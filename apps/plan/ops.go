@@ -1,6 +1,6 @@
 package plan
 
-// The typed-op seam for the /v1/plan catalog surface.
+// The typed-op client for the /v1/plan catalog surface.
 //
 // A typed op (zip.Get[In, Out]) is ONE registry entry with N projections — the
 // REST route, the OpenAPI operation's schema AND prose, the MCP tool, the CLI

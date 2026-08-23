@@ -20,7 +20,7 @@ import (
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 )
 
-// storefront.go is the CATALOG seam: when a product Asset goes live (lifecycle →
+// storefront.go is the CATALOG client: when a product Asset goes live (lifecycle →
 // published), its rendered image becomes the product image the storefront shows. It
 // is the ONE Go-native replacement for the old library.json → karma-queue → sync-*
 // → site-build pipeline — instead of a batch job copying approved shots into the

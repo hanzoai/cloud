@@ -12,7 +12,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// acting drives Acting over the SAME seam a typed op uses: the facts are parked
+// acting drives Acting over the SAME client a typed op uses: the facts are parked
 // off a real request exactly as cloud.Bridge parks them, and read back off a
 // context and nothing else.
 func acting(t *testing.T, headers map[string]string) (org string, refusal string) {

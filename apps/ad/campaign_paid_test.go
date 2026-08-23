@@ -10,15 +10,15 @@ import (
 )
 
 // campaign_paid_test.go is the END-TO-END proof of the paid GTM channel: the SAME
-// adapter plugin/campaigns/seams.go registers (campaign.Plan → ad.PaidPlan → LaunchPaid)
+// adapter plugin/campaigns/clients.go registers (campaign.Plan → ad.PaidPlan → LaunchPaid)
 // driven through the campaign.Channel interface, so the whole chain
 // campaign → ads → integrations.TokenFor → provider is exercised against an
 // httptest Meta stub. It lives in package ads because only this package can point
-// the connector-custody seam (tokenFor) and the Meta base at test doubles;
+// the connector-custody client (tokenFor) and the Meta base at test doubles;
 // importing clients/campaign here is acyclic (campaign never imports ads).
 
 // paidChannelForTest builds the exact paid-channel adapter the composition root
-// wires, so the test exercises the real seam shape, not a bespoke one.
+// wires, so the test exercises the real client shape, not a bespoke one.
 func paidChannelForTest() campaign.Channel {
 	return campaign.NewChannel(campaign.KindPaid,
 		func(ctx context.Context, org string, p campaign.Plan) (campaign.Ref, error) {

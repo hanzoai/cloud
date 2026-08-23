@@ -51,7 +51,7 @@ const plaidSyncPageCap = 50
 // plaidSyncCount is the page size for /transactions/sync (Plaid's max is 500).
 const plaidSyncCount = 500
 
-// plaidConn is the Plaid connector. Every field is an OPTIONAL seam with a production default
+// plaidConn is the Plaid connector. Every field is an OPTIONAL client with a production default
 // resolved at call time: base falls back to CLOUD_PLAID_BASE_URL (else Plaid production), kms
 // to bankKMS(), env to os.Getenv, and http to a timeout-bounded client. newPlaid() returns the
 // zero value (the frozen bank.go wiring), so production reads globals; a test constructs the

@@ -28,7 +28,7 @@ type Filter struct {
 	// auditor would have to scan the whole trail to find the events that matter
 	// most.
 	Impersonated bool
-	Action       string    // action exact match
+	Action       string // action exact match
 	// Actions matches any ONE of several action names — the question "show me
 	// the rows that evidence this control", where a control is evidenced by a
 	// SET of actions. One query rather than one per name, because the caller
@@ -36,14 +36,14 @@ type Filter struct {
 	// have to merge and re-sort them, and would page each name separately.
 	// Empty means unrestricted. Composes with Action as an AND, so naming both
 	// is a contradiction rather than a widening.
-	Actions []string
-	Resource     string    // res_type exact match
-	ResourceID   string    // res_id exact match (a specific resource instance)
-	Result       string    // outcome result: success|deny|error
-	Since        time.Time // ts >= Since (UTC)
-	Until        time.Time // ts <= Until (UTC)
-	Limit        int       // max rows (default 100, cap 1000)
-	Offset       int       // pagination offset
+	Actions    []string
+	Resource   string    // res_type exact match
+	ResourceID string    // res_id exact match (a specific resource instance)
+	Result     string    // outcome result: success|deny|error
+	Since      time.Time // ts >= Since (UTC)
+	Until      time.Time // ts <= Until (UTC)
+	Limit      int       // max rows (default 100, cap 1000)
+	Offset     int       // pagination offset
 }
 
 // Query returns records matching f, newest first, and the total count matching

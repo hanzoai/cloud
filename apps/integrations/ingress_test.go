@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// ingress_test.go proves the two seam pieces channels rides: the SendDiscord
+// ingress_test.go proves the two client pieces channels rides: the SendDiscord
 // door (the one new HTTP verb — httptest via the package's own repoint
 // pattern, zero live network) and emitIngress (registration, goroutine hop,
 // bounded context, panic containment).

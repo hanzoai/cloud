@@ -36,7 +36,7 @@ package plane
 //
 //	Dial: func(addr string) Client { return zaphttp.Dial(networkOf(addr), addr) }
 //
-// So the seam already exists: re-register the same scheme with the same dialler
+// So the client already exists: re-register the same scheme with the same dialler
 // and one call to the knob zap-proto/http exports for exactly this
 // (SetReadTimeout, client.go:81). Nothing is forked and no behaviour changes
 // except the number.
