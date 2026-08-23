@@ -40,8 +40,15 @@ var untypedByDesign = map[string]string{
 	// point of a probe. A typed op reaches a non-2xx only by returning an error,
 	// and zip renders that as the flat {"status","code","error"} envelope, which
 	// drops exactly the detail the probe exists to deliver.
-	"GET /v1/risk/health": "a REAL probe: 503 carries the degraded REPORT as its body " +
-		"(plane/shelf/surface/error), which a typed op's error envelope would drop.",
+	"GET /v1/risk/health": "a liveness probe, refused by THIS PACKAGE'S own invariant " +
+		"rather than by anything about zip. The reason it used to give — 503 carries the degraded " +
+		"REPORT as its body, which a typed op's error envelope would drop — has EXPIRED: WithStatus is " +
+		"variadic and an answer states which declared status it is, which is how apps/deploy's probe " +
+		"became an op. The conversion was written here and TestOps_EveryOpIsAdmittedAndPriced refused " +
+		"it: every op must pass o.admit (a per-tenant in-flight slot) and be priced, and a probe must " +
+		"do NEITHER — it answers without a tenant, which is what liveness means, and metering it would " +
+		"bill a customer for being watched. Exempting it would weaken a bound that stops unbounded " +
+		"per-tenant compute, for a tool an agent has no use for.",
 }
 
 // TestSurface_IsOnlyUnderRisk is the namespace boundary as a gate.

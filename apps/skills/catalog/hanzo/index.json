@@ -1701,11 +1701,11 @@
       "sha256": "c2f9d7f8cf9b3149d55f40f5cf9861973a9145aa5bbe1e204f51e4d65fa1d103"
     },
     {
-      "description": "Read deploy health: Whether this control plane can actually reach the cluster it deploys to.",
+      "description": "Read deploy health: Health reports whether this deployment can observe the delivery plane..",
       "name": "deploy_health",
       "path": "deploy_health/SKILL.md",
       "service": "deploy",
-      "sha256": "e07cb4a5aa3ff37f2c5646402cc0c40aaa70efea3ab168eadbd0ce9574a75403"
+      "sha256": "903dd3d7029ed4b563bb0dd9bf6509f8fdf7e73321d33bb5d8c8e2044645e0ca"
     },
     {
       "description": "Read deploy login: Start the sign-in round trip for this console.",

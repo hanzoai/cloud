@@ -203,11 +203,28 @@ func mount(s *cloud.Service[state], app cloud.Router) {
 		zip.WithSummary("Read back one exhaustive search"),
 		zip.WithTags("risk"))
 
-	// UNTYPED BY DESIGN — a REAL probe answers 503 CARRYING THE DEGRADED REPORT as
-	// its body, which is the whole point of a probe. A typed op reaches a non-2xx
-	// only by returning an error, and zip renders that as its own envelope,
-	// dropping exactly the detail the probe exists to deliver. Held to the closed
-	// list in typed_wire_test.go.
+	// UNTYPED BY DESIGN, and the reason is THIS PACKAGE'S OWN INVARIANT rather than
+	// anything about zip.
+	//
+	// The reason it used to give was the multi-status gap: a real probe answers 503
+	// CARRYING the degraded report, and a typed op reached a non-2xx only by
+	// returning an error whose envelope dropped exactly that detail. THAT HAS
+	// EXPIRED — WithStatus is variadic and an answer states which declared status it
+	// is (StatusCoder), which is how apps/deploy's probe became an op. The
+	// conversion was written here, and this package's own gate refused it:
+	// TestOps_EveryOpIsAdmittedAndPriced requires every op to pass through o.admit
+	// (a per-tenant in-flight slot) and to be priced, because an op reaches a
+	// per-tenant model, a per-tenant disk and a shared warehouse.
+	//
+	// A LIVENESS PROBE MUST DO NEITHER. It has to answer without a tenant — that is
+	// what liveness means — so it can hold no tenant slot, and metering an
+	// orchestrator's probe would bill a customer for being watched. Making it an op
+	// would mean exempting it from that gate, which weakens a bound that exists to
+	// stop unbounded per-tenant compute, for one route that gains a tool nobody
+	// needs: an agent does not probe liveness, an orchestrator does, over HTTP.
+	//
+	// So the refusal stands on a better footing than before. Held to the closed list
+	// in typed_wire_test.go.
 	g.Get("/health", cloud.Handle(s, health))
 }
 

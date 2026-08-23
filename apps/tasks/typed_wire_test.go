@@ -26,12 +26,19 @@ import (
 // handler runs. Every method behaves the same way, because a redirect to the
 // subtree is a routing fact and not a method's answer.
 //
-// That is the blocker for all seven operations at this address: a typed op
-// answers 200, 204, or a 2xx it DECLARED — zip refuses a non-2xx at declaration
-// (zip@v1.18.11 typed.go:112) and writes c.JSON(out) or a bare status and
-// nothing else (typed.go:305-311), and the only codes cloud's Bridge carries are
-// 201 and 202 (cloud/typed.go, Created/Accepted). No typed op can emit a 307 or
-// the Location header that makes it mean anything.
+// That is the blocker for all seven operations at this address, and the reason is
+// OWNERSHIP rather than expressiveness. Cloud registers no handler here: the
+// redirect is the engine's own ServeMux answering before anything of ours runs, so
+// there is nothing for a typed op to BE. Typing it would mean hanzoai/tasks
+// declaring the op, which is the same shape as ai, o11y and licensing.
+//
+// An older reading gave a second reason — "zip refuses a non-2xx at declaration
+// and cannot emit a 307 or the Location header that makes it mean anything" — and
+// it is STALE at the pinned zip: WithStatus is variadic and accepts any status,
+// and WithResponseHeader + HeaderCoder put a response header in the document. It
+// is recorded rather than deleted because a reader who checks that clause, finds
+// it false, and concludes the route converts would be wrong twice over: the
+// capability is there and the route still is not ours.
 func TestBareNounIsARedirect(t *testing.T) {
 	mux := httpMux(testEngine(t))
 	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete} {
