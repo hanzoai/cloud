@@ -220,6 +220,68 @@
         "x-tool": true
       }
     },
+    "/v1/graph/search": {
+      "get": {
+        "operationId": "graphSearch",
+        "summary": "Find assertions by their text rather than by an entity key",
+        "description": "Finds assertions by their text where read finds them by their keys.\n\nIt is the READ with one more term, not a second way to leave the store: same\norder, same ceiling, same tenancy, and searching composes with narrowing by\nrelation and by instant because all of them are terms of one filter.\n\nIt resolves nothing. What matches is what was asserted, including claims that\nwere later corrected — which is the honest answer to \"where is this mentioned\"\nand the reason the caller then asks resolve about what it found.",
+        "tags": [
+          "graph"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q is what to look for: words, matched as prefixes, all of them required.\nPunctuation is text here rather than syntax, so an entity key searches as\nitself.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "relation",
+            "in": "query",
+            "required": false,
+            "description": "Relation narrows to one relation. Absent matches every relation.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "description": "AsOf bounds the search to what was knowable at an instant, RFC 3339. Absent\nsearches everything this plane holds.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps how many assertions come back. Absent, zero, or anything above\nthe walk ceiling is the ceiling.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/graphReadOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/graph/vocabulary": {
       "get": {
         "operationId": "graphVocabulary",

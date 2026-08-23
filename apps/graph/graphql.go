@@ -50,6 +50,11 @@ type Query {
     # Assertions, filtered. The same read the REST GET serves.
     assertions(entity: String, relation: String, value: String, asOf: String, limit: Int): [Assertion!]!
 
+    # Assertions found by their TEXT rather than by a key: words, matched as
+    # prefixes, all of them required. It resolves nothing — what matches is what
+    # was asserted, so ask resolve about what you find.
+    search(q: String!, relation: String, asOf: String, limit: Int): [Assertion!]!
+
     # The relations in use and the rule that settles a conflict.
     vocabulary: Vocabulary!
 }
@@ -124,6 +129,23 @@ func (q *query) Assertions(ctx context.Context, args struct {
 		Limit:    num(args.Limit),
 	}
 	out, err := q.o.read(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return wrap(out.Assertions), nil
+}
+
+func (q *query) Search(ctx context.Context, args struct {
+	Q              string
+	Relation, AsOf *string
+	Limit          *int32
+}) ([]*assertion, error) {
+	out, err := q.o.search(ctx, &graphSearchIn{
+		Q:        args.Q,
+		Relation: str(args.Relation),
+		AsOf:     str(args.AsOf),
+		Limit:    num(args.Limit),
+	})
 	if err != nil {
 		return nil, err
 	}

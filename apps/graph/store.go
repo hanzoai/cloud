@@ -78,6 +78,32 @@ const (
 	seedMax = 256
 )
 
+// index is the full-text view of the same rows, in the same file, so a search
+// inherits the tenancy the assertions already have: there is no second store to
+// keep in step and nothing to re-scope on the way out.
+//
+// EXTERNAL CONTENT — the index holds no copy of the text, only the terms and the
+// seq to find it by, and every read still comes from `assertion` through `cols`.
+// A copy would be a second place for one fact to live and a way for the two to
+// disagree.
+//
+// There is no UPDATE trigger because there is no UPDATE statement in this
+// package. Rows arrive and, on disposal, leave; nothing in between rewrites one.
+const index = `
+CREATE VIRTUAL TABLE IF NOT EXISTS assertion_fts USING fts5(
+	entity, relation, value, source, evidence,
+	content='assertion', content_rowid='seq', tokenize='unicode61'
+);
+CREATE TRIGGER IF NOT EXISTS assertion_ai AFTER INSERT ON assertion BEGIN
+	INSERT INTO assertion_fts(rowid, entity, relation, value, source, evidence)
+	VALUES (new.seq, new.entity, new.relation, new.value, new.source, new.evidence);
+END;
+CREATE TRIGGER IF NOT EXISTS assertion_ad AFTER DELETE ON assertion BEGIN
+	INSERT INTO assertion_fts(assertion_fts, rowid, entity, relation, value, source, evidence)
+	VALUES ('delete', old.seq, old.entity, old.relation, old.value, old.source, old.evidence);
+END;
+`
+
 type store struct{ db *sql.DB }
 
 // openStore is cloud.OrgStore's open func: the file is already opened, pragma'd
@@ -86,7 +112,35 @@ func openStore(db *sql.DB) (*store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, fmt.Errorf("graph: migrate: %w", err)
 	}
+	if err := reindex(db); err != nil {
+		return nil, err
+	}
 	return &store{db: db}, nil
+}
+
+// reindex installs the index and, when it had to build it, fills it from the
+// rows already there. The triggers only see what arrives AFTER them, so a file
+// written before this migration would search as though it were empty — which is
+// worse than an error, because it answers.
+//
+// The build runs once per file, on the open that creates the table.
+func reindex(db *sql.DB) error {
+	var built int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'assertion_fts'`,
+	).Scan(&built); err != nil {
+		return fmt.Errorf("graph: index: %w", err)
+	}
+	if _, err := db.Exec(index); err != nil {
+		return fmt.Errorf("graph: index: %w", err)
+	}
+	if built > 0 {
+		return nil
+	}
+	if _, err := db.Exec(`INSERT INTO assertion_fts(assertion_fts) VALUES ('rebuild')`); err != nil {
+		return fmt.Errorf("graph: index rebuild: %w", err)
+	}
+	return nil
 }
 
 // record writes assertions. It is idempotent by content: a redelivered assertion
@@ -135,6 +189,11 @@ type filter struct {
 	// resolution reads this way: the table only grows, a correction is a row,
 	// and the rows that decide what is in force are the last ones written.
 	Newest bool
+	// Match narrows to the rows whose text matches an FTS5 query. It is a TERM of
+	// this filter and not a read of its own, so searching composes with every
+	// other narrowing here and answers in the same order under the same ceiling.
+	// Build it with [match]; a caller's words are not FTS5 syntax.
+	Match string
 }
 
 func (s *store) read(ctx context.Context, f filter) ([]Fact, error) {
@@ -156,6 +215,13 @@ func (s *store) read(ctx context.Context, f filter) ([]Fact, error) {
 		q += ` AND knowable <= ?`
 		args = append(args, f.AsOf.UTC().Unix())
 	}
+	if f.Match != "" {
+		// A subquery and not a join: `cols` is unqualified, and the index
+		// publishes columns by the same names as the table, so joining them into
+		// one scope would make every one of those names ambiguous.
+		q += ` AND seq IN (SELECT rowid FROM assertion_fts WHERE assertion_fts MATCH ?)`
+		args = append(args, f.Match)
+	}
 	limit := f.Limit
 	if limit <= 0 || limit > walkBound {
 		limit = walkBound
@@ -173,6 +239,28 @@ func (s *store) read(ctx context.Context, f filter) ([]Fact, error) {
 	}
 	defer func() { _ = rows.Close() }()
 	return scan(rows)
+}
+
+// match renders what a caller typed as an FTS5 query: every word a quoted prefix
+// term, all of them required.
+//
+// QUOTED because FTS5 reads a bare `-`, `*`, `:`, `^` or `"` as syntax, and the
+// words people search for carry those by accident — an entity key is full of
+// slashes and dashes. Quoting means a caller's text is text, so no input is a
+// syntax error and none of it is an operator.
+//
+// PREFIX because the caller is typing a search and expects `depl` to find
+// `deploy`. REQUIRED because narrowing is what more words are for.
+//
+// An empty result means there was nothing to search for; the caller decides what
+// to do about that, since a filter with no term matches everything.
+func match(q string) string {
+	words := strings.Fields(q)
+	terms := make([]string, 0, len(words))
+	for _, w := range words {
+		terms = append(terms, `"`+strings.ReplaceAll(w, `"`, `""`)+`"*`)
+	}
+	return strings.Join(terms, " ")
 }
 
 // step is one hop of a walk, named for the direction it reads.
