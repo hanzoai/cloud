@@ -317,6 +317,16 @@ var allowedRequestUses = map[string]string{
 		"signed in or not, so the tenant is re-pointed for the index Ask while the caller's authority " +
 		"travels whole. cloud.As needs the request to do that; cloud.For alone drops the caller and the " +
 		"public browse 500s with \"index: no org on the call\".",
+	"apps/commerce/balance_rpc.go": "callerOrg — the commerce package's ONE tenancy rule, and an " +
+		"identity gate reading strictly more than the org: it needs the CREDENTIAL that vouches for " +
+		"the org, which is exactly what no ctx accessor carries. The tenant of a money op arrives in " +
+		"two shapes. With a request it is a header, and a header is an assertion only once something " +
+		"stands behind it — account.ReaderOrg is that rule and needs the request to apply it, " +
+		"admitting a validated principal OR the service token that stands in for one where the " +
+		"caller is another PROCESS and so carries no session. principal.OrgFrom alone cannot: it " +
+		"composes validated-ness AND an org, so it refuses that service. Off the HTTP path there is " +
+		"no request and no header in play: the org is what plane.For stamped in-process, and zip " +
+		"reads a stated caller only on a request-free context. Fails closed in both shapes.",
 	"apps/commerce/invoices.go": "eventsFrom/kmsFrom — two request-scoped side channels " +
 		"carried in c.Locals(), which no ctx helper exposes. Both are OPTIONAL by design: a missing " +
 		"analytics collector must never fail a money move, and a missing KMS client is the dev/test " +
