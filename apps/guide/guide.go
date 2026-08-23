@@ -835,12 +835,21 @@ type stepRef struct {
 // and it is the right direction — every other refusal in the fleet already reads
 // that way, because every propagated error goes through that one handler.
 //
-// THE MERGE IS SAFE HERE BECAUSE OF THE KEY NAMES, and that is worth checking per
-// route rather than assuming. Members are copied FIRST and the envelope written
-// over them, so a domain key named type, title, status, detail or code is silently
-// displaced; these are `step` and `blockedBy`, which collide with none. The money
-// wire is the counter-example — its nested {"error":{code,message}} cannot ride
-// Detail at all, which is why cloud.Denied keeps its middleware.
+// THE RESERVED SET IS type, title, status, detail AND code — measured, not
+// inherited. Members are copied FIRST and the problem-details envelope written
+// OVER them, so a domain key with one of those five names is silently displaced.
+//
+// `error` is NOT among them, and an earlier version of this comment said it was.
+// The envelope wrote `error` at zip v1.31.x and writes `detail` now, so a body
+// carrying its own nested {"error":{code,message}} — the money wire's — rides
+// Detail intact today; verified by marshalling one. What keeps cloud.Denied on its
+// middleware is therefore NOT expressibility. It is that DenyEnvelope writes that
+// object BARE, with no envelope around it, and Detail would wrap it in one: the
+// nested body survives exactly and gains type/title/status/detail beside it. That
+// is a wire change to the MONEY path and a decision for whoever owns it, not a
+// mechanical conversion.
+//
+// Here they are `step` and `blockedBy`, which collide with none of the five.
 type blockedErr struct {
 	step      string
 	blockedBy []string

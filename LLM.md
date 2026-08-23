@@ -3137,10 +3137,27 @@ over, and both were got wrong here before being measured:
   address answering in a vocabulary the other ~2400 do not use. But it is a wire
   change on those addresses and it belongs in the release note, not in a comment
   that says nothing moved.
-- **The RESERVED key set is bigger than documented.** Members are copied FIRST and
-  the envelope written over them, so a domain key named `type`, `title`, `status`,
-  `detail` or `code` is silently displaced — five, not the three this file used to
-  name. `findings`, `step` and `blockedBy` collide with none. Check per route.
+- **The RESERVED key set is `type`, `title`, `status`, `detail`, `code` — and it is
+  now a TEST, not a sentence.** Members are copied FIRST and the envelope written
+  over them, so a domain key with one of those five names is silently displaced;
+  `findings`, `step` and `blockedBy` collide with none.
+  `TestTheRefusalEnvelopeClaimsExactlyTheseKeys` (errmap_reserved_test.go) offers
+  every reserved name AS a member and requires each to be displaced, and also
+  requires the envelope to have written all five — an assertion that passes because
+  nothing rendered is no assertion. It is a test because a reserved-key set is a
+  fact about a DEPENDENCY, and this file has now had it wrong in BOTH directions.
+- **`error` is NOT reserved, and the correction above originally said it was.**
+  The envelope wrote `error` at zip v1.31.x and writes `detail` now, so a body
+  carrying its own nested `{"error":{code,message}}` — the money wire's — rides
+  Detail INTACT; `TestADomainErrorKeyRidesDetailIntact` marshals one and proves it.
+  So what keeps `cloud.Denied` on its own middleware is **not** expressibility, as
+  three comments written this week claimed. It is that `DenyEnvelope` writes that
+  object BARE and Detail would wrap it in an envelope: the nested body survives
+  exactly and gains `type`/`title`/`status`/`detail` beside it. **That is a wire
+  change to the MONEY path and a decision for whoever owns it**, not a mechanical
+  conversion — which is a much better reason for the seam to stay than the one it
+  had. The lesson is the session's own: I corrected a stale claim by inheriting the
+  other half of the same stale reading, and only marshalling one caught it.
 
 **HOW BOTH ESCAPED: the tests declared the field and never asserted it.**
 `provenance_test.go` had `Error string \`json:"error"\`` in its target struct and
