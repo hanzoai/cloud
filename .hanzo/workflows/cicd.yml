@@ -191,7 +191,7 @@ jobs:
           # THE STORE IS A NEIGHBOUR, NOT AN INTERNET HOST. kms.hanzo.ai resolves to
           # svc/cloud:8000 in ns hanzo, and the git-runner fleet is a StatefulSet in
           # that same namespace — so the public name sent every login out to
-          # Cloudflare and back to the pod next door. Under a burst of concurrent
+          # Cloudflare and back to the pod next endpoint. Under a burst of concurrent
           # runs the edge answered `error code: 502` in plain text, every review
           # failed to get an identity, and `image` (needs: review) was SKIPPED, so
           # the release stopped with nothing red to point at. Measured both ways from
