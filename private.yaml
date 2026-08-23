@@ -21739,6 +21739,19 @@ components:
             $ref: '#/components/schemas/dataroomLink'
           type: array
       type: object
+    dataroomLiveness:
+      properties:
+        service:
+          description: |-
+            Service names the subsystem answering, so a probe response is attributable
+            when several are collected together.
+          type: string
+        status:
+          description: |-
+            Status is `ok`. This probe has no degraded answer by design: it reports
+            process liveness and nothing that could be false while the process serves.
+          type: string
+      type: object
     dataroomMember:
       properties:
         contentType:
@@ -80464,17 +80477,28 @@ paths:
       x-public: true
   /v1/dataroom/health:
     get:
-      description: 'Answers {service, status} unconditionally — no principal, no tenant.
-        It is registered BEFORE the bundle, the link index and the object-storage
-        seam are wired, so it keeps answering when any of those fail and the subsystem
-        degrades to health-only. That is the point, and the limit: a 200 here says
-        the process is alive, never that a data room can be read or written.'
+      description: |-
+        Health reports that the data room subsystem is up.
+
+        It answers before the bundle loads, holds no state and touches no store, so it
+        stays true in exactly the situation an operator is probing for. It says nothing
+        about whether a room can be OPENED — that is what the room operations answer —
+        because a liveness probe that fails on a dependency takes a working process out
+        of rotation.
       operationId: get_dataroom_health
-      summary: Liveness of the dataroom subsystem
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataroomLiveness'
+          description: ok
+      summary: Health reports that the data room subsystem is up.
       tags:
       - dataroom
       x-app: dataroom
       x-public: true
+      x-tool: true
   /v1/dataroom/links:
     get:
       description: |-
