@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
+	codeplane "github.com/hanzoai/cloud/plane/code"
 	"github.com/hanzoai/tasks/pkg/sdk/temporal"
 	"github.com/hanzoai/tasks/pkg/sdk/workflow"
 )
@@ -50,17 +52,6 @@ type IndexedFile struct {
 	Content string
 }
 
-// Indexer folds a pushed repo's text files into the code-intelligence index.
-// Injected at the composition root so the git plane stays free of a clients/code
-// import (the two planes never import each other).
-type Indexer func(ctx context.Context, org, billingOrg, project, repo string, files []IndexedFile) error
-
-var indexer Indexer
-
-// SetIndexer injects the code-index reactor. The composition root calls it once,
-// after the git and code subsystems both mount. Nil leaves push-index inert.
-func SetIndexer(fn Indexer) { indexer = fn }
-
 // indexInput is the durable workflow payload: the repo coordinates + the exact commit
 // to index. Small by design — the worker reads the tree from the object plane at
 // execution time rather than carrying file bytes through the durable store. Org is the
@@ -87,7 +78,7 @@ const (
 // fan-out (its own goroutine, never blocks the push) and every failure is logged, not
 // returned.
 func indexOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.LifecycleEvent) {
-	if indexer == nil || ev.Kind != cloud.LifecyclePushLanded || ev.Org == "" || ev.Repo == "" || ev.Branch == "" {
+	if ev.Kind != cloud.LifecyclePushLanded || ev.Org == "" || ev.Repo == "" || ev.Branch == "" {
 		return
 	}
 	repo, err := openRepository(s, Repo{Org: ev.Org, Project: ev.Project, Name: ev.Repo})
@@ -151,8 +142,7 @@ func IndexRepoActivity(ctx context.Context, in indexInput) error {
 // indexer. The ONE place the tree read + index call live, used by both the durable
 // activity and the fail-soft inline path.
 func readAndIndex(ctx context.Context, s *cloud.Service[state], in indexInput) error {
-	fn := indexer
-	if fn == nil || s == nil {
+	if s == nil {
 		return nil
 	}
 	repo, err := openRepository(s, Repo{Org: in.Org, Project: in.Project, Name: in.Repo})
@@ -166,9 +156,26 @@ func readAndIndex(ctx context.Context, s *cloud.Service[state], in indexInput) e
 	if len(files) == 0 {
 		return nil
 	}
+	out := make([]plane.IndexFile, 0, len(files))
+	for _, f := range files {
+		out = append(out, plane.IndexFile{Path: f.Path, Content: f.Content})
+	}
+	// Bounded, because this rides a push and indexing EMBEDS — the work is paid
+	// inference on the far side, so a code plane that has stopped answering must
+	// not hold a push reactor open.
+	ctx, cancel := context.WithTimeout(ctx, indexCallTimeout)
+	defer cancel()
 	// billingOrg = org: the repo owner's org pays for indexing its own code.
-	return fn(ctx, in.Org, in.Org, in.Project, in.Repo, files)
+	_, err = codeplane.CodeIndex(ctx, &plane.IndexIn{
+		Org: in.Org, BillingOrg: in.Org, Project: in.Project, Repo: in.Repo, Files: out,
+	})
+	return err
 }
+
+// indexCallTimeout bounds one reconcile. Generous because a first index of a
+// large repo embeds every file; short enough that a push reactor is never held
+// open by a code plane that has stopped answering.
+var indexCallTimeout = 2 * time.Minute
 
 // isDefaultBranch reports whether branch is the repo's default (its symbolic HEAD
 // target). initBare points HEAD at the default branch, so this holds for a bare repo
