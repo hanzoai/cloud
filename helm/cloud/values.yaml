@@ -59,7 +59,10 @@ hanzo:
   # The app set is NOT configured here. The binary knows which apps it was
   # built with (manifest.Apps) and Listen sets it; a values file restating
   # the set can only ever disagree with it, which is what config.go records
-  # two devnet outages for. There is no --enable flag to render into.
+  # two devnet outages for. There is no --enable flag to render into. This
+  # documents a key's ABSENCE, so it belongs where one would look for it and
+  # attaches to nothing below.
+  #
   # Which backend holds embedded IAM's identity records — users, orgs, applications,
   # signing certs, and the session revocation rows (apps/iam.openStore).
   #

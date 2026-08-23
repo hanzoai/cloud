@@ -635,7 +635,7 @@ func (c *Config) Validate() error {
 	//
 	// CLOUD_REPLICAS=0 (unset) is the unmanaged/dev case and never refuses.
 	if c.Enabled("iam") && c.Replicas > 1 && !IAMStoreShared(c.IAMStore) {
-		return fmt.Errorf("iam is enabled at CLOUD_REPLICAS=%d but %s=%q keeps its identity store in the per-pod file %s/iam/iam.db: %d replicas would hold %d divergent identity stores (set %s to a shared backend, or run one replica, or disable iam and point CLOUD_IAM_ADDR at one that is)",
+		return fmt.Errorf("iam is enabled at CLOUD_REPLICAS=%d but %s=%q keeps its identity store in the per-pod file %s/iam/iam.db: %d replicas would hold %d divergent identity stores (set %s to a shared backend, or run one replica)",
 			c.Replicas, IAMStoreEnv, c.IAMStore, c.DataDir, c.Replicas, c.Replicas, IAMStoreEnv)
 	}
 	// Horizontal shard routing (CLOUD_PEERS names >1 pod). Two fail-closed guards:
@@ -655,7 +655,7 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("shard self %q is not in CLOUD_PEERS %q: this pod is not a member of its own ring (it would forward every request away and own no shard)", c.ShardSelf, c.ShardPeers)
 		}
 		if c.Enabled("iam") && !IAMStoreShared(c.IAMStore) {
-			return fmt.Errorf("iam is enabled with CLOUD_PEERS shard routing but %s=%q keeps its identity store in the per-pod file: a login served on one pod is unreachable on the pod a later request routes to (set %s to a shared backend, or disable iam and point CLOUD_IAM_ADDR at one that is)", IAMStoreEnv, c.IAMStore, IAMStoreEnv)
+			return fmt.Errorf("iam is enabled with CLOUD_PEERS shard routing but %s=%q keeps its identity store in the per-pod file: a login served on one pod is unreachable on the pod a later request routes to (set %s to a shared backend, or name one pod in CLOUD_PEERS)", IAMStoreEnv, c.IAMStore, IAMStoreEnv)
 		}
 	}
 	return nil
