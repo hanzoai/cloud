@@ -102,7 +102,7 @@ func (a *fakeAgents) wasCreated(name string) bool {
 // it speaks BOTH of vm's wires because vm does — the same split fakeVisor makes
 // with envelope200 and op200 (http_test.go):
 //
-//   - the machines + launch routes are still casibase, so those answer HTTP 200
+//   - the machines + launch routes still use that envelope, so those answer HTTP 200
 //     with the {status,msg,data} envelope;
 //   - a machine's AGENT is a typed op, so those answer the value itself, 204 for
 //     the unbind, and 404 for a read of a machine that runs no bot.
