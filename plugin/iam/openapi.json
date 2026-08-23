@@ -1121,82 +1121,6 @@
         "x-public": true
       }
     },
-    "/v1/iam/delete-mfa": {
-      "post": {
-        "operationId": "post_iam_delete-mfa",
-        "summary": "Turns a factor off, so sign-in stops asking for it.",
-        "description": "Turns a factor off, so sign-in stops asking for it. Naming no factor turns\noff ALL of them — the reset path. People may do this for themselves; doing it for\nsomebody else takes an administrator, which is what makes it the way back in when a\nphone is lost.\n\nThe recovery codes go with the last factor: they are the way past a challenge, so\nkeeping them alive for an account with nothing to challenge would leave a standing\ncredential behind.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-account": {
-      "get": {
-        "operationId": "get_iam_get-account",
-        "summary": "Returns the signed-in person's own account and the organization they belong to — what a console reads to draw the account menu.",
-        "description": "Returns the signed-in person's own account and the organization\nthey belong to — what a console reads to draw the account menu.\n\nPasswords, API secrets and MFA material are stripped. It answers for a session\ncookie or a bearer token alike.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/get-app-login": {
-      "get": {
-        "operationId": "get_iam_get-app-login",
-        "summary": "Returns everything a login screen needs to draw itself for one application: its branding, and each sign-in method it offers with the provider details that method needs.",
-        "description": "Returns everything a login screen needs to draw itself for one\napplication: its branding, and each sign-in method it offers with the provider\ndetails that method needs.\n\nThe client secret is masked. Read before anyone has signed in, so it carries\nonly what is safe for a browser to see.",
-        "tags": [
-          "iam"
-        ],
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "query",
-            "required": false,
-            "description": "ClientId is the application's OAuth client id — the one field that selects\nwhich login screen this is.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "responseType",
-            "in": "query",
-            "required": false,
-            "description": "ResponseType is the OAuth response type the screen will ask for. Only \"code\"\nis served; anything else is refused here rather than at the authorize leg,\nwhere the person has already typed a password.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Answer"
-                }
-              }
-            },
-            "description": "ok"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/iam.Answer"
-                }
-              }
-            },
-            "description": "bad request"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
     "/v1/iam/invitations": {
       "get": {
         "operationId": "get_iam_invitations",
@@ -1393,17 +1317,6 @@
         },
         "x-public": true,
         "x-tool": true
-      }
-    },
-    "/v1/iam/issue-user-token": {
-      "post": {
-        "operationId": "post_iam_issue-user-token",
-        "summary": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target user (optional `?aud=` resource, RFC 8707), issued by the authenticated + allow-listed confidential client.",
-        "description": "Mints an access token for the `?id=\u003cowner\u003e/\u003cname\u003e` target\nuser (optional `?aud=` resource, RFC 8707), issued by the authenticated +\nallow-listed confidential client. The token's subject + owner are the TARGET\nUSER's, so a resource server scopes on the validated owner claim to the user's\ntenant — indistinguishable from a token the user obtained directly. Response is\nthe camelCase `{accessToken, expiresIn}` body identity.ts consumes. Equivalent to\nthe RFC 8693 token-exchange grant, minus the subject_token proof (the console has\nthe user's id, not a token) — the reason this compat shim exists.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
       }
     },
     "/v1/iam/keys": {
@@ -1761,17 +1674,6 @@
         "operationId": "post_iam_mfa_setup_initiate",
         "summary": "Starts enrolling a factor and hands over whatever the person needs to prove they hold it: app a fresh secret and the otpauth:// URL to render as a QR code sms a code texted to the number on the account email a code mailed to the address on the account Nothing is switched on yet, so abandoning this step leaves the account exactly as it was.",
         "description": "Starts enrolling a factor and hands over whatever the person needs to prove\nthey hold it:\n\n\tapp   a fresh secret and the otpauth:// URL to render as a QR code\n\tsms   a code texted to the number on the account\n\temail a code mailed to the address on the account\n\nNothing is switched on yet, so abandoning this step leaves the account exactly as\nit was. Response: {status:\"ok\", data:{mfaType, secret, url}} — secret and url only\nfor the authenticator.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/mint-user-keys": {
-      "post": {
-        "operationId": "post_iam_mint-user-keys",
-        "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget seam.",
-        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
         "tags": [
           "iam"
         ],
@@ -2953,17 +2855,6 @@
         "x-tool": true
       }
     },
-    "/v1/iam/revoke-user-keys": {
-      "post": {
-        "operationId": "post_iam_revoke-user-keys",
-        "summary": "Clears the target user's key of the requested TYPE (immediate revoke).",
-        "description": "Clears the target user's key of the requested TYPE (immediate\nrevoke). Scoped by the same `?type` field mint takes, so revoking the browser key\nleaves the server key working. A secret key's stored value is the sk- in its\nschema.Key row.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
     "/v1/iam/roles": {
       "get": {
         "operationId": "get_iam_roles",
@@ -3444,17 +3335,6 @@
         "x-public": true
       }
     },
-    "/v1/iam/send-verification-code": {
-      "post": {
-        "operationId": "post_iam_send-verification-code",
-        "summary": "Validates the request and asks otp to get a code to the person.",
-        "description": "Validates the request and asks otp to get a code to the\nperson. The request fields are read via fiber's FormValue — the escape hatch zip\nexposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does\nnot apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam\nignores them (the captcha/forget/MFA flows those drive are not ported), and\nCAPTCHA verification is likewise not enforced — iam models no captcha provider —\nso the code is issued once the destination and application validate.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
     "/v1/iam/service-accounts": {
       "get": {
         "operationId": "get_iam_service-accounts",
@@ -3807,17 +3687,6 @@
         "x-tool": true
       }
     },
-    "/v1/iam/set-preferred-mfa": {
-      "post": {
-        "operationId": "post_iam_set-preferred-mfa",
-        "summary": "Picks which second factor an account is asked for first when it has more than one.",
-        "description": "Picks which second factor an account is asked for first when it has\nmore than one. Only a factor the account actually holds: storing an unheld one told\nthe login gate \"MFA is on\" — factor.Enabled reads that column — while leaving it\nnothing to ask for, so the sign-in required the password alone.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
     "/v1/iam/signin": {
       "post": {
         "operationId": "post_iam_signin",
@@ -4062,17 +3931,6 @@
         "operationId": "post_iam_unlink",
         "summary": "Disconnects one sign-in identity from an account, so that provider can no longer be used to sign in as that person.",
         "description": "Disconnects one sign-in identity from an account, so that provider can\nno longer be used to sign in as that person. Their account and every other way\nthey sign in are untouched. Two principals may do it, and\nonly two: the account holder itself, and a SuperAdmin (a member of the reserved\nadmin org, the one predicate). An ORG ADMIN deliberately may NOT — unlinking is\nnot tenant administration, it is unpicking someone's own sign-in method, so the\ngeneric org-admin rule is the wrong answer here.\n\nA holder unlinking itself must also be permitted by the application — the\nprovider link's CanUnlink flag — so an organization that mandates federated\nsign-in cannot have its users strand themselves. A SuperAdmin is not bound by\nthat flag; it is the platform's own recovery path. Fail-closed throughout.",
-        "tags": [
-          "iam"
-        ],
-        "x-public": true
-      }
-    },
-    "/v1/iam/update-preferences": {
-      "post": {
-        "operationId": "post_iam_update-preferences",
-        "summary": "Saves the calling person's own settings and returns the full set afterwards.",
-        "description": "Saves the calling person's own settings and returns\nthe full set afterwards. Send only the settings you are changing — the rest\nare kept, so two screens can save at once without one undoing the other.",
         "tags": [
           "iam"
         ],

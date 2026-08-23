@@ -106,7 +106,7 @@ func TestTheBootCheckNamesTheStoreThisTestVaried(t *testing.T) {
 //   - the org, and a user with a bcrypt password to sign in as.
 func identityStore(t *testing.T) orm.DB {
 	t.Helper()
-	db, err := iamstore.Open("sqlite", t.TempDir()+"/iam.db")
+	db, err := iamstore.Open("sqlite", t.TempDir()+"/iam.db", "")
 	if err != nil {
 		t.Fatalf("open identity store: %v", err)
 	}

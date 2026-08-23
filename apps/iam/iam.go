@@ -416,7 +416,10 @@ func openStore(dir string) (orm.DB, *sql.DB, error) {
 		// populated-store check through the entity API, which is not written yet,
 		// so it is named here rather than assumed. Do not point this at an empty
 		// database and expect to be told.
-		db, err := iamstore.Open(backend, "")
+		// No address: hanzoai/iam resolves each shared backend to its own default
+		// (sql on :9651, datastore on :9655), which is what this opened before the
+		// parameter existed. A knob here would be a second place to name a host.
+		db, err := iamstore.Open(backend, "", "")
 		if err != nil {
 			return nil, nil, fmt.Errorf("iam: open the %s identity store: %w", backend, err)
 		}
