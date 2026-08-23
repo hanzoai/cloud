@@ -16,7 +16,7 @@ import (
 // socket — never HTTP back through our own edge.
 //
 // `ai` is its OWN process (prod pod: /cloud pid 7, /billing pid 111, /ai pid 83), so
-// cloud.BalanceReader() — a package-level var wireFinance sets in the CLOUD process —
+// cloud.BalanceReader() — a package-level var installFinance sets in the CLOUD process —
 // is ALWAYS nil there. The ai module then fell back to an HTTP self-call to
 // /v1/billing/balance carrying COMMERCE_SERVICE_TOKEN and no user; that is not a
 // validated principal at the edge, so it answered 401, and because the balance gate is

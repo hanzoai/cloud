@@ -26,7 +26,7 @@ import (
 // its workflow, its activities, and the idempotency key for one fact.
 
 // errEngineNotReady is the fail-soft signal: the embedded engine is nil until
-// wireDurableIngest runs (after MountAll). A reactor that sees it does its work inline
+// installDurableIngest runs (after MountAll). A reactor that sees it does its work inline
 // instead — the same contract ai's durable ingest uses — so no reactor is ever dark;
 // the engine only upgrades it from best-effort-inline to durable-retryable.
 var errEngineNotReady = fmt.Errorf("tasks engine not ready")

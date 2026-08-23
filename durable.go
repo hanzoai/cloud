@@ -42,7 +42,7 @@ const durableGatedZAPPort = 9999
 // gatedAddr is where the CLUSTER-reachable, identity-gated listener binds. This
 // one is a TCP address and must stay one: consumers in other pods dial it, and a
 // unix socket does not leave the host. The engine's own loopback listener is a
-// socket (see wireDurableIngest) precisely because nothing off-host dials THAT.
+// socket (see installDurableIngest) precisely because nothing off-host dials THAT.
 func gatedAddr() string {
 	if v := strings.TrimSpace(os.Getenv("CLOUD_TASKS_GATED_PORT")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -57,14 +57,14 @@ func gatedAddr() string {
 var embeddedTasks *tasksengine.Embedded
 
 // EmbeddedTasks returns the ONE in-process tasks engine, or nil until
-// wireDurableIngest has run (or if it failed to start). The Tasks HTTP/UI surface
+// installDurableIngest has run (or if it failed to start). The Tasks HTTP/UI surface
 // (apps/tasks, mounted at /v1/tasks/*) serves on THIS shared engine — there is
 // exactly one engine per process, shared by ai's durable ingest AND the Tasks
 // product surface, never a second Embed. The surface resolves it lazily (per
-// request) because subsystem Mount runs during MountAll, before wireDurableIngest.
+// request) because subsystem Mount runs during MountAll, before installDurableIngest.
 func EmbeddedTasks() *tasksengine.Embedded { return embeddedTasks }
 
-// wireDurableIngest embeds the ONE hanzoai/tasks engine IN-PROCESS — the unified durable
+// installDurableIngest embeds the ONE hanzoai/tasks engine IN-PROCESS — the unified durable
 // queue (there is no second async system; tasks/CONTRACT) — and injects a per-org
 // loopback ZAP dialer into ai's ingest. A long ingest (github/crawl/s3) then runs as a
 // durable workflow in the OWNER's namespace (CONTRACT §6: namespace maps 1:1 to org),
@@ -72,7 +72,7 @@ func EmbeddedTasks() *tasksengine.Embedded { return embeddedTasks }
 // HTTP. Fail-soft by construction: any embed error leaves ai's dialer unset →
 // EnqueueIngest returns ErrTasksNotConfigured → the handler runs ingest inline (always
 // works). Called once, after MountAll (ai is mounted) and before Listen.
-func wireDurableIngest(ctx context.Context, deps Deps, app string) {
+func installDurableIngest(ctx context.Context, deps Deps, app string) {
 	// A stable data dir the engine owns. Cloud's container is distroless (no /tmp), so
 	// Embed's default os.MkdirTemp("") fallback fails — pin it to cloud's data root.
 	// PER PROCESS, both of them. Apps are their own binaries now, so a fixed port

@@ -14,7 +14,7 @@ import (
 
 // The prepaid ledger is a per-org SQLite store with ONE writer, so exactly one
 // process may open it — and that process is the one that mounts commerce, because
-// wireFinance builds the ledger only when commerce is enabled. Every other app
+// installFinance builds the ledger only when commerce is enabled. Every other app
 // therefore has no ledger to read, which is not a configuration gap to fill in but
 // the single-writer property working as intended.
 //
