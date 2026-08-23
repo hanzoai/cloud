@@ -209,7 +209,7 @@ func TestOverridesNeverLeaveTheirOrg(t *testing.T) {
 func TestNoRequestShapeNamesAnotherOrg(t *testing.T) {
 	forbidden := map[string]bool{"org": true, "owner": true, "tenant": true, "scope": true, "project": true, "brand": true, "account": true}
 	for _, in := range []any{SetReferenceIn{}, ClearReferenceIn{}, ResolveReferenceIn{}, ReferenceIn{}, RefreshReferenceIn{}, ReferenceOverrideIn{}, ReferenceReceipt{}} {
-		for _, f := range wireNames(in) {
+		for _, f := range jsonNames(in) {
 			if forbidden[f] {
 				t.Errorf("%T carries a %q field; a cross-tenant write must be inexpressible, not merely refused", in, f)
 			}
@@ -237,8 +237,8 @@ func TestNoRequestShapeNamesAnotherOrg(t *testing.T) {
 	}
 }
 
-// wireNames lists the json field names of a wire struct.
-func wireNames(v any) []string {
+// jsonNames lists the json field names of a wire struct.
+func jsonNames(v any) []string {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return nil

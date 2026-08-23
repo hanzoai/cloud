@@ -44,7 +44,7 @@ func (sessionAdapter) Stop(ctx context.Context, org string, m SessionMatch) (int
 	if agents.Ready() {
 		return agents.StopSessions(ctx, org, toMatch(org, m))
 	}
-	out, err := agentspeer.AgentsSessionsStop(ctx, wireMatch(m))
+	out, err := agentspeer.AgentsSessionsStop(ctx, planeMatch(m))
 	if err != nil {
 		return 0, err
 	}
@@ -55,18 +55,18 @@ func (sessionAdapter) CountActive(ctx context.Context, org string, m SessionMatc
 	if agents.Ready() {
 		return agents.CountActiveSessions(ctx, org, toMatch(org, m))
 	}
-	out, err := agentspeer.AgentsSessionsCount(ctx, wireMatch(m))
+	out, err := agentspeer.AgentsSessionsCount(ctx, planeMatch(m))
 	if err != nil {
 		return 0, err
 	}
 	return out.Count, nil
 }
 
-// wireMatch is the plane shape of a link match. It carries the raw Subject and
+// planeMatch is the plane shape of a link match. It carries the raw Subject and
 // NO org: the peer qualifies the subject into an actor with the org the plane
 // proved, which is what keeps a revoke bounded to its own user's sessions when
 // the caller is another process.
-func wireMatch(m SessionMatch) *plane.SessionMatchIn {
+func planeMatch(m SessionMatch) *plane.SessionMatchIn {
 	return &plane.SessionMatchIn{
 		Subject:  strings.TrimSpace(m.Subject),
 		Host:     m.Host,
