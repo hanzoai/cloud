@@ -45,7 +45,7 @@ func TestRetiredNamesStayRetired(t *testing.T) {
 	}
 
 	skip := map[string]bool{
-		".git": true, "vendor": true, "node_modules": true, "dist": true,
+		"vendor": true, "node_modules": true, "dist": true,
 		"testdata": true, "explorer": true,
 	}
 
@@ -55,6 +55,17 @@ func TestRetiredNamesStayRetired(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
+			// A DOT-DIRECTORY IS NEVER THIS MODULE'S SOURCE — .git, and equally
+			// .claude/worktrees and .worktrees, which hold whole checkouts of this
+			// same repo at other commits. Naming ".git" alone let those be walked,
+			// so a name retired HERE was reported as "back" because an old checkout
+			// still spelled it — a finding under a path that exists for nobody else,
+			// indistinguishable from a real regression. The sibling guard
+			// (typed_request_gate_test.go) already skips them for the same reason;
+			// this is that rule, not a second one.
+			if path != "." && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
 			if skip[d.Name()] {
 				return filepath.SkipDir
 			}
