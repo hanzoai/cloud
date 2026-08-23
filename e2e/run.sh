@@ -158,6 +158,42 @@ say "booting cloud on $BASE (data: $DATA_DIR)"
 # `--enable` was removed (ecafb31c5) and stating the set here a second time is
 # what took devnet down twice. Build the plugins this suite needs with
 # `make plugin APP=<name>`; the host mounts whichever ones it finds.
+# ── the identity store and its signing key ──────────────────────────────────
+# IAM will not CREATE either, deliberately: a missing volume is a fault, not an
+# empty identity service, and a key minted in-process would die with the process
+# and differ between replicas under one kid. Both refusals are right in a
+# deployment and both make a fresh directory unservable — which is why this
+# script provides them. It is the one caller that KNOWS the directory is new,
+# because it made it a moment ago with mktemp, and that is exactly the case those
+# refusals distinguish from a volume that failed to mount.
+#
+# The store only has to EXIST and be a real SQLite file; the ORM migrates it and
+# the seed fills it. A zero-byte file is not one — SQLite writes no header until
+# something is written — so this creates a table to force it.
+mkdir -p "$DATA_DIR/iam" "$DATA_DIR/signing"
+python3 - "$DATA_DIR/iam/iam.db" <<'PYEOF'
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+c.execute("CREATE TABLE IF NOT EXISTS _bootstrap(x)")
+c.commit()
+c.close()
+PYEOF
+
+# One PEM per signing Cert, each file named for the Cert with NO extension — the
+# name IS the JWKS kid, which is how the thing that mounts the key and the thing
+# that verifies the token agree without a mapping table. The names come from
+# init_data.json rather than a list here, so the seed stays the one source.
+export IAM_SIGNING_KEYS="$DATA_DIR/signing"
+for cert in $(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(" ".join(c["name"] for c in d.get("certs", []) if c.get("name")))
+' "$initDataFile"); do
+  openssl genrsa -out "$IAM_SIGNING_KEYS/$cert" 2048 2>/dev/null
+  chmod 0400 "$IAM_SIGNING_KEYS/$cert"
+done
+say "identity: store staged, $(ls "$IAM_SIGNING_KEYS" | wc -w) signing key(s) mounted"
+
 ./bin/cloud --brand=hanzo --listen=":$HTTP_PORT" >"$LOG" 2>&1 &
 CLOUD_PID=$!
 
