@@ -205,11 +205,11 @@ func streamName(org, id string) (string, bool) {
 // tenant stream binds, filters or reads lives under it.
 func subjectRoot(org string) string { return "mq." + tok(org) + "." }
 
-// wireSubject maps a caller's relative subject ("orders.*") onto the org's
+// absSubject maps a caller's relative subject ("orders.*") onto the org's
 // space. It refuses shapes NATS refuses (empty tokens, spaces) plus absolute
 // escapes — a caller cannot name another org's space because the prefix is
 // always added, never trusted.
-func wireSubject(org, rel string) (string, error) {
+func absSubject(org, rel string) (string, error) {
 	if rel == "" || strings.ContainsAny(rel, " \t\r\n") || strings.HasPrefix(rel, ".") ||
 		strings.HasSuffix(rel, ".") || strings.Contains(rel, "..") {
 		return "", zip.ErrBadRequest("bad subject " + strconv.Quote(rel))

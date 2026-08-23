@@ -375,7 +375,7 @@ func normalizeCartCurrency(code string) currency.Type {
 	return cur
 }
 
-// cartAnswer projects the stored cart onto the wire shape. It is the SINGLE
+// cartAnswer projects the stored cart onto the answer shape. It is the SINGLE
 // projection every cart op answers through, so the four addresses cannot disagree
 // about what a cart looks like.
 func cartAnswer(c *cartmodel.Cart) *Cart {

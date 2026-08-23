@@ -465,7 +465,7 @@ func TestPaymentSignals_AnAmountThatIsNotUSDIsNotStated(t *testing.T) {
 			// The RAW door's whole read: the wire parse and the signal rule it feeds,
 			// which is the pair mount.go's top-up runs through [screen.route].
 			app.Post("/probe", func(c *zip.Ctx) error {
-				cents, currency := wireAmount(c)
+				cents, currency := bodyAmount(c)
 				got = cloud.Facts(paymentSignals(c, cents, currency))
 				return c.JSON(http.StatusOK, "ok")
 			})

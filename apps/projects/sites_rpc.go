@@ -86,7 +86,7 @@ func planeResolveSite(ctx context.Context, in *plane.SiteIn) (*plane.Site, error
 	if err != nil {
 		return nil, err
 	}
-	return wireSite(s, ok), nil
+	return planeSite(s, ok), nil
 }
 
 // planeResolveSiteOrg is the first-party path: it NEVER falls back to
@@ -101,7 +101,7 @@ func planeResolveSiteOrg(ctx context.Context, in *plane.SiteIn) (*plane.Site, er
 	if err != nil {
 		return nil, err
 	}
-	return wireSite(s, ok), nil
+	return planeSite(s, ok), nil
 }
 
 // The resolver this process serves plane answers from. Set at Mount beside
@@ -120,9 +120,9 @@ func currentResolver() (siteResolver, error) {
 	return planeResolver, nil
 }
 
-// wireSite projects a resolved Site onto the wire shape, carrying found-ness
+// planeSite projects a resolved Site onto the plane shape, carrying found-ness
 // explicitly so the edge can tell "no such site" from "could not ask".
-func wireSite(s sites.Site, ok bool) *plane.Site {
+func planeSite(s sites.Site, ok bool) *plane.Site {
 	if !ok {
 		return &plane.Site{Found: false}
 	}
