@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 671,
+  "skill_count": 669,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
@@ -2336,20 +2336,6 @@
       "path": "iam_consent/SKILL.md",
       "service": "iam",
       "sha256": "e2682cb4d8c5f7cbb60009a1a17e869e82e679e0f3f4ff99f8c90ea740169a17"
-    },
-    {
-      "description": "Read iam get account: Returns the signed-in person's own account and the organization they belong to — what a console reads to draw the account menu..",
-      "name": "iam_get-account",
-      "path": "iam_get-account/SKILL.md",
-      "service": "iam",
-      "sha256": "68e41c3116f586eaac58b74c62c961cce7dfa8ec0dcf2913fc96aba8da0e6639"
-    },
-    {
-      "description": "Read iam get app login: Returns everything a login screen needs to draw itself for one application: its branding, and each sign-in method it offers with the provider details that method needs..",
-      "name": "iam_get-app-login",
-      "path": "iam_get-app-login/SKILL.md",
-      "service": "iam",
-      "sha256": "c9955f96ca24dae3b11efafb936accd66a0bdac6c93e87558e2e1695fd26a12e"
     },
     {
       "description": "Read iam invitations: Returns your organization's invitations, newest first — who has been asked to join, on what terms, and how many seats each invitation still has left., Returns one invitation: who it is for, what it grants on acceptance, and when it expires..",
