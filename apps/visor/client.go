@@ -1,7 +1,7 @@
 // client.go is the ONE HTTP path from this subsystem to Visor (the cloud OS at
 // visor.hanzo.svc:19000 that owns compute — machines and DOKS node pools). Every
 // handler in visor.go routes through this client, so the wire contract (base URL,
-// auth, the casibase {status,msg,data} envelope, error mapping) lives once here
+// auth, the {status,msg,data} envelope, error mapping) lives once here
 // and can never drift between six hand-rolled fetches.
 //
 // AUTH (one rule): a request carries a Visor identity that is EITHER the service
@@ -15,7 +15,7 @@
 // TWO WIRES, and a call site says which, because they cannot be told apart by
 // looking:
 //
-//	cl.call  LEGACY. Visor (casibase) returns HTTP 200 with {status:"ok"|"error",
+//	cl.call  LEGACY. Visor returns HTTP 200 with {status:"ok"|"error",
 //	         msg, data}; a logical failure is status:"error" at HTTP 200, NOT a
 //	         4xx/5xx, so a bare status-code check would read an error as success.
 //	cl.op    TYPED (zip.Get/Put/Delete[In,Out]). The answer IS the value, the
@@ -85,7 +85,7 @@ func newClient() *client {
 	return &client{target: visorBase(), cc: &http.Client{Timeout: 30 * time.Second}}
 }
 
-// envelope is Visor's casibase response wrapper. Data is deferred so call() can
+// envelope is Visor's response wrapper. Data is deferred so call() can
 // decode it into the caller's concrete type only after confirming status:"ok".
 type envelope struct {
 	Status string          `json:"status"`

@@ -14,7 +14,7 @@ import (
 )
 
 // fakeVisor is a stand-in for the real Visor Beego service. It speaks the same
-// casibase {status,msg,data} envelope and, crucially, scopes every read by the
+// {status,msg,data} envelope and, crucially, scopes every read by the
 // ?owner query — so a test can prove cloud forwards the VALIDATED principal's org
 // (not a client-forgeable field) as the tenant key. It records the last owner it
 // saw for assertions.
