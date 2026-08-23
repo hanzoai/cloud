@@ -3,7 +3,9 @@ package auto
 import (
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/openapi"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -341,5 +343,85 @@ func TestOpsAddressThroughArgumentsAlone(t *testing.T) {
 				t.Fatalf("%s must carry the payload verbatim over MCP, got %#v", tool, (*starts)[0].Trigger)
 			}
 		}
+	}
+}
+
+// untypedByDesign is the CLOSED list of addresses this app serves raw, each with
+// the wire fact that keeps it there.
+//
+// The package already MEASURES each of these — the tests above drive the wires
+// themselves, which is the stronger form and stays. What this list adds is the
+// SUM: those tests go red when a refused route's WIRE changes, and nothing went
+// red when a route was ADDED raw beside them. openapi/untyped.json catches that
+// fleet-wide by count, and a count is flat when one route converts and another
+// arrives raw in the same change, which is exactly what this catches.
+var untypedByDesign = map[string]string{
+	"POST /v1/auto/flows/{id}/operations": "answers TWO success bodies — the Flow on CHANGE_STATUS, " +
+		"the FlowVersion otherwise — and an op declares one Out. TestOperationsAnswersTwoBodyShapes " +
+		"drives both.",
+	"POST /v1/auto/runs/{id}/resume": "takes an ARBITRARY JSON value — object, array, string, number, " +
+		"null — delivered verbatim to the waitpoint, and size-gated on the RAW bytes. " +
+		"TestResumeAcceptsAnyJSONValue drives every shape.",
+	"POST /v1/auto/hooks/{source}/{event}": "dedupes on a content hash of the RAW received bytes and " +
+		"reads two contract headers (X-Idempotency-Key, X-Causation-Depth). A re-encoded In is not the " +
+		"bytes that were hashed, and a typed op holds a context rather than a request. " +
+		"TestInboundHookAcceptsPayloadKeysCollidingWithPathParams pins the half that would bite first.",
+}
+
+// TestEveryRouteIsTypedOrNamed requires the two ledgers to SUM to the served
+// surface, so a route added raw goes red without anyone remembering this file, and
+// a reason that stops being true goes red the moment its op is written.
+func TestEveryRouteIsTypedOrNamed(t *testing.T) {
+	app := newApp(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "auto", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	reg, err := openapi.Typed(app)
+	if err != nil {
+		t.Fatalf("typed: %v", err)
+	}
+
+	served, typed := map[string]bool{}, map[string]bool{}
+	for path, item := range doc.Paths {
+		if !strings.HasPrefix(path, "/v1/auto") {
+			continue
+		}
+		for method := range item {
+			served[strings.ToUpper(method)+" "+path] = true
+		}
+	}
+	for key := range reg.Ops {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/auto") {
+			typed[key] = true
+		}
+	}
+
+	var untyped []string
+	for key := range served {
+		if !typed[key] {
+			if _, named := untypedByDesign[key]; !named {
+				untyped = append(untyped, key)
+			}
+		}
+	}
+	if len(untyped) > 0 {
+		sort.Strings(untyped)
+		t.Errorf("served but neither typed nor named: %s\n"+
+			"A raw route publishes no schema, no MCP tool, no CLI command and no typed SDK method. "+
+			"Convert it, or name it in untypedByDesign with the wire fact that keeps it raw.",
+			strings.Join(untyped, ", "))
+	}
+	for key := range untypedByDesign {
+		if !served[key] {
+			t.Errorf("untypedByDesign names %q, which this app no longer serves", key)
+		}
+		if typed[key] {
+			t.Errorf("untypedByDesign names %q, which IS a typed op — delete the entry", key)
+		}
+	}
+	if got, want := len(typed)+len(untypedByDesign), len(served); got != want {
+		t.Errorf("the two ledgers must sum to the served surface: typed %d + named %d = %d, served %d",
+			len(typed), len(untypedByDesign), got, want)
 	}
 }

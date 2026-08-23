@@ -23,10 +23,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/openapi"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -585,4 +588,83 @@ func sameJSON(t *testing.T, got []byte, want string) bool {
 	x, _ := json.Marshal(a)
 	y, _ := json.Marshal(b)
 	return bytes.Equal(x, y)
+}
+
+// untypedByDesign is the CLOSED list of addresses this app serves raw, each with
+// the wire fact that keeps it there.
+//
+// The package already MEASURES each of these — the tests above drive the wires
+// themselves, which is the stronger form and stays. What this list adds is the
+// SUM: those tests go red when a refused route's WIRE changes, and nothing went
+// red when a route was ADDED raw beside them. openapi/untyped.json catches that
+// fleet-wide by count, and a count is flat when one route converts and another
+// arrives raw in the same change, which is exactly what this catches.
+var untypedByDesign = map[string]string{
+	"POST /v1/books/scan": "the request body IS the receipt — raw bytes under the caller's own " +
+		"Content-Type. zip decodes every non-empty typed body as JSON before the handler is entered.",
+	"POST /v1/books/inbox": "the same raw-byte upload as scan.",
+	"POST /v1/books/bank/import": "raw statement bytes (OFX/QFX/CSV): there is no JSON In that names " +
+		"a file, and a typed In would answer 400 to every real import.",
+	"POST /v1/books/bank/token": "answers an unconditional 501. A typed op publishes a SUCCESS " +
+		"response — its Out schema, or the 204 a void op declares — that this route has never sent, " +
+		"so typing it would put an invented contract in every generated SDK.",
+	"POST /v1/books/bank/exchange": "the same unconditional 501 as token.",
+}
+
+// TestEveryRouteIsTypedOrNamed requires the two ledgers to SUM to the served
+// surface, so a route added raw goes red without anyone remembering this file, and
+// a reason that stops being true goes red the moment its op is written.
+func TestEveryRouteIsTypedOrNamed(t *testing.T) {
+	app := mountBooks(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "books", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	reg, err := openapi.Typed(app)
+	if err != nil {
+		t.Fatalf("typed: %v", err)
+	}
+
+	served, typed := map[string]bool{}, map[string]bool{}
+	for path, item := range doc.Paths {
+		if !strings.HasPrefix(path, "/v1/books") {
+			continue
+		}
+		for method := range item {
+			served[strings.ToUpper(method)+" "+path] = true
+		}
+	}
+	for key := range reg.Ops {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/books") {
+			typed[key] = true
+		}
+	}
+
+	var untyped []string
+	for key := range served {
+		if !typed[key] {
+			if _, named := untypedByDesign[key]; !named {
+				untyped = append(untyped, key)
+			}
+		}
+	}
+	if len(untyped) > 0 {
+		sort.Strings(untyped)
+		t.Errorf("served but neither typed nor named: %s\n"+
+			"A raw route publishes no schema, no MCP tool, no CLI command and no typed SDK method. "+
+			"Convert it, or name it in untypedByDesign with the wire fact that keeps it raw.",
+			strings.Join(untyped, ", "))
+	}
+	for key := range untypedByDesign {
+		if !served[key] {
+			t.Errorf("untypedByDesign names %q, which this app no longer serves", key)
+		}
+		if typed[key] {
+			t.Errorf("untypedByDesign names %q, which IS a typed op — delete the entry", key)
+		}
+	}
+	if got, want := len(typed)+len(untypedByDesign), len(served); got != want {
+		t.Errorf("the two ledgers must sum to the served surface: typed %d + named %d = %d, served %d",
+			len(typed), len(untypedByDesign), got, want)
+	}
 }
