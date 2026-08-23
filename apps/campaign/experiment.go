@@ -38,7 +38,7 @@ var (
 )
 
 // SetExperiment wires the experiments primitive into the campaign plane. Called
-// once at the composition root (plugin/campaigns/clients.go) with the experiment.Assign +
+// once at the composition root (plugin/campaign/clients.go) with the experiment.Assign +
 // experiment.Analyze adapters. Passing nils clears the client (single-creative mode).
 func SetExperiment(assign AssignFunc, analyze AnalyzeFunc) {
 	assignClient = assign

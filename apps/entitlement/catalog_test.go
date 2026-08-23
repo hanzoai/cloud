@@ -137,7 +137,7 @@ func TestEveryProductCloudAsksAboutCanBeGranted(t *testing.T) {
 		return
 	}
 	t.Fatalf("cloud gates on %d product(s) NO plan can grant: %s\n\n"+
-		"  ASKED   apps/entitlements/require.go appProducts = %v\n"+
+		"  ASKED   apps/entitlement/require.go appProducts = %v\n"+
 		"  GRANTED @hanzo/plans entitlements[\"licensing.product_ids\"]:%s\n\n"+
 		"For each dead product CheckEntitlement resolves cleanly and answers Active:false for\n"+
 		"EVERY org on EVERY tier, enterprise included. RequireProduct then admits only on the\n"+
@@ -193,7 +193,7 @@ func TestEveryProductThePlansGrantIsAskedAbout(t *testing.T) {
 	}
 	t.Fatalf("%d product(s) are licensed by a plan and consulted by NOTHING: %s\n\n"+
 		"  GRANTED @hanzo/plans entitlements[\"licensing.product_ids\"]:%s\n"+
-		"  ASKED   apps/entitlements/require.go appProducts = %v\n\n"+
+		"  ASKED   apps/entitlement/require.go appProducts = %v\n\n"+
 		"A grant no gate reads is a line the customer pays for that opens no door. Either the\n"+
 		"consumer that should read it is missing, or the grant belongs in a vocabulary this one\n"+
 		"is not — apps/plan/licence.go relays these ids verbatim into a signed engine licence\n"+

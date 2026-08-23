@@ -19,7 +19,7 @@ import (
 // with 200Gi attached, running until it is deleted. Holding the NFT makes a caller
 // ELIGIBLE and bounds the count to the token supply — which is why this was a
 // revenue leak and not a denial-of-service one — but eligibility is not
-// settlement. The meter is apps/validators/meter.go, and it charges the
+// settlement. The meter is apps/validator/meter.go, and it charges the
 // MATERIALIZATION: a claim that stays pending starts nothing and bills nothing.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{

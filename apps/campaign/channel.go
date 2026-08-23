@@ -9,7 +9,7 @@ package campaign
 // here at the composition root — the SAME injected-function pattern the coding
 // dispatcher uses (coding.NewDispatcher(git.CloneURL, …)). One constructor, N
 // registrations: the campaign package stays free of every executor's type. Today
-// N is 1 — plugin/campaigns/clients.go registers paid (ads) and nothing else.
+// N is 1 — plugin/campaign/clients.go registers paid (ads) and nothing else.
 
 import (
 	"context"
@@ -110,7 +110,7 @@ func (c channel) Pause(ctx context.Context, org string, ref Ref) error {
 }
 
 // NewChannel builds a Channel from a kind and its injected executor funcs. The
-// composition root calls it once per channel (plugin/campaigns/clients.go) with the
+// composition root calls it once per channel (plugin/campaign/clients.go) with the
 // concrete ads/publish/marketing execution funcs, then RegisterChannel-s it.
 func NewChannel(kind string, launch LaunchFunc, spend SpendFunc, pause PauseFunc) Channel {
 	return channel{kind: kind, launch: launch, spend: spend, pause: pause}

@@ -6,7 +6,7 @@ package cloud
 // This file exists because the distinction is invisible to every other test here.
 // The gate read claims.homeOrg() == adminOrg, i.e. Claims.Orgs[0].Org, and IAM's
 // MemberOrgRefs ALWAYS writes the user's own org at index 0 and appends granted
-// memberships after it (iam internal/store/membership.go). So the positional read
+// memberships after it (iam internal/org/membership.go). So the positional read
 // was equivalent to the set read for exactly the population the old tests built —
 // a user whose row already lives in the admin org — and wrong for the population
 // that actually operates the estate: an operator anchored in a brand org who was
