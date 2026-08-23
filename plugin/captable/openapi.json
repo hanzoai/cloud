@@ -443,8 +443,8 @@
     "/v1/captable/rounds/{id}/investments": {
       "post": {
         "operationId": "post_captable_rounds_by_id_investments",
-        "summary": "Record an investment into a round",
-        "description": "Records what a stakeholder put into a round and adds it to the round's raised total.\n\nOn a PRICED round this ISSUES SHARES as well as recording the money: the amount is divided by the round's price per share, rounded DOWN to whole shares, and a new certificate for them is issued to the investor in the round's share class — so an amount too small to buy one whole share is refused rather than recorded as a zero-share investment. On a non-priced round the money is recorded and no shares are issued.\n\nThe round must exist in this company and still be OPEN — a closed round refuses further investment — and the investor must already be a stakeholder here. The date defaults to today when omitted.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Records one investor's money into an open round.",
+        "description": "Records one investor's money into an open round.\n\nThe round must be OPEN; investing into a closed one is refused. Where the round\ncarries a price per share, the investment also issues the shares it buys and the\nanswer names them.",
         "tags": [
           "captable"
         ],
@@ -453,12 +453,36 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the round to invest in. The URL is the addressing authority — a path\nsegment binds after the body and after the query — so the address decides\nwhich round is written whatever a body claims.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableInvestmentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableInvested"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/safes": {
@@ -565,12 +589,35 @@
     "/v1/captable/shares/transfer": {
       "post": {
         "operationId": "post_captable_shares_transfer",
-        "summary": "Transfer shares to another stakeholder",
-        "description": "Moves shares from one certificate to another stakeholder, in one atomic step.\n\nOMITTING `quantity` transfers the WHOLE certificate, which simply reassigns it and answers newShareId null — that is the difference between a full and a partial transfer, and it is why quantity is absent rather than zero. A partial transfer shrinks the source certificate and issues a NEW one to the recipient, so it requires a `certificateId` for that new certificate and refuses a reused one. The quantity must be between 1 and what the source certificate actually holds; the recipient must be a stakeholder of this same company.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Moves shares from one stakeholder to another.",
+        "description": "Moves shares from one stakeholder to another.\n\nOmit `quantity` to transfer the whole certificate, which REASSIGNS it and mints\nno new share. Send a quantity below the amount held to SPLIT it — the source\ncertificate keeps the remainder, and a split additionally requires\n`certificateId` for the new certificate, which must be unique in the company.\nA quantity outside 1..held is refused, so a transfer can never over-issue.\n\nBoth outcomes answer 200: a transfer records a movement between holders and\nmints no security of its own, which is why this is not a 201 the way an\ninvestment is.",
         "tags": [
           "captable"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableShareTransfer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableTransferred"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/shares/{id}": {
@@ -945,6 +992,27 @@
         },
         "type": "object"
       },
+      "captableInvested": {
+        "properties": {
+          "id": {
+            "description": "ID is the investment record's id.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is the human sentence the cap table wrote.",
+            "type": "string"
+          },
+          "newShareId": {
+            "description": "NewShareID names the certificate the investment issued, when the round\ncarries a price per share. Null when the round prices later, which is a\nrecorded investment and not a failure.",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is true when the investment was recorded.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "captableInvestment": {
         "properties": {
           "amount": {
@@ -978,6 +1046,27 @@
           "stakeholderName": {
             "description": "StakeholderName is that investor's name.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captableInvestmentIn": {
+        "properties": {
+          "amount": {
+            "description": "Amount is the money invested, in the round's own currency. Required and must\nbe positive."
+          },
+          "comments": {
+            "description": "Comments is a free-text note kept with the investment. Optional."
+          },
+          "date": {
+            "description": "Date is when the investment was made, YYYY-MM-DD. Optional: omitted, it is\nrecorded as today."
+          },
+          "id": {
+            "description": "ID is the round to invest in. The URL is the addressing authority — a path\nsegment binds after the body and after the query — so the address decides\nwhich round is written whatever a body claims.",
+            "type": "string"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the investor. Required, and it must reference a stakeholder\nof the same company."
           }
         },
         "type": "object"
@@ -1449,6 +1538,23 @@
         },
         "type": "object"
       },
+      "captableShareTransfer": {
+        "properties": {
+          "certificateId": {
+            "description": "CertificateID names the NEW certificate a partial transfer issues, and is\nrequired for one — a partial transfer without it is refused 400. It is unused\nby a full transfer, which reassigns the existing certificate.\n\nIt must be unique within the company; reusing one is refused 409. Declaring\nit is not optional in the way the tag suggests: omitting this field from the\nGo type would leave `quantity` accepted and every PARTIAL transfer answering\n\"certificateId is required\" with no way for a caller to supply it — the\nsilent-drop failure this whole conversion was blocked on, one field wide."
+          },
+          "quantity": {
+            "description": "Quantity is how many shares to move. OPTIONAL, and its absence is not zero:\nomitted or null transfers the WHOLE certificate. A value outside 1..held is\nrefused, so a partial transfer can never over-issue.\n\nA full transfer REASSIGNS the certificate and mints no new one; a partial\ntransfer splits it and answers with the new share's id. That is the fact a\ncaller needs from the answer, not from this comment."
+          },
+          "shareId": {
+            "description": "ShareID is the certificate being transferred. Required, and it must name a\nshare in the caller org's own company — a share id from another tenant\nresolves to not-found rather than to another company's certificate."
+          },
+          "toStakeholderId": {
+            "description": "ToStakeholderID is who receives them. Required, and it must reference a\nstakeholder of the SAME company; one that does not is refused 400 rather\nthan creating a dangling holder."
+          }
+        },
+        "type": "object"
+      },
       "captableShares": {
         "properties": {
           "data": {
@@ -1629,6 +1735,27 @@
           },
           "stakeholders": {
             "description": "Stakeholders is how many stakeholders the company has.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "captableTransferred": {
+        "properties": {
+          "message": {
+            "description": "Message is the human sentence the cap table wrote, e.g. \"Share transferred\".",
+            "type": "string"
+          },
+          "newShareId": {
+            "description": "NewShareID names the certificate a PARTIAL transfer created. It is null on a\nfull transfer, which reassigns the existing certificate instead of splitting\nit — so null here means \"no new certificate\", never \"the transfer failed\".",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is true when the transfer was applied.",
+            "type": "boolean"
+          },
+          "transferred": {
+            "description": "Transferred is how many shares moved.",
             "type": "integer"
           }
         },

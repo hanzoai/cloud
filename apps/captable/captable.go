@@ -190,7 +190,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/shares", route(s, "shares.add", nil, true))
 	// shares.transfer: `quantity` OMITTED means "transfer the whole certificate",
 	// which a typed In cannot say (its zero value means 0), and it is coerced too.
-	g.Post("/shares/transfer", route(s, "shares.transfer", nil, true))
+	zip.Post(g, "/shares/transfer", o.transferShares)
 	// options.add: `quantity`, `exercisePrice`, `cliffYears` and `vestingYears` are
 	// coerced numbers.
 	g.Post("/options", route(s, "options.add", nil, true))
@@ -205,7 +205,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/rounds", route(s, "rounds.create", nil, true))
 	// rounds.investments.add: `amount` is a coerced number and `date`/`comments`
 	// go through optDateString/optString.
-	g.Post("/rounds/:id/investments", routeID(s, "rounds.investments.add", true))
+	// 201: an investment into a priced round MINTS a security, and the bundle says
+	// so with created(). The transfer beside it answers 200 because it moves an
+	// existing holding rather than creating one — a distinction the untyped relay
+	// carried by passing the bundle's own status through, and which a typed op has
+	// to declare. The suite caught this within a minute of the conversion.
+	zip.Post(g, "/rounds/:id/investments", o.addInvestment, zip.WithStatus(http.StatusCreated))
 }
 
 // The eleven relays' prose, declared beside the wire facts above.

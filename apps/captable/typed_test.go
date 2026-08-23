@@ -178,8 +178,12 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	if total != 31 {
 		t.Fatalf("/v1/captable has %d routes, expected 31 — type the new one or record why it cannot be", total)
 	}
-	if typed != 20 {
-		t.Fatalf("/v1/captable has %d typed ops, expected 20", typed)
+	// 22, and it rises as the OWED writes are written. It was 20 until the bundle's
+	// route source turned out to be readable — it is a Go module dependency, so it
+	// sits in the module cache at the version go.mod pins — which is what unblocked
+	// the eleven writes that were listed as owed rather than refused.
+	if typed != 22 {
+		t.Fatalf("/v1/captable has %d typed ops, expected 22", typed)
 	}
 }
 

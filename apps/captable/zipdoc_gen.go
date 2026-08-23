@@ -320,7 +320,18 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/captable/rounds/:id/investments", zip.Doc{
-		Description: "Is route with the :id path param threaded into params.",
+		Description: "Records one investor's money into an open round.\n\nThe round must be OPEN; investing into a closed one is refused. Where the round\ncarries a price per share, the investment also issues the shares it buys and the\nanswer names them.",
+		Fields: map[string]string{
+			"captableInvested.id":                "ID is the investment record's id.",
+			"captableInvested.message":           "Message is the human sentence the cap table wrote.",
+			"captableInvested.newShareId":        "NewShareID names the certificate the investment issued, when the round\ncarries a price per share. Null when the round prices later, which is a\nrecorded investment and not a failure.",
+			"captableInvested.success":           "Success is true when the investment was recorded.",
+			"captableInvestmentIn.amount":        "Amount is the money invested, in the round's own currency. Required and must\nbe positive.",
+			"captableInvestmentIn.comments":      "Comments is a free-text note kept with the investment. Optional.",
+			"captableInvestmentIn.date":          "Date is when the investment was made, YYYY-MM-DD. Optional: omitted, it is\nrecorded as today.",
+			"captableInvestmentIn.id":            "ID is the round to invest in. The URL is the addressing authority — a path\nsegment binds after the body and after the query — so the address decides\nwhich round is written whatever a body claims.",
+			"captableInvestmentIn.stakeholderId": "StakeholderID is the investor. Required, and it must reference a stakeholder\nof the same company.",
+		},
 	})
 	zip.Describe("POST /v1/captable/safes", zip.Doc{
 		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
@@ -329,7 +340,17 @@ func init() {
 		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
 	})
 	zip.Describe("POST /v1/captable/shares/transfer", zip.Doc{
-		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
+		Description: "Moves shares from one stakeholder to another.\n\nOmit `quantity` to transfer the whole certificate, which REASSIGNS it and mints\nno new share. Send a quantity below the amount held to SPLIT it — the source\ncertificate keeps the remainder, and a split additionally requires\n`certificateId` for the new certificate, which must be unique in the company.\nA quantity outside 1..held is refused, so a transfer can never over-issue.\n\nBoth outcomes answer 200: a transfer records a movement between holders and\nmints no security of its own, which is why this is not a 201 the way an\ninvestment is.",
+		Fields: map[string]string{
+			"captableShareTransfer.certificateId":   "CertificateID names the NEW certificate a partial transfer issues, and is\nrequired for one — a partial transfer without it is refused 400. It is unused\nby a full transfer, which reassigns the existing certificate.\n\nIt must be unique within the company; reusing one is refused 409. Declaring\nit is not optional in the way the tag suggests: omitting this field from the\nGo type would leave `quantity` accepted and every PARTIAL transfer answering\n\"certificateId is required\" with no way for a caller to supply it — the\nsilent-drop failure this whole conversion was blocked on, one field wide.",
+			"captableShareTransfer.quantity":        "Quantity is how many shares to move. OPTIONAL, and its absence is not zero:\nomitted or null transfers the WHOLE certificate. A value outside 1..held is\nrefused, so a partial transfer can never over-issue.\n\nA full transfer REASSIGNS the certificate and mints no new one; a partial\ntransfer splits it and answers with the new share's id. That is the fact a\ncaller needs from the answer, not from this comment.",
+			"captableShareTransfer.shareId":         "ShareID is the certificate being transferred. Required, and it must name a\nshare in the caller org's own company — a share id from another tenant\nresolves to not-found rather than to another company's certificate.",
+			"captableShareTransfer.toStakeholderId": "ToStakeholderID is who receives them. Required, and it must reference a\nstakeholder of the SAME company; one that does not is refused 400 rather\nthan creating a dangling holder.",
+			"captableTransferred.message":           "Message is the human sentence the cap table wrote, e.g. \"Share transferred\".",
+			"captableTransferred.newShareId":        "NewShareID names the certificate a PARTIAL transfer created. It is null on a\nfull transfer, which reassigns the existing certificate instead of splitting\nit — so null here means \"no new certificate\", never \"the transfer failed\".",
+			"captableTransferred.success":           "Success is true when the transfer was applied.",
+			"captableTransferred.transferred":       "Transferred is how many shares moved.",
+		},
 	})
 	zip.Describe("POST /v1/captable/stakeholders", zip.Doc{
 		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
