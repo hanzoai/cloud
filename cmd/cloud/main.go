@@ -346,6 +346,12 @@ func run(addr, zapAddr string) error {
 	// whole fleet and no plugin can see past itself.
 	spec(app, composed)
 
+	// The same description as a QUERY LANGUAGE, at /v1/graphql. The host's for the
+	// same reason, and by claiming the address rather than leaving it to the app
+	// that holds the /v1 remainder — which answered it with a schema of its own
+	// registry, one field wide, about the wrong thing.
+	graphql(app, composed)
+
 	// THE AGENT DOOR, at POST /v1/mcp — composed by ASKING, at the moment of
 	// asking. Registered after the mount loops so the plugin table it starts from
 	// is the finished one, and before anything listens.
@@ -832,6 +838,21 @@ func spec(app *zip.App, composed []string) {
 // one address and the composition is refused outright.
 func index(app *zip.App, composed []string) {
 	openapi.MountIndex(app, subsets(composed))
+}
+
+// graphql is the fleet's QUERY LANGUAGE, at /v1/graphql: GET renders the schema
+// this deployment publishes, POST runs a request against it, one hop per root
+// field to the app that owns the operation.
+//
+// It reads the SAME subsets the document and the index do, so all three describe
+// one API by construction — and it dispatches through locate, the resolver the
+// agent door already uses, so a field reaches its app the way every other fleet
+// question does.
+//
+// /v1/graphql, never /v1/graph: the second is the knowledge graph's own address,
+// assertions and neighbours, and the two mean different things by the word.
+func graphql(app *zip.App, composed []string) {
+	fleet.MountGraph(app, "/v1/graphql", subsets(composed), locate(app))
 }
 
 // subsets is what this deployment publishes: each app's own document, read from
