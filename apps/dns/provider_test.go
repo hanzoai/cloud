@@ -44,7 +44,7 @@ func init() {
 	})
 }
 
-// ── the seam ─────────────────────────────────────────────────────────────────────
+// ── the client ─────────────────────────────────────────────────────────────────────
 
 // The address is read once, into the operation it names plus the zone and record it
 // names it on. This table IS the contract between the head and every adapter.

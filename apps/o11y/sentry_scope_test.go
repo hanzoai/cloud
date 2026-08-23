@@ -146,7 +146,7 @@ func TestSuperAdminReachesTheProductOrgless(t *testing.T) {
 	}
 }
 
-// X-User-IsAdmin is a header, and this seam is a net/http handler — so pin that
+// X-User-IsAdmin is a header, and this client is a net/http handler — so pin that
 // only the exact minted value counts. Anything else is a member, not sudo.
 func TestOnlyTheMintedAdminBitCounts(t *testing.T) {
 	for _, v := range []string{"", "false", "TRUE", "1", "yes", " true"} {

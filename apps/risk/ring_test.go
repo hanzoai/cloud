@@ -59,7 +59,7 @@ func TestPlane_HoldsNoSharedTenantState(t *testing.T) {
 	// is counted; holding the bare store back would put the eviction out of sight
 	// again.
 	//
-	// The MODEL is named by its seam and not by one family's store: a resident holds a
+	// The MODEL is named by its client and not by one family's store: a resident holds a
 	// [detector], so the assertion is that per-tenant model state lives on the resident
 	// whatever family it belongs to. A plane field of that type would be exactly as
 	// shared as a plane field of the store type was, which is why the type above still

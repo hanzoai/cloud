@@ -1,6 +1,6 @@
 package books
 
-// typed.go — the seam between a books ROUTE and a typed op.
+// typed.go — the client between a books ROUTE and a typed op.
 //
 // A typed op is ONE registry entry with four projections: the REST route, the
 // OpenAPI operation (schema AND prose), the MCP tool an agent picks by reading

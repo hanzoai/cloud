@@ -576,7 +576,7 @@ func TestRequestValidation(t *testing.T) {
 //
 // The env override this replaced (TRANSLATE_PRICE_UUSD_PER_1K_CHARS) is gone: an
 // env var keeps no history, so nothing could say what we charged in March. The
-// price is a row now, and the seam a test drives is the resolver itself.
+// price is a row now, and the client a test drives is the resolver itself.
 func TestBulkPricing(t *testing.T) {
 	ctx := context.Background()
 

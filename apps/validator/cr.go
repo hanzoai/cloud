@@ -83,7 +83,7 @@ type provisionRequest struct {
 }
 
 // nodeProvisioner materializes (or reports unavailable) a validator node. The
-// seam keeps the orchestration in validators.go testable without a cluster.
+// client keeps the orchestration in validators.go testable without a cluster.
 type nodeProvisioner interface {
 	// Provision writes the node CR + KMS→Secret sync and returns the CR name +
 	// namespace. It MUST enforce the three mainnet-safety guards.

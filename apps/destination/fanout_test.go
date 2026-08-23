@@ -151,10 +151,10 @@ func TestResolveSecretCredentialLess(t *testing.T) {
 	}
 }
 
-// TestSeamConnect verifies the guide-facing in-process Connect seam provisions
+// TestClientConnect verifies the guide-facing in-process Connect client provisions
 // non-secret config, requires the platform's required fields, and reports live=false
 // without a credential.
-func TestSeamConnect(t *testing.T) {
+func TestClientConnect(t *testing.T) {
 	kc := newKMS(t)
 	fd := &fakeDest{}
 	s := testService(t, kc, map[string]Destination{"fake": fd})

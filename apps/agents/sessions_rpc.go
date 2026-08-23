@@ -24,7 +24,7 @@ import (
 // its own user's sessions holds identically across the boundary.
 
 // exposeSessions publishes the teardown and its count on the internal plane.
-// Mount calls it, beside the in-process seam.
+// Mount calls it, beside the in-process client.
 func exposeSessions() {
 	zip.Post[plane.SessionMatchIn, plane.SessionCount](cloud.Plane(), "/agents/sessions/stop", planeStopSessions,
 		zip.WithOperationID(plane.AgentsSessionsStop),

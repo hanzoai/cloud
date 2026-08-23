@@ -42,7 +42,7 @@ import (
 	"github.com/hanzoai/cloud/internal/fqdn"
 )
 
-// verifiedHostFn is the PROVEN source. A seam, not a config: the tests drive it
+// verifiedHostFn is the PROVEN source. A client, not a config: the tests drive it
 // directly, and production is sites.VerifiedHost, which prefers the in-process
 // projects store and falls back to the plane. Production genuinely needs the
 // fallback — the pod boots ~25 single-app processes, so the projects store is not

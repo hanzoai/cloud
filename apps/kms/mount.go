@@ -104,7 +104,7 @@ func init() {
 			"administrative act, and a credential distributed to read one must not be able to "+
 			"remove it.")
 
-	// The BODIES those two answer with, declared through the reflection seam.
+	// The BODIES those two answer with, declared through the reflection client.
 	// Without this each renders as an operationId and a tag and NOTHING else —
 	// indistinguishable from a route that returns nothing at all — so every SDK
 	// generated off the document offered a secret read with no return type. Both

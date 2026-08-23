@@ -4,7 +4,7 @@ package team
 // hits via its FrontStorage client (foundations/core/packages/storage-client/src/
 // client/front.ts). team-go's pkg/files was only a 307 alias to Base's file API
 // (no store), so this is a fresh implementation of the SAME FrontStorage contract
-// backed by cloud's CANONICAL blob seam, deps.VFS (Put/Get) — no new store (ONE
+// backed by cloud's CANONICAL blob client, deps.VFS (Put/Get) — no new store (ONE
 // way).
 //
 // CONTRACT (front.ts, authoritative):
@@ -86,7 +86,7 @@ func init() {
 // backend or memory. 100 MiB matches the attachment ceiling.
 const maxBlobSize = 100 << 20
 
-// filesService serves the workspace blob plane. vfs is cloud's blob seam (deps.VFS);
+// filesService serves the workspace blob plane. vfs is cloud's blob client (deps.VFS);
 // accounts asserts workspace membership; secret verifies the session token.
 // degraded is the fail-closed posture Mount resolved (no HS256 secret): a typed
 // op cannot be wrapped by Mount's guard, so it asks for itself — see typed.go.

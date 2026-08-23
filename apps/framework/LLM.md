@@ -95,7 +95,7 @@ strings and numbers. The fix is one `case reflect.Interface` in zip's `schemaOf`
 returning `{}` (JSON Schema "any"), which is also leg 1 of the refusal above; it
 needs a zip release, so it is not made in this package.
 
-**Identity across the typed seam.** A typed op receives only a `context.Context`,
+**Identity across the typed client.** A typed op receives only a `context.Context`,
 so the engine `Caller` is assembled from two carriers parked ahead of the leaves
 by `g.Use(cloud.Bridge(), bridgeFacts)`: the validated org from
 `principal.OrgFrom` (cloud.Bridge) and the user id + platform-admin bit from

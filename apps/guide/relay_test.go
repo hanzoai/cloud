@@ -43,7 +43,7 @@ func TestDoStepNeverRelaysAnUpstreamCredential(t *testing.T) {
 	}
 
 	// Non-vacuity: the refusal must actually have travelled. Without this, deleting
-	// the invoke seam's error would leave the key absent for the wrong reason and
+	// the invoke client's error would leave the key absent for the wrong reason and
 	// the assertion below would pass while proving nothing.
 	var relayed string
 	for _, e := range resp.Events {

@@ -7,7 +7,7 @@ package team
 //     never renders for an anonymous caller.
 //   - GET /v1/team/billing/plan  answers plan + seats for the caller's OWN org,
 //     resolved from the VERIFIED session token (never a client header), through
-//     the SAME commerce/plan seams the workspace-login gate uses (entitle.go).
+//     the SAME commerce/plan clients the workspace-login gate uses (entitle.go).
 //
 // Money reads are deliberately NOT re-proxied here (one way): the page calls
 // cloud's own /v1/billing/balance and /v1/usage/summary same-origin, where the
@@ -138,7 +138,7 @@ func (b *billingService) readPlan(ctx context.Context, _ *none) (*planInfo, erro
 		return nil, zip.Errorf(http.StatusBadGateway, "seat count unavailable")
 	}
 	out := planInfo{Seats: seats, Guests: guests, UpgradeURL: upgradeURL}
-	// Best-effort licensing read — the SAME seams entitle() gates login with.
+	// Best-effort licensing read — the SAME clients entitle() gates login with.
 	// An infra absence (nil commerce, resolution error) leaves plan empty.
 	if b.commerce != nil {
 		if ent, err := b.commerce.CheckEntitlement(ctx, org, productTeam); err == nil && ent != nil {

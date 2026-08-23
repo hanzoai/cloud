@@ -1,6 +1,6 @@
 package cloud
 
-// coresidence_test.go — the scorer seam's composition argument, as a GATE.
+// coresidence_test.go — the scorer client's composition argument, as a GATE.
 //
 // risk.go states it in prose: this is an IN-PROCESS handoff, and which apps share
 // a process is a per-plugin CHOICE rather than a law. Two of those choices are
@@ -8,7 +8,7 @@ package cloud
 // being reversed by somebody who has not read that file:
 //
 //	apps/commerce INSTALLS a scorer (installRiskScorer, on the credit door's own
-//	plane client). It is the seam's first and only producer.
+//	plane client). It is the client's first and only producer.
 //	apps/gateway ARMS the fleet-wide abuse gate on cloud.RiskScorerInstalled(),
 //	and refuses mode=live while that reads false.
 //
@@ -48,7 +48,7 @@ import (
 // entirely inside this module.
 const modulePath = "github.com/hanzoai/cloud/"
 
-// the two apps whose co-residence the seam's safety currently rests on.
+// the two apps whose co-residence the client's safety currently rests on.
 const (
 	scorerApp = "github.com/hanzoai/cloud/apps/commerce"
 	gateApp   = "github.com/hanzoai/cloud/apps/gateway"

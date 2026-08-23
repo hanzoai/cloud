@@ -1,6 +1,6 @@
 package o11y
 
-// typed.go is the ONE seam between a request and o11y's TYPED ops, and the ONE
+// typed.go is the ONE client between a request and o11y's TYPED ops, and the ONE
 // place this package reaches for the request at all.
 //
 // A typed op — func(context.Context, *In) (*Out, error) — receives a context and
@@ -22,7 +22,7 @@ package o11y
 //     stays in the one place that owns it.
 //
 // Concentrating the two remaining cloud.Request calls in this file is deliberate:
-// the escape hatch is pinned (cloud/typed_request_gate_test.go), and one seam
+// the escape hatch is pinned (cloud/typed_request_gate_test.go), and one client
 // file with one justification beats the same call scattered across handlers.
 //
 // Every one FAILS CLOSED off the HTTP path — the CLI projection's LocalInvoke

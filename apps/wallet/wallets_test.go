@@ -295,9 +295,9 @@ func TestPerTenantIsolation(t *testing.T) {
 	}
 }
 
-// ── 3. the custody seam selects the backend by config ────────────────────────
+// ── 3. the custody client selects the backend by config ────────────────────────
 
-func TestCustodySeamSelectsBackend(t *testing.T) {
+func TestCustodyClientSelectsBackend(t *testing.T) {
 	k, _ := testKMS(t)
 	// Only KMS is configured — mpc/treasury must fail closed.
 	s, app := newService(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)

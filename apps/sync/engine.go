@@ -72,7 +72,7 @@ func reconcileEvent(ctx context.Context, se cloud.SyncEvent) (cloud.SyncResult, 
 	if err != nil {
 		return cloud.SyncResult{}, err
 	}
-	ev := eventFromSeam(se)
+	ev := eventFromClient(se)
 	syncs, err := st.ResolveBySource(ctx, se.Org, se.Kind, ev.Provider)
 	if err != nil {
 		return cloud.SyncResult{}, err
@@ -165,8 +165,8 @@ func propagate(ctx context.Context, st *store, sy Sync, ev Event) {
 	}
 }
 
-// eventFromSeam converts the cross-package cloud.SyncEvent into the in-package Event.
-func eventFromSeam(se cloud.SyncEvent) Event {
+// eventFromClient converts the cross-package cloud.SyncEvent into the in-package Event.
+func eventFromClient(se cloud.SyncEvent) Event {
 	return Event{
 		Provider: se.Provider, Org: se.Org, Locator: se.Locator, Repo: se.Repo,
 		Ref: se.Ref, Before: se.Before, After: se.After, Actor: se.Actor,

@@ -48,9 +48,9 @@ func init() {
 	})
 }
 
-// runDestinationsConnect drives the destinations in-process Connect seam AS THE
+// runDestinationsConnect drives the destinations in-process Connect client AS THE
 // CALLER'S ORG (rc.Org, pinned by dispatchTool). It forwards only the known
-// non-secret id fields; the seam validates the platform's required ids and reports
+// non-secret id fields; the client validates the platform's required ids and reports
 // whether the destination is live.
 func runDestinationsConnect(ctx context.Context, rc RunContext) (any, error) {
 	platform := strings.TrimSpace(strInput(rc.Input, "platform"))

@@ -2,7 +2,7 @@
 
 package controlplane
 
-// cert_test.go — standalone crypto tests for the seam (c) real certificate.
+// cert_test.go — standalone crypto tests for the client (c) real certificate.
 // These exercise ComposeControlPlaneCert / VerifyControlPlaneCert directly
 // (independent of the ceremony wiring) and are the acceptance suite for the
 // independent-sig weighted-quorum cert: a real cert verifies under policy; a

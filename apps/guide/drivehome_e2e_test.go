@@ -19,13 +19,13 @@ import (
 // drivehome_e2e_test.go is the DRIVE-IT-HOME proof: a cross-subsystem harness that
 // mounts the REAL app wire (framework + content + automations + guide + company) and
 // walks a FRESH org through the whole agentic-company + Guide loop, asserting each of
-// the seven seams against the real, in-process subsystems with a validated test
-// principal. Nothing is stubbed at the seam boundary that production wires: the Guide's
+// the seven clients against the real, in-process subsystems with a validated test
+// principal. Nothing is stubbed at the client boundary that production wires: the Guide's
 // "do it for me" runs content_generate through the real auto.InvokeTool onto the
 // real framework DocType store; the company machine runs its real transition guards; the
 // blueprint admin plane runs the real SuperAdmin predicate. The only fakes are the AI
-// completion (a deterministic draft) and the growth-observe seams, which are bound to
-// provably org-scoped reads exactly as the composition root (plugin/guide/seams.go) binds
+// completion (a deterministic draft) and the growth-observe clients, which are bound to
+// provably org-scoped reads exactly as the composition root (plugin/guide/clients.go) binds
 // framework.ModuleInstalled / integrations.Connected in prod.
 
 // mountAgenticStack wires the five real subsystems a fresh org traverses on the
@@ -45,7 +45,7 @@ func mountAgenticStack(t *testing.T, ai cloud.AIClient) *zip.App {
 	if err := auto.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("auto.Mount: %v", err)
 	}
-	// guide with the REAL invoke seam (auto.InvokeTool) — no fake tool plane.
+	// guide with the REAL invoke client (auto.InvokeTool) — no fake tool plane.
 	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), AI: ai}); err != nil {
 		t.Fatalf("guide.Mount: %v", err)
 	}
@@ -81,13 +81,13 @@ func superForOrg(org string) map[string]string {
 	}
 }
 
-// ── Seam 1 — company formation + the KYC gate ────────────────────────────────
+// ── Client 1 — company formation + the KYC gate ────────────────────────────────
 
-// TestDrive_Seam1_CompanyFormationAndKYCGate proves the incorporation entrypoint: POST
+// TestDrive_Client1_CompanyFormationAndKYCGate proves the incorporation entrypoint: POST
 // /v1/company begins ONE formation for the org; the machine advances structure→founders
 // once a structure is chosen; and the KYC gate HOLDS — an unattributed founder can never
 // cross founders→payment, and only an ATTRIBUTED reviewer confirmation opens it.
-func TestDrive_Seam1_CompanyFormationAndKYCGate(t *testing.T) {
+func TestDrive_Client1_CompanyFormationAndKYCGate(t *testing.T) {
 	app := mountAgenticStack(t, &fakeAI{content: "draft"})
 	const org = "foundco"
 
@@ -152,16 +152,16 @@ func TestDrive_Seam1_CompanyFormationAndKYCGate(t *testing.T) {
 		t.Fatalf("attributed KYC must open the gate: want 200@payment, got %d @%q (%s)",
 			opened.Code, formationStage(t, opened.Body), opened.Body)
 	}
-	t.Logf("SEAM 1 PROVEN: formation begins@structure → advances@founders → KYC gate 422 (unattributed) → SuperAdmin-attributed pass → advances@payment")
+	t.Logf("CLIENT 1 PROVEN: formation begins@structure → advances@founders → KYC gate 422 (unattributed) → SuperAdmin-attributed pass → advances@payment")
 }
 
-// ── Seam 2 — Guide default-on: the marketing/content module resolves with zero install ──
+// ── Client 2 — Guide default-on: the marketing/content module resolves with zero install ──
 
-// TestDrive_Seam2_GuideDefaultOnZeroInstall proves the "module not installed for org"
+// TestDrive_Client2_GuideDefaultOnZeroInstall proves the "module not installed for org"
 // fix: a brand-new org that NEVER ran POST /v1/framework/modules/marketing/install still
 // resolves the marketing module and its Campaign DocType — framework.ModuleInstalled and
 // framework.Installed (both call GetDocType) satisfy the always-on fixture for every org.
-func TestDrive_Seam2_GuideDefaultOnZeroInstall(t *testing.T) {
+func TestDrive_Client2_GuideDefaultOnZeroInstall(t *testing.T) {
 	mountAgenticStack(t, &fakeAI{content: "draft"})
 	ctx := context.Background()
 	const org = "neverinstalled" // this org runs NO install, ever
@@ -176,16 +176,16 @@ func TestDrive_Seam2_GuideDefaultOnZeroInstall(t *testing.T) {
 	if framework.ModuleInstalled(ctx, org, "no-such-module") {
 		t.Fatalf("an unknown module must resolve false, never a spurious true")
 	}
-	t.Logf("SEAM 2 PROVEN: fresh org %q resolves marketing module + Campaign DocType with zero install; unknown module stays false", org)
+	t.Logf("CLIENT 2 PROVEN: fresh org %q resolves marketing module + Campaign DocType with zero install; unknown module stays false", org)
 }
 
-// ── Seam 3 — observe: org-scoped growth profile ──────────────────────────────
+// ── Client 3 — observe: org-scoped growth profile ──────────────────────────────
 
-// TestDrive_Seam3_ObserveOrgScoped proves the observe layer serves each org its OWN
-// growth stage + signals + keyMetrics, and never another org's. A signal seam true only
+// TestDrive_Client3_ObserveOrgScoped proves the observe layer serves each org its OWN
+// growth stage + signals + keyMetrics, and never another org's. A signal client true only
 // for "alpha" must leave "beta" formed with zeroed metrics, and every probe reads only
 // the caller's own org.
-func TestDrive_Seam3_ObserveOrgScoped(t *testing.T) {
+func TestDrive_Client3_ObserveOrgScoped(t *testing.T) {
 	app := mountAgenticStack(t, &fakeAI{content: "draft"})
 
 	mounted.State.signals = Signals{
@@ -233,17 +233,17 @@ func TestDrive_Seam3_ObserveOrgScoped(t *testing.T) {
 	if beta.KeyMetrics.RevenueCents != 0 || beta.KeyMetrics.Records != 0 {
 		t.Fatalf("beta keyMetrics must be zero, got %+v", beta.KeyMetrics)
 	}
-	t.Logf("SEAM 3 PROVEN: alpha stage=%s rev=%d records=%d | beta stage=%s rev=%d records=%d (org-scoped, zero leak)",
+	t.Logf("CLIENT 3 PROVEN: alpha stage=%s rev=%d records=%d | beta stage=%s rev=%d records=%d (org-scoped, zero leak)",
 		alpha.Stage, alpha.KeyMetrics.RevenueCents, alpha.KeyMetrics.Records,
 		beta.Stage, beta.KeyMetrics.RevenueCents, beta.KeyMetrics.Records)
 }
 
-// ── Seam 4 — suggest: the ranked next-best move ──────────────────────────────
+// ── Client 4 — suggest: the ranked next-best move ──────────────────────────────
 
-// TestDrive_Seam4_SuggestNextBestMove proves the recommendation surface returns the
+// TestDrive_Client4_SuggestNextBestMove proves the recommendation surface returns the
 // ranked next-best quests for the org's reconciled state — a fresh org's leading move is
 // the journey root (incorporate), which is automatable (the Business AI can run it).
-func TestDrive_Seam4_SuggestNextBestMove(t *testing.T) {
+func TestDrive_Client4_SuggestNextBestMove(t *testing.T) {
 	app := mountAgenticStack(t, &fakeAI{content: "draft"})
 	var resp suggestResponse
 	r := reqJSON(t, app, http.MethodGet, "/v1/guide/suggest", "acme", nil)
@@ -266,17 +266,17 @@ func TestDrive_Seam4_SuggestNextBestMove(t *testing.T) {
 	if r := reqJSON(t, app, http.MethodGet, "/v1/guide/suggest", "", nil); r.Code != http.StatusForbidden {
 		t.Fatalf("suggest without principal want 403, got %d", r.Code)
 	}
-	t.Logf("SEAM 4 PROVEN: fresh org next-best=%q automatable=%v unlocks=%d (%d ranked candidates)",
+	t.Logf("CLIENT 4 PROVEN: fresh org next-best=%q automatable=%v unlocks=%d (%d ranked candidates)",
 		resp.Next, resp.Suggestions[0].Automatable, resp.Suggestions[0].Unlocks, len(resp.Suggestions))
 }
 
-// ── Seam 5 — strategies corpus, stage-filtered, signal-gated ─────────────────
+// ── Client 5 — strategies corpus, stage-filtered, signal-gated ─────────────────
 
-// TestDrive_Seam5_StrategiesStageFiltered proves the tactics corpus is org-scoped and
+// TestDrive_Client5_StrategiesStageFiltered proves the tactics corpus is org-scoped and
 // filtered by the observed stage — and, the load-bearing part, that an explicit ?stage=
 // override can lift STAGE-gated tactics but can NEVER unlock a SIGNAL-gated tactic (a
 // has:<capability> tag whose observed signal is absent stays hidden).
-func TestDrive_Seam5_StrategiesStageFiltered(t *testing.T) {
+func TestDrive_Client5_StrategiesStageFiltered(t *testing.T) {
 	app := mountAgenticStack(t, &fakeAI{content: "draft"})
 	// No signals bound → the org observes nothing (stage formed, every has:* signal absent).
 
@@ -334,18 +334,18 @@ func TestDrive_Seam5_StrategiesStageFiltered(t *testing.T) {
 			t.Fatalf("?category= surfaced %q, which the unfiltered read at the same stage did not", s.ID)
 		}
 	}
-	t.Logf("SEAM 5 PROVEN: observed(formed)=%d tactics [research✓ scaling✗ analytics✗]; ?stage=scaling=%d tactics [scaling✓ but analytics-gate STILL✗]; ?category=%s=%d tactics (strict subset, no leak)",
+	t.Logf("CLIENT 5 PROVEN: observed(formed)=%d tactics [research✓ scaling✗ analytics✗]; ?stage=scaling=%d tactics [scaling✓ but analytics-gate STILL✗]; ?category=%s=%d tactics (strict subset, no leak)",
 		base.Count, scaling.Count, cat, filtered.Count)
 }
 
-// ── Seam 6 — execute a step: the effect lands, detect reflects it ────────────
+// ── Client 6 — execute a step: the effect lands, detect reflects it ────────────
 
-// TestDrive_Seam6_ExecuteStepEffectLandsDetectReflects proves the executing seam. A Guide
+// TestDrive_Client6_ExecuteStepEffectLandsDetectReflects proves the executing client. A Guide
 // content_generate step runs through the REAL auto.InvokeTool → content.Generate →
 // framework store: a Campaign document actually lands for the org, the step auto-marks
 // done, AND the "acted" auto-detect signal INDEPENDENTLY reflects the landed effect (a
 // reset step re-detects done on the next read, driven only by the recorded action).
-func TestDrive_Seam6_ExecuteStepEffectLandsDetectReflects(t *testing.T) {
+func TestDrive_Client6_ExecuteStepEffectLandsDetectReflects(t *testing.T) {
 	app := mountAgenticStack(t, &fakeAI{content: "One-line positioning.\n\n- a\n- b\n- c"})
 	const org = "shipco"
 	ctx := context.Background()
@@ -408,16 +408,16 @@ func TestDrive_Seam6_ExecuteStepEffectLandsDetectReflects(t *testing.T) {
 	if !reflected {
 		t.Fatalf("the acted detector must re-mark the step done (source auto) after reset — detect reflects the landed effect")
 	}
-	t.Logf("SEAM 6 PROVEN: content_generate ran the real invoke→content→framework path; %d Campaign doc(s) landed; step auto-done; acted-detector re-marked done after reset", len(docs))
+	t.Logf("CLIENT 6 PROVEN: content_generate ran the real invoke→content→framework path; %d Campaign doc(s) landed; step auto-done; acted-detector re-marked done after reset", len(docs))
 }
 
-// ── Seam 7 — blueprint admin plane: SuperAdmin-gated ─────────────────────────
+// ── Client 7 — blueprint admin plane: SuperAdmin-gated ─────────────────────────
 
-// TestDrive_Seam7_BlueprintAdminPlane proves the authoring plane: a SuperAdmin can GET
+// TestDrive_Client7_BlueprintAdminPlane proves the authoring plane: a SuperAdmin can GET
 // and PATCH the shared brand blueprint live (a disable takes effect on the next org
 // resolve), while a normal org member is refused 403 (trusting per-org isAdmin here would
 // be a privilege escalation).
-func TestDrive_Seam7_BlueprintAdminPlane(t *testing.T) {
+func TestDrive_Client7_BlueprintAdminPlane(t *testing.T) {
 	app := mountAgenticStack(t, &fakeAI{content: "draft"})
 
 	// A normal org is refused the whole plane.
@@ -451,7 +451,7 @@ func TestDrive_Seam7_BlueprintAdminPlane(t *testing.T) {
 	if hasStep(after, "gsuite") {
 		t.Fatalf("a SuperAdmin disable must drop the step from the next org resolve")
 	}
-	t.Logf("SEAM 7 PROVEN: SuperAdmin GET/PATCH ok (gsuite disabled LIVE: journey %d→%d steps); normal org 403", len(before.Steps), len(after.Steps))
+	t.Logf("CLIENT 7 PROVEN: SuperAdmin GET/PATCH ok (gsuite disabled LIVE: journey %d→%d steps); normal org 403", len(before.Steps), len(after.Steps))
 }
 
 // ── Part 2 — the autonomous loop ─────────────────────────────────────────────
@@ -462,8 +462,8 @@ func TestDrive_Seam7_BlueprintAdminPlane(t *testing.T) {
 // next-step pointer walks the milestone chain AND the observed growth STAGE climbs
 // formed→launched→activated→scaling as each milestone's real effect comes online.
 //
-// The growth-observe seams are bound to read the org's OWN real, persisted milestone
-// state from the guide store — the honest in-harness stand-in for the prod seams
+// The growth-observe clients are bound to read the org's OWN real, persisted milestone
+// state from the guide store — the honest in-harness stand-in for the prod clients
 // (deploy.HasDeployment / commerce.RevenueCents / crm.RecordCount) the composition root
 // leaves nil today. As the machine drives each milestone to done, those reads flip and
 // the classifier reclassifies — the machine genuinely steering its own observed stage.
@@ -502,7 +502,7 @@ func TestDrive_AutonomousLoop(t *testing.T) {
 		}
 		return rows[id].State == StateDone
 	}
-	// Bind the observe seams to the org's own achieved milestones — a live deployment
+	// Bind the observe clients to the org's own achieved milestones — a live deployment
 	// once go-live lands, a book of customers once acquire lands, revenue once monetize
 	// lands. Real reads of real state, org-scoped (only loopco has this chain).
 	mounted.State.signals = Signals{

@@ -361,7 +361,7 @@ func TestLegalHealthNeedsNoPrincipal(t *testing.T) {
 }
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one. Both causes below are
+// because the CLIENT they arrived through cannot carry one. Both causes below are
 // zipdoc/schema-builder limitations with a line number, not fields nobody wrote:
 // the prose is in the Go source in every case, and the two ends key it on
 // different names.

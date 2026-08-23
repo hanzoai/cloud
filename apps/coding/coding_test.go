@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// ---- fakes recording every seam call for isolation + contract assertions ----
+// ---- fakes recording every client call for isolation + contract assertions ----
 
 type openCall struct{ org, actor, agent, title, target string }
 type eventCall struct {
@@ -91,7 +91,7 @@ func (f *fakeRunner) Run(_ context.Context, org, userID string, req RunRequest, 
 	return f.result, f.err
 }
 
-// dispatcherFor builds a Dispatcher whose git seams are org-aware fakes: CloneURL
+// dispatcherFor builds a Dispatcher whose git clients are org-aware fakes: CloneURL
 // echoes the (org, repo) — it backs the ROUTED path, where a customer's machine
 // gets an address and brings its own credential; VerifyRef succeeds for a
 // configured branch.
@@ -149,7 +149,7 @@ func TestRun_HappyPath_PushVerifyPR_NoCredentialLeak(t *testing.T) {
 		t.Fatalf("commit should be the authoritative verified tip, got %q", res.CommitSha)
 	}
 	// The sandbox is pointed ONLY at the caller's own repository, and at the one
-	// address its key opens. It does not go through the CloneURL seam at all —
+	// address its key opens. It does not go through the CloneURL client at all —
 	// that would be a second answer to "which repository", able to disagree with
 	// the credential.
 	if len(*cloneCalls) != 0 {

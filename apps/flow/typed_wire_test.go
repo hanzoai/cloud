@@ -58,7 +58,7 @@ var intentRefused = map[string]string{
 	// backend yet, so they get no route until they are: the honest-slice bar.
 	"/v1/flow/folders":      "upstream projects/folders exist but only as this plane's INTERNAL tenant boundary — exposing them would let a caller address another org's project",
 	"/v1/flow/users":        "the product's user table is service-internal; platform identity is IAM, and mapping org members onto product users is unbuilt",
-	"/v1/flow/ai-providers": "the product's model-provider config is deployment-global today; per-org provider custody needs the integrations KMS seam first",
+	"/v1/flow/ai-providers": "the product's model-provider config is deployment-global today; per-org provider custody needs the integrations KMS client first",
 	"/v1/flow/webhooks":     "webhook trigger delivery needs a public ingress contract (signature, replay) that is not designed yet",
 	"/v1/flow/mcp":          "the product's MCP server surface overlaps apps/tools' catalog; composing them is task-level work, not a relay",
 }

@@ -192,7 +192,7 @@ type store struct {
 }
 
 // openStore layers orm's record model over the already-opened per-org *sql.DB. The
-// seam signature is unchanged (cloud.OrgStore hands a pragma'd, cek-encrypted
+// client signature is unchanged (cloud.OrgStore hands a pragma'd, cek-encrypted
 // connection); orm's initSchema creates its `_entities` table if absent. It then
 // carries any pre-orm raw-SQL evidence forward (migrateLegacy) so an existing store
 // is never silently read as empty. A migration failure FAILS the open (fail-secure)

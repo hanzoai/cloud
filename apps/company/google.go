@@ -34,7 +34,7 @@ type DriveFile struct {
 	MimeType string `json:"mimeType"`
 }
 
-// GoogleReader is the read seam over Google Drive + Sheets used by the import path.
+// GoogleReader is the read client over Google Drive + Sheets used by the import path.
 // A real implementation authenticates with the org's custodied OAuth token; tests
 // substitute a fake.
 type GoogleReader interface {
@@ -43,7 +43,7 @@ type GoogleReader interface {
 	SheetValues(ctx context.Context, org, spreadsheetID, rangeA1 string) ([][]string, error)
 }
 
-// googleTokenFor is the seam to the integrations token custody. It is a package var
+// googleTokenFor is the client to the integrations token custody. It is a package var
 // so a test can observe/inject the (org, provider) resolution without a live KMS.
 var googleTokenFor = integrations.TokenFor
 

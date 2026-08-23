@@ -11,7 +11,7 @@ package main
 //	FAIL-CLOSED the run's tenant and its person are read off the caller, and
 //	            the input has no field either could arrive in
 //
-// Nothing here is a fixture at the seam under test. The first two drive the
+// Nothing here is a fixture at the client under test. The first two drive the
 // REAL fleet.Door over a child carrying the REAL registration [codingDoor], so
 // deleting that registration fails them — which is the whole point, because the
 // magic-word path that used to reach the engine has been deleted and this is

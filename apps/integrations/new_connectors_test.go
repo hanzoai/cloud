@@ -99,7 +99,7 @@ func TestNewOAuthConnectorsCoherent(t *testing.T) {
 	}
 }
 
-// keyWireCases pins each keyVerify connector's env seam, verify path, credential
+// keyWireCases pins each keyVerify connector's env client, verify path, credential
 // placement, and (for account-scoped ones) the account hint. The token is a sentinel
 // that must arrive exactly where the provider expects and seal under api_key.
 var keyWireCases = []struct {
@@ -122,7 +122,7 @@ var keyWireCases = []struct {
 	{"netlify", "NETLIFY_API_BASE", "/api/v1/user", sentinel + "NET", "", bearer, ""},
 }
 
-// TestNewKeyConnectorsWiring drives each key connector through its env seam to a
+// TestNewKeyConnectorsWiring drives each key connector through its env client to a
 // capture server and asserts the credential arrives at the right path with the right
 // placement, and that a 200 seals it under api_key — proving the declarative
 // registration is wired, not just present.

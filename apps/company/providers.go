@@ -10,15 +10,15 @@ import (
 	"github.com/hanzoai/cloud/internal/mint"
 )
 
-// providers.go declares the provider SEAMS the formation machine drives, plus the
+// providers.go declares the provider CLIENTS the formation machine drives, plus the
 // honest stubs used when a real provider is not wired. Every external dependency
 // (identity verification, billing, document storage, e-signature, cap table,
 // on-chain anchor, state filing, org upgrade) is behind a narrow interface so the
-// machine composes them the same way in production and in tests — and so a seam
+// machine composes them the same way in production and in tests — and so a client
 // with no real backend fails HONESTLY (records nothing false) rather than faking a
 // result.
 
-// KYCProvider is the identity-verification seam (the clients/idv seam in the
+// KYCProvider is the identity-verification client (the clients/idv client in the
 // product spec). Start begins verification for one founder and returns a provider
 // reference plus, for a hosted flow, a URL the founder visits; Check reports the
 // current status. A real provider (Persona, Stripe Identity, Onfido, …) implements
@@ -29,7 +29,7 @@ type KYCProvider interface {
 	Name() string
 }
 
-// Charger is the one-time billing seam: it authorizes and records the $999
+// Charger is the one-time billing client: it authorizes and records the $999
 // formation fee against the org's ledger. It returns a payment reference on
 // success, or a metering error (mapped by the handler to 402/503) when funds are
 // insufficient or billing is unavailable.
@@ -52,16 +52,16 @@ type Signer struct {
 	Email string `json:"email"`
 }
 
-// Esign is the e-signature seam. Request creates a signature request over the named
+// Esign is the e-signature client. Request creates a signature request over the named
 // documents for the given signers and returns a provider reference; Status reports
-// completion. Formation docs and fundraising SAFEs/notes both ride this seam.
+// completion. Formation docs and fundraising SAFEs/notes both ride this client.
 type Esign interface {
 	Request(ctx context.Context, org string, docIDs []string, signers []Signer) (ref string, err error)
 	Status(ctx context.Context, org, ref string) (complete bool, err error)
 	Name() string
 }
 
-// Stakeholder is the cap-table stakeholder shape the CapTable seam accepts. It
+// Stakeholder is the cap-table stakeholder shape the CapTable client accepts. It
 // mirrors the captable bundle's stakeholders.add contract.
 type Stakeholder struct {
 	Name                string `json:"name"`
@@ -71,7 +71,7 @@ type Stakeholder struct {
 	InstitutionName     string `json:"institutionName,omitempty"`
 }
 
-// RoundInput is a fundraising round the CapTable seam records.
+// RoundInput is a fundraising round the CapTable client records.
 type RoundInput struct {
 	// Name is the round's name on the cap table, e.g. "Seed". Required.
 	Name string `json:"name"`
@@ -88,7 +88,7 @@ type RoundInput struct {
 	ShareClassID string `json:"shareClassId,omitempty"`
 }
 
-// CapTable is the cap-table seam. SetIncorporation records the entity kind on the
+// CapTable is the cap-table client. SetIncorporation records the entity kind on the
 // canonical captable company row (the "org upgraded to company" fact at the cap
 // table layer); SeedFounders writes the founding allocation; RecordRound records a
 // fundraising round. All are org-scoped.
@@ -109,7 +109,7 @@ type EquityAnchor interface {
 	Configured() bool
 }
 
-// FilingProvider is the state-of-incorporation filing seam (Delaware / Wyoming).
+// FilingProvider is the state-of-incorporation filing client (Delaware / Wyoming).
 // Submit files the formation with the state; Status polls it. No provider is wired
 // by default — the stub records an honest "manual" status and never fabricates a
 // filing id. See filing.go for exactly what a real integration requires.
@@ -126,7 +126,7 @@ type OrgUpgrader interface {
 	MarkCompany(ctx context.Context, f *Formation) error
 }
 
-// providerSet is the bundle of seams a mounted company service holds. build() wires
+// providerSet is the bundle of clients a mounted company service holds. build() wires
 // the real implementations; tests substitute fakes field by field.
 type providerSet struct {
 	kyc      KYCProvider
@@ -213,7 +213,7 @@ func (manualKYC) Check(_ context.Context, ref string) (string, error) {
 
 // stubEsign records a signature request reference but performs NO real signing —
 // the clients/esign subsystem is a goja bundle whose create→recipients→fields→send
-// sequence has no in-process Go seam today (see company.go docs / the gap list).
+// sequence has no in-process Go client today (see company.go docs / the gap list).
 // Completion arrives via /v1/company/esign/complete (a manual/webhook signal). It
 // never reports a request complete on its own.
 type stubEsign struct{}

@@ -25,7 +25,7 @@ import (
 // the two apart, so every SDK generated off openapi.yaml offered a deck upload
 // with nowhere to put the deck and no return type for either call.
 //
-// openapi.Register is the seam for the halves that ARE statable — it attaches to
+// openapi.Register is the client for the halves that ARE statable — it attaches to
 // a route the router already carries, so it can never contradict the router — and
 // it does not make these typed ops: there is still no MCP tool, no CLI command and
 // no SDK method, because those come from zip's registry. See typed_wire_test.go
@@ -40,7 +40,7 @@ import (
 //     "2XX" range key only; the denial needs the same declarable-error-body
 //     capability that keeps this route untyped in the first place.
 //   - field prose on the shapes below. zipdoc lifts doc comments off TYPED ops
-//     only, and Register's reflection seam reads Go types, not comments — so
+//     only, and Register's reflection client reads Go types, not comments — so
 //     deckOut publishes `documentId: string` with no description. formationView
 //     is unaffected: it is already described through the typed ops that share it.
 func init() {
@@ -61,7 +61,7 @@ func init() {
 }
 
 // company.go mounts the /v1/company surface and wires the state machine to its
-// provider seams. The design is decomplected: ACTION endpoints populate the
+// provider clients. The design is decomplected: ACTION endpoints populate the
 // formation's data (structure, founders, KYC, payment, documents, esign, genesis,
 // import), and ONE transition door — POST /v1/company/advance {to} — runs the
 // guarded machine (Advance). Side effects live in the actions; ordering + gates live
@@ -73,7 +73,7 @@ func init() {
 //	GET    /v1/company                     the formation + next stages
 //	PUT    /v1/company/structure           set structure/jurisdiction/name
 //	POST   /v1/company/founders            set founders
-//	POST   /v1/company/kyc                 start founder KYC (idv seam)
+//	POST   /v1/company/kyc                 start founder KYC (idv client)
 //	POST   /v1/company/kyc/refresh         reconcile founder KYC with the wired provider
 //	POST   /v1/company/kyc/decision        reviewer decision on a founder {email,status}
 //	POST   /v1/company/payment             charge the formation fee
@@ -480,7 +480,7 @@ func (o ops) setFounders(ctx context.Context, in *foundersIn) (*formationView, e
 	return view(f), nil
 }
 
-// ---- KYC (idv seam) ----
+// ---- KYC (idv client) ----
 
 // kycSession is one founder's identity-verification session, as the wired
 // provider opened it.
@@ -531,7 +531,7 @@ func (o ops) startKYC(ctx context.Context, _ *noInput) (*kycStartOut, error) {
 			return nil, zip.Errorf(http.StatusBadGateway, "kyc start for %s: %v", f.Founders[i].Email, err)
 		}
 		// A start is never a decision: clamp any terminal status a provider returns at
-		// inquiry time back to pending (belt-and-suspenders over the idv seam's own
+		// inquiry time back to pending (belt-and-suspenders over the idv client's own
 		// downgrade), so the payment gate can never open at start. A terminal status
 		// arrives only via kycRefresh (provider) or kycDecision (reviewer), each of
 		// which records a decider.
@@ -563,7 +563,7 @@ type kycRefreshOut struct {
 // ATTRIBUTED to the provider.
 //
 // It NEVER trusts a client-asserted status — the status comes from the provider
-// seam — so a client cannot force a pass here, and an already-passing founder
+// client — so a client cannot force a pass here, and an already-passing founder
 // (e.g. a reviewer confirmation) is left untouched.
 func (o ops) kycRefresh(ctx context.Context, _ *noInput) (*kycRefreshOut, error) {
 	f, _, err := load(ctx, o.s)
@@ -715,7 +715,7 @@ func (o ops) pay(ctx context.Context, _ *noInput) (*formationView, error) {
 
 // GenerateDocuments renders the formation documents for the chosen structure and
 // jurisdiction, ingests each into the org's data room, and submits the state
-// filing through the filing seam.
+// filing through the filing client.
 //
 // With no filing partner wired the filing is recorded honestly as "manual" — no
 // filing id is fabricated. Available only at the documents stage.

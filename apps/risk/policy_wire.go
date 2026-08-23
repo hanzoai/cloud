@@ -31,7 +31,7 @@ package risk
 // /v1/risk/policy is what it is called.
 
 // The identity a change is recorded against is [caller], in typed.go beside the
-// gate it shares a seam with: the raw request is this package's ONE escape hatch
+// gate it shares a client with: the raw request is this package's ONE escape hatch
 // and it is held to ONE file, so a second call site here would be the same hatch
 // under a second justification.
 

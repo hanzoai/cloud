@@ -10,15 +10,15 @@ import (
 	"github.com/luxfi/geth/core/types"
 )
 
-// TestAnchorSignerSeam proves the anchor's signing was decoupled from a single
-// in-process key into a quorum-gateable seam WITHOUT changing the on-chain result:
+// TestAnchorSignerClient proves the anchor's signing was decoupled from a single
+// in-process key into a quorum-gateable client WITHOUT changing the on-chain result:
 //   - keySigner (the local KMS key path) still produces a tx that recovers to its
 //     address — byte-identical to the reference types.SignTx.
 //   - a bound quorum signer (BindAnchorSigner — the reserve's treasury MPC wallet)
 //     WINS over any local key, is invoked exactly once, and its tx recovers to the
 //     bound address. This is the "single-signer → MPC treasury sign, quorum-gated"
 //     path, exercised with a stand-in ring signer (the real ring is a config swap).
-func TestAnchorSignerSeam(t *testing.T) {
+func TestAnchorSignerClient(t *testing.T) {
 	chainID := big.NewInt(defaultHanzoChainID)
 	evmSigner := types.LatestSignerForChainID(chainID)
 	to := common.HexToAddress("0x00112233445566778899aabbccddeeff00112233")
@@ -29,7 +29,7 @@ func TestAnchorSignerSeam(t *testing.T) {
 		})
 	}
 
-	// ── keySigner: seam output == reference types.SignTx, recovers to address ──
+	// ── keySigner: client output == reference types.SignTx, recovers to address ──
 	priv, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("gen key: %v", err)
@@ -55,7 +55,7 @@ func TestAnchorSignerSeam(t *testing.T) {
 		t.Fatalf("reference SignTx: %v", err)
 	}
 	if signed.Hash() != ref.Hash() {
-		t.Fatalf("seam-signed tx %s != reference SignTx %s", signed.Hash().Hex(), ref.Hash().Hex())
+		t.Fatalf("client-signed tx %s != reference SignTx %s", signed.Hash().Hex(), ref.Hash().Hex())
 	}
 
 	// ── mpcSigner (quorum-gated) via BindAnchorSigner wins over the local key ──

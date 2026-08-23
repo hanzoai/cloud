@@ -36,7 +36,7 @@
 // user-facing per-org PaaS is /v1/platform; this is the platform-operator console the
 // admin dashboard consumes, now also serving a read-only per-org reflection.
 //
-// GitOps note (the follow-on seam): today the CR is the desired-state source and a
+// GitOps note (the follow-on client): today the CR is the desired-state source and a
 // rollback/rollout PATCHES it directly (P1's RegisterServiceReleaser), so deploys
 // work now. The end-state is true GitOps on OUR native git — RegisterPushBuilder
 // commits the CR image-tag change to the manifest repo on git.hanzo.ai
@@ -243,7 +243,7 @@ func init() {
 			"timestamp onto the application's App CR and answers the application re-projected. "+
 			"It does NOT select, pin or revert to a prior image tag, and that is the one thing to "+
 			"know before wiring anything to it — the name is the console's, the behaviour is the "+
-			"sync. Pinning a previous release rides the release seam, which this address does not "+
+			"sync. Pinning a previous release rides the release client, which this address does not "+
 			"call yet.\n\n"+
 			"SuperAdmin-only and fail-closed, reading no request body, with an unknown application "+
 			"name a 404 and no cluster client a 503 — the same gate and the same failures as the "+

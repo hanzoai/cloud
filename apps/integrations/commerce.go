@@ -77,7 +77,7 @@ func init() {
 // authorizeNetVerify checks an Authorize.Net API Login ID + Transaction Key via the
 // authenticateTest request and seals the pair only when the gateway reports Ok. It is
 // fail-closed and token-free: a bad credential returns an error carrying no value, and
-// nothing is stored. Env-overridable base for the httptest seam / the sandbox
+// nothing is stored. Env-overridable base for the httptest client / the sandbox
 // (apitest.authorize.net).
 func authorizeNetVerify(ctx context.Context, in VerifyInput) (*ExchangeResult, error) {
 	cred := strings.TrimSpace(in.Token)

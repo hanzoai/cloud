@@ -1,7 +1,7 @@
 package x402
 
 // x402.go owns the subsystem: Mount + the settlement store, the marketplace
-// Registry SEAM (Publish/Terms), the challenge→verify→settle→serve flow, the
+// Registry CLIENT (Publish/Terms), the challenge→verify→settle→serve flow, the
 // settle-once settlement, and the receipt lookup surface
 // (/v1/x402/settlements/:id).
 //
@@ -17,7 +17,7 @@ package x402
 //
 // Both are inert until a Registry is Published: x402 links into a binary harmlessly
 // and the marketplace subsystem plugs its price/recipient table in — the clean
-// seam: x402 enforces payment; the marketplace declares what is priced and who is
+// client: x402 enforces payment; the marketplace declares what is priced and who is
 // paid.
 
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
@@ -237,11 +237,11 @@ var (
 // "Splitting apps into their own binaries turned every priced create free without
 // changing a line of billing code."
 //
-// The TOOL path asks a different question — it offers EVERY dispatch to the seam,
+// The TOOL path asks a different question — it offers EVERY dispatch to the client,
 // free ones included, so it must be able to answer "this costs nothing" — but it
 // reaches the same safe answer by asking the process that OWNS the table (peer.go)
 // rather than by reading its own absence as free. A middleware is applied only to
-// what is FOR SALE and can refuse on sight; the tool seam is applied to everything
+// what is FOR SALE and can refuse on sight; the tool client is applied to everything
 // and has to look. Neither ever renders "I cannot tell" as "free".
 func Enforce() zip.Handler {
 	return func(c *zip.Ctx) error {
@@ -282,7 +282,7 @@ func Enforce() zip.Handler {
 // and retry. Paid → settled exactly once, the settlement is on PAYMENT-RESPONSE, nil.
 func Settle(ctx context.Context, resource string) error {
 	// FREE FIRST, before anything is required of the world. A caller that offers
-	// every call to this seam — which is the only way a gate and a settlement cannot
+	// every call to this client — which is the only way a gate and a settlement cannot
 	// disagree — must not have its free calls broken by a payment rail that is
 	// merely absent. Nothing unpriced needs x402 mounted, a request, or a payer.
 	terms, priced, err := priceOf(ctx, resource)
@@ -321,7 +321,7 @@ func Settle(ctx context.Context, resource string) error {
 //
 // It is deliberately separate from run and takes no service: whether something is
 // free must be answerable with nothing mounted and no request in hand, or a caller
-// that offers EVERY call to the payment seam cannot exist.
+// that offers EVERY call to the payment client cannot exist.
 //
 // TWO TRANSPORTS, ONE TABLE. The published Registry is a process-global installed
 // by marketplace.Mount, and the fleet runs one process per app — so in the x402
@@ -636,7 +636,7 @@ func claimOf(ctx context.Context, st *store, want *Settlement) (*Settlement, err
 // the metering spine (so paid usage appears in billing/usage like any metered
 // spend) and credits the recipient wallet's ledger. Both writes are idempotent on
 // the settlement id (metering RequestID / finance Ref), so a retried settle never
-// double-moves money. On-chain broadcast of the authorization is a SEPARATE seam
+// double-moves money. On-chain broadcast of the authorization is a SEPARATE client
 // (not wired) — this path is ledger-only.
 //
 // BOTH SIDES ARE MANDATORY. Each write used to be skipped when its backend was

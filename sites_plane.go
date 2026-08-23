@@ -19,7 +19,7 @@ import (
 // clean miss, so the request fell through to the API pipeline with no error
 // anywhere to notice.
 //
-// Same seam, same reason, as the balance and scope-rule reads that already cross
+// Same client, same reason, as the balance and scope-rule reads that already cross
 // this plane: the reader is an edge middleware and the fact belongs elsewhere.
 type planeSites struct{}
 

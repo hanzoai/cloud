@@ -86,7 +86,7 @@ func DocTypes() []framework.DocType {
 // Link) so Help installs and runs WITHOUT the ERP lane; the assignee, team, and SLA
 // are in-lane Links. `source` records the intake channel (portal/email/zendesk/…) so
 // the inbound support connectors (Zendesk/Intercom/Re:amaze) can stamp provenance
-// when they file a ticket via framework.Ingest — the ONE inbound seam. `public_ref`
+// when they file a ticket via framework.Ingest — the ONE inbound client. `public_ref`
 // is the opaque, random customer-facing reference the public intake returns in place
 // of the monotonic name, so an anonymous submitter never learns the ticket volume
 // (the sequential name stays internal to the agent plane).

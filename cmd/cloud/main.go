@@ -130,7 +130,7 @@ func doorConfig() zip.Config {
 		Warm:           manifest.Warm(),
 		ReadBufferSize: edge.ReadBufferSize(),
 		BodyLimit:      edge.BodyLimit(),
-		// Which hops are ours, so the framework's ONE answer at the seam is the
+		// Which hops are ours, so the framework's ONE answer at the client is the
 		// caller and not the ingress. zip honours a forwarded header only where an
 		// app names its own proxies; unnamed, every request through the bar reports
 		// the same in-cluster address, and anything keyed on the caller — the free

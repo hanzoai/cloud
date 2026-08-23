@@ -3,7 +3,7 @@ package platform
 // rpc_test.go — the TENANT BOUNDARY across the internal plane.
 //
 // The fleet observation now leaves this app: admin asks for it over a unix socket
-// instead of importing platform and resolving an in-process seam. That moves the
+// instead of importing platform and resolving an in-process client. That moves the
 // question "whose workloads are these?" onto the wire, which is exactly the shape of
 // bug this fleet has shipped before — an org-scoped list that answered 200 with
 // another tenant's rows because a scope filter was quietly dropped.
@@ -314,7 +314,7 @@ func TestFleetPlane_UnreadyClusterIsAnErrorNotAnEmptyFleet(t *testing.T) {
 
 // TestFleetPlane_NoSocketIsAnError is the same honesty at the other end: a platform
 // that is not running in this binary — which is EVERY binary that mounts admin
-// alone — must be an error the board can show. The in-process seam this replaced
+// alone — must be an error the board can show. The in-process client this replaced
 // returned nil there, and nil became an empty registry with no error at all.
 func TestFleetPlane_NoSocketIsAnError(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))

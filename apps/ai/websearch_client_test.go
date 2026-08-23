@@ -12,7 +12,7 @@ import (
 	"github.com/hanzoai/cloud/apps/websearch"
 )
 
-// THE SEAM IS A LINE OF CODE NOTHING ELSE DEPENDS ON, WHICH IS EXACTLY THE KIND
+// THE CLIENT IS A LINE OF CODE NOTHING ELSE DEPENDS ON, WHICH IS EXACTLY THE KIND
 // THAT GETS DELETED.
 //
 // ai's builtin registry DECLARES web_search unconditionally and holds no backend
@@ -20,17 +20,17 @@ import (
 // no route 404s, and no test goes red — the tool simply starts answering "not
 // available in this deployment" to every agent, forever. That is the same shape as
 // every other "wired but never consulted" defect in this tree.
-func TestInstallWebSearchClosesTheSeam(t *testing.T) {
+func TestInstallWebSearchClosesTheClient(t *testing.T) {
 	t.Cleanup(func() { webtools.SetSearch(nil) })
 
 	webtools.SetSearch(nil)
 	if webtools.Search() != nil {
-		t.Fatal("precondition: the seam should start empty")
+		t.Fatal("precondition: the client should start empty")
 	}
 
 	installWebSearch(func(context.Context, string, string) []websearch.Result { return nil })
 	if webtools.Search() == nil {
-		t.Fatal("installWebSearch left the seam empty — every agent's web_search would " +
+		t.Fatal("installWebSearch left the client empty — every agent's web_search would " +
 			"report the capability as unavailable")
 	}
 }
@@ -119,7 +119,7 @@ func TestInstallWebSearchReturnsEmptyNotError(t *testing.T) {
 // anything better here: Mount needs a real zip.App and cloud.Deps (it runs ai's
 // Bootstrap), so no test in this package constructs one. It pins the call site
 // against deletion; the behaviour above is what pins the adapter.
-func TestMountInstallsTheWebSearchSeam(t *testing.T) {
+func TestMountInstallsTheWebSearchClient(t *testing.T) {
 	src, err := os.ReadFile("ai.go")
 	if err != nil {
 		t.Fatalf("read ai.go: %v", err)

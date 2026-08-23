@@ -363,7 +363,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 	s := o.s
 	// The request itself, not a tenant: this route resolves the organization from
 	// the credential below and accepts a credential that names none, so asking the
-	// seam for a tenant here would refuse the fabric's own build before the route
+	// client for a tenant here would refuse the fabric's own build before the route
 	// could decide.
 	c, err := o.request(ctx)
 	if err != nil {

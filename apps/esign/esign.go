@@ -6,7 +6,7 @@
 // epic #96). Cloud serves the e-signature surface (/v1/esign/*) ITSELF — per
 // tenant, on Base/SQLite — no Next.js/Remix pod, no Prisma, no Postgres.
 //
-// WRAP, DON'T REWRITE — the read-WRITE variant, reusing the SAME seam captable
+// WRAP, DON'T REWRITE — the read-WRITE variant, reusing the SAME client captable
 // (the #96 pilot) established: the server-side domain (documents, recipients,
 // fields, the signing flow/state machine, audit trail, completion) is ported to
 // a self-contained goja bundle in github.com/hanzoai/esign; the REUSABLE
@@ -108,7 +108,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // down, and both leave the deployment serving health and nothing else, because
 // serving anything else would mean doing the wrong thing rather than nothing:
 //
-//   - no object storage. esign persists PDF BYTES on the object-storage seam
+//   - no object storage. esign persists PDF BYTES on the object-storage client
 //     (deps.VFS), never inline in the per-tenant SQLite — a 32 MiB base64 PDF in a
 //     TEXT column would bloat the tenant DB and be re-copied on every read. Without
 //     it the only alternative is writing PDFs into the tenant DB.

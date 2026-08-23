@@ -585,7 +585,7 @@ const maxFollowUps = 5
 // and every step degrades honestly. An error yields nil so synthesize can advance
 // to the next model in the chain.
 //
-// emit is the ONE delivery seam and it binds twice, never forking the code path:
+// emit is the ONE delivery client and it binds twice, never forking the code path:
 // when the AI plane implements types.StreamCompleter the model's real token deltas
 // go straight to emit; when it does not, the finished completion is chunked at word
 // boundaries. Either way the returned Content is the whole answer, so a streamed

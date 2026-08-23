@@ -114,13 +114,13 @@ func Consumes(method string) bool {
 // DefaultPrice is what ONE invocation of the operation (method, path) costs.
 //
 // IT TAKES TWO STRINGS, AND THAT IS THE WHOLE POINT. It used to take a *zip.Ctx,
-// which made the price a property of an HTTP REQUEST — so the only seam that could
+// which made the price a property of an HTTP REQUEST — so the only client that could
 // ask it was HTTP middleware, and middleware reads the path the TRANSPORT carried.
 // Over MCP that path is /mcp; over the ZAP plane it is /.well-known/zip/op/<name>.
 // Neither names a declared surface, so both resolved to Undeclared and both were
 // free, silently and permanently, however the operation inside them was priced.
 // A price is a fact about an operation, and an operation is a method and a path,
-// so those are the arguments. Every seam that knows an operation can now ask.
+// so those are the arguments. Every client that knows an operation can now ask.
 //
 // It holds NO table: it reads the price the surface DECLARED at the composition
 // root (Plugin.Price → PriceOf), so the number the gate charges and the number a

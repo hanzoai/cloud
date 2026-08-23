@@ -571,7 +571,7 @@ func TestInertClaimsGrantAndReduceNothing(t *testing.T) {
 // order was a free mutation.
 func TestTrustOrderPrefersTheApiCredential(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
-	// Stand in for IAM's key seam: this key belongs to org "keyorg".
+	// Stand in for IAM's key client: this key belongs to org "keyorg".
 	prev := resolveKeyOrg
 	resolveKeyOrg = func(_ context.Context, key string) (string, bool) {
 		if key == "sk-the-key" {

@@ -143,7 +143,7 @@ func (o ops) run(ctx context.Context, org, route string, params map[string]strin
 // ---- documents ----
 
 // dataroomDocument is one uploaded file's metadata. The BYTES are not here: they
-// live on the object-storage seam under fileKey and are read by the file routes.
+// live on the object-storage client under fileKey and are read by the file routes.
 type dataroomDocument struct {
 	// ContentType is the mime type recorded at upload, null when none was sent.
 	ContentType *string `json:"contentType"`

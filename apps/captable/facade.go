@@ -10,7 +10,7 @@ import (
 	"github.com/hanzoai/cloud/apps/goja"
 )
 
-// facade.go is the in-process cap-table seam: it lets a sibling subsystem (Hanzo
+// facade.go is the in-process cap-table client: it lets a sibling subsystem (Hanzo
 // Company's formation + import + fundraising flows) write to a tenant's cap table
 // WITHOUT an HTTP hop, dispatching the SAME goja bundle routes the /v1/captable/*
 // handlers do (one transaction per call, per-tenant Base). Every function is

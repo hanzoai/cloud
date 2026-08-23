@@ -16,7 +16,7 @@ import (
 // DIRECTLY from the co-resident embedded commerce ledger — no HTTP hop. It is the native
 // twin of the /v1/billing/balance read (billing.zapGetBalance): resolve the org's own
 // datastore namespace, tally the subject's iam-user transactions in the currency, and
-// return Balance - Holds clamped at zero. It reuses the SAME currentEmbedded seam the
+// return Balance - Holds clamped at zero. It reuses the SAME currentEmbedded client the
 // in-process entitlement client resolves through.
 //
 // This is the read the money cutover (admin/finance backfill) and the admin cockpit's

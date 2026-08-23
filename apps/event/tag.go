@@ -60,7 +60,7 @@ var tagJS []byte
 //
 //	curl -fsSL https://unpkg.com/@hanzo/event/src/anon.js -o apps/analytics/anon.js
 //
-// and TestTagServesOneIdentityChain holds the seam: this file must carry the
+// and TestTagServesOneIdentityChain holds the client: this file must carry the
 // marked region, and tag.js must not name an identity key of its own.
 //
 //go:embed anon.js

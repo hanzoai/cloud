@@ -60,7 +60,7 @@ const (
 )
 
 // realLedger publishes a real finance ledger (its own file, in a temp dir) on the
-// process-wide money seam and returns it, restoring the previous seam after.
+// process-wide money client and returns it, restoring the previous client after.
 func realLedger(t *testing.T) *ledgerReader {
 	t.Helper()
 	fin := finance.New(t.TempDir())
@@ -113,11 +113,11 @@ func forbiddenCommerce(t *testing.T) string {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
-		t.Error("the gate read a balance over HTTP — the co-resident ledger seam is broken")
+		t.Error("the gate read a balance over HTTP — the co-resident ledger client is broken")
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 	mux.HandleFunc("/v1/billing/usage", func(w http.ResponseWriter, r *http.Request) {
-		t.Error("the debit went out over HTTP — the co-resident ledger seam is broken")
+		t.Error("the debit went out over HTTP — the co-resident ledger client is broken")
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 	mux.HandleFunc("/v1/billing/limits/authorize", func(w http.ResponseWriter, r *http.Request) {

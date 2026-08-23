@@ -4,7 +4,7 @@ package coding
 // two halves of why that is not obvious — the same pair apps/integrations keeps
 // for the chat turn, kept here because this is the other place it shipped wrong.
 //
-// Every seam a run touches (session, git, todo, the balance gate behind them)
+// Every client a run touches (session, git, todo, the balance gate behind them)
 // authorizes on the CALLER's org and never on an argument, so no caller can name
 // the tenant it acts for. The org therefore rides the caller. But zip reads a
 // STATED caller only where there is NO REQUEST behind the context
@@ -14,7 +14,7 @@ package coding
 // The coding path had neither half: the run was spawned on a bare
 // context.Background() with no statement at all, and the routed target lookup
 // ran on the webhook's request context where a statement would have been
-// discarded anyway. Every seam call in every run answered "authorize: no org on
+// discarded anyway. Every client call in every run answered "authorize: no org on
 // the call", which is a run that dies before a model is asked anything.
 
 import (
@@ -28,7 +28,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// A run's context must name the tenant, or every seam it touches refuses it.
+// A run's context must name the tenant, or every client it touches refuses it.
 func TestRunContextStatesTheTenant(t *testing.T) {
 	ctx, cancel := runContext("acme", 0)
 	defer cancel()

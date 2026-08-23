@@ -22,7 +22,7 @@ var (
 	ErrPaymentRequired = errors.New("tools: payment required")
 	// ErrChargerUnset — a priced tool was called but no x402 Charger is wired; the
 	// call fails CLOSED (a paid tool is never served free).
-	ErrChargerUnset = errors.New("tools: payment seam not configured")
+	ErrChargerUnset = errors.New("tools: payment client not configured")
 )
 
 // Charger settles one tool call over the x402 payment rail. The tool plane hands it
@@ -50,7 +50,7 @@ type Charger interface {
 }
 
 // Registry is THE tool plane: the set of registered source Providers, the shared
-// per-(org,project) activation store, and the x402 Charger seam. It composes
+// per-(org,project) activation store, and the x402 Charger client. It composes
 // providers and enforces the ONE dispatch policy (activation gate → price gate →
 // dispatch); it knows nothing about how any source lists or runs a tool.
 type Registry struct {
@@ -77,7 +77,7 @@ func Register(p Provider) { std.Register(p) }
 // Default returns the process-wide registry (for marketplace + the HTTP surface).
 func Default() *Registry { return std }
 
-// SetCharger installs the x402 payment seam on the process-wide registry. The
+// SetCharger installs the x402 payment client on the process-wide registry. The
 // subsystem that owns the price table calls this once from its Mount
 // (apps/marketplace); until it does, a tool with a declared price fails closed.
 func SetCharger(c Charger) { std.SetCharger(c) }
@@ -101,7 +101,7 @@ func (r *Registry) SetActivation(a *ActivationStore) {
 	r.activation = a
 }
 
-// SetCharger installs the payment seam.
+// SetCharger installs the payment client.
 func (r *Registry) SetCharger(c Charger) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -218,9 +218,9 @@ func (r *Registry) resolve(ctx context.Context, scope Scope, name string) (Tool,
 //
 //  1. resolve the winning tool (precedence) — ErrUnknownTool if none.
 //  2. ACTIVATION gate — the tool MUST be activated for (org,project) or ErrNotActivated (403).
-//  3. PAYMENT gate — every call is offered to the x402 seam, which owns the price
+//  3. PAYMENT gate — every call is offered to the x402 client, which owns the price
 //     table: a free tool settles for nothing, a priced one settles or the call fails
-//     closed (ErrPaymentRequired). With NO rail REACHABLE the seam asks the table
+//     closed (ErrPaymentRequired). With NO rail REACHABLE the client asks the table
 //     instead (charge_peer.go), and only a deployment holding neither reaches
 //     ErrChargerUnset, where a tool that DECLARES a price fails closed — a paid tool
 //     is never served free.
@@ -256,7 +256,7 @@ func (r *Registry) Dispatch(ctx context.Context, p Principal, name string, args 
 	return provider.Dispatch(ctx, p, name, args)
 }
 
-// charge settles one call through the payment seam: the installed Charger when the
+// charge settles one call through the payment client: the installed Charger when the
 // subsystem that owns the price table is in this process, the internal plane when it
 // is not (charge_peer.go). ONE policy, two transports — which one answers is a
 // deployment fact, never a difference in what is enforced.

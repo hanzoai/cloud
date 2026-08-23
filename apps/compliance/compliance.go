@@ -32,7 +32,7 @@ const routePrefix = "/v1/compliance"
 const auditActionPrefix = "compliance."
 
 // state is compliance's own data; shared deps live in the embedded cloud.Base. It
-// holds the sealed record store, the verification provider seam (Manual by default;
+// holds the sealed record store, the verification provider client (Manual by default;
 // a real provider when configured), the OPTIONAL signature-authenticated provider
 // webhook receiver (nil unless configured), and the shared audit recorder (nil-safe).
 type state struct {
@@ -527,8 +527,8 @@ func (o ops) startVerification(ctx context.Context, in *verificationReq) (*check
 		}
 	}
 
-	// Start the verification through the provider seam. The returned status is
-	// provider-reported and, by the seam's contract, non-terminal on a fresh start —
+	// Start the verification through the provider client. The returned status is
+	// provider-reported and, by the client's contract, non-terminal on a fresh start —
 	// there is NO path here that yields a verified check. A provider error is a 502;
 	// it never degrades to verified.
 	// An inquiry is opened on the DEPLOYMENT's provider key and the vendor bills for
@@ -546,7 +546,7 @@ func (o ops) startVerification(ctx context.Context, in *verificationReq) (*check
 	charge(ch)
 	// A "start" is never a decision. Clamp any terminal status the provider returns
 	// here to pending at the product boundary — belt-and-suspenders over the idv
-	// seam's own downgrade, so "creating a verification can never yield a verified
+	// client's own downgrade, so "creating a verification can never yield a verified
 	// record" holds even against a misbehaving or compromised provider adapter.
 	initial := sess.Status
 	if initial.Terminal() {

@@ -6,7 +6,7 @@
 package agents
 
 // onbehalf_rpc.go carries an agent turn across a PROCESS boundary, exactly as
-// sessions_rpc.go carries a teardown. onbehalf.go stays the in-process seam and
+// sessions_rpc.go carries a teardown. onbehalf.go stays the in-process client and
 // keeps its promise to know nothing of zip.Ctx or the wire; this file is the
 // door, and both run the same runOnBehalf underneath.
 
@@ -27,7 +27,7 @@ import (
 // RunOnBehalf above gates on `mounted`, a package global, and a package global
 // is per-PROCESS. When agents and integrations are separate plugins — which is
 // the normal deployment, not an exotic one — that global is nil on the bridge's
-// side and every @hanzo turn died with ErrNoPeer. The in-process seam is not
+// side and every @hanzo turn died with ErrNoPeer. The in-process client is not
 // wrong; it was simply the ONLY door, so co-residency had quietly become a
 // requirement nothing declared.
 //

@@ -291,7 +291,7 @@ func TestSlackBridgeOrgIsolation(t *testing.T) {
 		t.Fatalf("globex connect: %d (%s)", cb.Code, cb.Body)
 	}
 
-	// Seam isolation: team → connecting org, one-to-one.
+	// Client isolation: team → connecting org, one-to-one.
 	if org, ok := OrgForExternalID("slack", "TACME"); !ok || org != "acme" {
 		t.Fatalf("TACME must resolve to acme, got %q ok=%v", org, ok)
 	}

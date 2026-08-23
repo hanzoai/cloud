@@ -84,11 +84,11 @@ func TestPropagatedRefusalsKeepTheirStatusAndCode(t *testing.T) {
 	}
 }
 
-// TestWithoutTheSeamAnUnfundedRequestIs500 is the bug, kept executable: zip's
+// TestWithoutTheClientAnUnfundedRequestIs500 is the bug, kept executable: zip's
 // DEFAULT handler reads only a *zip.HTTPError, so the sentinel that means 402
 // renders as an internal fault with no code on it — the dead card. It is why
 // Serve installs ErrorHandler, and it fails the moment anyone stops.
-func TestWithoutTheSeamAnUnfundedRequestIs500(t *testing.T) {
+func TestWithoutTheClientAnUnfundedRequestIs500(t *testing.T) {
 	app := zip.New(zip.Config{}) // no ErrorHandler: zip's own
 	app.Get("/v1/thing", func(c *zip.Ctx) error { return metering.ErrInsufficientBalance })
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/thing", nil))
@@ -97,14 +97,14 @@ func TestWithoutTheSeamAnUnfundedRequestIs500(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("default handler status = %d, want 500 — if this changed, the seam may no longer be needed", resp.StatusCode)
+		t.Fatalf("default handler status = %d, want 500 — if this changed, the client may no longer be needed", resp.StatusCode)
 	}
 	if status, _ := getThing(t, metering.ErrInsufficientBalance); status != http.StatusPaymentRequired {
-		t.Fatalf("with the seam status = %d, want 402", status)
+		t.Fatalf("with the client status = %d, want 402", status)
 	}
 }
 
-// TestGenuineFaultsStayInternal: the seam must not launder a fault into something
+// TestGenuineFaultsStayInternal: the client must not launder a fault into something
 // a client is invited to retry or pay for. 500 is the ABSENCE of a decision.
 func TestGenuineFaultsStayInternal(t *testing.T) {
 	for _, tc := range []struct {

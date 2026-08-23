@@ -354,7 +354,7 @@ func mountSessions(s *cloud.Service[state], app cloud.Router) {
 // six are exactly the handlers mountSessions refuses to type: the SSE feed, whose
 // loop outlives the handler and has no In/Out that describes a feed, and the five
 // guarded writes, whose 422 carries a findings array zip's error type cannot
-// express. There is no typed op here to lift from, so openapi.Describe is the seam
+// express. There is no typed op here to lift from, so openapi.Describe is the client
 // — and without it each publishes an operationId and nothing else: an SDK method
 // that cannot explain itself, an MCP tool with no description, a CLI command with
 // no help.

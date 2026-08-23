@@ -378,7 +378,7 @@ func TestClaimReport_OwnerScoped(t *testing.T) {
 }
 
 // A pre-migration UNOWNED target (owner=”) is admin-only, and its owner heals it by
-// re-registering (register binds the owner). Proven at the store + handler seam.
+// re-registering (register binds the owner). Proven at the store + handler client.
 func TestUnownedTarget_AdminOnly_ThenBoundByRegister(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 	ctx := context.Background()

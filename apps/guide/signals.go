@@ -7,18 +7,18 @@ import (
 )
 
 // signals.go is the Guide's real-time growth-OBSERVE layer: the cross-subsystem
-// read seams the growth detectors need, the observed SignalSet, and the pure
+// read clients the growth detectors need, the observed SignalSet, and the pure
 // growth-stage classifier. It PRODUCES signals + a stage; it decides NOTHING about
 // recommendations (that is a later surface engine) — a pure reader/classifier, so
 // the observe layer stays decomplected from whatever consumes it.
 //
 // DECOMPLECT: guide imports NONE of the sibling subsystems it observes. Each
 // cross-subsystem read is an injected func field on Signals, bound once at the
-// composition root (plugin/guide/seams.go) to a provably org-scoped, nil-safe read
-// (framework.ModuleInstalled, integrations.Connected, …) — exactly the seam
+// composition root (plugin/guide/clients.go) to a provably org-scoped, nil-safe read
+// (framework.ModuleInstalled, integrations.Connected, …) — exactly the client
 // pattern apps/coding uses for git's CloneURL/VerifyRef. A nil field
 // honest-degrades its signal to "not present": the vocabulary is the contract, a
-// read fills in the day its seam is bound, so a subsystem that is down or not yet
+// read fills in the day its client is bound, so a subsystem that is down or not yet
 // wired can NEVER spuriously satisfy a signal.
 
 // Signals are the org-scoped, cross-subsystem reads the growth observe layer
@@ -41,14 +41,14 @@ type Signals struct {
 	RecordCount func(ctx context.Context, org string) (int64, error)
 }
 
-// boundSignals is the process-wide seam set, installed once at the composition
+// boundSignals is the process-wide client set, installed once at the composition
 // root via BindSignals before cloud.Listen mounts guide. The zero value (all nil)
 // honest-degrades every growth signal to "not present" — the state guide's own
 // tests and a minimally-wired deployment both observe.
 var boundSignals Signals
 
 // BindSignals installs the cross-subsystem reads. The composition root
-// (plugin/guide/seams.go) calls it once at init, before guide.Mount. Last write wins;
+// (plugin/guide/clients.go) calls it once at init, before guide.Mount. Last write wins;
 // guide never mutates it after mount.
 func BindSignals(s Signals) { boundSignals = s }
 
@@ -84,7 +84,7 @@ const (
 const customersThreshold = 25
 
 // standardModules / standardConnectors are the curated sets the profile probes for
-// its SignalSet. An unregistered name honest-degrades to false through the seams, so
+// its SignalSet. An unregistered name honest-degrades to false through the clients, so
 // the vocabulary is safe to carry ahead of a lane/provider landing. The connector set
 // includes the providers the strategies corpus joins against (facebook/google-ads/
 // mailchimp/sms — the Guide's connect:<provider> steps), so a `has:<capability>` tag
@@ -172,7 +172,7 @@ type profileMetrics struct {
 
 // observe runs the growth signal probes against the org's real, CURRENT state and
 // returns the observed SignalSet plus the org's own key metrics. Every probe is
-// org-scoped (each seam reads only `org`) and honest-degrading: a nil seam or a
+// org-scoped (each client reads only `org`) and honest-degrading: a nil client or a
 // probe error yields an ABSENT (false) signal, never a spurious true and never a
 // failed profile — the profile degrades signal-by-signal. Pure I/O orchestration;
 // the fold into a Stage is classifyStage (pure).
@@ -186,11 +186,11 @@ func observe(ctx context.Context, org string, sig Signals, funnel Funnel) (Signa
 	set[SignalFunnelSignups] = funnelStagePresent(funnel, "signups")
 	set[SignalFunnelOrders] = funnelStagePresent(funnel, "orders")
 
-	// Live deployment (boolean seam).
+	// Live deployment (boolean client).
 	set[SignalDeployed] = probeBool(ctx, org, sig.HasDeployment)
 
 	// Revenue-of-record: read the org's OWN number once, derive the boolean. The
-	// signal is always emitted (false when the seam is unbound or errors) so the
+	// signal is always emitted (false when the client is unbound or errors) so the
 	// profile has a stable shape — honest-degrading is a false signal, not a missing key.
 	set[SignalRevenue] = false
 	if sig.RevenueCents != nil {
@@ -207,7 +207,7 @@ func observe(ctx context.Context, org string, sig Signals, funnel Funnel) (Signa
 			set[SignalCustomers] = n >= customersThreshold
 		}
 	}
-	// Installed modules + connected providers (boolean seams).
+	// Installed modules + connected providers (boolean clients).
 	for _, mod := range standardModules {
 		set[kindModule+":"+mod] = sig.ModuleInstalled != nil && sig.ModuleInstalled(ctx, org, mod)
 	}
@@ -217,7 +217,7 @@ func observe(ctx context.Context, org string, sig Signals, funnel Funnel) (Signa
 	return set, m
 }
 
-// probeBool runs an honest-degrading boolean seam: a nil seam or an error yields
+// probeBool runs an honest-degrading boolean client: a nil client or an error yields
 // false (not present), never a spurious true.
 func probeBool(ctx context.Context, org string, fn func(context.Context, string) (bool, error)) bool {
 	if fn == nil {

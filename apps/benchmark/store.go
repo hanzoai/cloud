@@ -1,6 +1,6 @@
 package benchmark
 
-// AttemptStore is the durability seam. The read/leaderboard/compare paths and the run
+// AttemptStore is the durability client. The read/leaderboard/compare paths and the run
 // worker go through it — NEVER pod-local files in production. fileStore is the local-dev
 // backend (DataDir JSONL); the cloud backend (relational metadata + object-store raw
 // responses + materialized leaderboard views) implements the same interface, so a large

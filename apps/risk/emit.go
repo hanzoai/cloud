@@ -209,8 +209,8 @@ func emit(ctx context.Context, log luxlog.Logger, t tenant, in *contract.EventIn
 	}
 	// The peer call is read HERE, on the caller's goroutine, so the detached
 	// goroutine below holds a VALUE rather than reading a package variable while
-	// something else writes it. It is the seam a test substitutes, and a seam read
-	// from a goroutine nobody joins is a seam no test can put back.
+	// something else writes it. It is the client a test substitutes, and a client read
+	// from a goroutine nobody joins is a client no test can put back.
 	call := send
 	go func() {
 		defer func() { <-inflight }()

@@ -11,7 +11,7 @@ import (
 )
 
 // discord.go is the Discord transport: envelope normalization from the
-// ingress seam and egress through integrations.SendDiscord (token custody
+// ingress client and egress through integrations.SendDiscord (token custody
 // stays in integrations).
 
 // errNoRoute rejects egress to a room the org has no inbound-learned route

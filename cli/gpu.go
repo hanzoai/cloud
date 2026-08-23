@@ -79,7 +79,7 @@ const (
 	renderWindow = 4 * time.Hour
 	// localComfyUI is the studio render backend the studio.render handler drives.
 	localComfyUI = "http://127.0.0.1:8188"
-	// localWorkerExecute is the GATED submit seam on the local studio (worker-mode):
+	// localWorkerExecute is the GATED submit client on the local studio (worker-mode):
 	// the render graph is POSTed here with X-Worker-Token so ONLY the fleet worker —
 	// not anything else that can reach loopback — can start a render. It replaces the
 	// open /prompt POST (the hidden-run hole the studio's --worker-mode closes).
@@ -974,7 +974,7 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	// advertises studioCap or claims a render lane. Every node probes, including one
 	// that launches its own studio below — at this point that studio has not been
 	// started yet, so a node claiming work here would be claiming it cold.
-	// The worker token is required either way — the gated execute seam refuses without it.
+	// The worker token is required either way — the gated execute client refuses without it.
 	w.launchesStudio = opts.studioDir != ""
 	w.refreshStudioReady(ctx)
 
@@ -1213,7 +1213,7 @@ func (w *worker) studioReachable(ctx context.Context) bool {
 // refreshStudioReady recomputes whether this node can serve renders and returns
 // whether the verdict changed. Ready ⇔ a worker token is present AND a studio
 // ANSWERS right now. The token is the decisive gate: without it the gated execute
-// seam 403s every job.
+// client 403s every job.
 //
 // Reachability is MEASURED even when we launch the studio ourselves. Launching one
 // does not make it serve — it makes it serve eventually, after it binds the port and
@@ -1254,7 +1254,7 @@ func (w *worker) studioBlockReason() string {
 		return ""
 	}
 	if workerToken() == "" {
-		return "STUDIO_WORKER_TOKEN not set (the gated studio seam would refuse every render) — set it from KMS"
+		return "STUDIO_WORKER_TOKEN not set (the gated studio client would refuse every render) — set it from KMS"
 	}
 	if w.launchesStudio {
 		return fmt.Sprintf("the studio we launched is not serving on %s yet (still starting, or it failed) — this clears by itself once it answers", localComfyUI)
@@ -1722,7 +1722,7 @@ func fnRunHandler(ctx context.Context, input json.RawMessage) (any, error) {
 func workerToken() string { return os.Getenv("STUDIO_WORKER_TOKEN") }
 
 // authLocal stamps the worker token on a loopback studio request. The studio's
-// --worker-mode gate guards the submit seam today, but sending it on ALL loopback
+// --worker-mode gate guards the submit client today, but sending it on ALL loopback
 // calls (execute/history/view/upload/queue) makes the CLI robust if that scope widens
 // — one way to talk to the local studio, always authenticated.
 func authLocal(req *http.Request) {
@@ -1770,7 +1770,7 @@ func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage)
 		return nil, err
 	}
 	post.Header.Set("Content-Type", "application/json")
-	authLocal(post) // gated worker-mode submit seam
+	authLocal(post) // gated worker-mode submit client
 	resp, err := cl.Do(post)
 	if err != nil {
 		return nil, fmt.Errorf("studio.render: POST /v1/worker/execute: %w (is the local studio server on %s?)", err, localComfyUI)

@@ -23,7 +23,7 @@ func (f *fakeSource) transactions(_ context.Context, _ string, sandbox bool) ([]
 	return f.live, nil
 }
 
-// fakeCost is the test double for the COGS cost seam: a per-transaction cost figure. A txn
+// fakeCost is the test double for the COGS cost client: a per-transaction cost figure. A txn
 // absent from the map reports ok=false (no real figure → no accrual), mirroring the live
 // default until the cloud_usage projection is wired.
 type fakeCost struct{ perTxn map[string]int64 }
@@ -376,7 +376,7 @@ func TestUsageReversalDeRecognizes(t *testing.T) {
 	}
 }
 
-// TestCOGSAccrual proves that when the cost seam reports a REAL figure, a usage recognition
+// TestCOGSAccrual proves that when the cost client reports a REAL figure, a usage recognition
 // accrues matching cost of goods (Dr 5000 Cloud COGS / Cr 2300 Accrued infra payable) in a
 // separate voucher — making the P&L a gross-margin statement (income − expense), not
 // revenue-only — while the books stay balanced and revenue is NOT double-counted.
@@ -418,8 +418,8 @@ func TestCOGSAccrual(t *testing.T) {
 }
 
 // TestCOGSBackfillsPastRevenueCursor proves the cost accrual is DECOUPLED from the revenue
-// cursor: a usage txn is first ingested with NO cost seam (revenue-only, exactly today's
-// live noCost path), which advances the revenue cursor PAST that txn. When a real cost seam
+// cursor: a usage txn is first ingested with NO cost client (revenue-only, exactly today's
+// live noCost path), which advances the revenue cursor PAST that txn. When a real cost client
 // is wired on a LATER sync, the COGS voucher for that already-past usage still books — the
 // matching principle backfills instead of being stranded revenue-only forever.
 func TestCOGSBackfillsPastRevenueCursor(t *testing.T) {
@@ -431,14 +431,14 @@ func TestCOGSBackfillsPastRevenueCursor(t *testing.T) {
 		{ID: "use-1", Kind: finance.KindUsage, Amount: 4000, CreatedAt: "2026-07-02T00:00:00Z"},
 	}}
 
-	// Phase 1: ingest with NO cost seam — the live revenue-only path. Books revenue and
+	// Phase 1: ingest with NO cost client — the live revenue-only path. Books revenue and
 	// advances the revenue cursor past use-1; NO COGS accrues yet.
 	if _, err := ingestOrg(ctx, src, nil, st, "acme", false); err != nil {
 		t.Fatalf("ingest revenue-only: %v", err)
 	}
 	tb, _ := trialBalance(ctx, st, "", "")
 	if cogsD, _ := closingOf(tb, CloudCOGS); cogsD != 0 {
-		t.Fatalf("no cost seam must accrue ZERO COGS, got debit=%d", cogsD)
+		t.Fatalf("no cost client must accrue ZERO COGS, got debit=%d", cogsD)
 	}
 	cur, err := st.cursor(ctx)
 	if err != nil {
@@ -448,12 +448,12 @@ func TestCOGSBackfillsPastRevenueCursor(t *testing.T) {
 		t.Fatalf("revenue cursor must have advanced past use-1, got %q", cur.LastAt)
 	}
 
-	// Phase 2: wire a REAL cost seam and re-sync. Even though the revenue cursor already sits
+	// Phase 2: wire a REAL cost client and re-sync. Even though the revenue cursor already sits
 	// past use-1, the COGS pass re-scans it and books the matching accrual exactly once.
 	cost := &fakeCost{perTxn: map[string]int64{"use-1": 2500}}
 	posted, err := ingestOrg(ctx, src, cost, st, "acme", false)
 	if err != nil {
-		t.Fatalf("ingest with cost seam: %v", err)
+		t.Fatalf("ingest with cost client: %v", err)
 	}
 	if posted != 1 {
 		t.Fatalf("backfill must post EXACTLY the 1 new COGS voucher (revenue idempotent), got %d", posted)
@@ -473,13 +473,13 @@ func TestCOGSBackfillsPastRevenueCursor(t *testing.T) {
 		t.Fatalf("revenue must stay $40.00 after backfill, got credit=%d", revC)
 	}
 
-	// Idempotent: a third sync with the same cost seam books nothing more.
+	// Idempotent: a third sync with the same cost client books nothing more.
 	posted, err = ingestOrg(ctx, src, cost, st, "acme", false)
 	if err != nil {
 		t.Fatalf("third ingest: %v", err)
 	}
 	if posted != 0 {
-		t.Fatalf("re-syncing an unchanged feed+seam must post 0 vouchers, got %d", posted)
+		t.Fatalf("re-syncing an unchanged feed+client must post 0 vouchers, got %d", posted)
 	}
 }
 

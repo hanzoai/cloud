@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// TestFanOutTranslatesAndFiresSink verifies the fan-out seam builds SinkEvents from
+// TestFanOutTranslatesAndFiresSink verifies the fan-out client builds SinkEvents from
 // the RAW accepted batch (resolved name, commerce fields, un-scrubbed properties for
 // match keys), drops unroutable events, and dispatches them to the installed sink.
 func TestFanOutTranslatesAndFiresSink(t *testing.T) {

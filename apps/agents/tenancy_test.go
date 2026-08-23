@@ -102,7 +102,7 @@ func TestPublicBuildNeverMintsAStore(t *testing.T) {
 	}
 }
 
-// TestMountedStoreRefusesAnInvalidOrg keeps the in-process seams fail-closed.
+// TestMountedStoreRefusesAnInvalidOrg keeps the in-process clients fail-closed.
 // Their contract is that the caller resolved the org server-side; an empty or
 // oversized org could not have come from a validated principal, so it is refused
 // before it can reach the filesystem.

@@ -33,7 +33,7 @@
 // disk — the caller supplies it (typically from an env var the operator wires
 // from a KMS-backed secret, e.g. COMMERCE_SERVICE_TOKEN).
 //
-// Its only intra-repo dependency is the in-process finance seam (clients/finance): when a
+// Its only intra-repo dependency is the in-process finance client (clients/finance): when a
 // co-resident finance ledger is published, Authorize's balance read and Record's usage
 // debit resolve it DIRECTLY (a typed in-proc call, no HTTP); otherwise both fall back to
 // the commerce billing HTTP contract above. It pulls in NO commerce server internals, so
@@ -761,7 +761,7 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 	u = u.Seal()
 
 	// Co-resident native ledger: post the usage debit DIRECTLY (no HTTP), the ONE
-	// money seam. finance is an exact 18-decimal USD ledger, so the typed Amount
+	// money client. finance is an exact 18-decimal USD ledger, so the typed Amount
 	// debits with NO rounding — a per-token cost priced at 18-dp is never floored to
 	// cents or micros. The debit is idempotent on the act's Ref inside finance, and a
 	// test-mode client hits the sandbox books.

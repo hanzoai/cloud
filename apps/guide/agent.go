@@ -27,7 +27,7 @@ type event struct {
 
 // agentDeps is the narrow surface the agent needs: the embedded AI (to draft
 // content), the caller's per-org store (action ledger + state write), and the
-// invoke seam onto the per-principal MCP plane. It is a struct of injected
+// invoke client onto the per-principal MCP plane. It is a struct of injected
 // collaborators so runAgent is pure over them — the HTTP handler wires the real
 // ones (deps.AI + automations.InvokeTool), tests wire fakes.
 type agentDeps struct {

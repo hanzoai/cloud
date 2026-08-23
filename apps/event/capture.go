@@ -527,7 +527,7 @@ func strconv64(n int64) string {
 // ── handler ──────────────────────────────────────────────────────────────────
 
 // resolveKeyOrg maps a presented project/API key to its org through the ONE IAM
-// key seam (cloud.OrgForKey). It is a package var ONLY so a test can substitute a
+// key client (cloud.OrgForKey). It is a package var ONLY so a test can substitute a
 // resolver without standing up IAM; production is always cloud.OrgForKey.
 var resolveKeyOrg = cloud.OrgForKey
 

@@ -15,7 +15,7 @@ import (
 
 // The transport that carries a verification code to a person.
 //
-// IAM declares the seam (iamserver.Sender) and composes the message; this carries
+// IAM declares the client (iamserver.Sender) and composes the message; this carries
 // it. The split is not decoration — the two halves need different knowledge and only
 // one of them is available on each side. IAM knows how long a code lasts and what to
 // say about it; the router knows which apps this deployment runs and how to start one

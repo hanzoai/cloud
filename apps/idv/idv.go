@@ -1,7 +1,7 @@
 // Package idv is identity verification: run a KYC or KYB check through a licensed
 // provider.
 //
-// It is the ONE identity/business verification seam the Hanzo cloud binary uses to
+// It is the ONE identity/business verification client the Hanzo cloud binary uses to
 // orchestrate that check. It is deliberately small and provider-agnostic so every consumer wires
 // the SAME contract: company formation (founder KYC) and the compliance product
 // (org-side onboarding KYB/KYC) both drive verifications through a idv.Provider, and
@@ -46,7 +46,7 @@ func ValidKind(k Kind) bool { return k == KindIndividual || k == KindBusiness }
 // callers custody it sealed at rest and never place it in logs, URLs, or audit
 // records. The provider collects the sensitive documents (ID image, proof of
 // address, incorporation papers) directly from the subject via the hosted flow —
-// this seam carries only the minimum needed to open that flow.
+// this client carries only the minimum needed to open that flow.
 type Subject struct {
 	Kind  Kind   // individual (KYC) or business (KYB)
 	Name  string // legal name of the person or entity
@@ -118,7 +118,7 @@ type Result struct {
 	Status Status
 }
 
-// Provider is the provider-agnostic verification seam. Start begins a verification
+// Provider is the provider-agnostic verification client. Start begins a verification
 // for a subject and returns a Session; Check polls the current status. A real
 // provider implements this over its REST API (see REST); Manual is the honest
 // default. Name identifies the wired provider for audit and display.

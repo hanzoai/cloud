@@ -131,7 +131,7 @@
       "post": {
         "operationId": "post_tools_call",
         "summary": "Runs one of the caller's activated tools and answers with its output.",
-        "description": "Runs one of the caller's activated tools and answers with its output.\n\nThis is the door onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 seam or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set.",
+        "description": "Runs one of the caller's activated tools and answers with its output.\n\nThis is the door onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 client or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set.",
         "tags": [
           "tools"
         ],
@@ -959,7 +959,7 @@
           },
           "price": {
             "$ref": "#/components/schemas/Price",
-            "description": "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement seam; this is the declaration."
+            "description": "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement client; this is the declaration."
           },
           "source": {
             "description": "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",

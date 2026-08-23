@@ -14,14 +14,14 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// generate.go is the agentic content-creation seam: given a brand brief + type, draft
+// generate.go is the agentic content-creation client: given a brand brief + type, draft
 // content into the CMS as a DRAFT document. The heart of the loop's first step.
 //
 // Decomplected into two concerns:
 //
-//   - Generator (the seam) turns a GenerateInput into the field data for a draft. The
+//   - Generator (the client) turns a GenerateInput into the field data for a draft. The
 //     REAL implementation (aiStudioGenerator, wired at Mount via newGenerator) has two
-//     orthogonal modes behind the one seam:
+//     orthogonal modes behind the one client:
 //       * COPY (Campaign, SocialPost) — drafts brand copy on the platform AI plane
 //         (deps.AI.ChatCompletion, model zen5). The billing scope (Org/Project) rides
 //         the ChatRequest, so the ONE inference gate+meter (cloud/metered_ai.go) that
@@ -78,7 +78,7 @@ type Generator interface {
 // built at all. It never fabricates content — it returns an honest error the handler
 // maps to 503, so an un-provisioned deployment degrades cleanly instead of shipping
 // fake copy. (In practice newGenerator always returns the real aiStudioGenerator, which
-// fail-closes per-mode; this remains the type-level zero value for the seam.)
+// fail-closes per-mode; this remains the type-level zero value for the client.)
 type notConfiguredGenerator struct{}
 
 func (notConfiguredGenerator) Draft(context.Context, string, GenerateInput) (map[string]any, error) {
@@ -108,7 +108,7 @@ func newGenerator(deps cloud.Deps, b cloud.Base) Generator {
 	}
 }
 
-// aiStudioGenerator is the real seam: zen5 copy for Campaign/SocialPost, studio assets
+// aiStudioGenerator is the real client: zen5 copy for Campaign/SocialPost, studio assets
 // for Asset. It holds only edges (no store of its own) — content stays a stateless
 // orchestrator. Every dependency is optional at construction; a missing one fail-closes
 // only the mode that needs it.

@@ -1,4 +1,4 @@
-// release.go — the first-party release seam. build.go's RegisterServiceReleaser is
+// release.go — the first-party release client. build.go's RegisterServiceReleaser is
 // the inversion that lets a build-completion path (apps/platform/release.go, or
 // any package-cloud caller) request a rollout with no cloud⇄platform import cycle.
 //
@@ -72,7 +72,7 @@ func releaseService(s *cloud.Service[fleetState], ctx context.Context, service, 
 		service, service, service)
 }
 
-// registerReleaser wires the first-party release seam (build.go's
+// registerReleaser wires the first-party release client (build.go's
 // RegisterServiceReleaser inversion) to this mounted fleet board. Called once
 // from routes, so a release requested anywhere in the binary (cloud's own
 // self-release, or a future in-process first-party builder) reaches the SAME

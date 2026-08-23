@@ -98,7 +98,7 @@ func TestPlans_ResolveProducesLicenseFeatures(t *testing.T) {
 // World is not a separately billable product: its limits resolve to the free floor
 // (apps/world/entitlement.go), which is the whole answer rather than a degraded one.
 //
-// What is worth keeping from that test is the seam it exercised, so this asserts both
+// What is worth keeping from that test is the client it exercised, so this asserts both
 // halves: a live tier still resolves entitlements through goja, and a retired id
 // ERRORS rather than answering an empty map. The distinction matters — an empty map
 // reads as "this tier grants nothing", which is a confident wrong answer that would

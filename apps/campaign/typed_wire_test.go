@@ -384,7 +384,7 @@ func TestEveryTypedCampaignOpIsDescribed(t *testing.T) {
 }
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody wrote
+// because the CLIENT they arrived through cannot carry one — not because nobody wrote
 // it.
 //
 // EMBEDDED STRUCT. campaignUpdate is `{ID string; campaignWrite}` (typed.go), and the

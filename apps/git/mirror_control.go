@@ -13,7 +13,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// mirror_control.go implements the cloud.GitMirrorController seam: the universal
+// mirror_control.go implements the cloud.GitMirrorController client: the universal
 // sync engine's git provider ENSURES or REMOVES a native repo's outbound mirror
 // target through it, reusing the SAME repo_mirrors store + validateMirrorTarget
 // gate the /mirror endpoint and mirror_out reactor use — one outbound target list,
@@ -21,7 +21,7 @@ import (
 // engine drives it with no sync⇆git import cycle (the pushBuilder / GitImporter
 // idiom).
 //
-// That seam assumed co-residence. It is registered in THIS process, and the sync
+// That client assumed co-residence. It is registered in THIS process, and the sync
 // engine runs in its own, so over there the controller was nil and every mirror
 // the engine decided on came back "git mirror controller not registered" — a sync
 // that reconciled inbound forever and pushed nothing back, while the app holding
@@ -81,7 +81,7 @@ func (gitMirrorController) EnsureMirror(ctx context.Context, org, project, repo,
 }
 
 // exposeMirror publishes the mirror declaration on the internal plane. Called
-// from Mount, beside the other cross-app seams.
+// from Mount, beside the other cross-app clients.
 //
 // The tenant comes from the CALLER, never the argument — which is why MirrorIn
 // has no Org field to read. An argument org would let an engine acting for one

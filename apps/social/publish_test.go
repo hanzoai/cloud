@@ -15,7 +15,7 @@ import (
 
 // fakePublisher is an injected Publisher that records every call and returns a
 // configurable outcome — it proves the publish MACHINE (claim → fanout → record) end to
-// end without any network, exactly the seam a real provider edge slots into.
+// end without any network, exactly the client a real provider edge slots into.
 type fakePublisher struct {
 	mu    sync.Mutex
 	calls []fakeCall

@@ -23,7 +23,7 @@ import (
 )
 
 // destinations.go mounts the /v1/destination surface and owns the KMS custody + the
-// in-process seam. It composes clients/analytics (installs the fan-out sink) and
+// in-process client. It composes clients/analytics (installs the fan-out sink) and
 // clients/integrations (a destination may reuse an OAuth connection's token).
 //
 // Surface (all org-scoped; /v1 only; mutations require org admin). Four of the
@@ -38,7 +38,7 @@ import (
 //
 // TENANT ISOLATION mirrors clients/ads and clients/integrations: the org is the
 // VALIDATED principal's (principal.OrgFrom for a typed op, principal.Org for the
-// untyped one — the same value, read through the seam each has), never a client
+// untyped one — the same value, read through the client each has), never a client
 // header and never an In field; every store row is keyed (org,platform) and every
 // KMS secret lives under a per-org path.
 //
@@ -76,14 +76,14 @@ type state struct {
 	sem   chan struct{} // fan-out concurrency bound
 }
 
-// mounted is the active service so Shutdown + the in-process seam reach it.
+// mounted is the active service so Shutdown + the in-process client reach it.
 var mounted *cloud.Service[state]
 
 // removeSink unregisters this subsystem's fan-out consumer on Shutdown.
 var removeSink func()
 
 // Mount wires /v1/destination/* onto app. Complex flavour (a package global for the
-// seam + Shutdown, and it installs the analytics fan-out sink), so it constructs the
+// client + Shutdown, and it installs the analytics fan-out sink), so it constructs the
 // Service value directly.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
@@ -671,10 +671,10 @@ func syntheticConversion(org, brand string) Conversion {
 	}
 }
 
-// ── in-process seam (the guide MCP tool + siblings) ──────────────────────────
+// ── in-process client (the guide MCP tool + siblings) ──────────────────────────
 
 // Connect provisions (or updates) a destination's NON-SECRET config for org — the
-// seam the guide's destinations_connect MCP tool drives. It NEVER accepts a secret
+// client the guide's destinations_connect MCP tool drives. It NEVER accepts a secret
 // (secrets flow only via the authenticated HTTP connect body → KMS), so the tool args
 // and the guide action ledger never carry one. It requires the destination's REQUIRED
 // non-secret fields (the guide cannot fabricate a measurement/pixel id), returning an
@@ -721,7 +721,7 @@ func Connect(ctx context.Context, org, platform string, in map[string]any) (Dest
 	return statusOf(s, ctx, org, dest, &row), nil
 }
 
-// List returns the org's destination status for every registered platform — the seam
+// List returns the org's destination status for every registered platform — the client
 // a sibling (the guide) reads to report what is connected. Fails closed when
 // unmounted.
 func List(ctx context.Context, org string) ([]DestinationStatus, error) {

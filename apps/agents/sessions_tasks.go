@@ -5,11 +5,11 @@ import (
 	"errors"
 )
 
-// TaskController is the seam to the hanzoai/tasks durable-execution engine — the
+// TaskController is the client to the hanzoai/tasks durable-execution engine — the
 // ONE canonical engine for durable/retriable/scheduled agent work. This sessions
 // surface is the REGISTRY + control + ZAP-stream VIEW layer; it deliberately owns
 // NO scheduler, ticker, or lease. When a session is backed by a tasks workflow
-// (Session.TaskWorkflowID set), a control command forwards through this seam to
+// (Session.TaskWorkflowID set), a control command forwards through this client to
 // the engine's signal/cancel API instead of only being recorded.
 //
 // The method set mirrors github.com/hanzoai/tasks/pkg/sdk/client.Client exactly,

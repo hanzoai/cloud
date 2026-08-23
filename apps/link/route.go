@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// route.go is the redundancy seam: a PURE policy that turns a user's linked
+// route.go is the redundancy client: a PURE policy that turns a user's linked
 // accounts into an ordered list of routing candidates, so a caller (the ai
 // gateway / enso router) can fail over across accounts — two Claude Max
 // subscriptions for redundancy, then the metered API as the always-available
 // backstop — and know how each candidate BILLS before it dials.
 //
-// This is the policy + its types (the SEAM). EXECUTION — actually dialing a
+// This is the policy + its types (the CLIENT). EXECUTION — actually dialing a
 // provider, detecting a live 429, and advancing to the next candidate — is the
 // gateway's job (the deferred failover-execution increment). The policy reads the
 // registry's own usage snapshots (the rate-limit headroom @hanzo/usage already

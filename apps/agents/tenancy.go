@@ -37,7 +37,7 @@ import (
 
 // storeFor opens (on first touch) and returns the database holding org's agent
 // records. org MUST already be validated — principal.OrgFrom for a request, or
-// the caller's own server-side resolution for an in-process seam.
+// the caller's own server-side resolution for an in-process client.
 // cloud.OrgNamespace folds it through namespace.Sanitize, so an org that slugger
 // refuses is an error here rather than a silent fall-through to another org's
 // file.
@@ -76,7 +76,7 @@ func tenantStore(ctx context.Context, st *state) (*Store, string, error) {
 	return sto, org, nil
 }
 
-// mountedStore is the entry every IN-PROCESS seam uses — ListForOrg,
+// mountedStore is the entry every IN-PROCESS client uses — ListForOrg,
 // TargetsForOrg, ResolveTarget, LoadOn, the inproc session calls, StopSessions,
 // SeedPersonalities. Their shared contract is that the CALLER has already
 // resolved the org server-side (principal.Org, or a verified token claim) and
@@ -84,14 +84,14 @@ func tenantStore(ctx context.Context, st *state) (*Store, string, error) {
 // path applies, so an org that could not have come from a validated principal is
 // refused here rather than reaching the filesystem.
 //
-// The eight seams used to repeat this check by hand, which is eight chances for
+// The eight clients used to repeat this check by hand, which is eight chances for
 // one of them to be written without it.
 //
 // The MaxOrgLen bound is NOT subsumed by cloud.OrgNamespace and must stay.
 // namespace.Sanitize maps an over-long owner to a 49-byte slug rather than refusing it,
 // so the namespace constructor would happily accept a ten-kilobyte org id. The
 // bound is the same one principal.OrgOf applies at the HTTP boundary: one rule,
-// two readers, so an in-process seam can never be granted an org key the HTTP
+// two readers, so an in-process client can never be granted an org key the HTTP
 // path would have refused.
 func mountedStore(org string) (*Store, string, error) {
 	if mounted == nil {

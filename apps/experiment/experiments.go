@@ -44,9 +44,9 @@ type MetricOutcome struct {
 	Converted bool
 }
 
-// MetricSource is the measurement seam: per-subject outcomes for two event names
+// MetricSource is the measurement client: per-subject outcomes for two event names
 // over a window, org-scoped by the impl. Production is analyticsSource (the ONE
-// analytics events plane); tests inject a fake. This is the only seam to the
+// analytics events plane); tests inject a fake. This is the only client to the
 // measurement half — there is no second event store.
 type MetricSource interface {
 	Outcomes(ctx context.Context, org, exposureEvent, metricEvent string, start, end time.Time) ([]MetricOutcome, error)
@@ -77,7 +77,7 @@ type state struct {
 	log    luxlog.Logger
 }
 
-// mounted is the process-wide handle the in-process seams (Assign/Analyze that
+// mounted is the process-wide handle the in-process clients (Assign/Analyze that
 // clients/campaign composes) reach the registry + measurement through — the same
 // pattern flags exposes for admission.
 var mounted *state
@@ -88,7 +88,7 @@ var mounted *state
 // "which file does this request touch" has one answer from one input.
 //
 // org MUST already be validated: principal.Org for a request, or the caller's
-// own server-side resolution for an in-process seam.
+// own server-side resolution for an in-process client.
 //
 // experiments is project-scoped: the IAM project is a physical partition of the
 // org, so it rides in the namespace rather than in a column.
@@ -100,7 +100,7 @@ func storeFor(s *cloud.Service[*state], org, project string) (*store, error) {
 	return s.State.stores.For(ns)
 }
 
-// mountedStore is storeFor for an in-process seam, whose caller has already
+// mountedStore is storeFor for an in-process client, whose caller has already
 // resolved the org server-side and states that as its contract.
 func mountedStore(org, project string) (*store, error) {
 	if mounted == nil || mounted.stores == nil {
@@ -113,7 +113,7 @@ func mountedStore(org, project string) (*store, error) {
 	return mounted.stores.For(ns)
 }
 
-// Mount opens the per-org registry stores, installs the process seam, and registers
+// Mount opens the per-org registry stores, installs the process client, and registers
 // the /v1/experiment surface.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
@@ -125,8 +125,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		metric: analyticsSource{},
 		log:    b.Log,
 	}
-	// The Service holds the SAME *state as the process seam, so the /v1 handlers and
-	// the in-process seams (Assign/Analyze) share one instance — one measurement
+	// The Service holds the SAME *state as the process client, so the /v1 handlers and
+	// the in-process clients (Assign/Analyze) share one instance — one measurement
 	// source, one registry.
 	svc := &cloud.Service[*state]{Base: b, State: mounted}
 	routes(app, svc)
@@ -862,9 +862,9 @@ func promoteVariant(def json.RawMessage, winner string) (json.RawMessage, error)
 	return json.Marshal(m)
 }
 
-// ── in-process seams (clients/campaign composes these) ─────────────────────────
+// ── in-process clients (clients/campaign composes these) ─────────────────────────
 
-// Assign is the in-process assignment seam: resolve the experiment's flag and return
+// Assign is the in-process assignment client: resolve the experiment's flag and return
 // the subject's variant + payload. clients/campaign composes THIS to pick a creative
 // (variant.payload) per subject — it never reinvents the bucketing. Org-scoped and
 // fail-closed (an unknown experiment is an error, not a silent default).
@@ -886,7 +886,7 @@ func Assign(ctx context.Context, org, project, experimentID, subject string, pro
 	return flags.Assign(org, project, exp.FlagKey, subject, props)
 }
 
-// Analyze is the in-process analysis seam (campaign's scheduler / a cron composes it
+// Analyze is the in-process analysis client (campaign's scheduler / a cron composes it
 // to refresh an experiment's significance): resolve the experiment, then run the
 // full analytics x flags x research analysis over [start,end).
 func Analyze(ctx context.Context, org, project, experimentID string, start, end time.Time, alpha float64) (Analysis, error) {
