@@ -319,7 +319,7 @@ type registryToken struct {
 // the OCI half is auth-gated, which token realm its challenge advertises — an
 // honest lens for "is the registry plane up", never a fabricated ok.
 func (o ops) status(ctx context.Context, _ *registryNoInput) (*registryStatus, error) {
-	if _, err := caller(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	out := &registryStatus{Host: hostOf(upstream()), PkgHost: hostOf(pkgHost())}
@@ -339,7 +339,7 @@ func (o ops) status(ctx context.Context, _ *registryNoInput) (*registryStatus, e
 // org's slug, its repository count on the OCI catalog, and its package count
 // on the npm registry. Today that is exactly one row — the caller's org.
 func (o ops) projects(ctx context.Context, _ *registryNoInput) (*registryProjectList, error) {
-	org, err := caller(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -360,7 +360,7 @@ func (o ops) projects(ctx context.Context, _ *registryNoInput) (*registryProject
 // catalog and filtered server-side to the org's namespace — the page can only
 // ever hold the caller's own images.
 func (o ops) images(ctx context.Context, _ *registryNoInput) (*registryImageList, error) {
-	org, err := caller(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +418,7 @@ func (o ops) tags(ctx context.Context, in *registryTags) (*registryTagList, erro
 // scope. The org boundary is applied server-side after the search, so a query
 // can never widen it.
 func (o ops) packages(ctx context.Context, in *registryPackages) (*registryPackageList, error) {
-	org, err := caller(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -457,38 +457,12 @@ func (o ops) token(ctx context.Context, in *registryMint) (*registryToken, error
 
 // ── tenancy ─────────────────────────────────────────────────────────────────
 
-// caller resolves the validated caller's org — the ONE tenancy input for every
-// op on this plane. FAIL CLOSED off the HTTP path: a CLI LocalInvoke parks no
-// principal, so there is no org to scope by and every op refuses.
-//
-// It reads the org Bridge PARKED, not the request. The org is all this plane
-// needs — nothing here turns on admin-ness, a project or a forwarded credential
-// — so cloud.Request, the pinned escape hatch, is not one of its inputs. The
-// three refusals it replaced were ONE decision written three times, because
-// principal.Org already composes the validated-principal check (OrgOf returns
-// false on an empty X-User-Id, which is exactly principal.Validated): a forged
-// X-Org-Id with no credential parks nothing and is refused here, before an
-// upstream byte (TestNoPrincipalIs403AndNoUpstreamByte). The refusal that
-// survives is the product-facing one, since all three were 403 and only the
-// status is contract — and the one state the other two named, a signed-in caller
-// whose token resolves no org, is already diagnosed where it is KNOWN: the
-// identity boundary logs it with the subject and the audience (SanitizeIdentity,
-// "token names no home org"), which is a better answer than a 403 string and
-// does not cost this plane its typing.
-func caller(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("sign in to use Registry")
-	}
-	return org, nil
-}
-
 // owned is the addressing gate every per-image op passes through: resolve the
 // caller's org, validate the image name's shape, and compose the ONE
 // repository name the op may touch — `<org>/<image>`. The org segment comes
 // from the principal, so a foreign repository cannot be expressed at all.
 func (o ops) owned(ctx context.Context, image string) (org, repo string, err error) {
-	org, err = caller(ctx)
+	org, err = principal.Acting(ctx)
 	if err != nil {
 		return "", "", err
 	}
