@@ -272,6 +272,13 @@ smoke: ## Build and run the smoke prober (mount-time integration check).
 e2e: ## Boot the binary locally and run the Playwright e2e suite against it.
 	@E2E_ARGS="$(E2E_ARGS)" ./e2e/run.sh
 
+# The whole cloud on this machine, in one command: the host and every app, on
+# ports that cannot collide with an instance already running here, over a fresh
+# data dir, with identity seeded. It is `e2e` minus the specs, because the specs
+# need the universe suite and a local boot does not.
+boot: ## Build and boot the whole cloud locally on isolated ports; leaves it running.
+	@BOOT_ONLY=1 ./e2e/run.sh
+
 # The console's IAM/cloud origins are NEXT_PUBLIC_* — inlined at BUILD time — so a
 # bundle built for production points its login at hanzo.id and its reads at
 # api.hanzo.ai, and the UI specs need one pointed at the loopback instance
