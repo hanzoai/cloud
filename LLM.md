@@ -3075,10 +3075,24 @@ could not be written. It is one command away and offline:
 The names were never unknowable; they were unread — the same shape as a refusal
 that names its own expiry condition, one level up.
 
-Two writes are converted as the worked examples (the two smallest, so the pattern
-is proved before it reaches a seventeen-field share issuance) and the other nine
-are SPECIFIED in the ledger, field by field, so the next writer starts from data.
-captable 20 → 22 typed; the ratchet 777 → 775.
+**All eleven are settled: TEN converted, ONE genuinely refusable.** captable is
+**30 typed of 31** and its ratchet row went 11 → 1. Every field on every op is
+transcribed from that source — 17 on the share issuance, 15 on the option grant,
+13 on the share class — and the subset publishes **zero bare properties**.
+
+The statuses are DECLARED rather than inherited, and they are not uniform: every
+create answers `created()` → **201**, the share-class amend answers `okRes()` →
+**200** because replacing terms mints nothing, and the transfer answers **200**
+because it moves a holding rather than creating one. The untyped relay carried all
+of that by passing the bundle's status through; a typed op has to say it, and
+captable's own suite caught the first one that was wrong within a minute.
+
+**The one that stays raw was never merely unwritten**, and only reading the source
+showed which of the eleven that was: `POST /stakeholders` takes a single object
+**or an ARRAY** (`Array.isArray(raw) ? raw : [raw]` — it mirrors a tRPC
+`addStakeholders` that takes an array). A typed op declares ONE In and zip binds
+by unmarshalling into it, so a struct In refuses the array a real client sends and
+a slice In refuses the object. It moved from `typingOwed` to `untypedByDesign`.
 
 **Reading the source rather than guessing paid for itself twice in two routes.**
 `shares.transfer` takes a FOURTH field, `certificateId`, required for a partial
