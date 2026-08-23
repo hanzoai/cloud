@@ -27,7 +27,7 @@ import (
 // noFinance is the PLUGIN-PROCESS shape: no co-resident ledger at all. It is not
 // publishFinance(t, nil) — that hands over a typed nil, which is a non-nil Client the
 // consumer then calls — but a cleared client, which is what finance.Current() reports in
-// a `--enable billing` child where wireFinance never ran.
+// a `--enable billing` child where installFinance never ran.
 func noFinance(t *testing.T) {
 	t.Helper()
 	finance.Publish(nil)
@@ -58,7 +58,7 @@ func s2sCall(t *testing.T, app *zip.App, path, token, org string) (int, []byte) 
 // inference outage.
 //
 // ai's prepaid gate reads /v1/billing/balance to decide whether to admit a paid
-// request. build.go's wireFinance installs an in-process balanceReader hook so
+// request. build.go's installFinance installs an in-process balanceReader hook so
 // that read is a direct typed call — but a Go func var cannot cross a PROCESS
 // boundary, and once ai became its own plugin process it fell back to the HTTP
 // path that comment calls the split-deploy fallback. That request carries
@@ -129,7 +129,7 @@ func TestBalance_S2SDoesNotWidenScope(t *testing.T) {
 // Every test here published a finance ledger, so balance() always took the co-resident
 // return and the S2S rule it holds was the only one that ran. A PLUGIN PROCESS is the
 // opposite shape and it is the shape prod runs: `cloud.Listen(…, []string{"billing"})`
-// leaves cfg.Enabled("commerce") false, so build.go's wireFinance returns before
+// leaves cfg.Enabled("commerce") false, so build.go's installFinance returns before
 // finance.Publish and finance.Current() is nil FOREVER in that process. availableCents
 // then falls to the plane, and when the plane cannot answer, balance() delegates to
 // proxy() — which asked principal.Org a SECOND time, without the S2S rule, and refused
