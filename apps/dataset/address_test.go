@@ -53,7 +53,7 @@ const app = "dataset"
 const product = "risk"
 
 // published is the document this plane projects of itself — the same call
-// describe.go makes to write plugin/datasets/openapi.json, which is the file the
+// describe.go makes to write plugin/dataset/openapi.json, which is the file the
 // fleet spec is composed from. So these assertions are about the published artifact
 // and not about a list of strings somebody kept in step with it.
 func published(t *testing.T) *openapi.Document {

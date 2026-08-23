@@ -214,7 +214,7 @@ func TestEveryStaleAppIsReportedInOnePass(t *testing.T) {
 			t.Errorf("report does not name %s — reporting the first stale app is the masking this replaces:\n%s", app, out)
 		}
 	}
-	if strings.Contains(out, "plugin/wallets/openapi.json") {
+	if strings.Contains(out, "plugin/wallet/openapi.json") {
 		t.Errorf("wallets is current and must not be named:\n%s", out)
 	}
 	if !strings.Contains(out, "github.com/hanzoai/iam  v1.34.21 → v1.34.29") {

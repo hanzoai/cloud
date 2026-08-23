@@ -107,7 +107,7 @@ const createEntry = `CREATE TABLE IF NOT EXISTS hanzo.reference_entry (
 ) ENGINE = ReplacingMergeTree(at)
 ORDER BY (set, source, version, key)`
 
-// The warehouse as VALUES, on the same terms as apps/analytics/warehouse.go:
+// The warehouse as VALUES, on the same terms as apps/event/warehouse.go:
 // production is always the ONE datastore client, and a test substitutes them to
 // drive the durable half — the version manifest, the resume cursor, the prune —
 // without standing up a store. They are the only door this package reaches the
