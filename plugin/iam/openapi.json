@@ -1770,8 +1770,8 @@
     "/v1/iam/mint-user-keys": {
       "post": {
         "operationId": "post_iam_mint-user-keys",
-        "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget client.",
-        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget client. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
+        "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget seam.",
+        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
         "tags": [
           "iam"
         ],
@@ -4340,8 +4340,8 @@
       },
       "post": {
         "operationId": "post_iam_users_by_owner_by_name_keys",
-        "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget client.",
-        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget client. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
+        "summary": "(re)generates the target user's key of the requested TYPE and returns it once, over the shared authorizeMinter + mintTarget seam.",
+        "description": "(re)generates the target user's key of the requested TYPE and\nreturns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`\n(the default) yields the confidential sk-; `?type=publishable` yields the pk- that\nis safe to ship in client JS and resolves to an org, never a principal.\n\nIt writes the schema.Key row that the resolvers actually read. schema.User.AccessKey\nis not a credential and nothing resolves it, so a key stamped there would\nauthenticate nobody.",
         "tags": [
           "iam"
         ],
