@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	financeclient "github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -29,11 +30,29 @@ import (
 // carry. One resolver, at the edge that has the request.
 
 // callerOrg is the ONE tenancy rule these ops share: the org comes from the
-// CALLER — the gateway's assertion, or what a background job stated once and
-// explicitly — and never from an argument. A caller that could name its own org
-// would be naming another tenant's books, and none of these inputs can express
-// one.
+// CALLER and never from an argument. A caller that could name its own org would
+// be naming another tenant's books, and none of these inputs can express one.
+//
+// The caller states it in one of two shapes, which are vouched for differently,
+// so this asks WHICH SHAPE it is rather than reading one value both arrive in.
+//
+// With a REQUEST, the org arrives as a header, and a header is an assertion only
+// once something stands behind it. account.ReaderOrg is where that rule lives and
+// is the whole of it: a validated principal, or the service token that stands in
+// for one where the caller is another PROCESS and so carries no session. Both are
+// checked against the request, which is what this needs the request for.
+//
+// With NO request there is no header in play at all: the org is what plane.For
+// stamped in-process, downstream of a door that had already validated it. zip
+// reads a stated caller only on a request-free context, so that value cannot be
+// supplied from outside.
 func callerOrg(ctx context.Context, op string) (string, error) {
+	if c, hasRequest := cloud.Request(ctx); hasRequest {
+		if org, ok := account.ReaderOrg(c); ok {
+			return org, nil
+		}
+		return "", zip.ErrForbidden(op + ": no validated org on the call")
+	}
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return "", zip.ErrForbidden(op + ": no org on the call")
