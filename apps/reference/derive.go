@@ -119,7 +119,7 @@ const deviceBudget = `
 // cross-tenant reader, so a phantom identity inflates both k-anonymity floors.
 //
 // publicTenant is the reserved org the event door files credential-less writes
-// under (apps/analytics/event.go). It is not a customer and it never
+// under (apps/event/event.go). It is not a customer and it never
 // contributes to an aggregate.
 const publicTenant = "$public"
 

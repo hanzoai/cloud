@@ -12,7 +12,7 @@ import (
 // catalog.json is the published event vocabulary, from @hanzo/events. It is
 // GENERATED there and copied here — refresh it with:
 //
-//	cp ../../ui/pkgs/events/dist/catalog.json apps/analytics/catalog.json
+//	cp ../../ui/pkgs/events/dist/catalog.json apps/event/catalog.json
 //
 // A copy is the honest cost of the door being Go and the catalog being an npm
 // package. What a copy must not become is a second DEFINITION: nothing here

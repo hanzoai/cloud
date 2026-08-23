@@ -74,7 +74,7 @@ func planeRunOnBehalf(ctx context.Context, in *plane.RunOnBehalfIn) (*plane.RunO
 	// The org must therefore be on the WIRE, stated by the dispatcher on a detached
 	// context before the hop (Caller.headers renders it, caller.go:302). The bridge
 	// does that — see the cloud.For(context.Background(), org) at the plane.Ask in
-	// apps/integrations/bridge.go. By the time we are here it has already arrived as
+	// apps/integrations/channel.go. By the time we are here it has already arrived as
 	// a header and rides onward for free. in.Org remains in the payload because the
 	// run RECORD needs it; it is not what authorizes the spend.
 	run, err := runOnBehalfModel(mounted, ctx, in.Org, in.Subject, in.Ref, in.Input, in.Model, transcript(in.History))

@@ -131,7 +131,7 @@ func TestLedger_CommerceUnconfigured_501(t *testing.T) {
 // two paths: a grant signs negative, spend counts as credit.
 //
 // The peer boundary's own end-to-end proof — a real ledger, a real socket, this same
-// reader — is apps/commerce/ledger_wire_test.go, which is where a mock cannot hide.
+// reader — is apps/commerce/ledger_peer_test.go, which is where a mock cannot hide.
 func TestOneVocabulary_BothBoundariesAgree(t *testing.T) {
 	for _, tc := range []struct {
 		concept    string
