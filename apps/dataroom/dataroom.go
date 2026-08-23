@@ -115,7 +115,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the case an operator is probing for. It was raw only because of WHERE it is
 	// registered, never because of its wire, which is why its own ledger carried it
 	// as a DEBT rather than a refusal.
-	zip.Get(cloud.ZipApp(app), "/v1/dataroom/health", probeOps{}.health)
+	//
+	// The registry is checked for nil, which every other app that reaches for it
+	// does: ZipApp returns nil for a Router that is neither a *zip.App nor a scope
+	// (scope.go), and zip.Get on a nil registry PANICS at mount rather than failing
+	// it. A subsystem that cannot register should refuse and say so — the difference
+	// between a degraded plugin and a crashing one.
+	reg := cloud.ZipApp(app)
+	if reg == nil {
+		return fmt.Errorf("dataroom.Mount: router carries no typed-op registry")
+	}
+	zip.Get(reg, "/v1/dataroom/health", probeOps{}.health)
 
 	bundle, err := dataroombundle.Bundle()
 	if err != nil {
