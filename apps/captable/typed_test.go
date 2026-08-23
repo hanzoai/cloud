@@ -182,8 +182,11 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	// route source turned out to be readable — it is a Go module dependency, so it
 	// sits in the module cache at the version go.mod pins — which is what unblocked
 	// the eleven writes that were listed as owed rather than refused.
-	if typed != 22 {
-		t.Fatalf("/v1/captable has %d typed ops, expected 22", typed)
+	// 30 of 31. The one that is not is POST /stakeholders, whose body is an object
+	// OR an array — the polymorphic-body class, and the only one of the eleven owed
+	// writes that turned out to be genuinely refusable rather than unwritten.
+	if typed != 30 {
+		t.Fatalf("/v1/captable has %d typed ops, expected 30", typed)
 	}
 }
 
