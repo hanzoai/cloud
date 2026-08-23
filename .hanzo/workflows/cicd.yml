@@ -1463,7 +1463,7 @@ jobs:
     needs: image
     if: github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/')
     runs-on: [hanzo-build-linux-amd64]
-    timeout-minutes: 45
+    timeout-minutes: 100
     steps:
       - name: Publish the plugin set for this release
         env:
@@ -1560,8 +1560,17 @@ jobs:
           # reads, and the publisher writes it LAST and then re-reads it with NO
           # credential — so its appearance is the whole property, already proven
           # readable. Bounded, because a job that waits forever is a held runner.
-          for i in $(seq 1 80); do
-            code=$(curl -sS -o /tmp/idx.json -w '%{http_code}' "$index" || echo 000)
+          #
+          # THE BOUND IS SIZED FROM A MEASUREMENT, and 40 minutes was under it. The
+          # pf-artifact Jobs this enqueues take 38-39 minutes to build 121 plugins
+          # for two platforms (measured: pf-artifact-i1lalqnkjnrc 39m,
+          # pf-artifact-3ymmw59fqrxz 38m), and they QUEUE behind each other — so a
+          # release whose Job starts behind one already running could not finish
+          # inside the old bound however healthy it was. That is why this car failed
+          # 5 of 7 while every Job it launched completed. The runner it holds is
+          # asleep, not building, which is the cost this trades against.
+          for i in $(seq 1 180); do
+            code=$(curl -sS --connect-timeout 5 --max-time 30 -o /tmp/idx.json -w '%{http_code}' "$index" || echo 000)
             if [ "$code" = 200 ]; then
               n=$(jq '.binaries | length' /tmp/idx.json)
               echo "published ${n} artifacts at ${index}"
@@ -1576,7 +1585,7 @@ jobs:
             fi
             sleep 30
           done
-          echo "::error::${index} never appeared (40 min). The release SHIPPED — nothing depends on this job — but a host with no baked plugins has no index for v${VERSION}."
+          echo "::error::${index} never appeared (90 min). The release SHIPPED — nothing depends on this job — but a host with no baked plugins has no index for v${VERSION}."
           exit 1
 
   # ══ live ══ PRODUCTION IS SERVING IT.
