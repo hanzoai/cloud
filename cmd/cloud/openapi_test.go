@@ -84,6 +84,7 @@ func host(t *testing.T) *zip.App {
 	}
 	health(app, absent)
 	spec(app, manifest.Names()) // no --enable: the whole fleet, as production runs it
+	graphql(app, manifest.Names())
 	if err := webui.Mount(app, consoleBundle()); err != nil {
 		t.Fatalf("mount console: %v", err)
 	}
