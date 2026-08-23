@@ -318,12 +318,35 @@
     "/v1/deploy/health": {
       "get": {
         "operationId": "get_deploy_health",
-        "summary": "Whether this control plane can actually reach the cluster it deploys to",
-        "description": "Reports the plane's real reachability: 200 only when the Kubernetes API server answers AND the App CRD is served, 503 with the same body shape otherwise, so a caller reads the same `k8s` and `crd` booleans either way rather than parsing an error envelope. It is a genuine dependency probe, not a process liveness ping — a running plane with no cluster behind it reports degraded.\n\nThis is the ONE unauthenticated route that reports state, because liveness must be probe-able without a JWT. It therefore discloses booleans only: the underlying failure — the API server address, an RBAC refusal — is logged server-side and never put on the wire.",
+        "summary": "Health reports whether this deployment can observe the delivery plane.",
+        "description": "Health reports whether this deployment can observe the delivery plane.\n\n200 only when the Kubernetes API answers AND the App custom resource is served;\n503 with the same shape otherwise, naming which half failed. It reports BOOLEANS\nand never the underlying error, because the route is unauthenticated — liveness\nmust be probe-able without a token — and a raw client error can disclose the\napiserver address or an RBAC detail. That detail is logged server-side instead.",
         "tags": [
           "deploy"
         ],
-        "x-public": true
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deployHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deployHealth"
+                }
+              }
+            },
+            "description": "service unavailable"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/deploy/login": {
@@ -1305,6 +1328,27 @@
       },
       "deployEmpty": {
         "properties": {},
+        "type": "object"
+      },
+      "deployHealth": {
+        "properties": {
+          "crd": {
+            "description": "CRD reports whether the App custom resource is served and listable. Absent\nwhen the apiserver was unreachable, because then it is unknown rather than\nfalse.",
+            "type": "boolean"
+          },
+          "k8s": {
+            "description": "K8s reports whether the Kubernetes API is reachable. Absent when the probe\ndid not get far enough to find out.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service names the subsystem answering, so a probe response is attributable\nwhen several are collected together.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is `ok` when this deployment can serve the delivery plane, and\n`degraded` otherwise. It agrees with the HTTP status by construction — see\nStatusCode.",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "sessionUser": {

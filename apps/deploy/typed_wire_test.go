@@ -275,6 +275,12 @@ func TestEveryTypedOpIsInTheDocumentWithProse(t *testing.T) {
 		"GET /v1/deploy/applications/{name}/revisions/{revision}/metadata",
 		"GET /v1/deploy/applications/{name}/syncwindows",
 		"GET /v1/deploy/clusters",
+		// Converted when zip's WithStatus became variadic: this probe answers 200 or
+		// 503 over ONE shape, and the ANSWER states which (StatusCoder). Its old entry
+		// in `raw` cited "WithStatus refuses a non-2xx by design", which was true at
+		// the zip of the day and is false at the pinned one — the exact shape of stale
+		// reason this file's two-ledger sum exists to surface.
+		"GET /v1/deploy/health",
 		"GET /v1/deploy/gitops",
 		"GET /v1/deploy/projects",
 		"GET /v1/deploy/session/userinfo",
@@ -288,9 +294,6 @@ func TestEveryTypedOpIsInTheDocumentWithProse(t *testing.T) {
 			"closeColonParams (openapi.go:407), which leaves '*' alone, while cloud's translate " +
 			"(openapi/openapi.go:556) renders the live route as '{wildcard1}' — openapi.Fold then refuses the " +
 			"whole document.",
-		"GET /v1/deploy/health": "answers 503 carrying the SAME domain body as its 200 (status + the k8s and " +
-			"crd booleans); a typed op's only non-2xx is a returned error rendered as the flat HTTPError, and " +
-			"zip.WithStatus refuses a non-2xx by design (typed.go:112).",
 		"GET /v1/deploy/login":                                    "its success IS a 302 with a Set-Cookie; zip stamps cmp.Or(op.Status, 204) over it (typed.go:305-309).",
 		"GET /v1/deploy/callback":                                 "same 302 + Set-Cookie success as login.",
 		"GET /v1/deploy/stream/applications":                      "an unbounded text/event-stream; a typed op answers with ONE marshalled Out.",

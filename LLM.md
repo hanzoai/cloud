@@ -3153,6 +3153,52 @@ because that is what go.mod said when they were written; it says **v1.34.0** now
 and moved without any of those notes moving. A version in prose is a claim about a
 dependency and it expires — cite the behaviour and check `go.mod`.
 
+**A REFUSAL CLASS DIES QUIETLY, SO SWEEP FOR ITS CITATIONS RATHER THAN ITS
+INSTANCES.** "A typed op cannot answer two statuses over one shape" was cited by
+five ledgers. `WithStatus` is variadic at the pinned zip and an answer states which
+declared status it is (`StatusCoder`), so the clause is FALSE everywhere it
+appears — and the five did not all convert, which is the point:
+
+| cited by | what happened |
+|---|---|
+| `apps/deploy` `/health` | **CONVERTED.** 200 or 503 over one shape; deploy 11 → 12. |
+| `apps/risk` `/health` | refusal STANDS on a better blocker — see below |
+| `apps/ml` `/health` | stands: the body has DYNAMIC keys (`res[capacity.Resource]`), an open object |
+| `apps/event` `tag.js` | stands: the body is JavaScript, and 304 is DEFINED to carry none |
+| `apps/node` `/connect` | stands: a WebSocket upgrade — the status was never the blocker |
+| `apps/tasks` bare noun | stands: cloud registers no handler; the 307 is the engine's own mux |
+
+Three lessons, and the second is the one that cost the most to learn:
+
+- **A dead clause is worse than a missing one, because a reader who checks it,
+  finds it false, and converts the route is wrong for a reason nothing warned
+  them about.** Each surviving refusal above now says the clause is stale AND what
+  actually holds, so the next reader is stopped by the real fact rather than
+  discovering the fake one.
+- **`apps/risk` was converted and its own gate refused the conversion.**
+  `TestOps_EveryOpIsAdmittedAndPriced` requires every op there to pass `o.admit` (a
+  per-tenant in-flight slot) and to be priced, because an op reaches a per-tenant
+  model, a per-tenant disk and a shared warehouse. A LIVENESS PROBE MUST DO
+  NEITHER — it answers without a tenant, which is what liveness means, and metering
+  an orchestrator's probe bills a customer for being watched. Exempting it would
+  weaken a bound against unbounded per-tenant compute for a tool an agent has no
+  use for. **A package-local invariant can outrank a fleet-wide convention, and
+  the gate is how you find that out rather than by arguing.**
+- **`apps/node`'s `/invoke` gained a SHARPER blocker from the same measurement.**
+  Its stated reason (a returned error renders flat) had expired; what replaced it
+  is that its domain body's discriminator is `code`, which the problem-details
+  envelope OVERWRITES. That refusal is now grounded in the reserved-key set rather
+  than in a capability that no longer applies.
+
+**The conversion's own trap: presence.** deploy's probe reported `k8s`/`crd` by
+leaving a key UNSET when it never learned that fact — a run that could not reach
+the apiserver does not know whether the CRD is served, and `crd: false` there
+states something it does not know. A plain `bool` with `omitempty` renders absent
+and false alike, so both are `*bool`. `TestTheProbeKeepsItsPresenceSemantics`
+drives all three branches. And `healthReport` was already `apps/event`'s: the
+unpublished name yielded to `deployHealth`, which is the flat-namespace rule
+catching a collision one step before the weave would have refused the package.
+
 ## The typed migration: one registry entry, or a route and nothing else
 
 Measured at `e88ea216`, and re-measurable — do not trust these numbers past the

@@ -32,17 +32,21 @@ import (
 var untypedByDesign = map[string]string{
 	"GET /v1/node/connect": "a WebSocket UPGRADE. It answers 101 and the connection then carries " +
 		"duplex frames for the life of the node (NodeWS, ws.go). A typed op answers one marshalled " +
-		"value at one declared success status, and zip's WithStatus refuses a non-2xx — there is no " +
-		"Out that can express a socket.",
+		"value and returns; there is no Out that can express a socket, and nothing after the handler " +
+		"returns to carry frames. (An older reading added 'and WithStatus refuses a non-2xx' — that " +
+		"clause is stale, WithStatus is variadic and takes 101 happily. The blocker was never the " +
+		"status.)",
 
 	"POST /v1/node/{id}/invoke": "a refusal here is a 403 carrying a DOMAIN body — " +
 		"{\"error\":\"denied\",\"code\":…,\"reason\":…} — that a client switches on, returned both for " +
-		"the pre-flight system.run sanitize and for the node's own denial. A typed op's only refusal is " +
-		"a RETURNED error, which zip renders as its flat {status,code,error}; writing the body from " +
-		"inside the op does not escape it either, because a nil Out is stamped cmp.Or(op.Status, 204) " +
-		"over the 403. Same class as apps/ml's in-band 402 and task #78's multi-status responses. It " +
-		"also reads the caller's X-Device-Id (callerOf), which no In field may carry: a caller that " +
-		"could name its own device could pre-approve its own system.run.",
+		"the pre-flight system.run sanitize and for the node's own denial. The reason that USED to be " +
+		"given (a returned error renders flat and cannot carry members) has expired: HTTPError.Detail " +
+		"carries extension members now. What survives is sharper and was found by measuring the " +
+		"envelope: members are merged FIRST and the problem-details envelope written OVER them, so a " +
+		"domain key named type, title, status, detail or CODE is silently displaced — and this body's " +
+		"discriminator is `code`. A client switching on it would read the envelope's value instead of " +
+		"the domain's. It also reads the caller's X-Device-Id (callerOf), which no In field may carry: " +
+		"a caller that could name its own device could pre-approve its own system.run.",
 
 	"POST /v1/node/peer/invoke": "a replica-to-replica machine hop served by a net/http handler " +
 		"(Registry.PeerHandler, registry.go). Its refusals are text/plain — 503 \"peer forwarding " +
