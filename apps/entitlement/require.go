@@ -131,12 +131,6 @@ func init() {
 	})
 }
 
-// Enforced reports whether the paywall is on, read live from the cockpit switch
-// (store -> PAYWALL_ENFORCED -> false). It is the ONE reader of enforceKey outside
-// this file's own gate: serve.go hands it to routers.Paywall so the middleware and
-// RequireProduct can never disagree about whether enforcement is on.
-func Enforced() bool { return flags.Bool(enforceKey) }
-
 // ── the gate ────────────────────────────────────────────────────────────────────
 
 // RequireProduct is the unified-paywall enforcement middleware a gated route group
