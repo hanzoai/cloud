@@ -428,7 +428,7 @@ func (o ops) browseReadme(ctx context.Context, in *revRef) (*readmeJSON, error) 
 
 // ---- shared read helpers ----
 
-// refsToJSON projects the model's refs onto the wire shape the console expects.
+// refsToJSON projects the model's refs onto the JSON shape the console expects.
 func refsToJSON(refs []Ref) []refJSON {
 	out := make([]refJSON, 0, len(refs))
 	for _, r := range refs {

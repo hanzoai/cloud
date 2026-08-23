@@ -64,7 +64,7 @@ func planeFigures(ctx context.Context, _ *plane.FiguresIn) (*plane.FiguresOut, e
 	return &plane.FiguresOut{Figures: planeFiguresOf(metricsFigures(m))}, nil
 }
 
-// planeFiguresOf carries books' own figures onto the wire shape unchanged. It is
+// planeFiguresOf carries books' own figures onto the plane shape unchanged. It is
 // a projection and never a computation: same labels, same already-formatted
 // values, same period. The two types are separate because the plane package
 // cannot import an app, not because the figures differ.

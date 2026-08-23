@@ -153,14 +153,14 @@ type eventFrame struct {
 }
 
 type resFrame struct {
-	Type    string     `json:"type"`
-	ID      string     `json:"id"`
-	OK      bool       `json:"ok"`
-	Payload any        `json:"payload,omitempty"`
-	Error   *wireError `json:"error,omitempty"`
+	Type    string      `json:"type"`
+	ID      string      `json:"id"`
+	OK      bool        `json:"ok"`
+	Payload any         `json:"payload,omitempty"`
+	Error   *frameError `json:"error,omitempty"`
 }
 
-type wireError struct {
+type frameError struct {
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
 }
@@ -170,7 +170,7 @@ func okRes(id string, payload any) resFrame {
 }
 
 func errRes(id, code, msg string) resFrame {
-	return resFrame{Type: frameRes, ID: id, OK: false, Error: &wireError{Code: code, Message: msg}}
+	return resFrame{Type: frameRes, ID: id, OK: false, Error: &frameError{Code: code, Message: msg}}
 }
 
 // connectParams is the handshake. Fields cloud does not act on (auth, scopes,
@@ -231,7 +231,7 @@ type invokeResultParams struct {
 	OK          bool            `json:"ok"`
 	Payload     json.RawMessage `json:"payload"`
 	PayloadJSON *string         `json:"payloadJSON"`
-	Error       *wireError      `json:"error"`
+	Error       *frameError     `json:"error"`
 }
 
 // result reduces a node's answer to what a caller can use. payloadJSON wins
@@ -443,25 +443,25 @@ func (t *wsTransport) serve(conn *wsx.Conn, org, remoteIP string) {
 // connect validates a handshake and shapes the session it describes. It is
 // pure — no registration, no writes — so serve keeps every side effect, and
 // therefore the teardown invariant, in one place.
-func (t *wsTransport) connect(org, remoteIP, connID string, f reqFrame) (*Session, *wireError) {
+func (t *wsTransport) connect(org, remoteIP, connID string, f reqFrame) (*Session, *frameError) {
 	if f.Method != methodConnect {
-		return nil, &wireError{Code: codeInvalidRequest, Message: "connect required"}
+		return nil, &frameError{Code: codeInvalidRequest, Message: "connect required"}
 	}
 	var p connectParams
 	if err := json.Unmarshal(f.Params, &p); err != nil {
-		return nil, &wireError{Code: codeInvalidRequest, Message: "malformed connect params"}
+		return nil, &frameError{Code: codeInvalidRequest, Message: "malformed connect params"}
 	}
 	if p.MaxProtocol < protocolVersion || p.MinProtocol > protocolVersion {
-		return nil, &wireError{Code: codeInvalidRequest, Message: "protocol mismatch"}
+		return nil, &frameError{Code: codeInvalidRequest, Message: "protocol mismatch"}
 	}
 	// bot treats a roleless connect as an operator. This route serves nodes, so
 	// anything else is a client on the wrong endpoint, not a node to register.
 	if p.Role != "node" {
-		return nil, &wireError{Code: codeInvalidRequest, Message: "this endpoint serves bot nodes"}
+		return nil, &frameError{Code: codeInvalidRequest, Message: "this endpoint serves bot nodes"}
 	}
 	nodeID := p.nodeID()
 	if nodeID == "" {
-		return nil, &wireError{Code: codeInvalidRequest, Message: "connect names no node"}
+		return nil, &frameError{Code: codeInvalidRequest, Message: "connect names no node"}
 	}
 	return &Session{
 		Key:         NodeKey{Org: org, NodeID: nodeID},

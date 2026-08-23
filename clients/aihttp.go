@@ -216,14 +216,14 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 
 	resp, err := a.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model:    model,
-		Messages: wireMessages(req),
+		Messages: openaiMessages(req),
 		// The ceiling the prepaid gate RESERVED. Sending it is what makes the
 		// reservation binding: without it the provider picks its own limit and
 		// can return a completion nobody paid for.
 		MaxTokens: req.MaxTokens,
 		// Absent unless the caller offered tools, so a request that offers none
 		// is the same bytes on the wire it always was.
-		Tools: wireTools(req.Tools),
+		Tools: openaiTools(req.Tools),
 		// WHO this completion is for. `user` is the OpenAI-compatible field for
 		// exactly that, so this invents no vocabulary and the gateway already
 		// parses it. Omitted when there is nobody to name (omitempty), which is
@@ -279,7 +279,7 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 	}, nil
 }
 
-// wireMessages renders a request's conversation for the gateway. A request that
+// openaiMessages renders a request's conversation for the gateway. A request that
 // carries no Messages is the single user turn this client has always sent —
 // identical bytes, so the no-tools path is untouched.
 //
@@ -287,7 +287,7 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 // RoleTool turn with its ToolCallID, because that pair is what the gateway
 // matches a result to its call by; drop either and the model is answered with an
 // orphan.
-func wireMessages(req *types.ChatRequest) []openai.ChatCompletionMessage {
+func openaiMessages(req *types.ChatRequest) []openai.ChatCompletionMessage {
 	if len(req.Messages) == 0 {
 		return []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleUser, Content: req.Prompt}}
 	}
@@ -311,12 +311,12 @@ func wireMessages(req *types.ChatRequest) []openai.ChatCompletionMessage {
 	return out
 }
 
-// wireTools renders the offered tools as OpenAI function definitions. The schema
+// openaiTools renders the offered tools as OpenAI function definitions. The schema
 // crosses as json.RawMessage — the tool plane's own inputSchema, verbatim — so
 // nothing here has an opinion about what a tool's arguments look like. A tool
 // that declares no schema is offered as taking an empty object rather than as
 // taking nothing, which is what a model needs to emit valid arguments for it.
-func wireTools(defs []types.ToolDef) []openai.Tool {
+func openaiTools(defs []types.ToolDef) []openai.Tool {
 	if len(defs) == 0 {
 		return nil // absent field, not an empty array: an empty one is a refusal to use tools
 	}
@@ -416,7 +416,7 @@ func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit fu
 
 	stream, err := a.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
 		Model:    model,
-		Messages: wireMessages(req),
+		Messages: openaiMessages(req),
 		// Same ceiling the gate reserved — streaming must not be a way to buy
 		// more completion than was paid for.
 		MaxTokens: req.MaxTokens,
