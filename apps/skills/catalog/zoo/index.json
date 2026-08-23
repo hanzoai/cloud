@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 670,
+  "skill_count": 671,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Zoo surface..",
@@ -2210,6 +2210,13 @@
       "path": "graph_graph/SKILL.md",
       "service": "graph",
       "sha256": "c21257839288b69c2eddea60ac382139fb4a4bca1d4fab1172ec20d27ad0c35f"
+    },
+    {
+      "description": "Read graph search: Find assertions by their text rather than by an entity key.",
+      "name": "graph_search",
+      "path": "graph_search/SKILL.md",
+      "service": "graph",
+      "sha256": "d5c3c1e0ff47d7ff5b8abd12425692fb6816b42eb88ae2b2f7290fb157a7f3dc"
     },
     {
       "description": "Read graph vocabulary: The relations in use, and the rule that resolves a conflict.",

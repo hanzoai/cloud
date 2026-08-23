@@ -2237,6 +2237,11 @@
    "doc": "What is in force about an entity as of an instant, and what disagreed"
   },
   {
+   "id": "graphSearch",
+   "doc": "Finds assertions by their text where read finds them by their keys.\n\nIt is the READ with one more term, not a second way to leave the store: same\norder, same ceiling, same tenancy, and searching composes with narrowing by\nrelation and by instant because all of them are terms of one filter.\n\nIt resolves nothing. What matches is what was asserted, including claims that\nwere later corrected — which is the honest answer to \"where is this mentioned\"\nand the reason the caller then asks resolve about what it found.",
+   "read": true
+  },
+  {
    "id": "graphVocabulary",
    "doc": "The relations in use, and the rule that resolves a conflict",
    "read": true
