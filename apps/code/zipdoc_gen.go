@@ -74,6 +74,9 @@ func init() {
 		},
 		Example: json.RawMessage(`{"repo":"cloud"}`),
 	})
+	zip.Describe("POST /code/index", zip.Doc{
+		Description: "Reconciles one repo's whole tree, pruning what the push removed.\n\nIT IS THE SAME PIPELINE the POST /v1/code/index handler runs — same per-file\ncaps, same prune semantics — because a second indexing path would drift from\nthe first and index differently depending on who asked.\n\nAn unmounted service answers an EMPTY reconcile rather than an error: this is a\nbackground enrichment reached from a push reactor, and a deployment that hosts\nno code index is not a fault in the push that landed.",
+	})
 	zip.Describe("POST /v1/code/ask", zip.Doc{
 		Description: "Is askGet with the question in the request BODY, for a question too\nlong or too awkward to put in a URL. `query` and `repo` in the body take\nprecedence over `?q=` and `?repo=`; either source works alone.",
 		Fields: map[string]string{
