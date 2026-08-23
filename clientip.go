@@ -15,8 +15,6 @@
 package cloud
 
 import (
-	"net/http"
-
 	"github.com/hanzoai/cloud/clientip"
 	"github.com/zap-proto/zip"
 )
@@ -49,10 +47,3 @@ func ClientCountry(c *zip.Ctx) string { return clientip.ClientCountry(c) }
 
 // TrustedProxy reports whether addr is one of this deployment's own hops.
 func TrustedProxy(addr string) bool { return clientip.TrustedProxy(addr) }
-
-// StampClientIP writes this host's answer onto a request bound for a child process.
-// Register it BEFORE the children are included.
-func StampClientIP(c *zip.Ctx) error { return clientip.StampClientIP(c) }
-
-// ClientIPAcross reads that answer back inside a child.
-func ClientIPAcross(r *http.Request) string { return clientip.ClientIPAcross(r) }
