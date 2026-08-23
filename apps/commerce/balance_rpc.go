@@ -33,31 +33,31 @@ import (
 // CALLER and never from an argument. A caller that could name its own org would
 // be naming another tenant's books, and none of these inputs can express one.
 //
-// The caller states it in one of two shapes, which are vouched for differently,
-// so this asks WHICH SHAPE it is rather than reading one value both arrive in.
+// cloud.Tenant decides it, and it is the fleet's ONE rule for that: a request
+// resolves through the validated principal, a plane call through the caller a
+// door stated in-process. Both fail closed, and neither can be mistaken for the
+// other — which matters here because commerce is reached in both shapes.
 //
-// With a REQUEST, the org arrives as a header, and a header is an assertion only
-// once something stands behind it. account.ReaderOrg is where that rule lives and
-// is the whole of it: a validated principal, or the service token that stands in
-// for one where the caller is another PROCESS and so carries no session. Both are
-// checked against the request, which is what this needs the request for.
+// COMMERCE ADDS EXACTLY ONE ADMISSION, on top rather than instead. Every app is
+// its own PROCESS, so `ai` cannot reach an in-process reader and asks over HTTP
+// bearing COMMERCE_SERVICE_TOKEN and no session. A service has no validated
+// principal to resolve — that is what being a service means here — so the base
+// rule refuses it and account.ReaderOrg is what admits it: the token is checked
+// against the request, and only then is the org it names taken.
 //
-// With NO request there is no header in play at all: the org is what plane.For
-// stamped in-process, downstream of a door that had already validated it. zip
-// reads a stated caller only on a request-free context, so that value cannot be
-// supplied from outside.
+// Composed this way the addition is visible AS an addition. Restating the base
+// rule alongside it would make two tenant decisions in one package, and two
+// copies of one rule is two rules the day they disagree.
 func callerOrg(ctx context.Context, op string) (string, error) {
-	if c, hasRequest := cloud.Request(ctx); hasRequest {
+	if org, ok := cloud.Tenant(ctx); ok {
+		return org, nil
+	}
+	if c, onRequest := cloud.Request(ctx); onRequest {
 		if org, ok := account.ReaderOrg(c); ok {
 			return org, nil
 		}
-		return "", zip.ErrForbidden(op + ": no validated org on the call")
 	}
-	org := cloud.Who(ctx).Org
-	if org == "" {
-		return "", zip.ErrForbidden(op + ": no org on the call")
-	}
-	return org, nil
+	return "", zip.ErrForbidden(op + ": no validated org on the call")
 }
 
 // books is the other rule they share. This process mounts commerce, so the
