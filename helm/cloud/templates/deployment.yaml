@@ -28,7 +28,7 @@ spec:
   {{- $peak := max $replicas $max }}
   {{- $rwo := and .Values.persistence.enabled (has "ReadWriteOnce" .Values.persistence.accessModes) }}
   {{- if and (gt $peak 1) (not $iamShared) }}
-    {{- fail (printf "cloud: %d replicas with embedded IAM on the per-pod store. iam is mounted and hanzo.iamStore is %q, so each replica opens its own %s/iam/iam.db and a user created on one cannot sign in on the next. Set hanzo.iamStore to a shared backend (\"sql\"), or point CLOUD_IAM_ADDR at an instance that runs it, or keep replicaCount (and autoscaling.maxReplicas) at 1." $peak $iamStore .Values.hanzo.dataDir) }}
+    {{- fail (printf "cloud: %d replicas with embedded IAM on the per-pod store. iam is mounted and hanzo.iamStore is %q, so each replica opens its own %s/iam/iam.db and a user created on one cannot sign in on the next. Set hanzo.iamStore to a shared backend (\"sql\"), or keep replicaCount (and autoscaling.maxReplicas) at 1." $peak $iamStore .Values.hanzo.dataDir) }}
   {{- end }}
   {{- if and (gt $peak 1) $rwo }}
     {{- fail (printf "cloud: %d replicas on a ReadWriteOnce volume. A block volume attaches to ONE node, so the second pod never leaves ContainerCreating on Multi-Attach and a rolling update deadlocks against itself. Declare persistence.accessModes as ReadWriteMany on a filesystem that supports it, or set persistence.enabled=false and let the durable plane ship per-org state to object storage, or keep replicaCount (and autoscaling.maxReplicas) at 1." $peak) }}
