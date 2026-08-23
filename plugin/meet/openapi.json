@@ -103,7 +103,7 @@
       "get": {
         "operationId": "meetRecordRead",
         "summary": "What is being recorded in a room, and where the file goes",
-        "description": "Answers what is being recorded in a room, and where the file went.\n\nIt reports the recording that is RUNNING, and once none is, the most recent one\nthe media server still holds — with its final status and its object. That second\ncase is the one that matters for finding a file: the answer to a start is the\nonly other place the location appears, and a client that lost it, or a colleague\nwho was not the one to press record, has nowhere else to look.\n\nIt is behind the same door as starting one: where a recording of a private\nconversation is kept is a fact about that conversation, so it is told to the\npeople the room admits and to nobody else.",
+        "description": "Answers what is being recorded in a room, and where the file went.\n\nIt reports the recording that is RUNNING, and once none is, the most recent one\nthe media server still holds — with its final status and its object. That second\ncase is the one that matters for finding a file: the answer to a start is the\nonly other place the location appears, and a client that lost it, or a colleague\nwho was not the one to press record, has nowhere else to look.\n\nIt is behind the same check as starting one: where a recording of a private\nconversation is kept is a fact about that conversation, so it is told to the\npeople the room admits and to nobody else.",
         "tags": [
           "meet"
         ],
