@@ -281,3 +281,98 @@ func head(s string, n int) string {
 	}
 	return s[:n]
 }
+
+// TestEveryPublishedFieldCanBeSent is the invariant the whole door rests on, and
+// it was asserted only by construction: [GraphQL] and [Fields] read one document
+// at one moment, so a field in the schema is a field in the table.
+//
+// "By construction" is a claim about code that both functions have to keep. They
+// derive their names through the same call today; the day one of them sanitizes
+// differently, the schema advertises a name the dispatch cannot resolve and the
+// caller gets `no field named` for something it read in the schema. That is the
+// exact failure this door was built to end, so it is worth a test rather than a
+// sentence.
+func TestEveryPublishedFieldCanBeSent(t *testing.T) {
+	subsets, err := openapi.Subsets(manifest.Names(), fromTree, manifest.StageOf)
+	if err != nil {
+		t.Fatalf("subsets: %v", err)
+	}
+	composed, err := openapi.Fleet(subsets)
+	if err != nil {
+		t.Fatalf("compose: %v", err)
+	}
+
+	sdl := openapi.GraphQL(composed)
+	table := openapi.Fields(composed)
+	if len(table) == 0 {
+		t.Fatal("the dispatch table is empty")
+	}
+
+	published := map[string]bool{}
+	for _, root := range []string{"type Query {", "type Mutation {"} {
+		for _, line := range strings.Split(section(sdl, root), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			name := line
+			if i := strings.IndexAny(name, "(:"); i >= 0 {
+				name = name[:i]
+			}
+			published[name] = true
+		}
+	}
+	if len(published) == 0 {
+		t.Fatal("the schema published no fields")
+	}
+
+	for name := range published {
+		f, ok := table[name]
+		if !ok {
+			t.Errorf("the schema publishes %q and the dispatch table cannot resolve it", name)
+			continue
+		}
+		if f.App == "" {
+			t.Errorf("%q resolves to no app, so nothing can answer it", name)
+		}
+		if f.Method == "" || f.Path == "" {
+			t.Errorf("%q resolves to %q %q — an address nothing can be sent to", name, f.Method, f.Path)
+		}
+	}
+	for name := range table {
+		if !published[name] {
+			t.Errorf("the dispatch table holds %q and the schema never published it", name)
+		}
+	}
+	t.Logf("%d fields, every one publishable and sendable", len(published))
+}
+
+// TestAPathParameterIsCarriedIntoTheTable pins the split the executor depends on:
+// a parameter in the ADDRESS is not a query parameter, and confusing the two
+// sends {braces} to a child that 404s on them.
+func TestAPathParameterIsCarriedIntoTheTable(t *testing.T) {
+	table := openapi.Fields(doc(nil, map[string]openapi.PathItem{
+		"/v1/thing/{id}": {"get": {
+			OperationID: "thingRead", Tool: true, App: "thing",
+			Parameters: []openapi.Parameter{
+				{Name: "id", In: "path", Required: true, Schema: map[string]any{"type": "string"}},
+				{Name: "limit", In: "query", Schema: map[string]any{"type": "integer"}},
+			},
+			Responses: ok(map[string]any{"type": "object"}),
+		}},
+	}))
+
+	f, ok := table["thingRead"]
+	if !ok {
+		t.Fatal("thingRead is missing from the table")
+	}
+	if len(f.Route) != 1 || f.Route[0] != "id" {
+		t.Errorf("route params = %v, want [id]", f.Route)
+	}
+	if len(f.Query) != 1 || f.Query[0] != "limit" {
+		t.Errorf("query params = %v, want [limit]", f.Query)
+	}
+	if f.Path != "/v1/thing/{id}" {
+		t.Errorf("path = %q; the template must survive, because substituting it is the arguments' job", f.Path)
+	}
+}
