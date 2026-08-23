@@ -38,33 +38,67 @@ var untypedByDesign = map[string]string{}
 // (updateCompany, updateStakeholder, closeRound). None of these eleven needs a
 // capability that does not exist.
 //
-// WHAT EACH ONE NEEDS is the bundle route's own accepted FIELDS, and that is the
-// whole reason they are listed rather than written: the field names live in the
-// captable bundle's source (github.com/hanzoai/captable, goja/src/routes/*), not
-// in this repo. The DDL in schema.go gives column names, which are snake_case
-// and NOT the JSON the routes take, and the openapi.Describe prose beside each
-// registration gives semantics without naming fields.
+// WHAT EACH ONE NEEDS is the bundle route's own accepted FIELDS — and they are
+// READABLE, which is the thing this comment got wrong for as long as it stood.
 //
-// SO DO NOT GUESS THEM. A field name that does not match silently drops its
-// value: goja.Body assembles only the fields declared, the bundle validates what
-// it receives, and a share issuance missing a price or a stakeholder id is
-// accepted as a smaller write rather than refused. Wrong equity data that
-// nothing reports is worse than an untyped route, which is only invisible.
+// It said the names "live in the captable bundle's source … not in this repo" and
+// treated that as the blocker. github.com/hanzoai/captable is a Go module
+// DEPENDENCY: its source sits in the module cache at the version go.mod pins, so
+// `$(go env GOMODCACHE)/github.com/hanzoai/captable@<ver>/goja/src/routes/*.ts` is
+// on disk, offline, at exactly the version this binary talks to. The names were
+// never unknowable. They were unread.
 //
-// Read the bundle's routes, mirror each one's inputs as goja.Scalar fields with
-// prose, and delete the entry. One op per line here is one op per line there.
+// SO STILL DO NOT GUESS THEM — read them. A field name that does not match
+// silently drops its value: goja.Body assembles only the fields declared, the
+// bundle validates what it receives, and a share issuance missing a price or a
+// stakeholder id is accepted as a smaller write rather than refused. Wrong equity
+// data that nothing reports is worse than an untyped route, which is only
+// invisible. Two things found in the first two conversions show the margin is
+// real: `shares.transfer` takes a fourth field, `certificateId`, REQUIRED for a
+// partial transfer — omit it from the Go type and every split answers
+// "certificateId is required" with no way for a caller to supply one — and
+// `rounds.investments.add` answers 201 where the transfer answers 200, because it
+// MINTS a security rather than moving one.
+//
+// THE FIELD LISTS, transcribed from that source, so the next writer starts from
+// data. `req*`/`num`/`oneOf`/`dateString` are required, `opt*` optional:
+//
+//	classes         createShareClass    name, initialSharesAuthorized, boardApprovalDate,
+//	                                    stockholderApprovalDate, votesPerShare, parValue,
+//	                                    pricePerShare, seniority, conversionRights,
+//	                                    convertsToShareClassId?, liquidationPreferenceMultiple
+//	classes/{id}    updateShareClass    the same list — a full REPLACE, not a merge
+//	plans           createEquityPlan    7 fields
+//	shares          addShare            stakeholderId, shareClassId, certificateId, quantity,
+//	                                    status, pricePerShare?, capitalContribution?,
+//	                                    ipContribution?, debtCancelled?, otherContributions?,
+//	                                    cliffYears, vestingYears, companyLegends, issueDate,
+//	                                    rule144Date?, vestingStartDate?, boardApprovalDate
+//	options         addOption           grantId, stakeholderId, equityPlanId, quantity,
+//	                                    exercisePrice, type, status, cliffYears, vestingYears,
+//	                                    issueDate, expirationDate, vestingStartDate,
+//	                                    boardApprovalDate, rule144Date, notes?
+//	safes           createSafe          10 fields
+//	convertibles    createConvertible   11 fields
+//	rounds          createRound         6 fields
+//
+// ONE of the eleven is not merely unwritten and moves to untypedByDesign when
+// someone confirms it: `POST /stakeholders` takes a single object OR an ARRAY
+// (`const list = Array.isArray(raw) ? raw : [raw]`, stakeholders.ts), which is the
+// polymorphic-body class apps/index records for its own document writes.
+//
+// Read the bundle's route, mirror its inputs as goja.Scalar fields with prose, and
+// delete the entry. One op per line here is one op per line there.
 var typingOwed = map[string]string{
-	"POST /v1/captable/stakeholders":            "add a stakeholder",
-	"POST /v1/captable/classes":                 "define a share class",
-	"PATCH /v1/captable/classes/{id}":           "amend a share class (a full REPLACE, not a merge)",
-	"POST /v1/captable/plans":                   "create an equity plan",
-	"POST /v1/captable/shares":                  "issue shares",
-	"POST /v1/captable/shares/transfer":         "transfer shares between stakeholders",
-	"POST /v1/captable/options":                 "grant options from a plan",
-	"POST /v1/captable/safes":                   "record a SAFE",
-	"POST /v1/captable/convertibles":            "record a convertible note",
-	"POST /v1/captable/rounds":                  "open a priced round",
-	"POST /v1/captable/rounds/{id}/investments": "add an investment to an open round",
+	"POST /v1/captable/stakeholders":  "add a stakeholder",
+	"POST /v1/captable/classes":       "define a share class",
+	"PATCH /v1/captable/classes/{id}": "amend a share class (a full REPLACE, not a merge)",
+	"POST /v1/captable/plans":         "create an equity plan",
+	"POST /v1/captable/shares":        "issue shares",
+	"POST /v1/captable/options":       "grant options from a plan",
+	"POST /v1/captable/safes":         "record a SAFE",
+	"POST /v1/captable/convertibles":  "record a convertible note",
+	"POST /v1/captable/rounds":        "open a priced round",
 }
 
 // TestEveryRouteIsTypedOrAccountedFor requires the three ledgers to SUM to the
