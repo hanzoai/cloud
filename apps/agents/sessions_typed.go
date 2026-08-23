@@ -28,11 +28,21 @@ package agents
 // to declare an `error` field and never check it, which is exactly how a key moves
 // unnoticed.
 //
-// THE MERGE ORDER is what to check before copying this: members are copied FIRST
-// and the envelope written over them, so a domain key named type, title, status,
-// detail or code is silently displaced. Here it is `findings`, which collides with
-// none. The money wire's nested {"error":{code,message}} is the counter-example —
-// it cannot ride Detail at all, which is why cloud.Denied keeps its middleware.
+// THE RESERVED SET IS type, title, status, detail AND code — measured, not
+// inherited. Members are copied FIRST and the problem-details envelope written
+// OVER them, so a domain key with one of those five names is silently displaced.
+//
+// `error` is NOT among them, and an earlier version of this comment said it was.
+// The envelope wrote `error` at zip v1.31.x and writes `detail` now, so a body
+// carrying its own nested {"error":{code,message}} — the money wire's — rides
+// Detail intact today; verified by marshalling one. What keeps cloud.Denied on its
+// middleware is therefore NOT expressibility. It is that DenyEnvelope writes that
+// object BARE, with no envelope around it, and Detail would wrap it in one: the
+// nested body survives exactly and gains type/title/status/detail beside it. That
+// is a wire change to the MONEY path and a decision for whoever owns it, not a
+// mechanical conversion.
+//
+// Here the member is `findings`, which collides with none of the five.
 
 import (
 	"context"
