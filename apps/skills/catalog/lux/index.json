@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 669,
+  "skill_count": 670,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
@@ -2882,6 +2882,13 @@
       "path": "meet_health/SKILL.md",
       "service": "meet",
       "sha256": "1401db2ae985873aa95541f19f6cb32d3ae25a56d653bd7fead9835a16f52f01"
+    },
+    {
+      "description": "Read meet record: What is being recorded in a room, and where the file goes.",
+      "name": "meet_record",
+      "path": "meet_record/SKILL.md",
+      "service": "meet",
+      "sha256": "5e4712c1aac948450a7867480b59e56e25ae2958edea4aec92fcf69de616585e"
     },
     {
       "description": "Read meet session: What this caller may open a room in.",

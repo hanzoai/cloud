@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 669,
+  "skill_count": 670,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Zoo surface..",
@@ -2882,6 +2882,13 @@
       "path": "meet_health/SKILL.md",
       "service": "meet",
       "sha256": "fa188e152a4c3d2a530dd55a95255471d6ecefcb5839f31e7f1b3df9802ff14b"
+    },
+    {
+      "description": "Read meet record: What is being recorded in a room, and where the file goes.",
+      "name": "meet_record",
+      "path": "meet_record/SKILL.md",
+      "service": "meet",
+      "sha256": "c4d8c3a15cd5a9d10d5ad8c6676376e41bc5ed0718d82c9c276977c0f14e2358"
     },
     {
       "description": "Read meet session: What this caller may open a room in.",
