@@ -41,7 +41,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	"github.com/hanzoai/commerce/models/organization"
@@ -304,18 +303,22 @@ func (paymentOps) get(ctx context.Context, in *PaymentRef) (*PaymentRecord, erro
 func payingOrg(ctx context.Context, op string) (*organization.Organization, error) {
 	name, ok := principal.OrgFrom(ctx)
 	if !ok {
-		// A trusted service names its tenant instead of carrying a session, and
-		// account.ReaderOrg is where that rule lives — the same one the billing
-		// reads in front of this one resolve by. Without it a typed op is
-		// unreachable from `ai`, which is its own child PROCESS and therefore asks
-		// over HTTP with COMMERCE_SERVICE_TOKEN: the caller the door admitted got
-		// "no validated org on the call" from the op behind it.
-		if c, has := cloud.Request(ctx); has {
-			name, ok = account.ReaderOrg(c)
+		// A PLANE op is reached with a stated caller and NO request behind it —
+		// plane.For sets zip.Caller{Org} and nothing else — so OrgFrom refuses
+		// here by construction: it composes validated-ness AND an org, and there
+		// is no user on this context to be validated.
+		//
+		// callerOrg is the rule the other plane ops in this package already read
+		// by, and it is the one plane.Ask documents: the org rides the CALLER,
+		// forwarded from the gateway's assertion or stated once and explicitly,
+		// never an argument. Nothing is widened by reading it — the org stated
+		// here is the one billing's door already resolved and validated before it
+		// called, so this reads that decision rather than making a second one.
+		orgName, err := callerOrg(ctx, op)
+		if err != nil {
+			return nil, err
 		}
-	}
-	if !ok {
-		return nil, zip.ErrForbidden(op + ": no validated org on the call")
+		name = orgName
 	}
 	// Commerce must be co-resident for its ledger to be writable in-process. A
 	// missing embed is an ERROR, never a silent no-op: money that quietly did not
