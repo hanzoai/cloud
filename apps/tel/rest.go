@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/shorten"
 )
 
 // restCarrier speaks the carrier's HTTP API.
@@ -75,19 +77,12 @@ func (c *restCarrier) do(ctx context.Context, method, path string, body any, out
 	if res.StatusCode >= 300 {
 		// The carrier's own message is carried through, trimmed. A handler that
 		// swallows it leaves "the call failed" as the only thing anyone can act on.
-		return fmt.Errorf("carrier %d: %s", res.StatusCode, strings.TrimSpace(string(raw))[:min(len(strings.TrimSpace(string(raw))), 300)])
+		return fmt.Errorf("carrier %d: %s", res.StatusCode, shorten.To(strings.TrimSpace(string(raw)), 300))
 	}
 	if out == nil || len(raw) == 0 {
 		return nil
 	}
 	return json.Unmarshal(raw, out)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // The carrier answers with its own field names. These envelopes are the ONE place
