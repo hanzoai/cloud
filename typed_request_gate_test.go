@@ -508,18 +508,6 @@ var allowedRequestUses = map[string]string{
 		"per-account routed-usage breakdown, which is scoped to the PERSON. Cache-Control rides the " +
 		"DECLARED contract instead (zip.WithResponseHeader + each Out's ResponseHeaders), so no-store " +
 		"needs no request at all. Both fail closed off the HTTP path: no request, no payer.",
-	"apps/commerce/payments.go": "payingOrg — the tenant a typed money op acts for, and the SECOND " +
-		"half of the admission billing/typed.go makes at the door. principal.OrgFrom answers where a " +
-		"person is asking and refuses where a SERVICE is, because it composes validated-ness AND an " +
-		"org; every app is its own child PROCESS, so ai cannot see an in-process reader hook and asks " +
-		"over HTTP bearing COMMERCE_SERVICE_TOKEN with no session behind it. The request is consulted " +
-		"for exactly what no ctx slot carries: the Authorization bearer, which is the whole point — " +
-		"the token is what makes the caller trusted, and verifying it is not something a tenant string " +
-		"can stand in for. It cannot be an In field for the usual reason: a caller that could name its " +
-		"own tenant would read another's books. ONE fallback, account.ReaderOrg, the same function " +
-		"billing resolves by, so the door and the op behind it cannot answer differently again — they " +
-		"already did, and it read as 401 at the door and 403 one layer down. Fails closed off the HTTP " +
-		"path, where there is no request to read a tenant from and so nobody to admit.",
 	"apps/billing/peer.go": "serviceOrg — the one read on this surface whose caller is a SERVICE " +
 		"rather than a person: the metering edge, presenting a token and the gateway-pinned org with no " +
 		"user behind it, which principal.OrgFrom refuses because it composes validated-ness AND an org. " +
