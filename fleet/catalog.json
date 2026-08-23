@@ -3585,6 +3585,19 @@
    "id": "get_meet_health",
    "doc": "Health reports whether the office can mint join tokens.\n\nIt reports whether this deployment holds the LiveKit key pair it needs:\nready:true with 200 when tokens can be minted, the SAME body with ready:false,\nstatus \"degraded\" and 503 when they cannot — so a probe and a dashboard both\nread the degraded state instead of someone grepping a boot log.\n\nIt takes no credential and is reachable on every public host, so it withholds\nboth the reason and the signing key's name on purpose: ready is the whole\ndashboard fact, and the reason — which names the key file and the Secret — is\nwritten to the boot log where an operator already is.",
    "read": true
+  },
+  {
+   "id": "meetRecordRead",
+   "doc": "Answers what is being recorded in a room, and where the file went.\n\nIt reports the recording that is RUNNING, and once none is, the most recent one\nthe media server still holds — with its final status and its object. That second\ncase is the one that matters for finding a file: the answer to a start is the\nonly other place the location appears, and a client that lost it, or a colleague\nwho was not the one to press record, has nowhere else to look.\n\nIt is behind the same door as starting one: where a recording of a private\nconversation is kept is a fact about that conversation, so it is told to the\npeople the room admits and to nobody else.",
+   "read": true
+  },
+  {
+   "id": "meetRecordStart",
+   "doc": "Begins recording a room, or hands back the recording already running.\n\nA recording is a durable artifact of a conversation, so only someone this room\nwould admit may make one: the caller is authorized by the SAME decision\n/v1/meet/getToken makes about the same room, and refused with the same 401.\n\nA SECOND START RETURNS THE FIRST rather than refusing it. There is at most one\nrecording per room and this operation's job is to establish that there is one —\nwhich is already true when a colleague, or the caller's own double-click,\nstarted it a moment ago. The answer is the same shape either way, naming the\nrecording that is actually running, so a client never has to tell the two cases\napart to find the id.\n\nA deployment with no media server address or no object store answers 503 naming\nwhich, because a recording that silently does not happen is worse than one that\nis refused. The reason reaches only a caller this room already admits."
+  },
+  {
+   "id": "meetRecordStop",
+   "doc": "Ends a room's recording — EVERY one of them.\n\nWhoever the room admits may stop it, including someone who did not start it:\na person being recorded has to be able to end it, and a rule that only the\nstarter may stop would deny exactly that. Stopping is free — a caller made to\npay to stop being recorded would be paying for the wrong thing.\n\n200 MEANS THE ROOM IS NOT BEING RECORDED, and that is why this ends all of them\nrather than the first. \"At most one per room\" is an invariant this surface wants\nand cannot impose: reading the list and starting are two calls, and two replicas\nracing through that window both start. When the list comes back holding two, two\nis the truth — and ending one while answering 200 tells the person withdrawing\nconsent that it stopped while a second worker keeps writing. A stop that cannot\nfinish the job says so instead.\n\nStopping a room that is not being recorded is not an error. The answer names the\nroom with no recording on it, which is the state the caller asked for."
   }
  ],
  "metrics": [],

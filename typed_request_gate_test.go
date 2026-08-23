@@ -270,6 +270,18 @@ var allowedRequestUses = map[string]string{
 		"is ONE file for the whole subsystem on purpose — the resolvers live here so the planes that use them " +
 		"do not each reach for the request. All of them fail closed off the HTTP path: no request, no " +
 		"credential, no identity, and no browser to sign out.",
+	"apps/meet/record.go": "admitted — the recording surface's ONE authorization, and it is the SAME " +
+		"decision POST /v1/meet/getToken makes about the same room (state.admits), asked again rather than " +
+		"re-derived. It needs the REQUEST because that decision selects on principal.Minted — the identity " +
+		"boundary's OWN attestation, parked on the request and absent when no boundary ran. The ctx-side " +
+		"facts a typed op can read (OrgFrom / ValidatedFrom) derive from headers that NOTHING strips in a " +
+		"hand-written plugin main, which is exactly what this app runs and exactly the forgeable signal " +
+		"admits was fixed to stop selecting on; reading the weaker one here would let a client-set header " +
+		"start a recording of a colleague's call. It lifts the ORG off that same attestation too, because " +
+		"the org is the object key's prefix and reading it through a second door is how one tenant's " +
+		"recordings land under another's. Neither may be an In field — a caller that could name its own " +
+		"tenant would write there. ONE function, which all three ops ask; it fails closed off the HTTP " +
+		"path, where there is no attested caller and therefore nobody who is in the room.",
 	"apps/ml/typed.go": "tenantFrom — ml's tenant boundary is a per-org(+project) KUBERNETES NAMESPACE, and " +
 		"deriving it takes two facts principal.OrgFrom does not carry: the org SUB-SCOPE (X-Project-Id, " +
 		"which suffixes the namespace) and platform-admin-ness (X-User-IsAdmin, which buckets an org-less " +
