@@ -14,6 +14,25 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// The two ceilings on one request, and they bound the WORK rather than only the
+// answer.
+//
+// A root field is a HOP: it starts a lazy child if one is not running and holds a
+// connection while that child answers. So the width of a query is fan-out into
+// the fleet, and an unbounded one lets a single caller ask this host to dial every
+// app it composes, several times over, in parallel. Depth costs no hop — nesting
+// only narrows an answer already in hand — but it is still a caller-supplied
+// recursion, and expansion copies what a fragment spreads.
+//
+// Both REFUSE rather than truncate. A door that quietly answered the first
+// sixty-four of a hundred fields would report a complete-looking answer that is
+// missing a third of what was asked, and the caller has no way to tell. Refusing
+// says which ceiling bound and how far over, so the caller can split the request.
+const (
+	rootMax  = 64
+	depthMax = 32
+)
+
 // Graph is the door's dispatch table: the fields this deployment publishes, and
 // the way to reach the app behind each one.
 //
@@ -46,9 +65,14 @@ func (g *Graph) Run(req Request, from *fasthttp.Request) Response {
 		return Response{Errors: []Failure{{Message: err.Error()}}}
 	}
 
-	roots, err := expand(op.sels, frags, map[string]bool{})
+	roots, err := expand(op.sels, frags, map[string]bool{}, 0)
 	if err != nil {
 		return Response{Errors: []Failure{{Message: err.Error()}}}
+	}
+	if len(roots) > rootMax {
+		return Response{Errors: []Failure{{Message: fmt.Sprintf(
+			"%d root fields is %d over the %d a request may ask for; each one is a hop into the fleet",
+			len(roots), len(roots)-rootMax, rootMax)}}}
 	}
 
 	data := make(map[string]any, len(roots))
@@ -99,7 +123,10 @@ func pick(ops []operation, name string) (operation, error) {
 // expand replaces fragment spreads with what they select. The seen set is what
 // stops a fragment that spreads itself — a cycle GraphQL forbids and a parser
 // cannot refuse on its own.
-func expand(sels []selection, frags map[string][]selection, seen map[string]bool) ([]selection, error) {
+func expand(sels []selection, frags map[string][]selection, seen map[string]bool, depth int) ([]selection, error) {
+	if depth > depthMax {
+		return nil, fmt.Errorf("selections nest deeper than %d", depthMax)
+	}
 	var out []selection
 	for _, s := range sels {
 		if s.spread != "" {
@@ -111,7 +138,7 @@ func expand(sels []selection, frags map[string][]selection, seen map[string]bool
 				return nil, fmt.Errorf("no fragment named %q", s.spread)
 			}
 			seen[s.spread] = true
-			inner, err := expand(body, frags, seen)
+			inner, err := expand(body, frags, seen, depth+1)
 			delete(seen, s.spread)
 			if err != nil {
 				return nil, err
@@ -122,7 +149,7 @@ func expand(sels []selection, frags map[string][]selection, seen map[string]bool
 		// An inline fragment contributes its selections here: this door has one
 		// type per field, so there is no condition left to test.
 		if s.name == "..." {
-			inner, err := expand(s.sels, frags, seen)
+			inner, err := expand(s.sels, frags, seen, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -130,7 +157,7 @@ func expand(sels []selection, frags map[string][]selection, seen map[string]bool
 			continue
 		}
 		if len(s.sels) > 0 {
-			inner, err := expand(s.sels, frags, seen)
+			inner, err := expand(s.sels, frags, seen, depth+1)
 			if err != nil {
 				return nil, err
 			}
