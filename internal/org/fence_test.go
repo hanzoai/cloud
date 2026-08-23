@@ -75,7 +75,7 @@ func (s *fakeCondStore) PutIfVersion(_ context.Context, key string, data []byte,
 	return strconv.Itoa(obj.ver), nil
 }
 
-// stubView is a fixed membership view — the seam the fencer's HRW gate runs over.
+// stubView is a fixed membership view — the client the fencer's HRW gate runs over.
 type stubView struct {
 	id  string
 	set []Member

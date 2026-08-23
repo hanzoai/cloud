@@ -49,7 +49,7 @@ import (
 	"time"
 )
 
-// BlobStore is the ONE object-storage seam a bundle uses to persist large binary
+// BlobStore is the ONE object-storage client a bundle uses to persist large binary
 // payloads OUTSIDE its per-tenant SQLite (e.g. sign's PDFs — a 32 MiB base64 blob
 // in a TEXT column would bloat the tenant DB and get copied on every read). The
 // cloud VFS/S3 data plane (deps.VFS) satisfies it, exactly as clients/dataroom
@@ -96,7 +96,7 @@ type BaseConfig struct {
 	// are process-global (set once at NewBase), not per-tenant; the binding stays
 	// domain-free. May be nil. A key MUST NOT collide with __db/__newId/__now/__blob.
 	HostFns map[string]any
-	// Blob is the OPTIONAL object-storage seam (see BlobStore). When set, the binding
+	// Blob is the OPTIONAL object-storage client (see BlobStore). When set, the binding
 	// injects globalThis.__blob = { put(key, b64), get(key) -> b64 } on every
 	// Dispatch, bound to the tenant: keys are prefixed with {Name}/{TenantSegment}
 	// so a bundle can NEVER address another tenant's blob. Payloads cross as base64
@@ -192,7 +192,7 @@ func (h *BaseHost) Dispatch(ctx context.Context, tenant string, req BaseRequest)
 	globals["__db"] = newBridge(ctx, tx)
 	globals["__newId"] = newID
 	globals["__now"] = func() int64 { return time.Now().UnixMilli() }
-	// Tenant-bound object-storage seam (e.g. sign's PDFs). Keys are namespaced to
+	// Tenant-bound object-storage client (e.g. sign's PDFs). Keys are namespaced to
 	// {Name}/{TenantSegment} inside the bridge, so a bundle can only ever reach its
 	// OWN tenant's blobs.
 	if h.blob != nil {

@@ -15,7 +15,7 @@ import (
 // github_import_test.go proves the git object-plane half of the GitHub-App sync:
 // import (fast-forward mirror-in), the inbound fast-forward-ONLY advance, the
 // split-brain guard (a divergence preserves native), loop prevention, and status.
-// It drives the cloud.GitImporter seam directly (githubImporter{}) against a REAL
+// It drives the cloud.GitImporter client directly (githubImporter{}) against a REAL
 // mutable external git source served over smart-HTTP — a stand-in for github.com.
 
 // ghSource is a mutable external git source: a work tree + a served bare repo.

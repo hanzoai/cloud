@@ -24,7 +24,7 @@ import (
 // ai is its own OS process (the pod runs `/cloud` and `/ai` side by side) and the
 // host reaches it over a unix socket. Every earlier test in this family ran both
 // halves in ONE process and passed while production was broken — function, adapter,
-// composition, each one short of the seam that ships. This one puts the socket in.
+// composition, each one short of the client that ships. This one puts the socket in.
 //
 // It is also the observation the diagnosis rested on: the child's RemoteAddr is
 // logged, so the address the handler actually sees is measured rather than deduced.

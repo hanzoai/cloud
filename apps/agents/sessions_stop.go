@@ -103,7 +103,7 @@ func (s *Store) countActiveMatch(ctx context.Context, org string, m SessionMatch
 // never had the session store in it, and every credential revoke answered 200
 // with {"sessionsStopped":0} having torn down nothing, while the sessions kept
 // running under the revoked account. A zero that means "I could not ask" is
-// indistinguishable from "there were none", and this is the seam where that
+// indistinguishable from "there were none", and this is the client where that
 // distinction is the security property. Callers take the plane leg (apps/links).
 func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) {
 	if m.empty() {

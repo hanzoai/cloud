@@ -114,11 +114,11 @@ func TestClaimBothLanesEmpty(t *testing.T) {
 	}
 }
 
-// The render submit seam is the gated worker-mode execute path, not the open /prompt
+// The render submit client is the gated worker-mode execute path, not the open /prompt
 // — the shared contract with the studio's --worker-mode gate.
-func TestWorkerExecuteSeamIsGated(t *testing.T) {
+func TestWorkerExecuteClientIsGated(t *testing.T) {
 	if localWorkerExecute != "http://127.0.0.1:8188/v1/worker/execute" {
-		t.Fatalf("localWorkerExecute = %q, want the gated /v1/worker/execute seam", localWorkerExecute)
+		t.Fatalf("localWorkerExecute = %q, want the gated /v1/worker/execute client", localWorkerExecute)
 	}
 }
 
@@ -159,7 +159,7 @@ func TestReportSampleNeverBlocksLoop(t *testing.T) {
 }
 
 // A node that can't serve renders (preflight failed) claims NOTHING — it must never
-// pull a render job onto a box that will only refuse it on the gated seam (poison
+// pull a render job onto a box that will only refuse it on the gated client (poison
 // loop). It still heartbeats presence; it just stays idle.
 func TestNotStudioReadyClaimsNothing(t *testing.T) {
 	var claims []string
@@ -315,7 +315,7 @@ func TestSharePolicyRejectFallback(t *testing.T) {
 }
 
 // studioCap is advertised ONLY when the node can actually render: a missing worker
-// token is never ready (the gated seam would 403), a studio that does not answer is
+// token is never ready (the gated client would 403), a studio that does not answer is
 // never ready EVEN ON A NODE THAT LAUNCHES ITS OWN, and the block reason is explicit.
 //
 // That middle clause is the regression this pins. Launching a studio was once taken

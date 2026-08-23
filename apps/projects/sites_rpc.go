@@ -22,7 +22,7 @@ import (
 // <slug>.hanzo.app served the console SPA, and the whole cloud API answered on
 // the customer's own hostname. Measured at the pod with the ingress bypassed.
 //
-// This is the same seam FinanceScopeRules already uses and for the same stated
+// This is the same client FinanceScopeRules already uses and for the same stated
 // reason: the READER is a cloud edge middleware and the fact belongs to another
 // app. The store read stays in the one process that owns the store.
 //

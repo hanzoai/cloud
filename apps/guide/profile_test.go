@@ -8,7 +8,7 @@ import (
 )
 
 // TestHTTPProfile: the observe surface is fail-closed without a principal (403), and
-// a fresh org (no seams wired, no warehouse) reports the stable signal vocabulary all
+// a fresh org (no clients wired, no warehouse) reports the stable signal vocabulary all
 // false, a formed stage, and zeroed key metrics — an honest, complete profile.
 func TestHTTPProfile(t *testing.T) {
 	app := newApp(t)
@@ -40,7 +40,7 @@ func TestHTTPProfile(t *testing.T) {
 }
 
 // TestHTTPProfileCrossTenantIsolation is the load-bearing isolation proof the observe
-// layer must satisfy: org A's profile NEVER reflects org B's signals. A fake seam is
+// layer must satisfy: org A's profile NEVER reflects org B's signals. A fake client is
 // true only for org "acme"; every probe records the org it was asked about, cleared
 // per request. We assert (1) acme observes its OWN signals + own numbers and reaches
 // scaling, (2) "other" observes NONE of them and stays formed with zeroed numbers,

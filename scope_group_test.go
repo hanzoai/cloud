@@ -193,7 +193,7 @@ func TestGroupUseOutsideThePrefixesFailsTheMount(t *testing.T) {
 // registration, so a subsystem grouping routes under someone else's tree composes
 // a router the way routers are built, and refusing the bare group would fail that
 // mount. Every app answering under its own name (HIP-0139 §3) is the goal, not
-// something this seam is entitled to enforce — the misfiled ratchet does that, in
+// something this client is entitled to enforce — the misfiled ratchet does that, in
 // one place, against the served document.
 //
 // It is the Use that is the escape, which is exactly why the two tests are

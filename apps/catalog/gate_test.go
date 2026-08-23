@@ -190,7 +190,7 @@ func TestGateReadsWhatAVisitorReads(t *testing.T) {
 	}
 }
 
-// serve swaps the body seam for the duration of one test: a url in the map is
+// serve swaps the body client for the duration of one test: a url in the map is
 // served, anything else fails to load. An empty body is a failed load too, which
 // is how a test says "unreachable".
 func serve(t *testing.T, pages map[string]string) {

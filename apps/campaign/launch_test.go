@@ -15,7 +15,7 @@ func resetChannels() {
 }
 
 // recordingChannel is a fake executor that records what the orchestrator handed
-// it and returns scripted outcomes — the seam the fan-out is tested against,
+// it and returns scripted outcomes — the client the fan-out is tested against,
 // standing in for the real ads/publish/marketing executors.
 type recordingChannel struct {
 	kind       string
@@ -126,7 +126,7 @@ func TestFanOut_NoExecutorUnavailable(t *testing.T) {
 
 // TestFanOut_TenantIsolationOrgPassthrough: the org the orchestrator passes to the
 // executor is EXACTLY the campaign's caller org — never another tenant's. This is
-// the seam that keeps a campaign from resolving another org's connector token.
+// the client that keeps a campaign from resolving another org's connector token.
 func TestFanOut_TenantIsolationOrgPassthrough(t *testing.T) {
 	resetChannels()
 	rc := &recordingChannel{kind: KindPaid, ref: Ref{ExternalID: "ext_1", Status: chanLive}}

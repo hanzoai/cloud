@@ -23,7 +23,7 @@ import (
 	"github.com/hanzoai/vfs/replica"
 )
 
-// liveView is a MUTABLE membership view — the seam a rolling-upgrade change flows
+// liveView is a MUTABLE membership view — the client a rolling-upgrade change flows
 // through. swap() replaces the live set so PendingPromotion re-evaluates HRW against the
 // new pod set, exactly as internal/org.Membership's atomic snapshot does in production.
 type liveView struct {

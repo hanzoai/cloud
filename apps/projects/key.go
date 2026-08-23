@@ -56,7 +56,7 @@ func mintKey() (string, error) {
 }
 
 // keyResolver answers "which project holds this key" for the analytics ingest
-// path, in-process. It is the same seam shape sites.SetResolver uses, for the same
+// path, in-process. It is the same client shape sites.SetResolver uses, for the same
 // reason: the fact lives in this store and the reader is another app.
 type keyResolver struct{ store *Store }
 

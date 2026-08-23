@@ -111,10 +111,10 @@ func SpendGate(commerce CommerceClient) zip.Handler {
 
 // standing IS the ladder above — every step of it — returning "" to admit and
 // otherwise the reason to refuse with. It is split out of SpendGate for one
-// reason: the ladder decides, and SpendGate only renders, and the OP SEAM (Toll)
+// reason: the ladder decides, and SpendGate only renders, and the OP CLIENT (Toll)
 // has to reach the same decision through a channel that cannot write a body. Two
 // copies of a seven-step money ladder is the drift this codebase has paid for
-// three times; there is one, and both seams call it.
+// three times; there is one, and both clients call it.
 //
 // c may be nil — an operation reached from the command line runs with no request
 // behind it at all. That is the unvalidated case, already step 3, so it needs no

@@ -87,7 +87,7 @@ func NewApprovals(ttl time.Duration) *Approvals {
 	return &Approvals{lookup: planeApproval, ttl: ttl, cache: map[string]approvalEntry{}}
 }
 
-// newApprovalsWithLookup is the test seam: a resolver over an injected lookup.
+// newApprovalsWithLookup is the test client: a resolver over an injected lookup.
 func newApprovalsWithLookup(lookup accountLookup, ttl time.Duration) *Approvals {
 	if ttl <= 0 {
 		ttl = 30 * time.Second

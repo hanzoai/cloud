@@ -150,7 +150,7 @@ func nsEnv(key string, def []string) []string {
 
 // meterBiller adapts cloud's ResourceMeter to the Biller interface: Gate is the
 // pre-charge balance authorize, Meter is the debit capture. This is the exact
-// deposit→charge seam every metered subsystem uses.
+// deposit→charge client every metered subsystem uses.
 type meterBiller struct{ rm *cloud.ResourceMeter }
 
 func (m *meterBiller) Authorize(ctx context.Context, org string, cents int64) error {

@@ -338,7 +338,7 @@ func TestTestSendDeliversAndRecords(t *testing.T) {
 	}))
 	defer srv.Close()
 	// The mounted dispatcher's client must trust the test TLS cert (its URL is https, so it
-	// passes the registry's https-only rule — no other seam is touched).
+	// passes the registry's https-only rule — no other client is touched).
 	mounted.disp.http = srv.Client()
 
 	// DISABLED on purpose: testing an endpoint you have paused is the whole point.

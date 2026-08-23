@@ -3,7 +3,7 @@
 Hanzo Engine is the inference runtime product: github.com/hanzoai/engine, the
 Rust LLM engine (`hanzo-engine serve` — the OpenAI- and Anthropic-compatible server,
 quantization, multimodality, the built-in web UI). cloud does not reimplement
-it. This app is the product-repo model with an HTTP seam — apps/flow's
+it. This app is the product-repo model with an HTTP client — apps/flow's
 posture — a typed read lens over the engine deployment's own management
 plane. cloud adds IAM auth and the unified projection (OpenAPI, MCP tool, CLI
 command, SDK method — all from the four typed ops).

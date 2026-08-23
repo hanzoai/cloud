@@ -83,7 +83,7 @@ func RoutedRunWorkflow(ctx workflow.Context, in agents.RoutedRun) (agents.Routed
 
 // routedFinalizeTimeout bounds the cloud-side completion (verify ref + file PR +
 // close session) that runs once the machine reports. Generous for a couple of local
-// reads + writes, but finite so a wedged seam can never hold the activity open.
+// reads + writes, but finite so a wedged client can never hold the activity open.
 const routedFinalizeTimeout = 60 * time.Second
 
 // DeliverRoutedRunActivity offers the run to the live mailbox and blocks until the
@@ -116,13 +116,13 @@ func DeliverRoutedRunActivity(ctx context.Context, in agents.RoutedRun) (agents.
 	return res, nil
 }
 
-// routedFinalizer is the completion seam the delivery activity runs when a routed run
+// routedFinalizer is the completion client the delivery activity runs when a routed run
 // reports terminal: verify the pushed ref, file the PR, and close the session. It is
 // injected once at the composition root (NewDispatcher binds it to THIS dispatcher's
-// git/todo/session seams), so the free-function activity reaches those seams
-// without coding holding global Dispatcher state — the same injected-seam shape
+// git/todo/session clients), so the free-function activity reaches those clients
+// without coding holding global Dispatcher state — the same injected-client shape
 // index_on_push uses. Nil (unwired, e.g. a direct-Dispatcher unit test that fakes the
-// Route seam) simply skips the cloud-side completion.
+// Route client) simply skips the cloud-side completion.
 var routedFinalizer func(ctx context.Context, in agents.RoutedRun, res agents.RoutedResult)
 
 func setRoutedFinalizer(fn func(ctx context.Context, in agents.RoutedRun, res agents.RoutedResult)) {
@@ -130,7 +130,7 @@ func setRoutedFinalizer(fn func(ctx context.Context, in agents.RoutedRun, res ag
 }
 
 // finalizeRoutedDurable adapts the durable agents types to coding's and runs the
-// cloud-side completion. It is what NewDispatcher binds as the routedFinalizer seam.
+// cloud-side completion. It is what NewDispatcher binds as the routedFinalizer client.
 func (d Dispatcher) finalizeRoutedDurable(ctx context.Context, in agents.RoutedRun, res agents.RoutedResult) {
 	d.finalizeRouted(ctx, RoutedRun{
 		Org: in.Org, TargetID: in.TargetID, SessionID: in.SessionID, Repo: in.Repo,
@@ -184,7 +184,7 @@ func routedEngineClient() (tasksclient.Client, error) {
 	return cli, nil
 }
 
-// enqueueRoutedRun is the Route seam's production binding: it starts the durable
+// enqueueRoutedRun is the Route client's production binding: it starts the durable
 // RoutedRunWorkflow keyed by the session id (idempotent) and returns immediately.
 // No local execution, no new queue.
 func enqueueRoutedRun(ctx context.Context, run RoutedRun) error {

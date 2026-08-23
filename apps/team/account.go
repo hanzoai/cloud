@@ -91,11 +91,11 @@ type api struct {
 	trans    *transServer
 	cfg      config
 	log      luxlog.Logger
-	// ident is the identity seam every team surface resolves its caller through:
+	// ident is the identity client every team surface resolves its caller through:
 	// cloud's RS256/JWKS IAM validator (the SAME trust anchor as the identity
 	// boundary), the HS256 secret, and the membership rows. The OAuth callback
 	// derives its tenant from that validator's verdict, never from unverified
-	// claims — one validator, not a second copy beside the seam holding it.
+	// claims — one validator, not a second copy beside the client holding it.
 	ident *identity
 	// commerce answers CheckEntitlement(org, "team") at workspace select — nil
 	// (not co-resident) is an infra absence and never blocks login.
@@ -932,7 +932,7 @@ func (g *api) getSocialIds(c *zip.Ctx) error {
 	}})
 }
 
-// ── the identity seam ─────────────────────────────────────────────────────────
+// ── the identity client ─────────────────────────────────────────────────────────
 
 // identity is what every team surface turns a credential into a caller with, and
 // the ONE place a credential's algorithm is routed on. It composes three answers
@@ -1035,7 +1035,7 @@ type caller struct {
 // header that verifies as IAM is never re-read as HS256.
 func (id *identity) who(c *zip.Ctx) (caller, error) {
 	if id == nil {
-		return caller{}, fmt.Errorf("no identity seam")
+		return caller{}, fmt.Errorf("no identity client")
 	}
 	ctx := c.Context()
 	if raw := bearer(c); raw != "" {
@@ -1227,7 +1227,7 @@ func isAccessToken(t string) bool {
 // come from its SIGNED claims.
 func (id *identity) hs256(raw string) (caller, error) {
 	if id == nil {
-		return caller{}, fmt.Errorf("no identity seam")
+		return caller{}, fmt.Errorf("no identity client")
 	}
 	if raw == "" {
 		return caller{}, fmt.Errorf("no token")

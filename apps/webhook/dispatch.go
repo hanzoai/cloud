@@ -82,7 +82,7 @@ var retryBackoff = []time.Duration{1 * time.Second, 5 * time.Second, 25 * time.S
 // row here, not a rewrite: the org-resolution + match + deliver path is stream-agnostic.
 //
 // orgKey is per-stream because the platform genuinely has two envelope dialects and this
-// is the seam that reads both — commerce says organization_id, the event plane says org.
+// is the client that reads both — commerce says organization_id, the event plane says org.
 // Declaring it here (rather than trying keys until one hits) means a stream whose
 // publisher renames its tenant field goes red at this table instead of silently
 // resolving every event to "" and delivering to nobody.

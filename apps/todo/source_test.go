@@ -636,7 +636,7 @@ func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
 
 // The per-(org, IAM project) SQLite store is no longer behind /v1/todo — the
 // forge is. It still backs the two PLANE doors (upsert_plane.go and the agent-PR
-// seam), so its physical tenant boundary is still load-bearing and still pinned
+// client), so its physical tenant boundary is still load-bearing and still pinned
 // here: two IAM projects under ONE org are two files, and neither can read the
 // other's rows.
 //

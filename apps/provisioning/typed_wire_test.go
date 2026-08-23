@@ -262,7 +262,7 @@ func TestTheCreatesStillDeclareTheirBodies(t *testing.T) {
 		if op == nil {
 			t.Fatalf("POST /v1/provisioning/%s is not in the document at all", kind)
 		}
-		// RequestBody is `any` on the shared Operation — the untyped seam and the
+		// RequestBody is `any` on the shared Operation — the untyped client and the
 		// typed fold build different (JSON-identical) shapes — so read it the way
 		// every consumer does, through the marshalled document.
 		raw, err := json.Marshal(op.RequestBody)
@@ -289,10 +289,10 @@ func TestTheCreatesStillDeclareTheirBodies(t *testing.T) {
 }
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody
+// because the CLIENT they arrived through cannot carry one — not because nobody
 // wrote it.
 //
-// REFLECTION SEAM. The seven creates stay untyped for the wire reason typed.go
+// REFLECTION CLIENT. The seven creates stay untyped for the wire reason typed.go
 // states, and declare their shapes through openapi.Register (provisioning.go's
 // init) instead. Register keeps a reflect.Type (openapi/register.go:150) and
 // builds the schema from it; Go drops comments at compile time, so the only
@@ -308,7 +308,7 @@ func TestTheCreatesStillDeclareTheirBodies(t *testing.T) {
 // would start rendering as zip's flat error body.
 //
 // Exact in BOTH directions: a bare property anywhere else goes red, and an entry
-// here that starts publishing prose goes red too, which is the day the seam
+// here that starts publishing prose goes red too, which is the day the client
 // learns and this ledger must shrink rather than outlive the gap.
 // proseless WAS the cost of openapi.Register: it derives a schema by REFLECTION
 // and Go drops comments, so the twelve properties of provisionRequest and

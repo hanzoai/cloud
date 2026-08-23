@@ -14,7 +14,7 @@ import (
 )
 
 // advance.go moves ONE ref from one git host to another, and refuses to move it
-// any way but forward. It is the whole safety property of this seam.
+// any way but forward. It is the whole safety property of this client.
 //
 // # The invariant, and where it is enforced
 //
@@ -57,7 +57,7 @@ import (
 // Nothing here removes a ref from a REMOTE. A refspec that names a source ref
 // can only create or update, and no path pushes an empty source, so a branch
 // that disappears upstream simply stays on the forge. That is deliberate: this
-// seam is not allowed to take anything away from the canonical store, and the
+// client is not allowed to take anything away from the canonical store, and the
 // way to guarantee that is to have no code path that could.
 //
 // The one delete this file does make is [work.drop], on a scratch ref in the
@@ -118,7 +118,7 @@ func (o outcome) reason() (string, bool) {
 // words in English.
 var nonFFRE = regexp.MustCompile(`(?i)\[rejected\]|non-fast-forward|would clobber existing tag`)
 
-// refRE bounds a ref this seam will write. It is the retired push door's rule:
+// refRE bounds a ref this client will write. It is the retired push door's rule:
 // under refs/heads/ or refs/tags/, no traversal, no escape from the namespace.
 // A source ref that fails it is skipped rather than sanitized — a name we cannot
 // state exactly is a name we do not write.
@@ -133,7 +133,7 @@ var refRE = regexp.MustCompile(`^refs/(heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]{0,
 // mirror made the same exclusion with a negative refspec, for the same reason.
 const agentRefPrefix = "refs/heads/agent/"
 
-// syncable reports whether this seam may carry ref.
+// syncable reports whether this client may carry ref.
 func syncable(ref string) bool {
 	return refRE.MatchString(ref) && !strings.HasPrefix(ref, agentRefPrefix)
 }

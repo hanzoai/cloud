@@ -14,7 +14,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// testGate is the injected decide (the flags engine's WaitlistModeForHost seam):
+// testGate is the injected decide (the flags engine's WaitlistModeForHost client):
 // hanzo.chat is gated, api.hanzo.ai is open, everything else is un-governed. This is
 // exactly what WaitlistModeForHost returns for the equivalent registry, without
 // standing up the native flag engine (cgo) in a middleware unit test.

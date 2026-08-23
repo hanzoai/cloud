@@ -377,7 +377,7 @@ type ops struct{ s *cloud.Service[state] }
 
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	shutdownStores = s.State.stores.CloseAll
-	mountedStores = s.State.stores // the in-process evidence seam (compose.go)
+	mountedStores = s.State.stores // the in-process evidence client (compose.go)
 	// cloud.Bridge is not installed here: the composer owns it — the fused host
 	// installs it once at its root, and the plugin constructor does the same for a
 	// plugin program — and typed ops read the validated org and the project scope

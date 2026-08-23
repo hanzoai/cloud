@@ -12,7 +12,7 @@
 // whose existence, price and activation depend on which org is asking — reached
 // from that same door through the typed POST /v1/tools/call.
 //
-// Decomplected on the Rich Hickey seam: a Source knows how to LIST its tools and
+// Decomplected on the Rich Hickey client: a Source knows how to LIST its tools and
 // DISPATCH one; the registry knows nothing about how any single source works. Each
 // source REGISTERS a Provider into the registry from its own Mount — no source
 // duplicates listing or dispatch logic, and the registry never grows a per-source
@@ -20,7 +20,7 @@
 //
 // Every dispatch flows through ONE per-principal plane: the caller's VALIDATED org
 // (principal.Org) gates the call, the tool must be ACTIVATED for that (org,project)
-// or the call is 403, a priced tool settles through the explicit x402 Charger seam,
+// or the call is 403, a priced tool settles through the explicit x402 Charger client,
 // and the platform meters one unit. One plane, one policy, every source.
 package tools
 
@@ -76,7 +76,7 @@ func rank(s Source) int {
 }
 
 // Price declares what a monetized tool call costs and who is paid. Enforcement is
-// the x402 Charger seam (registry.go) — this is only the DECLARATION a marketplace
+// the x402 Charger client (registry.go) — this is only the DECLARATION a marketplace
 // listing carries. A nil Price means the tool is free (no x402 settlement).
 type Price struct {
 	// Amount is what ONE call costs, EXACTLY: an 18-decimal USD value, so a
@@ -107,7 +107,7 @@ type Tool struct {
 	// Absent for a tool that takes none.
 	Schema json.RawMessage `json:"inputSchema,omitempty"`
 	// Price is what a call costs and who is paid, absent for a free tool.
-	// Enforcement is the x402 settlement seam; this is the declaration.
+	// Enforcement is the x402 settlement client; this is the declaration.
 	Price *Price `json:"price,omitempty"`
 	// Dispatchable is whether the tool can be CALLED. False for a listing-only
 	// entry: a skill is activated and attached to an agent, never called.

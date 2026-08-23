@@ -12,7 +12,7 @@ import (
 
 // TestPostSlackBlocksIncludesBlocks proves the shared exported poster sends the
 // Block Kit `blocks` array (and the text fallback) with the bot bearer, through the
-// ONE chat.postMessage path. This is the seam the git-lifecycle notifier and the
+// ONE chat.postMessage path. This is the client the git-lifecycle notifier and the
 // automations connector both post through.
 func TestPostSlackBlocksIncludesBlocks(t *testing.T) {
 	var gotAuth string

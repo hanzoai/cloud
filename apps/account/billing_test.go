@@ -14,7 +14,7 @@ import (
 //
 // These are FUNCTIONS of a query/body and a subject, tested as such. What APPLIES
 // them to a live request is PinBillingSubject, in front of the co-resident commerce
-// handlers, and billing_coresident_test.go drives that seam end to end — including
+// handlers, and billing_coresident_test.go drives that client end to end — including
 // the three admission cases (validated customer, trusted in-proc S2S, neither).
 
 // TestBillingSubject proves the top-up subject is resolved through the ONE rule

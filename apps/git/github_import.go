@@ -13,7 +13,7 @@ import (
 	"github.com/hanzoai/cloud/internal/mint"
 )
 
-// github_import.go implements the cloud.GitImporter seam (git_import.go in the
+// github_import.go implements the cloud.GitImporter client (git_import.go in the
 // root): the git object-plane half of the GitHub-App bidirectional sync. The
 // integrations plane owns the App (token minting, repo list, webhook signature);
 // this file owns the repo objects — create + mirror-in (import), the fast-forward-

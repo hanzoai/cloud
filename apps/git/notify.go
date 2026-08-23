@@ -19,7 +19,7 @@ import (
 // subscribed to that repo — GitHub-Slack-app parity. It OWNS no Slack custody: the
 // per-org bot token and the chat.postMessage call belong to clients/integrations
 // (the OAuth plane that sealed the token into KMS), reached through the ONE
-// delivery seam below. Token custody, posting, and org-scoping are never
+// delivery client below. Token custody, posting, and org-scoping are never
 // re-implemented here.
 
 // slackNotify is the ONE Slack delivery door — resolves the org's KMS-sealed bot

@@ -10,7 +10,7 @@ import (
 
 // connectorToolProvider registers every connector action into the unified tool
 // plane (clients/tools) as a SourceConnector tool. It reuses the SAME resolution +
-// dispatch the in-process seam uses (resolveTool → lookupAction →
+// dispatch the in-process client uses (resolveTool → lookupAction →
 // Action.Run, RunContext.Token pinned to the caller's validated org), so there is
 // ONE connector-dispatch path — the tool plane composes it, never re-implements it.
 // The plane owns activation, pricing, metering + audit; this provider owns only the

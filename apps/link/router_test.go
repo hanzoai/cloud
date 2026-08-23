@@ -21,9 +21,9 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// ── fakes (the seams the router composes) ─────────────────────────────────────────
+// ── fakes (the clients the router composes) ─────────────────────────────────────────
 
-// fakeLinks is a Links seam returning preset accounts per (org, subject), recording
+// fakeLinks is a Links client returning preset accounts per (org, subject), recording
 // every scope it was asked for so a test can assert the router never queried a
 // foreign scope.
 type fakeLinks struct {

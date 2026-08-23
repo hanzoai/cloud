@@ -45,14 +45,14 @@ func TestClassifyStage(t *testing.T) {
 	}
 }
 
-// TestObserveHonestDegrades: with an all-nil seam and an unavailable funnel, EVERY
+// TestObserveHonestDegrades: with an all-nil client and an unavailable funnel, EVERY
 // growth signal is present=false and every key metric is zero — no spurious true, no
 // panic. The observe layer degrades signal-by-signal.
 func TestObserveHonestDegrades(t *testing.T) {
 	set, m := observe(context.Background(), "acme", Signals{}, Funnel{})
 	for name, present := range set {
 		if present {
-			t.Fatalf("nil seam + empty funnel must yield no present signal; %q was true", name)
+			t.Fatalf("nil client + empty funnel must yield no present signal; %q was true", name)
 		}
 	}
 	// The fixed vocabulary is always reported (stable shape), all false.
@@ -70,9 +70,9 @@ func TestObserveHonestDegrades(t *testing.T) {
 	}
 }
 
-// TestObserveReflectsSeams: a fake seam + an available funnel is reflected verbatim
+// TestObserveReflectsClients: a fake client + an available funnel is reflected verbatim
 // into the SignalSet and the org's OWN key metrics.
-func TestObserveReflectsSeams(t *testing.T) {
+func TestObserveReflectsClients(t *testing.T) {
 	sig := Signals{
 		ModuleInstalled:  func(_ context.Context, _ /*org*/, module string) bool { return module == "cms" },
 		ConnectorPresent: func(_ context.Context, _ /*org*/, provider string) bool { return provider == "stripe" },
@@ -124,13 +124,13 @@ func TestParseThreshold(t *testing.T) {
 
 // TestGrowthSignalsResolveAndDegrade: the growth signals extend the Detector
 // vocabulary. lookupDetector resolves the parameterized families to their kind
-// detector, a nil seam honest-degrades to not-present, and a wired seam drives a
-// curriculum step to auto-done through reconcile — org-scoped, so the seam is only
+// detector, a nil client honest-degrades to not-present, and a wired client drives a
+// curriculum step to auto-done through reconcile — org-scoped, so the client is only
 // ever asked about the caller's own org.
 func TestGrowthSignalsResolveAndDegrade(t *testing.T) {
 	ctx := context.Background()
 
-	// A fake seam that is TRUE only for org "acme" and records the org it is asked
+	// A fake client that is TRUE only for org "acme" and records the org it is asked
 	// about — the org-scoping proof at the detector level.
 	var askedModuleOrg string
 	sig := Signals{
@@ -154,7 +154,7 @@ func TestGrowthSignalsResolveAndDegrade(t *testing.T) {
 		t.Fatal("an unregistered signal kind must not resolve")
 	}
 
-	// A step naming module:cms auto-completes for acme (seam present)…
+	// A step naming module:cms auto-completes for acme (client present)…
 	cur := Curriculum{Steps: []JourneyStep{{ID: "sell", Title: "Sell", Signal: "module:cms"}}}
 	states := map[string]State{}
 	marked := 0
@@ -165,10 +165,10 @@ func TestGrowthSignalsResolveAndDegrade(t *testing.T) {
 		t.Fatalf("module:cms must auto-complete for acme, marked=%d state=%q", marked, states["sell"])
 	}
 	if askedModuleOrg != "acme" {
-		t.Fatalf("the module seam must be asked about the CALLER's org, got %q", askedModuleOrg)
+		t.Fatalf("the module client must be asked about the CALLER's org, got %q", askedModuleOrg)
 	}
 
-	// …and for a DIFFERENT org the same seam reports absent → the step stays open
+	// …and for a DIFFERENT org the same client reports absent → the step stays open
 	// (per-org isolation at the reconcile boundary).
 	states = map[string]State{}
 	marked = 0
@@ -179,10 +179,10 @@ func TestGrowthSignalsResolveAndDegrade(t *testing.T) {
 		t.Fatalf("module:cms must NOT complete for a different org, marked=%d state=%q", marked, states["sell"])
 	}
 	if askedModuleOrg != "other" {
-		t.Fatalf("the seam must be asked about the OTHER org on its own request, got %q", askedModuleOrg)
+		t.Fatalf("the client must be asked about the OTHER org on its own request, got %q", askedModuleOrg)
 	}
 
-	// A nil-seam registry honest-degrades: the same step never marks.
+	// A nil-client registry honest-degrades: the same step never marks.
 	degraded := newDetectors(store, Signals{})
 	states = map[string]State{}
 	marked = 0
@@ -190,6 +190,6 @@ func TestGrowthSignalsResolveAndDegrade(t *testing.T) {
 		t.Fatalf("reconcile degraded: %v", err)
 	}
 	if marked != 0 {
-		t.Fatalf("a nil seam must honest-degrade (no auto-complete), marked=%d", marked)
+		t.Fatalf("a nil client must honest-degrade (no auto-complete), marked=%d", marked)
 	}
 }

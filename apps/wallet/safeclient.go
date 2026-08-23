@@ -3,7 +3,7 @@ package wallet
 // safeclient.go is the thin typed client to the DEPLOYED luxfi/mpc ring's
 // DASHBOARD/product API (github.com/luxfi/mpc pkg/api, served on the node's
 // dashboard port :8081, ClusterIP mpc-api-svc) — specifically its Safe / ERC-4337
-// smart-wallet surface (pkg/api/handlers_smart_wallets.go). It is the custody seam
+// smart-wallet surface (pkg/api/handlers_smart_wallets.go). It is the custody client
 // for KindSafe: cloud composes the ring's Gnosis-Safe-style smart-wallet product
 // WITHOUT importing github.com/luxfi/mpc (same rule as mpcclient.go).
 //

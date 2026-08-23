@@ -238,7 +238,7 @@ func TestBackfillNeverRotatesAServingKey(t *testing.T) {
 	}
 }
 
-// keyResolver must satisfy the seam the ingest door consults.
+// keyResolver must satisfy the client the ingest door consults.
 var _ event.KeyResolver = keyResolver{}
 
 func mustKey(t *testing.T) string {

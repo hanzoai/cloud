@@ -1,6 +1,6 @@
 package trust
 
-// The typed-op seam for /v1/trust.
+// The typed-op client for /v1/trust.
 //
 // A typed op (zip.Get[In, Out]) is ONE registry entry with N projections — the
 // REST route, the OpenAPI operation's schema AND prose, the MCP tool, the CLI

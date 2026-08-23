@@ -10,7 +10,7 @@ import (
 
 // agentToolProvider registers an org's agents into the unified tool plane as
 // SourceAgent tools (name "agent_<name>"), callable with a text input. It reuses
-// the SAME in-process seams other subsystems use — ListForOrg to list, RunOnBehalf
+// the SAME in-process clients other subsystems use — ListForOrg to list, RunOnBehalf
 // to run bound to the caller's org + user (which bills the agent's org and records
 // the run). The plane owns activation, pricing, metering + audit.
 type agentToolProvider struct{}

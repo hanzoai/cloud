@@ -32,7 +32,7 @@ import (
 // repositories served by git-http-backend, and every assertion about a ref is a
 // read of that repository afterwards.
 //
-// The forge stand additionally answers the handful of REST calls this seam makes
+// The forge stand additionally answers the handful of REST calls this client makes
 // (create, read, list, set default branch) on the same origin, because the forge
 // client derives the git address from its own API base — so serving them apart
 // would test an arrangement production does not have.
@@ -232,7 +232,7 @@ func newHost(t *testing.T) *host {
 // really travels by env-injected header and not by luck.
 const forgeToken = "stand-machine-token"
 
-// stand is a git host that ALSO answers the forge REST calls this seam makes, on
+// stand is a git host that ALSO answers the forge REST calls this client makes, on
 // the same origin — create a repository, read one, list them, point HEAD, and
 // state a branch rule.
 type stand struct {
@@ -243,7 +243,7 @@ type stand struct {
 	rules   map[string]map[string]any // repo → the last branch rule asked for
 }
 
-// rule returns the branch-protection rule the seam asked this stand to write on
+// rule returns the branch-protection rule the client asked this stand to write on
 // repo, or nil if it asked for none.
 func (s *stand) rule(repo string) map[string]any {
 	s.rulesMu.Lock()
@@ -273,7 +273,7 @@ func newStand(t *testing.T, owner string) *stand {
 	return s
 }
 
-// rest answers the forge endpoints this seam uses. Every one of them checks the
+// rest answers the forge endpoints this client uses. Every one of them checks the
 // machine credential, so a call that lost it fails here rather than silently
 // succeeding against an open stub.
 func (s *stand) rest(w http.ResponseWriter, r *http.Request) {
@@ -287,7 +287,7 @@ func (s *stand) rest(w http.ResponseWriter, r *http.Request) {
 	//
 	// The rule is REMEMBERED rather than enforced: this stand serves real
 	// git-http-backend, which knows nothing of the forge's pre-receive, so what a
-	// test can prove here is that the seam asked for the right rule. That it is
+	// test can prove here is that the client asked for the right rule. That it is
 	// the rule the forge acts on is the forge's own contract (protect.go).
 	case r.Method == http.MethodPost && len(seg) == 4 && seg[0] == "repos" && seg[3] == "branch_protections":
 		var in map[string]any
@@ -409,7 +409,7 @@ func basic() string {
 
 // forceInto force-pushes a work tree's tip onto ref, bypassing every rule this
 // package follows. It exists to prove that a test's divergence is REAL: the same
-// setup that this seam refuses is one a '+' would have overwritten, so the
+// setup that this client refuses is one a '+' would have overwritten, so the
 // refusal is doing work rather than describing a scenario that could not lose
 // anything anyway.
 func forceInto(t *testing.T, w *tree, url, ref string) {

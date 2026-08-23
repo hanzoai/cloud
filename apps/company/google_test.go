@@ -9,7 +9,7 @@ import (
 )
 
 // TestHTTPGoogleReader drives the production Google reader against mock Drive +
-// Sheets endpoints, with the access token injected through the same seam that
+// Sheets endpoints, with the access token injected through the same client that
 // resolves it from integrations' KMS custody. It proves folder listing, native-doc
 // export, binary download, and sheet-value parsing.
 func TestHTTPGoogleReader(t *testing.T) {

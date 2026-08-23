@@ -36,11 +36,11 @@ package cloud
 // ONE OPERATION, ONE ANSWER. The edge gates stay, because an UNTYPED handler is not
 // an operation: it has no registry entry, so it is invisible to MCP, to the plane
 // and to the CLI, and HTTP is the only way to reach it. Untyped routes are the
-// edge's, typed ops are this seam's, and the only request both can see is a typed op
+// edge's, typed ops are this client's, and the only request both can see is a typed op
 // reached over REST. That one is settled by BillingGate SAYING it took the request
-// (middleware_billing.go's answer/answered) rather than by this seam guessing that
+// (middleware_billing.go's answer/answered) rather than by this client guessing that
 // it must have — a guess reads true and stays true right up until somebody unmounts
-// the edge gate, at which point both seams stand down and nothing charges anything.
+// the edge gate, at which point both clients stand down and nothing charges anything.
 //
 // WHAT IS AVAILABLE ON EVERY PATH, AND WHAT IS NOT. The OPERATION is: zip.Op is
 // the same value four times. The PAYER is not, and pretending otherwise would be
@@ -60,7 +60,7 @@ package cloud
 // WHEN THE DEBIT LANDS. The edge authorizes before the handler and records after
 // it, so it can decline to bill work that failed. That property belongs to a
 // WRAPPER, and op.invoke offers a decision, not a wrapper: there is no post-invoke
-// hook in zip, and inventing a second seam to get one would put the money in two
+// hook in zip, and inventing a second client to get one would put the money in two
 // places again. So on the three paths this gate owns, the charge is levied at
 // ADMISSION — check standing, then debit, then run. The trade is stated rather than
 // discovered: a failed operation is billed here, which is loud, complained about
@@ -176,7 +176,7 @@ func refusal(reason string) error {
 }
 
 // verdict turns a non-allow metering Verdict into the same error the edge renders
-// as a status. It maps to the errors errmap.go already classifies, so the op seam
+// as a status. It maps to the errors errmap.go already classifies, so the op client
 // and the edge answer ONE refusal identically: a per-scope cap is never reshaped
 // into out-of-funds, which would send a caller to top up against a ceiling that
 // will not clear until the period rolls over.

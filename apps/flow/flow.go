@@ -8,7 +8,7 @@
 // FastAPI — the visual builder, the graph engine, the component library). This
 // subsystem does NOT reimplement any of it: every op is a TYPED PASSTHROUGH to
 // the flow service, the same posture apps/iam takes for its Go product — except
-// flow is Python, so the seam is HTTP to the in-cluster service instead of an
+// flow is Python, so the client is HTTP to the in-cluster service instead of an
 // in-process handler. cloud adds exactly three things: IAM auth, the tenant
 // boundary, and the unified surface (OpenAPI/MCP/CLI/SDK projection).
 //

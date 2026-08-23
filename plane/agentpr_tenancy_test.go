@@ -9,7 +9,7 @@ import (
 // The two ops that file work items share ONE socket, and they must not disagree
 // about where tenancy comes from.
 //
-// AgentPRIn used to carry an Org field which plugin/todo/seams.go read off
+// AgentPRIn used to carry an Org field which plugin/todo/clients.go read off
 // the wire and passed straight into the per-tenant store selector
 // (apps/todo/agentpr.go storeFor), so a caller on the plane could file a work
 // item onto ANOTHER tenant's board simply by naming it. Its sibling IssueIn has

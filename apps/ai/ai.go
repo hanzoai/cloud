@@ -144,7 +144,7 @@ func document() (*openapi.Document, error) {
 	return doc, nil
 }
 
-// installWebSearch closes the web-search seam over a meta-search function.
+// installWebSearch closes the web-search client over a meta-search function.
 //
 // It takes the searcher as a PARAMETER rather than calling websearch.Search
 // directly so the adapter — the part with the truncation and the field mapping —
@@ -225,7 +225,7 @@ func debitOverPlane(ctx context.Context, u aiobject.UsageEvent) error {
 // The two halves are independent facts, not two writes of one, so there is no
 // half-applied state anywhere to recover. A count that does not land costs us one free
 // call and leaves the debit exactly as it was; both errors travel back through the one
-// line that already watches this seam.
+// line that already watches this client.
 func record(money aiobject.UsageRecorderFunc) aiobject.UsageRecorderFunc {
 	return func(ctx context.Context, u aiobject.UsageEvent) error {
 		// BOTH HALVES ALWAYS RUN. A count that cannot land must not hold back a debit,
@@ -290,7 +290,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// ai's builtin registry declares web_search / fetch_url / deep_research but holds
 	// no backend for the two this host serves — agent/builtin_tool/web must stay a
 	// leaf package (object imports agent, agent imports the registry), and websearch
-	// lives here in any case. This is where that seam is closed, beside the balance
+	// lives here in any case. This is where that client is closed, beside the balance
 	// and tier readers, for the same reason they are here: this package links both
 	// sides and the host does not.
 	//
@@ -303,7 +303,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//
 	// Research carries an explicit per-answer FEE — 25 cents, apps/answer/mode.go —
 	// charged through Bill.Gate on the request path, where a payer has been
-	// resolved and can be refused. A tool call has no payer. Installing this seam
+	// resolved and can be refused. A tool call has no payer. Installing this client
 	// with a direct call to the engine would therefore be an unbilled 25-cent
 	// operation an agent may invoke in a loop: free inference, arrived at by the
 	// exact route this codebase keeps closing.
@@ -333,7 +333,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// at whatever number was typed. It cannot read models.yaml itself:
 	// hanzoai/ai/controllers imports hanzoai/cloud, so the catalog is a CYCLE from
 	// cloud's root, not merely weight. This package already links both, which is
-	// why the seam is installed here beside the other cross-module hooks.
+	// why the client is installed here beside the other cross-module hooks.
 	//
 	// max_output_tokens is the answer when the catalog declares one; otherwise the
 	// model's context window is still a true architectural bound (prompt +

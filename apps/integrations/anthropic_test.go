@@ -1,7 +1,7 @@
 package integrations
 
 // anthropic_test.go proves anthropic.go's wire protocol against an httptest
-// stand-in for api.anthropic.com (ANTHROPIC_API_BASE seam; zero live network):
+// stand-in for api.anthropic.com (ANTHROPIC_API_BASE client; zero live network):
 // setup-token vs API-key header selection on the live GET /v1/models verify,
 // offline syntactic reject, verify-before-store, static (non-refreshable)
 // custody, and (org,user) isolation.

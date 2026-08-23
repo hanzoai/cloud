@@ -51,9 +51,9 @@ const meteringProvider = "cloud"
 // price must not be nil; pass DefaultPrice.
 //
 // IT COVERS THE ROUTES THAT ARE NOT OPERATIONS, and only those. A typed op is
-// reachable over four transports and this seam sees one of them, so the op seam
+// reachable over four transports and this client sees one of them, so the op client
 // (Toll) owns it; an UNTYPED handler is reachable over HTTP and nowhere else, so
-// this seam owns that. The two sets are disjoint by construction and the split is
+// this client owns that. The two sets are disjoint by construction and the split is
 // not a rule either of them keeps — Toll reads PriceOf on the REQUEST's own path
 // and stands down when it names a declared surface, which is exactly when this
 // gate has already answered.
@@ -83,10 +83,10 @@ func BillingGate(m *metering.Client, price func(method, path string) int64) zip.
 		in.AmountCents = cents
 
 		// From here on this gate OWNS this request's money, so say so before the
-		// chain runs — the op seam runs INSIDE c.Next() and has to know not to
+		// chain runs — the op client runs INSIDE c.Next() and has to know not to
 		// answer a second time. It is written here rather than at the top because
 		// everything above this line is a decision NOT to charge, and a request
-		// this gate waved through is one the op seam must still weigh: over MCP
+		// this gate waved through is one the op client must still weigh: over MCP
 		// and over the plane the path read above is an envelope, not the operation.
 		answer(c)
 
@@ -156,15 +156,15 @@ func BillingGate(m *metering.Client, price func(method, path string) int64) zip.
 type answeredKey struct{}
 
 // answer records that this gate has decided the money question for this request,
-// and answered reports it. They are the seam between the two places money is
+// and answered reports it. They are the client between the two places money is
 // gated — here, over the transport, and at op.invoke (toll.go), over the
 // operation — and they exist so an operation reached over REST is charged ONCE.
 //
 // IT IS A FACT, NOT AN INFERENCE, and that distinction is the whole reason it is
-// written down. The first version of this had the op seam infer it: "if the
+// written down. The first version of this had the op client infer it: "if the
 // request's own path names a declared surface then the edge must have answered".
 // That reads true and is true — right up until somebody unmounts BillingGate, at
-// which point the inference still says yes, the op seam still stands down, and
+// which point the inference still says yes, the op client still stands down, and
 // nothing charges anything. An invariant spread across two lines of a composition
 // root is an invariant nobody is keeping. So the gate that answers says that it
 // answered, and the gate that would answer second reads it. Unmount this one and
@@ -271,7 +271,7 @@ func canonicalService(path string) string {
 // tools/call under no scope at all, and a per-scope spend cap would never bind to
 // it. The MONEY (who pays) comes off the request, because that is where identity
 // is; the SCOPE (what was done) comes off the operation. One builder, so the edge
-// and the op seam can never key two different ledger entries for one call.
+// and the op client can never key two different ledger entries for one call.
 //
 // It agrees with metering.IdentityFromGatewayHeaders because both call the SAME
 // rule (hanzoai/account.Payer), not because two copies are kept in step — so cloud

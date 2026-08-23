@@ -53,7 +53,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Datastore seams. In production these are cloud's one warehouse connection;
+// Datastore clients. In production these are cloud's one warehouse connection;
 // tests substitute fakes to exercise the full read+assemble path (and to assert the
 // exact org-bound SQL the handlers build) without a live warehouse.
 var (

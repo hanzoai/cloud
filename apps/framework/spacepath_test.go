@@ -12,7 +12,7 @@ import (
 // ("Test Space" → "Test%20Space") was handed to the handler RAW and never matched
 // the stored value — GET/PUT/DELETE/submit/cancel by name 404'd for any DocType
 // or document whose name contains a space (which docTypeNameRe explicitly allows,
-// e.g. "Sales Invoice"). pathParam decodes at the ONE seam, so every by-name
+// e.g. "Sales Invoice"). pathParam decodes at the ONE client, so every by-name
 // operation resolves. Create+list were unaffected (no name in the path), so a
 // record could be made yet be unreachable — exactly what this asserts is fixed.
 func TestSpaceNamedDocTypeAndDocumentRoundTrip(t *testing.T) {

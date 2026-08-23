@@ -588,7 +588,7 @@ func TestFold_AGapIsRetried(t *testing.T) {
 // [replayable] applies the window a SECOND time in memory, where the nanosecond
 // still exists, so the re-read row is silently dropped downstream and no
 // behavioural test upstream of it can see the defect. A property that is only
-// visible at one seam is asserted at that seam.
+// visible at one client is asserted at that client.
 //
 // Mutation proof: step [bucketMark] by a nanosecond and this fails.
 func TestFoldMark_SurvivesTheWire(t *testing.T) {

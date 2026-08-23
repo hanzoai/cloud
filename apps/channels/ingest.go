@@ -140,7 +140,7 @@ func pairingText(code string) string {
 // global is per-process: on the emitting side it was nil, and every event
 // returned at the nil check. Nothing logged, because dropping is what a nil
 // consumer is for. The inbox held nothing and the gates below never ran on real
-// traffic for as long as the seam existed.
+// traffic for as long as the client existed.
 func serveIngest() {
 	zip.Post[plane.ChannelsIngestIn, plane.ChannelsIngestOut](cloud.Plane(), "/channels/ingest", planeIngest,
 		zip.WithOperationID(plane.ChannelsIngest),

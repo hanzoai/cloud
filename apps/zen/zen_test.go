@@ -134,7 +134,7 @@ func TestMeterUsageKeepsExactSubCentCharge(t *testing.T) {
 	}
 }
 
-// The unit trap this seam shipped with, pinned so it cannot come back. zen prices
+// The unit trap this client shipped with, pinned so it cannot come back. zen prices
 // an exact 18-dp value but tags it money.USD, whose Currency declares 2 decimals —
 // so Charge.Minor() renders CENTS, while cloudmoney.FromInt reads its argument as
 // 18-dp. Composing them silently divides every debit by 10^16.

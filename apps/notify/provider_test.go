@@ -33,7 +33,7 @@ func init() {
 	})
 }
 
-// ── the seam ─────────────────────────────────────────────────────────────────────
+// ── the client ─────────────────────────────────────────────────────────────────────
 
 // The four shipped providers each declare their channels, their keys and the subset
 // they cannot deliver without — the three facts that used to be three switches.

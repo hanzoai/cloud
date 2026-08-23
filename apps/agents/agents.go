@@ -153,7 +153,7 @@ type state struct {
 	// bus is the in-process fan-out behind the live session/event stream (SSE +
 	// ZAP). Set in Mount; nil-safe (a direct-construct unit test skips fan-out).
 	bus *bus
-	// tasks is the seam to the hanzoai/tasks durable-execution engine that control
+	// tasks is the client to the hanzoai/tasks durable-execution engine that control
 	// commands forward to for task-backed sessions. Defaults to the disabled
 	// controller (record-only) until a live tasks client is wired in Mount.
 	tasks TaskController
@@ -556,7 +556,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// as a tool via RunOnBehalf, activation-gated by the plane.
 	tools.Register(agentToolProvider{})
 
-	// Close the deploy seam clients/projects left open: a site going live becomes
+	// Close the deploy client clients/projects left open: a site going live becomes
 	// the last turn of the session that built it, so the story a visitor reads
 	// ends where the product starts (provenance.go).
 	mountProvenance(s)
@@ -1321,7 +1321,7 @@ func executeRun(ctx context.Context, ai types.AIClient, org, actor string, a Age
 // path, so instructions delivered in it reach nothing — the persona, the tool
 // protocol and the open-web rule would all be silently absent, which compiles,
 // passes every test with a fake client, and produces an assistant with no
-// instructions at all. The seam is worth fixing where it breaks; until it is,
+// instructions at all. The client is worth fixing where it breaks; until it is,
 // this sends the turn the model actually reads.
 //
 // It is a turn of its OWN rather than a prefix on the newest message. Measured

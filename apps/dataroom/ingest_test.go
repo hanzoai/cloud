@@ -9,7 +9,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// TestIngestInProc proves the in-process Ingest seam stores bytes on the VFS and
+// TestIngestInProc proves the in-process Ingest client stores bytes on the VFS and
 // records a retrievable dataroom document, org-scoped — the path Hanzo Company's
 // formation/import flows use.
 func TestIngestInProc(t *testing.T) {

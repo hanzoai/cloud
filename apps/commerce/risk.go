@@ -5,11 +5,11 @@ package commerce
 // risk.go — the credit door is SCREENED, and the scorer that screens it lives in
 // another process.
 //
-// Two halves of one seam, and they belong in one file because neither is
+// Two halves of one client, and they belong in one file because neither is
 // intelligible without the other:
 //
 //	the CLIENT — cloud.SetRiskScorer's first producer. Package cloud has held
-//	the seam and the fail policy since it was written and has never had anyone
+//	the client and the fail policy since it was written and has never had anyone
 //	to ask: the model is in-process mutable state, so exactly one binary may
 //	hold it, and the pod forks one process per app. Every gate in the fleet
 //	therefore read a nil scorer and allowed, unscored. This installs one that
@@ -77,11 +77,11 @@ import (
 	riskpeer "github.com/hanzoai/cloud/plane/risk"
 )
 
-// installRiskScorer publishes the ONE scorer to package cloud's seam. Mount calls
+// installRiskScorer publishes the ONE scorer to package cloud's client. Mount calls
 // it, beside the ledger ops, because both are this process telling the fleet what
 // it can reach through it.
 //
-// It is installed unconditionally: the seam's own fail policy already answers for
+// It is installed unconditionally: the client's own fail policy already answers for
 // a scorer that cannot be reached, and installing conditionally would mean asking
 // at mount time a question whose answer changes every time the risk child starts
 // or stops.
@@ -92,7 +92,7 @@ func installRiskScorer(lg luxlog.Logger) {
 	// THE UNARMED AXIS IS ANNOUNCED, ONCE, AT BOOT. A rule half that cannot fire
 	// because nothing states its axis is indistinguishable from a rule half that
 	// found nothing, and the second reads as a clean bill of health. Said here, where
-	// the seam is published, so it is on the record before any payment needs it —
+	// the client is published, so it is on the record before any payment needs it —
 	// which is the same reason apps/risk announces a jurisdiction listing it cannot
 	// use at mount rather than on the first decision that wanted one.
 	lg.Info("credit door risk axes", "armed", paymentAxes, "unarmed", paymentUnarmed,
@@ -146,8 +146,8 @@ var paymentUnarmed = []string{plane.SignalDevice}
 // correction apps/x402's peerCtx makes, for the same reason: the org that PAYS is
 // not always the org that asked.
 //
-// THE BUDGET IS THE SEAM'S. cloud.Decide answers at RiskBudget whatever this
-// returns, so a hop bounded any longer would only hold one of the seam's 256
+// THE BUDGET IS THE CLIENT'S. cloud.Decide answers at RiskBudget whatever this
+// returns, so a hop bounded any longer would only hold one of the client's 256
 // slots past the point where its answer could still be used.
 func scoreOverPlane(ctx context.Context, lg luxlog.Logger, org string, q cloud.RiskQuery) (cloud.RiskVerdict, error) {
 	// NOT LISTENING IS NOT AN OUTAGE, and telling the two apart is the whole
@@ -179,7 +179,7 @@ func scoreOverPlane(ctx context.Context, lg luxlog.Logger, org string, q cloud.R
 	up, err := scorerUp()
 	if err != nil {
 		// The judge's door is THERE and this process cannot use it. An outage, handed
-		// to the seam as one — [cloud.Decide] renders it RefusalError, and the fail
+		// to the client as one — [cloud.Decide] renders it RefusalError, and the fail
 		// policy denies it because the query is privileged.
 		return cloud.RiskVerdict{}, fmt.Errorf("risk: the scorer's socket is unusable: %w", err)
 	}
@@ -872,7 +872,7 @@ func (s screen) learn(p payment, ref string) {
 	}
 	// The peer call is read HERE, on the request's own goroutine, so the detached
 	// goroutine below holds a VALUE rather than reading a package variable while
-	// something else writes it — a seam read from a goroutine nobody joins is a seam
+	// something else writes it — a client read from a goroutine nobody joins is a client
 	// no test can put back.
 	call := teach
 	// THE VALUE IS BUILT BEFORE THE GOROUTINE and the context is NOT the request's,

@@ -19,7 +19,7 @@ import (
 // really-mounted IAM, not the fake: it mounts the co-resident IAM subsystem the
 // way cloud does at boot, writes users into IAM's own store, and reads them back
 // through iamRoster. Every other test stubs rosterFn, so without this one the
-// cross-repo seam — the whole point of the change — would never actually run.
+// cross-repo client — the whole point of the change — would never actually run.
 //
 // The fail-closed assertion lives HERE, before the mount, rather than in its own
 // test: clients/iam.DB() is a process-global set by Mount with no un-mount, so
@@ -41,11 +41,11 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 	// apps/iam opens the identity store through cek, which encrypts a plaintext one
 	// in place on the way — and that conversion is SQLCipher's sqlcipher_export, a
 	// function only the codec-linked engine has. Without it Mount cannot open a
-	// store, publishes none, and the assertion below reads "the seam is dead" when
+	// store, publishes none, and the assertion below reads "the client is dead" when
 	// what is actually missing is the engine (make test-codec, or the image's
 	// -tags libsqlite3). Skipping says which, the way every other store test here
 	// does.
-	codec.Require(t, "cek cannot convert a plaintext store without sqlcipher_export, so iam publishes none and the roster seam cannot be reached")
+	codec.Require(t, "cek cannot convert a plaintext store without sqlcipher_export, so iam publishes none and the roster client cannot be reached")
 
 	// THE STORE HAS TO EXIST FIRST. The co-resident IAM refuses to CREATE one —
 	// an absent store there is a mounting fault, and minting a fresh empty
@@ -54,7 +54,7 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 	// at the path IAM names.
 	// It also has to be able to SERVE: iam refuses a store carrying no signing
 	// certificate rather than answering an empty keyset, so an empty file is not a
-	// store this seam can publish.
+	// store this client can publish.
 	dir := t.TempDir()
 	seed, err := iamstore.Open("sqlite", iamclient.StorePath(dir))
 	if err != nil {
@@ -80,7 +80,7 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 	}
 	db := iamclient.DB()
 	if db == nil {
-		t.Fatal("iam mounted but published no store — the in-process seam is dead")
+		t.Fatal("iam mounted but published no store — the in-process client is dead")
 	}
 
 	// Write through IAM's own model, the way the migrator does.
@@ -107,7 +107,7 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 		t.Fatalf("want [ada@hanzo.ai] (deleted excluded, acme excluded), got %+v", got)
 	}
 	if got[0].PasswordHash != "" {
-		t.Fatalf("credential material crossed the embed seam: %q", got[0].PasswordHash)
+		t.Fatalf("credential material crossed the embed client: %q", got[0].PasswordHash)
 	}
 
 	// And it resolves as an audience — the real read, end to end.

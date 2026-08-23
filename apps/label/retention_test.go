@@ -41,7 +41,7 @@ func TestAHoldPlacedDuringASweepKeepsTheRecordInBothPlanes(t *testing.T) {
 		swept    []string
 		restored [][]Fact
 	)
-	// The seam: sweep places a litigation hold on everything it was just asked to
+	// The client: sweep places a litigation hold on everything it was just asked to
 	// remove, which is the exact interleaving a concurrent hold op produces.
 	c := columnar{
 		send: func(_ context.Context, _ tenant.Key, f []Fact) error {
@@ -76,7 +76,7 @@ func TestAHoldPlacedDuringASweepKeepsTheRecordInBothPlanes(t *testing.T) {
 	}
 
 	if len(swept) != 2 {
-		t.Fatalf("the sweep named %d records in the derived copy, want 2 — the seam did not fire", len(swept))
+		t.Fatalf("the sweep named %d records in the derived copy, want 2 — the client did not fire", len(swept))
 	}
 
 	// 1. THE RECORD IS KEPT. A hold beats retention, which is the property the

@@ -158,7 +158,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	logger = logger.New("subsystem", "crawl")
 
-	// Bind the corpus to the ONE object seam the binary already has. A deployment
+	// Bind the corpus to the ONE object client the binary already has. A deployment
 	// with no object store keeps crawling and keeps nothing — see Bind.
 	Bind(deps.VFS)
 	// And the meter that pays for a render, bound the same way and for the same

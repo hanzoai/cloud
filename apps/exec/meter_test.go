@@ -33,7 +33,7 @@ func billed(t *testing.T, l *planetest.Ledger) *zip.App {
 	}
 	// Mount binds a meter from deps; replace it with one that has a ledger behind
 	// it. Rebinding rather than passing Metering through Deps keeps this test
-	// pointed at the same seam production uses — the package global every door
+	// pointed at the same client production uses — the package global every door
 	// reads — instead of at a second construction path.
 	bindMeter(cloud.NewResourceMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "exec"))
 	t.Cleanup(func() { bindMeter(nil) })

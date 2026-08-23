@@ -18,7 +18,7 @@
 //
 // STORAGE — sealed secrets persist to PER-ORG SQLite (store.go): each org's
 // secrets live in ITS OWN encrypted file {CLOUD_DATA_DIR}/orgs/{org}/kms.db via
-// the canonical cloud.OrgDB → cek seam, mirroring clients/finance. This REPLACES
+// the canonical cloud.OrgDB → cek client, mirroring clients/finance. This REPLACES
 // the single embedded ZapDB KV, whose exclusive OS lock pinned cloud to
 // replicas=1: a per-org SQLite file has no single-opener lock, so different pods
 // can serve different tenants and cloud scales horizontally (consistent-hash

@@ -79,7 +79,7 @@ func TestPrecedence(t *testing.T) {
 
 // TestActivationGate: a tool that is NOT activated for the scope is refused with
 // ErrNotActivated; activating it for (org,project) lets the SAME call through. This
-// is the "403 on unactivated tools" contract at the registry seam.
+// is the "403 on unactivated tools" contract at the registry client.
 func TestActivationGate(t *testing.T) {
 	r := freshRegistry(t)
 	r.Register(&fakeProvider{src: SourceConnector, tools: []Tool{tool("slack_send", SourceConnector)}})
@@ -126,7 +126,7 @@ func (f *fakeCharger) Charge(_ context.Context, tool string) error {
 
 // TestPricedFailsClosed: a tool that DECLARES a price with no charger wired fails
 // closed (ErrChargerUnset) — a paid tool is never served free. With a charger every
-// dispatch is offered to the seam by name, and a payment failure surfaces as
+// dispatch is offered to the client by name, and a payment failure surfaces as
 // ErrPaymentRequired without dispatching.
 func TestPricedFailsClosed(t *testing.T) {
 	r := freshRegistry(t)
@@ -151,7 +151,7 @@ func TestPricedFailsClosed(t *testing.T) {
 		t.Fatalf("declined payment must be ErrPaymentRequired, got %v", err)
 	}
 
-	// Payment settled → dispatch runs, and the seam was asked about THIS tool.
+	// Payment settled → dispatch runs, and the client was asked about THIS tool.
 	ok := &fakeCharger{}
 	r.SetCharger(ok)
 	if _, err := r.Dispatch(context.Background(), Principal{Org: "acme", Owner: "payer-org"}, "premium_search", nil); err != nil {
@@ -185,6 +185,6 @@ func TestUnpricedToolStillSettles(t *testing.T) {
 		t.Fatalf("unpriced tool must run once settled, got %v", err)
 	}
 	if len(ok.charged) != 1 || ok.charged[0] != "free_search" {
-		t.Fatalf("every dispatch is offered to the seam; got %v", ok.charged)
+		t.Fatalf("every dispatch is offered to the client; got %v", ok.charged)
 	}
 }

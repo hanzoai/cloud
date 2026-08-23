@@ -16,7 +16,7 @@
 // clients/goja host — the SAME RW-Base binding captable (#97) pilots and esign
 // (#100) reuses — which injects __db/__newId/__now and one SQLite file per tenant,
 // one transaction per request. This leaf adds only: the per-tenant Schema, the
-// object-storage seam for document bytes, a bcrypt HostFn for link passwords, and
+// object-storage client for document bytes, a bcrypt HostFn for link passwords, and
 // the public link→org index. Zero domain logic lives in Go.
 //
 //	dataroom bundle (pinned module)  +  per-tenant Schema  +  __bcrypt HostFn
@@ -26,7 +26,7 @@
 //	             /v1/dataroom/* zip routes
 //
 // STORAGE. Document BYTES never touch the bundle or local disk: the leaf stores
-// them through the cloud object-storage seam (deps.VFS — the SeaweedFS/S3 data
+// them through the cloud object-storage client (deps.VFS — the SeaweedFS/S3 data
 // plane) keyed by an org-scoped opaque key (a Go storage host-fn over the s3/storage
 // subsystem), and the bundle persists only that key via __db. View-analytics events
 // (page-by-page tracking) are Base rows in the tenant DB.
@@ -70,7 +70,7 @@ const maxBody = 1 << 20 // 1 MiB
 // maxUpload caps a document upload. Datarooms hold decks/PDFs, not media libraries.
 const maxUpload = 64 << 20 // 64 MiB
 
-// blobStore is the object-storage seam the leaf stores/reads document bytes on.
+// blobStore is the object-storage client the leaf stores/reads document bytes on.
 // deps.VFS (the S3/SeaweedFS data plane) satisfies it — not local FS.
 type blobStore interface {
 	Put(ctx context.Context, key string, payload []byte) error
@@ -272,7 +272,7 @@ func init() {
 	openapi.Describe("/v1/dataroom/health", http.MethodGet,
 		"Liveness of the dataroom subsystem",
 		"Answers {service, status} unconditionally — no principal, no tenant. It is registered "+
-			"BEFORE the bundle, the link index and the object-storage seam are wired, so it keeps "+
+			"BEFORE the bundle, the link index and the object-storage client are wired, so it keeps "+
 			"answering when any of those fail and the subsystem degrades to health-only. That is "+
 			"the point, and the limit: a 200 here says the process is alive, never that a data "+
 			"room can be read or written.")
@@ -281,7 +281,7 @@ func init() {
 	openapi.Describe("/v1/dataroom/documents", http.MethodPost,
 		"Upload a document's bytes and record it",
 		"Takes the file ITSELF as the raw request body — not a JSON envelope, not multipart — "+
-			"stores it on the object-storage seam, and records the metadata row, answering with "+
+			"stores it on the object-storage client, and records the metadata row, answering with "+
 			"the new document. `?name=` names it (default \"document\"), the request's "+
 			"Content-Type becomes the recorded mime type, and `?numPages=` is optional.\n\n"+
 			"Requires a validated principal; 403 without one. An empty body is 400 and anything "+
@@ -394,10 +394,10 @@ func viewer(s *cloud.Service[state], route string, readBody bool) zip.Handler {
 	}
 }
 
-// === object-storage seam (document bytes) ====================================
+// === object-storage client (document bytes) ====================================
 
 // uploadDocument stores the request body (the file bytes) on the object-storage
-// seam, then records the metadata row via the bundle. The file is the raw request
+// client, then records the metadata row via the bundle. The file is the raw request
 // body; ?name= names it, Content-Type carries the mime type, ?numPages= is optional.
 func uploadDocument(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)

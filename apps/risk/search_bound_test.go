@@ -174,13 +174,13 @@ func TestSearch_TheSlotIsPerTenant(t *testing.T) {
 // upper bound instead would close the same hole and price out every small tenant
 // — maxHistory × the whole grid, whatever that organisation's history holds.
 
-// asked is one call the plane made to the money seam.
+// asked is one call the plane made to the money client.
 type asked struct {
 	Kind string
 	N    int
 }
 
-// meterer is a recording money seam: it remembers every gate and every meter, and
+// meterer is a recording money client: it remembers every gate and every meter, and
 // refuses when told to. It is the whole ledger a plane test needs — the real one
 // has its own fixture ([mountBilled]) and its own tests.
 type meterer struct {

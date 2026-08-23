@@ -35,7 +35,7 @@ import (
 // so the projection is reproducible offline and cannot go stale against the pin it
 // was built from.
 //
-// # Same laws as every other seam in this package
+// # Same laws as every other client in this package
 //
 // Register declares BODIES and renders only on a live route. Describe declares
 // PROSE and renders only on a live route. A relay declares the ROUTES BEHIND A

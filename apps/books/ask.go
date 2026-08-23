@@ -7,7 +7,7 @@ package books
 //	question → intent router (deterministic) → the REAL metric(s) from metrics.go
 //	         → figures + a templated answer + sharp followups + the report sources
 //	         → OPTIONAL LLM narration that rephrases the templated answer WITHOUT
-//	           touching a number (the ONE model seam; degrades to the template).
+//	           touching a number (the ONE model client; degrades to the template).
 //
 // THE FIGURES ARE ALWAYS REAL. The intent router maps the question to metric(s) and reads
 // them out of the deterministic engine; the LLM only ever rewrites prose. So whether the AI
@@ -70,7 +70,7 @@ const maxQuestion = 2000
 // MRR?", "how long is my runway?" — with figures taken from their ledger, never a guessed
 // number. A deterministic keyword router picks the intent and reads the real metrics, and
 // those figures, followups and report sources are computed BEFORE any model call and are
-// never altered by one: the optional narration seam only rephrases the sentence, and it
+// never altered by one: the optional narration client only rephrases the sentence, and it
 // degrades silently to the templated answer when no AI plane is wired. It is strictly
 // read-only — it restates the books, it never posts to them.
 //
@@ -100,7 +100,7 @@ func (o booksOps) ask(ctx context.Context, in *AskRequest) (*AskResponse, error)
 
 	resp := buildAnswer(q, m) // deterministic: REAL figures + templated answer
 
-	// LLM narration seam: rephrase the templated answer more naturally, grounded on the
+	// LLM narration client: rephrase the templated answer more naturally, grounded on the
 	// exact figures, WITHOUT changing a number. Degrades silently to the template.
 	if narrated := narrateAsk(ctx, o.s, org, q, resp); narrated != "" {
 		resp.Answer = narrated
@@ -314,7 +314,7 @@ func itoa(n int64) string {
 // never spends another tenant's budget). The prompt hands the model the EXACT figures and
 // forbids changing any number — the model rewrites prose only. Returns "" when no AI plane
 // is wired or the call errors, so the caller keeps the templated (already-correct) answer.
-// The figures are the ledger's; this seam only affects wording.
+// The figures are the ledger's; this client only affects wording.
 //
 // The BILLING ledger is principal.Ledger read off the request, which the typed op reaches
 // through cloud.Request — the org that pays is a header fact, not an input a caller may

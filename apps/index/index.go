@@ -195,7 +195,7 @@ func init() {
 			"later work: the documents are already gone when this answers.")
 
 	// The BODIES the three untyped routes carry, declared through the reflection
-	// seam. Without this each renders as an operationId and a tag and NOTHING else —
+	// client. Without this each renders as an operationId and a tag and NOTHING else —
 	// indistinguishable from a route that takes no input and returns none — so every
 	// SDK generated off the document offered a document upload with nowhere to put
 	// the documents. OneOf is the honest declaration a single Go struct cannot make:

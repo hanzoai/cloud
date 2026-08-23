@@ -6,7 +6,7 @@ import (
 )
 
 // TestConnected_OrgScopedBooleanNeverLeaksToken proves the observe/growth boolean
-// (bound as guide's ConnectorPresent seam) is strictly org-scoped and fail-closed: it
+// (bound as guide's ConnectorPresent client) is strictly org-scoped and fail-closed: it
 // reports a connection ONLY for the org that owns it; a cross-tenant org, an unknown
 // provider, and an invalid org all read false. It returns a boolean by construction —
 // it never touches KMS and never surfaces the token.

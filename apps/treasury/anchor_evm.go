@@ -31,7 +31,7 @@ var anchorSelector = crypto.Keccak256([]byte("anchor(bytes32)"))[:4]
 // "HZTA"+root, so an anchor is identifiable on-chain even without a deployed contract.
 var selfTxMagic = []byte("HZTA")
 
-// txSigner is the anchor's signing seam: it yields the sender address and signs
+// txSigner is the anchor's signing client: it yields the sender address and signs
 // the 32-byte EVM signing hash. Two backends satisfy it — a local, KMS-provisioned
 // key (keySigner, single-sig) and a quorum-gated treasury MPC wallet (mpcSigner,
 // the reserve's 3-of-5, bound via BindAnchorSigner). submit() is agnostic to which
@@ -65,7 +65,7 @@ func (m mpcSigner) signHash(ctx context.Context, hash []byte) ([]byte, error) {
 	return m.sign(ctx, hash)
 }
 
-// boundAnchorSigner, when set by the wallets/finance seam (BindAnchorSigner),
+// boundAnchorSigner, when set by the wallets/finance client (BindAnchorSigner),
 // makes the anchor commit with the reserve's treasury MPC wallet instead of a
 // local key — quorum-gated. nil ⇒ fall back to the KMS-provisioned key.
 var boundAnchorSigner txSigner
@@ -73,7 +73,7 @@ var boundAnchorSigner txSigner
 // BindAnchorSigner binds a quorum-gated treasury signer (the reserve's 3-of-5
 // MPC wallet) as the anchor's signer: addr is the wallet's EVM address, and sign
 // delegates the 32-byte signing hash to the threshold ring. A nil sign unbinds
-// (revert to the local key). This is the finance seam — the treasury reserve
+// (revert to the local key). This is the finance client — the treasury reserve
 // wallet, not a single key, governs on-chain anchors.
 func BindAnchorSigner(addr common.Address, sign func(ctx context.Context, hash []byte) ([]byte, error)) {
 	if sign == nil {
@@ -158,7 +158,7 @@ func (a *anchorer) submit(ctx context.Context, b ledger.Backend) (*anchorRecord,
 		GasPrice: gasPrice,
 		Data:     data,
 	})
-	// Sign through the seam: hash the tx for this chain, delegate the 32-byte
+	// Sign through the client: hash the tx for this chain, delegate the 32-byte
 	// signing hash to the resolved backend (local key OR the reserve's 3-of-5 MPC
 	// wallet), then apply the recoverable signature. Decouples the tx builder from
 	// WHERE the private material lives.

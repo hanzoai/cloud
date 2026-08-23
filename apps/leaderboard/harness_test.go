@@ -47,7 +47,7 @@ func (f *fakeDS) allCalls() []dsCall {
 	return out
 }
 
-// installFakeDS swaps the datastore seams for a fake (enabled, DDL no-op) and
+// installFakeDS swaps the datastore clients for a fake (enabled, DDL no-op) and
 // restores them + resets the rollup latch on cleanup, so each test exercises the
 // full read+assemble path against canned rows without a live warehouse.
 func installFakeDS(t *testing.T, answer func(sql string, args []any) []map[string]any) *fakeDS {

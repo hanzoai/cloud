@@ -18,15 +18,15 @@ import (
 
 // plane_test.go runs a whole coding job through REAL SOCKETS.
 //
-// The seam fakes elsewhere in this package call the Dispatcher's fields
+// The client fakes elsewhere in this package call the Dispatcher's fields
 // directly, which is the right shape for testing the orchestration and the
 // wrong shape for testing this: the bug being fixed here was never in the
-// orchestration. It was that each seam landed on a package global belonging to
+// orchestration. It was that each client landed on a package global belonging to
 // another PROCESS, and no in-process test can fail on that — the calls all
 // resolve, against the nil that ships.
 //
 // So the peers here are actual zip apps on actual unix sockets, serving the
-// actual ops the production plugins serve, and the Dispatcher's seams are the
+// actual ops the production plugins serve, and the Dispatcher's clients are the
 // production plane clients. What is proven is what could not be proven before:
 // every argument ENCODES (a map field would die inside zip.Call, before the
 // socket — see plane_encodable_test.go), every reply decodes, and a run whose
@@ -155,7 +155,7 @@ func servePeers(t *testing.T, p *peers) {
 	zip.Post[plane.AgentPRIn, plane.AgentPROut](todoApp, "/todo/agent-pr",
 		func(ctx context.Context, in *plane.AgentPRIn) (*plane.AgentPROut, error) {
 			// No in.Org: the org is the caller's plane identity, mirroring the real
-			// handler (plugin/todo/seams.go) after the cross-tenant write was closed.
+			// handler (plugin/todo/clients.go) after the cross-tenant write was closed.
 			ref, err := p.todo.Open(ctx, PRInput{
 				Org: zip.CallerOf(ctx).Org, Project: in.Project, Repo: in.Repo, Base: in.Base,
 				Head: in.Head, Title: in.Title, Body: in.Body, Assignee: in.Assignee,
@@ -186,7 +186,7 @@ func waitListening(t *testing.T, app string) {
 	t.Fatalf("peer %s never came up", app)
 }
 
-// planeDispatcher is the production seam set (adapters.go) with only the sandbox
+// planeDispatcher is the production client set (adapters.go) with only the sandbox
 // runner faked — the runner was always an HTTP client and never had a boundary.
 func planeDispatcher(run *fakeRunner) Dispatcher {
 	return Dispatcher{
@@ -195,7 +195,7 @@ func planeDispatcher(run *fakeRunner) Dispatcher {
 	}
 }
 
-// A changed run completes with every seam on the far side of a socket.
+// A changed run completes with every client on the far side of a socket.
 func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 	p := &peers{
 		sessions: &fakeSessions{id: "sess_abc123def456"},
@@ -221,7 +221,7 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 	if res.PR.Identifier != "API-7" {
 		t.Fatalf("the PR must be filed through todo's door, got %q", res.PR.Identifier)
 	}
-	// ONE seam, both backends: the row landed on the board AND git answered where
+	// ONE client, both backends: the row landed on the board AND git answered where
 	// the proposal is read. A run whose result carries no address gives a person
 	// in a thread nothing to click.
 	if p.proposed != "agent/abc123def456" {

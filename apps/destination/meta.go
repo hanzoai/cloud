@@ -14,7 +14,7 @@ import (
 // config: pixelId (the dataset/pixel id) and an optional testEventCode (Events
 // Manager "Test Events"). Secret: access_token — a CAPI token from Events Manager,
 // OR, when none is sealed locally, the org's existing meta_ads OAuth token, reused
-// through the integrations custody seam (Spec.Fallback = "meta_ads").
+// through the integrations custody client (Spec.Fallback = "meta_ads").
 //
 // The access_token rides the JSON body (never the URL). PII match keys (email, phone,
 // external id) are SHA-256 hashed before send per Meta's advanced-matching contract;

@@ -3,7 +3,7 @@ package agents
 import "context"
 
 // ListForOrg returns the org's agents from the in-process store — the ONE
-// exported seam other in-process subsystems use to read the canonical agent
+// exported client other in-process subsystems use to read the canonical agent
 // registry WITHOUT an HTTP hop back through the gateway.
 //
 // It is the decompleced replacement for the old bots-as-members path, which

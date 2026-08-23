@@ -30,7 +30,7 @@ import (
 )
 
 // proseless is the CLOSED list of published properties carrying NO description
-// because the SEAM they arrive through cannot carry one — not because nobody wrote
+// because the CLIENT they arrive through cannot carry one — not because nobody wrote
 // it. Every field named here HAS its doc comment in the source; the generator cannot
 // reach it from where the schema is built.
 //

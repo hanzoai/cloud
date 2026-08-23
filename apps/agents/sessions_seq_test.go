@@ -9,7 +9,7 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-// sessions_seq_test.go pins the event log's ordering guarantee at the seam it
+// sessions_seq_test.go pins the event log's ordering guarantee at the client it
 // now depends on.
 //
 // AppendEvent allocates a session's next Seq by reading MAX(seq)+1 and then
@@ -90,7 +90,7 @@ func TestAppendEventSequenceIsDenseAndUniqueUnderConcurrency(t *testing.T) {
 }
 
 // TestOrgFilesAreSingleWriter asserts the property the sequence rests on,
-// directly and at the seam that now owns it: a per-org file cloud.OrgDB opened
+// directly and at the client that now owns it: a per-org file cloud.OrgDB opened
 // serves on exactly one connection. If this ever changes, the test above starts
 // failing intermittently and this one says why in a single line.
 func TestOrgFilesAreSingleWriter(t *testing.T) {

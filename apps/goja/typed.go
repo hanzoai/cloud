@@ -26,7 +26,7 @@ package goja
 // UnmarshalJSON — and read back after the tenant is resolved, which keeps a 403
 // ahead of a 413 for the caller that has both problems.
 //
-// It lives in apps/goja because that is where the bundle seam already lives
+// It lives in apps/goja because that is where the bundle client already lives
 // (BaseHost, BaseRequest, Dispatch): these are the types an app needs to speak to
 // a bundle in the typed plane, next to the ones it needs in the untyped one.
 // Each app still owns its own dispatch tail — the service, the logger and the

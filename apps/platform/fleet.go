@@ -265,7 +265,7 @@ func fleetRoutes(app *zip.App, s *cloud.Service[fleetState]) {
 	// (observe, audit-logged); gating a restart wider is a live DoS lever (RED H1).
 	zip.Post(app, "/v1/platform/fleet/:app/deploy", b.deployFleet, zip.WithStatus(http.StatusAccepted))
 
-	// Native release seam: install the first-party CR-rollout hook (build.go's
+	// Native release client: install the first-party CR-rollout hook (build.go's
 	// RegisterServiceReleaser inversion) so a proven, clean-semver image rolls onto
 	// its Service CR here — the direct-CR replacement for the image-update.yml
 	// GitOps hop (rollout.go).
@@ -281,7 +281,7 @@ func fleetRoutes(app *zip.App, s *cloud.Service[fleetState]) {
 	// gets the same scan and the same tenant confinement listFleet applies (rpc.go).
 	// Registering here rather than in Mount is what lets the method hold s: an
 	// exposure with no service has only the package global to read, and that global
-	// is the in-process seam this whole move exists to delete.
+	// is the in-process client this whole move exists to delete.
 	exposeFleet(s)
 }
 

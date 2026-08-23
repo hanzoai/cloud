@@ -33,7 +33,7 @@ func init() {
 		Authorize:    slackAuthorize,
 		Exchange:     slackExchange,
 		Revoke:       slackRevoke,
-		// Sync / Writeback: nil — Slack has no #51 sync seam today.
+		// Sync / Writeback: nil — Slack has no #51 sync client today.
 	})
 }
 

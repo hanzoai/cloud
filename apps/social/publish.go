@@ -12,7 +12,7 @@ import (
 )
 
 // publish.go is the distribution edge of the social fold: the ONE path that pushes a
-// post OUT to its channel's connected accounts, plus the provider seam that push runs
+// post OUT to its channel's connected accounts, plus the provider client that push runs
 // through. It mirrors clients/content's publish/Distributor split — the machine here is
 // stable; the provider integration is a swappable edge selected once at Mount.
 //

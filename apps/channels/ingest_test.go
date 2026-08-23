@@ -20,7 +20,7 @@ import (
 )
 
 // ingest_test.go owns the shared package harness (mounted app, identity
-// requests, door spies, seam fixtures) plus the ingress-gate behavior tests.
+// requests, door spies, client fixtures) plus the ingress-gate behavior tests.
 // ingest is driven DIRECTLY: the goroutine hop lives in
 // integrations.emitIngress and is proven in clients/integrations/
 // ingress_test.go, so every test here is deterministic.
@@ -281,7 +281,7 @@ func spyDiscord(t *testing.T) *doorRec {
 	return rec
 }
 
-// ingressEv builds one seam event; realistic per-transport values live at the
+// ingressEv builds one client event; realistic per-transport values live at the
 // call sites.
 func ingressEv(org, provider, externalID, user, channel, thread, text, key, replyRoot string) plane.ChannelsIngestIn {
 	return plane.ChannelsIngestIn{

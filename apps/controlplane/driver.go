@@ -280,7 +280,7 @@ func (v *Voter) collectRound2() {
 	v.pending = keep
 }
 
-// selfComposedCert is the typed seam between CertComposer.Compose (the ONLY
+// selfComposedCert is the typed client between CertComposer.Compose (the ONLY
 // producer in this package) and verifyOwnCertStructure (its ONLY consumer).
 // The wrapped field is unexported and there is no exported constructor other
 // than newSelfComposedCert, called only from a CertComposer.Compose
@@ -318,7 +318,7 @@ func verifyOwnCertStructure(sc selfComposedCert, voters []string) bool {
 	return sc.cert != nil && sc.cert.Verify(voters)
 }
 
-// VerifyExternalCert is the ONLY seam a future external-cert path (recovery,
+// VerifyExternalCert is the ONLY client a future external-cert path (recovery,
 // light-client, gossip — none exist yet in this package, see doc.go
 // increment-2) may call to admit a cert this process did not compose itself.
 // It is intentionally UNIMPLEMENTED today rather than silently falling back to

@@ -15,7 +15,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// ingress.go is the chat-ingress seam between the platform adapters and the
+// ingress.go is the chat-ingress client between the platform adapters and the
 // channels inbox, plus the transport send doors. Token custody never leaves this
 // package; the event crosses on the PLANE.
 //
@@ -24,8 +24,8 @@ import (
 // integrations, channels and agents run as three separate processes, so that
 // pointer was nil on this side and every event was dropped where a nil check
 // returns. The inbox took nothing and the pairing and allowlist gates never saw
-// real traffic, silently, for as long as the seam existed. This is the same
-// mistake plane.AgentsRunOnBehalf was written to undo, one seam over.
+// real traffic, silently, for as long as the client existed. This is the same
+// mistake plane.AgentsRunOnBehalf was written to undo, one client over.
 
 // emitIngress hands one event to the channels inbox over the plane, on a
 // detached goroutine with its own bounded context, so the billed webhook path is

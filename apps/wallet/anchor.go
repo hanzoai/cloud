@@ -1,6 +1,6 @@
 package wallet
 
-// anchor.go is the finance/treasury seam (HIP-0106): it turns the reserve's
+// anchor.go is the finance/treasury client (HIP-0106): it turns the reserve's
 // treasury MPC wallet into the on-chain anchor signer. The treasury subsystem
 // binds this (treasury.BindAnchorSigner) so the Hanzo-L1 ledger-root anchor is
 // committed by the reserve's quorum wallet, not a lone KMS key.

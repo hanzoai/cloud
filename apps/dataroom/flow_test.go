@@ -20,7 +20,7 @@ import (
 )
 
 // memVFS is an in-memory types.VFSClient standing in for the S3/SeaweedFS data
-// plane. The leaf reaches storage ONLY through the deps.VFS seam, so this drives
+// plane. The leaf reaches storage ONLY through the deps.VFS client, so this drives
 // the exact production path (Put on upload, Get on download) without a live S3.
 type memVFS struct {
 	mu sync.Mutex
@@ -119,7 +119,7 @@ func str(m map[string]any, keys ...string) string {
 
 // TestDataroomFullFlow proves the COMPLETE create-dataroom → upload-document →
 // share-link → view-with-analytics flow, all Base-backed (per-tenant SQLite) with
-// document bytes on the object-storage seam. The final assertion is the task's
+// document bytes on the object-storage client. The final assertion is the task's
 // gate: a per-page view is recorded and surfaces in analytics.
 func TestDataroomFullFlow(t *testing.T) {
 	app, vfs := mountFlowApp(t)
@@ -145,7 +145,7 @@ func TestDataroomFullFlow(t *testing.T) {
 		t.Fatalf("no dataroom id: %v", m)
 	}
 
-	// 2) upload a document — raw bytes go through the object-storage seam.
+	// 2) upload a document — raw bytes go through the object-storage client.
 	pdf := []byte("%PDF-1.7\nHANZO DATAROOM TEST DOCUMENT\n%%EOF")
 	code, b := req(t, app, http.MethodPost, "/v1/dataroom/documents?name=deck.pdf&numPages=3", org, "application/pdf", pdf)
 	if code != 200 {
@@ -159,7 +159,7 @@ func TestDataroomFullFlow(t *testing.T) {
 		t.Fatalf("no document id/fileKey: %s", b)
 	}
 	if _, ok := vfs.m[fileKey]; !ok {
-		t.Fatalf("document bytes not stored on VFS seam under %q", fileKey)
+		t.Fatalf("document bytes not stored on VFS client under %q", fileKey)
 	}
 
 	// 3) attach the document to the data room.

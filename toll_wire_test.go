@@ -16,7 +16,7 @@ import (
 //	Toll charges once on every door        toll_test.go       proven
 //	the server actually mounts Toll        nothing            <- this file
 //
-// That gap is the shape of the failure this whole seam exists to stop. Money was
+// That gap is the shape of the failure this whole client exists to stop. Money was
 // gated by HTTP middleware and tested green for as long as the tests only spoke
 // HTTP; the gate was real, the coverage was real, and the hole was real, all at
 // once. A gate nothing mounts is worth exactly as much as no gate, and it is worse

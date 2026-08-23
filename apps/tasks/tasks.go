@@ -76,7 +76,7 @@ const engine = "\n\nThis single address fronts the whole durable-workflow engine
 // The prose for the twenty operations these four mounts publish. Not one of them
 // is a typed op, and each is refused for a fact typed_wire_test.go MEASURES
 // rather than for want of an edit — see Mount's note. That leaves openapi.Describe
-// as the seam: it declares the prose beside the wire fact, keyed on (method,
+// as the client: it declares the prose beside the wire fact, keyed on (method,
 // path), rendering only while the router serves the route. It does not make these
 // typed, and the place they become typed is still hanzoai/tasks; it does mean the
 // document, the generated SDKs and the spec-derived CLI stop offering twenty calls
@@ -169,7 +169,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// route here to type; their inputs are anonymous structs local to that
 	// module's handlers, so there is no named type to type it with; and the engine
 	// hands cloud its surface only as http.Handler (HTTPHandler / ClusterHandler /
-	// MCPHandler / EventsHandler), its programmatic seam — View plus the three
+	// MCPHandler / EventsHandler), its programmatic client — View plus the three
 	// *ForOrg helpers — reaching 13 of the 64, so there is no value to answer
 	// with either. The one route also carries four content types at once (the JSON
 	// API, two text/plain refusals, an event STREAM), 12 of its verbs run on a

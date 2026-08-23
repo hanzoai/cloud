@@ -47,7 +47,7 @@ type state struct {
 	sandbox *cloud.OrgStore[*store]
 	source  txnSource
 	cost    costSource
-	// ai + model are the NARRATION-ONLY seam for the AI Ask brain (ask.go): a chat client
+	// ai + model are the NARRATION-ONLY client for the AI Ask brain (ask.go): a chat client
 	// that rephrases a deterministic, already-computed answer more naturally. It NEVER
 	// writes to the books and never sources a figure — the numbers come from metrics.go.
 	// nil ai ⇒ the Ask brain returns its templated (already-correct) answer.
@@ -60,7 +60,7 @@ type state struct {
 	log luxlog.Logger
 }
 
-// mounted is the process-wide handle the in-process ingestion seam reaches the stores
+// mounted is the process-wide handle the in-process ingestion client reaches the stores
 // through — the same pattern experiments/flags expose.
 var mounted *state
 

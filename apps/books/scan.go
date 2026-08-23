@@ -90,7 +90,7 @@ func scannerRoutes(app cloud.Router, s *cloud.Service[*state]) {
 // "Cannot be a typed op" is not "must be undocumented". Both routes above published
 // nothing at all — no request, no response — which a consumer of the document cannot
 // distinguish from a route that takes no body and returns none. openapi.Register is
-// the seam for exactly that: the request is [openapi.Binary] (a receipt, byte for
+// the client for exactly that: the request is [openapi.Binary] (a receipt, byte for
 // byte, under the caller's own content type — see scanText, which accepts a PDF or
 // plain UTF-8), and the response is the very value each handler marshals on success:
 // ScanDraft for the scan, InboxItem for the upload. Pure DESCRIPTION — no route,

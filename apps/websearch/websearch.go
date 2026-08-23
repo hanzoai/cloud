@@ -87,7 +87,7 @@
 // served the fleet's only path to the live internet while projecting no tool at
 // all. An adapter's frozen contract binds the adapter. Their PROSE is declared
 // through openapi.Describe beside the route table (Mount, below), which is the
-// seam for exactly the operations the wire refuses to type.
+// client for exactly the operations the wire refuses to type.
 package websearch
 
 import (

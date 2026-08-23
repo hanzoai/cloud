@@ -45,7 +45,7 @@ func TestChromeListedOnIntegrations(t *testing.T) {
 
 // TestChromeConnectSealsAndIsolates: a well-formed pairing token verifies, seals to
 // the org's KMS namespace, and never leaks into the response; another org has
-// nothing and the token seam refuses it.
+// nothing and the token client refuses it.
 func TestChromeConnectSealsAndIsolates(t *testing.T) {
 	kc := newKMS(t)
 	app := newApp(t, kc)

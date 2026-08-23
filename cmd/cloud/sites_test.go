@@ -127,7 +127,7 @@ func TestSitesConfigIsNotResolvedHere(t *testing.T) {
 // The front door serves the API even when it cannot read the console.
 //
 // Pinned in run()'s source for the reason the tests above are: this is a fact
-// about the ENTRYPOINT's control flow, and there is no seam that returns it.
+// about the ENTRYPOINT's control flow, and there is no client that returns it.
 //
 // It is matched on the mount call rather than on the absence of a `return`,
 // because "no return of consoleErr" is a claim about every line and would pass

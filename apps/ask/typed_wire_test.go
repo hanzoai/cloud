@@ -122,7 +122,7 @@ func keysOfBody(t *testing.T, resp *http.Response) []string {
 }
 
 // proseless is the CLOSED list of published properties carrying NO description
-// because the SEAM they arrive through cannot carry one — not because nobody wrote
+// because the CLIENT they arrive through cannot carry one — not because nobody wrote
 // it. Every field named here HAS its doc comment in the source; the generator
 // cannot reach it from where the schema is built.
 //
@@ -130,15 +130,15 @@ func keysOfBody(t *testing.T, resp *http.Response) []string {
 // entry here that starts publishing prose goes red too — that is the day the
 // generator learns, and the ledger must shrink then rather than outlive the gap.
 var proseless = map[string]bool{
-	// REFLECTION SEAM. POST /v1/ask cannot be a typed op — TestAskRefusalIsTheWire
+	// REFLECTION CLIENT. POST /v1/ask cannot be a typed op — TestAskRefusalIsTheWire
 	// measures the three wire facts that keep it untyped — so its body reaches the
 	// document through openapi.Register (ask.go's init) instead. Register derives a
 	// schema by REFLECTION, and Go drops comments at compile time, so zipdoc, which
 	// walks zip's TYPED registrations, can never reach a type that arrives this way.
 	// These eleven carry their doc comments on askRequest; reflection cannot see one.
 	// The op's own prose is declared beside the wire fact (openapi.Describe), which
-	// is the seam for exactly the operations the wire refuses to type; there is no
-	// matching seam for a field.
+	// is the client for exactly the operations the wire refuses to type; there is no
+	// matching client for a field.
 	"askRequest.question":   true,
 	"askRequest.q":          true,
 	"askRequest.mode":       true,

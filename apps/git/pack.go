@@ -7,7 +7,7 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-// pack.go is the SSH half of the ONE git pack seam (gitexec.go). SSH drives the
+// pack.go is the SSH half of the ONE git pack client (gitexec.go). SSH drives the
 // SAME streaming git CLI the smart-HTTP transport uses, but over the native git
 // protocol (plain `git upload-pack <dir>` / `git receive-pack <dir>` —
 // advertise + negotiate + pack in one bidirectional stream on the channel's

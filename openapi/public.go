@@ -212,7 +212,7 @@ func Publish(d *Document) (*Document, error) {
 // alike: [Register] builds closed *RequestBody / map[string]*Response values,
 // while a composed or folded operation carries zip's decoded map[string]any. One
 // reader for both is the only way this cannot miss a $ref by arriving through
-// the wrong seam.
+// the wrong client.
 func refs(op *Operation, need map[string]bool) error {
 	raw, err := json.Marshal(op)
 	if err != nil {
