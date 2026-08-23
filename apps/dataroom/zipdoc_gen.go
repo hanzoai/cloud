@@ -122,6 +122,13 @@ func init() {
 	zip.Describe("GET /v1/dataroom/documents/:id/file", zip.Doc{
 		Description: "Streams a document's bytes to an authenticated owner.",
 	})
+	zip.Describe("GET /v1/dataroom/health", zip.Doc{
+		Description: "Health reports that the data room subsystem is up.\n\nIt answers before the bundle loads, holds no state and touches no store, so it\nstays true in exactly the situation an operator is probing for. It says nothing\nabout whether a room can be OPENED — that is what the room operations answer —\nbecause a liveness probe that fails on a dependency takes a working process out\nof rotation.",
+		Fields: map[string]string{
+			"dataroomLiveness.service": "Service names the subsystem answering, so a probe response is attributable\nwhen several are collected together.",
+			"dataroomLiveness.status":  "Status is `ok`. This probe has no degraded answer by design: it reports\nprocess liveness and nothing that could be false while the process serves.",
+		},
+	})
 	zip.Describe("GET /v1/dataroom/links", zip.Doc{
 		Description: "Returns every live share link in the caller org's own store,\nnewest first, with the controls a visitor will meet: whether an address is\nrequired, whether a password is set, the allow and deny lists, whether download\nis permitted, and when the link expires.\n\nArchived links are omitted entirely. A link reports only THAT a password is\nset — the stored form is a bcrypt hash and no route returns it.",
 		Fields: map[string]string{
