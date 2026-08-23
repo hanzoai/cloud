@@ -123,8 +123,11 @@ func TestOnARequestOnlyAVouchedOrgResolvesATenant(t *testing.T) {
 // only thing that states one is a door that already validated it.
 //
 // payingOrg checks the tenant BEFORE co-residency, which is what makes this
-// readable without a commerce embed: unresolved says "no org on the call",
-// resolved says "not co-resident". So the second message is the PASS.
+// readable without a commerce embed: unresolved says "no validated org on the
+// call", resolved gets past it and says "not co-resident". So the second message
+// is the PASS. One refusal for one rule — the shape it was refused in is not
+// something the caller needs told, and telling them would be telling them which
+// door they reached.
 func TestOffARequestTheStatedOrgIsTheTenant(t *testing.T) {
 	t.Setenv("COMMERCE_SERVICE_TOKEN", "test-commerce-service-token")
 
@@ -147,7 +150,7 @@ func TestOffARequestTheStatedOrgIsTheTenant(t *testing.T) {
 			t.Errorf("payingOrg %s: succeeded with no commerce co-resident", tc.what)
 			continue
 		}
-		if strings.Contains(err.Error(), "no org on the call") == tc.resolved {
+		if strings.Contains(err.Error(), "no validated org on the call") == tc.resolved {
 			t.Errorf("payingOrg %s: %v — want tenant-resolved=%v", tc.what, err, tc.resolved)
 		}
 	}
