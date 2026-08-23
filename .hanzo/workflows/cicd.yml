@@ -1997,8 +1997,18 @@ jobs:
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GH_PAT: ${{ secrets.GH_PAT }}
-          GIT_TOKEN: ${{ github.token }}
+          # THE ARBITER IS PRIVATE, so the tag read needs a credential, and this is
+          # the name the script reads. Without it `git ls-remote` runs anonymous and
+          # fails 128, and orphans.sh then does exactly what it says it will: refuse
+          # after three tries rather than call every published image an orphan on a
+          # failed read. The refusal is right; the missing input was not. It reddened
+          # the receipt of every COMPLETE release — v8.5.138 shipped with all four
+          # cars green and 12 projections dispatched and still reported incomplete.
+          # A per-run token cannot do this job: it is scoped to the repository the
+          # run is on, and this step READS one. GH_PAT and GIT_TOKEN were passed here
+          # and read by nothing — orphans.sh takes FORGE_TOKEN, GHCR_USER, GHCR_TOKEN
+          # and the ORPHANS_* coordinates, and no other variable.
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
           # The audit reads the same two coordinates the release just used, rather
           # than its own copy of them: an audit that checks a different image
           # against a different register answers a question nobody asked.
