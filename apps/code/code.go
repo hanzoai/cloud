@@ -92,6 +92,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 
+	exposeIndex()
+
 	if err := routes(app, s); err != nil {
 		return err
 	}
