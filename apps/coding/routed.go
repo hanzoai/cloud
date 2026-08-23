@@ -151,7 +151,7 @@ var (
 // routed worker once (process-lifetime), memoizing the client. Dialed on the
 // always-registered `default` namespace — isolation rides in the workflow input
 // (agents.RoutedRun.Org) exactly as index-on-push does. Nil engine (before
-// wireDurableIngest, or an embed failure) => errEngineNotReady, which the
+// installDurableIngest, or an embed failure) => errEngineNotReady, which the
 // dispatcher renders as an honest failure (a routed run NEVER falls back to
 // local execution).
 func routedEngineClient() (tasksclient.Client, error) {

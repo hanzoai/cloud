@@ -8,7 +8,7 @@
 // ("consolidating that surface into cloud").
 //
 // ONE ENGINE. cloud already embeds the single in-process tasks engine in
-// durable.go (wireDurableIngest → cloud.EmbeddedTasks), shared by ai's durable
+// durable.go (installDurableIngest → cloud.EmbeddedTasks), shared by ai's durable
 // ingest. This subsystem does NOT Embed a second engine; it mounts that ONE
 // engine's HTTP handlers on the shared zip mux, so the Tasks product (console/
 // studio) reads the SAME durable state as ai ingest — one engine, one binary,
@@ -220,7 +220,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 // surface serves the Tasks HTTP API off cloud.EmbeddedTasks. The engine is
 // created after MountAll, so it is resolved lazily on the first request (by which
-// point Serve has run wireDurableIngest); the per-engine route mux is then cached
+// point Serve has run installDurableIngest); the per-engine route mux is then cached
 // once. A nil engine (embed failed / not yet wired) fails soft with 503.
 type surface struct {
 	once sync.Once

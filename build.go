@@ -124,7 +124,7 @@ func BuildDeps(cfg *Config) Deps {
 	// commerce URL yields a !Enabled() client, so the wrap is a transparent
 	// pass-through and a dev deployment is never blocked.
 	deps.Metering = buildMeteringClient(cfg, logger)
-	wireTierReader(deps.Metering, logger)
+	installTierReader(deps.Metering, logger)
 	// AI (completions, WRITE) and Embed (embeddings, READ-ONLY) are DISTINCT
 	// credentials by concern: completions never ride the read-only publishable
 	// (pk-) key — the gateway 403s a pk- key on any write endpoint — so deps.AI
@@ -132,7 +132,7 @@ func BuildDeps(cfg *Config) Deps {
 	// least-privilege for a read-only call). Both meter through the ONE commerce path.
 	deps.AI = meteredAIClient(pickCompletionsClient(cfg, logger), deps)
 	deps.Embed = meteredAIClient(pickEmbedClient(cfg, logger), deps)
-	wireFinance(cfg, logger)
+	installFinance(cfg, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 
@@ -239,19 +239,19 @@ func boolStr(b bool, t, f string) string {
 	return f
 }
 
-// wireTierReader installs the embedded ai module's per-tier SKU gate reader so it
+// installTierReader installs the embedded ai module's per-tier SKU gate reader so it
 // resolves the caller's commerce subscription tier through the SAME co-resident
 // commerce client the metering gate bills over — in-process (the commerce transport) when
 // commerce is folded in, S2S HTTP with the service token otherwise — NEVER an authed
 // self-call to the cloud edge. That self-call is the toothless-gate bug: the edge
 // 401/403s a service call to /v1/billing/*, so the ai module's own HTTP lookup always
 // returned "" in-cluster and every tier-gated SKU failed OPEN. This mirrors
-// wireFinance's SetBalanceReader: cloud owns the co-resident read, ai stays
+// installFinance's SetBalanceReader: cloud owns the co-resident read, ai stays
 // transport-agnostic. Fail-safe is preserved — Client.Tier folds a commerce error or
 // an unknown plan to "", which the gate treats as ALLOW, so a commerce blip never
 // locks out a paying caller. No-op when commerce is unreachable (metering !Enabled),
 // leaving ai's standalone HTTP fallback in place.
-func wireTierReader(m *metering.Client, log luxlog.Logger) {
+func installTierReader(m *metering.Client, log luxlog.Logger) {
 	if m == nil || !m.Enabled() {
 		return
 	}
@@ -261,7 +261,7 @@ func wireTierReader(m *metering.Client, log luxlog.Logger) {
 	log.Info("ai per-tier SKU gate wired to co-resident commerce (in-process tier read, fail-safe)")
 }
 
-// wireFinance constructs the ONE in-process finance ledger (per-org SQLite
+// installFinance constructs the ONE in-process finance ledger (per-org SQLite
 // double-entry prepaid wallet), publishes it for every money consumer to resolve by
 // the narrow finance.Client, and installs the embedded ai router's balance-read +
 // usage-debit hooks so the PREPAID gate dispatches DIRECTLY to it — a typed in-proc
@@ -269,7 +269,7 @@ func wireTierReader(m *metering.Client, log luxlog.Logger) {
 // principal is gated on a positive prepaid balance, fail-closed. MUST run before
 // ai.Mount (the ai gate reads the hook per request; the hook must be installed first)
 // — which BuildDeps guarantees (deps are built before MountAll).
-func wireFinance(cfg *Config, log luxlog.Logger) {
+func installFinance(cfg *Config, log luxlog.Logger) {
 	if !cfg.Enabled("commerce") {
 		return // money layer not co-resident (split-deploy); ai falls back to HTTP.
 	}

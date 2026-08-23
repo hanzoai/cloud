@@ -497,7 +497,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// Durable ingest: embed the ONE tasks engine in-process + inject the per-org dialer
 	// into ai (long github/crawl/s3 ingests run as durable workflows; upload stays
 	// inline). Fail-soft — inline fallback if the engine can't start. See durable.go.
-	wireDurableIngest(ctx, deps, procName(plugins))
+	installDurableIngest(ctx, deps, procName(plugins))
 
 	// Health/metrics listener (HealthListenAddr, default :9090). Serves the
 	// liveness/readiness contract the platform probes hit (/healthz, /readyz)

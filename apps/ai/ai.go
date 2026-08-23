@@ -350,14 +350,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	})
 	// INSTALL ONLY WHAT THIS PROCESS ACTUALLY HAS. `ai` runs as its OWN process
 	// (ps in a prod pod: /cloud, /kms, /tasks, /ai, …), and these hooks are
-	// package-level vars — so a reader wireFinance sets in the CLOUD process is
+	// package-level vars — so a reader installFinance sets in the CLOUD process is
 	// invisible here, permanently. The ai module's contract is that a NIL hook means
 	// "use my own path" (the HTTP call to /v1/billing/balance, which cloud now accepts
 	// with the S2S token), so installing a hook that merely reports the host has none
 	// SHADOWS the only path that works in this process and fail-closes every
 	// completion with 503 balance_unavailable. Do not install what we cannot answer.
 	//
-	// In the cloud process the snapshot is safe by construction: wireFinance runs in
+	// In the cloud process the snapshot is safe by construction: installFinance runs in
 	// BuildDeps, which completes before MountAll — the ordering its own doc comment
 	// guarantees. The tier read below is the exception that is NOT a snapshot: cap.go
 	// resolves it per call, because a ceiling that cannot read the plan is uncapped
@@ -368,7 +368,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// THE BALANCE READ CROSSES THE PROCESS BOUNDARY OVER THE PLANE — ZAP on the
 	// canonical unix socket — never HTTP back through our own edge.
 	//
-	// `ai` is its OWN process, so cloud.BalanceReader() (a package-level var wireFinance
+	// `ai` is its OWN process, so cloud.BalanceReader() (a package-level var installFinance
 	// sets in the CLOUD process) is ALWAYS nil here and the ai module fell back to an HTTP
 	// self-call to /v1/billing/balance. That request carries COMMERCE_SERVICE_TOKEN and
 	// no user, so it is not a validated principal at the edge and answers 401 — and the
