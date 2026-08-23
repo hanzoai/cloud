@@ -76704,6 +76704,64 @@ paths:
       x-app: graph
       x-public: true
       x-tool: true
+  /v1/graph/search:
+    get:
+      description: |-
+        Finds assertions by their text where read finds them by their keys.
+
+        It is the READ with one more term, not a second way to leave the store: same
+        order, same ceiling, same tenancy, and searching composes with narrowing by
+        relation and by instant because all of them are terms of one filter.
+
+        It resolves nothing. What matches is what was asserted, including claims that
+        were later corrected — which is the honest answer to "where is this mentioned"
+        and the reason the caller then asks resolve about what it found.
+      operationId: graphSearch
+      parameters:
+      - description: |-
+          Q is what to look for: words, matched as prefixes, all of them required.
+          Punctuation is text here rather than syntax, so an entity key searches as
+          itself.
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - description: Relation narrows to one relation. Absent matches every relation.
+        in: query
+        name: relation
+        required: false
+        schema:
+          type: string
+      - description: |-
+          AsOf bounds the search to what was knowable at an instant, RFC 3339. Absent
+          searches everything this plane holds.
+        in: query
+        name: as_of
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps how many assertions come back. Absent, zero, or anything above
+          the walk ceiling is the ceiling.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphReadOut'
+          description: ok
+      summary: Find assertions by their text rather than by an entity key
+      tags:
+      - graph
+      x-app: graph
+      x-public: true
+      x-tool: true
   /v1/graph/vocabulary:
     get:
       operationId: graphVocabulary
