@@ -65,7 +65,7 @@ func seg(s string) string {
 func (s *docStore) db(org, workspace string) (*sql.DB, error) {
 	// The namespace is the key AND the name: cached by the value rather than by a
 	// rendering of it, so two spellings that resolve to one file can never become
-	// two open handles on that file. cloud.OrgNamespace is the ONE door — org is
+	// two open handles on that file. cloud.OrgNamespace is the ONE path — org is
 	// the VERIFIED workspace-token claim, never a client header.
 	ns, err := cloud.OrgNamespace(org, workspace)
 	if err != nil {

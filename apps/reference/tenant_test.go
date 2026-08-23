@@ -510,7 +510,7 @@ func TestOneRequestCannotSpendTheProcess(t *testing.T) {
 		t.Errorf("one refused request allocated %d MiB; a bound reached after the work is not a bound", grew)
 	}
 
-	// The same key, written as an override, is the other half of the same door.
+	// The same key, written as an override, is the other half of the same check.
 	if code, _ := call(t, app, http.MethodPut, "/v1/reference/domain", "acme",
 		map[string]any{"entries": []any{map[string]any{"key": long, "verdict": Deny}}}); code != http.StatusBadRequest {
 		t.Errorf("an over-long override key answered %d, want 400", code)
@@ -524,7 +524,7 @@ func TestOneRequestCannotSpendTheProcess(t *testing.T) {
 		t.Errorf("an over-long clear key of %d bytes answered %d, want 400", len(overLong), code)
 	}
 	// The page cursor is the last KEY of the previous page, so it crosses the same
-	// door: every door is the same door.
+	// check: every entry point runs the same one.
 	if code, _ := call(t, app, http.MethodGet, "/v1/reference/domain?after="+overLong, "acme", nil); code != http.StatusBadRequest {
 		t.Errorf("an over-long page cursor of %d bytes answered %d, want 400", len(overLong), code)
 	}
@@ -650,12 +650,12 @@ func bytesOnDisk(t *testing.T, o *overrides) int64 {
 // nothing about — so the published per-organisation ceiling understated the
 // truth by 1.69x on the ONE volume every organisation's store shares.
 //
-// So it is MEASURED. This fills a real store with the widest rows the door
+// So it is MEASURED. This fills a real store with the widest rows the endpoint
 // admits and fails if one costs more than the figure the count is divided from.
 func TestOneOrgsOverridesCostWhatTheyArePublishedToCost(t *testing.T) {
 	own := store(t, "acme")
 
-	// The worst row this door admits: every term at its own bound, in the set
+	// The worst row this endpoint admits: every term at its own bound, in the set
 	// whose name is longest.
 	widest := ""
 	for _, s := range Catalog() {
@@ -698,7 +698,7 @@ func TestOneOrgsOverridesCostWhatTheyArePublishedToCost(t *testing.T) {
 //
 // [ownVolume] is the per-organisation ceiling, and it is the product of
 // [maxOverrides], the catalog size and [row] — where [row] is the sum of the
-// bounded terms. The key and the note were bounded at the wire door; the WRITER
+// bounded terms. The key and the note were bounded at the wire endpoint; the WRITER
 // was not, and it is [actor]'s reading of the X-User-Id the request carries. So
 // the third term of the row was a caller-sized value, stored [maxOverrides]
 // times in every set the catalog publishes, on the ONE volume every

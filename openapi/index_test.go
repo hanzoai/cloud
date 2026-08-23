@@ -115,7 +115,7 @@ func TestTheRootListsTheCustomerSurfaceAndNothingBeside(t *testing.T) {
 			root.Links["auth"].Href, door.Metadata)
 	}
 	if root.Links["describedby"].Href != Path || root.Links["mcp"].Href != door.Path {
-		t.Errorf("the root's links name %v, not the document and the agent door", root.Links)
+		t.Errorf("the root's links name %v, not the document and the agent MCP address", root.Links)
 	}
 }
 
@@ -185,7 +185,7 @@ func served(t *testing.T, app *zip.App, method, path string) (*http.Response, st
 }
 
 // indexed builds an app with the index composed ahead of one capability that
-// answers its own root, exactly as the front door composes it ahead of the mounts
+// answers its own root, exactly as the host composes it ahead of the mounts
 // — and over the same [Subsets] shape, so the compose it does is the fleet's.
 func indexed(t *testing.T) *zip.App {
 	t.Helper()
@@ -219,7 +219,7 @@ func TestTheDoorsAnswerAndTheCapabilityStillAnswersItsOwn(t *testing.T) {
 	if _, body := served(t, app, http.MethodGet, "/v1/agents"); body != "the agents collection" {
 		t.Errorf("GET /v1/agents answered %.120q — the index took an address the capability serves", body)
 	}
-	// A door is a GET. Anything else at the same address belongs to whoever is
+	// An index is a GET. Anything else at the same address belongs to whoever is
 	// behind it, which here is nobody.
 	if resp, _ := served(t, app, http.MethodPost, RootPath); resp.StatusCode == http.StatusOK {
 		t.Errorf("POST %s was answered by the index", RootPath)
@@ -227,7 +227,7 @@ func TestTheDoorsAnswerAndTheCapabilityStillAnswersItsOwn(t *testing.T) {
 }
 
 // An unpublished name is answered exactly as any other address nothing claims,
-// so the door cannot be asked whether something exists that it would not list.
+// so the index cannot be asked whether something exists that it would not list.
 func TestAnUnpublishedNameIsAnsweredLikeAnyUnclaimedAddress(t *testing.T) {
 	app := indexed(t)
 
@@ -279,7 +279,7 @@ func TestEveryAnswerCarriesItsLinksAndClobbersNone(t *testing.T) {
 	}
 }
 
-// The doors are described where the fleet document describes them, so an SDK
+// The endpoints are described where the fleet document describes them, so an SDK
 // generated off it can call the index it needs in order to discover anything else.
 func TestBothDoorsAreInTheDocument(t *testing.T) {
 	app := newApp()
@@ -350,7 +350,7 @@ func TestAnAnswerSaysWhatItAcceptsAndWhatIsAboveIt(t *testing.T) {
 	}
 }
 
-// An operation's template is found by SHAPE, because the front door proxies and
+// An operation's template is found by SHAPE, because the host proxies and
 // the route a request matched there is the proxy's own. Where two templates fit
 // the same path, the one made of literals is the address the caller asked for.
 func TestALiteralAddressBeatsTheTemplateItFits(t *testing.T) {
@@ -381,9 +381,9 @@ func TestALiteralAddressBeatsTheTemplateItFits(t *testing.T) {
 // asking — RFC 9110 §9.3.7 — and not only as a header on a GET that may not be
 // allowed there in the first place.
 //
-// The three facts that make this a door rather than a decoration: it answers 204
-// with no body, because Allow IS the answer; it answers for a MEMBER template as
-// well as a literal, because that is where a client most needs to ask; and it
+// The three facts that make this an endpoint rather than a decoration: it answers
+// 204 with no body, because Allow IS the answer; it answers for a MEMBER template
+// as well as a literal, because that is where a client most needs to ask; and it
 // YIELDS on an address the contract does not carry, so a capability that grows
 // its own OPTIONS keeps it and an unclaimed path still 404s.
 func TestOptionsAnswersWhatAnAddressAccepts(t *testing.T) {
@@ -415,11 +415,12 @@ func TestOptionsAnswersWhatAnAddressAccepts(t *testing.T) {
 	}
 }
 
-// A CORS PREFLIGHT IS A DIFFERENT QUESTION AND IS NOT THIS DOOR'S. It is defined
-// by carrying Access-Control-Request-Method (Fetch, CORS preflight request), and
-// cloud's edge middleware owns and short-circuits exactly those. Answering one
-// here would be a second CORS authority — the defect middleware_edge.go's own
-// comment exists to prevent — so the split is on the header that defines it.
+// A CORS PREFLIGHT IS A DIFFERENT QUESTION AND IS NOT THIS ENDPOINT'S. It is
+// defined by carrying Access-Control-Request-Method (Fetch, CORS preflight
+// request), and cloud's edge middleware owns and short-circuits exactly those.
+// Answering one here would be a second CORS authority — the defect
+// middleware_edge.go's own comment exists to prevent — so the split is on the
+// header that defines it.
 func TestAPreflightIsNotThisDoor(t *testing.T) {
 	app := indexed(t)
 	req := httptest.NewRequest(http.MethodOptions, "/v1/agents", nil)
@@ -431,7 +432,7 @@ func TestAPreflightIsNotThisDoor(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNoContent && resp.Header.Get("Allow") != "" {
-		t.Fatalf("a preflight was answered by the contract door (Allow=%q); the edge owns it",
+		t.Fatalf("a preflight was answered by the contract endpoint (Allow=%q); the edge owns it",
 			resp.Header.Get("Allow"))
 	}
 }

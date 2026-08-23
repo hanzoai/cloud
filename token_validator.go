@@ -168,7 +168,7 @@ func (v VerifiedIdentity) Home() string {
 // themselves and therefore ignored CLOUD_JWKS_URL outright: an operator who
 // pinned a JWKS pinned it for the edge validator and NOT for the two planes
 // that verify the same tokens, which is a fleet validating one set of signing
-// keys at the front door and a different set behind it.
+// keys at the edge and a different set behind it.
 func JWKSURLFor(issuer string) string {
 	if override := environ.Or("CLOUD_JWKS_URL", ""); override != "" {
 		return override

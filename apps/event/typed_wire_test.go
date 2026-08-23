@@ -6,7 +6,7 @@
 // limitations under the License.
 
 // typed_wire_test.go — the projection gate. The reads and the health probe are
-// TYPED ops; the ingest doors are not, and each of those has a WIRE FACT that
+// TYPED ops; the ingest endpoints are not, and each of those has a WIRE FACT that
 // keeps it out. Both halves are MEASURED here rather than asserted in prose,
 // because prose cannot go red: a route added untyped goes red without anyone
 // remembering to name it, a reason naming a route this package no longer serves
@@ -42,16 +42,16 @@ var untypedByDesign = map[string]string{
 		"method, so typing it would buy nothing even if the body could be carried.",
 
 	"POST /v1/event": canonWireReason,
-	"POST /v1/event/{project}/envelope": "the Sentry error wire on the one event door: the body is a " +
+	"POST /v1/event/{project}/envelope": "the Sentry error wire on the one event endpoint: the body is a " +
 		"raw Sentry envelope stream and the credential is a DSN key the o11y consumer verifies itself " +
 		"(cloud.ObsErrorIngest) — no principal, no struct In, nothing for a typed op to say.",
-	"POST /v1/event/{project}/store": "the Sentry error wire on the one event door: the body is a " +
+	"POST /v1/event/{project}/store": "the Sentry error wire on the one event endpoint: the body is a " +
 		"raw Sentry envelope stream and the credential is a DSN key the o11y consumer verifies itself " +
 		"(cloud.ObsErrorIngest) — no principal, no struct In, nothing for a typed op to say.",
 
-	"POST /v1/event/replay": "the session-replay snapshot door has a declarable BODY — unlike every other " +
+	"POST /v1/event/replay": "the session-replay snapshot endpoint has a declarable BODY — unlike every other " +
 		"entry here — and is still not typable, because ADMISSION is what keeps it out. " +
-		admissionReason + " That is not academic on this door: it takes a publishable pk- on " +
+		admissionReason + " That is not academic on this endpoint: it takes a publishable pk- on " +
 		"?ingest_key= (a recorder drains its buffer through navigator.sendBeacon on unload, which " +
 		"cannot set headers), and a typed op never sees the query string the credential arrived on. " +
 		"Its 413 has the same ORDER problem as the anonymous lane's: the RAW body length is refused " +
@@ -76,7 +76,7 @@ const (
 		"field is caller-supplied, so that is a cross-tenant write the caller asserted for itself. " +
 		precedenceReason
 
-	// precedenceReason is the blocker that survives even if a door's body were
+	// precedenceReason is the blocker that survives even if an endpoint's body were
 	// declarable and the request were reachable, so it is stated separately: ORDER.
 	// zip decodes the body BEFORE the handler runs (zip v1.18.11 typed.go, op.invoke:
 	// `if len(rawIn) > 0 { dec(rawIn, &in) }` → ErrBadRequest), while every one of
@@ -173,7 +173,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 
 // proseless is the CLOSED list of published components whose properties carry NO
 // description, and it is a property of the CLIENT they came through, not of anyone's
-// diligence. These are the bodies of the untyped ingest doors and the health probe,
+// diligence. These are the bodies of the untyped ingest endpoints and the health probe,
 // declared through openapi.Register (event.go) because those routes cannot be typed
 // ops. Register derives a schema by REFLECTION from the Go type, and Go drops
 // comments at compile time — zipdoc, the pass that lifts field prose, walks zip's
@@ -195,7 +195,7 @@ var proseless = map[string]bool{
 	// carry doc comments in Go — reflection simply cannot see them, which is the one
 	// reason they are listed here rather than described.
 	"LogBody": true, "SpanBody": true, "MetricBody": true, "ClipBody": true, "Frame": true,
-	// Every door's receipt.
+	// Every endpoint's receipt.
 	"CaptureResult": true,
 	// The PostHog wire — now served on /v1/event, sniffed by decodeEvent.
 	"insightsBody": true, "insightsEvent": true,
@@ -367,7 +367,7 @@ func TestInsightsHealthIsUnconditional(t *testing.T) {
 // ── the refusals are MEASURED, not asserted ─────────────────────────────────
 
 // TestArrayBodiedDoorsStillAnswer200 is the measurement behind canonWireReason: the
-// four doors on an array-tolerant wire accept a BARE JSON ARRAY body today. That is
+// four endpoints on an array-tolerant wire accept a BARE JSON ARRAY body today. That is
 // exactly the request a typed In would turn into a 400 (zip's op.invoke unmarshals
 // every non-empty body into the struct), so this is the refusal's evidence rather
 // than its restatement. If a later zip can declare a polymorphic body, this test is
@@ -386,16 +386,16 @@ func TestArrayBodiedDoorsStillAnswer200(t *testing.T) {
 		}
 		evs, err := d.decode([]byte(body))
 		if err != nil {
-			t.Fatalf("door %s cannot decode its own array wire: %v", d.path, err)
+			t.Fatalf("endpoint %s cannot decode its own array wire: %v", d.path, err)
 		}
 		if len(evs) != 1 {
-			t.Fatalf("door %s decoded %d events from an array body, want 1", d.path, len(evs))
+			t.Fatalf("endpoint %s decoded %d events from an array body, want 1", d.path, len(evs))
 		}
 		fakeWarehouse(t)
 		app := mountApp(t)
 		if code, got := doHost(t, app, d.path, "", "", "api.hanzo.ai", body); code != http.StatusOK {
-			t.Errorf("door %s with a bare ARRAY body = %d (%s), want 200 — this is the 400 a typed In "+
-				"would produce, and the reason the door stays untyped", d.path, code, got)
+			t.Errorf("endpoint %s with a bare ARRAY body = %d (%s), want 200 — this is the 400 a typed In "+
+				"would produce, and the reason the endpoint stays untyped", d.path, code, got)
 		}
 	}
 }

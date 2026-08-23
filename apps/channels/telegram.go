@@ -21,7 +21,7 @@ import (
 // org holds no capability over that room.
 var errRoomNotBound = errors.New("channels: room not bound to org")
 
-// telegramDoor is the send door; tests spy it, prod never repoints.
+// telegramDoor is the sender; tests spy it, prod never repoints.
 var telegramDoor = func(ctx context.Context, chatID, replyTo int64, text string) error {
 	room := strconv.FormatInt(chatID, 10)
 	reply := ""

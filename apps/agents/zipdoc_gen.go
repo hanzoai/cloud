@@ -40,7 +40,7 @@ func init() {
 			"agentView.schedule":         "Schedule is the 5-field cron the scheduler fires a long-running agent on,\nevaluated once a minute. Required for long-running and DROPPED for one-shot —\na one-shot agent's schedule is not stored, so absence here is the mode's\nanswer rather than a value nobody set.",
 			"agentView.serviceAccountId": "ServiceAccountID is the IAM agent service account (<org>-<agent>) a scheduled\nrun is billed AS. It is what makes an autonomous run attributable to a\nprincipal rather than only to the org; empty means the org itself wears the\nspend.",
 			"agentView.status":           "Status is the agent's readiness, and today it is \"ready\" on every row: an\nagent is a definition rather than a provisioned thing, so nothing transitions\nit. Server-set at create; no route accepts it.",
-			"agentView.tools":            "Tools are the tool names this agent may call, and the list IS the authority:\nan agent that declares none gets none. The single entry \"*\" means whatever the\nfleet's tool door serves at the moment of the run, resolved per run rather\nthan frozen here, which is how the default assistant reaches subsystems that\nshipped after it was defined. Empty array, never null.",
+			"agentView.tools":            "Tools are the tool names this agent may call, and the list IS the authority:\nan agent that declares none gets none. The single entry \"*\" means whatever the\nfleet's MCP server serves at the moment of the run, resolved per run rather\nthan frozen here, which is how the default assistant reaches subsystems that\nshipped after it was defined. Empty array, never null.",
 			"agentView.updatedAt":        "UpdatedAt is the last time any field above was written, same format. It moves\non an update to the DEFINITION and never on a run, so a busy agent nobody has\nedited keeps an old one.",
 		},
 	})
@@ -75,7 +75,7 @@ func init() {
 			"agentView.schedule":            "Schedule is the 5-field cron the scheduler fires a long-running agent on,\nevaluated once a minute. Required for long-running and DROPPED for one-shot —\na one-shot agent's schedule is not stored, so absence here is the mode's\nanswer rather than a value nobody set.",
 			"agentView.serviceAccountId":    "ServiceAccountID is the IAM agent service account (<org>-<agent>) a scheduled\nrun is billed AS. It is what makes an autonomous run attributable to a\nprincipal rather than only to the org; empty means the org itself wears the\nspend.",
 			"agentView.status":              "Status is the agent's readiness, and today it is \"ready\" on every row: an\nagent is a definition rather than a provisioned thing, so nothing transitions\nit. Server-set at create; no route accepts it.",
-			"agentView.tools":               "Tools are the tool names this agent may call, and the list IS the authority:\nan agent that declares none gets none. The single entry \"*\" means whatever the\nfleet's tool door serves at the moment of the run, resolved per run rather\nthan frozen here, which is how the default assistant reaches subsystems that\nshipped after it was defined. Empty array, never null.",
+			"agentView.tools":               "Tools are the tool names this agent may call, and the list IS the authority:\nan agent that declares none gets none. The single entry \"*\" means whatever the\nfleet's MCP server serves at the moment of the run, resolved per run rather\nthan frozen here, which is how the default assistant reaches subsystems that\nshipped after it was defined. Empty array, never null.",
 			"agentView.updatedAt":           "UpdatedAt is the last time any field above was written, same format. It moves\non an update to the DEFINITION and never on a run, so a busy agent nobody has\nedited keeps an old one.",
 		},
 		Example: json.RawMessage(`{"ref":"helper"}`),
@@ -429,7 +429,7 @@ func init() {
 			"agentView.schedule":             "Schedule is the 5-field cron the scheduler fires a long-running agent on,\nevaluated once a minute. Required for long-running and DROPPED for one-shot —\na one-shot agent's schedule is not stored, so absence here is the mode's\nanswer rather than a value nobody set.",
 			"agentView.serviceAccountId":     "ServiceAccountID is the IAM agent service account (<org>-<agent>) a scheduled\nrun is billed AS. It is what makes an autonomous run attributable to a\nprincipal rather than only to the org; empty means the org itself wears the\nspend.",
 			"agentView.status":               "Status is the agent's readiness, and today it is \"ready\" on every row: an\nagent is a definition rather than a provisioned thing, so nothing transitions\nit. Server-set at create; no route accepts it.",
-			"agentView.tools":                "Tools are the tool names this agent may call, and the list IS the authority:\nan agent that declares none gets none. The single entry \"*\" means whatever the\nfleet's tool door serves at the moment of the run, resolved per run rather\nthan frozen here, which is how the default assistant reaches subsystems that\nshipped after it was defined. Empty array, never null.",
+			"agentView.tools":                "Tools are the tool names this agent may call, and the list IS the authority:\nan agent that declares none gets none. The single entry \"*\" means whatever the\nfleet's MCP server serves at the moment of the run, resolved per run rather\nthan frozen here, which is how the default assistant reaches subsystems that\nshipped after it was defined. Empty array, never null.",
 			"agentView.updatedAt":            "UpdatedAt is the last time any field above was written, same format. It moves\non an update to the DEFINITION and never on a run, so a busy agent nobody has\nedited keeps an old one.",
 			"updateAgentIn.computeRef":       "ComputeRef re-binds (or, with \"\", unbinds) the visor machine. Opaque here.",
 			"updateAgentIn.description":      "Description replaces the line other agents read in the tool catalogue.",
@@ -571,7 +571,7 @@ func init() {
 			"agentView.schedule":             "Schedule is the 5-field cron the scheduler fires a long-running agent on,\nevaluated once a minute. Required for long-running and DROPPED for one-shot —\na one-shot agent's schedule is not stored, so absence here is the mode's\nanswer rather than a value nobody set.",
 			"agentView.serviceAccountId":     "ServiceAccountID is the IAM agent service account (<org>-<agent>) a scheduled\nrun is billed AS. It is what makes an autonomous run attributable to a\nprincipal rather than only to the org; empty means the org itself wears the\nspend.",
 			"agentView.status":               "Status is the agent's readiness, and today it is \"ready\" on every row: an\nagent is a definition rather than a provisioned thing, so nothing transitions\nit. Server-set at create; no route accepts it.",
-			"agentView.tools":                "Tools are the tool names this agent may call, and the list IS the authority:\nan agent that declares none gets none. The single entry \"*\" means whatever the\nfleet's tool door serves at the moment of the run, resolved per run rather\nthan frozen here, which is how the default assistant reaches subsystems that\nshipped after it was defined. Empty array, never null.",
+			"agentView.tools":                "Tools are the tool names this agent may call, and the list IS the authority:\nan agent that declares none gets none. The single entry \"*\" means whatever the\nfleet's MCP server serves at the moment of the run, resolved per run rather\nthan frozen here, which is how the default assistant reaches subsystems that\nshipped after it was defined. Empty array, never null.",
 			"agentView.updatedAt":            "UpdatedAt is the last time any field above was written, same format. It moves\non an update to the DEFINITION and never on a run, so a busy agent nobody has\nedited keeps an old one.",
 			"createAgentIn.computeRef":       "ComputeRef optionally binds this bot to a visor machine. Opaque here, bounded\nat 256 characters, and not resolved — this package stores the reference and\nthe binding's lifecycle belongs elsewhere.",
 			"createAgentIn.description":      "Description is the one line published as the description of the `agent_<name>`\ntool, which is how another agent decides whether to call this one. Optional,\nand worth writing for exactly that reason.",
@@ -581,7 +581,7 @@ func init() {
 			"createAgentIn.name":             "Name is the agent's org-unique handle and the only required field. It must\nmatch ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$, and a name already taken in this org\nis a 409 rather than an overwrite. It is permanent: no update route moves it.",
 			"createAgentIn.schedule":         "Schedule is the 5-field cron a long-running agent fires on, parsed here so a\nbad expression is a 400 and not an agent that silently never runs. Required\nwith long-running; DISCARDED for one-shot rather than stored unused.",
 			"createAgentIn.serviceAccountId": "ServiceAccountID optionally names the IAM agent service account (<org>-<agent>)\na scheduled run should be billed AS, so an autonomous run is attributable to a\nprincipal rather than only to the org. Same 256-character bound, also\nunresolved here.",
-			"createAgentIn.tools":            "Tools are the tool names this agent may call. Omitted or empty grants NONE —\nthat default is the agent's authority and is not widened anywhere. The single\nentry \"*\" means whatever the fleet's tool door serves at the time of each run.",
+			"createAgentIn.tools":            "Tools are the tool names this agent may call. Omitted or empty grants NONE —\nthat default is the agent's authority and is not widened anywhere. The single\nentry \"*\" means whatever the fleet's MCP server serves at the time of each run.",
 		},
 		Example: json.RawMessage(`{"name":"helper","model":"enso-flash","instructions":"be terse"}`),
 	})
@@ -658,7 +658,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/agents/sessions/:id/message", zip.Doc{
-		Description: "Sends a steering message to a running session — the door a\nhuman or another agent interrupts through. It requires a `message` or a\n`payload`; the other three commands do not.",
+		Description: "Sends a steering message to a running session — the endpoint a\nhuman or another agent interrupts through. It requires a `message` or a\n`payload`; the other three commands do not.",
 		Fields: map[string]string{
 			"controlIn.id":            "ID is the session to steer, from the path.",
 			"controlIn.message":       "Message is free text for the running agent, up to 16 KiB. On a stop it is\nrecorded as the cancellation reason.",

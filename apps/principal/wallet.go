@@ -185,12 +185,14 @@ func nameOf(id string) string {
 }
 
 // PayerFrom is [Payer] where only the CONTEXT crossed the client — the ZAP plane,
-// MCP's tools/call, and the fleet-agent door, none of which carry an HTTP request.
-// It is the Org/OrgFrom pair again: one fact, one rule, read from either side.
+// MCP's tools/call, and the fleet-agent transport, none of which carry an HTTP
+// request. It is the Org/OrgFrom pair again: one fact, one rule, read from either
+// side.
 //
 // THE HOLE IT CLOSES. Every metered surface resolved its payer from the request
-// alone, so on a door with no request the wallet came back empty — and empty means
-// "nobody to bill", which every meter correctly treats as no gate and no debit.
+// alone, so on a transport with no request the wallet came back empty — and empty
+// means "nobody to bill", which every meter correctly treats as no gate and no
+// debit.
 // The result was that an identified caller who reached a paid operation over the
 // agent plane got it free and unrecorded: a carrier number ordered on a zero
 // balance, with the platform paying. The caller was never anonymous; only the

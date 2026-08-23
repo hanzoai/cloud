@@ -33,7 +33,7 @@ package agents
 // answer; it is a fact about this process.
 //
 // The thing that CAN answer already exists, and it was already deployed: the
-// fleet's composed agent door (fleet/mcp.go), which asks every app what it
+// fleet's composed agent MCP server (fleet/mcp.go), which asks every app what it
 // serves right now, merges the union, and forwards a call to the app that listed
 // the name. It is what api.hanzo.ai/v1/mcp is. So there is one tool surface in
 // this fleet and an agent reads THAT one — door.go is the client, over the
@@ -47,7 +47,7 @@ package agents
 // The degradation that remains is an OUTAGE, and it is visible: every run's step
 // span carries both hanzo.agent.tools_declared and hanzo.agent.tools, so
 // "declared 3, offered 0" is a number in o11y rather than a silence, and the
-// door's own error is recorded beside it.
+// MCP server's own error is recorded beside it.
 
 import (
 	"context"
@@ -156,7 +156,7 @@ type toolPlane interface {
 	call(ctx context.Context, org, actor, name, args string) (string, error)
 }
 
-// runTools is the tool plane a run uses: the fleet's own agent door, which
+// runTools is the tool plane a run uses: the fleet's own agent MCP server, which
 // answers with this process's registry wherever this process IS the fleet
 // (door.go). A package var so a test can substitute a deterministic one; there
 // is no exported setter, because which plane answers is a property of the
@@ -219,8 +219,8 @@ func (registryTools) call(ctx context.Context, org, actor, name, args string) (s
 // toolSubsystem names the app that answers for a tool, read out of the tool's OWN
 // name rather than looked up anywhere.
 //
-// The fleet door groups one tool per subsystem and carries the operation names in
-// its `op` enum (fleet/grouped.go), and those names are spelled
+// The fleet MCP server groups one tool per subsystem and carries the operation
+// names in its `op` enum (fleet/grouped.go), and those names are spelled
 // <method>_<subsystem>_<rest> — so the owner is a fact the name already states.
 //
 // THE METHOD IS WHAT SAYS THE NAME IS IN THAT SHAPE. Reading the second word

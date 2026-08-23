@@ -251,7 +251,7 @@ func TestTraffic_UnansweredScreensAreCountedApart(t *testing.T) {
 }
 
 // A held verdict carries strings from the SCORER, which is an input like any
-// other. Clamped at the door, so one entry's size is a published fact and
+// other. Clamped on the way in, so one entry's size is a published fact and
 // count × size is a real byte bound.
 func TestTraffic_HeldStringsAreClampedAtTheDoor(t *testing.T) {
 	tr := NewTraffic()

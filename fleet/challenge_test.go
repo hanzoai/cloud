@@ -20,8 +20,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// nowhere reaches no subsystem: every call that gets past the door is an outage,
-// which is what makes the door's own answers observable on their own.
+// nowhere reaches no subsystem: every call that gets past the MCP server is an
+// outage, which is what makes the server's own answers observable on their own.
 func nowhere(string) (string, string, error) { return "", "", errors.New("no subsystem here") }
 
 func post(t *testing.T, app *zip.App, path, body string, hdr map[string]string) (int, http.Header, string) {
@@ -68,8 +68,8 @@ func TestACredentiallessCallAtTheEdgeIsChallenged(t *testing.T) {
 	}
 
 	// Any credential the identity boundary could read is enough to be forwarded
-	// — the door validates nothing. Past the door, the only subsystem is nowhere,
-	// so the answer is the door's own -32602 and a 200.
+	// — the MCP server validates nothing. Past it, the only subsystem is nowhere,
+	// so the answer is the server's own -32602 and a 200.
 	for name, h := range map[string]map[string]string{
 		"a bearer":         {"Authorization": "Bearer x"},
 		"the alt spelling": {"X-Authorization": "Bearer x"},
@@ -77,7 +77,7 @@ func TestACredentiallessCallAtTheEdgeIsChallenged(t *testing.T) {
 	} {
 		code, _, body := post(t, app, manifest.MCPPath, callWithoutTool, h)
 		if code != 200 || !strings.Contains(body, "-32602") {
-			t.Errorf("%s: = %d %s, want 200 with the door's own unknown-tool error", name, code, body)
+			t.Errorf("%s: = %d %s, want 200 with the MCP server's own unknown-tool error", name, code, body)
 		}
 	}
 
@@ -97,6 +97,6 @@ func TestThePlaneDoorIsNeverChallenged(t *testing.T) {
 
 	code, _, body := post(t, app, manifest.MCPPath, callWithoutTool, nil)
 	if code != 200 || !strings.Contains(body, "-32602") {
-		t.Fatalf("the plane door answered %d %s to a header-less call, want 200 with the door's own unknown-tool error", code, body)
+		t.Fatalf("the plane endpoint answered %d %s to a header-less call, want 200 with the MCP server's own unknown-tool error", code, body)
 	}
 }

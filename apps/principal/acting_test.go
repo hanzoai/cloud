@@ -9,7 +9,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// AN ORG IS A TENANT ONLY WHERE A TRUSTED DOOR PARKED IT, and this is the
+// AN ORG IS A TENANT ONLY WHERE A TRUSTED WRITER PARKED IT, and this is the
 // property that makes that safe to rely on: the DEFAULT IS REFUSAL.
 //
 // zip.CallerOf hands back a plain string whether it read the request's X-Org-Id
@@ -19,7 +19,7 @@ import (
 // trusted writers park — the boundary for a validated request (WithOrg), and
 // WithActing for a call that states its own tenant in-process.
 //
-// The alternative was to mark the DOOR and admit a stated caller wherever the
+// The alternative was to mark the BOUNDARY and admit a stated caller wherever the
 // mark was absent. That fails OPEN: an app that serves HTTP without installing
 // the boundary has no mark, and a forged header there reads exactly like an
 // in-process statement. This way round, a writer that forgets to park is refused.

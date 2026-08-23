@@ -7,7 +7,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// door.go is this plane's half of the FLEET'S ONE MCP DOOR.
+// door.go is this plane's half of the FLEET'S ONE MCP SERVER.
 //
 // The other half is a build artifact and has to be: 549 typed ops across 112
 // lazily-mounted plugins, projected once and served as bytes, so tools/list —
@@ -18,15 +18,16 @@ import (
 // agents and functions, and the tools on the external MCP servers it enabled are
 // ROWS: they exist because of WHO is asking, so no projection can hold them and
 // no answer can be shared between callers. Before this they were reachable only
-// THROUGH a tool — POST /v1/tools/call, one door-tool standing in front of every
-// tenant capability — which is a second registry wearing a different hat. Now
-// they are tools, on the same door, in the same list.
+// THROUGH a tool — POST /v1/tools/call, one entry-point tool standing in front of
+// every tenant capability — which is a second registry wearing a different hat.
+// Now they are tools, on the same MCP server, in the same list.
 //
 // It adds NO policy. Tools is the registry's own per-principal listing and Call
 // is literally callTool, so activation, source precedence, the x402 price gate,
 // the metered unit and the audit record are the ones the REST route already
 // enforces. A tool that is refused at POST /v1/tools/call is refused here, for
-// the same reason, with the same words. One plane, one policy, two doors onto it.
+// the same reason, with the same words. One plane, one policy, two endpoints onto
+// it.
 //
 // zip.Source is the client (zip >= v1.18.14): the host declares the tools plugin
 // OPEN (manifest/apps.go), asks it for the caller's tools on a tools/list that
@@ -34,7 +35,7 @@ import (
 // list still costs a memcpy and starts nothing.
 
 // Door is the per-caller tool source this subsystem contributes to its own MCP
-// door. The composition root hands it to cloud.Serve (plugin/tools/main.go), which
+// server. The composition root hands it to cloud.Serve (plugin/tools/main.go), which
 // is the one place a subsystem's contributions to the binary are stated.
 func Door() zip.Source { return door{} }
 
@@ -66,7 +67,7 @@ func (door) Tools(ctx context.Context) []map[string]any {
 		// own identity boundary, and a credential that does not survive that hop
 		// makes every org's per-caller list empty with nothing logged anywhere.
 		if mounted != nil {
-			mounted.Log.Warn("mcp door: no validated caller, serving no per-caller tools", "err", err)
+			mounted.Log.Warn("mcp server: no validated caller, serving no per-caller tools", "err", err)
 		}
 		return nil
 	}

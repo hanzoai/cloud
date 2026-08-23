@@ -56,8 +56,8 @@ func exposeImport() {
 // The tenant is the caller's plane identity, but the SOURCE is an argument: both
 // import ops take a clone URL and a token off the request, and the token is a
 // live installation credential. The advance refuses the same pair on its own
-// ([upstream]) — this is the door saying so with a status, so a caller learns it
-// asked for something it may not have rather than reading a transport failure.
+// ([upstream]) — this is the endpoint saying so with a status, so a caller learns
+// it asked for something it may not have rather than reading a transport failure.
 func sourceOK(cloneURL, token string) error {
 	if token == "" || mirrorInHostAllowed(hostOf(cloneURL)) {
 		return nil

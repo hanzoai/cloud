@@ -10,16 +10,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// ask runs one GraphQL query through the mounted door as a validated principal
+// ask runs one GraphQL query through the mounted endpoint as a validated principal
 // and returns the decoded envelope. It goes through the ROUTE rather than
-// calling the resolvers, because the thing worth testing is that the door
+// calling the resolvers, because the thing worth testing is that the endpoint
 // carries the tenant into them.
 func ask(t *testing.T, app *zip.App, q string) map[string]any {
 	t.Helper()
 	_, b := call(t, app, http.MethodPost, "/v1/graph/graphql", "", map[string]any{"query": q})
 	var env map[string]any
 	if err := json.Unmarshal(b, &env); err != nil {
-		t.Fatalf("the door answered something that is not JSON: %v: %s", err, b)
+		t.Fatalf("the endpoint answered something that is not JSON: %v: %s", err, b)
 	}
 	if errs, ok := env["errors"]; ok {
 		t.Fatalf("query failed: %v", errs)
@@ -27,7 +27,7 @@ func ask(t *testing.T, app *zip.App, q string) map[string]any {
 	return env
 }
 
-// TestTheDoorTraversesInOneRequest is the whole reason this door exists. Over
+// TestTheDoorTraversesInOneRequest is the whole reason this endpoint exists. Over
 // REST, "the things this one points at, and what each of THOSE points at" is a
 // request per hop with the intermediate keys held by the caller. Here it is one
 // query, and the nesting is the answer's shape.
@@ -49,7 +49,7 @@ func TestTheDoorTraversesInOneRequest(t *testing.T) {
 	}
 	hop1, _ := root["edges"].([]any)
 	if len(hop1) == 0 {
-		t.Fatal("no edges from the seed — the walk answered nothing, so the door is not traversing")
+		t.Fatal("no edges from the seed — the walk answered nothing, so the endpoint is not traversing")
 	}
 	// The second hop is what a REST caller could not have had without a second
 	// request: it is resolved from a key this query never named.
@@ -64,8 +64,8 @@ func TestTheDoorTraversesInOneRequest(t *testing.T) {
 	}
 }
 
-// TestTheDoorReadsTheSameGraphTheOpsDo pins that this is a second DOOR and not a
-// second store: an assertion filed through REST is visible here, with the
+// TestTheDoorReadsTheSameGraphTheOpsDo pins that this is a second ENDPOINT and not
+// a second store: an assertion filed through REST is visible here, with the
 // server-minted fields the write path stamps.
 func TestTheDoorReadsTheSameGraphTheOpsDo(t *testing.T) {
 	app := mountGraph(t)
@@ -94,7 +94,7 @@ func TestTheDoorReadsTheSameGraphTheOpsDo(t *testing.T) {
 
 // TestTheDoorIsScopedToTheCallersOrg is the tenancy check, and it is the reason
 // every resolver calls an op rather than the store: the org is read from the
-// validated principal on the request context, so a second door cannot widen it.
+// validated principal on the request context, so a second endpoint cannot widen it.
 func TestTheDoorIsScopedToTheCallersOrg(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "", "acme/secret/1", "value", "acme-only", false)

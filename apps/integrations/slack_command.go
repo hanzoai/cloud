@@ -54,13 +54,13 @@ import (
 //
 // AUTH is the LINKED PERSON's, never a service identity. The refresh token
 // slack_link sealed in KMS mints a short-lived hanzo.id access token, and the
-// call goes through the front door, so the command meets the same authorizer a
+// call goes through the edge, so the command meets the same authorizer a
 // REST client would. An unlinked user gets the prompt the channel already writes
 // ([channelIdentity]); a spent one is told to link again rather than to wait. The
 // workspace's own bot token is a REPLY sink and is never a credential.
 //
 // THE ORG IS THE WORKSPACE'S. It rides as X-Org-Id and the caller's membership is
-// checked first ([acting]), because the front door DISCARDS a selection outside
+// checked first ([acting]), because the edge DISCARDS a selection outside
 // the signed set and continues in the caller's home org — so without both, a
 // person who belongs to two orgs runs this workspace's mutations in the other one.
 //
@@ -103,8 +103,8 @@ var registryFailed sync.Once
 
 // fleetCommands is the projection GET /v1/commands serves, resolved IN THIS
 // PROCESS: the fleet document composed from every app's own build-time subset,
-// handed to zip.CommandsFromSpec. Asking the front door for it over HTTP would
-// make a Slack turn depend on the host answering a public GET about itself.
+// handed to zip.CommandsFromSpec. Asking the public endpoint for it over HTTP
+// would make a Slack turn depend on the host answering a public GET about itself.
 //
 // It costs the embedded subsets (plugin, ~4.5 MB) in this binary. That is the
 // price of reading the whole fleet's registry without a network hop, and it is
@@ -328,13 +328,13 @@ func slackCommandTurn(s *cloud.Service[state], ctx context.Context, org string, 
 	return commandReply(argv, result, out.String(), err, s.State.consoleURL)
 }
 
-// invoker sends one command to the front door as the caller, in the workspace's
-// org. The front door is where the credential is checked, so the command meets
+// invoker sends one command to the edge as the caller, in the workspace's
+// org. The edge is where the credential is checked, so the command meets
 // the SAME authorizer a REST client would — running it in this process would
 // answer for operations this binary does not even link.
 //
 // X-Org-Id is the org that connected the WORKSPACE, not the caller's home org.
-// The front door honours a selection it finds in the token's signed membership
+// The edge honours a selection it finds in the token's signed membership
 // set and DISCARDS one it does not, so without it a person who belongs to two
 // orgs runs this workspace's commands against whichever org their token calls
 // home. Membership is checked before this is built ([acting]), because a
@@ -404,10 +404,10 @@ func segment(v string) bool {
 }
 
 // acting reports whether the caller may act in the workspace's org, asked
-// through authz.Claims.EffectiveOrg — the same published predicate the front
-// door decides with, so there is one reading of one claim.
+// through authz.Claims.EffectiveOrg — the same published predicate the edge
+// decides with, so there is one reading of one claim.
 //
-// The front door DISCARDS a selection outside the signed membership set and
+// The edge DISCARDS a selection outside the signed membership set and
 // continues in the caller's home org. For a browser that is right: a stale
 // selection reads your own data and never someone else's. Here it is the wrong
 // outcome — the person asked for something in THIS workspace, and running it

@@ -21,7 +21,8 @@ func beaconReq(host, path string) *http.Request {
 // TestSiteHostNeverIngests pins the invariant that replaced the analytics carve: a
 // site host serves BYTES and is TERMINAL. A beacon POST to one is neither ingested
 // here (there is no handler left to install — SetAnalyticsHost is gone, which the
-// build proves) nor passed through to the API pipeline where the ingest door lives.
+// build proves) nor passed through to the API pipeline where the ingest endpoint
+// lives.
 //
 // The carve was a SECOND attribution mechanism beside the project key, and the one
 // that could not be checked: this middleware runs BEFORE the identity boundary, so

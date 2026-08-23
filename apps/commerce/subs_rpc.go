@@ -5,11 +5,11 @@ package commerce
 // subs_rpc.go — the org's subscriptions, over the internal plane.
 //
 // Who is subscribed is commerce's fact, and every process that is not commerce
-// used to ask for it by re-entering commerce's own HTTP door: a GET of
+// used to ask for it by re-entering commerce's own HTTP endpoint: a GET of
 // /v1/billing/subscriptions through CLOUD_COMMERCE_HTTP_URL, which production
 // points at commerce.hanzo.svc:8001 — a Service selecting
 // `app.kubernetes.io/name: cloud` on targetPort 8000, this pod's own public
-// edge. The request left the process and came back through the front door, which
+// edge. The request left the process and came back through that edge, which
 // is the re-entry apps/commerce/transport's maxDepth counter exists to survive.
 //
 // A call by name cannot express that mistake, which is the whole argument for
@@ -26,7 +26,7 @@ import (
 )
 
 // planeSubs lists the caller org's subscriptions — which plan, what state, and
-// when it began — filtered by user and status the same way the HTTP door filters
+// when it began — filtered by user and status the same way the HTTP endpoint filters
 // them, because it IS the same query: commerce exports it as a value-taking core
 // (billing.ListSubscriptions) and both callers ask that one function. Deriving
 // the filter again here would be a second implementation of one question, and

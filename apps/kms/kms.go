@@ -107,8 +107,8 @@ var ErrInvalidKey = errors.New("kms: invalid secret coordinate (name/env must be
 
 // Store-key component bounds. The store keys are opaque byte strings, so a '/'
 // in a name is not filesystem traversal — but forbidding separators + control
-// chars keeps one key = one secret and closes the door on any future backend
-// that treats '/' structurally.
+// chars keeps one key = one secret and rules out any future backend that treats
+// '/' structurally.
 const (
 	maxNameLen    = 253
 	maxEnvLen     = 63

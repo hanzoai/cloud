@@ -379,7 +379,7 @@ func TestTerminalEndsWithTheLease(t *testing.T) {
 
 // A handler nothing can reach is the failure this package has already had once:
 // Create, List, Get and Delete existed as exported functions with no routes
-// registered, and nothing said so. The terminal adds three more doors, so the
+// registered, and nothing said so. The terminal adds three more routes, so the
 // mounting is a fact with a test rather than a line somebody remembered to write.
 //
 // None of it needs a cluster. Every refusal here happens before a pod or a store
@@ -387,7 +387,7 @@ func TestTerminalEndsWithTheLease(t *testing.T) {
 func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 	app := mountHTTP(t)
 
-	// The ticket door is the ordinary org gate, and it is the SAME 403 the
+	// The ticket route is the ordinary org gate, and it is the SAME 403 the
 	// siblings answer. A 404 here would mean the route is not registered at all,
 	// which is the bug this test exists for. What happens WITH a principal needs
 	// the org's store and so belongs to the live suite.
@@ -395,7 +395,7 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 		t.Fatalf("unauthenticated ticket: want 403, got %d %s", code, b)
 	}
 
-	// The socket door answers the TICKET and nothing else. It refuses BEFORE
+	// The socket route answers the TICKET and nothing else. It refuses BEFORE
 	// upgrading — a socket that opens and then closes tells a browser nothing —
 	// and it refuses identically whether the caller brings a principal or not,
 	// because a principal is not what opens a terminal.
@@ -408,7 +408,7 @@ func TestTerminalRoutesAreMountedAndGated(t *testing.T) {
 		}
 	}
 
-	// A session name that could reach a command line is refused at the door, ahead
+	// A session name that could reach a command line is refused on arrival, ahead
 	// of the ticket — so a caller cannot learn anything about a ticket by varying
 	// the name, and a malformed name never gets as far as a shell.
 	if code, b := req(t, app, http.MethodGet, "/v1/sandbox/m_nope/terminal/ws?arg=a;id&ticket=x", "", ""); code != http.StatusBadRequest {
@@ -491,7 +491,7 @@ func TestThePageReportsAFailureAndNotOnlyReadiness(t *testing.T) {
 	if !strings.Contains(page, "why: why") {
 		t.Error("the failure carries no reason; the host can only guess at one")
 	}
-	// Both outcomes leave by the same door, so a host has one message to parse.
+	// Both outcomes leave by the same channel, so a host has one message to parse.
 	if n := strings.Count(page, "source: 'hanzo-term'"); n != 3 {
 		t.Errorf("found %d messages to the host, want 3 (ready, failed, retry) — "+
 			"one channel, or a host has to learn a second", n)

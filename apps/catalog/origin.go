@@ -62,7 +62,7 @@ const (
 	OriginProduct = "product"
 )
 
-// curated is the ONE curated-gallery door (clients/templates owns the embedded
+// curated is the ONE curated-gallery source (clients/templates owns the embedded
 // catalog and its variants). A package var for the same reason the corpus's two
 // other sources are: the derivation is testable without the embedded catalog.
 var curated = template.List

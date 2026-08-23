@@ -35,7 +35,7 @@
 // now, not a firecrawl one: a firecrawl client composes
 // {apiUrl}/{version}/scrape, which cannot spell /v1/websearch/scrape from any
 // base URL it accepts, so the chat server's scraper is pointed at the Hanzo
-// address directly. The envelope is what stayed compatible; the door carries
+// address directly. The envelope is what stayed compatible; the path carries
 // the name of the capability behind it (HIP-0139 §3, whose §3.2 exemptions are
 // a closed list firecrawl is not on).
 //
@@ -53,13 +53,13 @@
 // with a validated principal never needs the key. So neither surface is ever an
 // open proxy, and the signed-in console user reaches search without the shared key.
 //
-// THE NATIVE DOOR IS A TYPED OP; THE TWO COMPAT DOORS CANNOT BE.
+// THE NATIVE ENDPOINT IS A TYPED OP; THE TWO COMPAT ENDPOINTS CANNOT BE.
 //
 //   - POST /v1/websearch is Hanzo's own address for this capability, and it is a
 //     typed op — so it is an MCP tool, a CLI command, an SDK method and a
 //     described operation, which is what the assistant reaches for when it is
 //     asked what the weather is. It runs the SAME metaSearch over the SAME
-//     engines and answers the SAME envelope as the SearXNG door; there is one
+//     engines and answers the SAME envelope as the SearXNG endpoint; there is one
 //     search here, offered at the address each caller can actually speak.
 //
 // WHY THE OTHER TWO ARE NOT TYPED OPS (re-verified at zip v1.27.0), so the next
@@ -150,7 +150,7 @@ func searchGuard(next http.Handler) http.Handler {
 	})
 }
 
-// ── The native door: POST /v1/websearch, a typed op ─────────────────────────
+// ── The native endpoint: POST /v1/websearch, a typed op ─────────────────────
 
 // Go drops comments at compile time, so cmd/zipdoc is the ONLY path from the
 // handler's prose to the published document, the SDKs and the MCP tool
@@ -168,8 +168,8 @@ func searchGuard(next http.Handler) http.Handler {
 const Path = "/v1/websearch"
 
 // webSearchQuery is the POST /v1/websearch body. It carries the SAME two inputs
-// the SearXNG door reads off its query string, so the two doors are one search
-// asked two ways rather than two searches.
+// the SearXNG endpoint reads off its query string, so the two endpoints are one
+// search asked two ways rather than two searches.
 type webSearchQuery struct {
 	// Q is the query. Required — an empty one is refused rather than answered
 	// with the whole web.
@@ -203,8 +203,8 @@ type webSearchQuery struct {
 // results are public web pages, identical for every caller, so nothing here is
 // scoped and nothing here can leak across orgs. A typed op is also an MCP tool
 // and a CLI command, and tools/call invokes it with no route and therefore no
-// middleware — so the gate is in the handler, where every door reaches it, rather
-// than in a middleware only one door passes through.
+// middleware — so the gate is in the handler, where every caller reaches it,
+// rather than in a middleware only one caller passes through.
 func webSearch(ctx context.Context, in *webSearchQuery) (*webSearchResults, error) {
 	if !principal.ValidatedFrom(ctx) {
 		return nil, zip.ErrUnauthorized("sign in to search the web")
@@ -242,7 +242,8 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // scrapeScoped serves one scrape under a caller scope, so scraped pages land in
-// the same corpus /v1/crawl fills — one crawl, one archive, whichever door was used.
+// the same corpus /v1/crawl fills — one crawl, one archive, whichever endpoint
+// was used.
 func scrapeScoped(w http.ResponseWriter, r *http.Request, s crawl.Scope) {
 	// Bearer auth (firecrawl always sends Authorization: Bearer <key>); fail
 	// closed if unconfigured.
@@ -307,13 +308,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	logger = logger.New("subsystem", "websearch")
 	// The package logs one thing and only one thing: an engine that went blind
 	// on a query another engine answered (outcome.go). Held here rather than
-	// threaded through metaSearch because the three doors into search — this
+	// threaded through metaSearch because the three entry points into search — this
 	// subsystem's two handlers and compose.go's in-process caller — do not all
 	// have a logger to pass, and a search that must not run without one would be
 	// a worse trade than a warning that stays quiet in a library caller.
 	setLogger(logger)
 	// Bound the same way and for the same reason as the logger above: the paid
-	// engines are asked from metaSearch, which every door reaches and none of
+	// engines are asked from metaSearch, which every caller reaches and none of
 	// them can hand a meter to. See meter.go.
 	bindMeter(cloud.NewResourceMeter(deps, "websearch"))
 
@@ -330,7 +331,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//      unset, 401 on a missing/wrong key.
 	// A caller with NEITHER a validated principal NOR a valid key is refused (401/503),
 	// so the anonymous-forge / open-surface path stays closed.
-	// The NATIVE door, registered on the *zip.App rather than on the cloud.Router,
+	// The NATIVE endpoint, registered on the *zip.App rather than on the cloud.Router,
 	// and that is what makes the prose reach the document: zipdoc resolves a typed
 	// op's path STATICALLY, and a cloud.Router parameter is an interface it cannot
 	// follow to a prefix. The path below is absolute and the subsystem scope adds no
@@ -353,11 +354,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	g.All("/search", func(c *zip.Ctx) error {
 		// The net/http adaptor hands the handler a request whose Context is the
 		// TRANSPORT's, not the one cloud.Bridge parked the validated caller in —
-		// so a search arriving by this door reached metaSearch with no principal
-		// and no ledger, and the paid engines had nobody to bill. Re-attaching
-		// the request's own context here is what makes this door resolve the same
-		// payer the typed door does. Same move, for the same reason, as scrape
-		// below: identity is resolved where the request is.
+		// so a search arriving by this endpoint reached metaSearch with no
+		// principal and no ledger, and the paid engines had nobody to bill.
+		// Re-attaching the request's own context here is what makes this endpoint
+		// resolve the same payer the typed op does. Same move, for the same
+		// reason, as scrape below: identity is resolved where the request is.
 		native := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			searchNative(w, r.WithContext(c.Context()))
 		})
@@ -373,7 +374,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		org, _ := principal.Org(c)
 		s := crawl.Scope{Org: org, Project: principal.Project(c)}
 		return zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Carried for the reason the search door above carries it: a page
+			// Carried for the reason the search endpoint above carries it: a page
 			// this fetch has to RENDER is billed, and the meter reads the payer
 			// off the request's own context, which the adaptor does not pass on.
 			scrapeScoped(w, r.WithContext(c.Context()), s)
@@ -461,7 +462,7 @@ func init() {
 
 			"The shared service key is required as an Authorization Bearer, compared in constant "+
 			"time: unset on the deployment is 503, missing or wrong is 401. Unlike search, a "+
-			"validated principal does NOT substitute for it — this is the service-to-service door.\n\n"+
+			"validated principal does NOT substitute for it — this is the service-to-service endpoint.\n\n"+
 
 			"A page is archived under the caller's own org and project, taken from the verified "+
 			"principal when there is one, so a scrape lands in the same corpus /v1/crawl fills and "+

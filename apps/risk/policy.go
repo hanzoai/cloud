@@ -203,8 +203,8 @@ const nanoPerUSD = 1_000_000_000
 // listing CALLS FOR ACTION on is frozen rather than merely examined.
 //
 // Ten thousand USD. It is the figure supervisors build their own reporting
-// obligations around, and it is far past what self-serve credit at a card door is
-// for — the door exists so a customer can buy inference, not move money.
+// obligations around, and it is far past what self-serve credit at a card endpoint
+// is for — the endpoint exists so a customer can buy inference, not move money.
 const freezeNano = 10_000 * nanoPerUSD
 
 // reviewNano is the value at or above which a top-up is examined WHATEVER the
@@ -238,32 +238,32 @@ const reviewNano = 50_000 * nanoPerUSD
 // the accrual these two bounds are read over holds money that moved IN and nothing
 // else, and one statement of appetite still has one reading.
 
-// The credit door's ARMED AXES, stated because the alternative is a half of a rule
+// The credit endpoint's ARMED AXES, stated because the alternative is a half of a rule
 // that is silently inert.
 //
 // [onFan] reads two link identifiers — the device and the counterparty — and a
 // determination on either is only reachable if the asking gate STATES one.
-// apps/commerce's credit door states the counterparty ([axisPeer]) as the address our
-// own edge resolved, which is the one identifier at that door that several nominally
-// unrelated payers can share, and it is what makes the fan-out reachable there.
+// apps/commerce's credit endpoint states the counterparty ([axisPeer]) as the address
+// our own edge resolved, which is the one identifier at that endpoint that several
+// nominally unrelated payers can share, and it is what makes the fan-out reachable there.
 //
-// IT STATES NO DEVICE, AND THAT IS A FACT ABOUT THE DOOR AND NOT A GAP IN THE RULE.
+// IT STATES NO DEVICE, AND THAT IS A FACT ABOUT THE ENDPOINT AND NOT A GAP IN THE RULE.
 // No device fingerprint reaches this binary from a top-up: the request body is a card
 // token, an amount and a currency; the card is tokenised in the browser and its number
 // never arrives; the browser does not run the payment SDK's buyer-verification step, so
 // there is no verification token either; and no header carries one. The DEVICE half of
-// the fan-out is therefore UNARMED at the credit door, deliberately, and it is declared
-// at boot (apps/commerce's [paymentAxes]) rather than left to read as a rule that found
-// nothing.
+// the fan-out is therefore UNARMED at the credit endpoint, deliberately, and it is
+// declared at boot (apps/commerce's [paymentAxes]) rather than left to read as a rule
+// that found nothing.
 //
 // What is emphatically NOT done is inventing one. A user-agent string, or a digest of
 // the request's headers, is shared by millions of unrelated people — stated as a device
 // it would put every customer past [fanSubjects] and summon a person for every payment,
 // which is the same control being useless in the louder direction. The axis stays
-// unarmed until a real fingerprint is collected, and the day it is, the door states it
-// in one line.
+// unarmed until a real fingerprint is collected, and the day it is, the endpoint states
+// it in one line.
 //
-// The device half remains armed on the LEARN door, where a caller that has a
+// The device half remains armed on the LEARN endpoint, where a caller that has a
 // fingerprint states one — so the rule is exercised, and it is exercised on the axis
 // where a real value exists.
 
@@ -322,7 +322,7 @@ var listedAsOf = time.Date(2026, time.June, 27, 0, 0, 0, 0, time.UTC)
 // THE DISTINCTION IS THE WHOLE POINT. A formal designation (OFAC, UN, EU, OFSI)
 // is a legal finding about a named party, it is made by the screening engine that
 // holds the designations, and nothing in this app makes one. What this is, is the
-// tier a jurisdiction sits in for the purpose of pricing RISK at a credit door —
+// tier a jurisdiction sits in for the purpose of pricing RISK at a credit endpoint —
 // which is a judgement an operator is entitled to make and must be able to state.
 // The two lists stay separate because the required response differs:
 //
@@ -336,7 +336,7 @@ var listedAsOf = time.Date(2026, time.June, 27, 0, 0, 0, 0, time.UTC)
 // WHY A COMPILED DEFAULT EXISTS AT ALL, given that the listing it defaults to is
 // stated by an operator and changes several times a year: without one, an
 // unconfigured deployment answers "not listed" for every country on earth, and the
-// geography half of the rule is silently inert at the one door it was built for.
+// geography half of the rule is silently inert at the one endpoint it was built for.
 // A control that switches itself off without saying so is worse than no control.
 // So the default is stated here, dated, and it LOSES to anything the operator
 // states — and because the rule ships in shadow, a stale entry cannot refuse
@@ -631,7 +631,7 @@ func (p *plane) restoreRegime(r *resident, row *anomaly.Config) {
 // rather than clamping: a coerced appetite is a policy the organisation did not
 // state, recorded as though it had.
 //
-// It is the ONE door. The bounds were stated twice — once here and once at the
+// It is the ONE check. The bounds were stated twice — once here and once at the
 // typed op — and two spellings of one rule is one rule that will disagree with
 // itself the first time either moves. The op's copy is gone; this is the whole
 // rule, at the same strictness the published contract always had.

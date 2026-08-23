@@ -83,7 +83,7 @@ func send(t *testing.T, app *zip.App, method, path, org string, body any, admin 
 	return result{Code: resp.StatusCode, Body: b}
 }
 
-// call runs POST /v1/tools/call — the ONE dispatch door onto the dynamic plane.
+// call runs POST /v1/tools/call — the ONE dispatch endpoint onto the dynamic plane.
 func call(t *testing.T, app *zip.App, org, name string, args map[string]any) result {
 	t.Helper()
 	if args == nil {
@@ -94,13 +94,13 @@ func call(t *testing.T, app *zip.App, org, name string, args map[string]any) res
 }
 
 // activated lists the caller's callable tools — GET /v1/tools?activated=true, the
-// discovery half the dispatch door is paired with.
+// discovery half the dispatch endpoint is paired with.
 func activated(t *testing.T, app *zip.App, org string) []string {
 	t.Helper()
 	return toolNames(t, do(t, app, http.MethodGet, "/v1/tools?activated=true", org, nil).Body)
 }
 
-// TestCallGate403: the dispatch door refuses a caller with no validated principal —
+// TestCallGate403: the dispatch endpoint refuses a caller with no validated principal —
 // the tool plane never dispatches an unauthenticated request.
 func TestCallGate403(t *testing.T) {
 	app := newApp(t, nil)

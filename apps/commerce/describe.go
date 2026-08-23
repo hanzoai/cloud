@@ -60,7 +60,7 @@ func describeAdmin() {
 			"would publish that credential to every reader of this status.")
 }
 
-// ---- /v1/commerce/webhooks — the processor's own door ----
+// ---- /v1/commerce/webhooks — the processor's own endpoint ----
 
 // The rest of what this function used to describe is gone from this file, not
 // deleted: the whole /v1/billing family is served by apps/billing now, as typed
@@ -167,13 +167,13 @@ func describeCatalog() {
 
 	openapi.Describe("/v1/commerce/catalog/models/refresh", http.MethodPost,
 		"Refresh the model catalog by reading the upstream provider",
-		"Pulls the upstream model list and lands it through the same upsert the push door uses, "+
-			"so the rule that a sync owns cost and an administrator owns price holds no matter "+
-			"which door a row came through. It takes no body — the upstream is READ rather than "+
-			"told. If that upstream cannot be read the call answers 502 and writes NOTHING: a "+
-			"sync that cannot see its source must never conclude the source is empty, because "+
-			"that conclusion would withdraw every model on sale. The gate is a PLATFORM principal "+
-			"so the scheduled job's service token qualifies.")
+		"Pulls the upstream model list and lands it through the same upsert the push "+
+			"endpoint uses, so the rule that a sync owns cost and an administrator owns price "+
+			"holds no matter which endpoint a row came through. It takes no body — the upstream "+
+			"is READ rather than told. If that upstream cannot be read the call answers 502 and "+
+			"writes NOTHING: a sync that cannot see its source must never conclude the source "+
+			"is empty, because that conclusion would withdraw every model on sale. The gate is "+
+			"a PLATFORM principal so the scheduled job's service token qualifies.")
 
 	openapi.Describe("/v1/commerce/catalog/seed", http.MethodPost,
 		"Seed the embedded catalog, without disturbing edits already made",

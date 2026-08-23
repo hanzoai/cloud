@@ -295,10 +295,10 @@ func fleetRoutes(app *zip.App, s *cloud.Service[fleetState]) {
 // admin (the 2026-07-08 admin-org P0), which is also what closes the fleet-restart
 // DoS lever (RED H1).
 //
-// The ROLE only opens the door; the TENANT boundary is enforced inside each
-// handler by scopedNamespaces(c): a SuperAdmin observes the whole fleet, an
-// OrgAdmin is CONFINED to the platform namespaces its own validated org owns, so a
-// tenant admin can never observe — or restart — another org's, or a platform, app.
+// The ROLE only admits; the TENANT boundary is enforced inside each handler by
+// scopedNamespaces(c): a SuperAdmin observes the whole fleet, an OrgAdmin is
+// CONFINED to the platform namespaces its own validated org owns, so a tenant
+// admin can never observe — or restart — another org's, or a platform, app.
 // This mirrors runner.go's org attribution (default to the caller's org, refuse a
 // foreign one) for a READ/RESTART surface.
 
@@ -337,10 +337,10 @@ func capPrincipal(who zip.Caller) fleetPrincipal {
 	}
 }
 
-// mayObserve is the read board's door, on the plane transport: the SAME
+// mayObserve is the read board's check, on the plane transport: the SAME
 // cloud.Admin scope the HTTP routes are guarded with, applied to the authority a
-// capability carries. It only opens the door; scopeNamespaces is what confines
-// whoever walks through.
+// capability carries. It only admits; scopeNamespaces is what confines the
+// caller it admits.
 func (p fleetPrincipal) mayObserve() bool { return cloud.Admin.Admits(p.Authority) }
 
 // scopeNamespaces is the TENANT boundary — the one confinement rule, applied to the

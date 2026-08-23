@@ -21,12 +21,12 @@
 //
 // # What asking costs, and why it is affordable
 //
-// A child answers on its OWN door — zip's default /mcp, which cloud.Serve
+// A child answers on its OWN MCP server — zip's default /mcp, which cloud.Serve
 // deliberately leaves where the framework puts it (manifest.FrameworkMCPPath),
 // over the private ZAP socket the host started it on; or, for a caller that
-// reached this host from INSIDE, the same door on the app's own plane socket
-// (manifest.MCPPath, cloud.Door). [At] resolves the name to whichever of the two
-// that caller may use, and zip.App.Start is what makes either reachable:
+// reached this host from INSIDE, the same MCP server on the app's own plane
+// socket (manifest.MCPPath, cloud.Door). [At] resolves the name to whichever of
+// the two that caller may use, and zip.App.Start is what makes either reachable:
 // idempotent, and the SAME single-flighted path a request to the app's prefix
 // takes, so a burst of concurrent askers still produces one child.
 //
@@ -53,8 +53,8 @@ import (
 	zaphttp "github.com/zap-proto/http"
 )
 
-// At resolves one app to the DOOR it answers on — the address, and the path on
-// it — starting the app if it is cold.
+// At resolves one app to the ENDPOINT it answers on — the address, and the path
+// on it — starting the app if it is cold.
 //
 // It is a function rather than a *zip.App because there are two ways an app is
 // reachable and only one of them is a child of this host: zip.App.Start covers
@@ -62,15 +62,16 @@ import (
 // running elsewhere is mounted, never started, so Start does not know it. The
 // composition root holds both facts (cmd/cloud), and this package holds neither.
 //
-// It answers the PATH too, because a subsystem serves its door at two addresses
-// and they are not interchangeable. Its EDGE door sits behind the identity
-// boundary every public request must pass, which deletes any authority header a
-// caller wrote and re-mints one only from a credential it verified; its PLANE
-// door sits on the canonical socket no edge route reaches, where a caller's
-// identity is its own statement, trusted exactly as far as that socket makes it
-// (cloud.Door). Which of the two a caller may be forwarded to is a property of
-// where that caller reached THIS door, and the composition root is the only
-// thing that knows both — so it says, rather than the dispatch assuming.
+// It answers the PATH too, because a subsystem serves its surface at two
+// addresses and they are not interchangeable. Its EDGE address sits behind the
+// identity boundary every public request must pass, which deletes any authority
+// header a caller wrote and re-mints one only from a credential it verified; its
+// PLANE address sits on the canonical socket no edge route reaches, where a
+// caller's identity is its own statement, trusted exactly as far as that socket
+// makes it (cloud.Door). Which of the two a caller may be forwarded to is a
+// property of where that caller reached THIS host, and the composition root is
+// the only thing that knows both — so it says, rather than the dispatch
+// assuming.
 type At func(app string) (addr, path string, err error)
 
 // Answer is one subsystem's reply to one question, or the reason there is none.
@@ -78,14 +79,14 @@ type At func(app string) (addr, path string, err error)
 type Answer struct {
 	// App is the subsystem asked, as the manifest names it.
 	App string
-	// Body is what its own door replied, verbatim.
+	// Body is what its own endpoint replied, verbatim.
 	Body []byte
 	// Err is why there is no reply: it would not start, or it did not answer.
 	Err error
 }
 
-// Ask puts req to every named app's own door at path, in PARALLEL, and returns
-// one Answer per app in the order asked.
+// Ask puts req to every named app's own endpoint at path, in PARALLEL, and
+// returns one Answer per app in the order asked.
 //
 // req is the CALLER's own request and is copied per child rather than rebuilt,
 // so a child answers as itself for the caller who asked: its headers ride along,

@@ -424,7 +424,7 @@ type dropped struct {
 // framework's whole published clause list, its documents, subprocessors,
 // policies, knowledge base, updates and risk profile.
 //
-// This is the PUBLIC door and needs no credential, because a published trust
+// This is the PUBLIC endpoint and needs no credential, because a published trust
 // centre is a public document. It answers only for an organization that has
 // published one — an organization that has not is not found rather than empty,
 // since an empty centre and a centre nobody meant to show read the same and are
@@ -433,7 +433,7 @@ type dropped struct {
 // A gated document appears here with its title, its type and its date and NO
 // address: the listing says the artifact exists and that reading it takes a
 // grant. Nothing an independent auditor signed is ever released through this
-// door.
+// endpoint.
 //
 // Example: {"org":"hanzo"}
 func (o ops) published(ctx context.Context, in *orgRef) (*centre, error) {
@@ -441,7 +441,7 @@ func (o ops) published(ctx context.Context, in *orgRef) (*centre, error) {
 }
 
 // Reads YOUR organization's whole trust centre, including the addresses of your
-// own gated documents. Same shape as the published door; the difference is that
+// own gated documents. Same shape as the published endpoint; the difference is that
 // this one is resolved from your validated bearer and shows you your own
 // artifacts.
 func (o ops) center(ctx context.Context, _ *noInput) (*centre, error) {
@@ -503,7 +503,7 @@ func (o ops) frameworkCoverage(ctx context.Context, in *frameworkRef) (*clauseCo
 }
 
 // Lists your organization's documents. Because this is your own centre, a gated
-// artifact carries its address here; through the published door it does not.
+// artifact carries its address here; through the published endpoint it does not.
 func (o ops) listDocuments(ctx context.Context, _ *noInput) (*trustDocuments, error) {
 	return mine[trustDocuments](ctx, o, "documents.list", nil)
 }
@@ -624,7 +624,7 @@ func mineBody[T any](ctx context.Context, o ops, route string, params map[string
 	return dispatch[T](ctx, o, org, route, params, body)
 }
 
-// as runs a bundle route on a NAMED tenant. Only the published door uses it with
+// as runs a bundle route on a NAMED tenant. Only the published endpoint uses it with
 // an org off the request, and only because a published trust centre is a public
 // document addressed by a public name.
 func as[T any](ctx context.Context, o ops, org, route string, params map[string]string) (*T, error) {

@@ -1,16 +1,16 @@
 package principal
 
-// The MCP door carries a caller and runs no middleware, so the two typed-op
+// The MCP server carries a caller and runs no middleware, so the two typed-op
 // readers have to resolve identity from the caller as well as from the slot the
 // route middleware fills. These pin that they do — and, more importantly, that
-// the fallback did not widen the trust rule while it widened the door.
+// the fallback did not widen the trust rule while it widened the surface.
 //
 // WHAT IT CAUGHT: every op gating on ValidatedFrom was unreachable as an MCP
 // tool. websearch refused `sign in to search the web` for a request that reached
 // the plugin WITH org=hanzo and user=hanzo/z@hanzo.ai on it, because tools/call
 // invokes an op directly (zip here.go) — no route, so no middleware, so nothing
 // parked the slot. The gate had been moved into the handler so that "every door
-// reaches it", and it was unsatisfiable on the one door that motivated the move.
+// reaches it", and it was unsatisfiable on the one endpoint that motivated the move.
 
 import (
 	"context"

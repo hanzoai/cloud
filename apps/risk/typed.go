@@ -68,9 +68,9 @@ func (o ops) tenantFor(ctx context.Context) (tenant, error) {
 	return tenantOf(ctx, o.s.Brand)
 }
 
-// admit is the ONE door into the plane: it resolves the model plane, the caller's
-// own tenant, and takes one of that tenant's in-flight slots. Pair it with the
-// release it returns.
+// admit is the ONE entry point into the plane: it resolves the model plane, the
+// caller's own tenant, and takes one of that tenant's in-flight slots. Pair it
+// with the release it returns.
 //
 // EVERY op opens with it, and that is enforced rather than asked for:
 // [TestOps_EveryOpIsAdmittedAndPriced] walks this file's syntax tree and fails on
@@ -127,7 +127,7 @@ type riskEvent struct {
 	// accepted, because a future timestamp moves the aggregates' leading edge and
 	// leaves every later event for that subject reading as though it never
 	// happened. History older than the window is folded in from your own event
-	// surface, not through this door.
+	// surface, not through this endpoint.
 	At string `json:"at,omitempty"`
 }
 
@@ -148,13 +148,13 @@ func (e riskEvent) observation(now time.Time) (observation, error) {
 	// Two of them exist and both are load-bearing. A SETTLEMENT observation
 	// ([planeObserve]) is the only thing teaching the aggregate rules any payment
 	// velocity at all, so pre-empting one switches those rules off for that subject
-	// — available to the paying party, which at a self-serve credit door is the
+	// — available to the paying party, which at a self-serve credit endpoint is the
 	// organisation itself. A FOLDED bucket ([bucketID]) is a piece of the
 	// organisation's own history, and a claimed id makes the fold skip it.
 	//
 	// It is refused HERE, on the CALLER's shape, and nowhere else. This method is the
 	// one that reads an id a caller chose; [riskEvent.under] is the conversion beneath
-	// it, and the plane's own doors reach that one with an id they minted themselves.
+	// it, and the plane's own callers reach that one with an id they minted themselves.
 	// A guard on the conversion would refuse the plane its own namespaces.
 	if ns, taken := reservedOf(id); taken {
 		return observation{}, zip.ErrBadRequest("'id' may not begin with " + ns +
@@ -164,8 +164,8 @@ func (e riskEvent) observation(now time.Time) (observation, error) {
 }
 
 // under is the conversion itself, under an id its caller has already settled on. It
-// holds the TIME bound — the one definition of it, [within] — so every door reaches
-// that bound through here and none of them can be the door that forgot it.
+// holds the TIME bound — the one definition of it, [within] — so every caller reaches
+// that bound through here and none of them can be the one that forgot it.
 func (e riskEvent) under(id string, now time.Time) (observation, error) {
 	at := now
 	if e.At != "" {
@@ -854,8 +854,8 @@ func (o ops) score(ctx context.Context, in *riskScoreIn) (*riskScoreOut, error) 
 // IT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;
 // learning is a transformation over observations; a verdict is a query against the
 // result. This op is the first two. [ops.score] is the third, it is pure, and it
-// is the ONE door to a verdict. They were one call, which meant you could not
-// record without training and could not train without being answered — and the
+// is the ONE entry point to a verdict. They were one call, which meant you could
+// not record without training and could not train without being answered — and the
 // model ran twice over every event to produce a verdict the response carried and
 // no caller read.
 //
@@ -1360,13 +1360,13 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 	}
 	ledger := principal.Ledger(c)
 	// NO LEDGER IS AN IDENTITY REFUSAL, and [cloud.ResourceMeter.Gate] is where it
-	// is answered — above both of its branches, for every caller of the money door,
+	// is answered — above both of its branches, for every caller of the meter,
 	// as [cloud.ErrNoLedger]. [cloud.denial] renders that as 403 "no validated
 	// principal" and [cloud.DenyEnvelope] writes it in the fleet's own nested
 	// {"error":{"code","message"}}, so this surface refuses an unidentified caller
 	// in the same bytes as every other one.
 	//
-	// This op used to hold its own copy of that rule, from before the fleet door
+	// This op used to hold its own copy of that rule, from before the fleet's meter
 	// had one. Both answered 403 with the identical sentence, so the only thing the
 	// copy still decided was the SHAPE — flat {"status","code","error"} from zip
 	// instead of the nested envelope — which made /v1/risk the one surface where a
@@ -1501,10 +1501,10 @@ func verdict(d decided) riskScoreOut {
 // review is the whole governance answer for one organisation: what its model is
 // right now, and every value it has published.
 //
-// ONE DOOR. The three ops that answer this question — reading the state, restating
-// the appetite and adopting a value — all come through here, so none of them can
-// answer it a different way. [modelState] stays a pure projection of engine state
-// beneath it; this is what adds the organisation's own history to it.
+// ONE ENTRY POINT. The three ops that answer this question — reading the state,
+// restating the appetite and adopting a value — all come through here, so none
+// of them can answer it a different way. [modelState] stays a pure projection of
+// engine state beneath it; this is what adds the organisation's own history to it.
 //
 // A history that cannot be read is an ERROR and not an empty list. The shelf is the
 // same file the model was just read from, so a read that fails here is a fault, and

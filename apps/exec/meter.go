@@ -12,7 +12,7 @@ package exec
 // function, which is this operation with a shorter lease — and it ALREADY gates
 // and debits its own per-invoke fee around that call. A meter inside Run would
 // charge that path twice for one execution. So the charge sits on THIS
-// subsystem's own door, where the callers are this subsystem's callers, and
+// subsystem's own endpoint, where the callers are this subsystem's callers, and
 // composition stays free: a subsystem that composes the interpreter prices its
 // own product and is not silently taxed for reusing the implementation.
 //
@@ -49,7 +49,7 @@ const defaultFeeCents int64 = 1
 // Package-level and an atomic pointer because this subsystem has no service
 // value to hang it off: its handlers are free functions and Mount builds no
 // cloud.Base. It is the shape apps/websearch uses, for the same reason — a
-// dependency every door needs and none of them can be handed.
+// dependency every handler needs and none of them can be handed.
 var meter atomic.Pointer[cloud.ResourceMeter]
 
 // bindMeter installs the process-wide meter. A nil meter leaves the interpreter
@@ -62,7 +62,7 @@ func fee() int64 { return cloud.FeeCents(feeEnv, runKind, defaultFeeCents) }
 // afford authorizes one run BEFORE a sandbox is leased, so a caller who cannot
 // cover it is refused having spent nothing.
 //
-// It must be asked with the door's OWN context. Run detaches to a background
+// It must be asked with the handler's OWN context. Run detaches to a background
 // context as its first act (callCtx), because the program must outlive a client
 // that hangs up — and a detached context carries the org and nothing else, so the
 // payer has to be resolved on this side of that line.

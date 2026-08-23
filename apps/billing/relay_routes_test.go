@@ -7,12 +7,12 @@ import (
 
 // Every relayed address must be MOUNTED, and must FAIL CLOSED.
 //
-// This carries a guarantee that used to live next door, on the app that used to
+// This carries a guarantee that used to live elsewhere, on the app that used to
 // serve these addresses. Its lesson survived the fold and is worth restating
-// where the doors are now: a route reaches an app only when both halves of its
-// address exist, and the router's half is a different file from the app's. The
-// manifest oracle asserts the router's half; this asserts the app's, and neither
-// can see the other.
+// where the endpoints are now: a route reaches an app only when both halves of
+// its address exist, and the router's half is a different file from the app's.
+// The manifest oracle asserts the router's half; this asserts the app's, and
+// neither can see the other.
 //
 // The assertion is NOT-404, and that distinction is the whole point. Both 404
 // and 401 are "no data" to a browser, but 404 means the route was never
@@ -22,9 +22,9 @@ import (
 // the entire time production answered 404 for them, because nothing mounted them
 // on the router that took the request.
 //
-// It is deliberately about the doors this app took over in the fold, listed leaf
-// by leaf rather than by prefix — a prefix is a claim about a subtree, and a
-// mount that missed one leaf inside a claimed subtree is exactly what this
+// It is deliberately about the endpoints this app took over in the fold, listed
+// leaf by leaf rather than by prefix — a prefix is a claim about a subtree, and
+// a mount that missed one leaf inside a claimed subtree is exactly what this
 // catches.
 func TestRelayedDoorsAreMountedAndFailClosed(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{}`}
@@ -79,17 +79,17 @@ func TestRelayedDoorsAreMountedAndFailClosed(t *testing.T) {
 			continue
 		}
 		if code < 400 {
-			t.Errorf("%s %s = %d for a caller with no validated principal — this door "+
+			t.Errorf("%s %s = %d for a caller with no validated principal — this endpoint "+
 				"answers money questions and must refuse one (%s)",
 				r.method, r.path, code, body)
 		}
 	}
 }
 
-// The public catalog is the ONE door here that must answer an anonymous caller,
-// and it is asserted separately for exactly that reason: folding it into the
-// list above would let a refusal there pass as correct, and a plans page that
-// requires a session is a paywall in front of the prices.
+// The public catalog is the ONE endpoint here that must answer an anonymous
+// caller, and it is asserted separately for exactly that reason: folding it
+// into the list above would let a refusal there pass as correct, and a plans
+// page that requires a session is a paywall in front of the prices.
 func TestTheCatalogAnswersAnonymously(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `{}`}
 	app := mountApp(t, f.server(t).URL, "svc-token")

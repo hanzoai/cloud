@@ -36,7 +36,7 @@ import (
 )
 
 // ask runs one peer call for org and normalises the two failures a caller must
-// never confuse. what names the act, so a 503 says which door could not be
+// never confuse. what names the act, so a 503 says which endpoint could not be
 // answered rather than only that something could not.
 //
 // The org rides cloud.For: an inbound request's own principal always wins over
@@ -81,8 +81,8 @@ func principalOrg(ctx context.Context) (string, error) {
 }
 
 // payerOf resolves the wallet a RAW handler acts for. It is payer's twin for the
-// two doors that serve something other than a JSON value, and it resolves the
-// same two facts by the same rules, so a raw door and a typed one can never
+// two endpoints that serve something other than a JSON value, and it resolves the
+// same two facts by the same rules, so a raw endpoint and a typed one can never
 // disagree about whose money they are describing.
 func payerOf(c *zip.Ctx) (org, subject string, err error) {
 	o, ok := principal.Org(c)

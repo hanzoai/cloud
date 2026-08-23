@@ -142,7 +142,7 @@ func resolveActor(ctx context.Context) (string, error) {
 // TWO INDEPENDENT CONTROLS, and neither is the other's backstop.
 //
 // THE ORG decides which namespace. It is derived from the run's org — resolved
-// by the door from a validated principal, never from a field — through a CLOSED
+// by the endpoint from a validated principal, never from a field — through a CLOSED
 // table (forge.Owner), so an org with no forge namespace is refused rather than
 // becoming one. There is no argument a run could carry to reach another tenant.
 //
@@ -179,14 +179,14 @@ func delegate(ctx context.Context, org, actor, repo, session string) (forge.Gran
 		return forge.Grant{}, fmt.Errorf("coding: %w", err)
 	}
 	if strings.TrimSpace(actor) == "" {
-		// A run with nobody to act as is refused, and the message says which door
-		// it came in by, because the two doors fail for different reasons. The
-		// HTTP door carries an authenticated caller; the Slack door does not —
-		// it resolves a linked ACCOUNT SUBJECT from its own table and states only
-		// the org on the hop, so there is no forge login to drop privilege to.
-		// Minting on the machine's authority instead would hand a write key to a
-		// request whose human was never established, which is the hole this
-		// closes.
+		// A run with nobody to act as is refused, and the message says which
+		// endpoint it came in by, because the two endpoints fail for different
+		// reasons. The HTTP endpoint carries an authenticated caller; the Slack
+		// endpoint does not — it resolves a linked ACCOUNT SUBJECT from its own
+		// table and states only the org on the hop, so there is no forge login to
+		// drop privilege to. Minting on the machine's authority instead would hand
+		// a write key to a request whose human was never established, which is the
+		// hole this closes.
 		return forge.Grant{}, fmt.Errorf(
 			"coding: this run has no forge identity to act as, so its access to %s cannot be established", repo)
 	}

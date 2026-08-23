@@ -243,9 +243,9 @@ func TestTransitionStorefrontFailClosed(t *testing.T) {
 func TestCommerceStorefrontWire(t *testing.T) {
 	// A commerce peer on commerce's own socket — the arrangement production has,
 	// now that both halves of Publish ask by name instead of re-entering
-	// commerce's HTTP door.
+	// commerce's HTTP endpoint.
 	//
-	// The assertions that went with that door are gone because the facts they
+	// The assertions that went with that endpoint are gone because the facts they
 	// checked are no longer carried the same way: there is no Authorization
 	// header to inspect, and no X-Org-Id, because identity rides the CALLER on the
 	// plane. What replaces them is stronger — the op reads the org out of the

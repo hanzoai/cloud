@@ -132,7 +132,7 @@ func TestNoSettingsPeerStillIsolates(t *testing.T) {
 //
 // The table tests state cases; this states the property, so a boundary added to
 // `runtimes` later cannot open a hole that no case happened to cover. It is the
-// isolation half of the volume invariant next door — same shape, same reason.
+// isolation half of the volume invariant in runtime_test.go — same shape, same reason.
 func TestNoFleetValuePutsATenantOnTheNodesKernel(t *testing.T) {
 	r := &runtime{}
 	for _, fleet := range append([]string{"", " ", "runsc", "default", "gVisor"}, sorted()...) {

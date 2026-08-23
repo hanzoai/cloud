@@ -997,7 +997,7 @@ func (o sessionOps) patch(ctx context.Context, in *patchSessionIn) (*sessionView
 	if body.Cwd != nil {
 		nc := strings.TrimSpace(*body.Cwd)
 		// The SAME bound register applies (sessionContext) — one rule for one
-		// field, whichever door the value arrives through.
+		// field, whichever endpoint the value arrives through.
 		if len(nc) > maxCwd {
 			return nil, zip.ErrBadRequest("cwd too long")
 		}

@@ -251,7 +251,7 @@ func TestNoWireFieldCanNameAnOrg(t *testing.T) {
 	}
 }
 
-// ASKING IS NOT GETTING — the trust axis, held at the DOOR.
+// ASKING IS NOT GETTING — the trust axis, held at the ENDPOINT.
 //
 // runc is the node's own kernel. The derivation refuses it to anyone outside the
 // reserved org, and this proves the refusal survives the trip through a request

@@ -95,10 +95,10 @@ const HeaderUserBrand = "X-User-Brand"
 //
 // It grants nothing on its own. An app holds NEITHER admin scope, deliberately:
 // authz.Claims.OrgAdmin refuses every machine by construction, because an app is
-// issued for a purpose and not handed an org's self-service surface. A door whose
-// act IS a purpose reads this to admit an org's own machine credential and bound it
-// to that org — which is how a build carries the organization it publishes for
-// instead of a shared secret that names none.
+// issued for a purpose and not handed an org's self-service surface. An endpoint
+// whose act IS a purpose reads this to admit an org's own machine credential and
+// bound it to that org — which is how a build carries the organization it publishes
+// for instead of a shared secret that names none.
 //
 // Stripped on ingress with every other authority header and re-injected here from
 // validated claims alone, so it is never a value a caller chose.
@@ -565,7 +565,7 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 		// bundles by design ("stored verbatim, safe to show"), so resolving it
 		// here would hand every visitor a reading credential for the org that
 		// owns it. It stays resolvable through OrgForKey — that is how the ingest
-		// door attributes a beacon to a tenant — but resolvable is not
+		// endpoint attributes a beacon to a tenant — but resolvable is not
 		// authenticated.
 		if IsPublishableKey(tok) {
 			return nil

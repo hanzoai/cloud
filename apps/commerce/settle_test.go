@@ -13,8 +13,8 @@ package commerce
 // moved.
 //
 // So every assertion here is on a BALANCE READ THROUGH A REAL READER — the ledger the
-// gate reads and the customer's own /v1/billing/balance route — never on the door's
-// answer, which was the thing that always looked fine.
+// gate reads and the customer's own /v1/billing/balance route — never on the
+// endpoint's answer, which was the thing that always looked fine.
 
 import (
 	"bytes"
@@ -53,9 +53,9 @@ const gateCents int64 = 4200
 
 // funded publishes a throwaway finance ledger — the ONE spendable ledger, in its own
 // temp directory — for the duration of one test, and hands it back so the test can
-// read the balance a credit produced. Every door fixture in this package uses it,
-// because a settled top-up now DEPOSITS, and a door with no ledger behind it is a
-// door that refuses.
+// read the balance a credit produced. Every endpoint fixture in this package uses it,
+// because a settled top-up now DEPOSITS, and an endpoint with no ledger behind it is
+// an endpoint that refuses.
 func funded(t *testing.T) finance.Client {
 	t.Helper()
 	fin := finance.New(t.TempDir())
@@ -68,7 +68,7 @@ func funded(t *testing.T) finance.Client {
 // its fixture down.
 //
 // The settlement's RECORD is detached by design — [screen.learn] spawns a goroutine
-// that outlives the request — while every door fixture in this package unbinds the
+// that outlives the request — while every endpoint fixture in this package unbinds the
 // plane in its own cleanup. Those two race: plane.Unbind on the test goroutine against
 // plane.Bind inside the detached one. It is not a property of this change (main reports
 // the same race from TestPayments_ANotDeployedScorerDoesNotCloseTheTypedDoor under
@@ -94,28 +94,28 @@ func quiet(t *testing.T) {
 
 // stating makes a screen read a settlement the TEST states rather than one a commerce
 // datastore holds. It is the [teach] pattern applied to the other client: what a payment
-// actually settled for is a fact about a row in another module's store, and a door test
-// has no business booting one to assert where the money went.
+// actually settled for is a fact about a row in another module's store, and an endpoint
+// test has no business booting one to assert where the money went.
 func stating(s screen, got settlement) screen {
 	s.receipt = func(context.Context, string, string) (settlement, error) { return got, nil }
 	return s
 }
 
-// refusing makes the receipt read FAIL, which is the state a door must never credit
-// from: it settled a charge and cannot learn what settled.
+// refusing makes the receipt read FAIL, which is the state an endpoint must never
+// credit from: it settled a charge and cannot learn what settled.
 func refusing(s screen, err error) screen {
 	s.receipt = func(context.Context, string, string) (settlement, error) { return settlement{}, err }
 	return s
 }
 
-// asked is the (org, id) a door LOOKED THE RECEIPT UP UNDER — the two arguments every
-// other fixture in this file discards.
+// asked is the (org, id) an endpoint LOOKED THE RECEIPT UP UNDER — the two arguments
+// every other fixture in this file discards.
 //
-// Discarding them is what let a door read the right amount out of the wrong namespace
-// for a whole green suite: [stating] answers a settlement whatever it is asked, so a
-// test driving a caller whose receipt lives in one org and whose balance lives in
-// another still saw the credit land. What the read is KEYED ON is a property, and a
-// client that cannot state it is a client that cannot hold it.
+// Discarding them is what let an endpoint read the right amount out of the wrong
+// namespace for a whole green suite: [stating] answers a settlement whatever it is
+// asked, so a test driving a caller whose receipt lives in one org and whose balance
+// lives in another still saw the credit land. What the read is KEYED ON is a
+// property, and a client that cannot state it is a client that cannot hold it.
 type asked struct {
 	org string
 	id  string
@@ -131,10 +131,10 @@ func capturing(s screen, got settlement, seen *asked) screen {
 	return s
 }
 
-// settling is the credit door's screen with the whole money path behind it: a
+// settling is the credit endpoint's screen with the whole money path behind it: a
 // throwaway ledger published for the test, and a receipt read stating the $42 the
-// door's own body asks for. It is what every door fixture in this package resolves
-// its screen through.
+// endpoint's own body asks for. It is what every endpoint fixture in this package
+// resolves its screen through.
 func settling(t *testing.T) screen {
 	t.Helper()
 	funded(t)
@@ -161,7 +161,7 @@ func held(t *testing.T, fin finance.Client, org string, test bool) int64 {
 	return bal.Cents()
 }
 
-// spendable is [held] for the org every door fixture in this file pays from.
+// spendable is [held] for the org every endpoint fixture in this file pays from.
 func spendable(t *testing.T, fin finance.Client, test bool) int64 {
 	t.Helper()
 	return held(t, fin, gateOrg, test)
@@ -214,18 +214,19 @@ func TestSettle_ASettledTopUpFundsTheWalletTheSpendGateReads(t *testing.T) {
 	}
 }
 
-// TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool — the AGENT's door, and the
+// TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool — the AGENT's endpoint, and the
 // divergence it closes.
 //
 // commerce's typed core credits its own store under the ORG POOL (org.Name), while the
 // wallet the spend gate reads is account.Payer's answer — the org's pool for a
 // dedicated tenant, and a PERSON for a member of the shared signup org or a credential
 // carrying a signed `person:` billing_account claim. For that population the agent's
-// door funded a balance nobody could spend while the payer stayed at zero. The
-// spendable credit is posted at the payer's own address, so both doors fund one wallet.
+// endpoint funded a balance nobody could spend while the payer stayed at zero. The
+// spendable credit is posted at the payer's own address, so both endpoints fund one
+// wallet.
 //
 // Mutation proof: delete the s.settle call from [screen.op] and this reads 0 — the
-// browser door would still credit, so the cross-door test alone cannot see it.
+// browser endpoint would still credit, so the cross-endpoint test alone cannot see it.
 func TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
 	// A member of the SHARED SIGNUP ORG, which is the population where the pool and the
 	// payer are different keys — account.Payer resolves a person there and the org's
@@ -255,7 +256,7 @@ func TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("the typed door answered %d %s, want 201", resp.StatusCode, body)
+		t.Fatalf("the typed endpoint answered %d %s, want 201", resp.StatusCode, body)
 	}
 
 	ctx := context.Background()
@@ -265,7 +266,7 @@ func TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
 	}
 	if paid.Cents() != gateCents {
 		t.Fatalf("the payer's wallet holds %d cents after an agent's settled payment, want %d — "+
-			"the agent's door credits a wallet the spend gate does not read", paid.Cents(), gateCents)
+			"the agent's endpoint credits a wallet the spend gate does not read", paid.Cents(), gateCents)
 	}
 	pool, err := fin.Balance(ctx, org, org, "usd", false)
 	if err != nil {
@@ -279,9 +280,10 @@ func TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
 
 // TestSettle_ASettledTopUpCreditsExactlyOncePerSettlement — the replay.
 //
-// Settlement is at-least-once by construction: the door retries, a webhook replays, an
-// idempotency key replays the first receipt verbatim. The deposit is keyed on the
-// settlement's own reference, so every replay of one payment converges on one credit.
+// Settlement is at-least-once by construction: the endpoint retries, a webhook
+// replays, an idempotency key replays the first receipt verbatim. The deposit is keyed
+// on the settlement's own reference, so every replay of one payment converges on one
+// credit.
 //
 // Mutation proof: drop Ref from the DepositInput in [screen.settle] — finance takes a
 // fresh ref for an empty one, so grants stack — and the second post doubles the
@@ -303,24 +305,24 @@ func TestSettle_ASettledTopUpCreditsExactlyOncePerSettlement(t *testing.T) {
 	}
 }
 
-// TestSettle_OnePaymentThroughBothDoorsIsOneCredit — the cross-door convergence, on
+// TestSettle_OnePaymentThroughBothDoorsIsOneCredit — the cross-endpoint convergence, on
 // the money rather than on the model.
 //
-// The browser's raw route and the agent's typed op are two doors onto ONE charge core,
-// so one payment can be answered at both — a retry that changes client, an agent
+// The browser's raw route and the agent's typed op are two endpoints onto ONE charge
+// core, so one payment can be answered at both — a retry that changes client, an agent
 // finishing what a browser started. Both answers carry the processor's own reference
-// for that charge, and the deposit is keyed on it, so the two doors credit one wallet
-// once.
+// for that charge, and the deposit is keyed on it, so the two endpoints credit one
+// wallet once.
 //
 // Mutation proof: key the deposit on the RECEIPT instead of [firstRef]'s answer (each
-// door writes its own row, so the two receipts differ) and this credits twice.
+// endpoint writes its own row, so the two receipts differ) and this credits twice.
 func TestSettle_OnePaymentThroughBothDoorsIsOneCredit(t *testing.T) {
 	const one = "sq_pay_the_same_charge"
 	s := riskGate(luxlog.New("settletest"))
 
 	// payApp publishes the ledger this reads back, so it is resolved AFTER the fixture
 	// rather than beside it — two ledgers published in one test would leave the
-	// assertions reading the one the doors did not credit.
+	// assertions reading the one the endpoints did not credit.
 	app := payApp(t)
 	quiet(t)
 	fin := finance.Current()
@@ -329,13 +331,13 @@ func TestSettle_OnePaymentThroughBothDoorsIsOneCredit(t *testing.T) {
 	typedDoor(t, app, s, func() string { return one })
 
 	if code, body := pay(t, app, "/v1/billing/topup/token"); code != http.StatusOK {
-		t.Fatalf("the browser door answered %d %s", code, body)
+		t.Fatalf("the browser endpoint answered %d %s", code, body)
 	}
 	if code, body := pay(t, app, paymentsDoor); code != http.StatusCreated {
-		t.Fatalf("the typed door answered %d %s", code, body)
+		t.Fatalf("the typed endpoint answered %d %s", code, body)
 	}
 	if got := spendable(t, fin, false); got != gateCents {
-		t.Fatalf("one payment answered at BOTH doors credited %d cents, want %d — the two doors are "+
+		t.Fatalf("one payment answered at BOTH endpoints credited %d cents, want %d — the two endpoints are "+
 			"not keying the same settlement, so a payment taken once is funded twice", got, gateCents)
 	}
 }
@@ -343,8 +345,8 @@ func TestSettle_OnePaymentThroughBothDoorsIsOneCredit(t *testing.T) {
 // TestSettle_TheCreditIsSizedByTheReceiptAndNeverByTheRequest — the mint this closes.
 //
 // commerce's guard replays the FIRST receipt for a repeated idempotency key, whatever
-// amount the repeat carried. So a door that sized its credit from the request would let
-// a settled $5 charge be replayed as $5,000 — one HTTP call, no second card
+// amount the repeat carried. So an endpoint that sized its credit from the request
+// would let a settled $5 charge be replayed as $5,000 — one HTTP call, no second card
 // authorisation — whenever the first attempt's deposit had not landed. The receipt is
 // the row the money core wrote when the card actually cleared; it is identical on a
 // replay and it is not a value the caller sends.
@@ -370,7 +372,7 @@ func TestSettle_TheCreditIsSizedByTheReceiptAndNeverByTheRequest(t *testing.T) {
 
 	if got := spendable(t, fin, false); got != gateCents {
 		t.Fatalf("a $42 settlement replayed under a $5,000 request credited %d cents, want %d — "+
-			"the door is sizing the credit from what was ASKED rather than from what SETTLED", got, gateCents)
+			"the endpoint is sizing the credit from what was ASKED rather than from what SETTLED", got, gateCents)
 	}
 }
 
@@ -410,11 +412,11 @@ func TestSettle_ASandboxChargeCreditsTheSandboxBooks(t *testing.T) {
 // its X-Org-Id is whichever org it is acting in.
 const adminOrg = "admin"
 
-// callers are the three identities a credit door can see, and the TWO organisations each
-// one names. Two tests range over this one table because they are two halves of a single
-// property — where the receipt is READ and where the credit may be MINTED — and a caller
-// list that drifted between them would leave one half asserted on a population the other
-// half never sees.
+// callers are the three identities a credit endpoint can see, and the TWO organisations
+// each one names. Two tests range over this one table because they are two halves of a
+// single property — where the receipt is READ and where the credit may be MINTED — and a
+// caller list that drifted between them would leave one half asserted on a population
+// the other half never sees.
 //
 // `charged` and `ledger` are the same string for the first two and different for the
 // third, which is the whole point: a masquerading SuperAdmin is the ONLY caller that
@@ -455,7 +457,7 @@ var callers = []struct {
 // that separates them.
 //
 // A card top-up names two organisations. The RECEIPT is written by commerce under the
-// EFFECTIVE org — the org the door is acting in, which is what iammiddleware resolves
+// EFFECTIVE org — the org the endpoint is acting in, which is what iammiddleware resolves
 // for the browser route and [payingOrg] for the typed op — and the BALANCE it funds is
 // principal.WalletOf's, which for a platform SuperAdmin is its OWN books, because
 // platform sudo is not a statement about who pays. For every other caller the two are
@@ -468,17 +470,17 @@ var callers = []struct {
 // fresh idempotency key charges the card again.
 //
 // It asserts the ARGUMENTS of the receipt read and nothing else, because the amount alone
-// cannot see this: [stating] answers a settlement whatever it is asked, so a door reading
-// the right figure out of the wrong namespace looks identical to a correct one. Where the
-// money may then GO is the sibling property, and
+// cannot see this: [stating] answers a settlement whatever it is asked, so an endpoint
+// reading the right figure out of the wrong namespace looks identical to a correct one.
+// Where the money may then GO is the sibling property, and
 // [TestSettle_AMintThatCannotLandIsRefusedBeforeTheCardIsCharged] holds it.
 //
-// THE MASQUERADE ROW IS DRIVEN AT THE BOUNDARY RATHER THAN AT THE DOOR, and that is the
-// screen's refusal arriving BEFORE the charge rather than a weakening of this property.
-// A door that no longer takes that caller's card also never reads its receipt, so
-// [screen.settle] is where the read still exists and where it is asserted: the same value,
-// the same two names, no card charged. The other two rows keep driving the real door,
-// which is what holds [seen] to resolving both names off a request.
+// THE MASQUERADE ROW IS DRIVEN AT THE BOUNDARY RATHER THAN AT THE ENDPOINT, and that is
+// the screen's refusal arriving BEFORE the charge rather than a weakening of this
+// property. An endpoint that no longer takes that caller's card also never reads its
+// receipt, so [screen.settle] is where the read still exists and where it is asserted:
+// the same value, the same two names, no card charged. The other two rows keep driving
+// the real endpoint, which is what holds [seen] to resolving both names off a request.
 //
 // The read is asserted for a payment whose credit is REFUSED, and that is the whole
 // reason the boundary's own guard sits after the read rather than before it: the two
@@ -497,7 +499,7 @@ func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
 			s := capturing(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"}, &seen)
 
 			if tc.charged != tc.ledger {
-				// No door takes this caller's card, so the boundary is called the way a
+				// No endpoint takes this caller's card, so the boundary is called the way a
 				// mint outside the screen would call it. The credit refuses; the read
 				// under test has already happened by then.
 				_ = s.settle(context.Background(), payment{
@@ -512,7 +514,7 @@ func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
 			if seen.org != tc.charged {
 				t.Errorf("the settled receipt was looked up in %q, want %q — the read is keyed on the "+
 					"wrong organisation, so in production commerce answers not-found for a row it "+
-					"wrote and the door 500s on a card that cleared", seen.org, tc.charged)
+					"wrote and the endpoint 500s on a card that cleared", seen.org, tc.charged)
 			}
 			if seen.id != settledReceipt {
 				t.Errorf("the receipt read named %q, want the settlement's own receipt %q", seen.id, settledReceipt)
@@ -529,14 +531,14 @@ func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
 // written in that org's books, while the credit is addressed to principal.WalletOf — and
 // for a masquerading SuperAdmin those are two different organisations. The deposit went to
 // the second of them: the customer's card cleared, spendable credit appeared in the
-// platform admin's own wallet, and the door answered 200. That is money moved between two
-// customers' books on nothing but a masqueraded session.
+// platform admin's own wallet, and the endpoint answered 200. That is money moved between
+// two customers' books on nothing but a masqueraded session.
 //
 // NEITHER ADDRESS IS RIGHT, so the mint refuses rather than choosing. Crediting the ledger
 // is the bug above; crediting the charged org has an admin's card top up the customer it is
 // only inspecting, which is a different surprise and equally unasked-for. A SuperAdmin who
-// means to fund a customer has the admin grant, a door whose whole subject is whose money
-// it is — so the refusal names it.
+// means to fund a customer has the admin grant, an endpoint whose whole subject is whose
+// money it is — so the refusal names it.
 //
 // AND THE REFUSAL IS WORTH NOTHING BEHIND THE CHARGE, which is what this asserts. The first
 // reading of the rule lived at the ledger boundary, which runs AFTER the handler: the
@@ -582,7 +584,7 @@ func TestSettle_AMintThatCannotLandIsRefusedBeforeTheCardIsCharged(t *testing.T)
 						"is not a risk verdict either", tc.charged, tc.ledger, code, body)
 				}
 				if !strings.Contains(body, "/v1/admin/grants") {
-					t.Errorf("the refusal (%s) does not name the door that CAN fund another organisation — "+
+					t.Errorf("the refusal (%s) does not name the endpoint that CAN fund another organisation — "+
 						"an operator told only 'no' has nowhere to go", body)
 				}
 				// AND NO WALLET MOVED, in EITHER organisation. A refusal that still credited
@@ -601,7 +603,7 @@ func TestSettle_AMintThatCannotLandIsRefusedBeforeTheCardIsCharged(t *testing.T)
 			// org == ledger: the ordinary path, and it must be exactly as it was.
 			if taken != 1 {
 				t.Fatalf("the charge handler ran %d time(s) for a caller that pays for itself, want 1 — "+
-					"the pre-charge refusal is closing the door on ordinary customers", taken)
+					"the pre-charge refusal is shutting out ordinary customers", taken)
 			}
 			if code != http.StatusOK {
 				t.Fatalf("a top-up whose charge and credit are the one org answered %d %s, want 200 — "+
@@ -618,14 +620,14 @@ func TestSettle_AMintThatCannotLandIsRefusedBeforeTheCardIsCharged(t *testing.T)
 //
 // The refusal that matters now happens at the screen, before any card moves. The boundary
 // keeps its own reading of the same rule ([payment.diverged], one method, two callers)
-// because refusing at the screen is a property of the two doors the screen is composed
-// onto, and NOT a property of the ledger: a third mint, a replayed webhook, a job calling
-// [screen.settle] directly is one composition away, and the address a divergent payment
-// would land at is exactly as wrong there.
+// because refusing at the screen is a property of the two endpoints the screen is
+// composed onto, and NOT a property of the ledger: a third mint, a replayed webhook, a
+// job calling [screen.settle] directly is one composition away, and the address a
+// divergent payment would land at is exactly as wrong there.
 //
-// So this calls the boundary the way such a caller would — no door, no screen in front —
-// and asserts it refuses and moves nothing. It is also the only place the boundary's own
-// answer is still asserted at all, now that no door can reach it.
+// So this calls the boundary the way such a caller would — no endpoint, no screen in
+// front — and asserts it refuses and moves nothing. It is also the only place the
+// boundary's own answer is still asserted at all, now that no endpoint can reach it.
 //
 // Mutation proof: delete the [payment.diverged] guard from [screen.settle] and this
 // credits $42 of a customer's money into the admin's wallet.
@@ -663,7 +665,7 @@ func TestSettle_TheLedgerBoundaryStillRefusesAMintReachedDirectly(t *testing.T) 
 // every one of them — the settlement is a fact about the past — so a payment dropped from
 // the payer's velocity there is a real payment the screen will never see. A caller who
 // can provoke the refusal could then pay all day and accrue nothing, which is the bound
-// the screen exists to apply, switched off by the door's own error path.
+// the screen exists to apply, switched off by the endpoint's own error path.
 //
 // Mutation proof: return early on settle's error (the shipped ordering) and this reads
 // nothing on the channel.
@@ -674,7 +676,7 @@ func TestSettle_ARefusedCreditStillTeachesTheModel(t *testing.T) {
 		stating(riskGate(luxlog.New("settletest")), settlement{cents: 500000, currency: "jpy"}),
 		`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`)
 	// AFTER the fixture: creditDoorBody substitutes the same client ([quiet]), and the
-	// watcher has to be the one in place when the door runs.
+	// watcher has to be the one in place when the endpoint runs.
 	seen := watchTeaching(t)
 
 	if code, _ := topup(t, app); code != http.StatusInternalServerError {
@@ -732,18 +734,18 @@ func TestSettle_ATopUpThatCannotBeCreditedRefusesTheDoor(t *testing.T) {
 // themselves the moment the top-up is retried: the idempotency key replays the receipt,
 // the deposit runs again, the credit lands. Some can never clear, because what refused
 // them is the settlement itself — a charge that settled in another currency or for
-// nothing, a settlement the door could not identify, a reference that is already another
-// payment's. The receipt is immutable, so every retry reads the same refusal.
+// nothing, a settlement the endpoint could not identify, a reference that is already
+// another payment's. The receipt is immutable, so every retry reads the same refusal.
 //
 // Telling a customer to retry one of those is worse than telling them nothing: they
 // retry, the same key replays into the same refusal, and a FRESH key takes the card
-// again. And an operator watching the door cannot page on a class that is indistinguish-
-// able from the transient one. So the refusal states which it is — to the customer in
-// the only terms they can act on, and on the RECONCILE line as a `terminal` field to
-// alert on, beside the two doors that DO settle it.
+// again. And an operator watching the endpoint cannot page on a class that is indistin-
+// guishable from the transient one. So the refusal states which it is — to the customer
+// in the only terms they can act on, and on the RECONCILE line as a `terminal` field to
+// alert on, beside the two endpoints that DO settle it.
 //
-// It reads the log the door actually wrote rather than trusting the wire alone, because
-// the alertable field is the operator's half and it is not on the wire at all.
+// It reads the log the endpoint actually wrote rather than trusting the wire alone,
+// because the alertable field is the operator's half and it is not on the wire at all.
 //
 // Mutation proof: answer every refusal through [screen.uncredited] (the shipped state)
 // and the four terminal rows fail; answer every one through [screen.stranded] and the
@@ -779,7 +781,7 @@ func TestSettle_ARefusalSaysWhetherARetryCanClearIt(t *testing.T) {
 					"that never self-heals: %s", want, log)
 			}
 			if tc.terminal && !strings.Contains(log, "/v1/admin/grants") {
-				t.Errorf("a terminal RECONCILE line does not name the door that credits the balance: %s", log)
+				t.Errorf("a terminal RECONCILE line does not name the endpoint that credits the balance: %s", log)
 			}
 			if tc.terminal && !strings.Contains(log, "refund") {
 				t.Errorf("a terminal RECONCILE line does not say the charge must be refunded — the "+
@@ -794,9 +796,9 @@ const settled = `{"transactionId":"` + settledReceipt + `","status":"ok","proces
 
 // refusals is EVERY way a settled charge can fail to credit, in one table.
 //
-// It is one table because three properties are asserted over it — the door never answers
-// 200, no wallet moves, and the refusal says whether a retry can clear it — and a row
-// list that drifted between them would leave one property asserted on a population
+// It is one table because three properties are asserted over it — the endpoint never
+// answers 200, no wallet moves, and the refusal says whether a retry can clear it — and
+// a row list that drifted between them would leave one property asserted on a population
 // another never sees. That is the same reason [callers] is shared.
 var refusals = []refusal{
 	{
@@ -870,7 +872,7 @@ type refusal struct {
 	screw func(screen) screen
 	// ledger says whether a finance ledger is published at all.
 	ledger bool
-	// seed is money already in the books before the door runs — the only way to reach
+	// seed is money already in the books before the endpoint runs — the only way to reach
 	// the deposit's own refusals, which need a real conflicting posting.
 	seed func(t *testing.T, fin finance.Client)
 	// terminal says whether NO retry can ever clear this one.
@@ -892,7 +894,7 @@ func refused(t *testing.T, tc refusal) (finance.Client, bool) {
 	return fin, true
 }
 
-// refusalDoor is the credit door for one row, with the screen the caller states — the
+// refusalDoor is the credit endpoint for one row, with the screen the caller states — the
 // production one, or one whose log a test can read.
 func refusalDoor(t *testing.T, tc refusal, s screen) *zip.App {
 	t.Helper()
@@ -999,7 +1001,7 @@ func allowAll(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, erro
 	return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
 }
 
-// creditDoor is the browser credit door answering the way commerce's core answers a
+// creditDoor is the browser credit endpoint answering the way commerce's core answers a
 // charge that cleared — the REAL TakePaymentOut field names, because the settlement is
 // read out of exactly those.
 func creditDoor(t *testing.T, s screen) *zip.App {
@@ -1013,9 +1015,9 @@ func creditDoorBody(t *testing.T, s screen, body string) *zip.App {
 	return creditDoorHandler(t, s, settledBody(http.StatusOK, body))
 }
 
-// creditDoorHandler is that same door in front of a handler the TEST supplies — the form
-// a test needs when what it asserts is not what the handler ANSWERED but whether it ran
-// at all. [charging] is the handler it exists for.
+// creditDoorHandler is that same endpoint in front of a handler the TEST supplies — the
+// form a test needs when what it asserts is not what the handler ANSWERED but whether it
+// ran at all. [charging] is the handler it exists for.
 func creditDoorHandler(t *testing.T, s screen, h zip.Handler) *zip.App {
 	t.Helper()
 	shortRuntimeDir(t)

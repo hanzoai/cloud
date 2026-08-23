@@ -522,6 +522,6 @@ func init() {
 		Example: json.RawMessage(`{"name":"widgets","channel":"#builds","events":["push.landed"]}`),
 	})
 	zip.Describe("POST /v1/git/webhook", zip.Doc{
-		Description: "Answers every delivery 410 Gone, naming the door that builds. It reads\nno body: there is nothing here to authenticate and nothing to parse.\n\n410, not 404: the address was real and its meaning moved, which is exactly the\ndistinction 410 carries. 404 would say \"no such route\" about a route this\nbinary still serves, and would be indistinguishable from the /api/v1 prefix\nmistake that has already sent two investigations after a switched-off API.\n\ncloud.Terminal (git.go) writes this in-band so the co-mounted /v1\nErrorHandlerJSON cannot flatten it to a 500 — the same reject-parity the\nbad-signature 401 needed when this door still verified one.",
+		Description: "Answers every delivery 410 Gone, naming the endpoint that builds. It\nreads no body: there is nothing here to authenticate and nothing to parse.\n\n410, not 404: the address was real and its meaning moved, which is exactly the\ndistinction 410 carries. 404 would say \"no such route\" about a route this\nbinary still serves, and would be indistinguishable from the /api/v1 prefix\nmistake that has already sent two investigations after a switched-off API.\n\ncloud.Terminal (git.go) writes this in-band so the co-mounted /v1\nErrorHandlerJSON cannot flatten it to a 500 — the same reject-parity the\nbad-signature 401 needed when this endpoint still verified one.",
 	})
 }

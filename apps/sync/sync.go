@@ -53,7 +53,7 @@ var mounted atomic.Pointer[cloud.Service[state]]
 var schedStop func()
 
 // storeFor is the ONE way this package reaches a store: it names the database
-// through cloud.OrgNamespace — the single door a validated org walks through —
+// through cloud.OrgNamespace — the single path a validated org takes —
 // and asks the registry for that name. Nothing else here resolves a store, so
 // "which file does this request touch" has one answer from one input.
 //
@@ -98,7 +98,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	cloud.RegisterGitImporter(importer{})
 	cloud.RegisterGitMirrorController(mirrorControl{})
 	// The same reconcile and the same git clients, offered to the processes the
-	// triggers actually land in — integrations and the webhook door, neither of
+	// triggers actually land in — integrations and the webhook receiver, neither of
 	// which is this one (run_plane.go, import_plane.go).
 	exposeRun()
 	exposeImport()

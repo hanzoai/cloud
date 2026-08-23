@@ -20,10 +20,10 @@ import (
 // untypedByDesign is the CLOSED list, each entry re-read against the PINNED zip
 // rather than inherited.
 var untypedByDesign = map[string]string{
-	"POST /v1/graph/graphql": "a GraphQL door: the request body is a QUERY in another language and the " +
+	"POST /v1/graph/graphql": "a GraphQL endpoint: the request body is a QUERY in another language and the " +
 		"answer is GraphQL's own {data, errors} envelope, in which a field-level failure rides a 200. " +
 		"A typed op declares one In shape and one Out shape and answers by status, so it can express " +
-		"neither half. The same fact as the JSON-RPC doors — a second protocol at one address is not " +
+		"neither half. The same fact as the JSON-RPC endpoints — a second protocol at one address is not " +
 		"an operation, and its OPERATIONS are the typed ops beside it.",
 }
 

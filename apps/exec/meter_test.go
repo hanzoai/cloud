@@ -33,7 +33,7 @@ func billed(t *testing.T, l *planetest.Ledger) *zip.App {
 	}
 	// Mount binds a meter from deps; replace it with one that has a ledger behind
 	// it. Rebinding rather than passing Metering through Deps keeps this test
-	// pointed at the same client production uses — the package global every door
+	// pointed at the same client production uses — the package global every handler
 	// reads — instead of at a second construction path.
 	bindMeter(cloud.NewResourceMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "exec"))
 	t.Cleanup(func() { bindMeter(nil) })
@@ -107,14 +107,14 @@ func TestUnfundedOrgNeverGetsAPod(t *testing.T) {
 }
 
 // The shared service key carries no tenant, so there is no wallet to charge. The
-// run still happens — this is the chat server's door — and bills nobody.
+// run still happens — this is the chat server's endpoint — and bills nobody.
 func TestServiceKeyRunBillsNobody(t *testing.T) {
 	sb := servePeer(t)
 	l := planetest.Money(t, 0) // a balance that must never be consulted
 	app := billed(t, l)
 
 	if resp := runAs(t, app, ""); resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200 — the service door must keep working", resp.StatusCode)
+		t.Fatalf("status = %d, want 200 — the service endpoint must keep working", resp.StatusCode)
 	}
 	if sb.Ran() != 1 {
 		t.Fatalf("programs run = %d, want 1", sb.Ran())

@@ -20,9 +20,9 @@ package cloud
 // edge, against IAM (middleware_identity.go); this reads the assertion that
 // minted and answers an authorization question about it. Nor anything a
 // subsystem does BESIDES authorization — store readiness, key syntax, per-op
-// billing, the shape of a refusal, the tenant confinement applied after the door
-// opens. Those compose AROUND the gate, so each app keeps its own business and
-// none of them keeps a copy of the rule.
+// billing, the shape of a refusal, the tenant confinement applied after a
+// caller is admitted. Those compose AROUND the gate, so each app keeps its own
+// business and none of them keeps a copy of the rule.
 
 import (
 	"github.com/hanzoai/cloud/apps/principal"
@@ -53,21 +53,21 @@ func AuthorityOf(c *zip.Ctx) Authority {
 }
 
 // Scope is how much authority a route REQUIRES. It is a closed set: there are
-// three kinds of door in the platform, and a fourth would be a new rule, not a
+// three kinds of check in the platform, and a fourth would be a new rule, not a
 // new constant.
 type Scope int
 
 const (
-	// Member admits any validated principal. It is the door on a TENANT surface,
+	// Member admits any validated principal. It is the check on a TENANT surface,
 	// where the caller's own org is the whole of what it may reach — the gate
 	// establishes that a principal exists, and the handler's own org resolution
 	// confines it.
 	Member Scope = iota
-	// Admin admits a SuperAdmin OR an admin of its own org. It is the door on an
+	// Admin admits a SuperAdmin OR an admin of its own org. It is the check on an
 	// administrative READ, where a tenant admin sees its own and platform sudo
 	// sees everything — again, the confinement is the handler's.
 	Admin
-	// Super admits platform sudo alone. It is the door on an act against SHARED
+	// Super admits platform sudo alone. It is the check on an act against SHARED
 	// platform state, which no customer-org admin may take however much authority
 	// they hold inside their own org.
 	Super
@@ -116,8 +116,8 @@ func Guard(s Scope, h zip.Handler) zip.Handler {
 //
 // It is a METHOD on the scope rather than a function taking one, because the
 // sentence is derived from the scope — a caller is told what it lacks in the
-// vocabulary of the door it failed — and because Refuse is already the name of the
-// 402 every SPEND gate renders (middleware_spend.go). Two refusals that mean
+// vocabulary of the check it failed — and because Refuse is already the name of
+// the 402 every SPEND gate renders (middleware_spend.go). Two refusals that mean
 // different things do not share a name.
 func (s Scope) Refusal() error { return zip.ErrForbidden(s.refusal()) }
 

@@ -87,7 +87,7 @@ const (
 
 	// Noisy-neighbor bounds (MED-3 / LOW-2 / LOW-4). A flow tree is capped in step
 	// count AND total serialized size at every write; the resume payload is bounded;
-	// and each org gets a front-door concurrency limit so one tenant cannot exhaust
+	// and each org gets an admission concurrency limit so one tenant cannot exhaust
 	// worker goroutines (notably via a burst of synchronous MCP core.delay calls).
 	maxSteps            = 256
 	maxTriggerBytes     = 512 * 1024
@@ -96,7 +96,7 @@ const (
 )
 
 // orgRunLimiter bounds concurrent in-flight run-starts + MCP tool executions PER
-// ORG — a front-door DoS/noisy-neighbor guard (LOW-2). Per-org so one tenant's burst
+// ORG — an admission DoS/noisy-neighbor guard (LOW-2). Per-org so one tenant's burst
 // never starves another; independent of the durable engine's own worker concurrency.
 var orgRunLimiter = newConcurrencyLimiter(maxConcurrentPerOrg)
 
@@ -167,7 +167,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// Register every connector action into the unified tool plane. This is the ONLY
 	// projection of them: discovery is GET /v1/tools, dispatch is POST /v1/tools/call,
-	// and through that registry every action is a tool on the fleet's one agent door.
+	// and through that registry every action is a tool on the fleet's one agent MCP server.
 	tools.Register(connectorToolProvider{})
 
 	b.Log.Info("auto mounted", "connectors", catalog.ConnectorCount, "runtime", len(registry), "brand", deps.Brand)
@@ -252,7 +252,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// enabled flow whose WEBHOOK trigger matches (source,event) fires. Distinct
 	// /hooks/* prefix — no wildcard, no shadow of the flow/run routes above. External
 	// provider webhooks (GitHub/Stripe) + inbound channels reach the SAME Deliver via
-	// the wire client (SetTrigger), so this is one dispatch door, three entrances.
+	// the wire client (SetTrigger), so this is one dispatch handler, three entrances.
 	//
 	// UNTYPED — the body is an OPEN-KEYED event payload and the (source,event) key is in
 	// the URL. An In can carry one or the other: a struct binds the path params and
@@ -593,7 +593,7 @@ func (o ops) createVersion(ctx context.Context, in *createVersionIn) (*FlowVersi
 // The prose for the three operations here that cannot be typed ops. Every other route
 // in automations is typed and zipdoc lifts its doc comment into zipdoc_gen.go; these
 // three stay raw handlers for reasons routes() and each handler state — two response
-// shapes on the builder's edit door, an arbitrary JSON resume payload, an open-keyed
+// shapes on the builder's edit endpoint, an arbitrary JSON resume payload, an open-keyed
 // event body under a URL address — so there is no comment for anything to lift and the
 // published document would carry an operationId and nothing else. They are the three
 // most easily misused routes in the surface (one edits a flow, one releases a held
@@ -670,7 +670,8 @@ func init() {
 //
 // It converts when zip can declare a response per outcome (the multi-SHAPE sibling of
 // the multi-status gap the conditional-status class waits on); until then the builder's
-// edit door stays a route and nothing else — no MCP tool, no CLI command, no SDK method.
+// edit endpoint stays a route and nothing else — no MCP tool, no CLI command, no
+// SDK method.
 func applyOperation(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {
@@ -745,7 +746,7 @@ var engineReady = func() bool { return cloud.EmbeddedTasks() != nil }
 // is the firing event payload (nil for a manual run); depth is the causation depth threaded
 // onto the run. Returns the run row and whether THIS call started it.
 func startRun(s *cloud.Service[state], ctx context.Context, org string, f Flow, v FlowVersion, runID string, depth int, trigger map[string]any) (FlowRun, bool, error) {
-	// Front-door concurrency bound, shared by EVERY run-start path so one org's burst never
+	// Admission concurrency bound, shared by EVERY run-start path so one org's burst never
 	// starves another. Full → refuse (429). Held only across the start (fast).
 	if !orgRunLimiter.acquire(org) {
 		return FlowRun{}, false, ErrBusy

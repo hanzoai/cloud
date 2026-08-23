@@ -53,10 +53,10 @@ const siteKey = "pk-sitekeysitekeysitekeysitekeysitekey00"
 
 // TestAdmitAsksBothIssuers is the whole of what Admit is: TWO issuers, and a key
 // from either one names its org. They are disjoint — a key minted by a project
-// exists only in the project store, one issued by IAM only in IAM — so a door that
-// asks a single issuer refuses every key the other minted, which is a door that
-// refuses the key it tells a caller to create. Every door that admits a key calls
-// this, so the sequence is proved once, here.
+// exists only in the project store, one issued by IAM only in IAM — so an
+// endpoint that asks a single issuer refuses every key the other minted, which
+// is an endpoint that refuses the key it tells a caller to create. Every
+// endpoint that admits a key calls this, so the sequence is proved once, here.
 func TestAdmitAsksBothIssuers(t *testing.T) {
 	stubKeys(t, map[string]Attribution{"pk-project": {Org: "acme", Project: "shop"}})
 	orig := resolveKeyOrg

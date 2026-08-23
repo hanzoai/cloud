@@ -182,9 +182,9 @@ func newDispatcher(stores *cloud.OrgStore[*store], log luxlog.Logger) *dispatche
 	}
 }
 
-// storeFor is the dispatcher's half of the ONE door: the delivery loop names the
-// database the same way the API does, so an event and the endpoints it fans out
-// to can never come from different files.
+// storeFor is the dispatcher's half of the ONE path to a store: the delivery loop
+// names the database the same way the API does, so an event and the endpoints it
+// fans out to can never come from different files.
 func (d *dispatcher) storeFor(org string) (*store, error) {
 	ns, err := cloud.OrgNamespace(org, "")
 	if err != nil {

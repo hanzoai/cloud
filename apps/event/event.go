@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// event.go — the ONE canonical event-ingestion front door.
+// event.go — the ONE canonical event-ingestion entry point.
 //
 //	POST /v1/event   body: Event | [Event] | {batch:[…]}   ->  {accepted, dropped}
 //
-// ONE door, EVERY wire, EVERY auth context. The decoder (decodeIngest) is
+// ONE endpoint, EVERY wire, EVERY auth context. The decoder (decodeIngest) is
 // wire-tolerant: a bare canonical Event object, a bare [Event] array, AND the
 // CaptureBatch envelope ({batch:[…]} | {events:[…]}) the Segment/beacon/publishable
 // paths speak all decode onto the SAME []CaptureEvent the ONE write core
 // (ingestEvents) consumes, onto the SAME event plane. There is deliberately
 // no /v1/event/batch — a JSON array, or a batch envelope, IS the batch.
 //
-// CAPABILITY IS DECIDED BY TRUST LEVEL, ONCE, IN ONE PLACE (handle) — never per door.
-// A door supplies only its WIRE (a decode) and its origin tag. There is no argument by
-// which a door can ASK for full capability, so a door cannot forget the decision or
-// route around it: the alternative is not a check to skip, it is not expressible. handle
-// reads the credential itself, SERVER-SIDE and FAIL-CLOSED, in strict trust order
-// (eventTenant):
+// CAPABILITY IS DECIDED BY TRUST LEVEL, ONCE, IN ONE PLACE (handle) — never per
+// endpoint. An endpoint supplies only its WIRE (a decode) and its origin tag. There is
+// no argument by which an endpoint can ASK for full capability, so an endpoint cannot
+// forget the decision or route around it: the alternative is not a check to skip, it is
+// not expressible. handle reads the credential itself, SERVER-SIDE and FAIL-CLOSED, in
+// strict trust order (eventTenant):
 //
 //  1. a validated IAM bearer principal — its owner org;
 //  2. a publishable key (pk-…) — IAM resolves it to its org; it can write but not read
@@ -42,13 +42,13 @@
 // did not resolve ⇒ 403 (a misconfigured key is refused, never downgraded). A caller
 // that presented NOTHING is CREDENTIAL-LESS and takes the ANONYMOUS lane (publicIngest,
 // public.go) — kind allowlist, field PROJECTION, its own size/rate bounds, DNT — no
-// matter which door it arrived at. It rejoins this pipeline at ingestDecoded, so decode,
-// write core, and receipt are shared; only capability differs.
+// matter which endpoint it arrived at. It rejoins this pipeline at ingestDecoded, so
+// decode, write core, and receipt are shared; only capability differs.
 //
-// There is NO host fallback anywhere: no door turns a request Host into a REAL tenant
-// with full capability. The org is NEVER read from the body, on either lane.
+// There is NO host fallback anywhere: no endpoint turns a request Host into a REAL
+// tenant with full capability. The org is NEVER read from the body, on either lane.
 //
-// The published-site host (installHostCarve, event.go) is the one door that does not
+// The published-site host (installHostCarve, event.go) is the one endpoint that does not
 // ask, because on it there is nothing to ask: sites.Middleware runs BEFORE the identity
 // boundary (serve.go — sites at 241, IdentityMiddleware at 267), so c.User()/c.Org() are
 // still RAW client headers there and no credential has been validated by anything. It
@@ -58,7 +58,7 @@
 //
 // Every ingest route is therefore one line — handle(c, <wire>, <origin tag>) — and no
 // route is written by hand at all: doors below declares them and both the router and
-// the site-host carve derive from it. One write path, many doors, ONE admission
+// the site-host carve derive from it. One write path, many endpoints, ONE admission
 // decision.
 
 package event
@@ -101,11 +101,11 @@ type Event struct {
 // admits on (publicKinds, public.go — the other half is the closed autocapture
 // name): canonicalType maps an empty Type to "event", which is NOT an allowlisted
 // kind, so an Event that cannot say "pageview" and does not name an autocaptured
-// interaction is dropped — with a 200 receipt — every single time. That made two of the three shapes this door
-// PUBLISHES (openapi.OneOf{Event, []Event, CaptureBatch}) totally lossy without a
-// credential while the third worked, which is a document that lies to any SDK
-// generated from it. One wire, three spellings, ONE meaning: whatever CaptureBatch
-// can express, the bare object and the bare array express too.
+// interaction is dropped — with a 200 receipt — every single time. That made two of the
+// three shapes this endpoint PUBLISHES (openapi.OneOf{Event, []Event, CaptureBatch})
+// totally lossy without a credential while the third worked, which is a document that
+// lies to any SDK generated from it. One wire, three spellings, ONE meaning: whatever
+// CaptureBatch can express, the bare object and the bare array express too.
 func (e Event) toCapture() CaptureEvent {
 	return CaptureEvent{
 		Event:      e.Event,
@@ -117,9 +117,9 @@ func (e Event) toCapture() CaptureEvent {
 }
 
 // admission is a RESOLVED credential: the org it names and the capability it carries.
-// Capability is a property of the CREDENTIAL, which is why it lives here and not on a
-// door — a door still cannot ask for anything. Two levels, because the platform mints
-// two kinds of principal:
+// Capability is a property of the CREDENTIAL, which is why it lives here and not on an
+// endpoint — an endpoint still cannot ask for anything. Two levels, because the
+// platform mints two kinds of principal:
 //
 //	full  ⇒ the unprojected write into org. Every API credential, and a workspace
 //	        member's session.
@@ -150,7 +150,7 @@ type admission struct {
 	subject string
 }
 
-// eventTenant resolves the credential for every door — PLUGGABLE auth, FAIL-CLOSED,
+// eventTenant resolves the credential for every endpoint — PLUGGABLE auth, FAIL-CLOSED,
 // in strict trust order:
 //
 //  1. a validated IAM bearer principal wins (its owner org), at FULL capability;
@@ -162,8 +162,8 @@ type admission struct {
 //
 // None matches ⇒ (admission{}, false), which handle answers by refusing a presented-
 // but-unresolvable credential and otherwise taking the anonymous lane. There is NO
-// host fallback on ANY door, so a tenant is only ever IAM, a signed/resolvable key, or
-// a signed team claim — never the request Host.
+// host fallback on ANY endpoint, so a tenant is only ever IAM, a signed/resolvable
+// key, or a signed team claim — never the request Host.
 func eventTenant(c *zip.Ctx) (admission, bool) {
 	if org, ok := tenant(c); ok {
 		return admission{org: org, full: true}, true
@@ -189,10 +189,10 @@ func eventTenant(c *zip.Ctx) (admission, bool) {
 	}
 	// A Hanzo Team workspace token (HS256 over SERVER_SECRET, org and role in the
 	// signed extra) — the credential the team SPA already holds. It is a PLATFORM
-	// credential, so it belongs in the trust order rather than on the door that
-	// happens to need it, and it therefore works on every door (team.go). It is the
-	// ONLY entry that can resolve at reduced capability, because it is the only one
-	// the platform issues to a principal weaker than "holds an API key".
+	// credential, so it belongs in the trust order rather than on the endpoint that
+	// happens to need it, and it therefore works on every endpoint (team.go). It is
+	// the ONLY entry that can resolve at reduced capability, because it is the only
+	// one the platform issues to a principal weaker than "holds an API key".
 	//
 	// It is LAST because it is the narrowest: the other three are issued to BE API
 	// credentials, while this one is a browser session a user's tab carries. Ordering
@@ -209,9 +209,9 @@ func eventTenant(c *zip.Ctx) (admission, bool) {
 // things by the same string.
 //
 // WHAT the key names is Admit (attribution.go) — both issuers, asked in one place,
-// so this door and every other door that admits a key answer the same key the same
-// way. All this adds is the capability, which is an event write's question and not a
-// key's: a resolved credential writes unprojected into its org.
+// so this endpoint and every other endpoint that admits a key answer the same key
+// the same way. All this adds is the capability, which is an event write's question
+// and not a key's: a resolved credential writes unprojected into its org.
 //
 // A project key is the credential a site's own beacon carries, so it also carries
 // the property the whole change is for: it stops resolving the moment the project
@@ -262,7 +262,7 @@ func decodeEvents(body []byte) ([]Event, error) {
 	return []Event{e}, nil
 }
 
-// decodeIngest is the ONE wire-tolerant decoder of the canonical door. It accepts
+// decodeIngest is the ONE wire-tolerant decoder of the canonical endpoint. It accepts
 // EVERY shape a Hanzo surface emits and yields the SAME []CaptureEvent the write
 // core consumes:
 //
@@ -372,9 +372,9 @@ func isTeamArray(body []byte, i int) bool {
 // decode is a WIRE's decoder: raw request bytes → the canonical []CaptureEvent the ONE
 // write core consumes. Exactly two exist — decodeIngest (the canonical Event / Segment
 // beacon wire) and decodeInsights (the deprecated PostHog wire) — and the wire is the
-// ONLY thing that differs between doors. Handing the pipeline a decoder, rather than
+// ONLY thing that differs between endpoints. Handing the pipeline a decoder, rather than
 // forking the pipeline per wire, is what lets admission stay a single decision instead
-// of one copy per door (which is exactly how the credential-less doors drifted).
+// of one copy per endpoint (which is exactly how the credential-less endpoints drifted).
 type decode func([]byte) ([]CaptureEvent, error)
 
 // refusal is what ADMISSION already refused before the write core ever saw it, and what
@@ -453,12 +453,12 @@ func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, refused r
 	return answer(c, org, source, res, refused)
 }
 
-// answer is THE receipt, and the ONE place a door's ingest STATUS is decided. Every
+// answer is THE receipt, and the ONE place an endpoint's ingest STATUS is decided. Every
 // lane reaches it — the anonymous projection, the reduced team principal, the full
 // credential, and the o11y plane's claim — so "what the caller is told happened" is
 // written once, beside the counts it is derived from.
 //
-// A 200 MEANT NOTHING, AND THAT IS WHAT MADE IT DANGEROUS. Every wire shape this door
+// A 200 MEANT NOTHING, AND THAT IS WHAT MADE IT DANGEROUS. Every wire shape this endpoint
 // accepts, posted with no resolvable tenant, answered 200 {"accepted":0,"dropped":1}:
 // the projection refuses a kind it cannot name (publicKinds — the anonymous lane stores
 // pageviews and errors, and a log, a span and an exception envelope are none of those),
@@ -521,9 +521,9 @@ func answer(c *zip.Ctx, org, source string, res CaptureResult, refused refusal) 
 //
 // CARDINALITY is bounded on all three labels: org is a SERVER-resolved tenant (an IAM
 // owner, a resolved key's org, or the $public constant) and never a caller-chosen
-// string; source is the door's own origin tag, from the finite doors table; reason is
-// two values. Bounded by real orgs × doors × 2 — the same envelope hanzo_http_requests_total
-// already lives in.
+// string; source is the endpoint's own origin tag, from the finite doors table; reason
+// is two values. Bounded by real orgs × endpoints × 2 — the same envelope
+// hanzo_http_requests_total already lives in.
 var (
 	dropOnce    sync.Once
 	dropCounter metric.Int64Counter
@@ -537,11 +537,11 @@ var (
 //
 // Both a counter and a log line, deliberately: the counter is what an alert rule reads
 // (it reaches the telemetry store in-process, via apps/o11y's metrics push), and the
-// log line is what names the tenant and door to whoever the alert wakes.
+// log line is what names the tenant and endpoint to whoever the alert wakes.
 func observeDropped(c *zip.Ctx, org, source string, unattributable, unroutable int) {
 	dropOnce.Do(func() {
 		dropCounter, _ = otel.Meter("github.com/hanzoai/cloud/apps/event").Int64Counter("hanzo_ingest_dropped_total",
-			metric.WithDescription("Events an ingest door received and did not land, by tenant, door origin and reason."))
+			metric.WithDescription("Events an ingest endpoint received and did not land, by tenant, endpoint origin and reason."))
 	})
 	for _, d := range []struct {
 		n      int
@@ -595,10 +595,10 @@ func bearerAPIKey(c *zip.Ctx) bool {
 }
 
 // handle is THE ingest pipeline and the ONE place in this package where trust level is
-// decided. Every /v1 ingest door is one call to it; the door contributes its WIRE and
-// its origin tag and NOTHING ELSE — capability is not a parameter, so no door can grant
-// itself full capability, and a door added tomorrow inherits this decision by
-// construction rather than by remembering to copy it.
+// decided. Every /v1 ingest endpoint is one call to it; the endpoint contributes its
+// WIRE and its origin tag and NOTHING ELSE — capability is not a parameter, so no
+// endpoint can grant itself full capability, and an endpoint added tomorrow inherits
+// this decision by construction rather than by remembering to copy it.
 //
 //	credential resolves     ⇒ FULL capability into THAT credential's org, and into
 //	                          the site it named when it named one.
@@ -642,8 +642,8 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 			// principal does not name the person; its token does.
 			return publicIngest(c, dec, a.org, source, a.subject)
 		}
-		// THE DOOR RUNS ITS OWN WIRE, and there is no longer anything in front of
-		// it. Every authenticated body used to be offered to the observability
+		// THE ENDPOINT RUNS ITS OWN WIRE, and there is no longer anything in front
+		// of it. Every authenticated body used to be offered to the observability
 		// plane first (plane op obs_event_claim) so an LLM-observability batch
 		// could be filed in its own store instead of the product warehouse. That
 		// sink is deleted: it inserted UNQUALIFIED `traces`/`observations`/
@@ -655,7 +655,7 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 		// product owns the grounded projections (apps/eval/telemetry.go).
 		//
 		// So the claim could only ever decline, at the cost of a synchronous
-		// cross-process round-trip per event on the fleet's busiest door.
+		// cross-process round-trip per event on the fleet's busiest endpoint.
 		//
 		// IT IS ALSO ONE FEWER LANE REACHING `answer`, and the receipt is the
 		// same either way. An LLM-obs-shaped body names no event kind, so the
@@ -672,20 +672,20 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 	return cannotAttribute(presented(c))
 }
 
-// door is one ingest door: a PATH bound to the WIRE it speaks. Capability is not a
-// field and cannot become one — handle decides it, once, for every door.
+// door is one ingest endpoint: a PATH bound to the WIRE it speaks. Capability is not a
+// field and cannot become one — handle decides it, once, for every endpoint.
 //
-// decode and wire are the two halves of ONE fact: what this door accepts. decode is
-// the half that runs; wire is the half that is PUBLISHED, and it sits here rather
-// than in a table of its own so a door cannot be routed with one wire and documented
+// decode and wire are the two halves of ONE fact: what this endpoint accepts. decode is
+// the half that runs; wire is the half that is PUBLISHED, and it sits here rather than
+// in a table of its own so an endpoint cannot be routed with one wire and documented
 // with another — the drift that put /v1/todo in the router and not in the carve.
 //
 // summary and description are the PROSE half of that same fact, and they live here
-// for the same reason: a door is untyped by construction (typed_wire_test.go names
+// for the same reason: an endpoint is untyped by construction (typed_wire_test.go names
 // the blocker), so zipdoc has no doc comment to lift and declare below is the only
-// place its prose can be stated. Keeping it on the row means a door added tomorrow
+// place its prose can be stated. Keeping it on the row means an endpoint added tomorrow
 // carries its own account of what it accepts and from whom, rather than inheriting
-// one blurb written about a different door.
+// one blurb written about a different endpoint.
 type door struct {
 	path   string
 	decode decode
@@ -696,30 +696,30 @@ type door struct {
 	description string
 }
 
-// doors is THE ingest surface: the ONE place a door is declared, and the ONE list
+// doors is THE ingest surface: the ONE place an endpoint is declared, and the ONE list
 // both consumers derive from. routes (event.go) registers exactly these paths;
 // installHostCarve hands sites exactly these paths bound to exactly these wires. So
-// "what is an ingest door" has a single answer, and the router and the site-host
+// "what is an ingest endpoint" has a single answer, and the router and the site-host
 // carve cannot hold different ones.
 //
 // They used to, because the answer was written three times — the route table, sites'
 // analyticsPaths literal, and a path switch inside the carve — and the copies had
-// already drifted: /v1/todo and /v1/ingest were routed doors that sites did not
+// already drifted: /v1/todo and /v1/ingest were routed endpoints that sites did not
 // name, so the same beacon was admitted (503, datastore down) on an API host and
 // refused (405) on a site host. Nothing decided that; two lists just disagreed.
 //
 // TWO WIRES, and no more — the canonical one and PostHog's:
 //
-//   - /v1/event — the canonical door and the canonical wire (Event | [Event] |
+//   - /v1/event — the canonical endpoint and the canonical wire (Event | [Event] |
 //     {batch:[…]} | the team SPA's bare snake_case array, dispatched by shape —
 //     isTeamArray), which every current Hanzo client emits. Nothing gets first
-//     refusal on it: the o11y plane's claim on this door (obs_event_claim) is
+//     refusal on it: the o11y plane's claim on this endpoint (obs_event_claim) is
 //     retired with the sink behind it, so the wire the shape selects is the wire
-//     that runs — consumers and shapes behind ONE door, not more doors.
+//     that runs — consumers and shapes behind ONE endpoint, not more endpoints.
 //
-//   - the PostHog wire has NO door of its own: decodeIngest dispatches it by
+//   - the PostHog wire has NO endpoint of its own: decodeIngest dispatches it by
 //     shape (isInsightsWire), so PostHog SDKs land on /v1/event like everything
-//     else. Its rows carry $source='event' now — the door they actually arrived
+//     else. Its rows carry $source='event' now — the endpoint they actually arrived
 //     on — because the path that used to name them is gone.
 //
 //     ALMOST NOTHING CALLS THIS PATH DIRECTLY. Its live traffic arrives through the
@@ -727,22 +727,22 @@ type door struct {
 //     infra/k8s/ingress/routes.yaml), which matches EIGHT SDK spellings — /e, /v1/e,
 //     /batch, /capture and each one's trailing-slash form, the forms real PostHog
 //     SDKs actually send — and replacePath's them all to this one literal. Two things
-//     follow. This door must NEVER be sunset on a $source count: its callers do not
+//     follow. This endpoint must NEVER be sunset on a $source count: its callers do not
 //     name it, so $source='posthog' would not decay even after every SDK moved. And
 //     if that middleware is dropped or reordered below the catch-all, eight live
 //     ingest paths break at once, here, with no change in this repo.
 //
 //     insights.hanzo.ai is an API host, so those rewritten requests reach the ROUTER
 //     (which tolerates a trailing slash) and never the site-host carve — the carve's
-//     byte-exact matching is not what holds this door open.
+//     byte-exact matching is not what keeps this endpoint reachable.
 //
-// A door is a WIRE, never a NAME. /v1/event, /v1/event/batch and /v1/todo
+// An endpoint is a WIRE, never a NAME. /v1/event, /v1/event/batch and /v1/todo
 // were three more spellings of the canonical wire already served above, and the ONE
 // thing that made them alternatives rather than duplicates — a caller that named them
 // — is gone:
 //
 //   - @hanzo/event (0.3.x) is the client every Hanzo surface now ships, and it posts
-//     the canonical door. The SDK it replaced, @hanzo/capture 0.1.1, POSTed
+//     the canonical endpoint. The SDK it replaced, @hanzo/capture 0.1.1, POSTed
 //     /v1/event and beaconed /v1/todo on unload; the fleet holds no importer
 //     of it, and its unload beacon had ALREADY stopped landing anywhere — apps/todo
 //     owns /v1/todo in the app manifest and registers only /v1/todo/projects/…,
@@ -753,24 +753,24 @@ type door struct {
 //     collector, whose batch takes an array of SendPayload and answers
 //     {size,processed,errors,details}. This package answers CaptureResult, and cloud
 //     serves none of that collector's routes (/v1/event/heartbeat is 404 here).
-//     They were never a contract on THIS door.
+//     They were never a contract on THIS endpoint.
 //
 // BATCH IS A BODY, NOT A PATH — the same reason there is no /v1/event/batch: a JSON
 // array, or a {batch:[…]} envelope, IS the batch, and decodeIngest takes both at the
-// one door. A second path for a second body shape is a second way to say one thing.
+// one endpoint. A second path for a second body shape is a second way to say one thing.
 //
 // The prefixes stay in the app manifest, because /v1/event still carries the READ
 // lenses (overview, timeseries, top, health) and /v1/todo belongs to the todo
 // product. What ends here is this package's claim on them as WRITE paths.
-// decodeEvent is the ONE door's decoder. It picks the wire by SNIFFING THE KEYS,
+// decodeEvent is the ONE endpoint's decoder. It picks the wire by SNIFFING THE KEYS,
 // never by "did the first decoder return anything".
 //
-// /v1/event/insights/e used to be a second door for the second wire. A wire is a SHAPE, and
-// a shape has never earned a path — decodeIngest already sniffs object-vs-array and
-// bare-vs-envelope on this route, so sniffing one more encoding is the mechanism that
-// is already here, not a new one. The wire did not go away: the ingress rewrite that
-// fed the old door (insights-cloud-ingest-rewrite: insights.hanzo.ai /e,/batch,
-// /capture) now replacePaths onto /v1/event.
+// /v1/event/insights/e used to be a second endpoint for the second wire. A wire is a
+// SHAPE, and a shape has never earned a path — decodeIngest already sniffs
+// object-vs-array and bare-vs-envelope on this route, so sniffing one more encoding is
+// the mechanism that is already here, not a new one. The wire did not go away: the
+// ingress rewrite that fed the old endpoint (insights-cloud-ingest-rewrite:
+// insights.hanzo.ai /e,/batch, /capture) now replacePaths onto /v1/event.
 //
 // Trying canonical first and falling back on an empty result is WRONG, and
 // TestMount_HostCarve_IngestsForSiteOrg refutes it: decodeIngest ACCEPTS a PostHog
@@ -833,12 +833,12 @@ var doors = []door{
 			"event was refused for want of a credential (the same events land with a key), and 400 " +
 			"`unroutable_events` when the caller HAD capability and the body still named nothing " +
 			"storable.\n\n" +
-			"ONE door for every wire a Hanzo surface emits, dispatched by the SHAPE of the body and " +
+			"ONE endpoint for every wire a Hanzo surface emits, dispatched by the SHAPE of the body and " +
 			"never by a second path: a bare event object, a bare array of them, the {batch:[…]} / " +
 			"{events:[…]} envelope, the team console's snake_case array, and the PostHog wire (spelled " +
 			"`distinct_id`/`api_key`, which the canonical wire never uses). BATCH IS A BODY, NOT A " +
 			"PATH — there is no /v1/event/batch, because an array already is one.\n\n" +
-			"WHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the door itself grants nothing. A " +
+			"WHAT THE CALLER PRESENTS DECIDES WHAT IT MAY WRITE, and the endpoint itself grants nothing. A " +
 			"validated bearer or an org API key writes the full event at full fidelity. A PUBLISHABLE " +
 			"key (pk-, on Authorization: Bearer, x-hanzo-ingest-key, or ?ingest_key= for " +
 			"navigator.sendBeacon, which cannot set headers) does the same, and is the credential a " +
@@ -879,24 +879,24 @@ var doors = []door{
 // real client sends. Declaring only the bare object — the one shape a lone Go type
 // could state — would document an ingest API that cannot batch, which is most of
 // what @hanzo/event does.
-// insightsBody rides here because the door accepts it: one path, four shapes. Leaving
+// insightsBody rides here because the endpoint accepts it: one path, four shapes. Leaving
 // it out would publish an ingest API that silently accepts a wire it does not document.
 var canonicalWire = openapi.OneOf{Event{}, []Event{}, CaptureBatch{}, insightsBody{}}
 
-// declare publishes what every ingest door ACCEPTS, RETURNS and MEANS. These doors
-// cannot be typed ops (typed_wire_test.go names each one's wire fact), and an untyped
-// route with no declaration publishes an operationId and NOTHING else —
+// declare publishes what every ingest endpoint ACCEPTS, RETURNS and MEANS. These
+// endpoints cannot be typed ops (typed_wire_test.go names each one's wire fact), and an
+// untyped route with no declaration publishes an operationId and NOTHING else —
 // indistinguishable, to every SDK generator reading the document, from a route that
-// takes no body and returns none. That is how the platform's primary ingest door came
-// to offer, in every generated SDK, a call with nowhere to put the event.
+// takes no body and returns none. That is how the platform's primary ingest endpoint
+// came to offer, in every generated SDK, a call with nowhere to put the event.
 //
 // Schema alone was only half of that: a call with somewhere to put the event and no
-// word about what a publishable key may do with it is a door a reader has to guess at.
-// Describe is the client for the other half, and it derives from the SAME rows — a door
-// added tomorrow declares its schema and its prose together, or fails the gate in
-// doors_test.go rather than silently publishing neither.
+// word about what a publishable key may do with it is an endpoint a reader has to
+// guess at. Describe is the client for the other half, and it derives from the SAME
+// rows — an endpoint added tomorrow declares its schema and its prose together, or
+// fails the gate in doors_test.go rather than silently publishing neither.
 //
-// The receipt is the SAME for every door and every lane — the anonymous projection,
+// The receipt is the SAME for every endpoint and every lane — the anonymous projection,
 // the reduced team principal, the full credential and the o11y plane's claim all
 // answer CaptureResult (handle/publicIngest/ingestDecoded, above), so one response
 // declaration is the whole truth rather than the common case.
@@ -906,7 +906,7 @@ func init() {
 		openapi.Describe(d.path, http.MethodPost, d.summary, d.description)
 	}
 	// The Sentry error wire (registered in event.go's routes, on the same
-	// /v1/event door). Its body is an opaque envelope stream the o11y consumer reads
+	// /v1/event endpoint). Its body is an opaque envelope stream the o11y consumer reads
 	// itself, so openapi.Binary is the whole truth — no struct describes it, exactly
 	// as none describes an upload. Its RESPONSE is deliberately undeclared: the
 	// handler relays the o11y plane op obs_error_post verbatim, so this package does not know
@@ -925,17 +925,17 @@ func init() {
 		{"/v1/event/:project/store",
 			"Sentry SDK store ingest — the legacy single-event wire",
 			"Accepts the LEGACY Sentry wire: one event per request, what an SDK predating envelopes " +
-				"sends. Same door, same credential, same destination as the envelope endpoint — kept " +
+				"sends. Same handler, same credential, same destination as the envelope endpoint — kept " +
 				"open so an old client reports without being upgraded first. New instrumentation has " +
 				"no reason to choose it."},
 	} {
 		openapi.Register(d.path, http.MethodPost, openapi.Binary{}, nil)
 		openapi.Describe(d.path, http.MethodPost, d.summary, d.description+sentryWire)
 	}
-	// The session-replay snapshot door (replay.go). It is not a `doors` row — its
+	// The session-replay snapshot endpoint (replay.go). It is not a `doors` row — its
 	// body is not the canonical wire and it lands no warehouse row — so it declares
 	// itself here beside the other route on this surface that is registered by hand.
-	// Its RESPONSE is the same CaptureResult every door answers, because the receipt
+	// Its RESPONSE is the same CaptureResult every endpoint answers, because the receipt
 	// is the one thing every write on this surface does share.
 	openapi.Register(replayPath, http.MethodPost, replayBody{}, CaptureResult{})
 	openapi.Describe(replayPath, http.MethodPost,
@@ -968,15 +968,15 @@ func init() {
 			"recording.")
 }
 
-// sentryWire is the half of both Sentry doors' prose that is identical because the
+// sentryWire is the half of both Sentry endpoints' prose that is identical because the
 // HANDLER is identical: one relay, one credential, one tenant rule. Stated once so two
 // descriptions cannot drift into two accounts of one forward.
 //
 // The DSN paragraph is the load-bearing one. Every other write in this package is
 // reached with a Hanzo credential, so a reader arrives expecting one here too — and
-// sending a bearer to this door accomplishes exactly nothing.
+// sending a bearer to this endpoint accomplishes exactly nothing.
 const sentryWire = "\n\nCLOUD ROUTES IT AND READS NONE OF IT. The body is relayed byte-for-byte to the " +
-	"observability plane, which parses the wire, verifies the credential and answers; this door " +
+	"observability plane, which parses the wire, verifies the credential and answers; this endpoint " +
 	"declares no response shape because it does not know one. A deployment with no observability " +
 	"plane mounted answers 503.\n\n" +
 	"THE CREDENTIAL IS A SENTRY DSN KEY, NOT A HANZO PRINCIPAL. This is one of the few writes on " +
@@ -989,7 +989,7 @@ const sentryWire = "\n\nCLOUD ROUTES IT AND READS NONE OF IT. The body is relaye
 	"Only these two ingest paths map through: no observability READ API is reachable by any other " +
 	"suffix under this prefix."
 
-// ingest is the door's API-host handler: admission (handle) over the door's wire.
+// ingest is the endpoint's API-host handler: admission (handle) over the endpoint's wire.
 // Capability is resolved fail-closed there — bearer | pk- | access key ⇒ full;
 // presented-but-unresolvable ⇒ 403; nothing ⇒ the anonymous projection.
 func (d door) ingest(_ *cloud.Service[state], c *zip.Ctx) error {

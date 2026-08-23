@@ -82,8 +82,8 @@ func TestCrawlWireSurvivedTyping(t *testing.T) {
 	}
 }
 
-// TestCrawlIsClosedToAnAnonymousCaller is the gate, asked at the door a typed op
-// adds rather than at the one it already had.
+// TestCrawlIsClosedToAnAnonymousCaller is the gate, asked at the entry point a
+// typed op adds rather than at the one it already had.
 //
 // A tools/call reaches a typed op with NO route and therefore NO middleware, so a
 // gate that lived only in middleware would be no gate at all for the MCP and CLI
@@ -142,7 +142,8 @@ func TestCrawlIsServedAtOneAddressAndPublishedAtIt(t *testing.T) {
 // every projection reads — so an untyped /v1/crawl is in no OpenAPI operation, no
 // SDK method, no CLI command and no MCP tool. Asserting the handler answers
 // correctly says nothing about any of that. This asks the subsystem's OWN MCP
-// door, over JSON-RPC, exactly as the fleet's door asks it, and reads the answer.
+// server, over JSON-RPC, exactly as the fleet's MCP server asks it, and reads
+// the answer.
 func TestCrawlProjectsAsATool(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "test-service-key")
 	app := mount(t)

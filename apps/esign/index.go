@@ -71,7 +71,7 @@ func (x *tokenIndex) org(token string) (string, bool, error) {
 // looking at.
 //
 // Both points are indexed because a token is live the moment it exists: the
-// signing door looks the token up and never asks whether the document was sent.
+// signing endpoint looks the token up and never asks whether the document was sent.
 // Sending re-points every token it names, which is what heals an index that has
 // fallen behind its tenant store.
 func (x *tokenIndex) record(route, org string, body []byte) error {

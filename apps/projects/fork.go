@@ -80,7 +80,7 @@ func (o ops) fork(ctx context.Context, in *projectsFork) (*projectsProject, erro
 }
 
 // seedFrom resolves the fork parent and returns the projectsCreate it seeds. Templates
-// FIRST, through the ONE catalog door (template.Lookup), which resolves the
+// FIRST, through the ONE catalog entry point (template.Lookup), which resolves the
 // CALLER ORG's own private templates ahead of the public gallery: a curated
 // template slug is a stable public name and must keep meaning the same thing even
 // if some org later publishes a live project under it, and an org's private

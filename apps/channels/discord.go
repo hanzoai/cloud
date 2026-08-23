@@ -19,7 +19,7 @@ import (
 // message from that room.
 var errNoRoute = errors.New("channels: no reply route for this room")
 
-// discordDoor is the send door; tests spy it, prod never repoints.
+// discordDoor is the send path; tests spy it, prod never repoints.
 var discordDoor = func(ctx context.Context, channelID, replyTo, text string) (string, error) {
 	return post(ctx, plane.ChatSendIn{Provider: "discord", Room: channelID, ReplyTo: replyTo, Text: text})
 }

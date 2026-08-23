@@ -236,7 +236,7 @@ func TestPrivateProjectNeverLeaks(t *testing.T) {
 	}
 }
 
-// TestNoOneCanPublish proves the published corpus has no write door: every verb
+// TestNoOneCanPublish proves the published corpus has no write endpoint: every verb
 // on /v1/catalog but GET is unroutable, so there is no gate to misconfigure and
 // no credential that could promote a tenant row into the cross-org catalog.
 func TestNoOneCanPublish(t *testing.T) {

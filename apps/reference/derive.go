@@ -73,9 +73,9 @@ const deviceWindow = 30 * 24 * time.Hour
 // observation floor.
 //
 // The anonymous lane is excluded at the source. The reserved `$public` tenant is
-// where the event door files credential-less writes, so counting it would let an
-// unauthenticated stranger push any browser identity over the floor and into
-// every tenant's baseline. Excluding it in the FROM rather than in a later
+// where the event endpoint files credential-less writes, so counting it would
+// let an unauthenticated stranger push any browser identity over the floor and
+// into every tenant's baseline. Excluding it in the FROM rather than in a later
 // filter is the difference between a refusal and a place to forget.
 const deviceStatement = `
 	SELECT id, orgs, n FROM (
@@ -118,8 +118,8 @@ const deviceBudget = `
 // counts errors and spans as product events. This aggregate is the only
 // cross-tenant reader, so a phantom identity inflates both k-anonymity floors.
 //
-// publicTenant is the reserved org the event door files credential-less writes
-// under (apps/event/event.go). It is not a customer and it never
+// publicTenant is the reserved org the event endpoint files credential-less
+// writes under (apps/event/event.go). It is not a customer and it never
 // contributes to an aggregate.
 const publicTenant = "$public"
 

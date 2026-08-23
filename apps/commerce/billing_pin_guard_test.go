@@ -31,14 +31,14 @@ import (
 // The fold retires the whole shape rather than pinning it again. /v1/billing is
 // billing's address (HIP-0018, HIP-1220 §2); commerce keeps the store and
 // publishes plane operations, and every plane input names its subject as a field
-// the DOOR fills from the caller's own credential. There is no query string on
+// the ENDPOINT fills from the caller's own credential. There is no query string on
 // that wire, so a subject a caller could name is not something to remember to
-// pin — it is unrepresentable. apps/billing's own guard asserts the door end.
+// pin — it is unrepresentable. apps/billing's own guard asserts the endpoint end.
 //
 // So the assertion here is the one that keeps the address from coming back: no
 // registration in this app may name /v1/billing. A route re-added here would win
-// its address by specificity, answer without the door's subject resolution, and
-// reopen the leak silently. It walks the AST rather than matching source text —
+// its address by specificity, answer without the endpoint's subject resolution,
+// and reopen the leak silently. It walks the AST rather than matching source text —
 // the first version of the old guard used a regexp and SILENTLY SKIPPED the very
 // route it was written for, reporting green while the pin was absent.
 func TestCommerceRegistersNoBillingRoute(t *testing.T) {
@@ -94,7 +94,7 @@ func TestCommerceRegistersNoBillingRoute(t *testing.T) {
 			if path == "/v1/billing" || strings.HasPrefix(path, "/v1/billing/") {
 				t.Errorf("%s %s is registered here at %s — /v1/billing is billing's address, and a "+
 					"route re-added on this app wins it by specificity and answers WITHOUT the "+
-					"door's subject resolution, which is the cross-customer read the fold closed",
+					"endpoint's subject resolution, which is the cross-customer read the fold closed",
 					sel.Sel.Name, path, fset.Position(call.Pos()))
 			}
 			return true

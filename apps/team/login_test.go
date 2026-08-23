@@ -1,7 +1,7 @@
 package team
 
 // Tests for the way in to hanzo.team: hanzo.id and nothing else. They lock the
-// two halves of that — the login page advertises exactly one door, and the
+// two halves of that — the login page advertises exactly one entry point, and the
 // password RPC that used to bypass it is refused.
 
 import (
@@ -30,11 +30,11 @@ const testPassword = "hunter2-Sup3rSecret!"
 //     credentials", and it POSTed credentials to production on every run.
 //  2. Asserting the refusal CODE fixed that for a revert, but a handler can
 //     still forge the shape: return statusUnauthorized(signInAtIssuer) from
-//     passwordLogin's error path and the test passes while the door is open and
-//     talking to the issuer.
+//     passwordLogin's error path and the test passes while the way in is still
+//     open and talking to the issuer.
 //
 // So the test pins absence BEHAVIORALLY. Any handler that walks a credential
-// must call IAM; the door never leaves the process. Pointing IAM_ENDPOINT at a
+// must call IAM; the endpoint never leaves the process. Pointing IAM_ENDPOINT at a
 // recording server and failing on ANY request is the one thing a resurrected
 // handler cannot forge — and it takes the credential POST off production.
 func TestCredentialVerbsAreRefused(t *testing.T) {
@@ -53,7 +53,7 @@ func TestCredentialVerbsAreRefused(t *testing.T) {
 
 	// Every verb the account client can send that would establish a session from
 	// a credential. loginAsGuest and exchangeGuestToken are the same bypass class
-	// one line from the door just closed; confirm is the sharp one — upstream it
+	// one line from the way in just closed; confirm is the sharp one — upstream it
 	// is email confirmation returning a LoginInfo WITH a token.
 	verbs := []string{
 		"login", "loginAsGuest", "loginOtp", "signUp", "signUpOtp", "signUpJoin",
@@ -78,12 +78,12 @@ func TestCredentialVerbsAreRefused(t *testing.T) {
 		raw, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 
-		// THE assertion: the door answers without ever consulting the issuer.
+		// THE assertion: the endpoint answers without ever consulting the issuer.
 		mu.Lock()
 		hops := append([]string(nil), tripped...)
 		mu.Unlock()
 		if len(hops) > 0 {
-			t.Fatalf("%s reached the issuer (%v) — a handler walked a credential; the door never leaves the process", verb, hops)
+			t.Fatalf("%s reached the issuer (%v) — a handler walked a credential; the endpoint never leaves the process", verb, hops)
 		}
 
 		var out struct {
@@ -97,7 +97,7 @@ func TestCredentialVerbsAreRefused(t *testing.T) {
 			t.Fatalf("%s decode %s: %v", verb, raw, err)
 		}
 		if out.Result != nil && out.Result.Token != "" {
-			t.Fatalf("%s minted a session token — the door is open: %s", verb, raw)
+			t.Fatalf("%s minted a session token — the way in is open: %s", verb, raw)
 		}
 		for _, ck := range resp.Header.Values("Set-Cookie") {
 			if strings.HasPrefix(ck, authCookie+"=") || strings.HasPrefix(ck, iamTokenCookie+"=") {
@@ -174,7 +174,7 @@ func TestAuthStartProviderHint(t *testing.T) {
 	}
 }
 
-// TestProvidersSurface locks the login-page button set to ONE door: Hanzo SSO.
+// TestProvidersSurface locks the login-page button set to ONE entry point: Hanzo SSO.
 //
 // The page renders exactly what this returns (ProvidersOnlyForm -> Providers.svelte
 // iterates it), so every extra entry here is a second, competing way in that also
@@ -194,7 +194,7 @@ func TestProvidersSurface(t *testing.T) {
 	}
 	want := []ProviderInfo{{Name: "openid", DisplayName: "Hanzo"}}
 	if len(ps) != len(want) {
-		t.Fatalf("providers = %+v, want exactly one door %+v", ps, want)
+		t.Fatalf("providers = %+v, want exactly one entry point %+v", ps, want)
 	}
 	if ps[0] != want[0] {
 		t.Fatalf("providers[0] = %+v, want %+v", ps[0], want[0])

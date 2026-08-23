@@ -14,10 +14,10 @@
 
 // bus.go — THE CONTAINER. fact.go says what an event IS; this file moves it.
 //
-// The door accepts, normalizes, authorizes and enriches FIRST, and only then
+// The endpoint accepts, normalizes, authorizes and enriches FIRST, and only then
 // publishes. Fan-out happens on the bus, never in the handler:
 //
-//	cloud service --ZAP/UDS--> the event door --publish--> event.<signal> --> EVENT
+//	cloud service --ZAP/UDS--> the event endpoint --publish--> event.<signal> --> EVENT
 //	    -> the warehouse writer      -> error grouping
 //	    -> the alert engine          -> session/replay
 //	    -> live dashboards           -> webhook/export consumers
@@ -136,7 +136,7 @@ type bus struct {
 
 var conn = &bus{}
 
-// errBusUnavailable is what the door answers with when the plane cannot take a fact.
+// errBusUnavailable is what the endpoint answers with when the plane cannot take a fact.
 // It is a 503 and never a 200: silently dropping an accepted event is the one failure
 // this design exists to make impossible.
 var errBusUnavailable = errors.New("event plane unavailable")
@@ -222,11 +222,12 @@ func planeReady(ctx context.Context) error {
 // DISCARD NEW, NOT OLD, which is the config that was silently wrong. On a full stream
 // the JetStream default (DiscardOld) evicts the OLDEST messages to make room — and the
 // oldest messages on a hand-off stream are precisely the ones no consumer has drained
-// yet. That is data the door already answered 200 for, deleted to make room for data the
-// door has not answered for yet, with no error at either end. DiscardNew inverts it: a
-// full stream REFUSES THE PUBLISH, so publishToStream fails, the door answers 503, and
-// the client retries — backpressure the caller can see instead of loss nobody can. The
-// ceiling stops being a silent shredder and becomes what it reads like: a limit.
+// yet. That is data the endpoint already answered 200 for, deleted to make room for
+// data the endpoint has not answered for yet, with no error at either end. DiscardNew
+// inverts it: a full stream REFUSES THE PUBLISH, so publishToStream fails, the
+// endpoint answers 503, and the client retries — backpressure the caller can see
+// instead of loss nobody can. The ceiling stops being a silent shredder and becomes
+// what it reads like: a limit.
 //
 // MaxAge still expires drained-or-not after streamAge. That is the deliberate hand-off
 // window, not a capacity failure, and a consumer down for three days is an outage to
@@ -292,10 +293,10 @@ func overlaps(err error) bool {
 // removed, because an empty stream is a name and nothing else.
 //
 // IT NEVER TOUCHES A TENANT'S STREAM. A tenant cannot reach these subjects in the
-// first place — the tenant door roots every subject it accepts at pub.<org>.
+// first place — the tenant endpoint roots every subject it accepts at pub.<org>.
 // (apps/pubsub) — so this cannot trigger today. It is here because the cost of
 // being wrong is a customer's stream, and the check is one comparison: if the
-// door's rooting ever regressed, this refuses instead of deleting.
+// endpoint's rooting ever regressed, this refuses instead of deleting.
 func retire(ctx context.Context, js jetstream.JetStream) error {
 	for _, subject := range EventSubjects {
 		name, err := js.StreamNameBySubject(ctx, subject)
@@ -315,7 +316,7 @@ func retire(ctx context.Context, js jetstream.JetStream) error {
 		}
 		if strings.HasPrefix(name, pubsub.TenantPrefix) {
 			return fmt.Errorf("stream %s is a TENANT stream and holds %s, which belongs to the platform event plane; "+
-				"refusing to remove it — the tenant door must not be able to bind this subject", name, subject)
+				"refusing to remove it — the tenant endpoint must not be able to bind this subject", name, subject)
 		}
 		if info.State.Msgs > 0 {
 			return fmt.Errorf("stream %s holds %s (subjects %v) with %d undrained message(s); "+

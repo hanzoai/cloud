@@ -4,8 +4,9 @@ import (
 	"context"
 )
 
-// indexQuery is GET /v1/world's input: nothing. The front door answers the same
-// addresses to every caller, so there is no parameter that could change them.
+// indexQuery is GET /v1/world's input: nothing. The public endpoint answers the
+// same addresses to every caller, so there is no parameter that could change
+// them.
 type indexQuery struct{}
 
 // worldIndex is what World is, and every wire this product answers on.
@@ -14,14 +15,15 @@ type worldIndex struct {
 	Product string `json:"product"`
 	// Summary is one sentence naming what this surface serves.
 	Summary string `json:"summary"`
-	// Wires is every protocol door onto World, REST first. It is deliberately NOT
-	// a list of REST operations: GET /v1/openapi.json is the one enumeration of
-	// those, and a second copy here would be a second thing to keep true.
+	// Wires is every protocol entry point onto World, REST first. It is
+	// deliberately NOT a list of REST operations: GET /v1/openapi.json is the one
+	// enumeration of those, and a second copy here would be a second thing to keep
+	// true.
 	Wires []worldWire `json:"wires"`
 }
 
-// worldWire is one protocol door onto World: where it is, what it speaks, and
-// what it asks of the caller.
+// worldWire is one protocol entry point onto World: where it is, what it
+// speaks, and what it asks of the caller.
 type worldWire struct {
 	// Name is the wire's short id — rest, mcp or zap.
 	Name string `json:"name"`
@@ -39,8 +41,8 @@ type worldWire struct {
 	Spec string `json:"spec,omitempty"`
 }
 
-// index answers GET /v1/world — the product's front door, naming every wire this
-// surface answers on.
+// index answers GET /v1/world — the product's public endpoint, naming every wire
+// this surface answers on.
 //
 // It exists because two of those wires are INVISIBLE to the generated document.
 // /v1/world/mcp and /v1/world/zap are carved off the cloud catch-all by the

@@ -2,13 +2,13 @@
 
 package cloud_test
 
-// plane_encodable_test.go — a plane type that cannot be ENCODED is a door that is
-// shut while every other signal says it is open.
+// plane_encodable_test.go — a plane type that cannot be ENCODED is an op that is
+// unreachable while every other signal says it is up.
 //
 // ObsErrorIn.Headers was a map[string]string. zapenc carries scalars, strings,
 // byte slices, structs, pointers and slices, and REFUSES anything else at encode
 // so a field can never silently fail to arrive — so every ObsErrorPost call died
-// inside zip.Call, before the socket, in dur_ms=0. The Sentry envelope door
+// inside zip.Call, before the socket, in dur_ms=0. The Sentry envelope endpoint
 // answered 503 for 24h+ with the peer up, the socket bound and the op registered,
 // which is why it read as an outage with no failing component: the request never
 // left the caller.
@@ -74,7 +74,7 @@ func TestObsErrorInCrossesThePlane(t *testing.T) {
 	}
 	// The runtime's status must arrive VERBATIM — a 401 "invalid ingest key" is
 	// the SDK's signal to stop retrying, and reshaping it into a 503 is what made
-	// every Sentry client retry a door that would never open.
+	// every Sentry client retry an endpoint that would never accept it.
 	if out.Status != 401 {
 		t.Fatalf("status %d crossed, want 401", out.Status)
 	}
@@ -98,9 +98,9 @@ func TestNoPlaneTypeCarriesAnUnencodableKind(t *testing.T) {
 		plane.ScopeRules{},
 		plane.SlackSendIn{},
 		plane.StartIn{}, plane.Started{},
-		// The coding door's contract. It crosses on every run started from chat,
+		// The coding op's contract. It crosses on every run started from chat,
 		// and a map added to either half would fail the call INSIDE zip.Call,
-		// before the socket, with a healthy-looking peer and a shut door.
+		// before the socket, with a healthy-looking peer and an unreachable op.
 		plane.CodingStartIn{}, plane.CodingStarted{},
 		// SlackSendIn grew a field (Update) and SlackSent is new — both are on the
 		// path a run narrates itself down.
@@ -186,7 +186,7 @@ func walkEncodable(t *testing.T, typ reflect.Type, path string) {
 		switch ft.Kind() {
 		case reflect.Map, reflect.Interface, reflect.Chan, reflect.Func, reflect.Complex64, reflect.Complex128:
 			t.Errorf("%s is a %s — zapenc refuses it AT ENCODE, so every call carrying this "+
-				"type fails before the socket and the peer looks healthy while the door is shut. "+
+				"type fails before the socket and the peer looks healthy while the op is unreachable. "+
 				"Carry it as a slice of structs.", where, ft.Kind())
 		case reflect.Slice, reflect.Array:
 			el := ft.Elem()

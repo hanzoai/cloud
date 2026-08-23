@@ -200,7 +200,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(zapp, "/v1/base/bases", ops.list)
 	zip.Get(zapp, "/v1/base/bases/:org", ops.read)
 
-	// There is no second door. /v1/collections used to reverse-proxy this same
+	// There is no second endpoint. /v1/collections used to reverse-proxy this same
 	// concept to a separate Base deployment, and its stated reason for existing was
 	// the cross-instance `tenants` registry that deployment held — one row per Base,
 	// each on its own subdomain. That registry cannot work: an authenticated request

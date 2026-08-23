@@ -18,7 +18,7 @@ package cloud
 // two envelopes priced at zero and required no standing — not by a decision anyone
 // made, but because the gate was asking about the wrong value. Every priced
 // operation reached over MCP or over the plane was free, silently, for as long as
-// those doors have been open. Free never errors, so nothing anywhere said so.
+// those paths have existed. Free never errors, so nothing anywhere said so.
 //
 // That was survivable while everything spoke HTTP. It stops being survivable the
 // moment internal hops move to ZAP over UDS: each converted call site is a hop

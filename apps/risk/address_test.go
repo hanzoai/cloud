@@ -132,10 +132,10 @@ func TestAddress_MassesAreNamedByTheirBitsAndNotTheirDigits(t *testing.T) {
 // the experiment that would refute it.
 //
 // Organisation A publishes a value and gets its address. Organisation B is handed
-// THAT EXACT ADDRESS — not a guess, the real one — and every door in this plane is
-// tried with it: the record read, the masses read, and the adoption an operator
-// would use to roll a model back. All three must answer nothing, and B's own model
-// must be untouched afterwards.
+// THAT EXACT ADDRESS — not a guess, the real one — and every entry point in this
+// plane is tried with it: the record read, the masses read, and the adoption an
+// operator would use to roll a model back. All three must answer nothing, and B's
+// own model must be untouched afterwards.
 //
 // WHAT MUTATION BREAKS IT, MEASURED. Two drafts of this comment were wrong before
 // the mutations were actually run, so what follows is the result and not the
@@ -190,22 +190,22 @@ func TestAddress_AForeignOrgResolvesNothing(t *testing.T) {
 		t.Fatal("organisation B learned nothing, so this test proves nothing about B")
 	}
 
-	// DOOR 1 — the record.
+	// ENTRY POINT 1 — the record.
 	if v, ok, err := p.valueAt(b, published.Address); err != nil {
 		t.Fatalf("valueAt(B): %v", err)
 	} else if ok {
 		t.Fatalf("organisation B read organisation A's published value by name: %+v", v)
 	}
 
-	// DOOR 2 — the model: the masses AND the shape they describe, which is the whole
-	// of what an adoption installs.
+	// ENTRY POINT 2 — the model: the masses AND the shape they describe, which is
+	// the whole of what an adoption installs.
 	if m, ok, err := p.modelAt(b, published.Address); err != nil {
 		t.Fatalf("modelAt(B): %v", err)
 	} else if ok {
 		t.Fatalf("organisation B read organisation A's model by name: learned=%d shape=%+v", m.Learned, m.Shape)
 	}
 
-	// DOOR 3 — adoption, which is what an operator rolling a model back actually
+	// ENTRY POINT 3 — adoption, which is what an operator rolling a model back
 	// calls. This is the one that would install A's learned behaviour into B.
 	if _, _, err := p.adopt(b, published.Address); err == nil {
 		t.Fatal("organisation B adopted organisation A's model by naming its address")
@@ -546,8 +546,8 @@ func TestAddress_TwoBrandsShareAFileAndNotAValue(t *testing.T) {
 	if _, _, err := p.adopt(za, mine.Address); err == nil {
 		t.Fatalf("%s adopted %s's model out of the file they share", za, ha)
 	}
-	// The listing is the third door, and it is the one an operator reads: it must not
-	// even MENTION the other brand's value.
+	// The listing is the third entry point, and it is the one an operator reads: it
+	// must not even MENTION the other brand's value.
 	vs, _, err := p.values(za, 0)
 	if err != nil {
 		t.Fatalf("values %s: %v", za, err)

@@ -160,9 +160,9 @@ func newStorefront() Storefront {
 // deployment's token is not admin on the store); any other non-2xx is errUpstream.
 func (s commerceStorefront) Publish(ctx context.Context, org string, req StorefrontRequest) (StorefrontResult, error) {
 	// Commerce is a PLUGIN in this binary, so both halves are asked by name over
-	// the internal plane. They used to be HTTP calls to commerce's own door,
+	// the internal plane. They used to be HTTP calls to commerce's own endpoint,
 	// which production resolves to this pod's own public edge — the request left
-	// the process and came back through the front door.
+	// the process and came back through the edge.
 	store, err := commercepeer.StoreCurrent(cloud.For(ctx, org), &plane.StoreIn{})
 	if err != nil {
 		if errors.Is(err, cloud.ErrNoPeer) {

@@ -71,7 +71,7 @@ type line struct {
 type tell struct {
 	org, session string
 	// blind redacts what the caller said must never be published. It is applied
-	// HERE, at the moment a line becomes an event, because this is the door the
+	// HERE, at the moment a line becomes an event, because this is the writer the
 	// bytes leave by — see [blinder] and plane.RunIn.Blind.
 	blind *blinder
 

@@ -48,8 +48,8 @@ func TestOrgStoreCloseAllIsTerminal(t *testing.T) {
 		t.Fatalf("For after CloseAll re-opened the org file: opens=%d, want 1 — the store came back to life after shutdown", opens)
 	}
 
-	// The SAME refusal on every door that can open a file, so there is no second
-	// spelling of the reset that survives.
+	// The SAME refusal on every entry point that can open a file, so there is no
+	// second spelling of the reset that survives.
 	if _, err := cache.For(MustOrgNamespace("neverseen", "")); !errors.Is(err, ErrStoreClosed) {
 		t.Fatalf("For(new org) after CloseAll must refuse with ErrStoreClosed, got %v", err)
 	}
@@ -59,7 +59,7 @@ func TestOrgStoreCloseAllIsTerminal(t *testing.T) {
 		t.Fatalf("Each after CloseAll must refuse with ErrStoreClosed, got %v", err)
 	}
 	if opens != 1 {
-		t.Fatalf("a door other than For re-opened an org file after close: opens=%d want 1", opens)
+		t.Fatalf("an entry point other than For re-opened an org file after close: opens=%d want 1", opens)
 	}
 
 	// CloseAll stays idempotent — a Shutdown that runs twice is not an error.

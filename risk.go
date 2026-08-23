@@ -1,6 +1,6 @@
 package cloud
 
-// The scorer client — the ONE door from anywhere in cloud to /v1/risk.
+// The scorer client — the ONE entry point from anywhere in cloud to /v1/risk.
 //
 // /v1/risk is the platform's scoring and decision plane: it judges an entity at
 // a lifecycle moment and answers with an action. Everything that DEFENDS a
@@ -33,7 +33,7 @@ package cloud
 // it one means EXPORTING a scorer from apps/risk and then deciding what it answers
 // for: this global answers for its own process, while arming asks whether the risk
 // plane can answer for the FLEET. That is a cross-process ask. The observability
-// plane's event door was the same shape and learned it the expensive way
+// plane's event endpoint was the same shape and learned it the expensive way
 // (cloud.SetObsErrorIngest, in a file named obsevents.go, read nil in the process
 // that needed it and answered 503 to every Sentry SDK until apps/o11y/obs_rpc.go
 // replaced it with a plane op; obsevents.go is gone).

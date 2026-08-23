@@ -21,7 +21,7 @@ package openapi
 // index the day its routes are in the document, and one that goes beta leaves
 // it the day its manifest row says so.
 //
-// # Why the front door answers this ahead of the router
+// # Why the edge answers this ahead of the router
 //
 // /v1 is a claimed address. ai's manifest row is the REMAINDER — its prefix is
 // the bare "/v1" — and zip mounts a prefix as All(prefix) plus All(prefix+"/*"),
@@ -29,7 +29,7 @@ package openapi
 // composition is refused outright. The same is true one segment down for every
 // capability that claims its own root: /v1/kms is kms's.
 //
-// So these two doors are middleware on the front door rather than routes on it,
+// So these two endpoints are middleware on the edge rather than routes on it,
 // which is the same client a co-resident app already uses to answer inside a
 // sibling's subtree (apps/zen). What keeps that from SHADOWING anything is one
 // line rather than a policy: an address the document already carries an
@@ -38,10 +38,10 @@ package openapi
 // serves its own root, the document says so and this steps aside with no edit
 // here at all.
 //
-// The document still describes both doors, and does it the way the agent door
-// is described (openapi/mcp.go): [core] mounts a stub at each address so [Spec]
-// projects it, and the prose and bodies are declared below. A published address
-// with an operationId and nothing else is an SDK method nobody can explain.
+// The document still describes both endpoints, and does it the way the agent MCP
+// endpoint is described (openapi/mcp.go): [core] mounts a stub at each address
+// so [Spec] projects it, and the prose and bodies are declared below. A published
+// address with an operationId and nothing else is an SDK method nobody can explain.
 
 import (
 	"encoding/json"
@@ -116,7 +116,7 @@ type Index struct {
 // one index per capability keyed by its name.
 //
 // The surface is the PUBLIC one — an operation carries the audience the compose
-// stamped on it, so the operator's admin product, the relay doors, the legacy
+// stamped on it, so the operator's admin product, the relays, the legacy
 // spellings and every capability that is not yet ga are absent from both halves
 // at once. That is the same rule openapi.yaml is projected by and it is asked
 // once, here, rather than restated: a beta capability being missing from the
@@ -173,11 +173,11 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 		Links: map[string]Link{
 			"self":        {Href: RootPath},
 			"describedby": {Href: Path},
-			// The same surface as a query language. A door nobody is told about is
+			// The same surface as a query language. An endpoint nobody is told about is
 			// half-shipped, and this index is the one call a caller already makes.
 			"graphql": {Href: GraphPath},
 			"mcp":     {Href: door.Path},
-			// Where to knock, beside where to knock ON. The door 401s with a
+			// Where to authenticate, beside where to call. The MCP server 401s with a
 			// WWW-Authenticate naming this same document (RFC 9728), which is how a
 			// spec-following MCP client discovers it — but only AFTER being refused.
 			// A caller reading the index learns both in the one call it already makes.
@@ -194,7 +194,7 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 		root.Capabilities = append(root.Capabilities, Capability{
 			Name: name, Href: href, Stage: stage, Description: said[name],
 		})
-		// Lower-case because that is how a document keys a method, where the door
+		// Lower-case because that is how a document keys a method, where the route
 		// itself is declared with http.MethodGet.
 		if d.Paths[href][strings.ToLower(http.MethodGet)] != nil {
 			continue // the capability reads its own root; this is not the index's address
@@ -218,8 +218,8 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 	return root, per
 }
 
-// MountIndex installs the hypermedia layer on the FRONT DOOR: the two index
-// doors, and the RFC 8288 links every /v1 answer carries.
+// MountIndex installs the hypermedia layer on the EDGE: the two index
+// endpoints, and the RFC 8288 links every /v1 answer carries.
 //
 // It must be composed BEFORE the subsystems are mounted. zip visits an included
 // App with the middleware stack as it stood at the inclusion site, so a Use
@@ -305,7 +305,7 @@ func answer(c *zip.Ctx, r *rendered) ([]byte, bool) {
 // way HTTP has a method for asking it: a client that holds an address and wants
 // to know what it can do there sends OPTIONS and reads Allow, without a body and
 // without fetching a document. That completes the self-describing story the two
-// index doors start — root names the capabilities, a capability names its
+// index endpoints start — root names the capabilities, a capability names its
 // operations, and every address names its own methods.
 //
 // It answers 204 and never a body, because Allow IS the answer (refer sets it,
@@ -394,7 +394,7 @@ func leaf(path string) string {
 }
 
 // rendered is what one compose of the fleet document leaves behind: the bodies of
-// the two index doors, and what the contract says about every other address.
+// the two index endpoints, and what the contract says about every other address.
 //
 // The document itself is dropped — see [MountIndex] — and this is deliberately
 // the small residue of it. Per address that is a method list and two booleans.
@@ -421,7 +421,7 @@ type address struct {
 
 // addresses recovers an operation's template from a concrete request path.
 //
-// It exists because the front door PROXIES: the fiber route a request matched
+// It exists because the edge PROXIES: the fiber route a request matched
 // here is the proxy's own, not the operation's, so the template cannot be read
 // off the route and has to be found by shape. Templates are bucketed by segment
 // count, so a lookup compares only the candidates that could possibly match —
@@ -516,12 +516,12 @@ func here(c *zip.Ctx) string {
 	return p
 }
 
-// stubIndex puts both doors on core's throwaway router so [Spec] projects them.
-// The handlers are never reached: the real doors are the front door's
+// stubIndex puts both endpoints on core's throwaway router so [Spec] projects them.
+// The handlers are never reached: the real endpoints are the edge's
 // middleware, for the reason stated at the top of this file.
 func stubIndex(app *zip.App) {
 	held := func(*zip.Ctx) error {
-		return zip.ErrInternal("the document's stub for the index — the front door serves it")
+		return zip.ErrInternal("the document's stub for the index — the edge serves it")
 	}
 	app.Get(RootPath, held)
 	app.Get(indexRoute, held)
@@ -532,9 +532,9 @@ func init() {
 		"Every capability this deployment answers, and where to follow each one",
 		"The API root. One row per capability — its name, the address it answers under, whether "+
 			"it is generally available, and the sentence it says about itself — plus the links to "+
-			"the document at "+Path+" and the agent door.\n\n"+
+			"the document at "+Path+" and the agent MCP server.\n\n"+
 			"It is a projection of that same document and carries the same surface a customer "+
-			"calls: the operator's admin product, the relay doors, the legacy spellings and any "+
+			"calls: the operator's admin product, the relays, the legacy spellings and any "+
 			"capability that is not yet generally available are in neither.\n\n"+
 			"Unauthenticated by design, exactly as the document it derives from: a client has to "+
 			"be able to read the contract before it holds a credential, and a list of capability "+

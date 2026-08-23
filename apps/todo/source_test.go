@@ -635,13 +635,13 @@ func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
 // ── the surviving store ──────────────────────────────────────────────────────
 
 // The per-(org, IAM project) SQLite store is no longer behind /v1/todo — the
-// forge is. It still backs the two PLANE doors (upsert_plane.go and the agent-PR
-// client), so its physical tenant boundary is still load-bearing and still pinned
-// here: two IAM projects under ONE org are two files, and neither can read the
-// other's rows.
+// forge is. It still backs the two PLANE endpoints (upsert_plane.go and the
+// agent-PR client), so its physical tenant boundary is still load-bearing and
+// still pinned here: two IAM projects under ONE org are two files, and neither
+// can read the other's rows.
 //
 // Driven through storeFor rather than over HTTP, because HTTP no longer reaches
-// it. Testing it through a door it no longer has would prove nothing.
+// it. Testing it through an endpoint it no longer has would prove nothing.
 func TestPerProjectStoreFileIsolation(t *testing.T) {
 	f := newForge(t)
 	app := mountForge(t, f)

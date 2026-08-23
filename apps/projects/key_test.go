@@ -111,8 +111,8 @@ func TestResolveKeyNamesTheProject(t *testing.T) {
 }
 
 // TestMissingSiteStopsRecording is the CTO's rule, structurally: delete the project
-// and its key resolves to nothing, so the door refuses. Recording stops because the
-// site is gone, not because anyone remembered to revoke a credential.
+// and its key resolves to nothing, so the endpoint refuses. Recording stops because
+// the site is gone, not because anyone remembered to revoke a credential.
 func TestMissingSiteStopsRecording(t *testing.T) {
 	st := storeAt(t)
 	key := mustKey(t)
@@ -136,7 +136,7 @@ func TestMissingSiteStopsRecording(t *testing.T) {
 	}
 }
 
-// TestAnalyticsOptOutStopsResolving: analytics:false is honoured at the door, not
+// TestAnalyticsOptOutStopsResolving: analytics:false is honoured at the endpoint, not
 // downstream. A project that asked not to be recorded reports unresolvable, so its
 // caller is told the write did not land instead of being told it did.
 func TestAnalyticsOptOutStopsResolving(t *testing.T) {
@@ -238,7 +238,7 @@ func TestBackfillNeverRotatesAServingKey(t *testing.T) {
 	}
 }
 
-// keyResolver must satisfy the client the ingest door consults.
+// keyResolver must satisfy the client the ingest endpoint consults.
 var _ event.KeyResolver = keyResolver{}
 
 func mustKey(t *testing.T) string {

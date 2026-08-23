@@ -215,7 +215,7 @@ func script(s iam.Session, brandID string) string {
 // isolation rather than a way around it. DO hands back a token-based kubeconfig
 // against the cluster's public https endpoint; the in-cluster 10/8 apiserver
 // address is refused by the sandbox NetworkPolicy, which is what that policy is
-// for. This is the same door an operator's laptop knocks on.
+// for. This is the same endpoint an operator's laptop uses.
 //
 // fleet.SafeRESTConfig is THE gate every kubeconfig in this binary passes, and
 // nothing about the source makes this one exempt: it refuses exec-credential

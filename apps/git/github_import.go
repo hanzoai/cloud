@@ -453,10 +453,10 @@ func (s *storage) inboundFastForward(ctx context.Context, org, project, name, re
 	// ALREADY OURS? Then there is nothing to fetch, and `before` is the proof.
 	//
 	// `want` is the object the source ADVERTISED for this ref, or "" from a caller
-	// that has no advertisement (the webhook door). The comparison lives here, beside
-	// the local tip it needs, so there is ONE place that decides a ref has not moved
-	// and ONE rev-parse to decide it with — importFetch asked the same question a
-	// moment earlier and then asked again through this function.
+	// that has no advertisement (the webhook endpoint). The comparison lives here,
+	// beside the local tip it needs, so there is ONE place that decides a ref has
+	// not moved and ONE rev-parse to decide it with — importFetch asked the same
+	// question a moment earlier and then asked again through this function.
 	//
 	// NoOp is exactly what the fetch would have reported, so a caller's result is
 	// unchanged; only the round trip is gone.
@@ -464,7 +464,7 @@ func (s *storage) inboundFastForward(ctx context.Context, org, project, name, re
 		return ffResult{NoOp: true, Before: before, After: before}, nil
 	}
 
-	// THE REF POLICY, on the inbound door (writer 7 in refpolicy.go).
+	// THE REF POLICY, on the inbound writer (writer 7 in refpolicy.go).
 	//
 	// Fast-forward-only is not the same guarantee as the policy's, and the gap is
 	// exactly the attack: appending a commit to a branch a reviewer has already

@@ -1,6 +1,6 @@
 package main
 
-// The fleet's spec door, pinned end to end on the REAL host surface.
+// The fleet's spec endpoint, pinned end to end on the REAL host surface.
 //
 // This file is about one production defect: GET https://api.hanzo.ai/v1/openapi.json
 // answered 200 with a 3.7 KB document of EIGHT paths — /.well-known/zip/plugin.json,
@@ -14,7 +14,7 @@ package main
 // So the questions here are the two nobody was asking:
 //
 //	WHO answers /v1/openapi.json on the host?   → the host, never a plugin.
-//	WHAT does it answer with?                   → openapi.yaml, exactly. The door is
+//	WHAT does it answer with?                   → openapi.yaml, exactly. The endpoint is
 //	                                              unauthenticated, so what it answers
 //	                                              with is the CUSTOMER contract, the
 //	                                              same bytes every SDK is generated
@@ -63,10 +63,10 @@ func (o oracle) Do(_ *fasthttp.Request, resp *fasthttp.Response) error {
 }
 
 // host builds the host's whole routing surface — every app at its declared
-// prefixes, the spec door, and the console catch-all — through the same mount(),
-// spec() and webui.Mount() run() calls, in the same order. It starts no process:
-// CLOUD_<NAME>_ADDR resolves every app to the oracle, which is the rung of
-// manifest's ladder that mounts a client and spawns nothing.
+// prefixes, the spec endpoint, and the console catch-all — through the same
+// mount(), spec() and webui.Mount() run() calls, in the same order. It starts
+// no process: CLOUD_<NAME>_ADDR resolves every app to the oracle, which is the
+// rung of manifest's ladder that mounts a client and spawns nothing.
 func host(t *testing.T) *zip.App {
 	t.Helper()
 	zip.RegisterTransport("oracle", zip.Transport{Dial: func(addr string) zip.Client { return oracle(addr) }})
@@ -100,7 +100,7 @@ func TestTheSpecDoorIsTheHostsNotACatchAlls(t *testing.T) {
 		t.Fatalf("GET %s = %d, want 200 — the published spec must be readable without credentials", openapi.Path, code)
 	}
 	// The oracle answers with an app's NAME, so a bare name here IS the misroute:
-	// a plugin took the door and this is the child that would have described its
+	// a plugin took the endpoint and this is the child that would have described its
 	// own router as the whole API.
 	if to := strings.TrimSpace(body); !strings.HasPrefix(to, "{") {
 		t.Fatalf("GET %s was answered by the %q plugin, not by the host. A static path beats the "+
@@ -118,30 +118,31 @@ func TestTheSpecDoorIsTheHostsNotACatchAlls(t *testing.T) {
 	// that actually serves them.
 	for _, p := range []string{"/v1/chat/completions", "/v1/models", "/v1/messages"} {
 		if _, _, to := do(t, app, p); to != "ai" {
-			t.Errorf("GET %s -> %q, want ai — claiming the spec door took the catch-all with it", p, to)
+			t.Errorf("GET %s -> %q, want ai — claiming the spec endpoint took the catch-all with it", p, to)
 		}
 	}
 }
 
-// The command door opens on the host's own mount, and answers with the
+// The command endpoint is served by the host's own mount, and answers with the
 // projection of the document served beside it.
 //
-// Asked through spec() — the host's real registration — because the door is not
-// written down anywhere else: openapi.serve registers both addresses, so a change
-// that kept the document and dropped the palette's list would be invisible to
-// every gate in the openapi package, which tests serve directly.
+// Asked through spec() — the host's real registration — because the endpoint
+// is not written down anywhere else: openapi.serve registers both addresses, so
+// a change that kept the document and dropped the palette's list would be
+// invisible to every gate in the openapi package, which tests serve directly.
 //
-// WHAT THIS DOES NOT ASK, and where it is asked instead: whether the door beats
-// ai's bare "/v1" on the full host. It is the same trap the spec door fell into
-// — a static path wins RIGHT UP UNTIL an app row claims it exactly, and then
-// fiber merges the patterns and the host's handler sits silently behind a proxy —
-// but the mechanism is a manifest row, and manifest.TestNoAppClaimsAHostDoor asks
-// it there, of openapi.Door, for both doors at once. The full-fleet version
-// belongs here beside TestTheSpecDoorIsTheHostsNotACatchAlls and cannot be
-// written yet: that test is red on this tree because openapi.Fleet refuses the
-// whole compose over a duplicate operationId (get_billing_portal_methods, two
-// billing routes), so the host answers 500 on BOTH doors. Add it in the commit
-// that fixes the compose.
+// WHAT THIS DOES NOT ASK, and where it is asked instead: whether the endpoint
+// beats ai's bare "/v1" on the full host. It is the same trap the spec
+// endpoint fell into — a static path wins RIGHT UP UNTIL an app row claims it
+// exactly, and then fiber merges the patterns and the host's handler sits
+// silently behind a proxy — but the mechanism is a manifest row, and
+// manifest.TestNoAppClaimsAHostDoor asks it there, of openapi.Door, for both
+// endpoints at once. The full-fleet version belongs here beside
+// TestTheSpecDoorIsTheHostsNotACatchAlls and cannot be written yet: that test
+// is red on this tree because openapi.Fleet refuses the whole compose over a
+// duplicate operationId (get_billing_portal_methods, two billing routes), so
+// the host answers 500 on BOTH endpoints. Add it in the commit that fixes the
+// compose.
 func TestTheCommandDoorOpensOnTheHostsOwnMount(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	spec(app, []string{"kms", "flags"})
@@ -253,7 +254,7 @@ func TestTheDocumentIsScopedToWhatTheDeploymentRuns(t *testing.T) {
 	}
 	for p := range served {
 		if openapi.Door(p) {
-			continue // the doors themselves, which every deployment serves
+			continue // the endpoints themselves, which every deployment serves
 		}
 		if !strings.HasPrefix(p, "/v1/kms") && !strings.HasPrefix(p, "/v1/flags") {
 			t.Errorf("a deployment running only kms and flags publishes %q — an SDK generated "+

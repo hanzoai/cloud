@@ -65,9 +65,9 @@ var ErrSyncUnavailable = errors.New("cloud: sync engine not registered")
 // processes. A webhook lands on integrations, a push lands on git, and neither
 // of them is where the engine runs, so the in-process call is nil on every path
 // that actually fires. It answered ErrSyncUnavailable for all of them while the
-// engine was up next door: every mirror and every chained propagation silently
-// stopped happening, reported as "not registered" rather than as the reachable
-// call it was.
+// engine was up in the sibling process: every mirror and every chained
+// propagation silently stopped happening, reported as "not registered" rather
+// than as the reachable call it was.
 //
 // ErrSyncUnavailable is kept for the case it always described honestly — a
 // registration this process was supposed to have and does not.

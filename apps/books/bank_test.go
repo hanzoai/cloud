@@ -417,7 +417,7 @@ func TestParseCents(t *testing.T) {
 		{in: "abc", bad: true},
 		{in: "", bad: true},
 		// Overflow must ERROR, never silently wrap to a negative or zero magnitude — the
-		// exact-int64-cents guarantee has no back door for a malformed/malicious PDF.
+		// exact-int64-cents guarantee has no bypass for a malformed/malicious PDF.
 		{in: "92233720368547758.08", bad: true},  // wrapped to a negative before the guard
 		{in: "184467440737095516.16", bad: true}, // wrapped to zero before the guard
 		{in: "99999999999999999999", bad: true},  // digit run overflows int64 in parseDigits

@@ -23,7 +23,7 @@ import (
 // feeder acting for one org cannot file into another's board.
 
 // exposeUpsert publishes the mirror upsert on the internal plane. Mount calls it,
-// beside registerIssueSink — two doors, one upsert.
+// beside registerIssueSink — two entry points, one upsert.
 func exposeUpsert() {
 	zip.Post[plane.IssueIn, plane.IssueUpserted](cloud.Plane(), "/todo/upsert", planeUpsert,
 		zip.WithOperationID(plane.TodoUpsert),

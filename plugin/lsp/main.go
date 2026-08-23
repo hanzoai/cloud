@@ -17,10 +17,10 @@ import (
 //
 // Scaffolded by plugin/gen-app-cmds from the manifest.Apps row; now hand-owned.
 //
-// Metered, not Free: a query's cost is not a property of the door but of whether
-// the revision had to be prepared — fetched and indexed — which only the app
-// knows. The edge therefore charges nothing and apps/lsp/meter.go owns the debit:
-// a prepare is billed, a query against a prepared revision is not.
+// Metered, not Free: a query's cost is not a property of the endpoint but of
+// whether the revision had to be prepared — fetched and indexed — which only the
+// app knows. The edge therefore charges nothing and apps/lsp/meter.go owns the
+// debit: a prepare is billed, a query against a prepared revision is not.
 //
 // There is no Shutdown. The language servers and the checkouts run in the
 // hanzoai/lsp daemon on its own deployment, not here; this app holds an

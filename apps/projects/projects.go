@@ -377,10 +377,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	setResolverForPlane(siteResolver{store: store})
 	exposeSites()
 
-	// The ingest door's key→project resolver, on both paths for the same reason.
-	// This is the whole of "a site with no project stops recording": the door asks
-	// this store which project a beacon's key names, and a key nothing holds is a
-	// refusal.
+	// The ingest endpoint's key→project resolver, on both paths for the same reason.
+	// This is the whole of "a site with no project stops recording": the endpoint
+	// asks this store which project a beacon's key names, and a key nothing holds is
+	// a refusal.
 	event.SetKeyResolver(keyResolver{store: store})
 	setKeyResolverForPlane(keyResolver{store: store})
 	exposeKeys()
@@ -403,8 +403,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	// The public per-site tag door (GET /v1/projects/tags), served by THIS process because it
-	// reads THIS process's project store in-process — the same reason the key/site/scope
+	// The public per-site tag endpoint (GET /v1/projects/tags), served by THIS process
+	// because it reads THIS process's project store in-process — the same reason the key/site/scope
 	// resolvers above are registered here rather than reached across the plane.
 	mountTagDoor(app, s)
 
@@ -980,7 +980,7 @@ func credit(s string) string {
 // sanitizeTags cleans a site's browser tag config: lower-cased platform keys, trimmed
 // ids, empties dropped, and both the platform count and each id's length bounded. The
 // ids are non-secret (they ship in the page) but reach a stored config and the public
-// tag door, so they are bounded like any input.
+// tag endpoint, so they are bounded like any input.
 func sanitizeTags(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for k, v := range in {

@@ -163,9 +163,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Delete(v1, "/tools/plugins/authored/:id", o.deleteAuthoredPlugin)
 
 	// The external MCP server registry: a server is a record an org creates, not a
-	// tool the registry enumerates. /v1/mcp is the HOST's agent door, wire-fixed
-	// for every MCP client (HIP-0139 §3.2), so this plane vacates that root
-	// entirely and keeps its servers where its rows are.
+	// tool the registry enumerates. /v1/mcp is the HOST's agent MCP address,
+	// wire-fixed for every MCP client (HIP-0139 §3.2), so this plane vacates that
+	// root entirely and keeps its servers where its rows are.
 	zip.Get(v1, "/tools/mcp/servers", o.listServers)
 	zip.Post(v1, "/tools/mcp/servers", o.createServer, zip.WithStatus(http.StatusCreated))
 	zip.Delete(v1, "/tools/mcp/servers/:id", o.deleteServer)

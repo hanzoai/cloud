@@ -40,7 +40,7 @@ func TestDeliveryRoutesAreRegisteredAtTheirPublishedPaths(t *testing.T) {
 // ── the gate ─────────────────────────────────────────────────────────────────
 
 // Every route on this surface is cloud.Admin: it declares deployments. A
-// validated member with no admin scope is refused at the door, before any
+// validated member with no admin scope is refused at the route, before any
 // handler observes the request.
 func TestDeliveryRefusesANonAdmin(t *testing.T) {
 	app := mountDelivery(t)

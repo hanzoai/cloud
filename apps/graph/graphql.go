@@ -1,11 +1,11 @@
-// graphql.go is the graph's second door, and the only surface here that a
+// graphql.go is the graph's second endpoint, and the only surface here that a
 // caller can TRAVERSE in one request.
 //
 // The REST ops are each one question: read the assertions, walk the edges from a
 // seed set, resolve what is in force. Composing them — "the entities this one
 // points at, and for each of those what its owner resolves to" — costs a request
 // per hop, and the caller has to hold the intermediate keys. That is the shape
-// GraphQL exists for, and it is worth a door HERE and nowhere else in the fleet:
+// GraphQL exists for, and it is worth an endpoint HERE and nowhere else in the fleet:
 // this plane is the one whose data is actually a graph. Projecting the other
 // 1,500 operations as GraphQL fields would publish a REST catalogue in another
 // syntax — flat, edgeless, and worse than the REST it wrapped.
@@ -13,9 +13,9 @@
 // IT ADDS NO WAY TO ASK ANYTHING. Every resolver below calls the SAME ops method
 // the REST route calls, so the tenancy, the as-of bound, the traversal bounds and
 // the conflict rule are the ones already written and tested; a second
-// implementation of any of them is how two doors come to disagree about what an
+// implementation of any of them is how two endpoints come to disagree about what an
 // organization knows. A field that cannot be answered by an existing op is not
-// added here — it is added as an op, and this door follows.
+// added here — it is added as an op, and this endpoint follows.
 package graph
 
 import (
@@ -110,7 +110,7 @@ type Vocabulary {
 `
 
 // query is the schema's root resolver. It holds the ops rather than the store,
-// which is what keeps this door from reaching past the checks the ops make.
+// which is what keeps this endpoint from reaching past the checks the ops make.
 type query struct{ o ops }
 
 func (q *query) Entity(args struct{ Key string }) *entity {
@@ -186,7 +186,7 @@ func (e *entity) Assertions(ctx context.Context, args struct {
 	return wrap(out.Assertions), nil
 }
 
-// Edges is the walk, and it is the reason this door exists. It answers ENTITIES
+// Edges is the walk, and it is the reason this endpoint exists. It answers ENTITIES
 // rather than assertions because that is what a caller composes on: the next
 // selection set asks its own questions of each one, which over REST is a request
 // per hop plus the keys held in between.
@@ -297,7 +297,7 @@ func schemaOf(o ops) (*graphql.Schema, error) {
 	)
 }
 
-// serveGraphQL is the door. It answers 200 with a GraphQL error list for a query
+// serveGraphQL is the endpoint. It answers 200 with a GraphQL error list for a query
 // that cannot run, which is the wire every GraphQL client parses — a transport
 // error would be read as the server being down rather than the query being
 // wrong.
@@ -331,7 +331,7 @@ func serveGraphQL(sc *graphql.Schema) func(*zip.Ctx) error {
 	}
 }
 
-// graphQLIn is the door's request, and it is DECLARED rather than typed: a typed
+// graphQLIn is the endpoint's request, and it is DECLARED rather than typed: a typed
 // op names one Out, and this route's output shape is whatever the query selected.
 type graphQLIn struct {
 	// Query is the GraphQL document to run against the schema above.
@@ -369,7 +369,7 @@ func init() {
 	openapi.Describe("/v1/graph/graphql", http.MethodPost,
 		"Ask the graph in one request, traversing.",
 		"Runs a GraphQL query against this organization's assertions.\n\n"+
-			"It is the one door here a caller can TRAVERSE: the REST ops each answer a "+
+			"It is the one endpoint here a caller can TRAVERSE: the REST ops each answer a "+
 			"single question, so composing them — the entities this one points at, and "+
 			"what each of those resolves to — costs a request per hop with the "+
 			"intermediate keys held by the caller. Here that is one query and the "+

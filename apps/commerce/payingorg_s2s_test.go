@@ -25,8 +25,8 @@ import (
 // this is code that gates: a header alone proves nothing here.
 //
 // With no request there is no header in play: the org is what plane.For stamped
-// in-process, after a door validated it, and zip reads a stated caller only on a
-// request-free context.
+// in-process, after an endpoint validated it, and zip reads a stated caller only
+// on a request-free context.
 //
 // Both shapes are exercised against BOTH resolvers — callerOrg, which the eight
 // ledger ops read by, and payingOrg, which the payment and cart ops read by — so
@@ -120,14 +120,14 @@ func TestOnARequestOnlyAVouchedOrgResolvesATenant(t *testing.T) {
 }
 
 // THE PLANE SHAPE. No request, so the org is whatever the caller stated — and the
-// only thing that states one is a door that already validated it.
+// only thing that states one is an endpoint that already validated it.
 //
 // payingOrg checks the tenant BEFORE co-residency, which is what makes this
 // readable without a commerce embed: unresolved says "no validated org on the
 // call", resolved gets past it and says "not co-resident". So the second message
 // is the PASS. One refusal for one rule — the shape it was refused in is not
 // something the caller needs told, and telling them would be telling them which
-// door they reached.
+// endpoint they reached.
 func TestOffARequestTheStatedOrgIsTheTenant(t *testing.T) {
 	t.Setenv("COMMERCE_SERVICE_TOKEN", "test-commerce-service-token")
 

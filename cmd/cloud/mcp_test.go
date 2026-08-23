@@ -34,14 +34,14 @@ func doMethod(t *testing.T, app *zip.App, method, path, body string) (int, strin
 	return resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Location"), string(b)
 }
 
-// app308 builds the host the way run() does: the fleet's own MCP door at
+// app308 builds the host the way run() does: the fleet's own MCP endpoint at
 // manifest.MCPPath, then the console catch-all LAST. There is no second
 // registration in between, and that is the point — webui's handler is TERMINAL,
 // so it answers the bare /mcp precisely because nothing else claimed it. This
 // test is therefore a test of the COMPOSED host and not of a helper: neuter
 // mcpDoor (webui/mcp.go) and every case below fails with the console shell.
 //
-// The door is the HOST's, registered by fleet.Mount, and zip's is disabled — the
+// The MCP server is the HOST's, registered by fleet.Mount, and zip's is disabled — the
 // same pair run() sets. It fronts no app here (an empty composed set), which is
 // exactly right for this file: what is being tested is that the ADDRESS is
 // reachable and answers JSON-RPC, not what is behind it. What is behind it is
@@ -62,16 +62,16 @@ func app308(t *testing.T) *zip.App {
 	return app
 }
 
-// errNoFleetHere: this host composes no subsystem, so nothing is reachable. A
-// door that answers anyway is the property under test.
+// errNoFleetHere: this host composes no subsystem, so nothing is reachable. An
+// endpoint that answers anyway is the property under test.
 var errNoFleetHere = errors.New("this host composes no subsystems")
 
 // TestBareMCPBeatsTheConsoleCatchAll is the defect, as a test.
 //
 // Measured on api.hanzo.ai before the fix: POST /mcp = 405 "method not allowed",
 // GET /mcp = 200 text/html (the console shell, ~700+ bytes of Next.js). An MCP
-// client configured with the host and the conventional /mcp path could not open
-// the door, and neither answer looked like an outage.
+// client configured with the host and the conventional /mcp path could not reach
+// the MCP server, and neither answer looked like an outage.
 //
 // Without mcpDoor both probes fall through to webui's SPA fallback and this fails.
 func TestBareMCPBeatsTheConsoleCatchAll(t *testing.T) {
@@ -90,14 +90,14 @@ func TestBareMCPBeatsTheConsoleCatchAll(t *testing.T) {
 			t.Fatalf("POST /mcp = %d, want 308; 301/302 would drop the JSON-RPC body", code)
 		}
 		if loc != manifest.MCPPath {
-			t.Errorf("POST /mcp Location = %q, want %q — the signpost must name the one door", loc, manifest.MCPPath)
+			t.Errorf("POST /mcp Location = %q, want %q — the signpost must name the one endpoint", loc, manifest.MCPPath)
 		}
 	})
 
 	t.Run("GET is not the console shell", func(t *testing.T) {
 		code, ctype, loc, body := doMethod(t, app, "GET", "/mcp", "")
 		if code == http.StatusOK && strings.Contains(ctype, "text/html") {
-			t.Fatalf("GET /mcp = 200 %s (%d bytes) — the console catch-all answered for the MCP door", ctype, len(body))
+			t.Fatalf("GET /mcp = 200 %s (%d bytes) — the console catch-all answered for the MCP endpoint", ctype, len(body))
 		}
 		if code != http.StatusPermanentRedirect {
 			t.Fatalf("GET /mcp = %d, want 308", code)
@@ -114,7 +114,7 @@ func TestBareMCPBeatsTheConsoleCatchAll(t *testing.T) {
 		code, _, _, body := doMethod(t, app, "POST", manifest.MCPPath,
 			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`)
 		if code == http.StatusNotFound || code == http.StatusMethodNotAllowed {
-			t.Fatalf("POST /v1/mcp = %d — the signpost points at a door that is not there: %s", code, body)
+			t.Fatalf("POST /v1/mcp = %d — the signpost points at an endpoint that is not there: %s", code, body)
 		}
 		if !strings.Contains(body, `"jsonrpc"`) {
 			t.Errorf("POST /v1/mcp body = %q, want a JSON-RPC envelope", body)

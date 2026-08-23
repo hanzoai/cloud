@@ -110,8 +110,9 @@ func mountTrust(t *testing.T) (*zip.App, *memVFS) {
 }
 
 // upload puts real bytes through the data room's own upload route and returns the
-// document id. The trust centre never takes bytes itself — this is the one door —
-// so a test that skipped it would be testing a path production does not have.
+// document id. The trust centre never takes bytes itself — this is the one
+// endpoint — so a test that skipped it would be testing a path production does
+// not have.
 func upload(t *testing.T, app *zip.App, org, name string, data []byte) string {
 	t.Helper()
 	rq := httptest.NewRequest(http.MethodPost, "/v1/dataroom/documents?name="+name, strings.NewReader(string(data)))
@@ -330,7 +331,7 @@ func TestAskIsRecordedOrRefused(t *testing.T) {
 		map[string]any{"email": "dana@globex.test", "accept": true})
 	if again["id"] != first["id"] {
 		t.Errorf("asking twice opened a second request (%v then %v).\n"+
-			"One open ask per party per target is what keeps an anonymous door from filling a "+
+			"One open ask per party per target is what keeps an anonymous endpoint from filling a "+
 			"tenant's store, and it is the honest answer too — they asked once.", first["id"], again["id"])
 	}
 
@@ -554,7 +555,7 @@ func TestAnUnpublishedCentreIsNotAddressable(t *testing.T) {
 	if code, _ := hit(t, app, caller{}, http.MethodGet, "/v1/dataroom/trust/center/acme", nil); code != http.StatusOK {
 		t.Fatalf("a published centre did not answer at its address")
 	}
-	// Withdrawing closes the door and keeps everything behind it.
+	// Withdrawing closes the public address and keeps everything behind it.
 	if code, body := hit(t, app, admin("acme"), http.MethodPut, "/v1/dataroom/trust", map[string]any{
 		"name": "Acme", "slug": "acme", "publish": false,
 	}); code != http.StatusOK {
@@ -564,7 +565,7 @@ func TestAnUnpublishedCentreIsNotAddressable(t *testing.T) {
 		t.Errorf("a withdrawn centre still answers at its address")
 	}
 	if code, _ := hit(t, app, admin("acme"), http.MethodGet, "/v1/dataroom/trust", nil); code != http.StatusOK {
-		t.Errorf("withdrawing lost the org its own desk — it must close the public door and nothing else")
+		t.Errorf("withdrawing lost the org its own desk — it must close the public address and nothing else")
 	}
 }
 

@@ -171,7 +171,7 @@ func TestPlaneDecide_RefusesAMomentItDoesNotModel(t *testing.T) {
 
 // TestPlaneDecide_RefusesAKindItCannotPlace: the kind namespaces the subject, so
 // an unknown one would judge a different entity than the caller meant. It is the
-// observation constructor's own bound, reached through this door too.
+// observation constructor's own bound, reached through this endpoint too.
 func TestPlaneDecide_RefusesAKindItCannotPlace(t *testing.T) {
 	probe.reset(true)
 	mountApp(t)

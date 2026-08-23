@@ -162,7 +162,7 @@ func (p *plane) start(ctx context.Context, c caller, name string) (entry, error)
 		return entry{}, zip.ErrNotFound("no such dataset")
 	}
 	if e.Status != statusDeclared {
-		// IMMUTABILITY, at the door. `ready`, `refused` and `disposed` are terminal,
+		// IMMUTABILITY, at the entry point. `ready`, `refused` and `disposed` are terminal,
 		// and a version already attempted can never be attempted again — re-running
 		// it would write a second run's rows under a number the first run's digest
 		// already describes.

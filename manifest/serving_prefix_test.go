@@ -30,8 +30,9 @@ import (
 // /v1/train was the second entry here and is deliberately not: it was deleted
 // (`ml: delete the /v1/train facade — the CRDs behind it are not served`) because
 // the two Kubeflow CRDs behind it are not served by the cluster and its health
-// door answered 503 in production. A gate must fence prefixes that EXIST — naming
-// a deleted one would trip the non-vacuity check below and say nothing true.
+// endpoint answered 503 in production. A gate must fence prefixes that EXIST —
+// naming a deleted one would trip the non-vacuity check below and say nothing
+// true.
 var serving = []string{"/v1/ml"}
 
 // servingOwner is the ONE app those two prefixes belong to.

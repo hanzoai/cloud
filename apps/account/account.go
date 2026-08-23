@@ -231,7 +231,7 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// environment, so `configured()` was false everywhere and the surface never took a
 	// cent.
 	//
-	// It is not a rename and there was nothing to point it at. Money-IN has ONE door
+	// It is not a rename and there was nothing to point it at. Money-IN has ONE endpoint
 	// (commerce's mint-gated POST /v1/billing/deposit, which requires an
 	// X-Idempotency-Key naming the settlement or tx hash that caused the credit), and
 	// the fleet deliberately routes NO mint address at the edge — the only two money-in
@@ -528,7 +528,7 @@ func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
 // publishable answers what a key IS, and the SCOPE is what says so — because on
 // this row it is the only field that can.
 //
-// This used to read the AccessKey prefix first, reasoning that every door
+// This used to read the AccessKey prefix first, reasoning that every endpoint
 // dispatches on the prefix and so the prefix is the fact. That holds for the
 // credential a holder PRESENTS, and AccessKey is not that credential. IAM mints
 // both classes with a pk- AccessKey and puts the secret key's sk- in AccessSecret,

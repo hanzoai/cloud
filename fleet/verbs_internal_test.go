@@ -121,9 +121,9 @@ func TestAPhraseSaysWhatTheRouteSays(t *testing.T) {
 }
 
 // TestEveryPublishedNameMeansExactlyOneOperation is the property a tools/call
-// depends on: the door publishes a name, a client sends that name back, and the
-// door must know which operation it meant. Over the whole corpus, at once,
-// because that is the set one gather holds.
+// depends on: the MCP server publishes a name, a client sends that name back, and
+// the MCP server must know which operation it meant. Over the whole corpus, at
+// once, because that is the set one gather holds.
 func TestEveryPublishedNameMeansExactlyOneOperation(t *testing.T) {
 	all := gathered(t)
 	offer(all)
@@ -132,7 +132,7 @@ func TestEveryPublishedNameMeansExactlyOneOperation(t *testing.T) {
 	kept := 0
 	for _, tl := range all {
 		if was, dup := means[tl.as]; dup {
-			t.Fatalf("the door would publish %q for BOTH %s and %s — a call naming it is a coin toss", tl.as, was, tl.name)
+			t.Fatalf("the MCP server would publish %q for BOTH %s and %s — a call naming it is a coin toss", tl.as, was, tl.name)
 		}
 		means[tl.as] = tl.name
 		if tl.as == tl.name {
@@ -151,9 +151,9 @@ func TestEveryPublishedNameMeansExactlyOneOperation(t *testing.T) {
 			t.Fatalf("%s is published as %q, which is %s's own id", tl.name, tl.as, id)
 		}
 	}
-	// And a published name can never be mistaken for one of the door's own tools:
-	// a phrase always carries a verb and an object, no app name in the manifest
-	// has an underscore, and [Describe] has none either.
+	// And a published name can never be mistaken for one of the MCP server's own
+	// tools: a phrase always carries a verb and an object, no app name in the
+	// manifest has an underscore, and [Describe] has none either.
 	for _, tl := range all {
 		if !strings.Contains(tl.as, "_") && tl.as != tl.name {
 			t.Errorf("%s is published as the bare word %q, which could shadow a subsystem tool", tl.name, tl.as)
@@ -203,7 +203,7 @@ func TestTheGateStillJudgesTheROUTE(t *testing.T) {
 	}
 	sort.Strings(held)
 
-	// 1. Nothing refused is reachable under any name the door would publish.
+	// 1. Nothing refused is reachable under any name the MCP server would publish.
 	all := gathered(t)
 	offer(all)
 	withheld := map[string]bool{}
@@ -212,7 +212,7 @@ func TestTheGateStillJudgesTheROUTE(t *testing.T) {
 	}
 	for _, tl := range all {
 		if withheld[tl.name] {
-			t.Fatalf("%s is refused and the door still holds it", tl.name)
+			t.Fatalf("%s is refused and the MCP server still holds it", tl.name)
 		}
 		if withheld[tl.as] {
 			t.Fatalf("%s is published as %q, which is a REFUSED operation's id — naming it would reach the survivor "+
@@ -222,7 +222,7 @@ func TestTheGateStillJudgesTheROUTE(t *testing.T) {
 	// 2. The set that survives is exactly the set the gate lets through: naming
 	//    neither added an operation nor lost one.
 	if len(all) != len(offered) {
-		t.Fatalf("the gate passes %d operations and the door holds %d", len(offered), len(all))
+		t.Fatalf("the gate passes %d operations and the MCP server holds %d", len(offered), len(all))
 	}
 
 	t.Logf("MEASURED — over %d declared operations: %d refused, %d offered", len(held)+len(offered), len(held), len(offered))
@@ -298,14 +298,15 @@ func TestASummaryIsOneSentenceAndFits(t *testing.T) {
 }
 
 // Phrase is [phrase] for the wire tests, which run in package fleet_test and
-// need to know what the door will call an operation before they can assert that
-// it published it. Exported here rather than duplicated there for the same
+// need to know what the MCP server will call an operation before they can assert
+// that it published it. Exported here rather than duplicated there for the same
 // reason [Corpus] is: two readings of one rule is one reading too many.
 func Phrase(op string) string { return phrase(op) }
 
 // gathered is the corpus as [Door.gather] would hold it: refused operations
 // dropped, one owner per name, sorted by [rank] then name. Everything this file
-// asserts is asserted against THAT set, because it is the set the door names.
+// asserts is asserted against THAT set, because it is the set the MCP server
+// names.
 func gathered(t *testing.T) []named {
 	t.Helper()
 	var all []named

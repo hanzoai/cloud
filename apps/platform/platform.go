@@ -215,8 +215,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The same trigger from the FORGE. Pushes land on git.hanzo.ai, a separate
 	// server whose refs never touch this fleet's receive-pack, so the two clients
 	// above are reached from there by a signed delivery (hook.go) — registered here,
-	// in the process holding the builder, which is the whole reason the door apps/git
-	// used to serve could accept a push and build nothing.
+	// in the process holding the builder, which is the whole reason the endpoint
+	// apps/git used to serve could accept a push and build nothing.
 	//
 	// Raw, not a typed op: the HMAC covers the bytes and has to run before the
 	// decode. Terminal keeps its 401/413 intact under an outer /v1 error filter,

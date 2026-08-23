@@ -2,11 +2,11 @@ package main
 
 // prose_test.go gates the FIELD half of the two schemas this composition root adds
 // to the agents document. Everything the SUBSYSTEM publishes is gated in its own
-// package (apps/agents/prose_test.go); the coding door is registered here, so its
+// package (apps/agents/prose_test.go); the coding op is registered here, so its
 // In and Out are gated here — one law, applied where each registration lives.
 //
 // It matters for this op in particular because a MODEL fills these arguments in: the
-// door is projected as an MCP tool, so `tool` being a closed set (dev | claude |
+// op is projected as an MCP tool, so `tool` being a closed set (dev | claude |
 // codex | python | node), `base` being read-only and `branch` being the one ref the
 // run may write are the difference between a run and a lease spent on a mistake.
 //
@@ -22,7 +22,7 @@ import (
 )
 
 // TestEveryPublishedFieldIsDescribed fails on any property of the coding op's
-// published shapes that carries no description. It stands the door up by CALLING
+// published shapes that carries no description. It stands the op up by CALLING
 // codingDoor, so it is downstream of the one registration this program makes rather
 // than beside a copy of it.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
@@ -33,7 +33,7 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 		t.Fatalf("spec: %v", err)
 	}
 	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
-		t.Fatal("the coding door publishes no schemas at all — the gate would pass vacuously")
+		t.Fatal("the coding op publishes no schemas at all — the gate would pass vacuously")
 	}
 	bare, err := openapi.Bare(doc)
 	if err != nil {

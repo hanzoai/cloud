@@ -76,7 +76,7 @@ type inventory struct{ cfg config }
 // contract by ADDRESS, so the split needs no flag — and apps/provisioning already
 // put its shared-backend reads at /v1/admin/provisioning/vector/* for exactly this
 // reason. Two literal segments also stop squatting where a per-corpus search would
-// address, which is what kept /v1/search from being one door with one meaning.
+// address, which is what kept /v1/search from being one prefix with one meaning.
 func mountInventory(z *zip.App) {
 	o := inventory{cfg: loadConfig()}
 	zip.Get(z, "/v1/admin/search/indexes", o.searchIndexes)

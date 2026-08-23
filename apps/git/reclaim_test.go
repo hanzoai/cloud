@@ -49,7 +49,7 @@ func bound(t *testing.T, bytes int64, idle time.Duration) *cache {
 }
 
 // mirroredIn creates repo `name` in org `acme` by mirroring a real bare repo
-// served over git smart-HTTP — the one door that records an origin, and a real
+// served over git smart-HTTP — the one route that records an origin, and a real
 // upstream so a release is genuinely reversible rather than reversible in a stub.
 func mirroredIn(t *testing.T, app *zip.App, name, content string) (url, commit string) {
 	t.Helper()

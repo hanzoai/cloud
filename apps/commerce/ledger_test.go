@@ -87,7 +87,7 @@ func recording(t *testing.T) *recorder {
 // A sandbox credit writes the SANDBOX books, and a live credit the live ones — the
 // deposit AND the balance read the caller is answered with.
 //
-// The read-back matters as much as the write: it is the number the credit door hands
+// The read-back matters as much as the write: it is the number the credit endpoint hands
 // back to its caller, and reading the live books after crediting the sandbox ones
 // reports a balance that has nothing to do with the credit just made. That was the
 // state of both call sites.

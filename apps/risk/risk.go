@@ -21,7 +21,7 @@
 // # The moat, stated plainly
 //
 // Every organisation's events already land in one columnar store through one
-// door: product analytics, captured failures, and every priced inference. This
+// endpoint: product analytics, captured failures, and every priced inference. This
 // app rolls that into a per-organisation feature surface and trains a model per
 // organisation ON THAT ORGANISATION'S OWN DATA. Nobody who does not already
 // operate the event surface can compute these features, and nobody who does not

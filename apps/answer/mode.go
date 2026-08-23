@@ -1,9 +1,10 @@
 package answer
 
 // mode.go — the answer engine's MODE registry: one parameterized code path for
-// search/news/research/deep. A mode is a VALUE handed to the one door (/v1/ask),
-// never a second route. It carries the loop's bounds (queries, sources, pages
-// read), the per-answer price policy, the synthesis prompt, and the model chain.
+// search/news/research/deep. A mode is a VALUE handed to the one endpoint
+// (/v1/ask), never a second route. It carries the loop's bounds (queries,
+// sources, pages read), the per-answer price policy, the synthesis prompt, and
+// the model chain.
 
 import (
 	"os"

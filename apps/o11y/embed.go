@@ -140,7 +140,7 @@ var (
 //
 // Absence, not preference: a key found in the projects space is not "preferred" over
 // an IAM answer, because IAM never has one to give. The order is what makes both
-// spaces reachable through one door.
+// spaces reachable through one endpoint.
 func ingestKeyOrg(ctx context.Context, key string) (string, bool) {
 	if org, ok := projectKeys(ctx, key); ok {
 		return org, true
@@ -154,12 +154,12 @@ func ingestKeyOrg(ctx context.Context, key string) (string, bool) {
 // IAM: apps/projects generates its own from crypto/rand and keeps it on the project
 // row, and every key a customer has actually been handed is one of those. Asking IAM
 // about a projects key is not a lookup that misses, it is a question about a
-// different set — so this door refused every key that works everywhere else, and the
+// different set — so this lookup refused every key that works everywhere else, and the
 // error endpoint accepted nothing at all while /v1/event accepted the same key.
 //
 // Projects first, IAM second, because the fallback is a genuine org-scoped key and
 // IAM does own those. It is the same op analytics resolves this key through
-// (apps/event/plane.go), so one key now means one org at both doors.
+// (apps/event/plane.go), so one key now means one org at both endpoints.
 //
 // The resolver it feeds answers a bool and carries no error, so a projects outage
 // reads here as "not this space" and falls through to IAM, which will not know the

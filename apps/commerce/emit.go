@@ -19,7 +19,7 @@ package commerce
 //
 // This states it, at the point both mints already agree a charge cleared.
 //
-// # It is the event plane's door, not a second one
+// # It is the event plane's endpoint, not a second one
 //
 // The call is [eventpeer.EventCapture] over the peer socket, which is the
 // SAME write core POST /v1/event reaches (apps/event/event_rpc.go). One
@@ -160,7 +160,7 @@ func purchase(p payment, ref string) *plane.EventIn {
 	if p.subject == "" || ref == "" {
 		return nil
 	}
-	// WHAT THE DOOR DID NOT OBSERVE IS NOT STATED, on either fact. A revenue of 0 is a
+	// WHAT THE ENDPOINT DID NOT OBSERVE IS NOT STATED, on either fact. A revenue of 0 is a
 	// sale worth nothing, which a platform averages into its bidding, where an absent
 	// one is a sale of unstated size; and an empty currency restated here would be a
 	// second place deciding what empty means, when the translator already reads it as

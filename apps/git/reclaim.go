@@ -296,7 +296,7 @@ func (c *cache) refetch(ctx context.Context, s *cloud.Service[state], r Repo) er
 // directory cannot be released while the caller uses it. The returned func gives
 // the reader back and runs reclaim; it must be called.
 //
-// It is the ONE door between "this repo exists" (the metadata row) and "its
+// It is the ONE entry point from "this repo exists" (the metadata row) to "its
 // objects are here" (the directory). Before the bound those were the same
 // statement; now they are not, and every path that shells out to git against
 // absRepoPath goes through here to make them agree again.
@@ -318,8 +318,8 @@ func materialize(ctx context.Context, s *cloud.Service[state], r Repo) (string, 
 }
 
 // materializeAt is materialize for a caller that holds a coordinate rather than
-// a row — every pack door, which resolves (org, project, repo) from the request
-// and its principal. The row read is the same one the door would need anyway to
+// a row — every pack endpoint, which resolves (org, project, repo) from the request
+// and its principal. The row read is the same one the endpoint would need anyway to
 // know the repo exists at all.
 func materializeAt(ctx context.Context, s *cloud.Service[state], org, project, name string) (string, func(), error) {
 	store, err := storeFor(s, org)

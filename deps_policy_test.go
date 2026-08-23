@@ -257,8 +257,8 @@ func TestApexIsOneDerivation(t *testing.T) {
 // concatenated the suffix onto the ISSUER instead and silently ignored the
 // override. Both were fetching signing keys from the public host that refuses
 // them, while the edge validator used the working in-cluster one: one fleet,
-// two answers, and the failure is a plane that cannot verify a token the front
-// door just accepted.
+// two answers, and the failure is a plane that cannot verify a token the edge
+// just accepted.
 func TestJWKSHasOneDerivation(t *testing.T) {
 	const issuer = "https://hanzo.id"
 	t.Setenv("CLOUD_JWKS_URL", "http://iam.hanzo.svc/v1/iam/.well-known/jwks")
@@ -331,7 +331,7 @@ func TestJWKSHasOneDerivation(t *testing.T) {
 			"Call cloud.JWKSURLFor(issuer). Concatenating the suffix onto the issuer "+
 			"ignores CLOUD_JWKS_URL, and production pins it because the public issuer "+
 			"host 403s a server-side loopback — that is the fleet verifying one set of "+
-			"signing keys at the front door and a different set behind it.", builders)
+			"signing keys at the edge and a different set behind it.", builders)
 	}
 }
 

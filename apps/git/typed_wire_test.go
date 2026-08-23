@@ -32,7 +32,7 @@ var untypedByDesign = map[string]string{
 	// value, so there is no In and no Out for a typed op to be built from — a
 	// typed op is a shape, and this route deliberately has none left.
 	"POST /v1/git/webhook": "retired: reads no request and returns no value, only a 410 naming the " +
-		"door that builds. A typed op needs an In or an Out; a tombstone has neither.",
+		"endpoint that builds. A typed op needs an In or an Out; a tombstone has neither.",
 
 	// 2. The smart-HTTP git pack protocol. Neither direction is JSON: requests
 	// are application/x-git-*-request pack streams, responses are

@@ -5,7 +5,7 @@ package billing
 //
 // The rows are commerce's and the lifecycle is its engine's, so a move the
 // engine will not make comes back as the caller's own refusal rather than being
-// re-decided here. One state machine, in one place — a door that re-checked it
+// re-decided here. One state machine, in one place — an endpoint that re-checked it
 // would be a second opinion about whether a paid period may be cancelled twice.
 
 import (

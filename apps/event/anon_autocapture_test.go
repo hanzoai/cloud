@@ -29,7 +29,7 @@ import (
 // server-owned table (publicNames). Both halves are load-bearing and both are pinned
 // here: the interaction lands (TestAnonAutocapture_*), and an arbitrary name still
 // cannot (TestAnonEventName_*). The second is the security property — it is the reason
-// the door was narrow, and narrowing is not what changed.
+// the endpoint was narrow, and narrowing is not what changed.
 //
 // Same observable as its neighbours: 503 ⇒ ADMITTED (reached the write core; no
 // warehouse in the harness). 200 {accepted:0,dropped:N} ⇒ the projection refused it.
@@ -58,10 +58,10 @@ func TestAnonAutocapture_ClickAdmittedThroughThePublicDoor(t *testing.T) {
 	}
 }
 
-// TestAnonAutocapture_ClickAdmittedOnThePostHogWire: the second wire the one door
-// speaks (insights.hanzo.ai rewrites eight SDK spellings onto it). Its adapter maps only
-// $pageview to a kind, so every other name arrives as `event` — exactly the shape the
-// name table decides.
+// TestAnonAutocapture_ClickAdmittedOnThePostHogWire: the second wire the one
+// endpoint speaks (insights.hanzo.ai rewrites eight SDK spellings onto it). Its
+// adapter maps only $pageview to a kind, so every other name arrives as `event` —
+// exactly the shape the name table decides.
 func TestAnonAutocapture_ClickAdmittedOnThePostHogWire(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
@@ -108,11 +108,11 @@ func TestAnonAutocapture_StoresTheRealURL(t *testing.T) {
 
 // ── the wall: an arbitrary name is still refused ─────────────────────────────
 
-// TestAnonEventName_ArbitraryRefused is THE security property, and the reason this door
-// admits a table rather than a kind. Every name here is a real attack on the warehouse
-// or on a read lens: the commerce lenses COUNT names (`countIf(event = 'order_completed')`),
-// and an unattested caller minting names is unbounded cardinality in a key space the
-// server is supposed to own.
+// TestAnonEventName_ArbitraryRefused is THE security property, and the reason this
+// endpoint admits a table rather than a kind. Every name here is a real attack on the
+// warehouse or on a read lens: the commerce lenses COUNT names
+// (`countIf(event = 'order_completed')`), and an unattested caller minting names is
+// unbounded cardinality in a key space the server is supposed to own.
 func TestAnonEventName_ArbitraryRefused(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
@@ -281,9 +281,9 @@ func TestAnonPageview_StillCarriesNoCallerName(t *testing.T) {
 // ── the hole Red found: an anonymous error named itself ──────────────────────
 
 // TestAnonError_NameIsNeverTheCallersExceptionClass is the HIGH-1 regression, and it is
-// the sharpest test in this file because the bug it pins was invisible from the door:
-// the request 200s either way, and the caller's bytes only appear once the row is
-// normalized.
+// the sharpest test in this file because the bug it pins was invisible from the
+// endpoint: the request 200s either way, and the caller's bytes only appear once the
+// row is normalized.
 //
 // The kind family used to be admitted with an EMPTY name so resolveName would supply the
 // route's default. That is true for a pageview and was FALSE for an error: resolveName
@@ -296,7 +296,7 @@ func TestAnonError_NameIsNeverTheCallersExceptionClass(t *testing.T) {
 		"TypeError",                // the honest one: still must not name the row
 		strings.Repeat("N", 3000),  // cardinality by length
 		strings.Repeat("N", 60000), // the demonstrated 60 KiB
-		"order_completed",          // poisons the commerce lenses through the error door
+		"order_completed",          // poisons the commerce lenses through the error path
 		"$click",                   // an admitted autocapture name, via the wrong family
 	} {
 		e := foldException(CaptureEvent{Type: "error", Error: &Exception{Type: class, Message: "boom"}})
@@ -617,8 +617,8 @@ func TestAnonError_StillCarriesItsException(t *testing.T) {
 // someone holding no credential at all.
 //
 // It asserts on the FACTS the write path emitted rather than on the status code, because
-// the door answered 200 before the fix and answers 200 after: the whole bug lived past
-// the receipt.
+// the endpoint answered 200 before the fix and answers 200 after: the whole bug lived
+// past the receipt.
 func TestAnonAutocapture_NoExceptionReachesARealOrg(t *testing.T) {
 	admitted, dropped := admitPublic([]CaptureEvent{{
 		Type: "event", Event: "$click",

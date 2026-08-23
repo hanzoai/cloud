@@ -60,12 +60,12 @@ func postBody(t *testing.T, app *zip.App, path, body, auth string) (int, Capture
 	return resp.StatusCode, res
 }
 
-// ── the evidence for the door ────────────────────────────────────────────────
+// ── the evidence for the endpoint ────────────────────────────────────────────
 
 // TestCanonicalDoorDecodesTeamBatch pins the fold that retired the /collect
-// door as a distinct wire: the canonical decode now dispatches the team SPA's
-// bare snake_case array by shape (isTeamArray), so a repoint of
-// ANALYTICS_COLLECTOR_URL at the canonical door loses nothing. This INVERTS the
+// endpoint as a distinct wire: the canonical decode now dispatches the team
+// SPA's bare snake_case array by shape (isTeamArray), so a repoint of
+// ANALYTICS_COLLECTOR_URL at the canonical endpoint loses nothing. This INVERTS the
 // old TestCanonicalWireSilentlyDropsTeamBatch, which pinned the
 // accepted-then-dropped failure the fold fixed: the person id, the timestamp
 // and the kind all survive now.
@@ -88,13 +88,14 @@ func TestCanonicalDoorDecodesTeamBatch(t *testing.T) {
 	}
 }
 
-// TestTeamWireLands is the other half: the SAME bytes through the team door survive
-// admission AND normalize into real facts. It walks the WHOLE pipeline offline —
-// decode, the anonymous projection, the exception fold, then normalize (fact.go),
-// which is the last function before the publish. A fact out of normalize with
-// ok==true is what "the event landed" means everywhere else in this package. The
-// error lands on event.error (its own table), the navigation on event.event as
-// kind=page — the plane vocabulary, not the wide table's $-names.
+// TestTeamWireLands is the other half: the SAME bytes through the team endpoint
+// survive admission AND normalize into real facts. It walks the WHOLE pipeline
+// offline — decode, the anonymous projection, the exception fold, then normalize
+// (fact.go), which is the last function before the publish. A fact out of
+// normalize with ok==true is what "the event landed" means everywhere else in
+// this package. The error lands on event.error (its own table), the navigation
+// on event.event as kind=page — the plane vocabulary, not the wide table's
+// $-names.
 func TestTeamWireLands(t *testing.T) {
 	evs, err := decodeTeam([]byte(teamWire))
 	if err != nil {
@@ -161,8 +162,8 @@ func TestTeamWireKeepsIdentityOnFullLane(t *testing.T) {
 // TestTeamKindMapping pins the whole 7-member enum onto canonicalType's closed set.
 // The mapping is TOTAL by design: a member that fell through to a kind outside
 // publicKinds would be dropped for an anonymous caller, which is the failure this
-// door exists to prevent, so every member is asserted rather than the two that matter
-// most.
+// endpoint exists to prevent, so every member is asserted rather than the two that
+// matter most.
 func TestTeamKindMapping(t *testing.T) {
 	cases := []struct{ event, kind, name string }{
 		{"error", "error", ""},
@@ -262,7 +263,7 @@ func TestTeamTimestampAbsentClampsToNow(t *testing.T) {
 // opinion about ONE: `"timestamp":1` is a well-formed epoch-millis that decodes to
 // 1970-01-01, which the write core used to accept verbatim into the time half of
 // ORDER BY. That is the widest possible key range from the smallest possible request, on
-// the one event door.
+// the one event endpoint.
 func TestTeamEpochMillisCannotReach1970(t *testing.T) {
 	evs, err := decodeTeam([]byte(`[{"event":"error","properties":{"error_message":"x"},"timestamp":1,"distinct_id":"u"}]`))
 	if err != nil {
@@ -403,7 +404,7 @@ func TestTeamTenantRefusals(t *testing.T) {
 			// weakness — it ENFORCED it: the fix (naming the team bearer in
 			// presented()) turns these into 403 and would have failed the old test.
 			//
-			// 200-with-rows-under-$public is the exact pathology this door exists to
+			// 200-with-rows-under-$public is the exact pathology this endpoint exists to
 			// prevent: the caller sees success and the org cannot read its own data.
 			code, _ := postBody(t, app, "/v1/event", teamWire, bearer)
 			if code != http.StatusForbidden {
@@ -447,9 +448,9 @@ func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) (string, bool) {
 	return got, resolved
 }
 
-// ── the door ─────────────────────────────────────────────────────────────────
+// ── the endpoint ─────────────────────────────────────────────────────────────
 
-// TestTeamDoorIsRegistered proves the canonical door carries the team wire:
+// TestTeamDoorIsRegistered proves the canonical endpoint carries the team wire:
 // /v1/event dispatches the team array by shape (isTeamArray), so team events
 // survive admission and REACH the write core — 503 in this warehouse-less
 // harness. A wrong or missing route would 404/405; a decode regression that

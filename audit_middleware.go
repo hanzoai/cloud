@@ -428,9 +428,10 @@ func resourceFromPath(path string) audit.Resource {
 // 24 (short enough for a 128-bit base64 or a 24-hex key, long enough that no
 // human-readable slug reaches it).
 // The scrub rule — what a credential looks like in text, and how one is removed —
-// lives in internal/scrub. It is a LEAF so the fleet's MCP door and apps/admission
-// can ask the same question without linking package cloud's ~400 packages, which
-// is what kept admission maintaining a hand-synced copy of the key prefixes.
+// lives in internal/scrub. It is a LEAF so the fleet's MCP server and
+// apps/admission can ask the same question without linking package cloud's ~400
+// packages, which is what kept admission maintaining a hand-synced copy of the key
+// prefixes.
 //
 // These three keep the names package cloud already used, so no caller moved.
 

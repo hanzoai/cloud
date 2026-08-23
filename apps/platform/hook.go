@@ -1,15 +1,15 @@
-// hook.go is the forge's push door: git.hanzo.ai POSTs every push here, this
+// hook.go is the forge's push endpoint: git.hanzo.ai POSTs every push here, this
 // verifies the signature, and the landed ref becomes a build (buildFromPush) and
 // a lifecycle fact (notify, code-index, mirror).
 //
 // IT IS IN PLATFORM BECAUSE THE BUILD IS. cloud runs each app as its own OS
 // process, and the deploy trigger has exactly one registrant — platform's, next
-// to this file. The door that used to take these deliveries lived in apps/git, a
-// different process, where that registrant is nil forever: every delivery was
-// signed, accepted, answered 204, and built nothing. A receiver has to sit in the
-// process that can act, which is why moving the address was the fix and not a
-// rename. apps/git's route is a 410 naming platform.hanzo.ai — a different
-// deployment, not this one (see [hookPath]).
+// to this file. The receiver that used to take these deliveries lived in
+// apps/git, a different process, where that registrant is nil forever: every
+// delivery was signed, accepted, answered 204, and built nothing. A receiver has
+// to sit in the process that can act, which is why moving the address was the fix
+// and not a rename. apps/git's route is a 410 naming platform.hanzo.ai — a
+// different deployment, not this one (see [hookPath]).
 //
 // The forge and native pushes now travel the SAME two clients. apps/git's
 // fireBranchBuild fires OnGitPush + EmitLifecycle for a push its own receive-pack
@@ -136,13 +136,13 @@ const (
 // answer blames the secret.
 var sigHeaders = []string{"X-Git-Signature", "X-Gitea-Signature", "X-Hub-Signature-256"}
 
-// push is the subset of the forge's push payload this door acts on. Owner and
+// push is the subset of the forge's push payload this receiver acts on. Owner and
 // pusher each carry both spellings the payload has used across forge versions
 // (login vs username); first non-empty wins.
 //
 // The payload's own clone_url is deliberately NOT among these. It would be a
 // third-party string reaching the build path — the value buildFromPush matches an
-// application's RepoURL against — and it carries nothing this door does not
+// application's RepoURL against — and it carries nothing this receiver does not
 // already know: the host is
 // ours, and the path is the owner and name it has read and vetted anyway. So the
 // clone URL is DERIVED, and a delivery cannot aim a build at a repository the
@@ -194,9 +194,9 @@ type push struct {
 // verdict is what the receiver did with one delivery, and it is the reason this
 // answers a body rather than a bare 204.
 //
-// The forge shows the response on its own delivery page. The door this replaces
-// answered an empty 204 whether or not it dispatched, and the cost was eight
-// commits of drift behind a green hook page — the truth lived only in the
+// The forge shows the response on its own delivery page. The receiver this
+// replaces answered an empty 204 whether or not it dispatched, and the cost was
+// eight commits of drift behind a green hook page — the truth lived only in the
 // forge's hook_task rows, which nobody reads until something is already wrong.
 // Fired says whether the two clients ran; Reason says why not when they did not.
 //
@@ -239,7 +239,7 @@ func init() {
 	openapi.Register(hookPath, "POST", push{}, verdict{})
 	openapi.Describe(hookPath, "POST",
 		"Receive a push from the forge and trigger its build",
-		"The forge's push-to-deploy door. git.hanzo.ai runs as a separate server, so its pushes "+
+		"The forge's push-to-deploy endpoint. git.hanzo.ai runs as a separate server, so its pushes "+
 			"never reach this fleet's own receive-pack; without this a push to the host we call "+
 			"canonical builds nothing. A verified push is handed to the SAME two clients a native "+
 			"push travels — the single-registrant deploy trigger, and the many-subscriber "+
@@ -280,7 +280,7 @@ var errNoAnswer = fmt.Errorf("read %s: the KMS client did not return", forge.Web
 // secret is the verifying key. It holds the last value that READ CLEANLY, and
 // the outcome of the last read whether or not that was one, for [hookFresh].
 //
-// HOLDING THE FAILURE IS THE POINT, and it is what makes this door survivable
+// HOLDING THE FAILURE IS THE POINT, and it is what makes this receiver survivable
 // while it is unauthenticated. Verifying needs the key, so the key is read before
 // any caller has proved anything; and the state every deployment STARTS in is the
 // ref unprovisioned. Caching only success meant that state turned a flood of
@@ -307,8 +307,9 @@ type secret struct {
 //
 // Fail-closed at every step: no KMS, a KMS that cannot answer, an empty secret,
 // or a refresh still in flight with nothing held yet each return an error and
-// never a value, because a door that starts builds must refuse rather than trust.
-// The error names the REF and never the value — a ref is a path and is safe to log.
+// never a value, because a receiver that starts builds must refuse rather than
+// trust. The error names the REF and never the value — a ref is a path and is
+// safe to log.
 func (k *secret) read(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if v, err, mine := k.claim(); !mine {
 		return v, err
@@ -324,8 +325,8 @@ func (k *secret) read(s *cloud.Service[state], ctx context.Context) (string, err
 		// A FAILED REFRESH DOES NOT DISCARD THE KEY THAT WORKS. The value read
 		// last time is still the value the forge signs with — the read failed, the
 		// secret did not change — so replacing it with nothing turned one KMS blip
-		// into five minutes of deliveries this door could not verify, and this fork
-		// does not redeliver them. The failure is still recorded (settle, above),
+		// into five minutes of deliveries this receiver could not verify, and this
+		// fork does not redeliver them. The failure is still recorded (settle, above),
 		// so it is visible; it just does not take the key with it.
 		if good := k.good(); good != "" {
 			s.Log.Warn("forge hook: KMS refresh failed; still verifying with the key that read cleanly", "err", err)
@@ -383,8 +384,8 @@ func (k *secret) settle(v string, err error) {
 // answer is shared process state, so a client that hangs up mid-read must not
 // cancel it — cancelled, that error is what gets held for the window, and one
 // disconnecting caller would 503 every legitimate delivery behind it. The bound
-// is there because a refresh nobody finishes leaves the door answering errUnread
-// forever.
+// is there because a refresh nobody finishes leaves the receiver answering
+// errUnread forever.
 func fetch(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if s.KMS == nil {
 		return "", fmt.Errorf("no KMS client mounted: cannot read %s", forge.WebhookRef)
@@ -459,8 +460,8 @@ func (k *seen) drop(key string) {
 
 // What a delivery may name, as the forge itself spells it.
 //
-// These three leave this door and are used as more than text: the namespace and
-// the name build the clone URL a build Job is handed, the name is the key a
+// These three leave this receiver and are used as more than text: the namespace
+// and the name build the clone URL a build Job is handed, the name is the key a
 // lifecycle reactor resolves a directory by, and the commit is a git argument. A
 // separator, a leading dash or a dot-dot in any of them is a traversal or a flag
 // in a position that expects a value — so the shape is checked once, here, at the
@@ -480,9 +481,9 @@ var (
 )
 
 // coordinate reports whether a delivery names a repository, a ref and a commit
-// this door can act on. The dot-dot is refused separately because the character
-// classes above admit each dot on its own, and git's own ref rules refuse the
-// pair for the same reason a path does.
+// this receiver can act on. The dot-dot is refused separately because the
+// character classes above admit each dot on its own, and git's own ref rules
+// refuse the pair for the same reason a path does.
 func coordinate(owner, repo, ref, commit string) bool {
 	return nameRE.MatchString(owner) && nameRE.MatchString(repo) &&
 		refRE.MatchString(ref) && !strings.Contains(ref, "..") &&
@@ -524,7 +525,7 @@ func signed(secret string, body []byte, sigs ...string) bool {
 // there is nothing to recover. Red on the forge's delivery page means "act", and
 // the only act it offers is Replay — which would decline this delivery again,
 // identically, forever. A non-2xx is spent on the one case where replaying does
-// help: a push this door meant to dispatch and could not.
+// help: a push this receiver meant to dispatch and could not.
 //
 // The reason travels in the BODY, where the forge's delivery page shows it, so
 // "why did my push not build" is answered at the forge instead of only in a log.
@@ -540,10 +541,10 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 	// INFLATED size and can only ever be told about an allocation that has already
 	// happened. 8 KB of gzip on the wire bought 8 MiB of it, in the process that
 	// owns builds, deploys and the reconciler, from a caller holding no credential
-	// at all. The forge sends its deliveries uncompressed, so nothing this door
-	// serves needs the feature it was paying for.
+	// at all. The forge sends its deliveries uncompressed, so nothing this
+	// receiver serves needs the feature it was paying for.
 	if enc := strings.TrimSpace(c.Header("Content-Encoding")); enc != "" {
-		return zip.Errorf(http.StatusUnsupportedMediaType, "this door reads an uncompressed body")
+		return zip.Errorf(http.StatusUnsupportedMediaType, "this receiver reads an uncompressed body")
 	}
 	body := c.Body()
 	if len(body) > maxHookBody {
@@ -553,7 +554,7 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 	// built from it, and the lifecycle origin IS it. A deployment that cannot name
 	// its own forge refuses rather than continues, because the value it would carry
 	// on is the empty origin — which every mirror reads as "a native push, send it
-	// on" and is the one loop this door has to not start.
+	// on" and is the one loop this receiver has to not start.
 	host := forge.Host(s.Domain)
 	if host == "" {
 		s.Log.Error("forge hook: this deployment names no forge", "domain", s.Domain)
@@ -587,8 +588,8 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 	// THE PAYLOAD SAYS WHAT THIS IS, not a header. The forge names the event in a
 	// header from the same renamed family as the signature, and a receiver gating
 	// on one spelling of it answers every push a benign 200 the day the forge picks
-	// another — the silent-nothing this door exists to have stopped. A push is the
-	// only delivery carrying a ref, a repository and a commit the ref moved to;
+	// another — the silent-nothing this receiver exists to have stopped. A push is
+	// the only delivery carrying a ref, a repository and a commit the ref moved to;
 	// every other event is missing one of them.
 	owner := cmp.Or(ev.Repository.Owner.Login, ev.Repository.Owner.Username)
 	if !strings.HasPrefix(ev.Ref, "refs/") || owner == "" || ev.Repository.Name == "" {

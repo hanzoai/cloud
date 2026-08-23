@@ -13,7 +13,7 @@ import (
 // client and egress through the ONE existing Bot Connector send path
 // (integrations.SendTeams).
 
-// teamsDoor is the send door; tests spy it, prod never repoints.
+// teamsDoor is the send path; tests spy it, prod never repoints.
 var teamsDoor = func(ctx context.Context, serviceURL, conversationID, text string) error {
 	_, err := post(ctx, plane.ChatSendIn{Provider: "teams", Root: serviceURL, Room: conversationID, Text: text})
 	return err

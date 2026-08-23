@@ -237,9 +237,9 @@ func TestDepositRecoveryIsNotSomebodyElsesCredit(t *testing.T) {
 // The in-transaction dedup only covers a replay whose transaction reaches its own read.
 // A transaction that never gets that far — the one that lost the write to a concurrent
 // poster of the same settlement, or whose request context died between the card clearing
-// and the post — leaves the caller an error over a ref that IS credited. At a credit door
-// that is a 500 on a settled charge (apps/commerce settle.go), and the customer's own
-// retry is what has to recover it.
+// and the post — leaves the caller an error over a ref that IS credited. At a credit
+// endpoint that is a 500 on a settled charge (apps/commerce settle.go), and the
+// customer's own retry is what has to recover it.
 //
 // The context here is CANCELLED, which is that state reproducibly rather than by racing:
 // the transaction cannot begin at all, and the entry is nonetheless posted.
@@ -262,7 +262,7 @@ func TestDepositAlreadyCreditedIsNotAFailure(t *testing.T) {
 	got, err := f.Deposit(dead, in)
 	if err != nil {
 		t.Fatalf("a deposit of an ALREADY CREDITED ref failed with %v — the caller is told the money "+
-			"did not land while the ledger holds it, which at a credit door is a 500 on a settled card", err)
+			"did not land while the ledger holds it, which at a credit endpoint is a 500 on a settled card", err)
 	}
 	if got != posted {
 		t.Errorf("it answered entry %q, want the entry the money is actually under, %q", got, posted)
@@ -284,8 +284,9 @@ func TestDepositAlreadyCreditedIsNotAFailure(t *testing.T) {
 // TestDepositConcurrentSettlementsOfOneRef — many posters, one settlement, one credit.
 //
 // Settlement is at-least-once and about to have a second writer (the processor webhook
-// replaying a charge the door already posted). Every one of them names the same Ref, so
-// every one of them must be told the money is there and the wallet must hold it once.
+// replaying a charge the endpoint already posted). Every one of them names the same
+// Ref, so every one of them must be told the money is there and the wallet must hold
+// it once.
 func TestDepositConcurrentSettlementsOfOneRef(t *testing.T) {
 	f := New(t.TempDir())
 	defer func() { _ = f.Close() }()
@@ -364,11 +365,11 @@ func TestMigrateOrgIdempotent(t *testing.T) {
 // that MOVES.
 //
 // [MigrateOrg] documents a re-run as a no-op that answers the original entry, and the
-// caller is an operator-facing admin door that says "safe to retry". Both are only true
-// while the balance being carried is the same number, because the deposit's idempotency
-// answers a replay with the first entry only when the ref names the same (subject,
-// AMOUNT) — and a legacy balance is a moving figure by construction: the customer spends,
-// tops up, is granted credit between the first run and the second.
+// caller is an operator-facing admin endpoint that says "safe to retry". Both are only
+// true while the balance being carried is the same number, because the deposit's
+// idempotency answers a replay with the first entry only when the ref names the same
+// (subject, AMOUNT) — and a legacy balance is a moving figure by construction: the
+// customer spends, tops up, is granted credit between the first run and the second.
 //
 // So the honest re-run — the retry the doc invites, over a balance that changed in the
 // meantime — was answered with a REF CONFLICT. The cutover looked failed, its receipt was
@@ -408,7 +409,7 @@ func TestMigrateOrgRerunAfterTheBalanceMoved(t *testing.T) {
 	again, err := MigrateOrg(ctx, "acme", 1500)
 	if err != nil {
 		t.Fatalf("re-running the cutover over a MOVED balance answered %v — the documented no-op is an "+
-			"error, so a retried operator call reads as a broken cutover and the admin door reports "+
+			"error, so a retried operator call reads as a broken cutover and the admin endpoint reports "+
 			"a failure over money that is already carried", err)
 	}
 	if again != first {

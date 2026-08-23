@@ -141,7 +141,7 @@ func TestNothingCallerDerivedIsEverComposedIntoAStatement(t *testing.T) {
 }
 
 // TestADatasetNameCannotCarrySyntax. The name is bound everywhere, so this is
-// about the name being readable back — but it is also the door that keeps
+// about the name being readable back — but it is also the check that keeps
 // anything shaped like SQL out of the register in the first place.
 func TestADatasetNameCannotCarrySyntax(t *testing.T) {
 	app := mountHTTP(t, newPlane(&fake{}))

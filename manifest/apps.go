@@ -49,27 +49,27 @@ package manifest
 
 var Apps = []App{
 	{Name: "pubsub", Prefixes: []string{"/v1/pubsub"}, Eager: true},
-	// The second door on pubsub's plane, and its own capability. A bucket holds
+	// The second endpoint on pubsub's plane, and its own capability. A bucket holds
 	// values and answers reads; nothing about it publishes or subscribes, so
 	// key-value is not messaging and does not answer under messaging's name. It
 	// rides the ONE embedded bus through the calls apps/pubsub exports (Bus, Org,
 	// Qualify, Err) rather than running a second server — one process apart, zero
-	// servers apart. NOT Eager: the door is request-driven, it owns no listener
+	// servers apart. NOT Eager: the endpoint is request-driven, it owns no listener
 	// and no loop, and the plane it dials is another row's to start.
 	{Name: "kv", Prefixes: []string{"/v1/kv"}},
 	{Name: "kafka", Prefixes: []string{"/v1/kafka"}, Eager: true},
 	// Eager for kafka's reason: it owns a listener. A wire adaptor that binds
 	// its port only once a request arrives at /v1/amqp would never bind, since
-	// its clients speak AMQP on :5672 and never knock on the HTTP door at all.
+	// its clients speak AMQP on :5672 and never call the HTTP endpoint at all.
 	{Name: "amqp", Prefixes: []string{"/v1/amqp"}, Eager: true},
 	{Name: "mq", Prefixes: []string{"/v1/mq"}},
 	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
 	{Name: "flags", Prefixes: []string{"/v1/flags"}},
 	{Name: "kms", Prefixes: []string{"/v1/kms"}},
-	// One store, three signals, one root: the logs and traces doors fold under
+	// One store, three signals, one root: the logs and traces endpoints fold under
 	// /v1/metrics (HIP-1241), so the capability's routes are all under its own
 	// name. The code moved with them — github.com/hanzoai/metrics is retired and
-	// its door now ships in github.com/hanzoai/o11y/metrics — but the capability
+	// its endpoint now ships in github.com/hanzoai/o11y/metrics — but the capability
 	// did not: a shared module is shared code, not a second owner of the address.
 	{Name: "metrics", Prefixes: []string{"/v1/metrics"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
@@ -129,10 +129,10 @@ var Apps = []App{
 	// The twenty /v1/billing leaves that used to sit beside them are gone too, and
 	// that is the second half of the same rule: /v1/billing is BILLING's address
 	// (HIP-0018, HIP-1220 §2), so commerce keeps the store and publishes the plane
-	// operations that answer from it while billing owns the door. A row here is what
-	// the ROUTER may hand an app, so vacating those leaves is what actually moves
-	// the address — leaving one behind would keep delivering a billing question to
-	// the app that no longer publishes it.
+	// operations that answer from it while billing owns the endpoint. A row here is
+	// what the ROUTER may hand an app, so vacating those leaves is what actually
+	// moves the address — leaving one behind would keep delivering a billing
+	// question to the app that no longer publishes it.
 	{Name: "commerce", Prefixes: []string{"/v1/commerce"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plan"}},
@@ -156,7 +156,7 @@ var Apps = []App{
 	// prefix is the operator's whole-backend view of the vector store it allocates
 	// into (apps/provisioning/inventory.go).
 	{Name: "provisioning", Prefixes: []string{"/v1/admin/provisioning", "/v1/provisioning"}},
-	// The customer's money door owns its whole root now. It held three leaves —
+	// The customer's money endpoint owns its whole root now. It held three leaves —
 	// balance, ledger, usage — beside twenty of commerce's, because the two split
 	// the address and neither claimed the stem: an unnamed leaf falls to ai's bare
 	// "/v1" remainder and answers ai's 404, which is indistinguishable from an
@@ -184,7 +184,7 @@ var Apps = []App{
 	// missing is a better answer than commerce's bare-"/v1" 404.
 	//
 	// /v1/platform/hook is where the FORGE delivers a push (apps/platform hook.go).
-	// It is platform's because the deploy trigger is: the door that used to take
+	// It is platform's because the deploy trigger is: the endpoint that used to take
 	// these deliveries was in git's process, where that trigger is nil, so it
 	// answered every push 204 and built nothing.
 	{Name: "platform", Prefixes: []string{"/v1/platform"}},
@@ -192,7 +192,7 @@ var Apps = []App{
 	{Name: "dns", Prefixes: []string{"/v1/dns"}},
 	{Name: "domain", Prefixes: []string{"/v1/domain"}},
 	{Name: "prompt", Prefixes: []string{"/v1/prompt"}},
-	// The coding door answers at /v1/agents/coding. A coding run IS an agent run:
+	// The coding endpoint answers at /v1/agents/coding. A coding run IS an agent run:
 	// the engine is in this process because it needs the live session store the
 	// run streams into, the durable tasks engine and the in-memory mailbox a routed
 	// run is handed through — all three of which are agents' — so there is no store
@@ -291,20 +291,20 @@ var Apps = []App{
 	{Name: "validator", Prefixes: []string{"/v1/validator"}},
 	{Name: "social", Prefixes: []string{"/v1/social"}},
 	{Name: "standing", Prefixes: []string{"/v1/standing"}},
-	// The INGESTION door is load-bearing, not decorative: apps/event/event.go's
+	// The INGESTION endpoint is load-bearing, not decorative: apps/event/event.go's
 	// `doors` table serves /v1/event, and every beacon the products emit lands on it.
 	// Listing only the read endpoints (as this row did) sent every write to commerce's
 	// bare "/v1" catch-all, which does not serve them — 405, silently, for every event
 	// in the fleet. The row was harmless while each app called its own routes(); it
 	// became the router when the mega-build died, so a missing prefix is now an outage.
 	//
-	// "/v1/event" is the ONE canonical ingest door — the product, team, PostHog and
-	// Sentry-envelope wires ALL arrive on it, dispatched by SHAPE — and it is the
-	// address this app is now NAMED for. It answered to analytics and served six
-	// stems; the ingest door is the one every client hard-codes (@hanzo/event's
+	// "/v1/event" is the ONE canonical ingest endpoint — the product, team, PostHog
+	// and Sentry-envelope wires ALL arrive on it, dispatched by SHAPE — and it is
+	// the address this app is now NAMED for. It answered to analytics and served six
+	// stems; the ingest endpoint is the one every client hard-codes (@hanzo/event's
 	// EVENT_PATH, the hosted tag, HIP-0132's one telemetry ingest), so HIP-0139 §7.3
 	// gives the app that word and §3.1 folds the rest under it, byte-identically for
-	// the door itself:
+	// the endpoint itself:
 	//
 	//	/v1/analytics/{overview,timeseries,top,health} -> /v1/event/…
 	//	/v1/errors                                     -> /v1/event/errors
@@ -314,7 +314,7 @@ var Apps = []App{
 	//
 	// The tag move is the one that costs: ".js" is part of a single segment rather
 	// than a child of it, so "/v1/event.js" could never be a child of the ingest
-	// door's prefix and had to be its own row — and unclaimed it fell to ai's bare
+	// endpoint's prefix and had to be its own row — and unclaimed it fell to ai's bare
 	// "/v1", a 404 that reads to a browser as a broken script tag. As a real child
 	// it needs no row, and the price is every page that embedded the old src and is
 	// never re-embedded. No alias: §7 has no fourth way.
@@ -322,7 +322,7 @@ var Apps = []App{
 	// The PostHog wire's own path stays gone: insights.hanzo.ai's /e, /batch and
 	// /capture rewrite onto /v1/event, so no caller moved, and "/v1/insights/e" is
 	// not claimed here — a prefix is a claim that this app ANSWERS the path, and the
-	// door is retired (retiredDoors, apps/event/doors_test.go). /v1/todo is NOT here
+	// endpoint is retired (retiredDoors, apps/event/doors_test.go). /v1/todo is NOT here
 	// and never was: the todo product owns that name.
 	{Name: "event", Prefixes: []string{"/v1/event"}},
 	{Name: "git", Prefixes: []string{"/v1/git"}},
@@ -481,7 +481,7 @@ var Apps = []App{
 	// to be roots of their own. Each is the SAME registry narrowed, over rows this
 	// app opens and no other does, so each folded under the plane rather than
 	// splitting off an app that would share a store. The last fold vacates the
-	// /v1/mcp root entirely: that address is the host's agent door.
+	// /v1/mcp root entirely: that address is the host's agent MCP server.
 	{Name: "tools", Prefixes: []string{"/v1/tools"}},
 	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}},
 	{Name: "referral", Prefixes: []string{"/v1/admin/referral/bonuses", "/v1/admin/referral/sweep", "/v1/referral"}},

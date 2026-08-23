@@ -35,7 +35,7 @@
 //	PROVENANCE  Every assertion names its source, the evidence record behind it
 //	            and the identity that filed it — the last stamped server-side from
 //	            the validated principal, never from the body. A label with no
-//	            evidence is refused at the door, because a label that cannot be
+//	            evidence is refused at admission, because a label that cannot be
 //	            traced cannot be defended when the adverse action it fed is
 //	            challenged. fact.go, admit().
 //

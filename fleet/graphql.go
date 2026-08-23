@@ -15,8 +15,8 @@ package fleet
 //
 // EXECUTION IS ONE HOP PER ROOT FIELD, in parallel, each carrying the caller's own
 // headers to the app that owns it. That is [ask]'s mechanism with the operation's
-// address instead of the app's door: the child authenticates the caller, scopes
-// the tenant and answers as itself, exactly as it would over REST. Nothing here
+// address instead of the app's own address: the child authenticates the caller,
+// scopes the tenant and answers as itself, exactly as it would over REST. Nothing here
 // holds an identity or decides an authorization — a field reaches precisely what
 // its REST route reaches, for the caller who asked.
 

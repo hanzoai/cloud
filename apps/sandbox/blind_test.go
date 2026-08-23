@@ -1,7 +1,7 @@
 package sandbox
 
 // blind_test.go asserts the property the orchestrator CANNOT assert for itself:
-// that a secret named by a caller does not leave this process, by either door.
+// that a secret named by a caller does not leave this process, by either path.
 //
 // The bug it pins is not hypothetical. A run's credential is a file in the
 // sandbox, so "cat the key" is one sentence in a README away, and the bytes a
@@ -66,7 +66,7 @@ func TestBlind_HidesTheGatewayToken(t *testing.T) {
 	}
 }
 
-// BOTH DOORS. The result returned to the caller and the narration are separate
+// BOTH PATHS. The result returned to the caller and the narration are separate
 // paths out of this process, and a secret must not survive either.
 func TestBlind_HidesBothDoors(t *testing.T) {
 	b := newBlinder([]string{pem})

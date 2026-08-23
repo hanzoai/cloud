@@ -36,7 +36,7 @@ func TestBaseOf(t *testing.T) {
 // structurally rather than checking it; the shape check is what stops a base
 // reaching `git clone -b <base>` as a FLAG rather than a branch. A session id is
 // not a branch name, so turning one into a branch here — instead of accepting a
-// branch — is what makes the first property hold for this door too.
+// branch — is what makes the first property hold for this path too.
 func TestADerivedBaseIsStillABranch(t *testing.T) {
 	for _, session := range []string{
 		"sess_0123456789abcdef",

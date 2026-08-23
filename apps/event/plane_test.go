@@ -1,6 +1,6 @@
 package event
 
-// plane_test.go — the wiring that makes a published fact QUERYABLE: the door publishes
+// plane_test.go — the wiring that makes a published fact QUERYABLE: the endpoint publishes
 // (capture.go), the stream keeps it (bus.go), the sink lands it (warehouse.go).
 //
 // Everything here was already written and none of it was connected. normalize had no
@@ -189,16 +189,16 @@ func TestAnUnpublishableBatchWritesNothing(t *testing.T) {
 
 // ── the signal with nowhere to land ──────────────────────────────────────────
 
-// TestLandableIsExactlyTheWriterSet pins that "which signals the door accepts" is DERIVED
-// from "which signals the sink can write" and is not a second list. A hand-kept allowlist
-// is exactly what lets a door accept a signal the sink silently discards.
+// TestLandableIsExactlyTheWriterSet pins that "which signals the endpoint accepts" is
+// DERIVED from "which signals the sink can write" and is not a second list. A hand-kept
+// allowlist is exactly what lets an endpoint accept a signal the sink silently discards.
 func TestLandableIsExactlyTheWriterSet(t *testing.T) {
 	if len(landableSignals) != len(writers) {
 		t.Fatalf("landableSignals has %d entries for %d writers", len(landableSignals), len(writers))
 	}
 	for _, w := range writers {
 		if !landableSignals[w.signal] {
-			t.Errorf("%s has a writer but the door refuses it", w.signal)
+			t.Errorf("%s has a writer but the endpoint refuses it", w.signal)
 		}
 	}
 	// The one signal deliberately absent, and the reason is a TENANCY defect rather than
@@ -207,12 +207,12 @@ func TestLandableIsExactlyTheWriterSet(t *testing.T) {
 	// metric name and labels into ONE series. A writer would interleave their samples —
 	// a cross-tenant write. See writers (warehouse.go).
 	if landableSignals[signalSample] {
-		t.Error("the door accepts metrics — event.metric has no org column, so landing one is a " +
+		t.Error("the endpoint accepts metrics — event.metric has no org column, so landing one is a " +
 			"cross-tenant write and not a feature")
 	}
 }
 
-// TestMetricIsRefusedNotAccepted is the other half, at the door. Answering 200
+// TestMetricIsRefusedNotAccepted is the other half, at the endpoint. Answering 200
 // {"accepted":1} to something stored nowhere is a lie whether the discard happens in the
 // handler or four hops later on a stream nothing drains; the receipt has to say what
 // actually happened.
@@ -263,9 +263,9 @@ func TestAMixedBatchDropsOnlyTheMetric(t *testing.T) {
 // TestTheStreamRefusesRatherThanEvicts pins the discard policy, the one setting that
 // decides whether a full stream is a LIMIT or a SHREDDER. JetStream's default
 // (DiscardOld) drops the oldest messages to make room — and on a hand-off stream the
-// oldest are exactly the ones no consumer has reached yet, so it deletes facts the door
-// already answered 200 for in order to admit facts it has not answered for, reporting an
-// error at neither end.
+// oldest are exactly the ones no consumer has reached yet, so it deletes facts the
+// endpoint already answered 200 for in order to admit facts it has not answered for,
+// reporting an error at neither end.
 func TestTheStreamRefusesRatherThanEvicts(t *testing.T) {
 	if eventStream.Discard != jetstream.DiscardNew {
 		t.Fatal("the event plane discards OLD on a full stream — that is acknowledged data " +

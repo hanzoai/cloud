@@ -206,7 +206,7 @@ func TestCanonicalProjectsCoresidentSkipsTheWire(t *testing.T) {
 	if _, err := c.List(context.Background(), "acme"); err != nil {
 		t.Fatalf("co-resident List: %v", err)
 	}
-	// The door is gone and the call still works, because it never used the door.
+	// The socket is gone and the call still works, because it never used the socket.
 	if err := os.Remove(zip.SocketPath("iam")); err != nil {
 		t.Fatalf("unlink: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestCanonicalProjectsSocketIsLoadBearing(t *testing.T) {
 		t.Fatalf("with the socket reachable, List must succeed: %v", err)
 	}
 
-	// The peer is alive; only the door the caller uses is gone.
+	// The peer is alive; only the socket the caller uses is gone.
 	if err := os.Remove(filepath.Join(front, "iam.sock")); err != nil {
 		t.Fatalf("unlink: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestCanonicalProjectsSocketIsLoadBearing(t *testing.T) {
 		t.Fatal("the socket was unlinked and the call SUCCEEDED — nothing is crossing it")
 	}
 
-	// Rebind the caller's door and it works again.
+	// Rebind the caller's socket and it works again.
 	relayTo(t, filepath.Join(front, "iam.sock"), peer)
 	rows, err := c.List(context.Background(), "acme")
 	if err != nil {

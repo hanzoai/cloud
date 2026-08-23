@@ -6,7 +6,7 @@ package risk
 //	IT HAPPENS. A decision nobody can query is not a control anybody can operate,
 //	so the decide path is asserted to state one — end to end, through planeDecide.
 //	IT CANNOT FAIL THE DECISION. The peer is made to refuse, and then to hang, and
-//	the door still answers its verdict.
+//	the endpoint still answers its verdict.
 //	IT CARRIES NO RAW SUBJECT AND NO RAW AMOUNT. Asserted over the WHOLE rendered
 //	occurrence, not over the fields the test remembered to look at.
 //	SHADOW IS STATED AND SAID SO. That is the entire value of a shadow regime:
@@ -90,7 +90,7 @@ func TestSendDefaultsToTheRealPeerCall(t *testing.T) {
 	want := reflect.ValueOf(peer.EventCapture).Pointer()
 	if got != want {
 		t.Error("the plane call does not default to the generated client — a substituted emit " +
-			"drops every decision while the door still answers a verdict")
+			"drops every decision while the endpoint still answers a verdict")
 	}
 }
 
@@ -163,11 +163,11 @@ func TestPlaneDecide_StatesTheDecisionOnTheSharedPlane(t *testing.T) {
 }
 
 // TestPlaneDecide_AnUnreachablePlaneDoesNotFailTheDecision. The gate that asks
-// this scorer is the CREDIT DOOR: a telemetry outage that refused a payment would
+// this scorer is the CREDIT ENDPOINT: a telemetry outage that refused a payment would
 // be a control firing on exactly the customers it must not fire on.
 //
 // Both shapes of outage, because they fail differently. A peer that REFUSES is
-// the easy one. A peer that HANGS is the one that would take the door with it,
+// the easy one. A peer that HANGS is the one that would take the endpoint with it,
 // and it is why the emit is detached rather than merely error-tolerant.
 //
 // Mutation proof: make the emit blocking (call the peer on this goroutine, or
@@ -225,7 +225,7 @@ func TestPlaneDecide_AnUnreachablePlaneDoesNotFailTheDecision(t *testing.T) {
 						a.out.Action, cloud.ActionAllow)
 				}
 			case <-time.After(2 * time.Second):
-				t.Fatal("the door did not answer while the event plane was unreachable — the emit " +
+				t.Fatal("the endpoint did not answer while the event plane was unreachable — the emit " +
 					"is on the decision's path, and a telemetry outage can now refuse a payment")
 			}
 		})

@@ -36,7 +36,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// The MODEL API IS THE DOOR'S REGISTRY, and it is asked rather than described.
+// The MODEL API IS THE RELAY'S REGISTRY, and it is asked rather than described.
 //
 // aimod.Mount registers one greedy `app.All("/v1/*")` — the whole model API,
 // ~200 routes, reaching the wire through a single wildcard. Read the router alone
@@ -46,9 +46,9 @@ import (
 //
 // This package used to close the PROSE half of that hole — five hand-written
 // openapi.Describe blocks saying what was behind each verb of the wildcard. That
-// is now deleted, and its deletion is the point. Prose about a door is a
+// is now deleted, and its deletion is the point. Prose about a relay is a
 // description of a thing standing in for the API; hanzoai/ai can hand over the API
-// itself, so nothing here has to say what is behind the door and nothing here can
+// itself, so nothing here has to say what is behind the relay and nothing here can
 // be wrong about it.
 //
 // routers.Document is what it hands over: ai's WHOLE surface as one OpenAPI
@@ -79,7 +79,7 @@ func init() {
 		// so what it answers is everything under /v1 no earlier app claimed.
 		// Fifteen of ai's own registrations are delivered to a sibling instead, and
 		// four of those 404 on api.hanzo.ai because the sibling does not serve
-		// them. The door reads which ones from the fleet's routing table rather
+		// them. The relay reads which ones from the fleet's routing table rather
 		// than carrying a list beside it — manifest/router_test.go asks the real
 		// router the same question, so a wrong answer here is a red gate and not a
 		// shipped phantom.
@@ -92,7 +92,7 @@ func init() {
 //
 // It crosses as JSON because that is what an OpenAPI document is. Two
 // repositories cannot share a document type without one depending on the other's,
-// and the door is the wrong place for that coupling — hanzoai/ai must stay able to
+// and the relay is the wrong place for that coupling — hanzoai/ai must stay able to
 // describe itself without importing a fleet document format. openapi.Typed reads
 // zip's spec the same way for the same reason.
 // describeAI states each of ai's operations for the document generator, from ai's own
@@ -478,18 +478,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		}
 		return out.Spent, nil
 	})
-	// The MCP door's inventory, registered BEFORE the wildcard below so the
+	// The MCP server's inventory, registered BEFORE the wildcard below so the
 	// reading order is the routing order (see mcp.go — the router would pick the
 	// static path over All("/v1/*") either way).
 	mountMCP(zapp)
-	// The door: ONE `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy
+	// The relay: ONE `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy
 	// router through zip.AdaptNetHTTP, so ai's ~200 real routes —
 	// /v1/chat/completions, /v1/models, /v1/messages and the rest — reach the wire
 	// through a single greedy wildcard.
 	//
 	// That is a routing fact, not a documentation one, and it stays: All has no typed
 	// registrar, a `{wildcard1}` segment cannot be a bound In field, and the adapter
-	// relays the handler's own status and Content-Type verbatim. What the door
+	// relays the handler's own status and Content-Type verbatim. What the wildcard
 	// no longer costs is the DOCUMENT — the relay declared in this package's init
 	// projects routers.App's own table through it, so the published surface is ai's
 	// 192 paths rather than one wildcard. Typed request and response schemas for them

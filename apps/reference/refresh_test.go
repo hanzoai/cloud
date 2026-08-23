@@ -465,7 +465,7 @@ func TestASourceCannotLandWhatNoLookupCouldReach(t *testing.T) {
 	}
 	good := first[0].Version
 
-	// One member past the door, everything else ordinary.
+	// One member past the bound, everything else ordinary.
 	body = list(50) + "\n" + strings.Repeat("a.", maxKey) + "example\n"
 	huge, err := take(ctx, s, set, nil, false)
 	if err != nil {
@@ -481,7 +481,7 @@ func TestASourceCannotLandWhatNoLookupCouldReach(t *testing.T) {
 		t.Error("the previous version must stand")
 	}
 	// Force is the lever for a size somebody vouched for, not for a member the
-	// lookup door would refuse anyway.
+	// lookup would refuse anyway.
 	if forced, err := take(ctx, s, set, nil, true); err != nil || forced[0].Refusal == "" {
 		t.Errorf("force must not land an unreachable member: %+v %v", forced, err)
 	}

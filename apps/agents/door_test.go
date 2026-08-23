@@ -7,9 +7,10 @@ package agents
 // publishes it on the router's socket exactly as cmd/cloud/wake.go does, and
 // then drives doorTools — so what is asserted is what a deployed agent gets.
 //
-// A fake door would have proved nothing: the two properties worth having are
-// that the agent inherits the door's CURATION and that the run's org reaches the
-// owning subsystem, and both live in code a stub would have replaced.
+// A fake MCP server would have proved nothing: the two properties worth
+// having are that the agent inherits the MCP server's CURATION and that the
+// run's org reaches the owning subsystem, and both live in code a stub would
+// have replaced.
 
 import (
 	"context"
@@ -39,9 +40,9 @@ type echoOut struct {
 }
 
 // declared is what the children below PUBLISH, which is a different fact from
-// what they serve and is now the only one the door reads.
+// what they serve and is now the only one the MCP server reads.
 //
-// The door used to ask a running subsystem what it had; it lists from the
+// The MCP server used to ask a running subsystem what it had; it lists from the
 // build-time catalog and asks nothing, because one question about names was
 // costing a process per subsystem. These children are built here rather than by
 // the fleet's generator, so nothing embeds their operations and the harness has
@@ -59,8 +60,9 @@ func subsystem(t *testing.T, name string, ops ...string) string {
 	t.Helper()
 	pub := make([]fleet.Op, 0, len(ops))
 	for _, id := range ops {
-		// The same sentence WithSummary puts on the live op, so what the door
-		// lists and what the child would have answered cannot drift apart here.
+		// The same sentence WithSummary puts on the live op, so what the MCP
+		// server lists and what the child would have answered cannot drift
+		// apart here.
 		pub = append(pub, fleet.Op{ID: id, Doc: "what " + name + " does at " + id})
 	}
 	declared[name] = pub
@@ -78,14 +80,14 @@ func subsystem(t *testing.T, name string, ops ...string) string {
 	return sock
 }
 
-// fleetDoor composes the real door over those apps and puts it where a child
-// looks for it — plane.HostApp's socket, at manifest.MCPPath. This is
+// fleetDoor composes the real MCP server over those apps and puts it where a
+// child looks for it — plane.HostApp's socket, at manifest.MCPPath. This is
 // serveWake's two lines, not a reimplementation of them.
 //
-// at names each app's EDGE door and inside names the PLANE door of the ones that
-// have one, which is the pair cmd/cloud registers (locate / inside). An app with
-// no entry in inside is reached at its edge door — production's remotely-mounted
-// case, where there is no local plane socket to reach.
+// at names each app's EDGE address and inside names the PLANE address of the
+// ones that have one, which is the pair cmd/cloud registers (locate / inside).
+// An app with no entry in inside is reached at its edge address — production's
+// remotely-mounted case, where there is no local plane socket to reach.
 func fleetDoor(t *testing.T, at map[string]string, inside map[string]string) {
 	t.Helper()
 	run := shortDir(t)
@@ -107,8 +109,8 @@ func fleetDoor(t *testing.T, at map[string]string, inside map[string]string) {
 	}
 	d := fleet.Mount(host, manifest.MCPPath, apps, edge)
 	// nil would mean the catalog THIS binary embeds, which is the real fleet's —
-	// it does not carry these children, so the door would list nothing for them
-	// and every assertion below would read as "the agent was offered 0".
+	// it does not carry these children, so the MCP server would list nothing for
+	// them and every assertion below would read as "the agent was offered 0".
 	d.Catalog = func(app string) []fleet.Op { return declared[app] }
 
 	door := zip.New(zip.Config{AppName: "plane", DisableStartupMessage: true})
@@ -203,8 +205,8 @@ func TestUnservedNamesAreNotOffered(t *testing.T) {
 // TestTheAgentInheritsTheDoorsDenylist is the security bar, as a test.
 //
 // The curation rule lives in fleet/surface.go and is applied inside gather,
-// where the routing table is written. An agent reaching the door through any
-// other path would have seen a surface external MCP clients cannot — so this
+// where the routing table is written. An agent reaching the MCP server through
+// any other path would have seen a surface external MCP clients cannot — so this
 // asserts BOTH halves: the credential-minting op is not offered, and naming it
 // anyway does not run it.
 func TestTheAgentInheritsTheDoorsDenylist(t *testing.T) {
@@ -216,7 +218,7 @@ func TestTheAgentInheritsTheDoorsDenylist(t *testing.T) {
 
 	defs := door.catalog(ctx, "acme", "acme/u-1", []string{"CreateServiceAccountKey", "GetRole"})
 	if len(defs) != 1 || defs[0].Name != "GetRole" {
-		t.Fatalf("the agent was offered %+v; the door projects GetRole and refuses CreateServiceAccountKey", defs)
+		t.Fatalf("the agent was offered %+v; the MCP server projects GetRole and refuses CreateServiceAccountKey", defs)
 	}
 	if _, err := door.call(ctx, "acme", "acme/u-1", "CreateServiceAccountKey", `{"say":"hi"}`); err == nil {
 		t.Fatal("a refused tool RAN for an agent that named it directly — the denylist is a suggestion, not a boundary")
@@ -256,7 +258,8 @@ func guarded(t *testing.T, name, op string) (edge, plane string) {
 	t.Cleanup(cloud.ResetPlane)
 
 	// Publishing is a separate act from serving, and this child owes it for the
-	// same reason subsystem's do: the door lists from the catalog and never asks.
+	// same reason subsystem's do: the MCP server lists from the catalog and
+	// never asks.
 	declared[name] = []fleet.Op{{ID: op, Doc: "what " + name + " does at " + op}}
 	t.Cleanup(func() { delete(declared, name) })
 
@@ -286,8 +289,9 @@ func guarded(t *testing.T, name, op string) (edge, plane string) {
 // tenant, and gets an answer instead of a refusal.
 //
 // It is the same call TestADispatchCarriesTheRunsOrg makes, against a subsystem
-// that has the boundary production has. Point the door's internal reach at the
-// EDGE door instead and it fails exactly the way the deployed fleet did.
+// that has the boundary production has. Point the MCP server's internal reach
+// at the EDGE address instead and it fails exactly the way the deployed fleet
+// did.
 func TestATenantedToolAnswersTheRun(t *testing.T) {
 	edge, plane := guarded(t, "alpha", "alpha_tenant")
 	fleetDoor(t, map[string]string{"alpha": edge}, map[string]string{"alpha": plane})
@@ -301,8 +305,8 @@ func TestATenantedToolAnswersTheRun(t *testing.T) {
 	}
 }
 
-// A tool the door cannot route is an ERROR the model reads, never a silent empty
-// result and never a killed turn.
+// A tool the MCP server cannot route is an ERROR the model reads, never a
+// silent empty result and never a killed turn.
 func TestAnUnroutableToolIsAnErrorNotAnEmptyResult(t *testing.T) {
 	fleetDoor(t, map[string]string{"alpha": subsystem(t, "alpha", "alpha_echo")}, nil)
 

@@ -35,12 +35,12 @@
 //	immutability  A published version is `ready`, and the only rank above it is
 //	              `disposed` — the tenant's own retention decision, the one write
 //	              that may outrank a publication. No other stage can displace it,
-//	              in the engine or at the door. Two layers.
+//	              in the engine or at the endpoint. Two layers.
 //	bounds        spec.go — the window, the horizon, the row cap, the number of
-//	              names and the number of versions are all bounded at the door, and
-//	              every scan of the source is admitted through ONE gate: priced at
-//	              the meter, one per tenant, [maxJobs] in the process, each with a
-//	              deadline of its own ([plane.admit]).
+//	              names and the number of versions are all bounded at the
+//	              endpoint, and every scan of the source is admitted through ONE
+//	              gate: priced at the meter, one per tenant, [maxJobs] in the
+//	              process, each with a deadline of its own ([plane.admit]).
 //	expiry        There is NO table TTL. Disposal is the tenant's own DROP
 //	              PARTITION on (org, dataset), which cannot be spelled cross-tenant.
 //
@@ -346,9 +346,9 @@ func (p *plane) who(ctx context.Context) (caller, error) {
 // it is a decision somebody made.
 const maxJobs = 8
 
-// admit is THE door to the source surface: it prices the act at the meter, takes
-// the tenant's single slot and one of the plane's, and hands back the [scan] the
-// read itself requires.
+// admit is THE entry point to the source surface: it prices the act at the meter,
+// takes the tenant's single slot and one of the plane's, and hands back the [scan]
+// the read itself requires.
 //
 // EVERY op that touches the source goes through here — materialising, and tracing
 // a lineage, which re-asks the source the SAME measured question and is therefore

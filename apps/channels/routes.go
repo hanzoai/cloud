@@ -799,7 +799,7 @@ func init() {
 			"deterministically to one line each after the text rather than dropped.")
 }
 
-// send is POST /v1/channels/:channel/send — the ONE egress door. The body is
+// send is POST /v1/channels/:channel/send — the ONE egress endpoint. The body is
 // the envelope's narrow outbound projection (C2-6): identity fields (sender,
 // account, channel) are not decodable — DisallowUnknownFields rejects them
 // loudly instead of silently dropping them.
@@ -862,7 +862,7 @@ func send(s *cloud.Service[state], c *zip.Ctx) error {
 		case errors.Is(err, errNoRoute):
 			return zip.ErrConflict("no inbound route for this room; the bot must be messaged there first")
 		}
-		// Door errors carry status/shape only — never tokens (SendSlack /
+		// Transport errors carry status/shape only — never tokens (SendSlack /
 		// SendDiscord contract, integrations/ingress.go).
 		return zip.Errorf(http.StatusBadGateway, "%s: %v", tr.id, err)
 	}

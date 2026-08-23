@@ -22,7 +22,7 @@ import (
 // delivery client below. Token custody, posting, and org-scoping are never
 // re-implemented here.
 
-// slackNotify is the ONE Slack delivery door — resolves the org's KMS-sealed bot
+// slackNotify is the ONE Slack delivery client — resolves the org's KMS-sealed bot
 // token and posts a Block Kit message (integrations.NotifySlack). A package var
 // ONLY so a test can capture the (org, channel, blocks) a lifecycle event routes to
 // without mounting integrations + KMS; production never reassigns it.

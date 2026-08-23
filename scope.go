@@ -7,7 +7,7 @@ package cloud
 // stop that one subsystem. This is the structural one: a subsystem cannot install
 // middleware it has not declared it may install.
 //
-// There are exactly TWO doors from a bare app to app-wide middleware:
+// There are exactly TWO paths from a bare app to app-wide middleware:
 //
 //	app.Use(mw)                 // matches every path
 //	app.Group("/x", mw)         // matches every path under /x

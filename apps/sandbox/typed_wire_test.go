@@ -19,7 +19,7 @@ import (
 //     response path is c.JSON. POST /fs takes the file ITSELF as the request
 //     body, and zip decodes every non-empty typed body as JSON, so a typed In
 //     would turn today's write into a 400 on the first binary file. The agent's
-//     door carries the same two operations in a JSON shape
+//     surface carries the same two operations in a JSON shape
 //     (/v1/sandbox/{read,write}), which is what a caller wanting types should
 //     reach for — this pair is the byte-exact one, kept because a shell pipeline
 //     needs it.
@@ -30,7 +30,7 @@ import (
 //     is read and answers one JSON value; there is no Out that means "I hijacked
 //     the connection".
 //
-// The TICKETS that authorize those doors ARE typed, which is the useful half: an
+// The TICKETS that authorize those endpoints ARE typed, which is the useful half: an
 // agent can mint a grant and hand it to a human, and the page and the socket stay
 // the browser's business.
 var untypedByDesign = map[string]string{

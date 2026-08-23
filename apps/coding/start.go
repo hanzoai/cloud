@@ -2,11 +2,11 @@ package coding
 
 // start.go is the ONE way a coding run begins.
 //
-// `POST /v1/agents/coding` is the door, and anything added later arrives here too. That
-// is not tidiness: a door that assembled its own
-// Dispatcher would be a second ENGINE with its own pool and its own in-flight
-// set, and a run started from chat would be invisible to the app that shares
-// its name. One Start, one pool, one process.
+// `POST /v1/agents/coding` is the endpoint, and anything added later arrives
+// here too. That is not tidiness: an endpoint that assembled its own Dispatcher
+// would be a second ENGINE with its own pool and its own in-flight set, and a
+// run started from chat would be invisible to the app that shares its name. One
+// Start, one pool, one process.
 //
 // # The tenant, and the bug that made every run fail
 //
@@ -71,9 +71,10 @@ const (
 	maxRunBudget = 30 * time.Minute
 )
 
-// Accepted is what a door returns the instant a run is admitted. A run takes
-// minutes; the door answers in milliseconds and hands back the session that is
-// the run's record, its live stream, and the handle for every later question.
+// Accepted is what an endpoint returns the instant a run is admitted. A run
+// takes minutes; the endpoint answers in milliseconds and hands back the session
+// that is the run's record, its live stream, and the handle for every later
+// question.
 type Accepted struct {
 	SessionID string
 	Branch    string
@@ -105,17 +106,17 @@ func Engine(log func(msg string, kv ...any)) Dispatcher {
 
 // Start admits one coding run and returns its handle.
 //
-// org and subject are the CALLER's, read off the caller by the door and never
-// taken from the request body — the two are parameters for exactly that reason,
-// and the symmetry is the contract: a door that can name one can name the other,
-// and neither is nameable. Everything the run then does happens in that org and
-// nowhere else: its session, its repo, its credential, its PR; and it is
-// attributed to that person.
+// org and subject are the CALLER's, read off the caller by the endpoint and
+// never taken from the request body — the two are parameters for exactly that
+// reason, and the symmetry is the contract: an endpoint that can name one can
+// name the other, and neither is nameable. Everything the run then does happens
+// in that org and nowhere else: its session, its repo, its credential, its PR;
+// and it is attributed to that person.
 //
 // It is synchronous up to the point the run is admitted — validate, resolve the
 // credential, open the session — and detached after it. That split is what lets
-// a door answer immediately with a real handle instead of an empty promise, and
-// it is why the session is opened HERE rather than inside Run.
+// an endpoint answer immediately with a real handle instead of an empty promise,
+// and it is why the session is opened HERE rather than inside Run.
 func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log func(msg string, kv ...any)) (Accepted, error) {
 	org = strings.TrimSpace(org)
 	if !OrgRE.MatchString(org) {
@@ -176,7 +177,7 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 	if !pool.acquire(org) {
 		return Accepted{}, ErrBusy
 	}
-	// Bind this run's narration, if the door gave it somewhere to talk. The
+	// Bind this run's narration, if the endpoint gave it somewhere to talk. The
 	// Dispatcher is a VALUE, so attaching a per-run watcher is a copy and never a
 	// mutation of the shared engine — two concurrent runs cannot end up narrating
 	// into each other's threads.
@@ -190,8 +191,8 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 		Prompt: prompt, TimeoutSeconds: in.TimeoutSeconds, TargetID: strings.TrimSpace(in.TargetID),
 	}
 
-	// The session is opened on the DOOR's context, which already carries the
-	// tenant (the door stated it, or it arrived on the wire). It is the one
+	// The session is opened on the ENDPOINT's context, which already carries the
+	// tenant (the endpoint stated it, or it arrived on the wire). It is the one
 	// synchronous client call, and it is what makes the handle real.
 	sessionID, err := d.Sessions.OpenOn(ctx, org, subject, agentRefOr(in.AgentRef),
 		codingTitle(repo, prompt), req.TargetID)
@@ -246,12 +247,12 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 
 	// Detach, and state the tenant again on the way out.
 	//
-	// Both halves are load-bearing. DETACHED because the run outlives the door's
-	// request by minutes — on the door's context the model call is cancelled the
-	// instant we answer. STATED because detaching drops the request the tenant was
-	// riding on, and every client call left in the run authorizes on the caller.
-	// This is the exact pairing the chat bridge uses, and the exact one whose
-	// absence made every coding run fail.
+	// Both halves are load-bearing. DETACHED because the run outlives the
+	// endpoint's request by minutes — on the endpoint's context the model call is
+	// cancelled the instant we answer. STATED because detaching drops the request
+	// the tenant was riding on, and every client call left in the run authorizes
+	// on the caller. This is the exact pairing the chat bridge uses, and the exact
+	// one whose absence made every coding run fail.
 	runCtx, cancel := runContext(org, req.TimeoutSeconds)
 	go func() {
 		defer cancel()
@@ -283,7 +284,7 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 		// Run is its own terminal: it mirrors the outcome into the session and
 		// closes it, on a cancel-immune context, whether it succeeded or failed.
 		// There is nothing left to report here and nobody left to report it to —
-		// the door answered minutes ago, and the session is the record.
+		// the endpoint answered minutes ago, and the session is the record.
 		d.Run(runCtx, req)
 	}()
 
@@ -293,13 +294,14 @@ func Start(ctx context.Context, org, subject string, in plane.CodingStartIn, log
 	}, nil
 }
 
-// runContext is the context ONE coding run executes on: detached from the door's
-// request, carrying the tenant it acts for, bounded by the run budget.
+// runContext is the context ONE coding run executes on: detached from the
+// endpoint's request, carrying the tenant it acts for, bounded by the run
+// budget.
 //
 // It takes an org and a budget and NOTHING ELSE — deliberately. A ctx parameter
-// here would be an invitation to pass the door's, which both cancels the run
-// when the door answers and silently discards the tenant. The signature is the
-// guard; bridgeRunContext is the same shape for the same reason.
+// here would be an invitation to pass the endpoint's, which both cancels the run
+// when the endpoint answers and silently discards the tenant. The signature is
+// the guard; bridgeRunContext is the same shape for the same reason.
 func runContext(org string, timeoutSeconds int) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(cloud.For(context.Background(), org), budget(timeoutSeconds))
 }

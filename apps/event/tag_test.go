@@ -43,7 +43,7 @@ func TestServeTag(t *testing.T) {
 		t.Error("no ETag: every cold page load in the fleet would re-download the tag")
 	}
 	if body := rec.Body.String(); !strings.Contains(body, "/v1/event") {
-		t.Error("tag does not name the door it feeds")
+		t.Error("tag does not name the endpoint it feeds")
 	}
 }
 

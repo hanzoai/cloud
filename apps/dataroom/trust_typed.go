@@ -21,8 +21,8 @@ package dataroom
 // EVERY GATE IS ASKED IN THE OP, NOT ONLY ON THE ROUTE. A typed op is also an MCP
 // tool and an internal-plane op, and both invoke it DIRECTLY — no route, so no
 // route middleware. A gate that lived only in a group would be a gate on one of
-// three doors. The routed group carries one too, so a refusal comes before the
-// decoder has read a byte and a caller sending garbage is told about authority
+// three entry points. The routed group carries one too, so a refusal comes before
+// the decoder has read a byte and a caller sending garbage is told about authority
 // rather than about JSON.
 
 import (
@@ -47,7 +47,7 @@ import (
 // would hand every customer admin the platform's roster.
 //
 // Fail-closed off the HTTP path: with no request there is no verified claim to
-// read, so the internal plane and the MCP door get the refusal rather than a
+// read, so the internal plane and the MCP server get the refusal rather than a
 // default.
 func sudo(ctx context.Context) bool {
 	c, ok := cloud.Request(ctx)
@@ -236,7 +236,7 @@ type trustAsked struct {
 //
 // Asking twice for the same thing from the same address is the SAME ask: the second
 // answers with the first's id rather than opening a second row, which is also what
-// keeps an anonymous door from filling a tenant's store.
+// keeps an anonymous endpoint from filling a tenant's store.
 func (o ops) askCenter(ctx context.Context, in *trustAsk) (*trustAsked, error) {
 	if in.Oversize() {
 		return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
@@ -488,8 +488,8 @@ func (in *trustSettings) UnmarshalJSON(b []byte) error {
 //
 // Publishing requires a name and an address, and the address must be free: another
 // org already answering there is a conflict, never a takeover. Withdrawing closes
-// the public door only — items, grants and the access record are untouched, so an
-// org can go quiet and come back without losing anything.
+// the public endpoint only — items, grants and the access record are untouched, so
+// an org can go quiet and come back without losing anything.
 //
 // Only an admin of the org may call it. The org is the caller's own, so there is no
 // field naming one and no way to point this at another tenant.

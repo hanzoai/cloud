@@ -11,7 +11,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// wake.go — the SECOND door onto a lazy app, and the only one an internal call
+// wake.go — the SECOND entry point to a lazy app, and the only one an internal call
 // can use.
 //
 // A lazy plugin has exactly one trigger: a request reaching one of its prefixes.
@@ -28,13 +28,13 @@ import (
 // goes through the same single-flighted path a prefix request takes, so a burst
 // of first callers still produces one child). This publishes it.
 //
-// It is a plane door but NOT an app's plane: the host has no manifest row, no
-// Mount, no Deps and no tenant, so it builds its own one-op app rather than
+// It is a plane endpoint but NOT an app's plane: the host has no manifest row,
+// no Mount, no Deps and no tenant, so it builds its own one-op app rather than
 // reaching for cloud.Plane() — which would pull the entire fleet's package graph
 // into a router that deliberately links none of it. One op, one socket, one
 // import of the leaf both halves already share.
 //
-// # The AGENT DOOR is on this socket too, and for the same reason
+// # The AGENT MCP SERVER is on this socket too, and for the same reason
 //
 // A subsystem cannot enumerate its siblings — a plugin is a process, and
 // MCPTools() is in-process — so an agent run inside `agents` could resolve its
@@ -47,37 +47,37 @@ import (
 // It is the SAME Door object, not a second one. So an agent gets the same union
 // its external MCP clients get, ordered by the same rank and — the part that
 // matters — narrowed by the same [fleet] curation rule, which is applied inside
-// gather where the routing table is written. A tool the door will not project to
-// Slack is not routable for an agent either, and both hear the same -32602.
+// gather where the routing table is written. A tool the MCP server will not project
+// to Slack is not routable for an agent either, and both hear the same -32602.
 
-// serveWake opens the router's start door at plane.HostApp's socket.
+// serveWake opens the router's start endpoint at plane.HostApp's socket.
 //
 // It returns NOTHING and takes its teardown from the app's own shutdown hooks, on
 // purpose. The version that returned a stop function was called
 // `defer func() { _ = serveWake(app)() }()`, which evaluates serveWake at defer-RUN
-// time — so the door was opened during shutdown, for an instant, and was never open
-// while the fleet served. Every test passed, because they called serveWake directly.
-// An API with no handle cannot be deferred into never happening.
+// time — so the endpoint was opened during shutdown, for an instant, and was never
+// open while the fleet served. Every test passed, because they called serveWake
+// directly. An API with no handle cannot be deferred into never happening.
 //
 // A bind failure is NOT fatal: the fleet still routes and still serves every HTTP
-// prefix without this door. What it loses is internal calls to cold apps. It is
+// prefix without this endpoint. What it loses is internal calls to cold apps. It is
 // logged where the socket is named, so the degradation is visible rather than
 // inferred — and it does not return until the socket ACCEPTS, so "listening" in the
 // log is a fact rather than an intention.
 func serveWake(app *zip.App, mcp *fleet.Door) {
 	door := zip.New(zip.Config{AppName: "plane", Logger: app.Logger()})
 
-	// The fleet's agent door, at its OWN address (manifest.MCPPath) on this
-	// socket. One name for one door across both transports: over HTTP it is the
+	// The fleet's agent MCP server, at its OWN address (manifest.MCPPath) on this
+	// socket. One name for one MCP server across both transports: over HTTP it is the
 	// edge's /v1/mcp, over ZAP it is the fleet's own. Nothing here re-aggregates
 	// and nothing here filters — [fleet.Door.Serve] publishes the object main.go
 	// already built.
 	//
 	// It forwards INSIDE, which is the whole of what this address adds. A caller
 	// on this socket is a sibling with a principal it resolved server-side and no
-	// bearer to replay for it; sent into a subsystem's edge door, its statement is
-	// deleted by the identity boundary and every org-scoped tool refuses it. Sent
-	// into the subsystem's plane door it is read as what it is — see cloud.Door.
+	// bearer to replay for it; sent into a subsystem's edge endpoint, its statement
+	// is deleted by the identity boundary and every org-scoped tool refuses it. Sent
+	// into the subsystem's plane endpoint it is read as what it is — see cloud.Door.
 	// The edge's own mount is untouched and still forwards to the edge.
 	mcp.Serve(door, manifest.MCPPath, inside(app))
 
@@ -116,9 +116,10 @@ func serveWake(app *zip.App, mcp *fleet.Door) {
 	// A closed channel broadcasts.
 	// Bind the SHARED runtime dir first. This router links the plane leaf and not the
 	// fleet, so it cannot reach cloud's binder — and without binding, zip resolved the
-	// start door to a private temp path. The door then existed nowhere any child looked,
-	// so waking a lazy app failed with "this process runs under a router whose start
-	// door is not there" and every call to a not-yet-started app was unreachable.
+	// start endpoint to a private temp path. The endpoint then existed nowhere any
+	// child looked, so waking a lazy app failed with "this process runs under a router
+	// whose start door is not there" and every call to a not-yet-started app was
+	// unreachable.
 	plane.BindRuntimeDir()
 	path := zip.SocketPath(plane.HostApp)
 	done := make(chan struct{})
@@ -142,18 +143,18 @@ func serveWake(app *zip.App, mcp *fleet.Door) {
 	for {
 		select {
 		case <-done:
-			app.Logger().Error("fleet start door is not listening — an internal call cannot wake a cold app",
+			app.Logger().Error("fleet start endpoint is not listening — an internal call cannot wake a cold app",
 				"sock", path, "err", listenErr)
 			return
 		default:
 		}
 		if c, err := net.DialTimeout("unix", path, time.Second); err == nil {
 			_ = c.Close()
-			app.Logger().Info("fleet start door listening", "sock", path)
+			app.Logger().Info("fleet start endpoint listening", "sock", path)
 			return
 		}
 		if time.Now().After(deadline) {
-			app.Logger().Error("fleet start door did not bind — an internal call cannot wake a cold app",
+			app.Logger().Error("fleet start endpoint did not bind — an internal call cannot wake a cold app",
 				"sock", path, "waited", doorBindWait)
 			return
 		}
@@ -161,7 +162,7 @@ func serveWake(app *zip.App, mcp *fleet.Door) {
 	}
 }
 
-// doorBindWait bounds how long boot waits for the start door's socket.
+// doorBindWait bounds how long boot waits for the start endpoint's socket.
 const doorBindWait = 5 * time.Second
 
 // isUnknownApp reports whether name is absent from this host's plugin table.

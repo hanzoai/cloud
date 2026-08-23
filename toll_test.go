@@ -1,18 +1,20 @@
 package cloud
 
-// ONE OPERATION, FOUR DOORS, ONE CHARGE.
+// ONE OPERATION, FOUR TRANSPORTS, ONE CHARGE.
 //
 // prepaid_e2e_test.go proves the loop closes from a SIGNATURE over TCP: a token
-// becomes a wallet and four writes spend it down. It proves it on one door, and
-// that is the gap this file exists for — the operation it exercises is reachable
-// three other ways, and until now every one of them was free. Not by decision:
-// the gate read the path the TRANSPORT carried, and over MCP that path is /mcp
-// while over the plane it is /.well-known/zip/op/<name>. Neither names a declared
-// surface, so both priced at zero however the operation inside was declared.
+// becomes a wallet and four writes spend it down. It proves it on one
+// transport, and that is the gap this file exists for — the operation it
+// exercises is reachable three other ways, and until now every one of them was
+// free. Not by decision: the gate read the path the TRANSPORT carried, and over
+// MCP that path is /mcp while over the plane it is /.well-known/zip/op/<name>.
+// Neither names a declared surface, so both priced at zero however the operation
+// inside was declared.
 //
 // So: one typed op, registered once at a surface declared at 25c, reached over
-// all four doors the fleet has, against a real double-entry ledger. Each door
-// debits exactly 25c, and at zero each refuses without running the handler.
+// all four transports the fleet has, against a real double-entry ledger. Each
+// transport debits exactly 25c, and at zero each refuses without running the
+// handler.
 //
 // WHAT IS REAL HERE. A real unix socket carrying real ZAP frames (no TCP, no
 // loopback — the file is in the temp dir and the test reads it back). A real TCP
@@ -24,16 +26,16 @@ package cloud
 //
 // WHAT IS HANDED IN. The identity, as the gateway-minted headers — the same split
 // prepaid_test.go and prepaid_e2e_test.go keep between them. Turning a signature
-// into those headers is one question and it is answered next door; this file asks
+// into those headers is one question and it is answered there; this file asks
 // the other one, which is what happens to an operation AFTER the identity exists.
-// The ZAP door carries the identity zip forwards for a caller with no inbound
-// request (zip.WithCaller), which is exactly how an in-cluster hop states who it
-// acts for.
+// The ZAP transport carries the identity zip forwards for a caller with no
+// inbound request (zip.WithCaller), which is exactly how an in-cluster hop
+// states who it acts for.
 //
 // THE CONTROLS ARE THE POINT. An unpriced op and a READ of the priced surface run
-// through all four doors and must move nothing — asserted after a re-fund, so
-// neither can pass by being broke. A gate that fires where it should not is the
-// same defect as one that never fires, and only a control catches it.
+// through all four transports and must move nothing — asserted after a re-fund,
+// so neither can pass by being broke. A gate that fires where it should not is
+// the same defect as one that never fires, and only a control catches it.
 
 import (
 	"context"
@@ -82,8 +84,8 @@ type tollOut struct {
 }
 
 // tollDoor is one way to reach an operation. Each returns whether the call was
-// REFUSED and the sentence it was refused with — the two facts every door can
-// answer, however differently it spells them on the wire.
+// REFUSED and the sentence it was refused with — the two facts every transport
+// can answer, however differently it spells them on the wire.
 type tollDoor struct {
 	name string
 	call func(t *testing.T, op string) (refused bool, detail string)
@@ -181,8 +183,8 @@ func tollRigWith(t *testing.T, edge bool) *tollRig {
 	return &tollRig{led: led, ran: &ran, base: "http://" + ln.Addr().String(), sock: sock, app: app}
 }
 
-// pathOf is the REST address of an operation — the only door that needs one,
-// which is the whole reason the other three could go unbilled.
+// pathOf is the REST address of an operation — the only transport that needs
+// one, which is the whole reason the other three could go unbilled.
 func pathOf(op string) (string, string) {
 	switch op {
 	case tollRun:
@@ -240,7 +242,7 @@ func (r *tollRig) doors() []tollDoor {
 			// carrying a JSON-RPC error carries NO `result`, so `Result.IsError`
 			// decodes to FALSE — byte-identical to a success. A caller asking this
 			// helper "was the op refused?" would read -32602 "no such tool" as an
-			// OPEN DOOR, which is the one answer a toll test must never get wrong:
+			// ADMITTED CALL, which is the one answer a toll test must never get wrong:
 			// the gate would look green because the name it guards does not exist.
 			var ans struct {
 				Result struct {
@@ -258,7 +260,7 @@ func (r *tollRig) doors() []tollDoor {
 				t.Fatalf("MCP %s: reply is not a frame: %v (%s)", op, err, body)
 			}
 			if ans.Error != nil {
-				t.Fatalf("MCP %s: the door answered a protocol error, so this op was never invoked "+
+				t.Fatalf("MCP %s: the server answered a protocol error, so this op was never invoked "+
 					"and the toll was never asked: %d %s", op, ans.Error.Code, ans.Error.Message)
 			}
 			text := ""
@@ -335,17 +337,18 @@ func (r *tollRig) settled(t *testing.T, want int64) {
 	}
 }
 
-// ── the charge: one operation, four doors, one debit each ────────────────────────
+// ── the charge: one operation, four transports, one debit each ───────────────────
 
-// TestTollChargesEveryDoorOnce is the whole claim. Each door is funded for exactly
-// one call, spends it, and is then refused at zero without the handler running.
+// TestTollChargesEveryDoorOnce is the whole claim. Each transport is funded for
+// exactly one call, spends it, and is then refused at zero without the handler
+// running.
 //
-// The CLI is the door that refuses for a different reason, and that reason is a
-// property rather than a shortfall: an in-process invoke carries no request, so
-// there is no attested principal, no signed billing_account claim and therefore no
-// wallet. There is nobody to charge. Serving it anyway is the exact leak this gate
-// closes, so it is refused whether or not anyone is funded — which the funded leg
-// below asserts explicitly.
+// The CLI is the transport that refuses for a different reason, and that reason
+// is a property rather than a shortfall: an in-process invoke carries no request,
+// so there is no attested principal, no signed billing_account claim and
+// therefore no wallet. There is nobody to charge. Serving it anyway is the exact
+// leak this gate closes, so it is refused whether or not anyone is funded —
+// which the funded leg below asserts explicitly.
 func TestTollChargesEveryDoorOnce(t *testing.T) {
 	for _, d := range tollApp(t).doors() {
 		t.Run(d.name, func(t *testing.T) {
@@ -440,8 +443,9 @@ func doorIndex(name string) int {
 // ── the controls ────────────────────────────────────────────────────────────────
 
 // TestTollMovesNothingForUnpricedWork is the control that makes the test above mean
-// something. The same four doors, the same funded wallet, an UNPRICED operation and
-// a READ of the PRICED one: both must run and neither must move a cent.
+// something. The same four transports, the same funded wallet, an UNPRICED
+// operation and a READ of the PRICED one: both must run and neither must move a
+// cent.
 //
 // The wallet is funded FIRST and checked after, so neither control can pass by being
 // broke — the failure mode where "nothing was charged" and "nothing could have been
@@ -557,7 +561,7 @@ func TestOperationIsTheSameValueAtEveryDoor(t *testing.T) {
 	}
 	for i, got := range ops {
 		if got != "POST /v1/probe/run" {
-			t.Errorf("door %d saw operation %q, want %q — the client is not transport-agnostic",
+			t.Errorf("transport %d saw operation %q, want %q — the client is not transport-agnostic",
 				i, got, "POST /v1/probe/run")
 		}
 	}

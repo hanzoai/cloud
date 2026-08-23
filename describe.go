@@ -113,11 +113,11 @@ func Describe(dir string, app *zip.App) error {
 	// An address the fleet delivers to a SIBLING is not this app's to publish.
 	//
 	// ai is the case: its module registers real routes now (apps/ai composes the
-	// whole app rather than a wildcard door), so mounted alone it carries
+	// whole app rather than a wildcard relay), so mounted alone it carries
 	// /v1/crawl and /v1/metrics — addresses the manifest routes to the apps that
 	// own those prefixes, where this binary's handler never answers. The relay's
-	// Yields used to subtract exactly this at the door; a real route is the
-	// host's own registration and wins its address, so the door never sees it
+	// Yields used to subtract exactly this at the relay; a real route is the
+	// host's own registration and wins its address, so the relay never sees it
 	// and the subtraction has to live at the one producer instead. It asks the
 	// same routing table the host reads, so a dropped address is the fleet's
 	// answer, not a judgment call — and the owner's own subset still carries the

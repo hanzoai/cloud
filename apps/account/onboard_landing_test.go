@@ -53,7 +53,7 @@ func TestOnboard_OAuthSignup_GetsItsOwnOrg(t *testing.T) {
 }
 
 // TestOnboard_OAuthSignup_NamedOrgAlsoMoves is the same first run through the
-// other door — a named org rather than a personal one. It took the ADDITIONAL
+// other path — a named org rather than a personal one. It took the ADDITIONAL
 // branch silently: 200, an org created, and the founder left outside it.
 func TestOnboard_OAuthSignup_NamedOrgAlsoMoves(t *testing.T) {
 	f := newFakeIAM()

@@ -146,8 +146,8 @@ func TestBothAddressesAreOneDocument(t *testing.T) {
 
 // TestTheAliasIsPublishedAndOpen: it is a second address in the contract, so it
 // owes the two declarations Path owes — prose, and no credential. Silence on
-// either is what an SDK method that cannot say what it is, or a discovery door a
-// client must already hold a token to read, is made of.
+// either is what an SDK method that cannot say what it is, or a discovery
+// endpoint a client must already hold a token to read, is made of.
 func TestTheAliasIsPublishedAndOpen(t *testing.T) {
 	a := app()
 	openapi.Mount(a, openapi.Info{Title: "Hanzo Cloud", Version: "v1"})

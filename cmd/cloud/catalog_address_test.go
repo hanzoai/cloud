@@ -4,7 +4,7 @@ package main
 // publishes.
 //
 // This file is about one production defect, and it is the same SHAPE as the one
-// openapi_test.go pins next door. There, a spec door answered with a document
+// openapi_test.go pins alongside it. There, a spec endpoint answered with a document
 // that was not the fleet's; here, a catalogue answers with routes that are not
 // the fleet's. Both were wrong for months while every gate stayed green, because
 // in both cases the claim and the thing claimed about lived in different repos
@@ -164,7 +164,7 @@ func resolves(published map[string]json.RawMessage, addr string) bool {
 }
 
 // publishedPaths is the path set of the document this host serves at
-// GET /v1/openapi.json. openapi_test.go pins that the door answers with this
+// GET /v1/openapi.json. openapi_test.go pins that the endpoint answers with this
 // committed artifact byte for byte, and that the artifact is the router's own
 // projection — so reading the file here is reading what a customer reads.
 func publishedPaths(t *testing.T) map[string]json.RawMessage {

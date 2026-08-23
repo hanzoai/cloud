@@ -9,7 +9,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The door's sign-in discovery names the deployment's own issuer, at both
+// The MCP server's sign-in discovery names the deployment's own issuer, at both
 // addresses the MCP authorization flow tries, and describes the host the client
 // actually reached.
 func TestProtectedResourceNamesTheIssuer(t *testing.T) {

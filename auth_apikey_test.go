@@ -88,12 +88,12 @@ func TestIAMKeysCache(t *testing.T) {
 }
 
 // A PUBLISHABLE key must resolve to its org through resolve-key — IAM's org-only
-// door — and NOT through get-user?accessKey, which refuses a pk- by design.
+// endpoint — and NOT through get-user?accessKey, which refuses a pk- by design.
 //
-// Cloud sent every key prefix down the get-user door, so a publishable key resolved
-// to nothing at all: the ingest path a pk- exists for could never attribute a beacon
-// to its tenant. A publishable key that resolves to nobody is a publishable key that
-// does not work, which is the other half of why no surface used one.
+// Cloud sent every key prefix down the get-user endpoint, so a publishable key
+// resolved to nothing at all: the ingest path a pk- exists for could never attribute
+// a beacon to its tenant. A publishable key that resolves to nobody is a publishable
+// key that does not work, which is the other half of why no surface used one.
 func TestOrgForKey_PublishableResolvesThroughTheOrgOnlyDoor(t *testing.T) {
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +116,7 @@ func TestOrgForKey_PublishableResolvesThroughTheOrgOnlyDoor(t *testing.T) {
 		t.Fatalf("resolveOrg = %q, want acme", org)
 	}
 	if len(paths) != 1 || paths[0] != "/v1/iam/keys/org" {
-		t.Fatalf("a publishable key must be resolved at the org-only door, got %v", paths)
+		t.Fatalf("a publishable key must be resolved at the org-only endpoint, got %v", paths)
 	}
 	// A publishable key yields an ORG and never a principal: there is no idClaims on
 	// this path at all, which is what keeps a browser key from becoming a read grant.
@@ -125,9 +125,9 @@ func TestOrgForKey_PublishableResolvesThroughTheOrgOnlyDoor(t *testing.T) {
 	}
 }
 
-// The two doors answer different questions, so a secret key must NOT be sent to the
-// org-only one (it would learn an org for a credential whose whole point is that it
-// names a user), and a publishable key must not be sent to the principal one.
+// The two endpoints answer different questions, so a secret key must NOT be sent to
+// the org-only one (it would learn an org for a credential whose whole point is that
+// it names a user), and a publishable key must not be sent to the principal one.
 func TestOrgForKey_EachPrefixUsesItsOwnDoor(t *testing.T) {
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -155,14 +155,14 @@ func TestOrgForKey_EachPrefixUsesItsOwnDoor(t *testing.T) {
 	if org, ok := OrgForKey(context.Background(), "pk-live-abc"); !ok || org != "pub-org" {
 		t.Fatalf("publishable key resolved to (%q,%v), want pub-org — this is the pk- ingest path", org, ok)
 	}
-	// get-user?accessKey is the SECRET-key door: it resolves sk- to the owning
+	// get-user?accessKey is the SECRET-key endpoint: it resolves sk- to the owning
 	// user behind CapKeyResolve, and refuses a pk- by design. resolve-key is the
-	// publishable door, org-only. /v1/iam/users/get is neither — it is the typed
+	// publishable endpoint, org-only. /v1/iam/users/get is neither — it is the typed
 	// (owner, name) read, which carries no accessKey and cannot answer this
 	// question at all.
 	want := []string{"/v1/iam/keys/principal", "/v1/iam/keys/org"}
 	if len(paths) != 2 || paths[0] != want[0] || paths[1] != want[1] {
-		t.Fatalf("doors used = %v, want %v (one question each, never interchangeable)", paths, want)
+		t.Fatalf("endpoints used = %v, want %v (one question each, never interchangeable)", paths, want)
 	}
 }
 
@@ -246,7 +246,7 @@ func TestIAMKeys_RefusalReasonIsCarried(t *testing.T) {
 	}
 }
 
-// RefusalForKey is the door a user-facing surface asks "why did this fail?", and it
+// RefusalForKey is the place a user-facing surface asks "why did this fail?", and it
 // answers from the SAME cache the auth path already filled — so diagnosing a failure
 // costs no extra IAM call.
 func TestRefusalForKey(t *testing.T) {

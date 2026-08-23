@@ -159,10 +159,10 @@ func TestUnsetKeyFailsClosedOnEverySpelling(t *testing.T) {
 // middleware, so no credential check ran and `tools/call name=post_exec` with no
 // key executed code.
 //
-// This calls the handler the way those doors do: straight, with a bare context. It
-// carries no validated principal and no admission marker, so it is refused — which
-// is the property, rather than a third gate that has to be kept in step with the
-// other two.
+// This calls the handler the way those entry points do: straight, with a bare
+// context. It carries no validated principal and no admission marker, so it is
+// refused — which is the property, rather than a third gate that has to be kept
+// in step with the other two.
 func TestTheOtherDoorsFailClosed(t *testing.T) {
 	p := servePeer(t)
 	p.Run = func(string, []string) (string, string, int, map[string][]byte) { return "pwned", "", 0, nil }
@@ -170,10 +170,10 @@ func TestTheOtherDoorsFailClosed(t *testing.T) {
 
 	if _, err := run(t.Context(), &CodeRun{Lang: "py", Code: "print(1)"}); err == nil {
 		t.Fatal("the typed op ran from a context that passed no credential check — this is " +
-			"the MCP tools/call and op-plane door, and it invokes the handler directly")
+			"the MCP tools/call and op-plane entry point, and it invokes the handler directly")
 	}
 	if n := p.Ran(); n != 0 {
-		t.Fatalf("%d program(s) executed through a door with no credential check", n)
+		t.Fatalf("%d program(s) executed through an entry point with no credential check", n)
 	}
 
 	// And it is not refusing everything: a context the middleware admitted works.

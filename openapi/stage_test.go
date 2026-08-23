@@ -7,7 +7,7 @@ package openapi_test
 // is what a flagged-in customer and every operator tool read, and a console that
 // wants to mark a surface "beta" has nowhere else to get the word. The second is
 // that a beta operation is not in the public contract, which is what keeps it out
-// of the eight generated SDKs, the CLI's command tree and the agent door's tool
+// of the eight generated SDKs, the CLI's command tree and the agent MCP server's tool
 // list — three projections that never ask about stages and do not have to,
 // because each reads x-public.
 //

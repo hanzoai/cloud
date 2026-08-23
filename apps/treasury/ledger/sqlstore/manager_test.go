@@ -100,7 +100,7 @@ func TestManager_PerTenantIsolation(t *testing.T) {
 
 // hostileTenants are the tenant strings the fold has to survive on the way to a
 // name: traversal, separators, dot segments, the house's own rendering, a case
-// variant, over-length. The Manager is handed the NAME, so this is the door one
+// variant, over-length. The Manager is handed the NAME, so this is the check one
 // step up — but it is the same question, and it is answered here because this is
 // where the file it decides lives.
 var hostileTenants = []string{

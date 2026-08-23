@@ -43,10 +43,10 @@ func stores(t *testing.T, dir string) []string {
 	return out
 }
 
-// TestUnknownTokenOpensNothing is the negative control on the signer's door.
+// TestUnknownTokenOpensNothing is the negative control on the signer's endpoint.
 //
-// That door is unauthenticated by design — the token IS the credential — so the
-// one thing it must never do for a caller who has not produced a real token is
+// That endpoint is unauthenticated by design — the token IS the credential — so
+// the one thing it must never do for a caller who has not produced a real token is
 // touch a per-tenant store. Opening one CREATES the encrypted file and runs its
 // schema DDL, so when the `:org` segment selected the store before the token was
 // checked, any string minted a tenant database and the refusal arrived after the
@@ -86,7 +86,7 @@ func TestUnknownTokenOpensNothing(t *testing.T) {
 	}
 
 	if after := stores(t, dir); !slices.Equal(before, after) {
-		t.Fatalf("the signer's door created a database for a token nobody minted\nbefore: %v\nafter:  %v", before, after)
+		t.Fatalf("the signer's endpoint created a database for a token nobody minted\nbefore: %v\nafter:  %v", before, after)
 	}
 
 	// POSITIVE CONTROL. The comparison above is evidence only if it can see a

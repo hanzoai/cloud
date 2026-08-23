@@ -85,7 +85,7 @@ func uncrossable(t reflect.Type, path string) string {
 	case reflect.Pointer:
 		return uncrossable(t.Elem(), path)
 	case reflect.Map:
-		return path + " is a map, which has no layout on this plane — send the entries as a slice and render the object at the door, as CreditBreakdown does"
+		return path + " is a map, which has no layout on this plane — send the entries as a slice and render the object at the endpoint, as CreditBreakdown does"
 	case reflect.Interface:
 		return path + " is an interface, which has no layout until it holds something — declare the shape"
 	case reflect.Slice:

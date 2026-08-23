@@ -13,15 +13,15 @@
 // or etcd in the path (Lux consensus only; the optional Quasar PQ control
 // plane is a follow-up, see github.com/hanzoai/pubsub/embed).
 //
-// ONE bus, MANY doors. The NATS port is the cluster's door: in-process apps and
-// in-cluster clients, unscoped. /v1/pubsub is this app's tenant door: publish
-// and request/reply (typed.go), each org confined to its own namespace by the
-// validated principal, never by anything a caller asserts. apps/kv is a second
-// tenant door on the SAME plane — a bucket is not a message, so it answers
-// under its own name — and it rides the four calls under "riding the plane"
-// below rather than opening a bus of its own. Cloud's generic per-subsystem
-// liveness route answers /v1/pubsub/health, and the K8s Service TCP-probes
-// :4222 directly.
+// ONE bus, MANY endpoints. The NATS port is the cluster's listener: in-process
+// apps and in-cluster clients, unscoped. /v1/pubsub is this app's tenant
+// endpoint: publish and request/reply (typed.go), each org confined to its own
+// namespace by the validated principal, never by anything a caller asserts.
+// apps/kv is a second tenant endpoint on the SAME plane — a bucket is not a
+// message, so it answers under its own name — and it rides the four calls
+// under "riding the plane" below rather than opening a bus of its own. Cloud's
+// generic per-subsystem liveness route answers /v1/pubsub/health, and the K8s
+// Service TCP-probes :4222 directly.
 //
 // It ALWAYS serves. The staged cutover it was gated behind is over — the
 // standalone nats StatefulSet and the pubsub App are retired, so this is the ONE
@@ -142,7 +142,7 @@ func clientPort() (int, error) {
 }
 
 // Mount starts the embedded PubSub server, binding NATS + JetStream in-process,
-// and registers the tenant door (/v1/pubsub, typed.go) over it.
+// and registers the tenant endpoint (/v1/pubsub, typed.go) over it.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	// A typed op is a route PLUS a registry entry, and the registry lives on
 	// the App. A router that cannot reach it would serve every route with no
@@ -214,7 +214,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	srv = s
 
-	// The tenant door rides the server just bound: registered only once the
+	// The tenant endpoint rides the server just bound: registered only once the
 	// plane is UP, so a served route always has a real bus behind it.
 	routes(app, &cloud.Service[state]{Base: cloud.NewBase(deps, "pubsub")})
 
@@ -254,7 +254,7 @@ func Shutdown(_ context.Context) error {
 // caller's name is called out there, and what a refusal from it means on the
 // wire. Four calls, four separate questions.
 //
-// They are exported because apps/kv is the second tenant door on this same
+// They are exported because apps/kv is the second tenant endpoint on this same
 // plane. Key-value is not messaging — a bucket holds values and answers reads;
 // nothing about it publishes, subscribes or waits for a reply — so it is its own
 // capability at its own address under its own name. But it is the same bus: it
@@ -275,7 +275,7 @@ var door struct {
 //
 // It answers 503 rather than an error the caller has to translate, because
 // every caller is a typed op and there is one honest answer to "the bus is not
-// reachable": the door is open, the plane behind it is not.
+// reachable": the endpoint is up, the plane behind it is not.
 func Bus() (jetstream.JetStream, *nats.Conn, error) {
 	door.mu.Lock()
 	defer door.mu.Unlock()

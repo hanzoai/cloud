@@ -261,7 +261,7 @@ func (o ops) closeRound(ctx context.Context, in *captableRoundCloseRequest) (*ca
 //
 // It also closes an asymmetry that was worse than either extreme: the DELETES on
 // this plane were already typed, so an agent could delete a share issuance through
-// the fleet door and not create one.
+// the fleet's MCP server and not create one.
 
 // captableShareTransfer moves shares from the holder of one certificate to another
 // stakeholder.

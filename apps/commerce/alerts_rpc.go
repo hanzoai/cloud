@@ -74,9 +74,9 @@ func planeAlerts(ctx context.Context, in *plane.SubjectIn) (*plane.Alerts, error
 
 // Opens a spend cap on the caller's own org.
 //
-// The row is keyed on the SUBJECT the door resolved, never on a body value, and
-// that is what makes enforcement bind: the gate looks the cap up under the same
-// key, so a cap stored under anything else is a cap nothing reads.
+// The row is keyed on the SUBJECT the endpoint resolved, never on a body value,
+// and that is what makes enforcement bind: the gate looks the cap up under the
+// same key, so a cap stored under anything else is a cap nothing reads.
 //
 // A refusal of the caller's own values — a threshold that bounds nothing, a soft
 // percentage outside its range, one row too many — is a 400 and says which. Any
@@ -148,7 +148,7 @@ func planeAlertDrop(ctx context.Context, in *plane.AlertRef) (*plane.Dropped, er
 // a project-scoped enforce row whose project axis the caller could not establish
 // — never block; they only raise the reported utilization.
 //
-// ProjectValidated travels because only the door knows it. A project a caller
+// ProjectValidated travels because only the endpoint knows it. A project a caller
 // merely claimed is not a project the cap may bind on, and a callee that assumed
 // validation would turn an unproven claim into a refusal.
 //
@@ -168,12 +168,13 @@ func planeCapAuthorize(ctx context.Context, in *plane.CapIn) (*plane.CapVerdict,
 	}, nil
 }
 
-// capFault maps a core refusal to the status the door has always answered with.
+// capFault maps a core refusal to the status the endpoint has always
+// answered with.
 //
 // The three cases are the module's own and stay its own: a miss is 404 (and a
 // row the caller does not own IS a miss, deliberately), a refusal of the
 // caller's values is 400 with the reason, and anything else is the store
-// failing. Reading them here rather than at the door is what makes one mapping
+// failing. Reading them here rather than at the endpoint is what makes one mapping
 // serve every projection of these ops.
 func capFault(what string, err error) error {
 	switch {

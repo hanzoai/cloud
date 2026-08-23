@@ -81,7 +81,7 @@ import (
 // Regenerating it is mechanical: the failure below prints the current list, in
 // this format, ready to paste.
 var unreachable = []string{
-	// The five analytics INGESTION doors that used to sit here were not a backlog
+	// The five analytics INGESTION endpoints that used to sit here were not a backlog
 	// item: they were a live outage. Every beacon the products emit landed on
 	// commerce's bare "/v1" and answered 405, so the warehouse stopped receiving
 	// events at 2026-07-29 04:15:29 — eighteen seconds after the ReplicaSet running

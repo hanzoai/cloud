@@ -55,11 +55,11 @@ const HostKeyRef = "orgs/hanzo/deploy/FORGE_HOST_KEY@prod"
 // receiver that turns a delivered push into a build (apps/platform).
 //
 // The forge carries no Hanzo session when it delivers, so the signature is that
-// door's ONLY authentication and this value is the whole of the trust: holding
-// it is the ability to start a build. It lives in KMS for the reasons [TokenRef]
-// does, and it is the SAME secret for every repository — one forge-wide system
-// webhook covers the estate, so a repository opts in by having an app that
-// tracks it rather than by owning a hook and a secret of its own.
+// endpoint's ONLY authentication and this value is the whole of the trust:
+// holding it is the ability to start a build. It lives in KMS for the reasons
+// [TokenRef] does, and it is the SAME secret for every repository — one
+// forge-wide system webhook covers the estate, so a repository opts in by having
+// an app that tracks it rather than by owning a hook and a secret of its own.
 const WebhookRef = "orgs/hanzo/deploy/FORGE_WEBHOOK_SECRET@prod"
 
 // fresh bounds how long a resolved credential is reused. A rotated token is
@@ -110,7 +110,7 @@ func (s *Source) Pinned() (bool, string) {
 // badPin refuses a known_hosts line that verifies nothing.
 //
 // A wildcard host pattern matches every host, so ssh would accept whatever key
-// it is offered — a pin in appearance and an open door in fact. Empty and
+// it is offered — a pin in appearance and none in fact. Empty and
 // single-field lines are refused for the same reason: they are not a pin.
 func badPin(line string) bool {
 	f := strings.Fields(strings.TrimSpace(line))
