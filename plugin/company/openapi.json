@@ -86,7 +86,7 @@
       "post": {
         "operationId": "post_company_advance",
         "summary": "Advance runs the ONE guarded transition of the formation machine.",
-        "description": "Advance runs the ONE guarded transition of the formation machine. It is the\nonly door between stages: the actions populate data, this decides ordering.\n\nAn edge the machine does not define answers 409; an edge whose guard is not yet\nsatisfied answers 422 naming what is missing. Reaching the terminal `company`\nstage also records the incorporation on the canonical cap table, and that must\nsucceed before the transition is persisted.",
+        "description": "Advance runs the ONE guarded transition of the formation machine. It is the\nonly endpoint between stages: the actions populate data, this decides ordering.\n\nAn edge the machine does not define answers 409; an edge whose guard is not yet\nsatisfied answers 422 naming what is missing. Reaching the terminal `company`\nstage also records the incorporation on the canonical cap table, and that must\nsucceed before the transition is persisted.",
         "tags": [
           "company"
         ],
