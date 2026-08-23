@@ -1485,8 +1485,8 @@
     "/v1/ai/mcp/tools": {
       "get": {
         "operationId": "aiMCPTools",
-        "summary": "Tools reports what THIS PROCESS's MCP door carries: how many tools its own registry projects, optionally their names, and which subsystems this process composed.",
-        "description": "Tools reports what THIS PROCESS's MCP door carries: how many tools its own\nregistry projects, optionally their names, and which subsystems this process\ncomposed. It is the answer to \"is this door up and does it have anything behind\nit\" — a question a status code cannot answer, since an empty door and a full\none are both 200. What the FLEET's door carries is the fleet door's own answer:\nPOST /v1/mcp, tools/list, which asks every subsystem and names the ones that\ndid not reply.",
+        "summary": "Tools reports what THIS PROCESS's MCP server carries: how many tools its own registry projects, optionally their names, and which subsystems this process composed.",
+        "description": "Tools reports what THIS PROCESS's MCP server carries: how many tools its own\nregistry projects, optionally their names, and which subsystems this process\ncomposed. It is the answer to \"is this MCP server up and does it have anything\nbehind it\" — a question a status code cannot answer, since an empty server and\na full one are both 200. What the FLEET's server carries is the fleet server's\nown answer: POST /v1/mcp, tools/list, which asks every subsystem and names the\nones that did not reply.",
         "tags": [
           "ai"
         ],
@@ -1495,7 +1495,7 @@
             "name": "names",
             "in": "query",
             "required": false,
-            "description": "Names asks for this process's tool NAMES and not only how many there are.\nOff by default: a list of names is a page, and the question this op exists\nto answer (\"is the door up and does it have anything behind it\") is answered\nby the count.",
+            "description": "Names asks for this process's tool NAMES and not only how many there are.\nOff by default: a list of names is a page, and the question this op exists to\nanswer (\"is the MCP server up and does it have anything behind it\") is\nanswered by the count.",
             "schema": {
               "type": "boolean"
             }
@@ -4970,7 +4970,7 @@
             "type": "string"
           },
           "served": {
-            "description": "Served reports that THIS process mounted it, so its tools are on this\nprocess's door rather than behind a sibling this process only knows the name\nof.",
+            "description": "Served reports that THIS process mounted it, so its tools are on this\nprocess's MCP server rather than behind a sibling this process only knows the\nname of.",
             "type": "boolean"
           }
         },
@@ -4993,7 +4993,7 @@
             "type": "array"
           },
           "tools": {
-            "description": "Tools is how many tools THIS PROCESS's door carries: its own typed-op\nregistry, projected. It is the only number a subsystem can state honestly —\nwhat the FLEET's door carries is a question only the host can ask, and it\nasks it by asking every subsystem (POST /v1/mcp, tools/list).",
+            "description": "Tools is how many tools THIS PROCESS's MCP server carries: its own typed-op\nregistry, projected. It is the only number a subsystem can state honestly —\nwhat the FLEET's server carries is a question only the host can ask, and it\nasks it by asking every subsystem (POST /v1/mcp, tools/list).",
             "type": "integer"
           }
         },

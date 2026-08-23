@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package web3 is the chain-access surface: which chains this deployment can reach, a JSON-RPC door onto each, and the two token reads every wallet UI needs.",
+    "description": "Package web3 is the chain-access surface: which chains this deployment can reach, a JSON-RPC endpoint onto each, and the two token reads every wallet UI needs.",
     "version": "v1"
   },
   "servers": [
