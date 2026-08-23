@@ -450,16 +450,15 @@ func Listen(plugins []Plugin, enable []string) error {
 	if consoleErr != nil {
 		luxlog.Default().Warn("console: no release mounted — this process serves no console UI", "err", consoleErr)
 	}
-	// Mounting is conditional on the load, which is what the paragraph above
-	// describes: a process that could not resolve a release serves no console
-	// rather than refusing to serve at all. Mounting an empty release errors, so
-	// doing it unconditionally turned "serves none" into "starts none" — and the
-	// API, the agent door and every /v1 route went down with a browser bundle
-	// nothing headless asks for.
-	if consoleErr == nil {
-		if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
-			return fmt.Errorf("console: %w", err)
-		}
+	// Mounted whether or not the load succeeded, which is safe now that the Source
+	// is POLLED: webui takes an empty one and answers 503 until a poll fills it.
+	// That keeps what the paragraph above describes — a process that cannot resolve
+	// a release serves no console rather than refusing to serve at all — while
+	// letting it start serving one later without a restart. It is still not a
+	// precondition of boot: an error here would take the API, the agent door and
+	// every /v1 route down with a browser bundle nothing headless asks for.
+	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
+		return fmt.Errorf("console: %w", err)
 	}
 
 	// This process's AGENT DOOR on that same plane, before the sockets bind, so a
@@ -488,8 +487,9 @@ func Listen(plugins []Plugin, enable []string) error {
 	defer stop()
 
 	// Keep the console current with what was published: a `hanzo sites publish`
-	// reaches this process on the next poll, with no build and no restart. Nothing
-	// to watch when this process mounted no release (see the mount above).
+	// reaches this process on the next poll, with no build and no restart — and so
+	// does a REPAIR, because Load hands back a Source even when the read failed.
+	// The nil check stays for a caller that never built one.
 	if consoleSrc != nil {
 		go consoleSrc.Watch(ctx)
 	}

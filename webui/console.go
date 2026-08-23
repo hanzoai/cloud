@@ -210,7 +210,22 @@ func newConsoleHandler(fsys fs.FS, door zapmcp.Handler) (*consoleHandler, error)
 		return &consoleHandler{door: door}, nil
 	}
 	if _, err := fs.Stat(fsys, "index.html"); err != nil {
-		return nil, fmt.Errorf("webui: console source has no index.html: %w", err)
+		// A POLLED source is allowed to be empty right now. It re-reads on an
+		// interval, so "no shell yet" is a moment: mount it, and serveIndex answers
+		// 503 until a poll fills it — the same 503 this handler already gives for a
+		// bundle whose shell went away under a running process.
+		//
+		// Refusing it here is what turned one unreadable object into an outage that
+		// outlived its own cause. The boot read failed, the composition root mounted
+		// nothing AND skipped the watch loop, and the console stayed down after the
+		// object was repaired because nothing was left to re-read it.
+		//
+		// A STATIC bundle with no shell is still refused, and that distinction is the
+		// whole point: a baked bundle missing index.html is broken and every deep
+		// link would 404, which is what source_test.go pins.
+		if p, ok := fsys.(interface{ Polled() bool }); !ok || !p.Polled() {
+			return nil, fmt.Errorf("webui: console source has no index.html: %w", err)
+		}
 	}
 	return &consoleHandler{fsys: fsys, door: door}, nil
 }
