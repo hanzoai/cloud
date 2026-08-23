@@ -173,6 +173,17 @@ func expand(sels []selection, frags map[string][]selection, seen map[string]bool
 func (g *Graph) resolve(sel selection, vars map[string]any, from *fasthttp.Request) (any, error) {
 	f, ok := g.fields[sel.name]
 	if !ok {
+		// INTROSPECTION is the first thing a GraphQL client sends, and it is not
+		// served here: the schema is not a type graph this process can walk, it is
+		// a projection of a document, and answering __schema with a partial one
+		// would have every generator build against a shape that is not the API.
+		//
+		// So the refusal says where the schema IS rather than reporting the field
+		// as unknown, which is true but sends a reader looking for a typo.
+		if strings.HasPrefix(sel.name, "__") {
+			return nil, fmt.Errorf(
+				"introspection is not served here; read the schema at GET this same address, as SDL")
+		}
 		return nil, fmt.Errorf("no field named %q", sel.name)
 	}
 	args, err := settle(sel.args, vars)

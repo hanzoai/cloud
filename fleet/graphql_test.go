@@ -477,3 +477,37 @@ func TestSelectionsDeeperThanTheCeilingAreRefused(t *testing.T) {
 		t.Fatal("a query nesting past the ceiling must be refused")
 	}
 }
+
+// TestAnIntrospectionQueryIsToldWhereTheSchemaIs covers the first request a
+// GraphQL client makes. Introspection is not served here — the schema is a
+// projection of a document rather than a type graph this process can walk, and a
+// partial __schema would have every generator build against a shape that is not
+// the API. Reporting it as an unknown field is true and useless; the refusal
+// names the address that does answer.
+func TestAnIntrospectionQueryIsToldWhereTheSchemaIs(t *testing.T) {
+	c := echo(t, `{}`)
+	g := doorTo(t, "graph", c.addr)
+
+	for _, q := range []string{
+		`{ __schema { queryType { name } } }`,
+		`{ __type(name: "Assertion") { name } }`,
+	} {
+		res := run(t, g, q, nil)
+		if len(res.Errors) != 1 {
+			t.Fatalf("%s: errors = %v, want one", q, res.Errors)
+		}
+		msg := res.Errors[0].Message
+		if !strings.Contains(msg, "introspection") || !strings.Contains(msg, "SDL") {
+			t.Errorf("%s: reason = %q, want it to say where the schema is", q, msg)
+		}
+		if strings.Contains(msg, "no field named") {
+			t.Errorf("%s: reported as a typo rather than as an unserved feature", q)
+		}
+	}
+	// And nothing was dispatched for it.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.calls) != 0 {
+		t.Errorf("an introspection query reached the fleet %d times", len(c.calls))
+	}
+}
