@@ -562,9 +562,9 @@ type kycRefreshOut struct {
 // check stays pending; for a real provider it reflects the settled decision,
 // ATTRIBUTED to the provider.
 //
-// It NEVER trusts a client-asserted status — the status comes from the provider
-// client — so a client cannot force a pass here, and an already-passing founder
-// (e.g. a reviewer confirmation) is left untouched.
+// It NEVER trusts a client-asserted status — the status comes from the PROVIDER —
+// so a client cannot force a pass here, and an already-passing founder (e.g. a
+// reviewer confirmation) is left untouched.
 func (o ops) kycRefresh(ctx context.Context, _ *noInput) (*kycRefreshOut, error) {
 	f, _, err := load(ctx, o.s)
 	if err != nil {

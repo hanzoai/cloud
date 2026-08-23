@@ -846,9 +846,9 @@ func TestTheSetListReportsStaleAndRefused(t *testing.T) {
 	// wire alone.
 	for _, s := range sets {
 		m, _ := s.(map[string]any)
-		if m["kind"] == string(KindClient) {
+		if m["kind"] == string(KindGap) {
 			if m["refusal"] == nil {
-				t.Errorf("%v is a client with no reason on the wire", m["set"])
+				t.Errorf("%v is a gap with no reason on the wire", m["set"])
 			}
 			continue
 		}

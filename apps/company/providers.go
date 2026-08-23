@@ -18,8 +18,8 @@ import (
 // with no real backend fails HONESTLY (records nothing false) rather than faking a
 // result.
 
-// KYCProvider is the identity-verification client (the clients/idv client in the
-// product spec). Start begins verification for one founder and returns a provider
+// KYCProvider is the identity-verification client (clients/idv in the product
+// spec). Start begins verification for one founder and returns a provider
 // reference plus, for a hosted flow, a URL the founder visits; Check reports the
 // current status. A real provider (Persona, Stripe Identity, Onfido, …) implements
 // this; manualKYC is the honest default.

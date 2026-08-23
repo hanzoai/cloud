@@ -364,7 +364,7 @@ func parseSpecial(body []byte) ([]Entry, error) {
 // What this set answers is narrow and worth being precise about: whether a
 // number has been delegated at all, and to which regional registry. It does NOT
 // answer whether the operator behind it is trustworthy; that is the reputation
-// client.
+// gap.
 func parseASN(body []byte) ([]Entry, error) {
 	r := csv.NewReader(strings.NewReader(string(body)))
 	r.FieldsPerRecord = -1

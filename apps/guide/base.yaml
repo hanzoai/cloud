@@ -3453,7 +3453,7 @@ strategies:
       past its SLA.
     slug: the-pipeline-command-center
     title: The Pipeline Command Center
-    why: Leads die in the clients between tools where no one is watching; one command
+    why: Leads die in the seams between tools where no one is watching; one command
       center that renders every lead's stage, owner, and next action turns a scattered
       funnel into a formation where nothing falls through.
   category: lead-generation
@@ -4520,7 +4520,7 @@ strategies:
       signup at save/share, converting curiosity into accounts at the peak of intent.
     how: Instrument the shortest path to a wow-output, run it ungated, and place the
       auth/paywall precisely at save/share/export using an analytics funnel to find
-      that natural friction client.
+      that natural friction seam.
     slug: value-before-signup-the-reverse-trial
     title: 'Value Before Signup: The Reverse Trial That Converts'
     why: Attention is brutally scarce in 2026 and a signup wall is a dam; letting
@@ -7223,7 +7223,7 @@ strategies:
   era: modern
   id: mending-the-rot-viral-loop-leak-repair
   principle: mending-the-rot
-  source: Sun Tzu, The Use of Spies (ch.13) — find the exact client where the flow is
+  source: Sun Tzu, The Use of Spies (ch.13) — find the exact seam where the flow is
     lost
   tags:
   - stage:activated
@@ -12227,7 +12227,7 @@ strategies:
     to voice.
   blog:
     caseStudy: Kindle's Whispersync and Spotify Connect retain by letting users continue
-      the exact same session across devices, so the ritual never has a client to fall
+      the exact same session across devices, so the ritual never has a seam to fall
       through.
     how: Sync state, history, and in-progress work instantly across surfaces, resume
       exactly where the user left off, and make starting on one device and finishing

@@ -341,7 +341,7 @@ func take(ctx context.Context, s *cloud.Service[state], set Set, receipts []Refe
 	was := holding(s.State.plane.get(set.Name))
 
 	switch set.Kind {
-	case KindClient:
+	case KindGap:
 		return nil, fmt.Errorf("%s", set.Refusal)
 	case KindAttest:
 		for _, r := range receipts {
@@ -642,7 +642,7 @@ type ReferenceSet struct {
 	Set string `json:"set"`
 	// Kind is how the baseline comes to exist: fetch (downloaded from a
 	// publisher), local (computed here), attest (held by the component that
-	// screens against it, freshness reported), or client (declared and NOT held,
+	// screens against it, freshness reported), or gap (declared and NOT held,
 	// because the source needs a licence we do not have).
 	Kind string `json:"kind"`
 	// What the set holds, in one sentence.
@@ -1333,7 +1333,7 @@ func (o ops) refresh(ctx context.Context, in *RefreshReferenceIn) (*RefreshRefer
 		return nil, zip.ErrNotFound("this plane publishes no set by that name")
 	}
 	switch {
-	case set.Kind == KindClient:
+	case set.Kind == KindGap:
 		return nil, zip.Errorf(http.StatusNotImplemented, "%s", set.Refusal)
 	case set.Kind == KindAttest && len(in.Receipts) == 0:
 		return nil, zip.ErrBadRequest("this set's membership is held elsewhere; refresh it with the loader's receipts")
