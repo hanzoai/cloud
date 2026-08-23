@@ -65,7 +65,7 @@ func mountSigningKey(t *testing.T, names ...string) string {
 
 func seedIdentity(t *testing.T, path, org, name string) {
 	t.Helper()
-	db, err := iamstore.Open("sqlite", path)
+	db, err := iamstore.Open("sqlite", path, "")
 	if err != nil {
 		t.Fatalf("open the identity store at %s: %v", path, err)
 	}

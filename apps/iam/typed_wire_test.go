@@ -60,8 +60,14 @@ import (
 // 111 -> 92 at iam v1.34.76: the verb surface was TYPED, and retiring it removed
 // its operations. The nineteen are gone as calls, not moved — each one's noun
 // was already counted here beside it, which is what made retiring them possible.
+//
+// 92 -> 91 at iam v1.34.86, and the same sentence applies to the last one:
+// get-app-login was the remaining TYPED half of a pair registered at two
+// addresses — auth/application carried the same handler value and is still
+// counted here. Nine spellings were retired in that release; this is the only
+// one of them that was typed.
 const (
-	typedOps = 92
+	typedOps = 91
 	// 85 + the two key doors iam v1.34.69 added at their nouns — keys/org and
 	// keys/principal, beside the resolve-key and get-user spellings they replace.
 	// They are raw handlers ON PURPOSE and the ratchet's usual remedy does not
