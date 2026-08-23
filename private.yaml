@@ -26937,7 +26937,7 @@ components:
             principal). Empty (the default, "secret") is a full key: a pk- publishable
             half AND a confidential sk- half, the sk- authenticating a server-side reader.
             KeyScopePublish is a WRITE-ONLY publishable key — a pk- half only, no secret —
-            that resolves to just an ORG (never a principal) at the ingest door and is safe
+            that resolves to just an ORG (never a principal) at the ingest endpoint and is safe
             to ship in client JS. A missing value on an existing row reads as the default,
             so every pre-Scope key is a secret key unchanged.
           type: string
@@ -90841,8 +90841,8 @@ paths:
         the cursor from the previous page to continue; an empty cursor in the answer
         means there is nothing more.
 
-        THE SCOPE IS THE HANDLER'S OWN, so it holds at every door. The Guard refuses a
-        bearerless request before this runs, but the agent door carries a typed op to
+        THE SCOPE IS THE HANDLER'S OWN, so it holds at every endpoint. The Guard refuses
+        a bearerless request before this runs, but the MCP server carries a typed op to
         its handler with no middleware in front of it — a handler that read no
         principal would answer such a caller with the whole registry. Reading the
         principal here is what makes the answer the same one over both.
