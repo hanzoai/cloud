@@ -4986,7 +4986,7 @@ strategies:
     how: Score inbound against fit and intent at capture, auto-route non-fits to self-serve
       or a polite decline, and hand humans only the leads above the winnability bar.
     slug: lead-disqualifier
-    title: 'The Disqualifier: Say No at the Front Door'
+    title: 'The Disqualifier: Say No at the Front Endpoint'
     why: Sales capacity is the true bottleneck, and every hour spent on a structurally-unwinnable
       lead is an hour stolen from a winnable one; qualifying OUT is higher-leverage
       than qualifying in.
@@ -5089,7 +5089,7 @@ strategies:
       daily posts, then opened to a room that felt alive from the first minute and
       compounded from there.
     how: Recruit a private founding cohort, instrument daily-active and message-density,
-      and keep the doors closed until the core sustains the quorum without prompting.
+      and keep the endpoints closed until the core sustains the quorum without prompting.
     slug: quorum-gate
     title: 'The Quorum Gate: Don''t Open an Empty Room'
     why: A community launched below activity density feels dead on arrival and that
@@ -5527,7 +5527,7 @@ strategies:
       high-satisfaction survey response), fire the referral prompt within seconds
       of them, and suppress the ask entirely during friction or early onboarding.
     slug: milestone-trigger-ask
-    title: Ask at the Peak, Never at the Door
+    title: Ask at the Peak, Never at the Endpoint
     why: Referral willingness spikes right after a person succeeds with the product
       and collapses at every other moment; timing the ask to the peak is often a larger
       lever than the reward size itself.
@@ -7271,7 +7271,7 @@ strategies:
     title: 'The Earned Win-Back: Return Only When the Reason Is Gone'
     why: Churned users who left for a named, now-fixed reason are the warmest and
       cheapest pipeline you have, and a credible 'we fixed the thing you left over'
-      reopens the door that generic offers can't.
+      reopens the endpoint that generic offers can't.
   category: agentic-outbound
   era: modern
   id: mending-the-rot-winback-agentic-outbound
@@ -7484,7 +7484,7 @@ strategies:
   id: drawing-near-integration-beachhead
   principle: drawing-near
   source: 'Sun Tzu, Maneuvering (ch.7) — the devious route made direct: arrive through
-    the door already open'
+    the endpoint already open'
   tags:
   - stage:launched
   - module:integrations
@@ -9512,15 +9512,15 @@ strategies:
   - has:leads
   workload: low
 - action: Make leaving frictionless and warm — instant export, a real thank-you, a
-    standing open door — so the churn ends on goodwill that makes the eventual return
+    standing open endpoint — so the churn ends on goodwill that makes the eventual return
     easy.
   blog:
     caseStudy: Basecamp and Wistia are known for gracious, dark-pattern-free offboarding,
       and a meaningful share of those clean exits return later precisely because leaving
       was respectful.
     how: Strip friction and guilt from cancellation, offer a real data export and
-      a warm note, and leave a single low-key door open for whenever their need returns.
-    slug: graceful-offboard-open-door
+      a warm note, and leave a single low-key endpoint open for whenever their need returns.
+    slug: graceful-offboard-open-endpoint
     title: 'The Clean Goodbye: Offboard Well So They Can Come Back'
     why: A hostile cancel flow burns the bridge you'll want later, while a gracious
       exit — easy export, genuine thanks, no dark patterns — preserves the trust that
@@ -9528,7 +9528,7 @@ strategies:
       left.
   category: social-proof-trust
   era: modern
-  id: the-turning-graceful-offboard-open-door
+  id: the-turning-graceful-offboard-open-endpoint
   principle: the-turning
   source: Sun Tzu, Energy (ch.5) — leave the channel clear so the tide can return
   tags:
@@ -9712,12 +9712,12 @@ strategies:
       pressure found reactivation and referral gains that outweighed the retained-by-force
       churn.
     how: Offer one-click cancel with a gracious exit, an honest pause option, and
-      a door left open, then measure the win-back and word of mouth it produces.
+      an endpoint left open, then measure the win-back and word of mouth it produces.
     slug: frictionless-honest-cancel
     title: 'The Easy Goodbye: Why an Honest Cancel Flow Grows You'
     why: Trapping users with cancellation dark patterns wins one month and loses the
       reactivation, the referral, and the reputation forever — and regulators are
-      now closing that door anyway.
+      now closing that endpoint anyway.
   category: lead-nurturing
   era: modern
   id: without-guile-frictionless-honest-cancel
@@ -12366,7 +12366,7 @@ strategies:
     slug: winback-whats-new
     title: 'The Honest Winback: Lead With What Actually Changed'
     why: A generic 'we miss you' is ignored, but a message showing that the specific
-      thing which drove a user away is now solved re-opens the door — and an AI can
+      thing which drove a user away is now solved re-opens the endpoint — and an AI can
       map each lapsed user's likely reason to the exact shipped fix.
   category: lead-nurturing
   era: modern
@@ -13538,7 +13538,7 @@ strategies:
       personal invites, and let the queue and social proof of exclusivity build pressure
       before you ever open publicly.
     slug: invite-only-scarcity-waitlist
-    title: 'The Closed Door: Invite-Only Waitlists That Compound in the Dark'
+    title: 'The Closed Endpoint: Invite-Only Waitlists That Compound in the Dark'
     why: Concealment plus scarcity turns a product nobody can see into the one everyone
       wants in, and peer-to-peer invites grow the list through trusted channels no
       competitor can monitor or copy.
@@ -13547,7 +13547,7 @@ strategies:
   id: veiled-light-invite-only-scarcity-waitlist
   principle: veiled-light
   source: Sun Tzu, Tactical Dispositions (ch.4) — hold the ground unseen; let the
-    enemy see only a closed door
+    enemy see only a closed endpoint
   tags:
   - stage:formed
   - module:product
@@ -15216,7 +15216,7 @@ strategies:
       often expand those exact accounts, while ones that go quiet after fixing the
       issue leave the goodwill on the table.
     how: Close every resolved incident with a personal follow-up that owns the fix,
-      offers a fair gesture, and opens the door to what more the customer needs —
+      offers a fair gesture, and opens the endpoint to what more the customer needs —
       capturing the trust dividend before it cools.
     slug: incident-to-expansion
     title: 'After the Storm, Move: Turn a Resolved Crisis Into Expansion'
@@ -15464,10 +15464,10 @@ strategies:
       but the single primary action, including the header nav on dedicated conversion
       pages.
     slug: single-cta-page
-    title: 'One Door: The Single-CTA Page'
+    title: 'One Endpoint: The Single-CTA Page'
     why: Every additional choice on a page dilutes the one that matters; decision
       fatigue and paradox-of-choice research show conversion rises when you subtract
-      options, and a page with one door funnels all intent through it instead of leaking
+      options, and a page with one endpoint funnels all intent through it instead of leaking
       attention to a nav bar.
   category: conversion-optimization
   era: modern
@@ -15489,7 +15489,7 @@ strategies:
       feature rows behind an expandable detail so the default view is a clean choose-in-seconds
       decision.
     slug: good-better-best-collapse
-    title: 'Three Doors, Not Thirty: Collapse the Pricing Table'
+    title: 'Three Endpoints, Not Thirty: Collapse the Pricing Table'
     why: A pricing page with seven tiers and a forty-row feature matrix induces analysis
       paralysis and stalls the sale; subtracting to three clear tiers with an obvious
       default lets the buyer self-select fast, and the anchor-and-default structure
@@ -16565,7 +16565,7 @@ strategies:
     why: A rival's stumble opens a short window where their customers are actively
       shopping, and the first credible alternative in front of them wins; meeting
       that weak signal the day it appears beats a generic campaign that arrives after
-      the door has closed.
+      the endpoint has closed.
   category: lead-generation
   era: modern
   id: sudden-meeting-competitor-switch-intercept
@@ -17763,7 +17763,7 @@ strategies:
       generate the pages with quality guardrails so each is genuinely useful, and
       let organic search compound while you spend nothing per visit.
     slug: data-to-page-engine
-    title: 'The Data-to-Page Engine: One Dataset, Ten Thousand Doors'
+    title: 'The Data-to-Page Engine: One Dataset, Ten Thousand Endpoints'
     why: Programmatic pages built from data you already have keep pulling organic
       traffic for years with no per-page cost, making them the highest-leverage acquisition
       asset a cash-starved team can own — provisions foraged rather than bought.
@@ -19391,7 +19391,7 @@ strategies:
     title: 'Draw the Bow Before the Bolt: Prime the Wave in Advance'
     why: Thunder is loudest when energy is stored and released at once, so the launches
       that shock hardest are the ones that spent weeks accumulating a primed, referral-fueled
-      waitlist whose stored anticipation discharges the instant the doors open.
+      waitlist whose stored anticipation discharges the instant the endpoints open.
   category: lead-generation
   era: modern
   id: the-thunderclap-pre-wave-waitlist-priming
@@ -19795,7 +19795,7 @@ strategies:
     title: 'The Quality Gate: A Community Grows by Who It Turns Away'
     why: Unbounded open communities decay into noise as spam and low-effort posts
       drive out the high-signal members who made them worth joining, so saying no
-      at the door and in moderation is what preserves the value; a smaller curated
+      at the endpoint and in moderation is what preserves the value; a smaller curated
       space compounds while a large ungated one hollows out.
   category: community-led
   era: modern
@@ -21298,7 +21298,7 @@ strategies:
   - has:revenue
   workload: medium
 - action: Enter a new market by integrating with the local tool or marketplace its
-    buyers already live in, arriving through a door that is already open rather than
+    buyers already live in, arriving through an endpoint that is already open rather than
     asking them to leave home for you.
   blog:
     caseStudy: Shopify's app store let countless tools enter e-commerce by riding
@@ -21307,7 +21307,7 @@ strategies:
       a genuinely native integration and marketplace listing, and let the host's existing
       trust and traffic carry your entrance.
     slug: embed-in-local-graph
-    title: Enter Through the Door Already Open
+    title: Enter Through the Endpoint Already Open
     why: Every market has an incumbent tool or marketplace its buyers already trust
       and live inside, and appearing there as a native integration borrows that established
       distribution instead of fighting to build your own from zero on foreign ground.
@@ -21503,7 +21503,7 @@ strategies:
   id: penetrating-wind-helpful-answer-seeding
   principle: penetrating-wind
   source: Sun Tzu, The Attack by Fire (ch.12) — the wind enters every room without
-    forcing a door
+    forcing an endpoint
   tags:
   - stage:launched
   - module:community
@@ -21763,7 +21763,7 @@ strategies:
       in each with tracked links, kill the losers fast, and re-invest in the ones
       whose readers become customers.
     slug: newsletter-swarm
-    title: 'Many Small Doors: The Niche-Newsletter Swarm'
+    title: 'Many Small Endpoints: The Niche-Newsletter Swarm'
     why: Niche newsletters carry high trust and engaged, precisely-targeted readers
       at low cost, and spreading spend across many of them buys diversified reach
       and rapid signal on which audiences convert.
@@ -21771,7 +21771,7 @@ strategies:
   era: modern
   id: penetrating-wind-newsletter-swarm
   principle: penetrating-wind
-  source: Sun Tzu, The Attack by Fire (ch.12) — many small drafts through many doors
+  source: Sun Tzu, The Attack by Fire (ch.12) — many small drafts through many endpoints
   tags:
   - stage:launched
   - module:ads
@@ -22378,7 +22378,7 @@ strategies:
       generate a page per meaningful segment or locale, and funnel all of them to
       one shared offer and capture.
     slug: programmatic-segment-pages
-    title: 'One Template, a Thousand Doors: Programmatic Reach'
+    title: 'One Template, a Thousand Endpoints: Programmatic Reach'
     why: Demand is fragmented across countless specific long-tail queries no one writes
       bespoke pages for, so a data-grounded template dispersed across every permutation
       captures aggregate traffic that converges on a single conversion path.
@@ -22859,7 +22859,7 @@ strategies:
       no seat or contract to start, and let the same meter carry the account smoothly
       into committed tiers as usage grows.
     slug: usage-based-entry
-    title: 'The Low Joint: Pay-As-You-Go as the Front Door'
+    title: 'The Low Joint: Pay-As-You-Go as the Front Endpoint'
     why: A usage-based entry with real free headroom removes the commitment that stalls
       adoption, letting a developer or team prove value on their own terms before
       the boundary quietly turns them into a paying, expanding account.

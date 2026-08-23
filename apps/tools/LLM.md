@@ -3,10 +3,10 @@
 One registry where everything an ORG can call is a `Tool` with a `Source`, a
 JSON-Schema, a per-`(org, project)` activation state and an optional price.
 Cloud's own typed ops are NOT here: they are code, projected at build time onto
-the fleet's MCP door. What lives here is ROWS.
+the fleet's MCP endpoint. What lives here is ROWS.
 
 Read `tool.go` first — the package comment is the design. This file is the rest:
-the shelf, the door, and the one thing that does not exist yet.
+the shelf, the endpoint, and the one thing that does not exist yet.
 
 ## The shelf — `catalog.go`
 
@@ -61,19 +61,19 @@ implementations (mostly test fakes across twelve packages). That is a change to 
 fleet-wide client and it belongs to whoever owns that client — not smuggled in behind
 a catalog feature.
 
-## The door — `door.go`
+## The endpoint — `door.go`
 
-The fleet serves ONE MCP door at `POST /v1/mcp`. Its build-time half is 549 typed
+The fleet serves ONE MCP endpoint at `POST /v1/mcp`. Its build-time half is 549 typed
 ops across 112 lazily-mounted plugins, projected into `plugin/<app>/mcp.json` and
-served as bytes. Its PER-CALLER half is this package: `Door()` returns a
+served as bytes. Its PER-CALLER half is this package: `Endpoint()` returns a
 `zip.Source` (zip >= v1.18.14) whose `Tools` is the registry's activated,
-dispatchable set for the caller and whose `Call` IS `callTool` — so the door adds
+dispatchable set for the caller and whose `Call` IS `callTool` — so the endpoint adds
 no policy of its own.
 
 Wiring, end to end:
 
-- `plugin/tools/main.go` — `Door: tools.Door()` on the `cloud.Plugin`.
-- `build.go` `door(plugins)` — a binary has ONE per-caller source; two is a
+- `plugin/tools/main.go` — `Endpoint: tools.Endpoint()` on the `cloud.Plugin`.
+- `build.go` `endpoint(plugins)` — a binary has ONE per-caller source; two is a
   composition error.
 - `serve.go` — passes it as `zip.MCPConfig{Source: …}`.
 - `manifest/apps.go` — the tools row is `Open: true`, and `manifest/plugin.go`
@@ -281,7 +281,7 @@ The shape it should take when those land, so it stays one way to do everything:
       → platform.applyService(org, project, bridge image, env from the package)
       → the endpoint it returns is written as an MCPServer row with
         listing=<id> and source=catalog, exactly as an enable does
-      → the door composes it like any other remote, with no new code in door.go
+      → the endpoint composes it like any other remote, with no new code in door.go
 
 That last line is the test of the design: running a package must produce the SAME
 registration record an enablement does, or the plane has grown a second kind of

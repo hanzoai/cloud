@@ -3,7 +3,7 @@
 #
 # Each stage is checked SEPARATELY so a failure names the broken link rather
 # than reporting "telemetry is down". The stages are independent — the ingest
-# door can be healthy while the collector that drains it is dead, which is
+# endpoint can be healthy while the collector that drains it is dead, which is
 # exactly the state this was written in.
 set -uo pipefail
 API="${API:-https://api.hanzo.ai}"
@@ -13,7 +13,7 @@ fail=0
 ok()   { printf "  \033[32mPASS\033[0m  %s\n" "$1"; }
 bad()  { printf "  \033[31mFAIL\033[0m  %s\n" "$1"; fail=1; }
 
-echo "== 1. the one ingest door accepts an event =="
+echo "== 1. the one ingest endpoint accepts an event =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/v1/event" \
   -H 'content-type: application/json' -d '{"event":"e2e.probe"}' 2>/dev/null)
 ctl=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/v1/definitely-not-real-9137" \
@@ -36,7 +36,7 @@ for port in 4317 4318; do
 done
 
 echo "== 3. telemetry is arriving, not just accepted =="
-# The load-bearing check. Stage 1 can pass while nothing is stored: the door
+# The load-bearing check. Stage 1 can pass while nothing is stored: the endpoint
 # 200s, the collector is dead, and the write never happens.
 # Both signals live in the one event plane and date themselves with the same
 # `time` column, so there is no per-probe expression left to carry. They used to

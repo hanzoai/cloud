@@ -85,7 +85,7 @@ APP_BINS := $(addprefix bin/,$(APPS))
 # without this include they were reachable only as `make -f mk/fleet.mk <target>` —
 # a path nobody would guess and nothing in `make help` mentioned. Its own header
 # always said it was meant to be included here; it just never was, so the drift
-# gate (check) sat behind a door with no handle.
+# gate (check) sat behind an endpoint with no handle.
 include mk/fleet.mk
 
 .PHONY: help setup deploy-ui skills build cloud hanzo ship apps $(APP_BINS) plugin generate describe ramfs ramfs-check run dev smoke zipdoc-check closure closure-check test test-fast test-cgo test-codec vet lint tidy docker docker-push compose clean e2e
@@ -451,7 +451,7 @@ test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only
 #   2. each app describes ITSELF: `<app> describe` mounts that one subsystem and
 #      projects its own router into plugin/<app>/openapi.json (mk/fleet.mk — one lean
 #      binary per app, no fused build and no mega link). It no longer writes an MCP
-#      catalogue beside it: the door asks the subsystems (package fleet).
+#      catalogue beside it: the endpoint asks the subsystems (package fleet).
 #   3. the compose composes those subsets into private.yaml (openapi/compose.go),
 #      refusing when two apps claim one path or one schema name. There is no
 #      monolith left to read: the composed document IS everything the fleet serves,

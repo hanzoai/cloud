@@ -69,7 +69,7 @@ log, and the lease continues. The SuperAdmin kubeconfig keeps the opposite polic
 and still fails its lease, because a caller who asked for the admin image asked
 for the toolchain that spends it.
 
-**Two doors, one of them silent.** The HTTP door relays `cloud.CallerBearer`. The
+**Two endpoints, one of them silent.** The HTTP endpoint relays `cloud.CallerBearer`. The
 agent plane passes "" — a plane call carries an ATTESTED caller, not the caller's
 own token, so there is nothing to exchange and substituting a credential of ours
 would put an identity in the pod nobody presented. An opaque API key is likewise
@@ -87,7 +87,7 @@ nothing.
 ## The screen, and the three things that were not obvious
 
 A `desktop` sandbox has an X server, and `/v1/sandboxes/:id/screen` is how you
-look at it: the terminal's three doors again — a ticket, a page, a socket —
+look at it: the terminal's three endpoints again — a ticket, a page, a socket —
 differing only in the bytes on the wire (RFB) and the client in the page (noVNC,
 inlined the way xterm is). The ticket, the bridge, the lease that bounds a
 session and the attention that keeps it from being reaped are the SAME code;
@@ -270,7 +270,7 @@ What is NOT in doubt any more, and cost this session to establish:
 
 ```
 hanzo.chat ─┐
-hanzo.app  ─┼─→ one agent door ─→ sandbox ─→ `dev` as the harness
+hanzo.app  ─┼─→ one agent endpoint ─→ sandbox ─→ `dev` as the harness
 Slack @hanzo┘
 ```
 
@@ -297,23 +297,23 @@ tenant gets gVisor and our own agents get runc.
 CORRECTION. An earlier version of this section said `apps/coding` registers zero
 typed ops and that chat therefore has no computer. That was wrong, and wrong in
 a way worth remembering: it was concluded from grepping `apps/` alone, and the
-doors are registered in `plugin/`.
+endpoints are registered in `plugin/`.
 
 
-There is now exactly ONE door, in `plugin/agents/coding.go`:
+There is now exactly ONE endpoint, in `plugin/agents/coding.go`:
 
 ```go
 zip.Post[plane.CodingStartIn, plane.CodingStarted](cloud.ZipApp(app), "/v1/agents/coding", httpCodingStart)
 ```
 
 A typed op is four surfaces at once, so that single registration IS the REST
-route, the OpenAPI operation, the CLI command and the MCP tool. The plane door
+route, the OpenAPI operation, the CLI command and the MCP tool. The plane endpoint
 (`coding_start`) is DELETED: its only caller was Slack's `code:` prefix, and a
 second way in for one caller is a caller whose model never has to choose.
 
 ## The magic word is gone, and here is the evidence it was never the only path
 
-MEASURED on the deployed door before anything was deleted — twice more of this
+MEASURED on the deployed endpoint before anything was deleted — twice more of this
 file's prose had gone stale in the meantime, so read the numbers, not the claim:
 
 ```
@@ -327,14 +327,14 @@ POST .../v1/mcp  tools/call {"name":"agents","arguments":{"op":"create_bogus_pro
 ```
 
 The call reaches the handler and is refused by the handler's own fail-closed org
-check; a name nobody listed is refused by the door two layers earlier. So the op
+check; a name nobody listed is refused by the endpoint two layers earlier. So the op
 was genuinely offered and genuinely dispatchable, and `codingIntent` was pure
 subtraction. It is deleted, along with `slack_coding.go` entirely — the parse,
 the usage sentence, the target lookup and the dispatch were reachable only from
 the prefix. `SLACK_AGENT_REF` did not become an orphan knob:
 `channelAgentRef("slack")` reads the same variable for the chat turn.
 
-`post_v1_coding` is published as **`create_coding`**, because the door renames a
+`post_v1_coding` is published as **`create_coding`**, because the endpoint renames a
 derived operation id to the verb phrase it already contains (`fleet/verbs.go`).
 That is the string a `tools/call` carries; do not look for `post_v1_coding` on
 the wire.
@@ -342,10 +342,10 @@ the wire.
 ## What actually blocked the model, and it was not the wiring
 
 The description. `zipdoc` strips an exact leading match of the handler's own
-name, so `// httpCodingStart is the app's door.` reached every SDK, the document
+name, so `// httpCodingStart is the app's endpoint.` reached every SDK, the document
 and the MCP tool list as:
 
-> Is the app's door. It answers 202 with the run's handle the moment the run is
+> Is the app's endpoint. It answers 202 with the run's handle the moment the run is
 > ADMITTED — not when it finishes…
 
 Every word true; none of it says the thing writes code. A model picks a tool by
@@ -366,14 +366,14 @@ same reason one step later than the last:
 - **the org**, because a caller that can name a tenant can spend another's
   balance;
 - **the subject**, because the thing filling in a tool's arguments is a MODEL.
-  Attribution-by-argument was sound while every door was an adapter we wrote and
+  Attribution-by-argument was sound while every endpoint was an adapter we wrote and
   stopped being sound the moment the op became a tool.
 
 Both halves of the identity are now parameters of `coding.Start(ctx, org,
-subject, in, log)`, read off `cloud.Who(ctx)` by the door. The check lives in
+subject, in, log)`, read off `cloud.Who(ctx)` by the endpoint. The check lives in
 the HANDLER and not in middleware, and that is not a style choice: zip dispatches
 an MCP `tools/call` and a call-plane op STRAIGHT into the handler
-(`registeredOp.direct`), so a middleware guard covers one door in three — the
+(`registeredOp.direct`), so a middleware guard covers one endpoint in three — the
 same hole `apps/exec` was walked through.
 
 `TestNothingInTheInputCanNameWhoTheRunIsFor` walks the type by reflection rather
