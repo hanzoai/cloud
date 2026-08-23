@@ -26,7 +26,7 @@ machine and whose verbs are different.
 
 ## What this is
 
-`hanzoai/cloud` serves the whole API from one origin. `cmd/cloud` is the front door: it
+`hanzoai/cloud` serves the whole API from one origin. `cmd/cloud` is the entry point: it
 links `zip`, the app manifest and the console embed — and nothing else. It knows only
 where each app lives and what path it answers, never what the app does. Each subsystem
 (iam, kms, base, gateway, ai, commerce, vfs, mq, dns, amqp, mcp, o11y, tasks, …) is its

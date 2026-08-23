@@ -32,9 +32,9 @@ so the one-model op addresses by QUERY, never a path segment.
 
 ## Inference is NOT here
 
-The fleet's ONE inference door is the OpenAI-compatible /v1 surface (apps/ai
+The fleet's ONE inference endpoint is the OpenAI-compatible /v1 surface (apps/ai
 + the zen claim), where requests are metered and billed. A second completion
-door under /v1/engine would split billing, so it deliberately does not exist —
+endpoint under /v1/engine would split billing, so it deliberately does not exist —
 the ledger pins it.
 
 ## Tenancy
@@ -88,7 +88,7 @@ family 404s on the live router and is absent from the document):
   endpoint CRUD; the engine's own table is the /v1/engine/models lens.
 - models/unload (+reload/tune/re_isq), system/doctor, chat — real upstream
   surface refused here: shared-runtime mutations, load diagnostics on shared
-  capacity, and a second unmetered inference door. See the ledger prose.
+  capacity, and a second unmetered inference endpoint. See the ledger prose.
 
 ## Growing the slice
 
